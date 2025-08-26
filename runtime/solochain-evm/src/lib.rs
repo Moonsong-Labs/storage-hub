@@ -13,6 +13,7 @@ mod weights;
 
 extern crate alloc;
 
+use fp_account::EthereumSignature;
 use frame_support::weights::{
     constants::WEIGHT_REF_TIME_PER_SECOND, Weight, WeightToFeeCoefficient, WeightToFeeCoefficients,
     WeightToFeePolynomial,
@@ -21,21 +22,19 @@ pub use parachains_common::BlockNumber;
 use smallvec::smallvec;
 pub use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_runtime::{
-    generic, impl_opaque_keys,
+    generic,
     traits::{BlakeTwo256, IdentifyAccount, Verify},
-    MultiAddress, MultiSignature, Perbill,
+    Perbill,
 };
 use sp_std::prelude::{Vec, *};
 use sp_version::RuntimeVersion;
 use weights::ExtrinsicBaseWeight;
 
-pub use crate::configs::xcm_config;
-
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
 
 /// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
-pub type Signature = MultiSignature;
+pub type Signature = EthereumSignature;
 
 /// Some way of identifying an account on the chain. We intentionally make it equivalent
 /// to the public key of our transaction signing scheme.
@@ -48,7 +47,7 @@ pub type Balance = u128;
 pub type Nonce = u32;
 
 /// The address format for describing accounts.
-pub type Address = MultiAddress<AccountId, ()>;
+pub type Address = AccountId;
 
 /// Block header type as expected by this runtime.
 pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
@@ -116,12 +115,6 @@ impl WeightToFeePolynomial for WeightToFee {
     }
 }
 
-impl_opaque_keys! {
-    pub struct SessionKeys {
-        pub aura: Aura,
-    }
-}
-
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
     spec_name: alloc::borrow::Cow::Borrowed("storage-hub-runtime"),
@@ -156,7 +149,7 @@ pub const NANOUNIT: Balance = 1_000;
 pub const PICOUNIT: Balance = 1;
 
 /// The existential deposit. Set to 1/10 of the Connected Relay Chain.
-pub const EXISTENTIAL_DEPOSIT: Balance = MILLIUNIT;
+pub const EXISTENTIAL_DEPOSIT: Balance = 0;
 
 /// We assume that ~5% of the block weight is consumed by `on_initialize` handlers. This is
 /// used to limit the maximal weight of a single extrinsic.
@@ -198,70 +191,89 @@ mod runtime {
     )]
     pub struct Runtime;
 
-    // System support stuff
+    // ╔══════════════════ System and Consensus Pallets ═════════════════╗
     #[runtime::pallet_index(0)]
     pub type System = frame_system;
+
+    // Babe must be before session.
     #[runtime::pallet_index(1)]
-    pub type ParachainSystem = cumulus_pallet_parachain_system;
+    pub type Babe = pallet_babe;
+
     #[runtime::pallet_index(2)]
     pub type Timestamp = pallet_timestamp;
-    #[runtime::pallet_index(3)]
-    pub type ParachainInfo = parachain_info;
 
-    // Monetary stuff
-    #[runtime::pallet_index(10)]
+    #[runtime::pallet_index(3)]
     pub type Balances = pallet_balances;
+
+    // Consensus support.
+    // Authorship must be before session in order to note author in the correct session and era.
+    #[runtime::pallet_index(4)]
+    pub type Authorship = pallet_authorship;
+
+    #[runtime::pallet_index(6)]
+    pub type Historical = pallet_session::historical;
+
+    // External Validators must be before Session.
+    #[runtime::pallet_index(7)]
+    pub type ExternalValidators = pallet_external_validators;
+
+    #[runtime::pallet_index(8)]
+    pub type Session = pallet_session;
+
+    #[runtime::pallet_index(10)]
+    pub type Grandpa = pallet_grandpa;
+
     #[runtime::pallet_index(11)]
     pub type TransactionPayment = pallet_transaction_payment;
+    // ╚═════════════════ System and Consensus Pallets ══════════════════╝
 
-    // Governance
-    #[runtime::pallet_index(15)]
+    // ╔═════════════════ Polkadot SDK Utility Pallets ══════════════════╗
+
+    #[runtime::pallet_index(35)]
+    pub type Parameters = pallet_parameters;
+
+    #[runtime::pallet_index(36)]
     pub type Sudo = pallet_sudo;
 
-    // Collator support. The order of these 4 are important and shall not change.
-    #[runtime::pallet_index(20)]
-    pub type Authorship = pallet_authorship;
-    #[runtime::pallet_index(21)]
-    pub type CollatorSelection = pallet_collator_selection;
-    #[runtime::pallet_index(22)]
-    pub type Session = pallet_session;
-    #[runtime::pallet_index(23)]
-    pub type Aura = pallet_aura;
-    #[runtime::pallet_index(24)]
-    pub type AuraExt = cumulus_pallet_aura_ext;
+    #[runtime::pallet_index(90)]
+    pub type Nfts = pallet_nfts;
+    // ╚═════════════════ Polkadot SDK Utility Pallets ══════════════════╝
 
-    // XCM helpers
-    #[runtime::pallet_index(30)]
-    pub type XcmpQueue = cumulus_pallet_xcmp_queue;
-    #[runtime::pallet_index(31)]
-    pub type PolkadotXcm = pallet_xcm;
-    #[runtime::pallet_index(32)]
-    pub type CumulusXcm = cumulus_pallet_xcm;
-    #[runtime::pallet_index(33)]
-    pub type MessageQueue = pallet_message_queue;
+    // ╔════════════════════ Frontier (EVM) Pallets ═════════════════════╗
+    #[runtime::pallet_index(50)]
+    pub type Ethereum = pallet_ethereum;
 
-    // Storage Hub
-    #[runtime::pallet_index(40)]
+    #[runtime::pallet_index(51)]
+    pub type Evm = pallet_evm;
+
+    #[runtime::pallet_index(52)]
+    pub type EvmChainId = pallet_evm_chain_id;
+    // ╚════════════════════ Frontier (EVM) Pallets ═════════════════════╝
+
+    // ╔══════════════════════ StorageHub Pallets ═══════════════════════╗
+    // Start with index 80
+    #[runtime::pallet_index(80)]
     pub type Providers = pallet_storage_providers;
-    #[runtime::pallet_index(41)]
+
+    #[runtime::pallet_index(81)]
     pub type FileSystem = pallet_file_system;
-    #[runtime::pallet_index(42)]
+
+    #[runtime::pallet_index(82)]
     pub type ProofsDealer = pallet_proofs_dealer;
-    #[runtime::pallet_index(43)]
+
+    #[runtime::pallet_index(83)]
     pub type Randomness = pallet_randomness;
-    #[runtime::pallet_index(44)]
+
+    #[runtime::pallet_index(84)]
     pub type PaymentStreams = pallet_payment_streams;
-    #[runtime::pallet_index(45)]
+
+    #[runtime::pallet_index(85)]
     pub type BucketNfts = pallet_bucket_nfts;
+
     // TODO: Add `pallet_cr_randomness` to the runtime when it's ready.
     // #[runtime::pallet_index(46)]
     // pub type CrRandomness = pallet_cr_randomness;
-
-    // Miscellaneous
-    #[runtime::pallet_index(50)]
-    pub type Nfts = pallet_nfts;
-    #[runtime::pallet_index(51)]
-    pub type Parameters = pallet_parameters;
+    // ╚══════════════════════ StorageHub Pallets ═══════════════════════╝
 }
 
 #[cfg(feature = "runtime-benchmarks")]
@@ -271,11 +283,7 @@ mod benches {
         [pallet_balances, Balances]
         [pallet_session, SessionBench::<Runtime>]
         [pallet_timestamp, Timestamp]
-        [pallet_message_queue, MessageQueue]
         [pallet_sudo, Sudo]
-        [pallet_collator_selection, CollatorSelection]
-        [cumulus_pallet_parachain_system, ParachainSystem]
-        [cumulus_pallet_xcmp_queue, XcmpQueue]
         [nfts, Nfts]
         [pallet_parameters, Parameters]
         [pallet_payment_streams, PaymentStreams]
@@ -285,9 +293,4 @@ mod benches {
         [pallet_file_system, FileSystem]
         [pallet_bucket_nfts, BucketNfts]
     );
-}
-
-cumulus_pallet_parachain_system::register_validate_block! {
-    Runtime = Runtime,
-    BlockExecutor = cumulus_pallet_aura_ext::BlockExecutor::<Runtime, Executive>,
 }
