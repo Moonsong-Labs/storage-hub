@@ -101,17 +101,19 @@ impl SmartPool {
             .await
             .map_err(|e| RepositoryError::Pool(format!("Failed to get connection: {}", e)))?;
 
-        // Begin test transaction if in test mode and not yet initialized
         #[cfg(test)]
         {
-            if !self.test_tx_initialized.load(Ordering::Acquire) {
+            if self
+                .test_tx_initialized
+                // initialize test transaction is not already initialized
+                // if it was not initialized, it will be set as initialized
+                .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+            {
                 // Begin test transaction that will rollback automatically
                 conn.begin_test_transaction()
                     .await
                     .map_err(RepositoryError::Database)?;
-
-                // Mark as initialized
-                self.test_tx_initialized.store(true, Ordering::Release);
             }
         }
 
