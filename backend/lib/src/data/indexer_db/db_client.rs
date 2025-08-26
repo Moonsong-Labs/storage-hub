@@ -96,24 +96,30 @@ mod tests {
 
     async fn delete_bsp(client: DBClient, id: i64) {
         let bsps = client
-            .get_all_bsps(None, None)
+            // ensure we get as many as possible
+            .get_all_bsps(Some(i64::MAX), Some(0))
             .await
             .expect("able to retrieve all bsps");
-        assert_eq!(bsps.len(), 1);
 
-        let bsp = &bsps[0];
-        assert_eq!(bsp.id, id);
+        let amount_of_bsps = bsps.len();
+        assert!(amount_of_bsps > 0);
+
+        let target_bsp = bsps
+            .iter()
+            .find(|bsp| bsp.id == id)
+            .expect("bsp id in list of bsps");
 
         client
-            .delete_bsp(&bsp.account)
+            .delete_bsp(&target_bsp.account)
             .await
             .expect("able to delete bsp");
 
         let bsps = client
-            .get_all_bsps(None, None)
+            .get_all_bsps(Some(i64::MAX), Some(0))
             .await
             .expect("able to retrieve all bsps");
-        assert_eq!(bsps.len(), 0);
+
+        assert_eq!(bsps.len(), amount_of_bsps - 1);
     }
 
     #[tokio::test]
