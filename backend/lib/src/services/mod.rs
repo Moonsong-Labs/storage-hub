@@ -3,7 +3,6 @@
 use std::sync::Arc;
 
 use crate::data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage};
-
 #[cfg(all(test, feature = "mocks"))]
 use crate::data::{
     indexer_db::mock_repository::MockRepository,
