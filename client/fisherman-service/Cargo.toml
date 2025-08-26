@@ -7,6 +7,7 @@ description = "Fisherman monitoring service for StorageHub protocol"
 
 [dependencies]
 async-trait = { workspace = true }
+codec = { workspace = true }
 diesel = { workspace = true }
 diesel-async = { workspace = true }
 futures = { workspace = true }
@@ -15,6 +16,9 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 
 pallet-file-system = { workspace = true }
+pallet-proofs-dealer = { workspace = true }
+pallet-file-system-runtime-api = { workspace = true }
+pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-storage-providers-runtime-api = { workspace = true }
 shc-actors-framework = { workspace = true }
 shc-actors-derive = { workspace = true }

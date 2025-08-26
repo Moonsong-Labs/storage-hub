@@ -10,6 +10,7 @@
 //! - Constructs proofs of inclusion from MSP or BSP forests
 //! - Submits constructed proofs to the blockchain
 
+pub mod commands;
 pub mod events;
 pub mod handler;
 
@@ -19,10 +20,8 @@ use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::ParachainClient;
 
-pub use self::handler::{
-    FileKeyChange, FileKeyOperation, FishermanService, FishermanServiceCommand,
-    FishermanServiceError,
-};
+pub use self::commands::{FishermanServiceCommand, FishermanServiceError};
+pub use self::handler::{FileKeyChange, FileKeyOperation, FishermanService};
 pub use events::{
     FileDeletionTarget, FishermanServiceEventBusProvider, ProcessFileDeletionRequest,
     ProcessIncompleteStorageRequest,

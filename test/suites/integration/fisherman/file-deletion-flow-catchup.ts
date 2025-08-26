@@ -10,13 +10,17 @@ import {
   ShConsts,
   assertEventPresent
 } from "../../../util";
+import { createBucketAndSendNewStorageRequest } from "../../../util/bspNet/fileHelpers";
+import {
+  waitForFileIndexed,
+  waitForMspFileAssociation,
+  waitForBspFileAssociation
+} from "../../../util/indexerHelpers";
+import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
 import {
   waitForDeleteFileExtrinsic,
   waitForFishermanProcessing
 } from "../../../util/fisherman/fishermanHelpers";
-import type { H256 } from "@polkadot/types/interfaces";
-import { u8aToHex } from "@polkadot/util";
-import { decodeAddress } from "@polkadot/util-crypto";
 
 /**
  * FISHERMAN FILE DELETION FLOW WITH CATCHUP
@@ -55,13 +59,13 @@ describeMspNet(
   }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
-    let mspApi: EnrichedBspApi;
+    let msp1Api: EnrichedBspApi;
     let fishermanApi: EnrichedBspApi;
     let sql: SqlClient;
-    let bucketId: H256;
-    let fileKey: H256;
-    let fileLocation: string;
-    let fileFingerprint: H256;
+    let fileKey: string;
+    let bucketId: string;
+    let location: string;
+    let fingerprint: string;
     let fileSize: number;
 
     before(async () => {
@@ -70,7 +74,7 @@ describeMspNet(
       const maybeMsp1Api = await createMsp1Api();
 
       assert(maybeMsp1Api, "MSP API not available");
-      mspApi = maybeMsp1Api;
+      msp1Api = maybeMsp1Api;
       sql = createSqlClient();
 
       await userApi.docker.waitForLog({
@@ -103,63 +107,43 @@ describeMspNet(
       const bucketName = "test-deletion-catchup-bucket";
       const source = "res/whatsup.jpg";
       const destination = "test/file-to-delete-catchup.txt";
+      const mspId = userApi.shConsts.DUMMY_MSP_ID;
 
-      // Create bucket
-      const newBucketEvent = await userApi.createBucket(bucketName);
-      const newBucketEventData =
-        userApi.events.fileSystem.NewBucket.is(newBucketEvent) && newBucketEvent.data;
+      const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
+      const valuePropId = valueProps[0].id;
 
-      assert(newBucketEventData, "NewBucket event data not found");
-      bucketId = newBucketEventData.bucketId;
-
-      // Load file for BSP storage (using whatsup.jpg for automatic volunteering)
-      const ownerHex = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
-      const {
-        file_metadata: { location, fingerprint, file_size }
-      } = await userApi.rpc.storagehubclient.loadFileInStorage(
+      const fileMetadata = await createBucketAndSendNewStorageRequest(
+        userApi,
         source,
         destination,
-        ownerHex,
-        bucketId
+        bucketName,
+        valuePropId,
+        mspId,
+        null,
+        1
       );
 
-      // Store file metadata for later use
-      fileLocation = location;
-      fileFingerprint = fingerprint;
-      fileSize = file_size;
+      fileKey = fileMetadata.fileKey;
+      bucketId = fileMetadata.bucketId;
+      location = fileMetadata.location;
+      fingerprint = fileMetadata.fingerprint;
+      fileSize = fileMetadata.fileSize;
 
-      // Issue storage request
-      await userApi.block.seal({
-        calls: [
-          userApi.tx.fileSystem.issueStorageRequest(
-            bucketId,
-            location,
-            fingerprint,
-            file_size,
-            userApi.shConsts.DUMMY_MSP_ID,
-            [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-            { Basic: null }
-          )
-        ],
-        signer: shUser
+      // Wait for MSP to store the file
+      await waitFor({
+        lambda: async () =>
+          (await msp1Api.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
       });
 
-      // Get the file key
-      const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
-      const eventData = userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
-      assert(eventData, "NewStorageRequest event data not found");
-      fileKey = eventData.fileKey;
+      await userApi.wait.mspResponseInTxPool();
 
-      // Wait for BSP to volunteer
+      // Wait for BSP to volunteer and store
       await userApi.wait.bspVolunteer();
-
-      // Wait for BSP to receive and store the file
       await waitFor({
         lambda: async () =>
           (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
       });
 
-      // Wait for BSP to confirm storage
       const bspAddress = userApi.createType("Address", bspKey.address);
       await userApi.wait.bspStored({
         expectedExts: 1,
@@ -167,59 +151,10 @@ describeMspNet(
         bspAccount: bspAddress
       });
 
-      // Wait for MSP to receive the file
-      await waitFor({
-        lambda: async () =>
-          (await mspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
-      });
-
-      // Wait for MSP to accept the storage request
-      await userApi.wait.mspResponseInTxPool();
-      await userApi.block.seal();
-
-      // Get the MspAcceptedStorageRequest event
-      const { event: mspAcceptedEvent } = await userApi.assert.eventPresent(
-        "fileSystem",
-        "MspAcceptedStorageRequest"
-      );
-
-      const mspAcceptedEventDataBlob =
-        userApi.events.fileSystem.MspAcceptedStorageRequest.is(mspAcceptedEvent) &&
-        mspAcceptedEvent.data;
-
-      assert(
-        mspAcceptedEventDataBlob,
-        "MspAcceptedStorageRequest event data does not match expected type"
-      );
-
-      const acceptedFileKey = mspAcceptedEventDataBlob.fileKey.toString();
-      assert.equal(acceptedFileKey, fileKey.toString());
-
-      // Wait for indexing
-      await userApi.block.seal();
-      await userApi.block.seal();
-
-      // Verify file is indexed with both BSP and MSP associations
-      const files = await sql`
-        SELECT * FROM file WHERE file_key = ${fileKey.toString()}
-      `;
-      assert(files.length > 0, "File should be indexed");
-
-      const bspFiles = await sql`
-        SELECT * FROM bsp_file
-        WHERE file_id = (
-          SELECT id FROM file WHERE file_key = ${fileKey.toString()}
-        )
-      `;
-      assert(bspFiles.length > 0, "BSP file association should be indexed");
-
-      const mspFiles = await sql`
-        SELECT * FROM msp_file
-        WHERE file_id = (
-          SELECT id FROM file WHERE file_key = ${fileKey.toString()}
-        )
-      `;
-      assert(mspFiles.length > 0, "MSP file association should be indexed");
+      await waitForIndexing(userApi);
+      await waitForFileIndexed(sql, fileKey);
+      await waitForMspFileAssociation(sql, fileKey);
+      await waitForBspFileAssociation(sql, fileKey);
     });
 
     it("creates 3 unfinalized blocks", async () => {
@@ -262,7 +197,7 @@ describeMspNet(
       // Ensure file is in MSP's forest storage before deletion attempt
       await waitFor({
         lambda: async () => {
-          const isFileInForest = await mspApi.rpc.storagehubclient.isFileInForest(
+          const isFileInForest = await msp1Api.rpc.storagehubclient.isFileInForest(
             bucketId.toString(),
             fileKey.toString()
           );
@@ -296,9 +231,9 @@ describeMspNet(
             fileOperationIntention,
             signature,
             bucketId,
-            fileLocation,
+            location,
             fileSize,
-            fileFingerprint
+            fingerprint
           )
         ],
         signer: shUser,

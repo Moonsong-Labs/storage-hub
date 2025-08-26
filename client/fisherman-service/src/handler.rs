@@ -1,20 +1,22 @@
+use codec::Decode;
 use futures::stream::{self, StreamExt};
 use log::{debug, error, info, warn};
+use pallet_file_system_runtime_api::FileSystemApi;
 use sc_client_api::{BlockImportNotification, BlockchainEvents, HeaderBackend};
 use shc_common::types::{FileOperation, OpaqueBlock, StorageEnableEvents};
-use shc_common::{
-    blockchain_utils::{get_events_at_block, EventsRetrievalError},
-    traits::StorageEnableRuntime,
-};
+use shc_common::{blockchain_utils::get_events_at_block, traits::StorageEnableRuntime};
+use sp_api::ProvideRuntimeApi;
 use sp_runtime::traits::{Header, One, SaturatedConversion, Saturating};
 use std::{collections::HashMap, sync::Arc};
-use thiserror::Error;
 
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::types::{BlockNumber, ParachainClient};
-use sp_core::H256;
+use shp_types::Hash;
 
-use crate::events::FishermanServiceEventBusProvider;
+use crate::{
+    commands::{FishermanServiceCommand, FishermanServiceError},
+    events::FishermanServiceEventBusProvider,
+};
 
 pub(crate) const LOG_TARGET: &str = "fisherman-service";
 
@@ -31,35 +33,9 @@ pub enum FileKeyOperation {
 #[derive(Debug, Clone)]
 pub struct FileKeyChange {
     /// The file key that changed
-    pub file_key: Vec<u8>,
+    pub file_key: Hash,
     /// The operation that was applied
     pub operation: FileKeyOperation,
-}
-
-/// Commands that can be sent to the FishermanService actor
-#[derive(Debug)]
-pub enum FishermanServiceCommand<Runtime: StorageEnableRuntime> {
-    /// Get file key changes since a specific block for a given provider
-    GetFileKeyChangesSinceBlock {
-        /// The starting block (exclusive) - changes will be tracked from this block + 1
-        from_block: BlockNumber<Runtime>,
-        /// The provider to track changes for (BSP ID or Bucket ID)
-        provider: crate::FileDeletionTarget<Runtime>,
-        /// Response channel for the file key changes
-        response_tx:
-            tokio::sync::oneshot::Sender<Result<Vec<FileKeyChange>, FishermanServiceError>>,
-    },
-}
-
-/// Errors that can occur in the fisherman service
-#[derive(Error, Debug)]
-pub enum FishermanServiceError {
-    #[error("Database error: {0}")]
-    Database(#[from] diesel::result::Error),
-    #[error("Blockchain client error: {0}")]
-    Client(String),
-    #[error("Events retrieval error: {0}")]
-    EventsRetrieval(#[from] EventsRetrievalError),
 }
 
 /// The main FishermanService actor
@@ -87,10 +63,10 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
     }
 
     /// Monitor new blocks for file deletion request events
-    pub async fn monitor_block(
+    async fn monitor_block(
         &mut self,
         block_number: BlockNumber<Runtime>,
-        block_hash: H256,
+        block_hash: Runtime::Hash,
     ) -> Result<(), FishermanServiceError> {
         debug!(target: LOG_TARGET, "🎣 Monitoring block #{}: {}", block_number, block_hash);
 
@@ -183,11 +159,13 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
         Ok(())
     }
 
-    /// Get file key changes between two blocks for a specific provider
+    /// Get file key changes between two blocks for a specific provider.
+    ///
+    /// `provider` is either a BSP id or a Bucket id
     pub async fn get_file_key_changes_since_block(
         &self,
         from_block: BlockNumber<Runtime>,
-        provider: crate::FileDeletionTarget<Runtime>,
+        provider: crate::events::FileDeletionTarget<Runtime>,
     ) -> Result<Vec<FileKeyChange>, FishermanServiceError> {
         // Get the current best block
         let best_block_info = self.client.info();
@@ -200,7 +178,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
 
         // Track file key states
         // TODO: Add proper memory management and block range limits to prevent OOM
-        let mut file_key_states: HashMap<Vec<u8>, FileKeyOperation> = HashMap::new();
+        let mut file_key_states: HashMap<Hash, FileKeyOperation> = HashMap::new();
 
         // Process blocks from from_block + 1 to best_block
         let mut block_num = from_block.saturating_add(One::one());
@@ -218,7 +196,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
             // Get events at this block
             let events = get_events_at_block::<Runtime>(&self.client, &block_hash)?;
 
-            // Process events for file key changes
+            // Process ProofsDealer events for file key changes
             for event_record in events.iter() {
                 let event: Result<StorageEnableEvents<Runtime>, _> =
                     event_record.event.clone().try_into();
@@ -228,124 +206,43 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                 };
 
                 match event {
-                    // Track BSP confirmations
-                    StorageEnableEvents::FileSystem(
-                        pallet_file_system::Event::BspConfirmedStoring {
-                            bsp_id,
-                            confirmed_file_keys,
+                    // Process BSP mutations from MutationsAppliedForProvider events
+                    StorageEnableEvents::ProofsDealer(
+                        pallet_proofs_dealer::Event::MutationsAppliedForProvider {
+                            provider_id,
+                            mutations,
                             ..
                         },
                     ) => {
                         if let crate::events::FileDeletionTarget::BspId(target_bsp_id) = &provider {
-                            if &bsp_id == target_bsp_id {
-                                // Process each confirmed file key with embedded metadata
-                                for (file_key, file_metadata) in confirmed_file_keys.iter() {
-                                    // Convert pallet FileMetadata to client FileMetadata
-                                    if let Ok(metadata) = shc_common::types::FileMetadata::new(
-                                        file_metadata.owner().clone(),
-                                        file_metadata.bucket_id().clone(),
-                                        file_metadata.location().clone(),
-                                        file_metadata.file_size(),
-                                        *file_metadata.fingerprint(),
-                                    ) {
-                                        let operation = FileKeyOperation::Add(metadata);
-                                        file_key_states
-                                            .insert(file_key.as_ref().to_vec(), operation);
-                                    }
-                                }
-                                debug!(
-                                    target: LOG_TARGET,
-                                    "Added {} BSP confirmed file keys with embedded metadata",
-                                    confirmed_file_keys.len()
-                                );
-                            }
+                            self.process_bsp_mutations(
+                                &mutations,
+                                target_bsp_id,
+                                &provider_id,
+                                &mut file_key_states,
+                            );
                         }
                     }
-                    // Track BSP stop storing
-                    StorageEnableEvents::FileSystem(
-                        pallet_file_system::Event::BspConfirmStoppedStoring {
-                            bsp_id,
-                            file_key,
+                    // Process MSP/bucket mutations from MutationsApplied events
+                    StorageEnableEvents::ProofsDealer(
+                        pallet_proofs_dealer::Event::MutationsApplied {
+                            mutations,
+                            event_info,
                             ..
                         },
                     ) => {
-                        if let crate::events::FileDeletionTarget::BspId(target_bsp_id) = &provider {
-                            if &bsp_id == target_bsp_id {
-                                file_key_states
-                                    .insert(file_key.as_ref().to_vec(), FileKeyOperation::Remove);
-                            }
-                        }
-                    }
-                    // Track successful proof submissions for pending deletions
-                    StorageEnableEvents::FileSystem(
-                        pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest {
-                            file_key,
-                            ..
-                        },
-                    ) => {
-                        // This confirms the file was deleted
-                        file_key_states
-                            .insert(file_key.as_ref().to_vec(), FileKeyOperation::Remove);
-                    }
-                    // Track MSP accepted storage requests
-                    StorageEnableEvents::FileSystem(
-                        pallet_file_system::Event::MspAcceptedStorageRequest {
-                            file_key,
-                            file_metadata,
-                        },
-                    ) => {
-                        // For bucket providers, check if this file is for our target bucket
                         if let crate::events::FileDeletionTarget::BucketId(target_bucket_id) =
                             &provider
                         {
-                            // Check if this file belongs to our target bucket by comparing bucket IDs
-                            if file_metadata.bucket_id() == target_bucket_id.as_ref() {
-                                // Convert pallet FileMetadata to client FileMetadata
-                                if let Ok(metadata) = shc_common::types::FileMetadata::new(
-                                    file_metadata.owner().clone(),
-                                    file_metadata.bucket_id().clone(),
-                                    file_metadata.location().clone(),
-                                    file_metadata.file_size(),
-                                    *file_metadata.fingerprint(),
-                                ) {
-                                    file_key_states.insert(
-                                        file_key.as_ref().to_vec(),
-                                        FileKeyOperation::Add(metadata),
-                                    );
-                                    debug!(
-                                        target: LOG_TARGET,
-                                        "Added MSP accepted file key with embedded metadata"
-                                    );
-                                }
-                            }
+                            self.process_msp_bucket_mutations(
+                                &block_hash,
+                                &mutations,
+                                target_bucket_id,
+                                event_info,
+                                &mut file_key_states,
+                            );
                         }
                     }
-                    // Track insolvent user file removals
-                    StorageEnableEvents::FileSystem(
-                        pallet_file_system::Event::SpStopStoringInsolventUser {
-                            sp_id,
-                            file_key,
-                            ..
-                        },
-                    ) => {
-                        match &provider {
-                            crate::events::FileDeletionTarget::BspId(target_bsp_id) => {
-                                // Convert AccountId32 to H256
-                                if &H256::from_slice(sp_id.as_ref()) == target_bsp_id {
-                                    file_key_states.insert(
-                                        file_key.as_ref().to_vec(),
-                                        FileKeyOperation::Remove,
-                                    );
-                                }
-                            }
-                            crate::events::FileDeletionTarget::BucketId(_) => {
-                                // This also affects bucket storage
-                                file_key_states
-                                    .insert(file_key.as_ref().to_vec(), FileKeyOperation::Remove);
-                            }
-                        }
-                    }
-                    // TODO: Track new file deletion completion events once they are implemented
                     _ => {}
                 }
             }
@@ -374,6 +271,144 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
 
         Ok(changes)
     }
+
+    /// Process BSP mutations from MutationsAppliedForProvider events
+    fn process_bsp_mutations(
+        &self,
+        mutations: &[(Hash, shc_common::types::TrieMutation)],
+        target_bsp_id: &Hash,
+        provider_id: &Hash,
+        file_key_states: &mut HashMap<Hash, FileKeyOperation>,
+    ) {
+        // Check if the provider_id matches the target BSP
+        if provider_id != target_bsp_id {
+            debug!(
+                target: LOG_TARGET,
+                "Provider ID [{:?}] is not the target BSP ID [{:?}]. Skipping mutations.",
+                provider_id,
+                target_bsp_id
+            );
+            return;
+        }
+
+        // Process mutations
+        for (file_key, mutation) in mutations {
+            match mutation {
+                shc_common::types::TrieMutation::Add(add_mutation) => {
+                    // Try to decode the value as FileMetadata
+                    if let Ok(metadata) =
+                        shc_common::types::FileMetadata::decode(&mut &add_mutation.value[..])
+                    {
+                        file_key_states.insert(*file_key, FileKeyOperation::Add(metadata));
+                    } else {
+                        debug!(
+                            target: LOG_TARGET,
+                            "Failed to decode FileMetadata from mutation value for file key: {:?}",
+                            file_key
+                        );
+                    }
+                }
+                shc_common::types::TrieMutation::Remove(_) => {
+                    file_key_states.insert(*file_key, FileKeyOperation::Remove);
+                }
+            }
+        }
+
+        debug!(
+            target: LOG_TARGET,
+            "Processed {} BSP mutations for provider {:?}",
+            mutations.len(),
+            provider_id
+        );
+    }
+
+    /// Process MSP/bucket mutations from MutationsApplied events
+    fn process_msp_bucket_mutations(
+        &self,
+        block_hash: &Runtime::Hash,
+        mutations: &[(Hash, shc_common::types::TrieMutation)],
+        target_bucket_id: &shc_common::types::BucketId<Runtime>,
+        event_info: Option<Vec<u8>>,
+        file_key_states: &mut HashMap<Hash, FileKeyOperation>,
+    ) {
+        // Check that event_info contains bucket ID
+        if event_info.is_none() {
+            error!(
+                target: LOG_TARGET,
+                "MutationsApplied event with `None` event info, when it is expected to contain the BucketId of the bucket that was mutated."
+            );
+            return;
+        }
+        let event_info = event_info.expect("Just checked that this is not None; qed");
+
+        // Decode bucket ID from event info
+        let bucket_id = match self
+            .client
+            .runtime_api()
+            .decode_generic_apply_delta_event_info(*block_hash, event_info)
+        {
+            Ok(runtime_api_result) => match runtime_api_result {
+                Ok(bucket_id) => bucket_id,
+                Err(e) => {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to decode BucketId from event info: {:?}",
+                        e
+                    );
+                    return;
+                }
+            },
+            Err(e) => {
+                error!(
+                    target: LOG_TARGET,
+                    "Error while calling runtime API to decode BucketId from event info: {:?}",
+                    e
+                );
+                return;
+            }
+        };
+
+        // Check if bucket ID matches the target bucket
+        if &bucket_id != target_bucket_id {
+            debug!(
+                target: LOG_TARGET,
+                "Bucket [{:?}] is not the target bucket [{:?}]. Skipping mutations.",
+                bucket_id,
+                target_bucket_id
+            );
+            return;
+        }
+
+        // Process mutations
+        for (file_key, mutation) in mutations {
+            match mutation {
+                shc_common::types::TrieMutation::Add(add_mutation) => {
+                    // Try to decode the value as FileMetadata
+                    if let Ok(metadata) =
+                        shc_common::types::FileMetadata::decode(&mut &add_mutation.value[..])
+                    {
+                        file_key_states.insert(*file_key, FileKeyOperation::Add(metadata));
+                    } else {
+                        debug!(
+                            target: LOG_TARGET,
+                            "Failed to decode FileMetadata from mutation value for file key: {:?}",
+                            file_key
+                        );
+                    }
+                }
+                shc_common::types::TrieMutation::Remove(_) => {
+                    file_key_states.insert(*file_key, FileKeyOperation::Remove);
+                }
+            }
+        }
+
+        debug!(
+            target: LOG_TARGET,
+            "Processed {} MSP/bucket mutations for bucket {:?}",
+            mutations.len(),
+            bucket_id
+        );
+    }
 }
 
 /// Implement the Actor trait for FishermanService
@@ -391,7 +426,7 @@ impl<Runtime: StorageEnableRuntime> Actor for FishermanService<Runtime> {
                 FishermanServiceCommand::GetFileKeyChangesSinceBlock {
                     from_block,
                     provider,
-                    response_tx,
+                    callback,
                 } => {
                     debug!(
                         target: LOG_TARGET,
@@ -404,7 +439,8 @@ impl<Runtime: StorageEnableRuntime> Actor for FishermanService<Runtime> {
                         .get_file_key_changes_since_block(from_block, provider)
                         .await;
 
-                    if let Err(_) = response_tx.send(result) {
+                    // Send the result back through the callback
+                    if let Err(_) = callback.send(result) {
                         warn!(
                             target: LOG_TARGET,
                             "Failed to send GetFileKeyChangesSinceBlock response - receiver dropped"
