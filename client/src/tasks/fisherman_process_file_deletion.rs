@@ -518,7 +518,7 @@ where
 /// This function implements the core logic for preparing file deletion parameters,
 /// including forest proof generation using a two-phase approach:
 /// 1. Build ephemeral trie from indexer database data at last processed block
-/// 2. Apply catch-up changes from last processed block to current best block
+/// 2. Apply catch-up changes from last indexed block to current best block
 ///
 /// The forest proof ensures the deletion extrinsic has the correct Merkle proof
 /// for the current blockchain state by using the indexer's last processed block
