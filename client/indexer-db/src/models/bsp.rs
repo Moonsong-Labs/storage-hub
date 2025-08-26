@@ -13,7 +13,7 @@ use shp_types::Hash;
 
 /// Table that holds the BSPs.
 /// The account is guaranteed to be unique across both MSPs and BSPs.
-#[derive(Debug, Queryable, Insertable, Selectable)]
+#[derive(Debug, Clone, Queryable, Insertable, Selectable)]
 #[diesel(table_name = bsp)]
 pub struct Bsp {
     /// The ID of the BSP as stored in the database. For the runtime id, use `onchain_bsp_id`.

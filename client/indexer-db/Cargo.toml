@@ -32,3 +32,7 @@ sc-network = { workspace = true }
 shc-common = { workspace = true }
 shp-types = { workspace = true }
 sp-core = { workspace = true }
+
+[features]
+default = ["std"]
+std = ["shc-common/std"]

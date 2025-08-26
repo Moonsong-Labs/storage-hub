@@ -1,0 +1,145 @@
+//! SmartPool implementation for automatic test transaction management.
+//!
+//! ## Key Components
+//! - [`SmartPool`] - Connection pool with automatic test transaction support
+//!
+//! ## Features
+//! - Automatic test transactions in test mode (single connection)
+//! - Normal pooling in production mode (32 connections)
+
+#[cfg(test)]
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
+#[cfg(test)]
+use diesel_async::AsyncConnection;
+use diesel_async::{
+    pooled_connection::{bb8::Pool, AsyncDieselConnectionManager},
+    AsyncPgConnection,
+};
+
+use super::error::RepositoryError;
+
+pub type DbPool = Pool<AsyncPgConnection>;
+pub type DbConnection<'a> =
+    diesel_async::pooled_connection::bb8::PooledConnection<'a, AsyncPgConnection>;
+
+/// Smart connection pool that automatically manages test transactions.
+///
+/// In test mode:
+/// - Uses single connection to enable test transactions
+/// - Automatically begins test transaction on first connection
+/// - Transaction automatically rolls back when test ends
+///
+/// In production mode:
+/// - Uses normal connection pooling with 32 connections
+/// - No test transaction overhead
+pub struct SmartPool {
+    /// The underlying bb8 pool
+    inner: Arc<DbPool>,
+
+    /// Track whether test transaction has been initialized (test mode only)
+    #[cfg(test)]
+    test_tx_initialized: AtomicBool,
+}
+
+impl SmartPool {
+    /// Create a new SmartPool with the given database URL.
+    ///
+    /// # Arguments
+    /// * `database_url` - PostgreSQL connection string
+    ///
+    /// # Returns
+    /// * `Result<Self, RepositoryError>` - The configured pool or error
+    pub async fn new(database_url: &str) -> Result<Self, RepositoryError> {
+        // Create the connection manager
+        let manager = AsyncDieselConnectionManager::<AsyncPgConnection>::new(database_url);
+
+        // Configure pool based on compile mode
+        #[cfg(test)]
+        let pool = {
+            // Single connection for test transactions
+            Pool::builder()
+                .max_size(1)
+                .build(manager)
+                .await
+                .map_err(|e| RepositoryError::Pool(format!("Failed to create test pool: {}", e)))?
+        };
+
+        #[cfg(not(test))]
+        let pool = {
+            // Normal pool size for production
+            Pool::builder()
+                .max_size(32)
+                .build(manager)
+                .await
+                .map_err(|e| {
+                    RepositoryError::Pool(format!("Failed to create production pool: {}", e))
+                })?
+        };
+
+        Ok(Self {
+            inner: Arc::new(pool),
+            #[cfg(test)]
+            test_tx_initialized: AtomicBool::new(false),
+        })
+    }
+
+    /// Get a connection from the pool.
+    ///
+    /// In test mode, this will automatically begin a test transaction
+    /// on the first call, which will be rolled back when the test ends.
+    ///
+    /// # Returns
+    /// * `Result<DbConnection, RepositoryError>` - Database connection or error
+    pub async fn get(&self) -> Result<DbConnection<'_>, RepositoryError> {
+        // Get connection from pool
+        #[allow(unused_mut)]
+        let mut conn = self
+            .inner
+            .get()
+            .await
+            .map_err(|e| RepositoryError::Pool(format!("Failed to get connection: {}", e)))?;
+
+        #[cfg(test)]
+        {
+            if self
+                .test_tx_initialized
+                // initialize test transaction is not already initialized
+                // if it was not initialized, it will be set as initialized
+                .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+            {
+                // Begin test transaction that will rollback automatically
+                conn.begin_test_transaction()
+                    .await
+                    .map_err(RepositoryError::Database)?;
+            }
+        }
+
+        Ok(conn)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::constants::test::DEFAULT_TEST_DATABASE_URL;
+
+    #[tokio::test]
+    // TODO: should NOT panic when we add testcontainers
+    #[should_panic]
+    async fn create_and_get_connection() {
+        let pool = SmartPool::new(DEFAULT_TEST_DATABASE_URL)
+            .await
+            .expect("able to create pool");
+
+        pool.get().await.expect("able to get connection");
+
+        assert!(
+            pool.test_tx_initialized
+                .fetch_and(true, std::sync::atomic::Ordering::SeqCst),
+            "connection initialized with test_transaction"
+        );
+    }
+}
