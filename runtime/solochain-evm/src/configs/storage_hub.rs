@@ -11,12 +11,12 @@ impl StorageEnableRuntime for crate::Runtime {
     type Address = crate::Address;
     type Call = crate::RuntimeCall;
     type Signature = crate::Signature;
-    type Extension = crate::SignedExtra;
+    type Extension = crate::TxExtension;
     type RuntimeApi = crate::apis::RuntimeApi;
 }
 
-// Implement the transaction extension helpers for the concrete runtime's SignedExtra.
-impl ExtensionOperations<crate::RuntimeCall, crate::Runtime> for crate::SignedExtra {
+// Implement the transaction extension helpers for the concrete runtime's TxExtension.
+impl ExtensionOperations<crate::RuntimeCall, crate::Runtime> for crate::TxExtension {
     type Hash = shp_types::Hash;
 
     fn from_minimal_extension(minimal: MinimalExtension) -> Self {

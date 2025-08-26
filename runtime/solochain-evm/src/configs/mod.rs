@@ -11,8 +11,8 @@ use frame_support::{
     dispatch::DispatchClass,
     parameter_types,
     traits::{
-        fungibles::{Balanced, Credit, Inspect},
-        tokens::imbalance::ResolveTo,
+        fungible::{Balanced, Credit, Inspect},
+        tokens::imbalance::{Imbalance, ResolveTo},
         AsEnsureOriginWithArg, ConstU32, ConstU64, ConstU8, FindAuthor, KeyOwnerProofSystem,
         OnUnbalanced, PalletInfo, VariantCountOf,
     },
@@ -43,6 +43,7 @@ use shp_treasury_funding::{
     LinearThenPowerOfTwoTreasuryCutCalculator, LinearThenPowerOfTwoTreasuryCutCalculatorConfig,
 };
 use shp_types::{Hash, Hashing, StorageDataUnit, StorageProofsMerkleTrieLayout};
+use sp_arithmetic::traits::One;
 use sp_core::{ConstU128, Get, Hasher, TypedGet, H160, H256, U256};
 use sp_runtime::{
     traits::{
@@ -117,6 +118,13 @@ parameter_types! {
 pub struct TreasuryAccount;
 impl Get<AccountId20> for TreasuryAccount {
     fn get() -> AccountId20 {
+        AccountId20::from([0; 20])
+    }
+}
+
+impl sp_core::TypedGet for TreasuryAccount {
+    type Type = AccountId20;
+    fn get() -> Self::Type {
         AccountId20::from([0; 20])
     }
 }
@@ -552,8 +560,8 @@ where
         already_withdrawn: Self::LiquidityInfo,
     ) -> Self::LiquidityInfo {
         <EVMFungibleAdapter<<T as pallet_evm::Config>::Currency, BaseFeesOU> as OnChargeEVMTransactionT<
-					T,
-				>>::correct_and_deposit_fee(who, corrected_fee, base_fee, already_withdrawn)
+            T,
+        >>::correct_and_deposit_fee(who, corrected_fee, base_fee, already_withdrawn)
     }
 
     fn pay_priority_fee(tip: Self::LiquidityInfo) {

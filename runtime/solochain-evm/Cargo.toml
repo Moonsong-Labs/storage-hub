@@ -74,6 +74,7 @@ pallet-timestamp = { workspace = true }
 pallet-transaction-payment = { workspace = true }
 pallet-transaction-payment-rpc-runtime-api = { workspace = true }
 sp-api = { workspace = true }
+sp-arithmetic = { workspace = true }
 sp-block-builder = { workspace = true }
 sp-consensus-babe = { workspace = true, features = ["serde"] }
 sp-consensus-grandpa = { workspace = true, features = ["serde"] }
@@ -184,6 +185,7 @@ std = [
 	"shp-traits/std",
 	"shp-treasury-funding/std",
 	"sp-api/std",
+	"sp-arithmetic/std",
 	"sp-block-builder/std",
 	"sp-consensus-babe/std",
 	"sp-consensus-grandpa/std",
