@@ -5,21 +5,18 @@ pub mod storage_hub;
 
 // Substrate and Polkadot dependencies
 use core::marker::PhantomData;
-use cumulus_pallet_parachain_system::DefaultCoreSelector;
-use cumulus_pallet_parachain_system::{RelayChainStateProof, RelayNumberMonotonicallyIncreases};
-use cumulus_primitives_core::{
-    relay_chain::well_known_keys, AggregateMessageOrigin, AssetId, ParaId,
-};
+use fp_account::AccountId20;
 use frame_support::{
     derive_impl,
     dispatch::DispatchClass,
     parameter_types,
     traits::{
-        AsEnsureOriginWithArg, ConstBool, ConstU32, ConstU64, ConstU8, EitherOfDiverse,
-        TransformOrigin,
+        fungibles::{Balanced, Credit, Inspect},
+        tokens::imbalance::ResolveTo,
+        AsEnsureOriginWithArg, ConstU32, ConstU64, ConstU8, FindAuthor, KeyOwnerProofSystem,
+        OnUnbalanced, PalletInfo, VariantCountOf,
     },
-    weights::{ConstantMultiplier, Weight},
-    PalletId,
+    weights::Weight,
 };
 use frame_system::{
     limits::{BlockLength, BlockWeights},
@@ -27,10 +24,17 @@ use frame_system::{
     EnsureRoot, EnsureSigned,
 };
 use num_bigint::BigUint;
+use pallet_ethereum::PostLogContent;
+use pallet_evm::{
+    EVMFungibleAdapter, EnsureAddressNever, EnsureAddressRoot, FeeCalculator,
+    FrameSystemAccountProvider, IdentityAddressMapping,
+    OnChargeEVMTransaction as OnChargeEVMTransactionT,
+};
+use pallet_grandpa::AuthorityId as GrandpaId;
 use pallet_nfts::PalletFeatures;
-use pallet_xcm::{EnsureXcm, IsVoiceOfBody};
-use parachains_common::message_queue::{NarrowOriginToSibling, ParaIdToSibling};
-use polkadot_runtime_common::{prod_or_fast, BlockHashCount, SlowAdjustingFeeUpdate};
+use pallet_transaction_payment::{ConstFeeMultiplier, FungibleAdapter, Multiplier};
+use polkadot_primitives::Moment;
+use polkadot_runtime_common::{prod_or_fast, BlockHashCount};
 use shp_data_price_updater::{MostlyStablePriceIndexUpdater, MostlyStablePriceIndexUpdaterConfig};
 use shp_file_key_verifier::FileKeyVerifier;
 use shp_file_metadata::{ChunkId, FileMetadata};
@@ -39,28 +43,60 @@ use shp_treasury_funding::{
     LinearThenPowerOfTwoTreasuryCutCalculator, LinearThenPowerOfTwoTreasuryCutCalculatorConfig,
 };
 use shp_types::{Hash, Hashing, StorageDataUnit, StorageProofsMerkleTrieLayout};
-use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{ConstU128, Get, Hasher, H256};
+use sp_core::{ConstU128, Get, Hasher, TypedGet, H160, H256, U256};
 use sp_runtime::{
-    traits::{BlakeTwo256, Convert, ConvertBack, IdentityLookup, Verify, Zero},
-    AccountId32, Perbill, SaturatedConversion,
+    traits::{
+        BlakeTwo256, Convert, ConvertBack, ConvertInto, IdentityLookup, OpaqueKeys,
+        UniqueSaturatedInto, Verify, Zero,
+    },
+    FixedPointNumber, KeyTypeId, Perbill, SaturatedConversion,
 };
+use sp_staking::{EraIndex, SessionIndex};
 use sp_std::vec;
 use sp_trie::{TrieConfiguration, TrieLayout};
 use sp_version::RuntimeVersion;
-use xcm::latest::prelude::BodyId;
+#[cfg(not(feature = "runtime-benchmarks"))]
+use sp_weights::IdentityFee;
+use sp_weights::RuntimeDbWeight;
 
 // Local module imports
 use crate::{
+    currency::WEIGHT_FEE,
+    gas::WEIGHT_PER_GAS,
     weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},
-    AccountId, Balance, Balances, Block, BlockNumber, BucketNfts, Nfts, Nonce, PaymentStreams,
-    ProofsDealer, Providers, Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason,
-    RuntimeHoldReason, RuntimeOrigin, RuntimeTask, Session, SessionKeys, Signature, System,
-    WeightToFee, AVERAGE_ON_INITIALIZE_RATIO, BLOCK_PROCESSING_VELOCITY, CENTS, DAYS,
-    EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT, MICROUNIT, MINUTES, NORMAL_DISPATCH_RATIO,
-    RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION, UNINCLUDED_SEGMENT_CAPACITY, UNIT, VERSION,
+    AccountId, Babe, Balance, Balances, Block, BlockNumber, BucketNfts, EvmChainId, Historical,
+    Nfts, Nonce, Offences, PaymentStreams, ProofsDealer, Providers, Runtime, RuntimeCall,
+    RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask, Session,
+    SessionKeys, Signature, System, Timestamp, TransactionPayment, WeightToFee,
+    AVERAGE_ON_INITIALIZE_RATIO, DAYS, EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT, MICROUNIT,
+    MINUTES, NORMAL_DISPATCH_RATIO, SLOT_DURATION, UNIT, VERSION,
 };
 use runtime_params::RuntimeParameters;
+
+/// Time and blocks.
+pub mod time {
+    use polkadot_primitives::{BlockNumber, Moment, SessionIndex};
+    use polkadot_runtime_common::prod_or_fast;
+
+    pub const MILLISECS_PER_BLOCK: Moment = 6000;
+    pub const SLOT_DURATION: Moment = MILLISECS_PER_BLOCK;
+
+    const ONE_HOUR: BlockNumber = HOURS;
+    const ONE_MINUTE: BlockNumber = MINUTES;
+
+    frame_support::parameter_types! {
+        pub const EpochDurationInBlocks: BlockNumber = prod_or_fast!(ONE_HOUR, ONE_MINUTE);
+        pub const SessionsPerEra: SessionIndex = prod_or_fast!(6, 3);
+    }
+
+    // These time units are defined in number of blocks.
+    pub const MINUTES: BlockNumber = 60_000 / (MILLISECS_PER_BLOCK as BlockNumber);
+    pub const HOURS: BlockNumber = MINUTES * 60;
+    pub const DAYS: BlockNumber = HOURS * 24;
+    pub const WEEKS: BlockNumber = DAYS * 7;
+}
+
+use crate::configs::time::{EpochDurationInBlocks, MILLISECS_PER_BLOCK};
 
 //╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
 //║                                             COMMON PARAMETERS                                                 ║
@@ -78,9 +114,9 @@ parameter_types! {
 //╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 // TODO move from here to where it is used
 pub struct TreasuryAccount;
-impl Get<AccountId32> for TreasuryAccount {
-    fn get() -> AccountId32 {
-        AccountId32::from([0; 32])
+impl Get<AccountId20> for TreasuryAccount {
+    fn get() -> AccountId20 {
+        AccountId20::from([0; 20])
     }
 }
 
@@ -214,22 +250,15 @@ impl pallet_balances::Config for Runtime {
     type DoneSlashHandler = ();
 }
 
-pub struct RewardsPoints;
-
-impl pallet_authorship::EventHandler<AccountId, BlockNumber> for RewardsPoints {
-    fn note_author(author: AccountId) {
-        let whitelisted_validators =
-            pallet_external_validators::WhitelistedValidatorsActiveEra::<Runtime>::get();
-        // Do not reward whitelisted validators
-        if !whitelisted_validators.contains(&author) {
-            ExternalValidatorsRewards::reward_by_ids(vec![(author, AuthorRewardPoints::get())])
-        }
-    }
-}
-
 impl pallet_authorship::Config for Runtime {
     type FindAuthor = pallet_session::FindAccountFromAuthorIndex<Self, Babe>;
-    type EventHandler = (RewardsPoints, ImOnline);
+    type EventHandler = ();
+}
+
+impl pallet_offences::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type IdentificationTuple = pallet_session::historical::IdentificationTuple<Self>;
+    type OnOffenceHandler = ();
 }
 
 pub struct FullIdentificationOf;
@@ -249,25 +278,12 @@ impl pallet_session::Config for Runtime {
     type ValidatorIdOf = ConvertInto;
     type ShouldEndSession = Babe;
     type NextSessionRotation = Babe;
-    type SessionManager = pallet_session::historical::NoteHistoricalRoot<Self, ExternalValidators>;
+    type SessionManager = pallet_session::historical::SessionManager<
+        <Runtime as pallet_session::Config>::ValidatorId,
+        (),
+    >;
     type SessionHandler = <SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
     type Keys = SessionKeys;
-    type WeightInfo = ();
-}
-
-parameter_types! {
-    pub const ImOnlineUnsignedPriority: TransactionPriority = TransactionPriority::MAX;
-}
-
-impl pallet_im_online::Config for Runtime {
-    type AuthorityId = ImOnlineId;
-    type MaxKeys = MaxAuthorities;
-    type MaxPeerInHeartbeats = ConstU32<0>; // Not used any more
-    type RuntimeEvent = RuntimeEvent;
-    type ValidatorSet = Historical;
-    type NextSessionRotation = Babe;
-    type ReportUnresponsiveness = Offences;
-    type UnsignedPriority = ImOnlineUnsignedPriority;
     type WeightInfo = ();
 }
 
@@ -295,19 +311,70 @@ impl pallet_grandpa::Config for Runtime {
     >;
 }
 
+/// Deal with substrate based fees and tip. This should be used with pallet_transaction_payment.
+pub struct DealWithSubstrateFeesAndTip<R, FeesTreasuryProportion>(
+    sp_std::marker::PhantomData<(R, FeesTreasuryProportion)>,
+);
+impl<R, FeesTreasuryProportion> DealWithSubstrateFeesAndTip<R, FeesTreasuryProportion>
+where
+    R: pallet_balances::Config + pallet_authorship::Config + frame_system::Config,
+    R::AccountId: Default,
+    FeesTreasuryProportion: Get<Perbill>,
+{
+    fn deal_with_fees(amount: Credit<R::AccountId, pallet_balances::Pallet<R>>) {
+        // Balances pallet automatically burns dropped Credits by decreasing
+        // total_supply accordingly
+        let treasury_proportion = FeesTreasuryProportion::get();
+        let treasury_part = treasury_proportion.deconstruct();
+        let burn_part = Perbill::one().deconstruct() - treasury_part;
+        let (_, to_treasury) = amount.ration(burn_part, treasury_part);
+        ResolveTo::<TreasuryAccount, pallet_balances::Pallet<R>>::on_unbalanced(to_treasury);
+    }
+
+    fn deal_with_tip(amount: Credit<R::AccountId, pallet_balances::Pallet<R>>) {
+        ResolveTo::<BlockAuthorAccountId<R>, pallet_balances::Pallet<R>>::on_unbalanced(amount);
+    }
+}
+impl<R, FeesTreasuryProportion> OnUnbalanced<Credit<R::AccountId, pallet_balances::Pallet<R>>>
+    for DealWithSubstrateFeesAndTip<R, FeesTreasuryProportion>
+where
+    R: pallet_balances::Config + pallet_authorship::Config + frame_system::Config,
+    R::AccountId: Default,
+    FeesTreasuryProportion: Get<Perbill>,
+{
+    fn on_unbalanceds(
+        mut fees_then_tips: impl Iterator<Item = Credit<R::AccountId, pallet_balances::Pallet<R>>>,
+    ) {
+        if let Some(fees) = fees_then_tips.next() {
+            Self::deal_with_fees(fees);
+            if let Some(tip) = fees_then_tips.next() {
+                Self::deal_with_tip(tip);
+            }
+        }
+    }
+}
+
+pub struct BlockAuthorAccountId<R>(sp_std::marker::PhantomData<R>);
+impl<R> TypedGet for BlockAuthorAccountId<R>
+where
+    R: frame_system::Config + pallet_authorship::Config,
+    R::AccountId: Default,
+{
+    type Type = R::AccountId;
+    fn get() -> Self::Type {
+        <pallet_authorship::Pallet<R>>::author().unwrap_or_default()
+    }
+}
+
 parameter_types! {
     pub FeeMultiplier: Multiplier = Multiplier::one();
+    pub FeesTreasuryProportion: Perbill = Perbill::from_percent(20);
 }
 
 impl pallet_transaction_payment::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
-    type OnChargeTransaction = FungibleAdapter<
-        Balances,
-        DealWithSubstrateFeesAndTip<
-            Runtime,
-            runtime_params::dynamic_params::runtime_config::FeesTreasuryProportion,
-        >,
-    >;
+    type OnChargeTransaction =
+        FungibleAdapter<Balances, DealWithSubstrateFeesAndTip<Runtime, FeesTreasuryProportion>>;
     type OperationalFeeMultiplier = ConstU8<5>;
     #[cfg(not(feature = "runtime-benchmarks"))]
     type WeightToFee = IdentityFee<Balance>;
@@ -318,7 +385,7 @@ impl pallet_transaction_payment::Config for Runtime {
     #[cfg(feature = "runtime-benchmarks")]
     type LengthToFee = benchmark_helpers::BenchmarkWeightToFee;
     type FeeMultiplierUpdate = ConstFeeMultiplier<FeeMultiplier>;
-    type WeightInfo = stagenet_weights::pallet_transaction_payment::WeightInfo<Runtime>;
+    type WeightInfo = ();
 }
 
 //╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
@@ -329,13 +396,13 @@ impl pallet_parameters::Config for Runtime {
     type AdminOrigin = EnsureRoot<AccountId>;
     type RuntimeEvent = RuntimeEvent;
     type RuntimeParameters = RuntimeParameters;
-    type WeightInfo = stagenet_weights::pallet_parameters::WeightInfo<Runtime>;
+    type WeightInfo = ();
 }
 
 impl pallet_sudo::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type RuntimeCall = RuntimeCall;
-    type WeightInfo = stagenet_weights::pallet_sudo::WeightInfo<Runtime>;
+    type WeightInfo = ();
 }
 
 parameter_types! {
@@ -406,7 +473,7 @@ impl FeeCalculator for TransactionPaymentAsGasPrice {
         //       updated once per block in on_finalize) and a 'WeightToFee' implementation. Our
         //       runtime implements this as a 'ConstantModifier', so we can get away with a simple
         //       multiplication here.
-        let min_gas_price: u128 = TransactionPayment::<Runtime>::next_fee_multiplier()
+        let min_gas_price: u128 = TransactionPayment::next_fee_multiplier()
             .saturating_mul_int((WEIGHT_FEE).saturating_mul(WEIGHT_PER_GAS as u128));
         (
             min_gas_price.into(),
@@ -430,7 +497,77 @@ where
     }
 }
 
-datahaven_runtime_common::impl_on_charge_evm_transaction!();
+pub struct OnChargeEVMTransaction<BaseFeesOU, PriorityFeesOU>(
+    sp_std::marker::PhantomData<(BaseFeesOU, PriorityFeesOU)>,
+);
+
+impl<T, BaseFeesOU, PriorityFeesOU> OnChargeEVMTransactionT<T>
+    for OnChargeEVMTransaction<BaseFeesOU, PriorityFeesOU>
+where
+    T: pallet_evm::Config,
+    T::Currency: Balanced<pallet_evm::AccountIdOf<T>>,
+    BaseFeesOU: OnUnbalanced<Credit<pallet_evm::AccountIdOf<T>, T::Currency>>,
+    PriorityFeesOU: OnUnbalanced<Credit<pallet_evm::AccountIdOf<T>, T::Currency>>,
+    U256: UniqueSaturatedInto<<T::Currency as Inspect<pallet_evm::AccountIdOf<T>>>::Balance>,
+    T::AddressMapping: pallet_evm::AddressMapping<T::AccountId>,
+{
+    type LiquidityInfo = Option<Credit<pallet_evm::AccountIdOf<T>, T::Currency>>;
+
+    fn withdraw_fee(who: &H160, fee: U256) -> Result<Self::LiquidityInfo, pallet_evm::Error<T>> {
+        EVMFungibleAdapter::<<T as pallet_evm::Config>::Currency, ()>::withdraw_fee(who, fee)
+    }
+
+    fn correct_and_deposit_fee(
+        who: &H160,
+        corrected_fee: U256,
+        base_fee: U256,
+        already_withdrawn: Self::LiquidityInfo,
+    ) -> Self::LiquidityInfo {
+        <EVMFungibleAdapter<<T as pallet_evm::Config>::Currency, BaseFeesOU> as OnChargeEVMTransactionT<
+					T,
+				>>::correct_and_deposit_fee(who, corrected_fee, base_fee, already_withdrawn)
+    }
+
+    fn pay_priority_fee(tip: Self::LiquidityInfo) {
+        if let Some(tip) = tip {
+            PriorityFeesOU::on_unbalanced(tip);
+        }
+    }
+}
+
+/// Deal with ethereum based fees. To handle tips/priority fees, use DealWithEthereumPriorityFees.
+pub struct DealWithEthereumBaseFees<R, FeesTreasuryProportion>(
+    sp_std::marker::PhantomData<(R, FeesTreasuryProportion)>,
+);
+impl<R, FeesTreasuryProportion> OnUnbalanced<Credit<R::AccountId, pallet_balances::Pallet<R>>>
+    for DealWithEthereumBaseFees<R, FeesTreasuryProportion>
+where
+    R: pallet_balances::Config,
+    FeesTreasuryProportion: Get<Perbill>,
+{
+    fn on_nonzero_unbalanced(amount: Credit<R::AccountId, pallet_balances::Pallet<R>>) {
+        // Balances pallet automatically burns dropped Credits by decreasing
+        // total_supply accordingly
+        let treasury_proportion = FeesTreasuryProportion::get();
+        let treasury_part = treasury_proportion.deconstruct();
+        let burn_part = Perbill::one().deconstruct() - treasury_part;
+        let (_, to_treasury) = amount.ration(burn_part, treasury_part);
+        ResolveTo::<TreasuryAccount, pallet_balances::Pallet<R>>::on_unbalanced(to_treasury);
+    }
+}
+
+/// Deal with ethereum based priority fees/tips. See DealWithEthereumBaseFees for base fees.
+pub struct DealWithEthereumPriorityFees<R>(sp_std::marker::PhantomData<R>);
+impl<R> OnUnbalanced<Credit<R::AccountId, pallet_balances::Pallet<R>>>
+    for DealWithEthereumPriorityFees<R>
+where
+    R: pallet_balances::Config + pallet_authorship::Config + frame_system::Config,
+    R::AccountId: Default,
+{
+    fn on_nonzero_unbalanced(amount: Credit<R::AccountId, pallet_balances::Pallet<R>>) {
+        ResolveTo::<BlockAuthorAccountId<R>, pallet_balances::Pallet<R>>::on_unbalanced(amount);
+    }
+}
 
 parameter_types! {
     pub BlockGasLimit: U256
@@ -467,10 +604,7 @@ impl pallet_evm::Config for Runtime {
     type BlockGasLimit = BlockGasLimit;
     type Runner = pallet_evm::runner::stack::Runner<Self>;
     type OnChargeTransaction = OnChargeEVMTransaction<
-        DealWithEthereumBaseFees<
-            Runtime,
-            runtime_params::dynamic_params::runtime_config::FeesTreasuryProportion,
-        >,
+        DealWithEthereumBaseFees<Runtime, FeesTreasuryProportion>,
         DealWithEthereumPriorityFees<Runtime>,
     >;
     type OnCreate = ();
@@ -478,7 +612,7 @@ impl pallet_evm::Config for Runtime {
     type GasLimitPovSizeRatio = GasLimitPovSizeRatio;
     type GasLimitStorageGrowthRatio = GasLimitStorageGrowthRatio;
     type Timestamp = Timestamp;
-    type WeightInfo = stagenet_weights::pallet_evm::WeightInfo<Runtime>;
+    type WeightInfo = ();
 }
 
 impl pallet_evm_chain_id::Config for Runtime {}
@@ -939,78 +1073,30 @@ impl pallet_proofs_dealer::Config for Runtime {
     type PriorityChallengeOrigin = EnsureRoot<AccountId>;
 }
 
-/// Only callable after `set_validation_data` is called which forms this proof the same way
-fn relay_chain_state_proof() -> RelayChainStateProof {
-    let relay_storage_root = cumulus_pallet_parachain_system::ValidationData::<Runtime>::get()
-        .expect("set in `set_validation_data`")
-        .relay_parent_storage_root;
-    let relay_chain_state = cumulus_pallet_parachain_system::RelayStateProof::<Runtime>::get()
-        .expect("set in `set_validation_data`");
-    RelayChainStateProof::new(ParachainInfo::get(), relay_storage_root, relay_chain_state)
-        .expect("Invalid relay chain state proof, already constructed in `set_validation_data`")
-}
-
+// TODO: Implement this
 pub struct BlockNumberGetter {}
 impl sp_runtime::traits::BlockNumberProvider for BlockNumberGetter {
     type BlockNumber = BlockNumberFor<Runtime>;
 
     fn current_block_number() -> Self::BlockNumber {
-        cumulus_pallet_parachain_system::RelaychainDataProvider::<Runtime>::current_block_number()
+        todo!()
     }
 }
 
+// TODO: Implement this
 pub struct BabeDataGetter;
 impl pallet_randomness::GetBabeData<u64, Hash> for BabeDataGetter {
     // Tolerate panic here because this is only ever called in an inherent (so can be omitted)
     fn get_epoch_index() -> u64 {
-        if cfg!(feature = "runtime-benchmarks") {
-            // storage reads as per actual reads
-            let _relay_storage_root =
-                cumulus_pallet_parachain_system::ValidationData::<Runtime>::get();
-            let _relay_chain_state =
-                cumulus_pallet_parachain_system::RelayStateProof::<Runtime>::get();
-            const BENCHMARKING_NEW_EPOCH: u64 = 10u64;
-            return BENCHMARKING_NEW_EPOCH;
-        }
-        relay_chain_state_proof()
-            .read_optional_entry(well_known_keys::EPOCH_INDEX)
-            .ok()
-            .flatten()
-            .expect("expected to be able to read epoch index from relay chain state proof")
+        todo!()
     }
     fn get_epoch_randomness() -> Hash {
-        if cfg!(feature = "runtime-benchmarks") {
-            // storage reads as per actual reads
-            let _relay_storage_root =
-                cumulus_pallet_parachain_system::ValidationData::<Runtime>::get();
-            let _relay_chain_state =
-                cumulus_pallet_parachain_system::RelayStateProof::<Runtime>::get();
-            let benchmarking_babe_output = Hash::default();
-            return benchmarking_babe_output;
-        }
-        relay_chain_state_proof()
-            .read_optional_entry(well_known_keys::ONE_EPOCH_AGO_RANDOMNESS)
-            .ok()
-            .flatten()
-            .expect("expected to be able to read epoch randomness from relay chain state proof")
+        todo!()
     }
     fn get_parent_randomness() -> Hash {
-        if cfg!(feature = "runtime-benchmarks") {
-            // storage reads as per actual reads
-            let _relay_storage_root =
-                cumulus_pallet_parachain_system::ValidationData::<Runtime>::get();
-            let _relay_chain_state =
-                cumulus_pallet_parachain_system::RelayStateProof::<Runtime>::get();
-            let benchmarking_babe_output = Hash::default();
-            return benchmarking_babe_output;
-        }
         // Note: we use the `CURRENT_BLOCK_RANDOMNESS` key here as it also represents the parent randomness, the only difference
         // is the block since this randomness is valid, but we don't care about that because we are setting that directly in the `randomness` pallet.
-        relay_chain_state_proof()
-            .read_optional_entry(well_known_keys::CURRENT_BLOCK_RANDOMNESS)
-            .ok()
-            .flatten()
-            .expect("expected to be able to read parent randomness from relay chain state proof")
+        todo!()
     }
 }
 

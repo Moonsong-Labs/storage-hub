@@ -62,11 +62,12 @@ frame-system = { workspace = true }
 frame-system-benchmarking = { workspace = true, optional = true }
 frame-system-rpc-runtime-api = { workspace = true }
 frame-try-runtime = { workspace = true, optional = true }
-pallet-aura = { workspace = true }
 pallet-authorship = { workspace = true }
+pallet-babe = { workspace = true }
 pallet-balances = { workspace = true }
 pallet-grandpa = { workspace = true }
 pallet-nfts = { workspace = true }
+pallet-offences = { workspace = true }
 pallet-session = { workspace = true }
 pallet-sudo = { workspace = true }
 pallet-timestamp = { workspace = true }
@@ -74,13 +75,15 @@ pallet-transaction-payment = { workspace = true }
 pallet-transaction-payment-rpc-runtime-api = { workspace = true }
 sp-api = { workspace = true }
 sp-block-builder = { workspace = true }
-sp-consensus-aura = { workspace = true }
+sp-consensus-babe = { workspace = true, features = ["serde"] }
+sp-consensus-grandpa = { workspace = true, features = ["serde"] }
 sp-core = { workspace = true }
 sp-genesis-builder = { workspace = true }
 sp-inherents = { workspace = true }
 sp-offchain = { workspace = true }
 sp-runtime = { workspace = true }
 sp-session = { workspace = true }
+sp-staking = { workspace = true }
 sp-std = { workspace = true }
 sp-transaction-pool = { workspace = true }
 sp-trie = { workspace = true }
@@ -89,6 +92,7 @@ sp-weights = { workspace = true }
 
 # Polkadot
 polkadot-parachain-primitives = { workspace = true }
+polkadot-primitives = { workspace = true }
 polkadot-runtime-common = { workspace = true }
 
 # Cumulus
@@ -135,7 +139,7 @@ std = [
 	"frame-system/std",
 	"frame-try-runtime?/std",
 	"log/std",
-	"pallet-aura/std",
+	"pallet-babe/std",
 	"pallet-authorship/std",
 	"pallet-balances/std",
 	"pallet-bucket-nfts/std",
@@ -148,6 +152,7 @@ std = [
 	"pallet-file-system-runtime-api/std",
 	"pallet-grandpa/std",
 	"pallet-nfts/std",
+	"pallet-offences/std",
 	"pallet-parameters/std",
 	"pallet-payment-streams/std",
 	"pallet-payment-streams-runtime-api/std",
@@ -164,6 +169,7 @@ std = [
 	"parachain-info/std",
 	"parachains-common/std",
 	"polkadot-parachain-primitives/std",
+	"polkadot-primitives/std",
 	"polkadot-runtime-common/std",
 	"scale-info/std",
 	"serde_json/std",
@@ -177,7 +183,8 @@ std = [
 	"shp-treasury-funding/std",
 	"sp-api/std",
 	"sp-block-builder/std",
-	"sp-consensus-aura/std",
+	"sp-consensus-babe/std",
+	"sp-consensus-grandpa/std",
 	"sp-core/std",
 	"sp-genesis-builder/std",
 	"sp-inherents/std",
@@ -185,6 +192,7 @@ std = [
 	"sp-runtime/std",
 	"sp-session/std",
 	"sp-std/std",
+	"sp-staking/std",
 	"sp-transaction-pool/std",
 	"sp-version/std",
 	"substrate-wasm-builder",
@@ -210,6 +218,7 @@ runtime-benchmarks = [
 	"pallet-file-system/runtime-benchmarks",
 	"pallet-grandpa/runtime-benchmarks",
 	"pallet-nfts/runtime-benchmarks",
+	"pallet-offences/runtime-benchmarks",
 	"pallet-parameters/runtime-benchmarks",
 	"pallet-payment-streams/runtime-benchmarks",
 	"pallet-proofs-dealer/runtime-benchmarks",
@@ -238,7 +247,7 @@ try-runtime = [
 	"frame-support/try-runtime",
 	"frame-system/try-runtime",
 	"frame-try-runtime/try-runtime",
-	"pallet-aura/try-runtime",
+	"pallet-babe/try-runtime",
 	"pallet-authorship/try-runtime",
 	"pallet-balances/try-runtime",
 	"pallet-bucket-nfts/try-runtime",
@@ -250,6 +259,7 @@ try-runtime = [
 	"pallet-file-system/try-runtime",
 	"pallet-grandpa/try-runtime",
 	"pallet-nfts/try-runtime",
+	"pallet-offences/try-runtime",
 	"pallet-parameters/try-runtime",
 	"pallet-proofs-dealer/try-runtime",
 	"pallet-randomness/try-runtime",

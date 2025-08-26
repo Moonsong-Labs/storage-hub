@@ -20,9 +20,8 @@ use frame_support::weights::{
 };
 pub use parachains_common::BlockNumber;
 use smallvec::smallvec;
-pub use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_runtime::{
-    generic,
+    generic, impl_opaque_keys,
     traits::{BlakeTwo256, IdentifyAccount, Verify},
     Perbill,
 };
@@ -32,6 +31,54 @@ use weights::ExtrinsicBaseWeight;
 
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
+
+impl_opaque_keys! {
+    pub struct SessionKeys {
+        pub babe: Babe,
+        pub grandpa: Grandpa,
+    }
+}
+
+pub mod currency {
+    use super::Balance;
+
+    // Provide a common factor between runtimes based on a supply of 10_000_000 tokens.
+    pub const SUPPLY_FACTOR: Balance = 1;
+
+    pub const WEI: Balance = 1;
+    pub const KILOWEI: Balance = 1_000;
+    pub const MEGAWEI: Balance = 1_000_000;
+    pub const GIGAWEI: Balance = 1_000_000_000;
+    pub const MICROHAVE: Balance = 1_000_000_000_000;
+    pub const MILLIHAVE: Balance = 1_000_000_000_000_000;
+    pub const HAVE: Balance = 1_000_000_000_000_000_000;
+    pub const KILOHAVE: Balance = 1_000_000_000_000_000_000_000;
+
+    pub const TRANSACTION_BYTE_FEE: Balance = 1 * GIGAWEI * SUPPLY_FACTOR;
+    pub const STORAGE_BYTE_FEE: Balance = 100 * MICROHAVE * SUPPLY_FACTOR;
+    pub const WEIGHT_FEE: Balance = 50 * KILOWEI * SUPPLY_FACTOR / 4;
+
+    pub const fn deposit(items: u32, bytes: u32) -> Balance {
+        items as Balance * 1 * HAVE * SUPPLY_FACTOR + (bytes as Balance) * STORAGE_BYTE_FEE
+    }
+}
+
+pub mod gas {
+    use frame_support::weights::constants::WEIGHT_REF_TIME_PER_SECOND;
+
+    /// Current approximation of the gas/s consumption considering
+    /// EVM execution over compiled WASM (on 4.4Ghz CPU).
+    /// Given the 1000ms Weight, from which 75% only are used for transactions,
+    /// the total EVM execution gas limit is: GAS_PER_SECOND * 1 * 0.75 ~= 30_000_000.
+    pub const GAS_PER_SECOND: u64 = 40_000_000;
+
+    /// Approximate ratio of the amount of Weight per Gas.
+    /// u64 works for approximations because Weight is a very small unit compared to gas.
+    pub const WEIGHT_PER_GAS: u64 = WEIGHT_REF_TIME_PER_SECOND / GAS_PER_SECOND;
+
+    /// The highest amount of new storage that can be created in a block (160KB).
+    pub const BLOCK_STORAGE_LIMIT: u64 = 160 * 1024;
+}
 
 /// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
 pub type Signature = EthereumSignature;
@@ -210,12 +257,11 @@ mod runtime {
     #[runtime::pallet_index(4)]
     pub type Authorship = pallet_authorship;
 
+    #[runtime::pallet_index(5)]
+    pub type Offences = pallet_offences;
+
     #[runtime::pallet_index(6)]
     pub type Historical = pallet_session::historical;
-
-    // External Validators must be before Session.
-    #[runtime::pallet_index(7)]
-    pub type ExternalValidators = pallet_external_validators;
 
     #[runtime::pallet_index(8)]
     pub type Session = pallet_session;
