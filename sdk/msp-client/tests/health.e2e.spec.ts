@@ -22,8 +22,8 @@ describe('MspClient.getHealth (e2e)', () => {
         expect(health).toBeDefined();
         expectState(health.status);
 
-        for (const key of ['storage', 'postgres', 'rpc'] as const) {
-            expectState(health.components[key]?.status);
+        for (const [_, comp] of Object.entries(health.components || {})) {
+            expectState((comp as any)?.status);
         }
 
         console.log('MSP Health:');

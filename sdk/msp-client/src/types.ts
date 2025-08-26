@@ -7,21 +7,17 @@ export enum HealthState {
 
 export interface ComponentHealth {
     status: HealthState;
-    message?: string;
+    details?: string;
     [k: string]: unknown;
 }
 
-export interface HealthComponents {
-    storage: ComponentHealth;
-    postgres: ComponentHealth;
-    rpc: ComponentHealth;
-    [k: string]: ComponentHealth;
-}
+export type HealthComponents = Record<string, ComponentHealth>;
 
 export interface HealthStatus {
     status: HealthState;
-    version: string;
-    service: string;
+    version?: string;
+    service?: string;
+    lastChecked?: string;
     components: HealthComponents;
     // Allow future changes in response without breaking the type
     [k: string]: unknown;
