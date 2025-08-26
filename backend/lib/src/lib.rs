@@ -12,7 +12,6 @@ pub use config::Config;
 pub use error::{Error, Result};
 
 #[cfg(all(test, feature = "mocks"))]
-#[allow(dead_code)]
 mod tests {
     use axum::http::StatusCode;
     use axum_test::TestServer;
