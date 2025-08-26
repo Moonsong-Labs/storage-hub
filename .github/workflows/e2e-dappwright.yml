@@ -19,12 +19,6 @@ jobs:
 
       - name: Setup pnpm & cache
         uses: ./.github/workflow-templates/setup-pnpm
-
-      - name: Configure npm registry auth
-        uses: actions/setup-node@v4
-        with:
-          registry-url: https://registry.npmjs.org/
-          always-auth: true
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
