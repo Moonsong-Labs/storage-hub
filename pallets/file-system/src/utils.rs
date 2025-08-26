@@ -41,11 +41,11 @@ use crate::{
     types::{
         BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
         CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileKeyHasher, FileKeyWithProof,
-        FileLocation, FileOperation, FileOperationIntention, Fingerprint, ForestProof,
-        IncompleteStorageRequestMetadata, MerkleHash, MoveBucketRequestMetadata, MultiAddresses,
-        PeerIds, PendingStopStoringRequest, ProviderIdFor, RejectedStorageRequest,
-        ReplicationTarget, ReplicationTargetType, StorageDataUnit, StorageRequestBspsMetadata,
-        StorageRequestMetadata, StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
+        FileLocation, FileOperation, FileOperationIntention, Fingerprint, ForestProof, MerkleHash,
+        MoveBucketRequestMetadata, MultiAddresses, PeerIds, PendingStopStoringRequest,
+        ProviderIdFor, RejectedStorageRequest, ReplicationTarget, ReplicationTargetType,
+        StorageDataUnit, StorageRequestBspsMetadata, StorageRequestMetadata,
+        StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
         StorageRequestMspResponse, TickNumber, ValuePropId,
     },
     weights::WeightInfo,
@@ -2897,45 +2897,15 @@ where
 
         Ok(())
     }
-
-    /// Construct IncompleteStorageRequestMetadata from existing storage request data
-    pub(crate) fn create_incomplete_storage_request_metadata(
-        storage_request: &StorageRequestMetadata<T>,
-        file_key: &MerkleHash<T>,
-    ) -> IncompleteStorageRequestMetadata<T> {
-        // Collect all confirmed BSPs with simple iteration
-        let mut confirmed_bsps = sp_std::vec::Vec::new();
-        for (bsp_id, metadata) in StorageRequestBsps::<T>::iter_prefix(file_key) {
-            if metadata.confirmed {
-                confirmed_bsps.push(bsp_id);
-            }
-        }
-
-        // Check if MSP accepted the file
-        let accepted_msp = match storage_request.msp {
-            Some((msp_id, true)) => Some(msp_id),
-            _ => None,
-        };
-
-        // Convert to bounded vec
-        let bounded_bsps = BoundedVec::truncate_from(confirmed_bsps);
-
-        IncompleteStorageRequestMetadata {
-            owner: storage_request.owner.clone(),
-            bucket_id: storage_request.bucket_id,
-            location: storage_request.location.clone(),
-            size: storage_request.size,
-            fingerprint: storage_request.fingerprint,
-            pending_bsp_removals: bounded_bsps,
-            pending_msp_removal: accepted_msp,
-        }
-    }
 }
 
 mod hooks {
     use crate::{
         pallet,
-        types::{MerkleHash, RejectedStorageRequestReason, StorageRequestMetadata, TickNumber},
+        types::{
+            IncompleteStorageRequestMetadata, MerkleHash, RejectedStorageRequestReason,
+            StorageRequestMetadata, TickNumber,
+        },
         utils::BucketIdFor,
         weights::WeightInfo,
         BucketsWithStorageRequests, Event, HoldReason, IncompleteStorageRequests,
@@ -3141,11 +3111,8 @@ mod hooks {
                         if !storage_request_metadata.bsps_confirmed.is_zero() {
                             // There are BSPs that have confirmed storing the file, so we need to create an incomplete storage request metadata
                             // This will allow the fisherman node to delete the file from the confirmed BSPs.
-                            let incomplete_storage_request_metadata =
-                                Self::create_incomplete_storage_request_metadata(
-                                    &storage_request_metadata,
-                                    &file_key,
-                                );
+                            let incomplete_storage_request_metadata: IncompleteStorageRequestMetadata<T> =
+                                (&storage_request_metadata, &file_key).into();
                             // Add to storage mapping
                             IncompleteStorageRequests::<T>::insert(
                                 &file_key,
