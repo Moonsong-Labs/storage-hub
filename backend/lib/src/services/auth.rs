@@ -1,7 +1,7 @@
 use crate::{
     api::validation::{generate_mock_jwt, validate_eth_address},
     error::Error,
-    models::*,
+    models::auth::{NonceResponse, ProfileResponse, TokenResponse, User, VerifyResponse},
 };
 
 #[derive(Clone, Default)]

@@ -7,7 +7,12 @@ use chrono::Utc;
 use crate::{
     data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage},
     error::Error,
-    models::*,
+    models::{
+        buckets::{Bucket, FileTree},
+        files::{DistributeResponse, FileInfo},
+        msp_info::{Capacity, InfoResponse, MspHealthResponse, StatsResponse, ValueProp},
+        payment::PaymentStream,
+    },
 };
 
 /// Service for handling MSP-related operations
