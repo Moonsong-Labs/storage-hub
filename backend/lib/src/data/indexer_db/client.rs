@@ -91,7 +91,10 @@ mod tests {
     use super::*;
     use crate::{
         constants::{database::DEFAULT_DATABASE_URL, test::bsp::DEFAULT_BSP_ID},
-        data::indexer_db::{mock_repository::tests::inject_sample_bsp, MockRepository, Repository},
+        data::indexer_db::{
+            mock_repository::{tests::inject_sample_bsp, MockRepository},
+            repository::postgres::Repository,
+        },
     };
 
     async fn delete_bsp(client: DBClient, id: i64) {

@@ -2,10 +2,11 @@
 
 use std::sync::Arc;
 
-use crate::data::{indexer_db::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage};
+use crate::data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage};
+
 #[cfg(all(test, feature = "mocks"))]
 use crate::data::{
-    indexer_db::MockRepository,
+    indexer_db::mock_repository::MockRepository,
     rpc::{AnyRpcConnection, MockConnection},
     storage::{BoxedStorageWrapper, InMemoryStorage},
 };
@@ -13,9 +14,6 @@ use crate::data::{
 pub mod health;
 
 use health::HealthService;
-
-// TODO: consider re-exporting all the services in this module
-// so other modules can easily get the right types (eg DBClient) at `crate::services`
 
 /// Container for all backend services
 #[derive(Clone)]

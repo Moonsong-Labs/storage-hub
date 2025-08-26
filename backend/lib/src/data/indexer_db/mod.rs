@@ -4,12 +4,7 @@
 //! allowing the backend to query blockchain-indexed data with support for
 //! both production PostgreSQL and mock implementations.
 
-pub mod db_client;
+pub mod client;
 #[cfg(feature = "mocks")]
 pub mod mock_repository;
 pub mod repository;
-
-pub use db_client::DBClient;
-#[cfg(feature = "mocks")]
-pub use mock_repository::MockRepository;
-pub use repository::{error::RepositoryError, pool::SmartPool, postgres::Repository};

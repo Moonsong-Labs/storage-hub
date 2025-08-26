@@ -7,12 +7,12 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use clap::Parser;
 #[cfg(feature = "mocks")]
-use sh_msp_backend_lib::data::{indexer_db::MockRepository, rpc::MockConnection};
+use sh_msp_backend_lib::data::{indexer_db::mock_repository::MockRepository, rpc::MockConnection};
 use sh_msp_backend_lib::{
     api::create_app,
     config::Config,
     data::{
-        indexer_db::{DBClient, Repository},
+        indexer_db::{client::DBClient, repository::postgres::Repository},
         rpc::{AnyRpcConnection, RpcConfig, StorageHubRpcClient, WsConnection},
         storage::{BoxedStorageWrapper, InMemoryStorage},
     },
