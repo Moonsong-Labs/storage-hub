@@ -5,7 +5,7 @@ use std::sync::Arc;
 use chrono::Utc;
 
 use crate::{
-    data::{indexer_db::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage},
+    data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage},
     error::Error,
     models::*,
 };
