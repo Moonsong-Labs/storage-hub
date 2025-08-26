@@ -180,11 +180,6 @@ describeMspNet(
       const finalizedHead = await userApi.rpc.chain.getFinalizedHead();
       const currentHead = await userApi.rpc.chain.getHeader();
 
-      console.log(`Current head: ${currentHead.number.toString()}`);
-      console.log(
-        `Finalized head number: ${(await userApi.rpc.chain.getHeader(finalizedHead)).number.toString()}`
-      );
-
       // There should be a gap between finalized and current head
       assert(
         currentHead.number.toNumber() >
@@ -257,19 +252,6 @@ describeMspNet(
       await userApi.block.seal({ finaliseBlock: false });
       await userApi.block.seal({ finaliseBlock: false });
 
-      // Verify current chain state
-      const finalizedHead2 = await userApi.rpc.chain.getFinalizedHead();
-      const currentHead2 = await userApi.rpc.chain.getHeader();
-
-      console.log(`After deletion - Current head: ${currentHead2.number.toString()}`);
-      console.log(
-        `After deletion - Finalized head number: ${(await userApi.rpc.chain.getHeader(finalizedHead2)).number.toString()}`
-      );
-
-      // Verify fisherman can index events from unfinalized blocks
-      // The indexer should still process events even though they're in unfinalized blocks
-      console.log("Fisherman indexer is processing events from unfinalized blocks in catchup mode");
-
       // Verify fisherman processes the FileDeletionRequested event even from unfinalized blocks
       const processingFound = await waitForFishermanProcessing(
         userApi,
@@ -299,7 +281,6 @@ describeMspNet(
       );
 
       // Now finalize the blocks to process the extrinsics
-      const currentHead3 = await userApi.rpc.chain.getHeader();
       await userApi.block.seal({ finaliseBlock: true });
 
       // Verify deletion completion events
@@ -307,13 +288,6 @@ describeMspNet(
 
       assertEventPresent(userApi, "fileSystem", "MspFileDeletionCompleted", events);
       assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", events);
-
-      console.log(
-        "✓ Fisherman successfully processed deletion from unfinalized blocks during catchup"
-      );
-      console.log(
-        `✓ Processed deletion from block ${currentHead3.number.toString()} before it was finalized`
-      );
     });
   }
 );

@@ -16,7 +16,6 @@ import {
 } from "../../../util/indexerHelpers";
 import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
 import { waitForDeleteFileExtrinsic } from "../../../util/fisherman/fishermanHelpers";
-import type { H256 } from "@polkadot/types/interfaces";
 
 /**
  * FISHERMAN FILE DELETION FLOW - BASIC HAPPY PATH
@@ -45,15 +44,7 @@ describeMspNet(
     fisherman: true,
     indexerMode: "fishing"
   },
-  ({
-    before,
-    it,
-    createUserApi,
-    createBspApi,
-    createMsp1Api,
-    createFishermanApi,
-    createSqlClient
-  }) => {
+  ({ before, it, createUserApi, createBspApi, createMsp1Api, createSqlClient }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
     let msp1Api: EnrichedBspApi;
@@ -61,7 +52,7 @@ describeMspNet(
     let fileKey: string;
     let bucketId: string;
     let location: string;
-    let fingerprint: H256;
+    let fingerprint: string;
     let fileSize: number;
 
     before(async () => {

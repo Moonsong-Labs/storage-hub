@@ -402,7 +402,7 @@ describeMspNet(
       await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
       await userApi.docker.pauseContainer("storage-hub-sh-bsp-1");
 
-      const { fileKey } = await createBucketAndSendNewStorageRequest(
+      const { fileKey: _ } = await createBucketAndSendNewStorageRequest(
         userApi,
         source,
         destination,
@@ -423,12 +423,7 @@ describeMspNet(
 
       await waitForIndexing(userApi);
 
-      // Note: StorageRequestRejected events are harder to trigger in integration tests
-      // This test serves as a placeholder for when such scenarios can be reliably created
-      // The fisherman should handle rejection events similarly to expiration/revocation
-
-      console.log(`Created test scenario for rejection handling with file key: ${fileKey}`);
-      // TODO: Enhance this test when reliable rejection scenarios can be created
+      // TODO: Verify extrinsic submission once implementation is complete
     });
   }
 );
