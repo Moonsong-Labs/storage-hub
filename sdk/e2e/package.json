@@ -18,6 +18,6 @@
         "playwright": "^1.54.2"
     },
     "engines": {
-        "node": ">=23"
+        "node": ">=22"
     }
 }
