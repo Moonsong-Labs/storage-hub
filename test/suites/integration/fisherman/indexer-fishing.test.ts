@@ -23,7 +23,7 @@ import {
   waitForBlockIndexed,
   verifyNoBspFileAssociation,
   verifyNoOrphanedBspAssociations,
-  verifyNoOrphanedMspAssociations,
+  verifyNoOrphanedMspAssociations
 } from "../../../util/indexerHelpers";
 import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
 import { waitForDeleteFileExtrinsic } from "../../../util/fisherman/fishermanHelpers";
@@ -767,16 +767,15 @@ describeMspNet(
         "SpStopStoringInsolventUser"
       );
       assert(spStopStoringEvents.length > 0, "SpStopStoringInsolventUser events should be emitted");
-      await userApi.assert.eventMany(
-        "fileSystem",
-        "MspStopStoringBucketInsolventUser"
+      await userApi.assert.eventMany("fileSystem", "MspStopStoringBucketInsolventUser");
+      assert(
+        spStopStoringEvents.length > 0,
+        "MspStopStoringBucketInsolventUser events should be emitted"
       );
-      assert(spStopStoringEvents.length > 0, "MspStopStoringBucketInsolventUser events should be emitted");
 
-      const stopStoringEvent = spStopStoringEvents.find(e => {
+      const stopStoringEvent = spStopStoringEvents.find((e) => {
         const eventData =
-          userApi.events.fileSystem.SpStopStoringInsolventUser.is(e.event) &&
-          e.event.data;
+          userApi.events.fileSystem.SpStopStoringInsolventUser.is(e.event) && e.event.data;
         return (
           eventData &&
           eventData.owner.toString() === shUser.address &&
@@ -784,7 +783,10 @@ describeMspNet(
         );
       });
 
-      assert(stopStoringEvent, "SpStopStoringInsolventUser event for the correct user and BSP ID should be present");
+      assert(
+        stopStoringEvent,
+        "SpStopStoringInsolventUser event for the correct user and BSP ID should be present"
+      );
 
       const stopStoringEventData =
         userApi.events.fileSystem.SpStopStoringInsolventUser.is(stopStoringEvent.event) &&
