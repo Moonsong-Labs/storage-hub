@@ -227,3 +227,27 @@ pub fn preset_names() -> Vec<PresetId> {
         PresetId::from(PRESET_GENESIS),
     ]
 }
+
+pub fn alith() -> AccountId {
+    AccountId::from(hex!("f24FF3a9CF04c71Dbc94D0b566f7A27B94566cac"))
+}
+
+pub fn baltathar() -> AccountId {
+    AccountId::from(hex!("3Cd0A705a2DC65e5b1E1205896BaA2be8A07c6e0"))
+}
+
+pub fn charleth() -> AccountId {
+    AccountId::from(hex!("798d4Ba9baf0064Ec19eB4F0a1a45785ae9D6DFc"))
+}
+
+pub fn dorothy() -> AccountId {
+    AccountId::from(hex!("773539d4Ac0e786233D90A233654ccEE26a613D9"))
+}
+
+pub fn ethan() -> AccountId {
+    AccountId::from(hex!("Ff64d3F6efE2317EE2807d2235B1ac2AA69d9E87"))
+}
+
+pub fn frank() -> AccountId {
+    AccountId::from(hex!("C0F0f4ab324C46e55D02D0033343B4Be8A55532d"))
+}

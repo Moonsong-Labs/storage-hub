@@ -118,13 +118,12 @@ pub type SignedExtra = (
     frame_system::CheckNonce<Runtime>,
     frame_system::CheckWeight<Runtime>,
     pallet_transaction_payment::ChargeTransactionPayment<Runtime>,
-    cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim<Runtime>,
     frame_metadata_hash_extension::CheckMetadataHash<Runtime>,
 );
 
 /// Unchecked extrinsic type as expected by this runtime.
 pub type UncheckedExtrinsic =
-    generic::UncheckedExtrinsic<Address, RuntimeCall, Signature, SignedExtra>;
+    fp_self_contained::UncheckedExtrinsic<Address, RuntimeCall, Signature, SignedExtra>;
 
 /// Executive: handles dispatch to the various modules.
 pub type Executive = frame_executive::Executive<
@@ -164,8 +163,8 @@ impl WeightToFeePolynomial for WeightToFee {
 
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
-    spec_name: alloc::borrow::Cow::Borrowed("storage-hub-runtime"),
-    impl_name: alloc::borrow::Cow::Borrowed("storage-hub-runtime"),
+    spec_name: alloc::borrow::Cow::Borrowed("shr-solochain-evm"),
+    impl_name: alloc::borrow::Cow::Borrowed("shr-solochain-evm"),
     authoring_version: 1,
     spec_version: 1,
     impl_version: 0,

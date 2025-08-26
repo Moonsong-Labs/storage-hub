@@ -63,6 +63,7 @@ use sp_weights::RuntimeDbWeight;
 use crate::{
     currency::WEIGHT_FEE,
     gas::WEIGHT_PER_GAS,
+    genesis_config_presets::{alith, baltathar, charleth},
     weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},
     AccountId, Babe, Balance, Balances, Block, BlockNumber, BucketNfts, EvmChainId, Historical,
     Nfts, Nonce, Offences, PaymentStreams, ProofsDealer, Providers, Runtime, RuntimeCall,
@@ -158,9 +159,9 @@ parameter_types! {
 }
 
 /// The default types are being injected by [`derive_impl`](`frame_support::derive_impl`) from
-/// [`ParaChainDefaultConfig`](`struct@frame_system::config_preludes::ParaChainDefaultConfig`),
+/// [`SoloChainDefaultConfig`](`struct@frame_system::config_preludes::SolochainDefaultConfig`),
 /// but overridden as needed.
-#[derive_impl(frame_system::config_preludes::ParaChainDefaultConfig as frame_system::DefaultConfig)]
+#[derive_impl(frame_system::config_preludes::SolochainDefaultConfig)]
 impl frame_system::Config for Runtime {
     /// The block type for the runtime.
     type Block = Block;
@@ -187,6 +188,7 @@ impl frame_system::Config for Runtime {
     /// This is used as an identifier of the chain. 42 is the generic substrate prefix.
     type SS58Prefix = SS58Prefix;
     type MaxConsumers = ConstU32<16>;
+    type SystemWeightInfo = ();
 }
 
 // 1 in 4 blocks (on average, not counting collisions) will be primary babe blocks.
@@ -267,6 +269,35 @@ impl Convert<AccountId, Option<()>> for FullIdentificationOf {
         Some(())
     }
 }
+
+parameter_types! {
+    pub static Validators: Option<Vec<AccountId>> = Some(vec![
+        alith(),
+        baltathar(),
+        charleth(),
+    ]);
+}
+
+pub struct NoChangesSessionManager;
+impl pallet_session::SessionManager<AccountId> for NoChangesSessionManager {
+    fn new_session(_new_index: SessionIndex) -> Option<Vec<AccountId>> {
+        Validators::get()
+    }
+    fn end_session(_: SessionIndex) {}
+    fn start_session(_: SessionIndex) {}
+}
+
+impl pallet_session::historical::SessionManager<AccountId, ()> for NoChangesSessionManager {
+    fn new_session(_new_index: SessionIndex) -> Option<Vec<(AccountId, ())>> {
+        Validators::mutate(|l| {
+            l.take()
+                .map(|validators| validators.iter().map(|v| (*v, ())).collect())
+        })
+    }
+    fn end_session(_: SessionIndex) {}
+    fn start_session(_: SessionIndex) {}
+}
+
 impl pallet_session::historical::Config for Runtime {
     type FullIdentification = ();
     type FullIdentificationOf = FullIdentificationOf;
@@ -278,10 +309,7 @@ impl pallet_session::Config for Runtime {
     type ValidatorIdOf = ConvertInto;
     type ShouldEndSession = Babe;
     type NextSessionRotation = Babe;
-    type SessionManager = pallet_session::historical::SessionManager<
-        <Runtime as pallet_session::Config>::ValidatorId,
-        (),
-    >;
+    type SessionManager = NoChangesSessionManager;
     type SessionHandler = <SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
     type Keys = SessionKeys;
     type WeightInfo = ();
