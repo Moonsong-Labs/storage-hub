@@ -19,6 +19,8 @@ jobs:
 
       - name: Setup pnpm & cache
         uses: ./.github/workflow-templates/setup-pnpm
+        with:
+          node_version: 23
 
       - name: Install Rust toolchain (for wasm)
         uses: actions-rust-lang/setup-rust-toolchain@v1.8
@@ -46,27 +48,26 @@ jobs:
         run: |
           pnpm exec playwright install --with-deps chromium
 
-      - name: Start dApp server (sdk root)
-        working-directory: sdk
-        run: |
-          nohup python3 -m http.server 3000 --directory . > /dev/null 2>&1 &
-          echo "Waiting for http://localhost:3000/e2e/page/index.html ..."
-          for i in {1..60}; do
-            if curl -sSf http://localhost:3000/e2e/page/index.html > /dev/null; then echo "Server is up"; break; fi
-            sleep 1
-          done
-
-      - name: Run Playwright tests (headless via xvfb) (sdk/e2e)
+      # Playwright webServer in config will start/stop the server
+      - name: Run Playwright tests (xvfb) (sdk/e2e)
         working-directory: sdk/e2e
         run: |
-          xvfb-run -a pnpm exec playwright test
+          xvfb-run -a pnpm exec playwright test --project metamask
 
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: sdk/e2e/playwright-report/
+          path: /tmp/playwright-report/
+          retention-days: 14
+
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: /tmp/test-results/
           retention-days: 14
 
 
