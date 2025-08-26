@@ -66,31 +66,6 @@ impl TaskContext {
     }
 }
 
-/// Helper function to classify errors into categories for telemetry.
-///
-/// This provides consistent error categorization across all tasks.
-pub fn classify_error(error: &anyhow::Error) -> String {
-    let error_str = error.to_string().to_lowercase();
-    
-    if error_str.contains("network") || error_str.contains("connection") {
-        "network_error".to_string()
-    } else if error_str.contains("timeout") {
-        "timeout_error".to_string()
-    } else if error_str.contains("permission") || error_str.contains("unauthorized") {
-        "permission_error".to_string()
-    } else if error_str.contains("storage") || error_str.contains("disk") {
-        "storage_error".to_string()
-    } else if error_str.contains("proof") || error_str.contains("verification") {
-        "proof_error".to_string()
-    } else if error_str.contains("blockchain") || error_str.contains("extrinsic") {
-        "blockchain_error".to_string()
-    } else if error_str.contains("capacity") || error_str.contains("full") {
-        "capacity_error".to_string()
-    } else {
-        "unknown_error".to_string()
-    }
-}
-
 /// Calculate transfer rate in Mbps given bytes and duration.
 pub fn calculate_transfer_rate_mbps(bytes: u64, duration: Duration) -> f64 {
     if duration.as_secs_f64() == 0.0 {
@@ -136,21 +111,6 @@ mod tests {
         let elapsed_ms = ctx.elapsed_ms();
         assert!(elapsed_ms >= 100);
         assert!(elapsed_ms < 200); // Allow some margin
-    }
-
-    #[test]
-    fn test_error_classification() {
-        let network_error = anyhow::anyhow!("Network connection failed");
-        assert_eq!(classify_error(&network_error), "network_error");
-        
-        let timeout_error = anyhow::anyhow!("Operation timeout exceeded");
-        assert_eq!(classify_error(&timeout_error), "timeout_error");
-        
-        let storage_error = anyhow::anyhow!("Disk storage full");
-        assert_eq!(classify_error(&storage_error), "storage_error");
-        
-        let unknown_error = anyhow::anyhow!("Something went wrong");
-        assert_eq!(classify_error(&unknown_error), "unknown_error");
     }
 
     #[test]

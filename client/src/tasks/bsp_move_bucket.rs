@@ -7,7 +7,7 @@ use shc_blockchain_service::{
     events::{MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected, MoveBucketRequested},
 };
 use shc_common::{
-    task_context::{classify_error, TaskContext},
+    task_context::TaskContext,
     traits::StorageEnableRuntime,
 };
 use shc_file_transfer_service::commands::{
@@ -16,6 +16,7 @@ use shc_file_transfer_service::commands::{
 use shc_telemetry_service::{
     create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryServiceCommandInterfaceExt,
 };
+use shc_common::telemetry_error::TelemetryErrorCategory;
 use serde::{Deserialize, Serialize};
 
 // Local BSP bucket move telemetry event definitions
@@ -213,7 +214,7 @@ where
                         base: create_base_event("bsp_bucket_move_failed", "storage-hub-bsp".to_string(), None),
                         task_id: ctx.task_id.clone(),
                         bucket_id: format!("{:?}", event.bucket_id),
-                        error_type: classify_error(&e),
+                        error_type: e.telemetry_category().to_string(),
                         error_message: e.to_string(),
                         duration_ms: Some(ctx.elapsed_ms()),
                         event_context: "requested".to_string(),
@@ -296,7 +297,7 @@ where
                         base: create_base_event("bsp_bucket_move_failed", "storage-hub-bsp".to_string(), None),
                         task_id: ctx.task_id.clone(),
                         bucket_id: format!("{:?}", event.bucket_id),
-                        error_type: classify_error(&e),
+                        error_type: e.telemetry_category().to_string(),
                         error_message: e.to_string(),
                         duration_ms: Some(ctx.elapsed_ms()),
                         event_context: "accepted".to_string(),
@@ -373,7 +374,7 @@ where
                         base: create_base_event("bsp_bucket_move_failed", "storage-hub-bsp".to_string(), None),
                         task_id: ctx.task_id.clone(),
                         bucket_id: format!("{:?}", event.bucket_id),
-                        error_type: classify_error(&e),
+                        error_type: e.telemetry_category().to_string(),
                         error_message: e.to_string(),
                         duration_ms: Some(ctx.elapsed_ms()),
                         event_context: "rejected".to_string(),
@@ -449,7 +450,7 @@ where
                         base: create_base_event("bsp_bucket_move_failed", "storage-hub-bsp".to_string(), None),
                         task_id: ctx.task_id.clone(),
                         bucket_id: format!("{:?}", event.bucket_id),
-                        error_type: classify_error(&e),
+                        error_type: e.telemetry_category().to_string(),
                         error_message: e.to_string(),
                         duration_ms: Some(ctx.elapsed_ms()),
                         event_context: "expired".to_string(),

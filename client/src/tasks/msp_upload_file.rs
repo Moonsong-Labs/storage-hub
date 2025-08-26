@@ -29,7 +29,8 @@ use shc_file_transfer_service::{
     commands::FileTransferServiceCommandInterface, events::RemoteUploadRequest,
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
-use shc_common::task_context::{classify_error, TaskContext};
+use shc_common::task_context::TaskContext;
+use shc_common::telemetry_error::TelemetryErrorCategory;
 use shc_telemetry_service::{
     create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryServiceCommandInterfaceExt,
 };
@@ -212,7 +213,7 @@ where
                         file_key: format!("{:?}", event.file_key),
                         bucket_id: format!("{:?}", event.bucket_id),
                         rejection_reason: "storage_request_failed".to_string(),
-                        error_type: classify_error(&e),
+                        error_type: e.telemetry_category().to_string(),
                         error_message: e.to_string(),
                     };
                     telemetry_service.queue_typed_event(rejected_event).await.ok();

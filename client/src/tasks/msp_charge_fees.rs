@@ -4,7 +4,8 @@ use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{commands::BlockchainServiceCommandInterface, events::NotifyPeriod};
 use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::{MaxUsersToCharge, StorageProviderId};
-use shc_common::task_context::{classify_error, TaskContext};
+use shc_common::task_context::TaskContext;
+use shc_common::telemetry_error::TelemetryErrorCategory;
 use shc_telemetry_service::{
     create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryServiceCommandInterfaceExt,
 };
@@ -167,7 +168,7 @@ where
                             base: create_base_event("msp_fee_collection_failed", "storage-hub-msp".to_string(), None),
                             task_id: ctx.task_id.clone(),
                             msp_id: "unknown".to_string(),
-                            error_type: classify_error(&error),
+                            error_type: error.telemetry_category().to_string(),
                             error_message: error.to_string(),
                             duration_ms: Some(ctx.elapsed_ms()),
                             users_attempted: 0,
@@ -216,7 +217,7 @@ where
                         base: create_base_event("msp_fee_collection_failed", "storage-hub-msp".to_string(), None),
                         task_id: ctx.task_id.clone(),
                         msp_id: format!("{:?}", own_msp_id),
-                        error_type: classify_error(&error),
+                        error_type: error.telemetry_category().to_string(),
                         error_message: error.to_string(),
                         duration_ms: Some(ctx.elapsed_ms()),
                         users_attempted: 0,

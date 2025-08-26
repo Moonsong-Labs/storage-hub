@@ -20,7 +20,8 @@ use shc_file_transfer_service::commands::{
 use shc_telemetry_service::{
     create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryServiceCommandInterfaceExt,
 };
-use shc_common::task_context::{TaskContext, classify_error};
+use shc_common::task_context::TaskContext;
+use shc_common::telemetry_error::TelemetryErrorCategory;
 use serde::{Deserialize, Serialize};
 use shp_file_metadata::ChunkId;
 
@@ -267,7 +268,7 @@ where
                         base: create_base_event("user_upload_failed", "storage-hub-user".to_string(), None),
                         task_id: ctx.task_id.clone(),
                         file_key: format!("{:?}", file_key),
-                        error_type: classify_error(&e),
+                        error_type: e.telemetry_category().to_string(),
                         error_message: e.to_string(),
                         duration_ms: Some(ctx.elapsed_ms()),
                         peer_id: Some("multiple".to_string()),
@@ -365,7 +366,7 @@ where
                         base: create_base_event("user_upload_failed", "storage-hub-user".to_string(), None),
                         task_id: ctx.task_id.clone(),
                         file_key: format!("{:?}", file_key),
-                        error_type: classify_error(&e),
+                        error_type: e.telemetry_category().to_string(),
                         error_message: e.to_string(),
                         duration_ms: Some(ctx.elapsed_ms()),
                         peer_id: Some("bsp_volunteer".to_string()),

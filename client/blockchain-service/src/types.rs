@@ -10,6 +10,7 @@ use std::{
 use codec::{Decode, Encode};
 use frame_system::DispatchEventInfo;
 use sc_client_api::BlockImportNotification;
+use shc_common::telemetry_error::{ErrorCategory, TelemetryErrorCategory};
 use shc_common::types::{
     BackupStorageProviderId, BlockNumber, BucketId, CustomChallenge, HasherOutT,
     MainStorageProviderId, ProofsDealerProviderId, RandomnessOutput, RejectedStorageRequestReason,
@@ -432,6 +433,17 @@ pub enum WatchTransactionError {
     },
     #[error("Unexpected error: {0}")]
     Internal(String),
+}
+
+impl TelemetryErrorCategory for WatchTransactionError {
+    fn telemetry_category(&self) -> ErrorCategory {
+        match self {
+            Self::Timeout => ErrorCategory::Timeout,
+            Self::WatcherChannelClosed => ErrorCategory::Network,
+            Self::TransactionFailed { .. } => ErrorCategory::Blockchain,
+            Self::Internal(_) => ErrorCategory::Blockchain,
+        }
+    }
 }
 
 /// Minimum block information needed to register what is the current best block

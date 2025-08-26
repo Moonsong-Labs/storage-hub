@@ -4,93 +4,134 @@ use trie_db::TrieLayout;
 
 use shc_common::types::{Chunk, ChunkId, FileKeyProof, FileMetadata, FileProof, HasherOutT};
 
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum FileStorageWriteError {
     /// The requested file does not exist.
+    #[error("The requested file does not exist")]
     FileDoesNotExist,
     /// File chunk ID already exists.
+    #[error("File chunk ID already exists")]
     FileChunkAlreadyExists,
     /// Failed to insert the file chunk.
+    #[error("Failed to insert the file chunk")]
     FailedToInsertFileChunk,
     /// Failed to get file chunk.
+    #[error("Failed to get file chunk")]
     FailedToGetFileChunk,
     /// File metadata fingerprint does not match the stored file fingerprint.
+    #[error("File metadata fingerprint does not match the stored file fingerprint")]
     FingerprintAndStoredFileMismatch,
     /// Failed to construct file trie.
+    #[error("Failed to construct file trie")]
     FailedToContructFileTrie,
     /// Failed to construct iterator for trie.
+    #[error("Failed to construct iterator for trie")]
     FailedToConstructTrieIter,
     /// Failed to commit changes in overlay to disk.
+    #[error("Failed to commit changes in overlay to disk")]
     FailedToPersistChanges,
     /// Failed to delete root.
+    #[error("Failed to delete root")]
     FailedToDeleteRoot,
     /// Failed to delete chunk.
+    #[error("Failed to delete chunk")]
     FailedToDeleteChunk,
     /// Failed to convert raw bytes into [`FileMetadata`].
+    #[error("Failed to convert raw bytes into FileMetadata")]
     FailedToParseFileMetadata,
     /// Failed to access storage for reading.
+    #[error("Failed to access storage for reading")]
     FailedToReadStorage,
     /// Failed to convert raw bytes into [`Fingerprint`].
+    #[error("Failed to convert raw bytes into Fingerprint")]
     FailedToParseFingerprint,
     /// Failed to update root after a chunk was written.
+    #[error("Failed to update root after a chunk was written")]
     FailedToUpdatePartialRoot,
     /// Failed to convert raw bytes into partial root.
+    #[error("Failed to convert raw bytes into partial root")]
     FailedToParsePartialRoot,
     /// Failed to get chunks count in storage.
+    #[error("Failed to get chunks count in storage")]
     FailedToGetStoredChunksCount,
     /// Reached chunk count limit (overflow)
+    #[error("Reached chunk count limit (overflow)")]
     ChunkCountOverflow,
 }
 
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum FileStorageError {
     /// File already exists.
+    #[error("File already exists")]
     FileAlreadyExists,
     /// File chunk already exists.
+    #[error("File chunk already exists")]
     FileChunkAlreadyExists,
     /// File chunk does not exist.
+    #[error("File chunk does not exist")]
     FileChunkDoesNotExist,
     /// Failed to insert the file chunk.
+    #[error("Failed to insert the file chunk")]
     FailedToInsertFileChunk,
     /// Failed to get file chunk.
+    #[error("Failed to get file chunk")]
     FailedToGetFileChunk,
     /// Failed to generate proof.
+    #[error("Failed to generate proof")]
     FailedToGenerateCompactProof,
     /// The requested file does not exist.
+    #[error("The requested file does not exist")]
     FileDoesNotExist,
     /// File metadata fingerprint does not match the stored file fingerprint.
+    #[error("File metadata fingerprint does not match the stored file fingerprint")]
     FingerprintAndStoredFileMismatch,
     /// The requested file is incomplete and a proof is impossible to generate.
+    #[error("The requested file is incomplete and a proof is impossible to generate")]
     IncompleteFile,
     /// Failed to access storage for reading.
+    #[error("Failed to access storage for reading")]
     FailedToReadStorage,
     /// Failed to access storage for writing.
+    #[error("Failed to access storage for writing")]
     FailedToWriteToStorage,
     /// Failed to convert raw bytes into [`FileKey`].
+    #[error("Failed to convert raw bytes into FileKey")]
     FailedToParseKey,
     /// Failed to construct iterator for trie.
+    #[error("Failed to construct iterator for trie")]
     FailedToConstructTrieIter,
     /// Failed to convert raw bytes into [`FileMetadata`].
+    #[error("Failed to convert raw bytes into FileMetadata")]
     FailedToParseFileMetadata,
     /// Failed to convert raw bytes into [`Fingerprint`].
+    #[error("Failed to convert raw bytes into Fingerprint")]
     FailedToParseFingerprint,
     /// Failed to convert raw bytes into [`ChunkWithId`].
+    #[error("Failed to convert raw bytes into ChunkWithId")]
     FailedToParseChunkWithId,
     /// Failed to delete chunk from storage.
+    #[error("Failed to delete chunk from storage")]
     FailedToDeleteFileChunk,
     /// Failed to convert raw bytes into partial root.
+    #[error("Failed to convert raw bytes into partial root")]
     FailedToParsePartialRoot,
     /// Failed to convert raw bytes into [`HasherOutT`].
+    #[error("Failed to convert raw bytes into HasherOutT")]
     FailedToHasherOutput,
     /// File has size zero.
+    #[error("File has size zero")]
     FileIsEmpty,
     /// Failed to add entity to the exclude list.
+    #[error("Failed to add entity to the exclude list")]
     FailedToAddEntityToExcludeList,
     /// Failed to remove entity from the exclude list.
+    #[error("Failed to remove entity from the exclude list")]
     FailedToAddEntityFromExcludeList,
     /// Trying to parse unknown exclude type.
+    #[error("Trying to parse unknown exclude type")]
     ErrorParsingExcludeType,
     /// Failed to get file key proof from file metadata.
+    #[error("Failed to get file key proof from file metadata")]
     FailedToConstructFileKeyProof,
 }
 

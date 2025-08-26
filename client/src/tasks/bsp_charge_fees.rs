@@ -11,13 +11,14 @@ use shc_blockchain_service::{
     },
     types::{SendExtrinsicOptions, StopStoringForInsolventUserRequest},
 };
-use shc_common::task_context::{classify_error, TaskContext};
+use shc_common::task_context::TaskContext;
 use shc_common::traits::StorageEnableRuntime;
 use shc_common::{consts::CURRENT_FOREST_KEY, types::MaxUsersToCharge};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shc_telemetry_service::{
     create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryServiceCommandInterfaceExt,
 };
+use shc_common::telemetry_error::TelemetryErrorCategory;
 use serde::{Deserialize, Serialize};
 use sp_core::{Get, H256};
 
@@ -191,7 +192,7 @@ where
                         base: create_base_event("bsp_fee_collection_failed", "storage-hub-bsp".to_string(), None),
                         task_id: ctx.task_id.clone(),
                         task_name: ctx.task_name.clone(),
-                        error_type: classify_error(&error),
+                        error_type: error.telemetry_category().to_string(),
                         error_message: error.to_string(),
                         users_count: None,
                     };
@@ -244,7 +245,7 @@ where
                             base: create_base_event("bsp_fee_collection_failed", "storage-hub-bsp".to_string(), None),
                             task_id: ctx.task_id.clone(),
                             task_name: ctx.task_name.clone(),
-                            error_type: classify_error(&e),
+                            error_type: e.telemetry_category().to_string(),
                             error_message: e.to_string(),
                             users_count: Some(users_chunk.len() as u32),
                         };
@@ -496,7 +497,7 @@ where
                                 base: create_base_event("bsp_fee_collection_failed", "storage-hub-bsp".to_string(), None),
                                 task_id: ctx.task_id.clone(),
                                 task_name: ctx.task_name.clone(),
-                                error_type: classify_error(&e),
+                                error_type: e.telemetry_category().to_string(),
                                 error_message: e.to_string(),
                                 users_count: Some(1),
                             };

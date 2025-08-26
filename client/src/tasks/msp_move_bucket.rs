@@ -13,7 +13,8 @@ use shc_blockchain_service::{
     events::{MoveBucketRequestedForMsp, StartMovedBucketDownload},
     types::{RetryStrategy, SendExtrinsicOptions},
 };
-use shc_common::task_context::{classify_error, TaskContext};
+use shc_common::task_context::TaskContext;
+use shc_common::telemetry_error::TelemetryErrorCategory;
 use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::{
     BucketId, HashT, ProviderId, StorageProofsMerkleTrieLayout, StorageProviderId,
@@ -197,7 +198,7 @@ where
                         base: create_base_event("msp_bucket_move_failed", "storage-hub-msp".to_string(), None),
                         task_id: ctx.task_id.clone(),
                         bucket_id: format!("{:?}", event.bucket_id),
-                        error_type: classify_error(&error),
+                        error_type: error.telemetry_category().to_string(),
                         error_message: error.to_string(),
                         duration_ms: Some(ctx.elapsed_ms()),
                     };
@@ -265,7 +266,7 @@ where
                         base: create_base_event("msp_bucket_move_failed", "storage-hub-msp".to_string(), None),
                         task_id: ctx.task_id.clone(),
                         bucket_id: format!("{:?}", event.bucket_id),
-                        error_type: classify_error(&error),
+                        error_type: error.telemetry_category().to_string(),
                         error_message: error.to_string(),
                         duration_ms: Some(download_start_time.elapsed().as_millis() as u64),
                     };

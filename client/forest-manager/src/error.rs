@@ -1,4 +1,5 @@
 use shc_common::types::HasherOutT;
+use shc_common::telemetry_error::{ErrorCategory, TelemetryErrorCategory};
 use trie_db::CError;
 
 pub(crate) type ErrorT<T> = Error<HasherOutT<T>, CError<T>>;
@@ -60,4 +61,27 @@ pub enum ForestStorageError<H> {
     FailedToConstructProvenLeaves,
     #[error("Failed to copy RocksDB database to another directory")]
     FailedToCopyRocksDB,
+}
+
+impl<H> TelemetryErrorCategory for ForestStorageError<H> {
+    fn telemetry_category(&self) -> ErrorCategory {
+        match self {
+            Self::FailedToCreateTrieIterator
+            | Self::FailedToSeek(_)
+            | Self::FailedToReadLeaf(_)
+            | Self::FailedToInsertFileKey(_)
+            | Self::FileKeyAlreadyExists(_)
+            | Self::FailedToParseKey
+            | Self::FailedToDecodeValue
+            | Self::FailedToConstructProvenLeaves => ErrorCategory::ForestOperation,
+            
+            Self::ExpectingRootToBeInStorage
+            | Self::FailedToReadStorage
+            | Self::FailedToWriteToStorage
+            | Self::FailedToCopyRocksDB => ErrorCategory::Storage,
+            
+            Self::FailedToGenerateCompactProof
+            | Self::InvalidProvingScenario => ErrorCategory::Proof,
+        }
+    }
 }

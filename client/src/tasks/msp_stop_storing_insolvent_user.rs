@@ -10,7 +10,7 @@ use shc_blockchain_service::{
     events::{FinalisedMspStopStoringBucketInsolventUser, UserWithoutFunds},
     types::SendExtrinsicOptions,
 };
-use shc_common::task_context::{classify_error, TaskContext};
+use shc_common::task_context::TaskContext;
 use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::StorageProviderId;
 use shc_file_manager::traits::FileStorage;
@@ -321,25 +321,7 @@ where
             }
         }
 
-        // Send error telemetry if the entire process failed
-        let result = Ok(());
-        if let Err(ref e) = result {
-            if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
-                let failed_event = MspInsolventProcessingFailedEvent {
-                    base: create_base_event("msp_insolvent_processing_failed", "storage-hub-msp".to_string(), None),
-                    task_id: ctx.task_id.clone(),
-                    insolvent_user: format!("{:?}", insolvent_user),
-                    error_type: classify_error(e),
-                    error_message: e.to_string(),
-                    buckets_failed: 0,
-                    buckets_total: 0,
-                    duration_ms: Some(ctx.elapsed_ms()),
-                };
-                telemetry_service.queue_typed_event(failed_event).await.ok();
-            }
-        }
-
-        result
+        Ok(())
     }
 }
 

@@ -1,6 +1,6 @@
 use sc_tracing::tracing::{error, trace};
 use shc_actors_framework::event_bus::EventHandler;
-use shc_common::task_context::{classify_error, TaskContext};
+use shc_common::task_context::TaskContext;
 use shc_common::traits::StorageEnableRuntime;
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::{
@@ -9,6 +9,7 @@ use shc_file_transfer_service::{
 use shc_telemetry_service::{
     create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryServiceCommandInterfaceExt,
 };
+use shc_common::telemetry_error::TelemetryErrorCategory;
 use serde::{Deserialize, Serialize};
 
 // Local BSP download telemetry event definitions
@@ -178,7 +179,7 @@ where
                         base: create_base_event("bsp_download_failed", "storage-hub-bsp".to_string(), None),
                         task_id: ctx.task_id.clone(),
                         file_key: format!("{:?}", event.file_key),
-                        error_type: classify_error(&e),
+                        error_type: e.telemetry_category().to_string(),
                         error_message: e.to_string(),
                         request_id: format!("{:?}", event.request_id),
                         duration_ms: Some(ctx.elapsed_ms()),

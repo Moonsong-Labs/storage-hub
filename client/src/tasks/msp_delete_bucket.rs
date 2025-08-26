@@ -4,7 +4,8 @@ use anyhow::anyhow;
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::events::{FinalisedBucketMovedAway, FinalisedMspStoppedStoringBucket};
-use shc_common::task_context::{classify_error, TaskContext};
+use shc_common::task_context::TaskContext;
+use shc_common::telemetry_error::TelemetryErrorCategory;
 use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::BucketId;
 use shc_file_manager::traits::FileStorage;
@@ -181,7 +182,7 @@ where
 
                 // Send telemetry event for bucket deletion failed
                 if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
-                    let error_type = classify_error(&e);
+                    let error_type = e.telemetry_category().to_string();
                     let error_message = e.to_string();
                     let failed_event = MspBucketDeletionFailedEvent {
                         base: create_base_event("msp_bucket_deletion_failed", "storage-hub-msp".to_string(), None),
@@ -266,7 +267,7 @@ where
 
                 // Send telemetry event for bucket deletion failed
                 if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
-                    let error_type = classify_error(&e);
+                    let error_type = e.telemetry_category().to_string();
                     let error_message = e.to_string();
                     let failed_event = MspBucketDeletionFailedEvent {
                         base: create_base_event("msp_bucket_deletion_failed", "storage-hub-msp".to_string(), None),

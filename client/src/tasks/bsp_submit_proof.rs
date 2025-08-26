@@ -18,7 +18,7 @@ use shc_blockchain_service::{
 use shc_common::traits::StorageEnableRuntime;
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
-    task_context::{classify_error, TaskContext},
+    task_context::TaskContext,
     types::{
         BlockNumber, CustomChallenge, FileKey, ForestRoot, KeyProof, KeyProofs,
         ProofsDealerProviderId, Proven, RandomnessOutput, StorageProof,
@@ -28,6 +28,7 @@ use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shc_telemetry_service::{
     create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryServiceCommandInterfaceExt,
 };
+use shc_common::telemetry_error::TelemetryErrorCategory;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -499,7 +500,7 @@ where
                         task_id: ctx.task_id.clone(),
                         provider_id: format!("{:?}", event.data.provider_id),
                         tick: event.data.tick,
-                        error_type: classify_error(e),
+                        error_type: e.telemetry_category().to_string(),
                         error_message: e.to_string(),
                         submission_attempts: self.config.max_submission_attempts,
                         total_time_ms,

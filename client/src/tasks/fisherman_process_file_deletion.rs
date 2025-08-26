@@ -5,7 +5,8 @@ use shc_common::traits::StorageEnableRuntime;
 use shc_telemetry_service::{
     create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryServiceCommandInterfaceExt,
 };
-use shc_common::task_context::{TaskContext, classify_error};
+use shc_common::task_context::TaskContext;
+use shc_common::telemetry_error::TelemetryErrorCategory;
 use serde::{Deserialize, Serialize};
 
 // Local Fisherman telemetry event definitions
@@ -153,7 +154,7 @@ where
                     file_key: format!("{:?}", event.file_key),
                     deletion_result: "failure".to_string(),
                     duration_ms: ctx.elapsed_ms(),
-                    error_type: Some(classify_error(&e)),
+                    error_type: Some(e.telemetry_category().to_string()),
                     error_message: Some(e.to_string()),
                 },
             };

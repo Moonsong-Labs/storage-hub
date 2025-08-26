@@ -4,7 +4,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::anyhow;
 use frame_support::BoundedVec;
 use pallet_file_system_runtime_api::QueryBspConfirmChunksToProveForFileError;
 use sc_network::PeerId;
@@ -22,7 +21,7 @@ use shc_blockchain_service::{
 use shc_common::traits::StorageEnableRuntime;
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
-    task_context::{classify_error, TaskContext},
+    task_context::TaskContext,
     types::{
         FileKey, FileKeyWithProof, FileMetadata, HashT, StorageProofsMerkleTrieLayout,
         StorageProviderId, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
@@ -36,7 +35,169 @@ use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shc_telemetry_service::{
     create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryServiceCommandInterfaceExt,
 };
+use shc_common::telemetry_error::{TelemetryErrorCategory, ErrorCategory};
 use serde::{Deserialize, Serialize};
+
+/// Strongly-typed errors for BSP upload file task
+#[derive(thiserror::Error, Debug)]
+pub enum BspUploadError {
+    #[error("Forest root write tx already taken - this is a critical bug")]
+    ForestRootTxTaken,
+    
+    #[error("Failed to get BSP ID")]
+    BspIdNotFound,
+    
+    #[error("Current node account is a Main Storage Provider. Expected a Backup Storage Provider ID")]
+    WrongProviderType,
+    
+    #[error("File size cannot be zero")]
+    InvalidFileSize,
+    
+    #[error("Failed to get forest storage")]
+    ForestStorageNotFound,
+    
+    #[error("Failed to generate proofs for ALL the requested files")]
+    ProofGenerationFailed,
+    
+    #[error("Failed to convert file keys and proofs to BoundedVec - critical bug")]
+    BoundedVecConversion,
+    
+    #[error("Failed to confirm file after {max_retries} retries: {last_error}")]
+    ConfirmationFailed { max_retries: u32, last_error: String },
+    
+    #[error("Invalid file metadata")]
+    InvalidFileMetadata,
+    
+    #[error("BSP is not allowed to receive this storage request: {reason}")]
+    NotAllowedToReceive { reason: String },
+    
+    #[error("Failed to query storage provider capacity: {details}")]
+    CapacityQueryFailed { details: String },
+    
+    #[error("BSP does not have enough storage capacity to store this file")]
+    InsufficientCapacity,
+    
+    #[error("Failed to send capacity request: {details}")]
+    CapacityRequestFailed { details: String },
+    
+    #[error("Capacity request was rejected")]
+    CapacityRequestRejected,
+    
+    #[error("Failed to query file earliest volunteer tick: {details}")]
+    VolunteerTickQueryFailed { details: String },
+    
+    #[error("Failed to query if storage request is open to volunteers: {details}")]
+    VolunteerCheckFailed { details: String },
+    
+    #[error("Storage request is no longer open to volunteers")]
+    StorageRequestClosed,
+    
+    #[error("Failed to insert file in file storage: {details}")]
+    FileInsertionFailed { details: String },
+    
+    #[error("Failed to convert peer ID to a string: {details}")]
+    PeerIdConversion { details: String },
+    
+    #[error("Failed to register new file peer: {details}")]
+    FilePeerRegistrationFailed { details: String },
+    
+    #[error("Failed to get file metadata: {details}")]
+    FileMetadataRetrievalFailed { details: String },
+    
+    #[error("File metadata not found")]
+    FileMetadataNotFound,
+    
+    #[error("Fingerprint mismatch")]
+    FingerprintMismatch,
+    
+    #[error("Expected at least one proven chunk but got none")]
+    NoProvenChunks,
+    
+    #[error("Total batch size {total_size} bytes exceeds maximum allowed size of {max_size} bytes")]
+    BatchSizeExceeded { total_size: u64, max_size: u64 },
+    
+    #[error("Failed to verify and get proven file key chunks: {details}")]
+    ChunkVerificationFailed { details: String },
+    
+    #[error("Invalid chunk size. Expected {expected}, got {actual}")]
+    InvalidChunkSize { expected: u64, actual: u64 },
+    
+    #[error("Chunk data mismatch for chunk {chunk_id}")]
+    ChunkDataMismatch { chunk_id: String },
+    
+    #[error("File does not exist for key {file_key:?}. Maybe we forgot to unregister before deleting?")]
+    FileNotFound { file_key: H256 },
+    
+    #[error("Invariant broken! This is a bug! Fingerprint and stored file mismatch for key {file_key:?}")]
+    FingerprintInvariantBroken { file_key: H256 },
+    
+    #[error("This is a bug! Failed to construct trie iter for key {file_key:?}")]
+    TrieConstructionBug { file_key: H256 },
+    
+    #[error("Internal trie read/write error {file_key:?}:{chunk_key:?}")]
+    TrieReadWriteError { file_key: H256, chunk_key: String },
+    
+    /// Wrapper for file storage errors
+    #[error("File storage error: {0}")]
+    FileStorage(#[from] shc_file_manager::traits::FileStorageError),
+    
+    /// Wrapper for file storage write errors
+    #[error("File storage write error: {0}")]
+    FileStorageWrite(#[from] FileStorageWriteError),
+    
+    /// Wrapper for forest storage errors
+    #[error("Forest storage error: {0}")]
+    ForestStorage(#[from] shc_forest_manager::error::ForestStorageError<H256>),
+    
+    /// Wrapper for blockchain service errors
+    #[error("Blockchain service error: {0}")]
+    Blockchain(#[from] shc_blockchain_service::types::WatchTransactionError),
+}
+
+impl TelemetryErrorCategory for BspUploadError {
+    fn telemetry_category(&self) -> ErrorCategory {
+        match self {
+            Self::ForestRootTxTaken | Self::BspIdNotFound | Self::WrongProviderType 
+            | Self::ForestStorageNotFound | Self::BoundedVecConversion 
+            | Self::FingerprintInvariantBroken { .. } | Self::TrieConstructionBug { .. }
+                => ErrorCategory::Configuration,
+                
+            Self::InvalidFileSize | Self::InvalidFileMetadata | Self::FileMetadataNotFound
+            | Self::FileMetadataRetrievalFailed { .. } | Self::FingerprintMismatch 
+            | Self::NoProvenChunks | Self::ChunkVerificationFailed { .. }
+            | Self::InvalidChunkSize { .. } | Self::ChunkDataMismatch { .. }
+            | Self::FileNotFound { .. } | Self::FileInsertionFailed { .. }
+                => ErrorCategory::FileOperation,
+                
+            Self::InsufficientCapacity | Self::BatchSizeExceeded { .. }
+                => ErrorCategory::Capacity,
+                
+            Self::ProofGenerationFailed
+                => ErrorCategory::Proof,
+                
+            Self::NotAllowedToReceive { .. } | Self::CapacityQueryFailed { .. }
+            | Self::CapacityRequestFailed { .. } | Self::CapacityRequestRejected
+            | Self::VolunteerTickQueryFailed { .. } | Self::VolunteerCheckFailed { .. }
+            | Self::StorageRequestClosed
+                => ErrorCategory::Blockchain,
+                
+            Self::ConfirmationFailed { .. }
+                => ErrorCategory::Timeout,
+                
+            Self::PeerIdConversion { .. } | Self::FilePeerRegistrationFailed { .. }
+                => ErrorCategory::Network,
+                
+            Self::TrieReadWriteError { .. }
+                => ErrorCategory::Storage,
+            
+            // Delegate to wrapped error types
+            Self::FileStorage(e) => e.telemetry_category(),
+            Self::FileStorageWrite(e) => e.telemetry_category(),
+            Self::ForestStorage(e) => e.telemetry_category(),
+            Self::Blockchain(e) => e.telemetry_category(),
+        }
+    }
+}
 
 // Local BSP telemetry event definitions
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -305,7 +466,7 @@ where
                             base: create_base_event("bsp_upload_failed", "storage-hub-bsp".to_string(), None),
                             task_id: ctx.task_id.clone(),
                             file_key: format!("{:?}", event.file_key),
-                            error_type: classify_error(&e),
+                            error_type: e.telemetry_category().to_string(),
                             error_message: e.to_string(),
                             duration_ms: Some(ctx.elapsed_ms()),
                             chunks_received: Some(0),
@@ -421,7 +582,7 @@ where
             None => {
                 let err_msg = "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. This is a critical bug. Please report it to the StorageHub team.";
                 error!(target: LOG_TARGET, err_msg);
-                return Err(anyhow!(err_msg));
+                return Err(BspUploadError::ForestRootTxTaken.into());
             }
         };
 
@@ -436,13 +597,13 @@ where
                 StorageProviderId::MainStorageProvider(_) => {
                     let err_msg = "Current node account is a Main Storage Provider. Expected a Backup Storage Provider ID.";
                     error!(target: LOG_TARGET, err_msg);
-                    return Err(anyhow!(err_msg));
+                    return Err(BspUploadError::WrongProviderType.into());
                 }
                 StorageProviderId::BackupStorageProvider(id) => id,
             },
             None => {
                 error!(target: LOG_TARGET, "Failed to get own BSP ID.");
-                return Err(anyhow!("Failed to get own BSP ID."));
+                return Err(BspUploadError::BspIdNotFound.into());
             }
         };
         let current_forest_key = CURRENT_FOREST_KEY.to_vec();
@@ -552,9 +713,7 @@ where
 
         if file_keys_and_proofs.is_empty() {
             error!(target: LOG_TARGET, "Failed to generate proofs for ALL the requested files.\n");
-            return Err(anyhow!(
-                "Failed to generate proofs for ALL the requested files."
-            ));
+            return Err(BspUploadError::ProofGenerationFailed.into());
         }
 
         let file_keys = file_keys_and_proofs
@@ -567,7 +726,7 @@ where
             .forest_storage_handler
             .get(&current_forest_key)
             .await
-            .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+            .ok_or_else(|| BspUploadError::ForestStorageNotFound)?;
 
         // Generate a proof of non-inclusion (executed in closure to drop the read lock on the forest storage).
         let non_inclusion_forest_proof = { fs.read().await.generate_proof(file_keys)? };
@@ -582,7 +741,7 @@ where
                 file_keys_and_proofs: BoundedVec::try_from(file_keys_and_proofs)
                 .map_err(|_| {
                     error!("CRITICAL❗️❗️ This is a bug! Failed to convert file keys and proofs to BoundedVec. Please report it to the StorageHub team.");
-                    anyhow!("Failed to convert file keys and proofs to BoundedVec.")
+                    BspUploadError::BoundedVecConversion
                 })?,
             },
         );
@@ -623,7 +782,7 @@ where
                         ),
                         task_id: ctx.task_id.clone(),
                         proof_type: "storage".to_string(),
-                        error_type: classify_error(&e),
+                        error_type: e.telemetry_category().to_string(),
                         error_message: e.to_string(),
                         generation_time_ms: Some(proof_generation_time_ms),
                         submission_attempts: self.config.max_try_count,
@@ -634,11 +793,10 @@ where
                         .ok();
                 }
 
-                return Err(anyhow!(
-                    "Failed to confirm file after {} retries: {:?}",
-                    self.config.max_try_count,
-                    e
-                ));
+                return Err(BspUploadError::ConfirmationFailed { 
+                    max_retries: self.config.max_try_count, 
+                    last_error: e.to_string() 
+                }.into());
             }
         };
 
@@ -706,7 +864,7 @@ where
         if event.size == 0 {
             let err_msg = "File size cannot be 0";
             error!(target: LOG_TARGET, err_msg);
-            return Err(anyhow!(err_msg));
+            return Err(BspUploadError::InvalidFileSize.into());
         }
 
         // First check if the file is not on our exclude list
@@ -725,7 +883,7 @@ where
             .forest_storage_handler
             .get(&current_forest_key)
             .await
-            .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+            .ok_or_else(|| BspUploadError::ForestStorageNotFound)?;
         if fs.read().await.contains_file_key(&event.file_key.into())? {
             info!(
                 target: LOG_TARGET,
@@ -743,7 +901,7 @@ where
             event.size as u64,
             event.fingerprint,
         )
-        .map_err(|_| anyhow::anyhow!("Invalid file metadata"))?;
+        .map_err(|_| BspUploadError::InvalidFileMetadata)?;
 
         let own_provider_id = self
             .storage_hub_handler
@@ -756,14 +914,14 @@ where
                 StorageProviderId::MainStorageProvider(_) => {
                     let err_msg = "Current node account is a Main Storage Provider. Expected a Backup Storage Provider ID.";
                     error!(target: LOG_TARGET, err_msg);
-                    return Err(anyhow!(err_msg));
+                    return Err(BspUploadError::WrongProviderType.into());
                 }
                 StorageProviderId::BackupStorageProvider(id) => id,
             },
             None => {
                 let err_msg = "Failed to get own BSP ID.";
                 error!(target: LOG_TARGET, err_msg);
-                return Err(anyhow!(err_msg));
+                return Err(BspUploadError::BspIdNotFound.into());
             }
         };
 
@@ -778,7 +936,7 @@ where
                     target: LOG_TARGET,
                     err_msg
                 );
-                anyhow::anyhow!(err_msg)
+                BspUploadError::CapacityQueryFailed { details: format!("{:?}", e) }
             })?;
 
         // Increase storage capacity if the available capacity is less than the file size.
@@ -800,7 +958,7 @@ where
                         target: LOG_TARGET,
                         "Failed to query storage provider capacity: {:?}", e
                     );
-                    anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
+                    BspUploadError::CapacityQueryFailed { details: format!("{:?}", e) }
                 })?;
 
             let max_storage_capacity = self
@@ -815,7 +973,7 @@ where
                 error!(
                     target: LOG_TARGET, "{}", err_msg
                 );
-                return Err(anyhow::anyhow!(err_msg));
+                return Err(BspUploadError::InsufficientCapacity.into());
             }
 
             self.storage_hub_handler
@@ -834,7 +992,7 @@ where
                         target: LOG_TARGET,
                         err_msg
                     );
-                    anyhow::anyhow!(err_msg)
+                    BspUploadError::CapacityQueryFailed { details: format!("{:?}", e) }
                 })?;
 
             // Skip volunteering if the new available capacity is still less than the file size.
@@ -843,7 +1001,7 @@ where
                 warn!(
                     target: LOG_TARGET, "{}", err_msg
                 );
-                return Err(anyhow::anyhow!(err_msg));
+                return Err(BspUploadError::InsufficientCapacity.into());
             }
         }
 
@@ -861,7 +1019,7 @@ where
             .blockchain
             .query_file_earliest_volunteer_tick(own_bsp_id, file_key.into())
             .await
-            .map_err(|e| anyhow!("Failed to query file earliest volunteer block: {:?}", e))?;
+            .map_err(|e| BspUploadError::VolunteerTickQueryFailed { details: format!("{:?}", e) })?;
 
         // Calculate the tick in which the BSP should send the extrinsic. It's one less that the tick
         // in which the BSP can volunteer for the file because that way it the extrinsic will get included
@@ -889,7 +1047,7 @@ where
             .blockchain
             .is_storage_request_open_to_volunteers(file_key.into())
             .await
-            .map_err(|e| anyhow!("Failed to query file can volunteer: {:?}", e))?;
+            .map_err(|e| BspUploadError::VolunteerCheckFailed { details: format!("{:?}", e) })?;
 
         // Skip volunteering if the storage request is no longer open to volunteers.
         // TODO: Handle the case where were catching up to the latest block. We probably either want to skip volunteering or wait until
@@ -899,7 +1057,7 @@ where
             warn!(
                 target: LOG_TARGET, "{}", err_msg
             );
-            return Err(anyhow::anyhow!(err_msg));
+            return Err(BspUploadError::StorageRequestClosed.into());
         }
 
         // Optimistically create file in file storage so we can write uploaded chunks as soon as possible.
@@ -909,7 +1067,7 @@ where
                 metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>(),
                 metadata,
             )
-            .map_err(|e| anyhow!("Failed to insert file in file storage: {:?}", e))?;
+            .map_err(|e| BspUploadError::FileInsertionFailed { details: format!("{:?}", e) })?;
         drop(write_file_storage);
 
         // Optimistically register the file for upload in the file transfer service.
@@ -921,13 +1079,13 @@ where
                     error!(target: LOG_TARGET, "Failed to convert peer ID to PeerId: {}", e);
                     e
                 })?,
-                Err(e) => return Err(anyhow!("Failed to convert peer ID to a string: {}", e)),
+                Err(e) => return Err(BspUploadError::PeerIdConversion { details: e.to_string() }.into()),
             };
             self.storage_hub_handler
                 .file_transfer
                 .register_new_file(peer_id, file_key)
                 .await
-                .map_err(|e| anyhow!("Failed to register new file peer: {:?}", e))?;
+                .map_err(|e| BspUploadError::FilePeerRegistrationFailed { details: format!("{:?}", e) })?;
         }
 
         // Build extrinsic.
@@ -1013,8 +1171,8 @@ where
         // Get the file metadata to verify the fingerprint
         let file_metadata = write_file_storage
             .get_metadata(&file_key)
-            .map_err(|e| anyhow!("Failed to get file metadata: {:?}", e))?
-            .ok_or_else(|| anyhow!("File metadata not found"))?;
+            .map_err(|e| BspUploadError::FileMetadataRetrievalFailed { details: format!("{:?}", e) })?
+            .ok_or_else(|| BspUploadError::FileMetadataNotFound)?;
 
         // Create task context for tracking chunk upload
         let ctx = TaskContext::new("bsp_upload_chunk");
@@ -1027,7 +1185,7 @@ where
                 "Fingerprint mismatch for file {:?}. Expected: {:?}, got: {:?}",
                 file_key, expected_fingerprint, event.file_key_proof.file_metadata.fingerprint()
             );
-            return Err(anyhow!("Fingerprint mismatch"));
+            return Err(BspUploadError::FingerprintMismatch.into());
         }
 
         // Verify and extract chunks from proof
@@ -1037,35 +1195,31 @@ where
         {
             Ok(proven) => {
                 if proven.is_empty() {
-                    Err(anyhow::anyhow!(
-                        "Expected at least one proven chunk but got none."
-                    ))
+                    Err(BspUploadError::NoProvenChunks)
                 } else {
                     // Calculate total batch size
                     let total_batch_size: usize = proven.iter().map(|chunk| chunk.data.len()).sum();
 
                     if total_batch_size > BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE {
-                        Err(anyhow::anyhow!(
-                            "Total batch size {} bytes exceeds maximum allowed size of {} bytes",
-                            total_batch_size,
-                            BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE
-                        ))
+                        Err(BspUploadError::BatchSizeExceeded { 
+                            total_size: total_batch_size as u64, 
+                            max_size: BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE as u64 
+                        })
                     } else {
                         Ok(proven)
                     }
                 }
             }
-            Err(e) => Err(anyhow::anyhow!(
-                "Failed to verify and get proven file key chunks: {:?}",
-                e
-            )),
+            Err(e) => Err(BspUploadError::ChunkVerificationFailed { 
+                details: format!("{:?}", e)
+            }),
         };
 
         let proven = match proven {
             Ok(proven) => proven,
             Err(e) => {
                 error!(target: LOG_TARGET, "Failed to verify and get proven file key chunks: {}", e);
-                return Err(e);
+                return Err(e.into());
             }
         };
 
@@ -1097,11 +1251,10 @@ where
                                 actual_chunk_size,
                             chunk.data.len()
                         );
-                        return Err(anyhow!(
-                            "Invalid chunk size. Expected {}, got {}",
-                            actual_chunk_size,
-                            chunk.data.len()
-                        ));
+                        return Err(BspUploadError::InvalidChunkSize { 
+                            expected: actual_chunk_size as u64, 
+                            actual: chunk.data.len() as u64 
+                        }.into());
                     }
                     Err(e) => {
                         let err_msg = format!(
@@ -1113,7 +1266,7 @@ where
                             "{}",
                             err_msg
                         );
-                        return Err(anyhow!(err_msg));
+                        return Err(BspUploadError::ChunkDataMismatch { chunk_id: chunk.key.as_u64().to_string() }.into());
                     }
                 }
             }
@@ -1139,10 +1292,7 @@ where
                         continue;
                     }
                     FileStorageWriteError::FileDoesNotExist => {
-                        return Err(anyhow::anyhow!(format!(
-                            "File does not exist for key {:?}. Maybe we forgot to unregister before deleting?",
-                            event.file_key
-                        )));
+                        return Err(BspUploadError::FileNotFound { file_key: event.file_key.into() }.into());
                     }
                     FileStorageWriteError::FailedToGetFileChunk
                     | FileStorageWriteError::FailedToInsertFileChunk
@@ -1156,23 +1306,21 @@ where
                     | FileStorageWriteError::FailedToParsePartialRoot
                     | FileStorageWriteError::FailedToGetStoredChunksCount
                     | FileStorageWriteError::ChunkCountOverflow => {
-                        return Err(anyhow::anyhow!(format!(
-                            "Internal trie read/write error {:?}:{:?}",
-                            event.file_key, chunk.key
-                        )));
+                        return Err(BspUploadError::TrieReadWriteError { 
+                            file_key: event.file_key.into(), 
+                            chunk_key: chunk.key.as_u64().to_string()
+                        }.into());
                     }
                     FileStorageWriteError::FingerprintAndStoredFileMismatch => {
-                        return Err(anyhow::anyhow!(format!(
-                            "Invariant broken! This is a bug! Fingerprint and stored file mismatch for key {:?}.",
-                            event.file_key
-                        )));
+                        return Err(BspUploadError::FingerprintInvariantBroken { 
+                            file_key: event.file_key.into() 
+                        }.into());
                     }
                     FileStorageWriteError::FailedToConstructTrieIter
                     | FileStorageWriteError::FailedToContructFileTrie => {
-                        return Err(anyhow::anyhow!(format!(
-                            "This is a bug! Failed to construct trie iter for key {:?}.",
-                            event.file_key
-                        )));
+                        return Err(BspUploadError::TrieConstructionBug { 
+                            file_key: event.file_key.into() 
+                        }.into());
                     }
                 },
             }
@@ -1214,7 +1362,7 @@ where
                     target: LOG_TARGET,
                     err_msg
                 );
-                anyhow::anyhow!(err_msg)
+                BspUploadError::CapacityQueryFailed { details: format!("{:?}", e) }
             })?;
 
         if !is_allowed {
@@ -1234,7 +1382,7 @@ where
                     target: LOG_TARGET,
                     err_msg
                 );
-                anyhow::anyhow!(err_msg)
+                BspUploadError::CapacityQueryFailed { details: format!("{:?}", e) }
             })?;
 
         if !is_allowed {
@@ -1252,7 +1400,7 @@ where
                     target: LOG_TARGET,
                     err_msg
                 );
-                anyhow::anyhow!(err_msg)
+                BspUploadError::CapacityQueryFailed { details: format!("{:?}", e) }
             })?;
 
         if !is_allowed {
@@ -1272,7 +1420,7 @@ where
                     target: LOG_TARGET,
                     err_msg
                 );
-                anyhow::anyhow!(err_msg)
+                BspUploadError::CapacityQueryFailed { details: format!("{:?}", e) }
             })?;
 
         if !is_allowed {

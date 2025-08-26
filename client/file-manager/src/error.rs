@@ -1,5 +1,6 @@
 use std::io;
 
+use shc_common::telemetry_error::{ErrorCategory, TelemetryErrorCategory};
 use shc_common::types::HasherOutT;
 use trie_db::CError;
 
@@ -43,4 +44,63 @@ impl<H, CodecError> From<FileStorageWriteError> for Error<H, CodecError> {
 
 pub fn other_io_error(err: String) -> io::Error {
     io::Error::new(io::ErrorKind::Other, err)
+}
+
+impl TelemetryErrorCategory for FileStorageError {
+    fn telemetry_category(&self) -> ErrorCategory {
+        match self {
+            Self::FileAlreadyExists 
+            | Self::FileDoesNotExist
+            | Self::IncompleteFile
+            | Self::FileIsEmpty
+            | Self::FingerprintAndStoredFileMismatch
+            | Self::FailedToParseKey
+            | Self::FailedToParseFileMetadata
+            | Self::FailedToParseFingerprint
+            | Self::FailedToParseChunkWithId
+            | Self::FailedToConstructFileKeyProof => ErrorCategory::FileOperation,
+            
+            Self::FailedToReadStorage
+            | Self::FailedToWriteToStorage
+            | Self::FailedToInsertFileChunk
+            | Self::FailedToGetFileChunk
+            | Self::FailedToDeleteFileChunk
+            | Self::FileChunkAlreadyExists
+            | Self::FileChunkDoesNotExist
+            | Self::FailedToConstructTrieIter
+            | Self::FailedToParsePartialRoot
+            | Self::FailedToHasherOutput
+            | Self::FailedToAddEntityToExcludeList
+            | Self::FailedToAddEntityFromExcludeList
+            | Self::ErrorParsingExcludeType => ErrorCategory::Storage,
+            
+            Self::FailedToGenerateCompactProof => ErrorCategory::Proof,
+        }
+    }
+}
+
+impl TelemetryErrorCategory for FileStorageWriteError {
+    fn telemetry_category(&self) -> ErrorCategory {
+        match self {
+            Self::FileDoesNotExist
+            | Self::FileChunkAlreadyExists
+            | Self::FingerprintAndStoredFileMismatch
+            | Self::FailedToContructFileTrie
+            | Self::FailedToParseFileMetadata
+            | Self::FailedToParseFingerprint
+            | Self::FailedToParsePartialRoot => ErrorCategory::FileOperation,
+            
+            Self::FailedToInsertFileChunk
+            | Self::FailedToGetFileChunk
+            | Self::FailedToPersistChanges
+            | Self::FailedToDeleteRoot
+            | Self::FailedToDeleteChunk
+            | Self::FailedToConstructTrieIter
+            | Self::FailedToReadStorage
+            | Self::FailedToUpdatePartialRoot
+            | Self::FailedToGetStoredChunksCount => ErrorCategory::Storage,
+            
+            Self::ChunkCountOverflow => ErrorCategory::Capacity,
+        }
+    }
 }

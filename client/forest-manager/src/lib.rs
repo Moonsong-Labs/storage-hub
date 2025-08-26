@@ -1,4 +1,4 @@
-mod error;
+pub mod error;
 pub mod in_memory;
 pub(crate) mod prove;
 pub mod rocksdb;

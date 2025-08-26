@@ -3,13 +3,14 @@ use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::events::FinalisedBspConfirmStoppedStoring;
 use shc_common::consts::CURRENT_FOREST_KEY;
-use shc_common::task_context::{classify_error, TaskContext};
+use shc_common::task_context::TaskContext;
 use shc_common::traits::StorageEnableRuntime;
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shc_telemetry_service::{
     create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryServiceCommandInterfaceExt,
 };
+use shc_common::telemetry_error::TelemetryErrorCategory;
 use serde::{Deserialize, Serialize};
 use sp_core::H256;
 
@@ -216,7 +217,7 @@ where
                         task_id: ctx.task_id.clone(),
                         file_key: format!("{:?}", event.file_key),
                         bsp_id: format!("{:?}", event.bsp_id),
-                        error_type: classify_error(&e),
+                        error_type: e.telemetry_category().to_string(),
                         error_message: e.to_string(),
                         duration_ms: Some(ctx.elapsed_ms()),
                     };
