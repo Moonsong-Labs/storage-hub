@@ -7,7 +7,6 @@ import {
   bspKey,
   sleep,
   waitFor,
-  ShConsts,
   assertEventPresent
 } from "../../../util";
 import { createBucketAndSendNewStorageRequest } from "../../../util/bspNet/fileHelpers";
