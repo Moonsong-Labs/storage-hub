@@ -35,6 +35,7 @@ import type {
   PalletBalancesBalanceLock,
   PalletBalancesReserveData,
   PalletCollatorSelectionCandidateInfo,
+  PalletFileSystemIncompleteStorageRequestMetadata,
   PalletFileSystemMoveBucketRequestMetadata,
   PalletFileSystemPendingFileDeletionRequest,
   PalletFileSystemPendingStopStoringRequest,
@@ -305,6 +306,21 @@ declare module "@polkadot/api-base/types/storage" {
         [H256, H256]
       > &
         QueryableStorageEntry<ApiType, [H256, H256]>;
+      /**
+       * Incomplete storage requests with pending provider file removal.
+       *
+       * This mapping tracks storage requests that have been expired or rejected but still have
+       * confirmed providers storing files. Each entry tracks which providers still need to remove
+       * their files. Once all providers have removed their files, the entry is automatically cleaned up.
+       **/
+      incompleteStorageRequests: AugmentedQuery<
+        ApiType,
+        (
+          arg: H256 | string | Uint8Array
+        ) => Observable<Option<PalletFileSystemIncompleteStorageRequestMetadata>>,
+        [H256]
+      > &
+        QueryableStorageEntry<ApiType, [H256]>;
       /**
        * A map of ticks to expired move bucket requests.
        **/
