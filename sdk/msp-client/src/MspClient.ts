@@ -70,7 +70,7 @@ export class MspClient {
    * Upload a file to a bucket for a specific fileKey using multipart/form-data.
    *
    * This matches the backend's current expectation of a FormData field named
-   * "file" sent via PUT to `/buckets/:bucketId/:fileKey/upload`.
+   * "file" sent via PUT to `/buckets/:bucketId/upload/:fileKey`.
    *
    * Accepted `file` types depend on the environment. In browsers, pass a
    * Blob/File or ArrayBuffer/Uint8Array. In Node 18+/23 with fetch, Node
@@ -87,7 +87,7 @@ export class MspClient {
     const part = this.coerceToFormPart(file);
     form.append('file', part as any);
 
-    const path = `/buckets/${encodeURIComponent(bucketId)}/${encodeURIComponent(fileKey)}/upload`;
+    const path = `/buckets/${encodeURIComponent(bucketId)}/upload/${encodeURIComponent(fileKey)}`;
     const res = await this.http.put<any>(path, {
       body: form as unknown as BodyInit,
       headers: this.withAuth(),
