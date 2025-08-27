@@ -23,6 +23,6 @@
         "@storagehub-sdk/core": "workspace:*"
     },
     "engines": {
-        "node": ">=23"
+        "node": ">=22"
     }
 }
