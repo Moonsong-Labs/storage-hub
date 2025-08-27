@@ -1,214 +1,99 @@
-//! # StorageHub Runtime genesis config presets
+//! # StorageHub Solochain EVM Runtime genesis config presets
 
-use crate::*;
+use crate::{
+    configs::BABE_GENESIS_EPOCH_CONFIG, AccountId, BalancesConfig, RuntimeGenesisConfig,
+    SessionKeys, Signature, SudoConfig,
+};
 use alloc::{format, vec, vec::Vec};
-use configs::{ExistentialDeposit, TreasuryAccount};
-use cumulus_primitives_core::ParaId;
+use hex_literal::hex;
 use serde_json::Value;
-pub use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{sr25519, Get, Pair, Public};
-use sp_genesis_builder::PresetId;
+use sp_consensus_babe::AuthorityId as BabeId;
+use sp_consensus_grandpa::AuthorityId as GrandpaId;
+use sp_core::{ecdsa, Pair, Public};
+use sp_genesis_builder::{self, PresetId};
 use sp_runtime::traits::{IdentifyAccount, Verify};
 
-type AccountPublic = <Signature as Verify>::Signer;
+const STORAGEHUB_EVM_CHAIN_ID: u64 = 181222;
 
-const STORAGEHUB_ED: Balance = ExistentialDeposit::get();
-
-/// The default XCM version to set in genesis config.
-const SAFE_XCM_VERSION: u32 = xcm::prelude::XCM_VERSION;
-
-/// Helper function to generate a crypto pair from seed
-pub fn get_from_seed<TPublic: Public>(seed: &str) -> <TPublic::Pair as Pair>::Public {
-    TPublic::Pair::from_string(&format!("//{}", seed), None)
-        .expect("static values are valid; qed")
-        .public()
-}
-
-/// Generate collator keys from seed.
-///
-/// This function's return type must always match the session keys of the chain in tuple format.
-pub fn get_collator_keys_from_seed(seed: &str) -> AuraId {
-    get_from_seed::<AuraId>(seed)
-}
-
-/// Helper function to generate an account ID from seed
-pub fn get_account_id_from_seed<TPublic: Public>(seed: &str) -> AccountId
-where
-    AccountPublic: From<<TPublic::Pair as Pair>::Public>,
-{
-    AccountPublic::from(get_from_seed::<TPublic>(seed)).into_account()
-}
-
-/// Generate the session keys from individual elements.
-///
-/// The input must be a tuple of individual keys (a single arg for now since we have just one key).
-pub fn template_session_keys(keys: AuraId) -> SessionKeys {
-    SessionKeys { aura: keys }
-}
-
-fn storagehub_genesis(
-    invulnerables: Vec<(AccountId, AuraId)>,
+// Returns the genesis config presets populated with given parameters.
+fn testnet_genesis(
+    initial_authorities: Vec<(AccountId, BabeId, GrandpaId)>,
+    root_key: AccountId,
     endowed_accounts: Vec<AccountId>,
-    endowment: Balance,
-    root: Option<AccountId>,
-    id: ParaId,
+    evm_chain_id: u64,
 ) -> Value {
     let config = RuntimeGenesisConfig {
         balances: BalancesConfig {
             balances: endowed_accounts
                 .iter()
                 .cloned()
-                .map(|k| (k, endowment))
-                .collect(),
+                .map(|k| (k, 1u128 << 110))
+                .collect::<Vec<_>>(),
         },
-        parachain_info: ParachainInfoConfig {
-            parachain_id: id,
+        babe: pallet_babe::GenesisConfig {
+            epoch_config: BABE_GENESIS_EPOCH_CONFIG,
             ..Default::default()
         },
-        collator_selection: CollatorSelectionConfig {
-            invulnerables: invulnerables.iter().cloned().map(|(acc, _)| acc).collect(),
-            candidacy_bond: STORAGEHUB_ED * 16,
+        evm_chain_id: pallet_evm_chain_id::GenesisConfig {
+            chain_id: evm_chain_id,
             ..Default::default()
         },
-        session: SessionConfig {
-            keys: invulnerables
-                .into_iter()
-                .map(|(acc, aura)| {
+        session: pallet_session::GenesisConfig {
+            keys: initial_authorities
+                .iter()
+                .map(|(account, babe, grandpa)| {
                     (
-                        acc.clone(),                 // account id
-                        acc,                         // validator id
-                        template_session_keys(aura), // session keys
+                        *account,
+                        *account,
+                        session_keys(babe.clone(), grandpa.clone()),
                     )
                 })
-                .collect(),
+                .collect::<Vec<_>>(),
             ..Default::default()
         },
-        polkadot_xcm: PolkadotXcmConfig {
-            safe_xcm_version: Some(SAFE_XCM_VERSION),
-            ..Default::default()
+        sudo: SudoConfig {
+            key: Some(root_key),
         },
-        sudo: SudoConfig { key: root },
         ..Default::default()
     };
 
     serde_json::to_value(config).expect("Could not build genesis config.")
 }
 
-/// Encapsulates names of predefined genesis config presets.
-mod preset_names {
-    pub const PRESET_GENESIS: &str = "genesis";
-}
+/// Return the development genesis config.
+pub fn development_config_genesis() -> Value {
+    let mut endowed_accounts = pre_funded_accounts();
+    endowed_accounts.sort();
 
-fn local_testnet_genesis() -> Value {
-    storagehub_genesis(
-        // initial collators.
-        vec![
-            (
-                get_account_id_from_seed::<sr25519::Public>("Alice"),
-                get_collator_keys_from_seed("Alice"),
-            ),
-            (
-                get_account_id_from_seed::<sr25519::Public>("Bob"),
-                get_collator_keys_from_seed("Bob"),
-            ),
-        ],
-        vec![
-            get_account_id_from_seed::<sr25519::Public>("Alice"),
-            get_account_id_from_seed::<sr25519::Public>("Bob"),
-            get_account_id_from_seed::<sr25519::Public>("Charlie"),
-            get_account_id_from_seed::<sr25519::Public>("Dave"),
-            get_account_id_from_seed::<sr25519::Public>("Eve"),
-            get_account_id_from_seed::<sr25519::Public>("Ferdie"),
-            get_account_id_from_seed::<sr25519::Public>("Alice//stash"),
-            get_account_id_from_seed::<sr25519::Public>("Bob//stash"),
-            get_account_id_from_seed::<sr25519::Public>("Charlie//stash"),
-            get_account_id_from_seed::<sr25519::Public>("Dave//stash"),
-            get_account_id_from_seed::<sr25519::Public>("Eve//stash"),
-            get_account_id_from_seed::<sr25519::Public>("Ferdie//stash"),
-            TreasuryAccount::get(),
-        ],
-        1u128 << 60,
-        Some(get_account_id_from_seed::<sr25519::Public>("Alice")),
-        1000.into(),
+    testnet_genesis(
+        vec![authority_keys_from_seed("Alice")],
+        alith(),
+        endowed_accounts,
+        STORAGEHUB_EVM_CHAIN_ID,
     )
 }
 
-fn development_config_genesis() -> Value {
-    storagehub_genesis(
-        // initial collators.
-        vec![
-            (
-                get_account_id_from_seed::<sr25519::Public>("Alice"),
-                get_collator_keys_from_seed("Alice"),
-            ),
-            (
-                get_account_id_from_seed::<sr25519::Public>("Bob"),
-                get_collator_keys_from_seed("Bob"),
-            ),
-        ],
-        vec![
-            get_account_id_from_seed::<sr25519::Public>("Alice"),
-            get_account_id_from_seed::<sr25519::Public>("Bob"),
-            get_account_id_from_seed::<sr25519::Public>("Charlie"),
-            get_account_id_from_seed::<sr25519::Public>("Dave"),
-            get_account_id_from_seed::<sr25519::Public>("Eve"),
-            get_account_id_from_seed::<sr25519::Public>("Ferdie"),
-            get_account_id_from_seed::<sr25519::Public>("Alice//stash"),
-            get_account_id_from_seed::<sr25519::Public>("Bob//stash"),
-            get_account_id_from_seed::<sr25519::Public>("Charlie//stash"),
-            get_account_id_from_seed::<sr25519::Public>("Dave//stash"),
-            get_account_id_from_seed::<sr25519::Public>("Eve//stash"),
-            get_account_id_from_seed::<sr25519::Public>("Ferdie//stash"),
-            TreasuryAccount::get(),
-        ],
-        1u128 << 60,
-        Some(get_account_id_from_seed::<sr25519::Public>("Alice")),
-        1000.into(),
-    )
-}
+/// Return the local genesis config preset.
+pub fn local_config_genesis() -> Value {
+    let mut endowed_accounts = pre_funded_accounts();
+    endowed_accounts.sort();
 
-// TODO: Replace this genesis config with the actual production config
-fn genesis_config() -> Value {
-    storagehub_genesis(
-        // initial collators.
+    testnet_genesis(
         vec![
-            (
-                get_account_id_from_seed::<sr25519::Public>("Alice"),
-                get_collator_keys_from_seed("Alice"),
-            ),
-            (
-                get_account_id_from_seed::<sr25519::Public>("Bob"),
-                get_collator_keys_from_seed("Bob"),
-            ),
+            authority_keys_from_seed("Alice"),
+            authority_keys_from_seed("Bob"),
         ],
-        vec![
-            get_account_id_from_seed::<sr25519::Public>("Alice"),
-            get_account_id_from_seed::<sr25519::Public>("Bob"),
-            get_account_id_from_seed::<sr25519::Public>("Charlie"),
-            get_account_id_from_seed::<sr25519::Public>("Dave"),
-            get_account_id_from_seed::<sr25519::Public>("Eve"),
-            get_account_id_from_seed::<sr25519::Public>("Ferdie"),
-            get_account_id_from_seed::<sr25519::Public>("Alice//stash"),
-            get_account_id_from_seed::<sr25519::Public>("Bob//stash"),
-            get_account_id_from_seed::<sr25519::Public>("Charlie//stash"),
-            get_account_id_from_seed::<sr25519::Public>("Dave//stash"),
-            get_account_id_from_seed::<sr25519::Public>("Eve//stash"),
-            get_account_id_from_seed::<sr25519::Public>("Ferdie//stash"),
-            TreasuryAccount::get(),
-        ],
-        1u128 << 60,
-        Some(get_account_id_from_seed::<sr25519::Public>("Alice")),
-        1000.into(),
+        alith(),
+        endowed_accounts,
+        STORAGEHUB_EVM_CHAIN_ID,
     )
 }
 
 /// Provides the JSON representation of predefined genesis config for given `id`.
-pub fn get_preset(id: &PresetId) -> Option<vec::Vec<u8>> {
-    use preset_names::*;
+pub fn get_preset(id: &PresetId) -> Option<Vec<u8>> {
     let patch = match id.as_str() {
-        PRESET_GENESIS => genesis_config(),
-        sp_genesis_builder::LOCAL_TESTNET_RUNTIME_PRESET => local_testnet_genesis(),
         sp_genesis_builder::DEV_RUNTIME_PRESET => development_config_genesis(),
+        sp_genesis_builder::LOCAL_TESTNET_RUNTIME_PRESET => local_config_genesis(),
         _ => return None,
     };
     Some(
@@ -220,12 +105,40 @@ pub fn get_preset(id: &PresetId) -> Option<vec::Vec<u8>> {
 
 /// List of supported presets.
 pub fn preset_names() -> Vec<PresetId> {
-    use preset_names::*;
     vec![
         PresetId::from(sp_genesis_builder::DEV_RUNTIME_PRESET),
         PresetId::from(sp_genesis_builder::LOCAL_TESTNET_RUNTIME_PRESET),
-        PresetId::from(PRESET_GENESIS),
     ]
+}
+
+/// Generate a crypto pair from seed.
+pub fn get_from_seed<TPublic: Public>(seed: &str) -> <TPublic::Pair as Pair>::Public {
+    TPublic::Pair::from_string(&format!("//{}", seed), None)
+        .expect("static values are valid; qed")
+        .public()
+}
+
+fn session_keys(babe: BabeId, grandpa: GrandpaId) -> SessionKeys {
+    SessionKeys { babe, grandpa }
+}
+
+type AccountPublic = <Signature as Verify>::Signer;
+
+/// Generate an account ID from seed.
+pub fn get_account_id_from_seed<TPublic: Public>(seed: &str) -> AccountId
+where
+    AccountPublic: From<<TPublic::Pair as Pair>::Public>,
+{
+    AccountPublic::from(get_from_seed::<TPublic>(seed)).into_account()
+}
+
+/// Generate a Babe authority key.
+pub fn authority_keys_from_seed(s: &str) -> (AccountId, BabeId, GrandpaId) {
+    (
+        get_account_id_from_seed::<ecdsa::Public>(s),
+        get_from_seed::<BabeId>(s),
+        get_from_seed::<GrandpaId>(s),
+    )
 }
 
 pub fn alith() -> AccountId {
@@ -250,4 +163,29 @@ pub fn ethan() -> AccountId {
 
 pub fn frank() -> AccountId {
     AccountId::from(hex!("C0F0f4ab324C46e55D02D0033343B4Be8A55532d"))
+}
+
+pub fn beacon_relayer() -> AccountId {
+    AccountId::from(hex!("c46e141b5083721ad5f5056ba1cded69dce4a65f"))
+}
+
+/// Get pre-funded accounts
+pub fn pre_funded_accounts() -> Vec<AccountId> {
+    // These addresses are derived from Substrate's canonical mnemonic:
+    // bottom drive obey lake curtain smoke basket hold race lonely fit walk
+    vec![
+        get_account_id_from_seed::<ecdsa::Public>("Alice"),
+        get_account_id_from_seed::<ecdsa::Public>("Bob"),
+        get_account_id_from_seed::<ecdsa::Public>("Charlie"),
+        get_account_id_from_seed::<ecdsa::Public>("Dave"),
+        get_account_id_from_seed::<ecdsa::Public>("Eve"),
+        get_account_id_from_seed::<ecdsa::Public>("Ferdie"),
+        alith(),
+        baltathar(),
+        charleth(),
+        dorothy(),
+        ethan(),
+        frank(),
+        beacon_relayer(),
+    ]
 }
