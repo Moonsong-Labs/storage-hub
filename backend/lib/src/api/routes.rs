@@ -53,7 +53,7 @@ pub fn routes(services: Services) -> Router {
             "/buckets/:bucket_id/download/path/*file_location",
             get(handlers::download_by_location),
         )
-        // Payment route
+        // Payment streams routes
         .route("/payment_stream", get(handlers::payment_stream))
         // Add state to all routes
         .with_state(services)

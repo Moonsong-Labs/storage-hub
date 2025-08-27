@@ -1,4 +1,6 @@
 use axum::http::HeaderMap;
+use base64::{engine::general_purpose, Engine};
+use rand::Rng;
 
 use crate::error::Error;
 
@@ -25,7 +27,6 @@ pub fn validate_hex_id(id: &str, expected_len: usize) -> Result<(), Error> {
 }
 
 pub fn generate_hex_string(len: usize) -> String {
-    use rand::Rng;
     let mut rng = rand::thread_rng();
     (0..len / 2)
         .map(|_| format!("{:02x}", rng.gen::<u8>()))
@@ -33,7 +34,6 @@ pub fn generate_hex_string(len: usize) -> String {
 }
 
 pub fn generate_mock_jwt() -> String {
-    use base64::{engine::general_purpose, Engine};
     format!(
         "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.{}.{}",
         general_purpose::STANDARD.encode("mock_payload"),

@@ -27,7 +27,7 @@ pub struct StatsResponse {
     pub last_capacity_change: u64,
     #[serde(rename = "valuePropsAmount")]
     pub value_props_amount: u64,
-    #[serde(rename = "BucketsAmount")]
+    #[serde(rename = "bucketsAmount")]
     pub buckets_amount: u64,
 }
 
