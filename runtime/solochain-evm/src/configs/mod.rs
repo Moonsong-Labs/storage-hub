@@ -475,7 +475,7 @@ impl pallet_nfts::Config for Runtime {
     type OffchainPublic = <Signature as Verify>::Signer;
     type WeightInfo = pallet_nfts::weights::SubstrateWeight<Runtime>;
     #[cfg(feature = "runtime-benchmarks")]
-    type Helper = ();
+    type Helper = benchmark_helpers::NftHelper;
     type Locker = ();
 }
 
@@ -1263,4 +1263,58 @@ impl shp_traits::CommitRevealRandomnessInterface for MockCrRandomness {
         Ok(())
     }
 }
+
+#[cfg(feature = "runtime-benchmarks")]
+pub mod benchmark_helpers {
+    use crate::{AccountId, Balance, Signature};
+    use frame_support::weights::{Weight, WeightToFee};
+    use sp_runtime::traits::{IdentifyAccount, Verify};
+
+    /// Benchmark helper for transaction payment that provides minimal fees
+    pub struct BenchmarkWeightToFee;
+
+    impl WeightToFee for BenchmarkWeightToFee {
+        type Balance = Balance;
+
+        fn weight_to_fee(weight: &Weight) -> Self::Balance {
+            // Divide weight by 10,000,000 to get minimal fees
+            // This ensures fees are small enough to work with minimal funding
+            weight.ref_time().saturating_div(10_000_000).max(1).into()
+        }
+    }
+
+    /// Benchmark helper for NFTs pallet
+    pub struct NftHelper;
+
+    impl pallet_nfts::BenchmarkHelper<u32, u32, <Signature as Verify>::Signer, AccountId, Signature>
+        for NftHelper
+    {
+        fn collection(i: u16) -> u32 {
+            i.into()
+        }
+
+        fn item(i: u16) -> u32 {
+            i.into()
+        }
+
+        fn signer() -> (<Signature as Verify>::Signer, AccountId) {
+            // Use a dummy ECDSA public key for benchmarks
+            use sp_core::ecdsa;
+            let public_key: <Signature as Verify>::Signer =
+                ecdsa::Public::from_raw([0u8; 33]).into();
+            let account: AccountId = public_key.clone().into_account();
+            (public_key, account)
+        }
+
+        fn sign(_public: &<Signature as Verify>::Signer, _message: &[u8]) -> Signature {
+            // For benchmarks, return a dummy signature
+            // Use MultiSignature::Ecdsa since EthereumSignature expects that
+            use sp_core::ecdsa;
+            use sp_runtime::MultiSignature;
+            let dummy_signature = ecdsa::Signature::from_raw([0u8; 65]);
+            Signature::from(MultiSignature::Ecdsa(dummy_signature))
+        }
+    }
+}
+
 /****** ****** ****** ******/

@@ -320,10 +320,9 @@ mod benches {
     frame_benchmarking::define_benchmarks!(
         [frame_system, SystemBench::<Runtime>]
         [pallet_balances, Balances]
-        [pallet_session, SessionBench::<Runtime>]
         [pallet_timestamp, Timestamp]
         [pallet_sudo, Sudo]
-        [nfts, Nfts]
+        [pallet_nfts, Nfts]
         [pallet_parameters, Parameters]
         [pallet_payment_streams, PaymentStreams]
         [pallet_proofs_dealer, ProofsDealer]
