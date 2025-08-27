@@ -5,7 +5,6 @@ use sp_genesis_builder;
 // For solochain, we use a simpler ChainSpec without parachain extensions
 pub type SolochainChainSpec = sc_service::GenericChainSpec;
 
-const CHAIN_ID: u64 = 2000; // Different chain ID for solochain
 const SS58_FORMAT: u16 = 42;
 const TOKEN_DECIMALS: u8 = 18; // Different decimals for EVM compatibility
 const TOKEN_SYMBOL: &str = "SHUB";
