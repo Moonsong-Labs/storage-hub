@@ -54,6 +54,13 @@ export class MetamaskWallet extends WalletBase {
     return signer.getAddress();
   }
 
+  /** @inheritdoc */
+  public async sendTransaction(tx: TransactionRequest): Promise<string> {
+    const signer = await this.provider.getSigner();
+    const response = await signer.sendTransaction(tx);
+    return response.hash;
+  }
+
   /**
    * Sign **and send** a transaction through MetaMask and return the signature.
    *
