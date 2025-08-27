@@ -83,6 +83,6 @@ pub fn extract_bearer_token(auth: &Authorization<Bearer>) -> Result<Value, Error
         &DecodingKey::from_secret(b"mock_secret"), // TODO(MOCK): use configurable secret
         &validation,
     )
-    .map_err(|e| Error::Unauthorized(format!("JWT decode error: {}", e)))?
+    .map_err(|e| Error::Unauthorized(format!("JWT decode error: {}", e)))
     .map(|token| token.claims)
 }

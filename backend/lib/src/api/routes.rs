@@ -14,7 +14,7 @@ pub fn routes(services: Services) -> Router {
     // so we can disable the request body limit
     let file_upload = Router::new()
         .route(
-            "/buckets/:bucket_id/upload/:file_key",
+            "/buckets/{bucket_id}/upload/{file_key}",
             put(handlers::upload_file),
         )
         .route_layer(DefaultBodyLimit::disable());
@@ -33,24 +33,24 @@ pub fn routes(services: Services) -> Router {
         .route("/health", get(handlers::msp_health))
         // Bucket routes
         .route("/buckets", get(handlers::list_buckets))
-        .route("/buckets/:bucket_id", get(handlers::get_bucket))
-        .route("/buckets/:bucket_id/files", get(handlers::get_files))
+        .route("/buckets/{bucket_id}", get(handlers::get_bucket))
+        .route("/buckets/{bucket_id}/files", get(handlers::get_files))
         // File routes
         .route(
-            "/buckets/:bucket_id/info/:file_key",
+            "/buckets/{bucket_id}/info/{file_key}",
             get(handlers::get_file_info),
         )
         .merge(file_upload)
         .route(
-            "/buckets/:bucket_id/distribute/:file_key",
+            "/buckets/{bucket_id}/distribute/{file_key}",
             post(handlers::distribute_file),
         )
         .route(
-            "/buckets/:bucket_id/download/:file_key",
+            "/buckets/{bucket_id}/download/{file_key}",
             get(handlers::download_by_key),
         )
         .route(
-            "/buckets/:bucket_id/download/path/*file_location",
+            "/buckets/{bucket_id}/download/path/{*file_location}",
             get(handlers::download_by_location),
         )
         // Payment streams routes
