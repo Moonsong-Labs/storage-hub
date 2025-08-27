@@ -38,7 +38,11 @@ export class MspClient {
   }
 
   /** Request a SIWE-style nonce message for the given address and chainId */
-  getNonce(address: string, chainId: number, options?: { signal?: AbortSignal }): Promise<NonceResponse> {
+  getNonce(
+    address: string,
+    chainId: number,
+    options?: { signal?: AbortSignal },
+  ): Promise<NonceResponse> {
     return this.http.post<NonceResponse>('/auth/nonce', {
       body: JSON.stringify({ address, chainId }),
       signal: options?.signal,
@@ -47,7 +51,11 @@ export class MspClient {
   }
 
   /** Verify signed message and receive JWT token */
-  verify(message: string, signature: string, options?: { signal?: AbortSignal }): Promise<VerifyResponse> {
+  verify(
+    message: string,
+    signature: string,
+    options?: { signal?: AbortSignal },
+  ): Promise<VerifyResponse> {
     return this.http.post<VerifyResponse>('/auth/verify', {
       body: JSON.stringify({ message, signature }),
       signal: options?.signal,
@@ -90,9 +98,12 @@ export class MspClient {
 
     const path = `/buckets/${encodeURIComponent(bucketId)}/upload/${encodeURIComponent(fileKey)}`;
     const authHeaders = this.withAuth();
-    const res = await this.http.put<UploadReceipt>(path, authHeaders
-      ? { body: form as unknown as BodyInit, headers: authHeaders }
-      : { body: form as unknown as BodyInit });
+    const res = await this.http.put<UploadReceipt>(
+      path,
+      authHeaders
+        ? { body: form as unknown as BodyInit, headers: authHeaders }
+        : { body: form as unknown as BodyInit },
+    );
     return res;
   }
 
@@ -126,9 +137,8 @@ export class MspClient {
     const contentRange = res.headers.get('content-range');
     const contentLengthHeader = res.headers.get('content-length');
     const parsedLength = contentLengthHeader !== null ? Number(contentLengthHeader) : undefined;
-    const contentLength = typeof parsedLength === 'number' && Number.isFinite(parsedLength)
-      ? parsedLength
-      : null;
+    const contentLength =
+      typeof parsedLength === 'number' && Number.isFinite(parsedLength) ? parsedLength : null;
 
     return {
       stream: res.body,
@@ -161,9 +171,8 @@ export class MspClient {
     const contentRange = res.headers.get('content-range');
     const contentLengthHeader = res.headers.get('content-length');
     const parsedLength = contentLengthHeader !== null ? Number(contentLengthHeader) : undefined;
-    const contentLength = typeof parsedLength === 'number' && Number.isFinite(parsedLength)
-      ? parsedLength
-      : null;
+    const contentLength =
+      typeof parsedLength === 'number' && Number.isFinite(parsedLength) ? parsedLength : null;
 
     return {
       stream: res.body,
