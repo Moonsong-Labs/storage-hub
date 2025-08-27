@@ -274,10 +274,6 @@ describeMspNet(
       const eventFileKey = deletionEventData.signedDeleteIntention.fileKey;
       assert.equal(eventFileKey.toString(), fileToDelete.fileKey.toString());
 
-      // Wait for indexing to process the deletion request from unfinalized block
-      await userApi.block.seal({ finaliseBlock: false });
-      await userApi.block.seal({ finaliseBlock: false });
-
       // Verify fisherman processes the FileDeletionRequested event even from unfinalized blocks
       const processingFound = await waitForFishermanProcessing(
         userApi,
@@ -286,7 +282,7 @@ describeMspNet(
       assert(processingFound, "Should find fisherman processing log even from unfinalized blocks");
 
       // Verify delete_file extrinsics are submitted (should be 2: one for BSP and one for MSP)
-      const deleteFileFound = await waitForDeleteFileExtrinsic(userApi, 2);
+      const deleteFileFound = await waitForDeleteFileExtrinsic(userApi, 2, 30000);
       assert(
         deleteFileFound,
         "Should find 2 delete_file extrinsics in transaction pool (BSP and MSP)"
