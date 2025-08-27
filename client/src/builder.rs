@@ -5,6 +5,7 @@ use sc_service::RpcHandlers;
 use serde::Deserialize;
 use shc_indexer_db::DbPool;
 use sp_keystore::KeystorePtr;
+use sp_runtime::traits::SaturatedConversion;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::RwLock;
 
@@ -15,13 +16,13 @@ use shc_blockchain_service::{
 };
 use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::ParachainClient;
-use shc_telemetry_service::TelemetryService;
 use shc_file_manager::{in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage};
 use shc_file_transfer_service::{spawn_file_transfer_service, FileTransferService};
 use shc_fisherman_service::{spawn_fisherman_service, FishermanService};
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_indexer_service::IndexerMode;
 use shc_rpc::{RpcConfig, StorageHubClientRpcConfig};
+use shc_telemetry_service::TelemetryService;
 
 use crate::tasks::{
     bsp_charge_fees::BspChargeFeesConfig, bsp_move_bucket::BspMoveBucketConfig,
@@ -47,17 +48,18 @@ pub struct StorageHubBuilder<R, S, Runtime>
 where
     R: ShRole,
     S: ShStorageLayer,
-    (R, S): ShNodeType,
+    (R, S): ShNodeType<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     task_spawner: Option<TaskSpawner>,
-    file_transfer: Option<ActorHandle<FileTransferService>>,
-    blockchain: Option<ActorHandle<BlockchainService<<(R, S) as ShNodeType>::FSH, Runtime>>>,
+    file_transfer: Option<ActorHandle<FileTransferService<Runtime>>>,
+    blockchain:
+        Option<ActorHandle<BlockchainService<<(R, S) as ShNodeType<Runtime>>::FSH, Runtime>>>,
     fisherman: Option<ActorHandle<FishermanService<Runtime>>>,
     storage_path: Option<String>,
-    file_storage: Option<Arc<RwLock<<(R, S) as ShNodeType>::FL>>>,
-    forest_storage_handler: Option<<(R, S) as ShNodeType>::FSH>,
-    capacity_config: Option<CapacityConfig>,
+    file_storage: Option<Arc<RwLock<<(R, S) as ShNodeType<Runtime>>::FL>>>,
+    forest_storage_handler: Option<<(R, S) as ShNodeType<Runtime>>::FSH>,
+    capacity_config: Option<CapacityConfig<Runtime>>,
     indexer_db_pool: Option<DbPool>,
     notify_period: Option<u32>,
     // Configuration options for tasks and services
@@ -67,7 +69,7 @@ where
     bsp_move_bucket_config: Option<BspMoveBucketConfig>,
     bsp_charge_fees_config: Option<BspChargeFeesConfig>,
     bsp_submit_proof_config: Option<BspSubmitProofConfig>,
-    blockchain_service_config: Option<BlockchainServiceConfig>,
+    blockchain_service_config: Option<BlockchainServiceConfig<Runtime>>,
     peer_manager: Option<Arc<BspPeerManager>>,
     telemetry: Option<ActorHandle<TelemetryService>>,
 }
@@ -75,7 +77,7 @@ where
 /// Common components to build for any given configuration of [`ShRole`] and [`ShStorageLayer`].
 impl<R: ShRole, S: ShStorageLayer, Runtime> StorageHubBuilder<R, S, Runtime>
 where
-    (R, S): ShNodeType,
+    (R, S): ShNodeType<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(task_spawner: TaskSpawner) -> Self {
@@ -127,7 +129,10 @@ where
     ///
     /// The node will not increase its on-chain capacity above this value.
     /// This is meant to reflect the actual physical storage capacity of the node.
-    pub fn with_capacity_config(&mut self, capacity_config: Option<CapacityConfig>) -> &mut Self {
+    pub fn with_capacity_config(
+        &mut self,
+        capacity_config: Option<CapacityConfig<Runtime>>,
+    ) -> &mut Self {
         self.capacity_config = capacity_config;
         self
     }
@@ -171,7 +176,7 @@ where
         let blockchain_service_config = self.blockchain_service_config.clone().unwrap_or_default();
 
         let blockchain_service_handle =
-            spawn_blockchain_service::<<(R, S) as ShNodeType>::FSH, Runtime>(
+            spawn_blockchain_service::<<(R, S) as ShNodeType<Runtime>>::FSH, Runtime>(
                 self.task_spawner
                     .as_ref()
                     .expect("Task spawner is not set."),
@@ -255,7 +260,11 @@ where
         &self,
         keystore: KeystorePtr,
         config: RpcConfig,
-    ) -> StorageHubClientRpcConfig<<(R, S) as ShNodeType>::FL, <(R, S) as ShNodeType>::FSH> {
+    ) -> StorageHubClientRpcConfig<
+        <(R, S) as ShNodeType<Runtime>>::FL,
+        <(R, S) as ShNodeType<Runtime>>::FSH,
+        Runtime,
+    > {
         StorageHubClientRpcConfig::new(
             self.file_storage
                 .clone()
@@ -334,19 +343,20 @@ where
         }
 
         if let Some(sync_mode_min_blocks_behind) = config.sync_mode_min_blocks_behind {
-            blockchain_service_config.sync_mode_min_blocks_behind = sync_mode_min_blocks_behind;
+            blockchain_service_config.sync_mode_min_blocks_behind =
+                sync_mode_min_blocks_behind.saturated_into();
         }
 
         if let Some(check_for_pending_proofs_period) = config.check_for_pending_proofs_period {
             blockchain_service_config.check_for_pending_proofs_period =
-                check_for_pending_proofs_period;
+                check_for_pending_proofs_period.saturated_into();
         }
 
         if let Some(max_blocks_behind_to_catch_up_root_changes) =
             config.max_blocks_behind_to_catch_up_root_changes
         {
             blockchain_service_config.max_blocks_behind_to_catch_up_root_changes =
-                max_blocks_behind_to_catch_up_root_changes;
+                max_blocks_behind_to_catch_up_root_changes.saturated_into();
         }
 
         self.blockchain_service_config = Some(blockchain_service_config);
@@ -370,8 +380,9 @@ where
 {
     fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
-        self.forest_storage_handler =
-            Some(<(BspProvider, InMemoryStorageLayer) as ShNodeType>::FSH::new());
+        self.forest_storage_handler = Some(<(BspProvider, InMemoryStorageLayer) as ShNodeType<
+            Runtime,
+        >>::FSH::new());
 
         self
     }
@@ -391,8 +402,9 @@ where
                 .expect("Failed to create RocksDB");
         self.file_storage = Some(Arc::new(RwLock::new(RocksDbFileStorage::new(file_storage))));
 
-        self.forest_storage_handler =
-            Some(<(BspProvider, RocksDbStorageLayer) as ShNodeType>::FSH::new(storage_path));
+        self.forest_storage_handler = Some(<(BspProvider, RocksDbStorageLayer) as ShNodeType<
+            Runtime,
+        >>::FSH::new(storage_path));
 
         self
     }
@@ -404,8 +416,9 @@ where
 {
     fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
-        self.forest_storage_handler =
-            Some(<(MspProvider, InMemoryStorageLayer) as ShNodeType>::FSH::new());
+        self.forest_storage_handler = Some(<(MspProvider, InMemoryStorageLayer) as ShNodeType<
+            Runtime,
+        >>::FSH::new());
 
         self
     }
@@ -424,8 +437,9 @@ where
                 .expect("Failed to create RocksDB");
         self.file_storage = Some(Arc::new(RwLock::new(RocksDbFileStorage::new(file_storage))));
 
-        self.forest_storage_handler =
-            Some(<(MspProvider, RocksDbStorageLayer) as ShNodeType>::FSH::new(storage_path));
+        self.forest_storage_handler = Some(<(MspProvider, RocksDbStorageLayer) as ShNodeType<
+            Runtime,
+        >>::FSH::new(storage_path));
 
         self
     }
@@ -437,7 +451,8 @@ where
 {
     fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
-        self.forest_storage_handler = Some(<(UserRole, NoStorageLayer) as ShNodeType>::FSH::new());
+        self.forest_storage_handler =
+            Some(<(UserRole, NoStorageLayer) as ShNodeType<Runtime>>::FSH::new());
 
         self
     }
@@ -451,8 +466,9 @@ where
     fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
         // Fisherman only needs forest storage for proof construction
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
-        self.forest_storage_handler =
-            Some(<(FishermanRole, NoStorageLayer) as ShNodeType>::FSH::new());
+        self.forest_storage_handler = Some(<(FishermanRole, NoStorageLayer) as ShNodeType<
+            RuntimeApi,
+        >>::FSH::new());
 
         self
     }
@@ -463,15 +479,15 @@ where
 /// This trait is implemented by the different [`StorageHubBuilder`] variants,
 /// and build a [`StorageHubHandler`] with the required configuration for the
 /// corresponding [`ShRole`].
-pub trait Buildable<NT: ShNodeType, Runtime: StorageEnableRuntime> {
+pub trait Buildable<NT: ShNodeType<Runtime>, Runtime: StorageEnableRuntime> {
     fn build(self) -> StorageHubHandler<NT, Runtime>;
 }
 
 impl<S: ShStorageLayer, Runtime> Buildable<(BspProvider, S), Runtime>
     for StorageHubBuilder<BspProvider, S, Runtime>
 where
-    (BspProvider, S): ShNodeType,
-    <(BspProvider, S) as ShNodeType>::FSH: BspForestStorageHandlerT,
+    (BspProvider, S): ShNodeType<Runtime>,
+    <(BspProvider, S) as ShNodeType<Runtime>>::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn build(self) -> StorageHubHandler<(BspProvider, S), Runtime> {
@@ -516,8 +532,8 @@ where
 impl<S: ShStorageLayer, Runtime> Buildable<(MspProvider, S), Runtime>
     for StorageHubBuilder<MspProvider, S, Runtime>
 where
-    (MspProvider, S): ShNodeType,
-    <(MspProvider, S) as ShNodeType>::FSH: MspForestStorageHandlerT,
+    (MspProvider, S): ShNodeType<Runtime>,
+    <(MspProvider, S) as ShNodeType<Runtime>>::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn build(self) -> StorageHubHandler<(MspProvider, S), Runtime> {
@@ -562,9 +578,9 @@ where
 impl<Runtime> Buildable<(UserRole, NoStorageLayer), Runtime>
     for StorageHubBuilder<UserRole, NoStorageLayer, Runtime>
 where
-    (UserRole, NoStorageLayer): ShNodeType,
-    <(UserRole, NoStorageLayer) as ShNodeType>::FSH:
-        ForestStorageHandler + Clone + Send + Sync + 'static,
+    (UserRole, NoStorageLayer): ShNodeType<Runtime>,
+    <(UserRole, NoStorageLayer) as ShNodeType<Runtime>>::FSH:
+        ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
     fn build(self) -> StorageHubHandler<(UserRole, NoStorageLayer), Runtime> {
@@ -606,14 +622,14 @@ where
     }
 }
 
-impl<RuntimeApi> Buildable<(FishermanRole, NoStorageLayer), RuntimeApi>
-    for StorageHubBuilder<FishermanRole, NoStorageLayer, RuntimeApi>
+impl<Runtime: StorageEnableRuntime> Buildable<(FishermanRole, NoStorageLayer), Runtime>
+    for StorageHubBuilder<FishermanRole, NoStorageLayer, Runtime>
 where
-    (FishermanRole, NoStorageLayer): ShNodeType,
-    <(FishermanRole, NoStorageLayer) as ShNodeType>::FSH: FishermanForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntime,
+    (FishermanRole, NoStorageLayer): ShNodeType<Runtime>,
+    <(FishermanRole, NoStorageLayer) as ShNodeType<Runtime>>::FSH:
+        FishermanForestStorageHandlerT<Runtime>,
 {
-    fn build(self) -> StorageHubHandler<(FishermanRole, NoStorageLayer), RuntimeApi> {
+    fn build(self) -> StorageHubHandler<(FishermanRole, NoStorageLayer), Runtime> {
         // TODO: Split StorageHubHandler into separate handlers or configurations to avoid unnecessary setting fields
         StorageHubHandler::new(
             self.task_spawner
@@ -675,7 +691,7 @@ pub struct MspMoveBucketOptions {
     /// Maximum number of times to retry a move bucket request.
     pub max_try_count: Option<u32>,
     /// Maximum tip amount to use when submitting a move bucket request extrinsic.
-    pub max_tip: Option<f64>,
+    pub max_tip: Option<u128>,
 }
 
 impl Into<MspMoveBucketConfig> for MspMoveBucketOptions {
@@ -693,7 +709,7 @@ pub struct BspUploadFileOptions {
     /// Maximum number of times to retry an upload file request.
     pub max_try_count: Option<u32>,
     /// Maximum tip amount to use when submitting an upload file request extrinsic.
-    pub max_tip: Option<f64>,
+    pub max_tip: Option<u128>,
 }
 
 impl Into<BspUploadFileConfig> for BspUploadFileOptions {
@@ -765,17 +781,24 @@ pub struct BlockchainServiceOptions {
     pub max_blocks_behind_to_catch_up_root_changes: Option<u32>,
 }
 
-impl Into<BlockchainServiceConfig> for BlockchainServiceOptions {
-    fn into(self) -> BlockchainServiceConfig {
+impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
+    for BlockchainServiceOptions
+{
+    fn into(self) -> BlockchainServiceConfig<Runtime> {
         BlockchainServiceConfig {
             extrinsic_retry_timeout: self.extrinsic_retry_timeout.unwrap_or_default(),
-            sync_mode_min_blocks_behind: self.sync_mode_min_blocks_behind.unwrap_or_default(),
+            sync_mode_min_blocks_behind: self
+                .sync_mode_min_blocks_behind
+                .unwrap_or_default()
+                .saturated_into(),
             check_for_pending_proofs_period: self
                 .check_for_pending_proofs_period
-                .unwrap_or_default(),
+                .unwrap_or_default()
+                .saturated_into(),
             max_blocks_behind_to_catch_up_root_changes: self
                 .max_blocks_behind_to_catch_up_root_changes
-                .unwrap_or_default(),
+                .unwrap_or_default()
+                .saturated_into(),
         }
     }
 }

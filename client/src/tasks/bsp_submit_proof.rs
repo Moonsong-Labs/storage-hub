@@ -1,11 +1,19 @@
-use std::{collections::HashSet, future::Future, pin::Pin, sync::Arc, time::{Duration, Instant}};
+use std::{
+    collections::HashSet,
+    future::Future,
+    pin::Pin,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use anyhow::anyhow;
 use sc_tracing::tracing::*;
 use shc_file_manager::traits::FileStorage;
 use shp_file_metadata::ChunkId;
 use sp_core::H256;
+use sp_runtime::traits::{SaturatedConversion, Saturating};
 
+use serde::{Deserialize, Serialize};
 use shc_actors_framework::{actor::ActorHandle, event_bus::EventHandler};
 use shc_blockchain_service::{
     commands::{BlockchainServiceCommandInterface, BlockchainServiceCommandInterfaceExt},
@@ -15,10 +23,11 @@ use shc_blockchain_service::{
     types::{RetryStrategy, SendExtrinsicOptions, SubmitProofRequest, WatchTransactionError},
     BlockchainService,
 };
-use shc_common::traits::StorageEnableRuntime;
+use shc_common::telemetry_error::TelemetryErrorCategory;
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
     task_context::TaskContext,
+    traits::StorageEnableRuntime,
     types::{
         BlockNumber, CustomChallenge, FileKey, ForestRoot, KeyProof, KeyProofs,
         ProofsDealerProviderId, Proven, RandomnessOutput, StorageProof,
@@ -28,8 +37,6 @@ use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shc_telemetry_service::{
     create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryServiceCommandInterfaceExt,
 };
-use shc_common::telemetry_error::TelemetryErrorCategory;
-use serde::{Deserialize, Serialize};
 
 use crate::{
     handler::StorageHubHandler,
@@ -172,8 +179,8 @@ impl Default for BspSubmitProofConfig {
 ///   - Ensures that no residual file keys remain in the File Storage when they should have been deleted.
 pub struct BspSubmitProofTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
@@ -183,8 +190,8 @@ where
 
 impl<NT, Runtime> Clone for BspSubmitProofTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> BspSubmitProofTask<NT, Runtime> {
@@ -197,8 +204,8 @@ where
 
 impl<NT, Runtime> BspSubmitProofTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
@@ -217,13 +224,17 @@ where
 /// - Derives forest challenges from the seed.
 /// - Checks for checkpoint challenges and adds them to the forest challenges.
 /// - Queues the challenges for submission to the runtime, for when the Forest write lock is released.
-impl<NT, Runtime> EventHandler<MultipleNewChallengeSeeds> for BspSubmitProofTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<MultipleNewChallengeSeeds<Runtime>>
+    for BspSubmitProofTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: MultipleNewChallengeSeeds) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: MultipleNewChallengeSeeds<Runtime>,
+    ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Initiating BSP multiple proof submissions for BSP ID: {:?}, with seeds: {:?}",
@@ -254,13 +265,17 @@ where
 ///   - Retries up to [`MAX_PROOF_SUBMISSION_ATTEMPTS`] times if the submission fails.
 /// - Applies any necessary mutations to the Forest Storage (not the File Storage).
 /// - Ensures the new Forest root matches the one on-chain.
-impl<NT, Runtime> EventHandler<ProcessSubmitProofRequest> for BspSubmitProofTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<ProcessSubmitProofRequest<Runtime>>
+    for BspSubmitProofTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: ProcessSubmitProofRequest) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: ProcessSubmitProofRequest<Runtime>,
+    ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Processing SubmitProofRequest {:?}",
@@ -279,16 +294,23 @@ where
         // Send challenge received telemetry event
         if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
             let challenge_event = BspProofChallengeReceivedEvent {
-                base: create_base_event("bsp_proof_challenge_received", "storage-hub-bsp".to_string(), None),
+                base: create_base_event(
+                    "bsp_proof_challenge_received",
+                    "storage-hub-bsp".to_string(),
+                    None,
+                ),
                 task_id: ctx.task_id.clone(),
                 task_name: ctx.task_name.clone(),
                 provider_id: format!("{:?}", event.data.provider_id),
-                tick: event.data.tick,
+                tick: event.data.tick.saturated_into(),
                 seed: format!("{:?}", event.data.seed),
                 forest_challenges_count: event.data.forest_challenges.len(),
                 checkpoint_challenges_count: event.data.checkpoint_challenges.len(),
             };
-            telemetry_service.queue_typed_event(challenge_event).await.ok();
+            telemetry_service
+                .queue_typed_event(challenge_event)
+                .await
+                .ok();
         }
 
         // Acquire Forest root write lock. This prevents other Forest-root-writing tasks from starting while we are processing this task.
@@ -379,12 +401,15 @@ where
                 base: create_base_event("bsp_proof_generated", "storage-hub-bsp".to_string(), None),
                 task_id: ctx.task_id.clone(),
                 provider_id: format!("{:?}", event.data.provider_id),
-                tick: event.data.tick,
+                tick: event.data.tick.saturated_into(),
                 proven_keys_count: proven_keys.len(),
                 key_proofs_count,
                 generation_time_ms: proof_generation_time_ms,
             };
-            telemetry_service.queue_typed_event(proof_generated_event).await.ok();
+            telemetry_service
+                .queue_typed_event(proof_generated_event)
+                .await
+                .ok();
         }
 
         // Construct full proof.
@@ -395,12 +420,11 @@ where
 
         // Submit proof to the runtime.
         // Provider is `None` since we're submitting with the account linked to the BSP.
-        let call = storage_hub_runtime::RuntimeCall::ProofsDealer(
-            pallet_proofs_dealer::Call::submit_proof {
-                proof,
-                provider: None,
-            },
-        );
+        let call: Runtime::Call = pallet_proofs_dealer::Call::<Runtime>::submit_proof {
+            proof,
+            provider: None,
+        }
+        .into();
 
         // We consider that the maximum tip we're willing to pay for the submission of the proof is
         // equal to the amount that this BSP would be slashed for, if the proof cannot be submitted.
@@ -409,12 +433,12 @@ where
             .blockchain
             .query_slash_amount_per_max_file_size()
             .await?
-            .saturating_mul(event.data.forest_challenges.len() as u128)
+            .saturating_mul(event.data.forest_challenges.len().saturated_into())
             .saturating_mul(2u32.into());
 
         // Get necessary data for the retry check.
         let cloned_sh_handler = Arc::new(self.storage_hub_handler.clone());
-        let cloned_event = Arc::new(event.clone());
+        let cloned_event: Arc<ProcessSubmitProofRequest<Runtime>> = Arc::new(event.clone());
         let cloned_forest_root = {
             let fs = self
                 .storage_hub_handler
@@ -445,7 +469,8 @@ where
         };
 
         // Attempt to submit the extrinsic with retries and tip increase.
-        let submission_result = self.storage_hub_handler
+        let submission_result = self
+            .storage_hub_handler
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
@@ -457,7 +482,7 @@ where
                 )),
                 RetryStrategy::default()
                     .with_max_retries(self.config.max_submission_attempts)
-                    .with_max_tip(max_tip as f64)
+                    .with_max_tip(max_tip.saturated_into())
                     .with_should_retry(Some(Box::new(should_retry))),
                 false,
             )
@@ -471,41 +496,62 @@ where
                 // Send proof submitted/accepted event
                 if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
                     let proof_submitted_event = BspProofSubmittedEvent {
-                        base: create_base_event("bsp_proof_submitted", "storage-hub-bsp".to_string(), None),
+                        base: create_base_event(
+                            "bsp_proof_submitted",
+                            "storage-hub-bsp".to_string(),
+                            None,
+                        ),
                         task_id: ctx.task_id.clone(),
                         provider_id: format!("{:?}", event.data.provider_id),
-                        tick: event.data.tick,
+                        tick: event.data.tick.saturated_into(),
                         submission_attempts: self.config.max_submission_attempts,
                         transaction_hash: Some(format!("{:?}", transaction_hash)),
                         total_time_ms,
                     };
-                    telemetry_service.queue_typed_event(proof_submitted_event).await.ok();
+                    telemetry_service
+                        .queue_typed_event(proof_submitted_event)
+                        .await
+                        .ok();
 
                     let proof_accepted_event = BspProofAcceptedEvent {
-                        base: create_base_event("bsp_proof_accepted", "storage-hub-bsp".to_string(), None),
+                        base: create_base_event(
+                            "bsp_proof_accepted",
+                            "storage-hub-bsp".to_string(),
+                            None,
+                        ),
                         task_id: ctx.task_id.clone(),
                         provider_id: format!("{:?}", event.data.provider_id),
-                        tick: event.data.tick,
+                        tick: event.data.tick.saturated_into(),
                         transaction_hash: format!("{:?}", transaction_hash),
                         total_time_ms,
                     };
-                    telemetry_service.queue_typed_event(proof_accepted_event).await.ok();
+                    telemetry_service
+                        .queue_typed_event(proof_accepted_event)
+                        .await
+                        .ok();
                 }
             }
             Err(e) => {
                 // Send proof rejected event
                 if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
                     let proof_rejected_event = BspProofRejectedEvent {
-                        base: create_base_event("bsp_proof_rejected", "storage-hub-bsp".to_string(), None),
+                        base: create_base_event(
+                            "bsp_proof_rejected",
+                            "storage-hub-bsp".to_string(),
+                            None,
+                        ),
                         task_id: ctx.task_id.clone(),
                         provider_id: format!("{:?}", event.data.provider_id),
-                        tick: event.data.tick,
+                        tick: event.data.tick.saturated_into(),
                         error_type: e.telemetry_category().to_string(),
                         error_message: e.to_string(),
                         submission_attempts: self.config.max_submission_attempts,
                         total_time_ms,
                     };
-                    telemetry_service.queue_typed_event(proof_rejected_event).await.ok();
+                    telemetry_service
+                        .queue_typed_event(proof_rejected_event)
+                        .await
+                        .ok();
                 }
 
                 error!(target: LOG_TARGET, "❌ Failed to submit proof due to: {}", e);
@@ -538,16 +584,16 @@ where
 ///   - If the key is still present, it logs a warning,
 ///     since this could indicate that the key has been re-added after being deleted.
 ///   - If the key is not present in the Forest Storage, it safely removes the key from the File Storage.
-impl<NT, Runtime> EventHandler<FinalisedTrieRemoveMutationsApplied>
+impl<NT, Runtime> EventHandler<FinalisedTrieRemoveMutationsApplied<Runtime>>
     for BspSubmitProofTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(
         &mut self,
-        event: FinalisedTrieRemoveMutationsApplied,
+        event: FinalisedTrieRemoveMutationsApplied<Runtime>,
     ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
@@ -587,15 +633,15 @@ where
 
 impl<NT, Runtime> BspSubmitProofTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn queue_submit_proof_request(
         &self,
-        provider_id: ProofsDealerProviderId,
-        tick: BlockNumber,
-        seed: RandomnessOutput,
+        provider_id: ProofsDealerProviderId<Runtime>,
+        tick: BlockNumber<Runtime>,
+        seed: RandomnessOutput<Runtime>,
     ) -> anyhow::Result<()> {
         trace!(target: LOG_TARGET, "Queueing submit proof request for provider [{:?}] with tick [{:?}] and seed [{:?}]", provider_id, tick, seed);
 
@@ -628,8 +674,8 @@ where
 
     async fn derive_forest_challenges_from_seed(
         &self,
-        seed: RandomnessOutput,
-        provider_id: ProofsDealerProviderId,
+        seed: RandomnessOutput<Runtime>,
+        provider_id: ProofsDealerProviderId<Runtime>,
     ) -> anyhow::Result<Vec<H256>> {
         Ok(self
             .storage_hub_handler
@@ -640,9 +686,9 @@ where
 
     async fn add_checkpoint_challenges_to_forest_challenges(
         &self,
-        provider_id: ProofsDealerProviderId,
+        provider_id: ProofsDealerProviderId<Runtime>,
         forest_challenges: &mut Vec<H256>,
-    ) -> anyhow::Result<Vec<CustomChallenge>> {
+    ) -> anyhow::Result<Vec<CustomChallenge<Runtime>>> {
         let last_tick_provider_submitted_proof_for = self
             .storage_hub_handler
             .blockchain
@@ -697,7 +743,7 @@ where
 
     async fn check_if_proof_is_outdated(
         blockchain: &ActorHandle<BlockchainService<NT::FSH, Runtime>>,
-        event: &ProcessSubmitProofRequest,
+        event: &ProcessSubmitProofRequest<Runtime>,
     ) -> anyhow::Result<()> {
         // Get the next challenge tick for this provider.
         let next_challenge_tick = blockchain
@@ -719,9 +765,9 @@ where
     async fn generate_key_proof(
         &self,
         file_key: H256,
-        seed: RandomnessOutput,
-        provider_id: ProofsDealerProviderId,
-    ) -> anyhow::Result<KeyProof> {
+        seed: RandomnessOutput<Runtime>,
+        provider_id: ProofsDealerProviderId<Runtime>,
+    ) -> anyhow::Result<KeyProof<Runtime>> {
         // Get the metadata for the file.
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
         let metadata = read_file_storage
@@ -790,8 +836,8 @@ where
     ///    which the proof was generated is still the tick this Provider should submit a proof for.
     async fn should_retry_submit_proof(
         sh_handler: Arc<StorageHubHandler<NT, Runtime>>,
-        event: Arc<ProcessSubmitProofRequest>,
-        forest_root: Arc<ForestRoot>,
+        event: Arc<ProcessSubmitProofRequest<Runtime>>,
+        forest_root: Arc<ForestRoot<Runtime>>,
         error: WatchTransactionError,
     ) -> bool {
         // We only retry sending THE SAME proof, if the error is a timeout.

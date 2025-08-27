@@ -13,7 +13,9 @@ export default defineConfig({
     },
     test: {
         environment: 'node',
+        setupFiles: ['./vitest.setup.ts'],
         globals: true,
+        watch: false,
         coverage: {
             provider: 'v8',
             exclude: ['scripts/**', '**/wasm/pkg/**'],

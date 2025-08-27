@@ -1,9 +1,7 @@
+use bigdecimal::BigDecimal;
 use diesel_async::AsyncConnection;
 use futures::prelude::*;
 use log::{error, info};
-use shc_common::traits::StorageEnableRuntime;
-use shc_common::types::StorageProviderId;
-use sp_runtime::AccountId32;
 use std::sync::Arc;
 use std::time::Instant;
 use thiserror::Error;
@@ -11,20 +9,21 @@ use thiserror::Error;
 use crate::telemetry::IndexerServiceTelemetry;
 
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
-use shc_actors_framework::actor::ActorHandle;
-use shc_telemetry_service::TelemetryService;
 use sc_client_api::{BlockBackend, BlockchainEvents};
+use shc_actors_framework::actor::ActorHandle;
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
-use shc_common::blockchain_utils::{convert_raw_multiaddress_to_multiaddr, EventsRetrievalError};
 use shc_common::{
-    blockchain_utils::get_events_at_block,
-    types::{BlockNumber, ParachainClient},
+    blockchain_utils::{
+        convert_raw_multiaddress_to_multiaddr, get_events_at_block, EventsRetrievalError,
+    },
+    traits::StorageEnableRuntime,
+    types::{ParachainClient, StorageEnableEvents, StorageProviderId},
 };
 use shc_indexer_db::{models::*, DbConnection, DbPool};
+use shc_telemetry_service::TelemetryService;
 use sp_api::ProvideRuntimeApi;
 use sp_core::H256;
-use sp_runtime::traits::Header;
-use storage_hub_runtime::RuntimeEvent;
+use sp_runtime::traits::{Header, NumberFor, SaturatedConversion};
 
 mod fishing;
 mod lite;
@@ -88,10 +87,10 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
     ) -> Result<(), HandleFinalityNotificationError>
     where
         Block: sp_runtime::traits::Block<Hash = H256>,
-        Block::Header: Header<Number = BlockNumber>,
+        Block::Header: Header,
     {
         let finalized_block_hash = notification.hash;
-        let finalized_block_number = *notification.header.number();
+        let finalized_block_number: u64 = (*notification.header.number()).saturated_into();
 
         info!(target: LOG_TARGET, "Finality notification (#{}): {}", finalized_block_number, finalized_block_hash);
 
@@ -99,26 +98,34 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
 
         let service_state = ServiceState::get(&mut db_conn).await?;
 
-        for block_number in
-            (service_state.last_processed_block as BlockNumber + 1)..=finalized_block_number
-        {
+        let mut next_block = service_state.last_processed_block as u64;
+        next_block = next_block.saturating_add(1);
+
+        while next_block <= finalized_block_number {
             let block_hash = self
                 .client
-                .block_hash(block_number)?
+                .block_hash(next_block.saturated_into())?
                 .ok_or(HandleFinalityNotificationError::BlockHashNotFound)?;
-            if let Err(e) = self.index_block(&mut db_conn, block_number as BlockNumber, block_hash).await {
+            let next_block_rt: NumberFor<Runtime::Block> = next_block.saturated_into();
+            if let Err(e) = self
+                .index_block(&mut db_conn, next_block_rt, block_hash)
+                .await
+            {
                 let handler_name = format!("{:?}", self.indexer_mode).to_lowercase();
-                self.telemetry.indexer_error(
-                    &handler_name,
-                    Some(block_number.into()),
-                    None,
-                    "IndexBlockError".to_string(),
-                    e.to_string(),
-                    false, // For now, we don't retry at this level
-                    None,
-                ).await;
+                self.telemetry
+                    .indexer_error(
+                        &handler_name,
+                        Some(next_block.into()),
+                        None,
+                        "IndexBlockError".to_string(),
+                        e.to_string(),
+                        false, // For now, we don't retry at this level
+                        None,
+                    )
+                    .await;
                 return Err(e.into());
             }
+            next_block = next_block.saturating_add(1);
         }
 
         Ok(())
@@ -127,7 +134,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
     async fn index_block<'a, 'b: 'a>(
         &'b self,
         conn: &mut DbConnection<'a>,
-        block_number: BlockNumber,
+        block_number: NumberFor<Runtime::Block>,
         block_hash: H256,
     ) -> Result<(), IndexBlockError> {
         let start_time = Instant::now();
@@ -138,10 +145,12 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
 
         conn.transaction::<(), IndexBlockError, _>(move |conn| {
             Box::pin(async move {
-                ServiceState::update(conn, block_number as i64).await?;
+                let block_number_u64: u64 = block_number.saturated_into();
+                let block_number_i64: i64 = block_number_u64 as i64;
+                ServiceState::update(conn, block_number_i64).await?;
 
                 for ev in block_events {
-                    self.route_event(conn, &ev.event, block_hash).await?;
+                    self.route_event(conn, &ev.event.into(), block_hash).await?;
                 }
 
                 Ok(())
@@ -153,15 +162,17 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         let handler_name = format!("{:?}", self.indexer_mode).to_lowercase();
 
         // Send block processed telemetry event
-        self.telemetry.block_processed(
-            &handler_name,
-            block_number.into(),
-            format!("{:?}", block_hash),
-            format!("{:?}", H256::zero()), // TODO: Get actual parent hash if needed
-            events_count,
-            processing_time_ms,
-            handler_name.clone(),
-        ).await;
+        self.telemetry
+            .block_processed(
+                &handler_name,
+                block_number.saturated_into(),
+                format!("{:?}", block_hash),
+                format!("{:?}", H256::zero()), // TODO: Get actual parent hash if needed
+                events_count,
+                processing_time_ms,
+                handler_name.clone(),
+            )
+            .await;
 
         Ok(())
     }
@@ -169,7 +180,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
     async fn route_event<'a, 'b: 'a>(
         &'b self,
         conn: &mut DbConnection<'a>,
-        event: &RuntimeEvent,
+        event: &StorageEnableEvents<Runtime>,
         block_hash: H256,
     ) -> Result<(), diesel::result::Error> {
         match self.indexer_mode {
@@ -182,41 +193,38 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
     async fn index_event<'a, 'b: 'a>(
         &'b self,
         conn: &mut DbConnection<'a>,
-        event: &RuntimeEvent,
+        event: &StorageEnableEvents<Runtime>,
         block_hash: H256,
     ) -> Result<(), diesel::result::Error> {
         match event {
-            RuntimeEvent::BucketNfts(event) => self.index_bucket_nfts_event(conn, event).await?,
-            RuntimeEvent::FileSystem(event) => self.index_file_system_event(conn, event).await?,
-            RuntimeEvent::PaymentStreams(event) => {
+            StorageEnableEvents::BucketNfts(event) => {
+                self.index_bucket_nfts_event(conn, event).await?
+            }
+            StorageEnableEvents::FileSystem(event) => {
+                self.index_file_system_event(conn, event).await?
+            }
+            StorageEnableEvents::PaymentStreams(event) => {
                 self.index_payment_streams_event(conn, event).await?
             }
-            RuntimeEvent::ProofsDealer(event) => {
+            StorageEnableEvents::ProofsDealer(event) => {
                 self.index_proofs_dealer_event(conn, event).await?
             }
-            RuntimeEvent::Providers(event) => {
+            StorageEnableEvents::StorageProviders(event) => {
                 self.index_providers_event(conn, event, block_hash).await?
             }
-            RuntimeEvent::Randomness(event) => self.index_randomness_event(conn, event).await?,
+            StorageEnableEvents::Randomness(event) => {
+                self.index_randomness_event(conn, event).await?
+            }
             // TODO: We have to index the events from the CrRandomness pallet when we integrate it to the runtime,
             // since they contain the information about the commit-reveal deadlines for Providers.
             // RuntimeEvent::CrRandomness(event) => self.index_cr_randomness_event(conn, event).await?,
             // Runtime events that we're not interested in.
             // We add them here instead of directly matching (_ => {})
             // to ensure the compiler will let us know to treat future events when added.
-            RuntimeEvent::System(_) => {}
-            RuntimeEvent::ParachainSystem(_) => {}
-            RuntimeEvent::Balances(_) => {}
-            RuntimeEvent::TransactionPayment(_) => {}
-            RuntimeEvent::Sudo(_) => {}
-            RuntimeEvent::CollatorSelection(_) => {}
-            RuntimeEvent::Session(_) => {}
-            RuntimeEvent::XcmpQueue(_) => {}
-            RuntimeEvent::PolkadotXcm(_) => {}
-            RuntimeEvent::CumulusXcm(_) => {}
-            RuntimeEvent::MessageQueue(_) => {}
-            RuntimeEvent::Nfts(_) => {}
-            RuntimeEvent::Parameters(_) => {}
+            StorageEnableEvents::System(_) => {}
+            StorageEnableEvents::Balances(_) => {}
+            StorageEnableEvents::TransactionPayment(_) => {}
+            StorageEnableEvents::Other(_) => {}
         }
 
         Ok(())
@@ -225,7 +233,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
     async fn index_bucket_nfts_event<'a, 'b: 'a>(
         &'b self,
         _conn: &mut DbConnection<'a>,
-        event: &pallet_bucket_nfts::Event<storage_hub_runtime::Runtime>,
+        event: &pallet_bucket_nfts::Event<Runtime>,
     ) -> Result<(), diesel::result::Error> {
         match event {
             pallet_bucket_nfts::Event::AccessShared { .. } => {}
@@ -239,7 +247,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
     async fn index_file_system_event<'a, 'b: 'a>(
         &'b self,
         conn: &mut DbConnection<'a>,
-        event: &pallet_file_system::Event<storage_hub_runtime::Runtime>,
+        event: &pallet_file_system::Event<Runtime>,
     ) -> Result<(), diesel::result::Error> {
         match event {
             pallet_file_system::Event::NewBucket {
@@ -355,14 +363,16 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     sql_peer_ids.push(PeerId::create(conn, peer_id.to_vec()).await?);
                 }
 
+                let size: u64 = (*size).saturated_into();
+                let who = who.as_ref().to_vec();
                 File::create(
                     conn,
-                    <AccountId32 as AsRef<[u8]>>::as_ref(who).to_vec(),
+                    who,
                     file_key.as_ref().to_vec(),
                     bucket.id,
                     location.to_vec(),
                     fingerprint.as_ref().to_vec(),
-                    *size as i64,
+                    size.saturated_into(),
                     FileStorageRequestStep::Requested,
                     sql_peer_ids,
                 )
@@ -486,6 +496,9 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             pallet_file_system::Event::FailedToTransferDepositFundsToBsp { .. } => {
                 // In the future we should monitor for this to detect eventual bugs in the pallets
             }
+            pallet_file_system::Event::FileDeletedFromIncompleteStorageRequest { .. } => {
+                // TODO: index this event
+            }
             pallet_file_system::Event::MspFileDeletionCompleted {
                 user: _,
                 file_key,
@@ -543,7 +556,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
     async fn index_payment_streams_event<'a, 'b: 'a>(
         &'b self,
         conn: &mut DbConnection<'a>,
-        event: &pallet_payment_streams::Event<storage_hub_runtime::Runtime>,
+        event: &pallet_payment_streams::Event<Runtime>,
     ) -> Result<(), diesel::result::Error> {
         match event {
             pallet_payment_streams::Event::DynamicRatePaymentStreamCreated {
@@ -581,15 +594,16 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 let ps =
                     PaymentStream::get(conn, user_account.to_string(), provider_id.to_string())
                         .await?;
+                let amount: BigDecimal = (*amount).into();
                 let new_total_amount = ps.total_amount_paid + amount;
-                let last_tick_charged: i64 = (*last_tick_charged).into();
-                let charged_at_tick: i64 = (*charged_at_tick).into();
+                let last_tick_charged: u64 = (*last_tick_charged).saturated_into();
+                let charged_at_tick: u64 = (*charged_at_tick).saturated_into();
                 PaymentStream::update_total_amount(
                     conn,
                     ps.id,
                     new_total_amount,
-                    last_tick_charged,
-                    charged_at_tick,
+                    last_tick_charged.saturated_into(),
+                    charged_at_tick.saturated_into(),
                 )
                 .await?;
             }
@@ -608,7 +622,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
     async fn index_proofs_dealer_event<'a, 'b: 'a>(
         &'b self,
         conn: &mut DbConnection<'a>,
-        event: &pallet_proofs_dealer::Event<storage_hub_runtime::Runtime>,
+        event: &pallet_proofs_dealer::Event<Runtime>,
     ) -> Result<(), diesel::result::Error> {
         match event {
             pallet_proofs_dealer::Event::MutationsAppliedForProvider { .. } => {}
@@ -620,10 +634,11 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 proof: _proof,
                 last_tick_proven,
             } => {
+                let last_tick_proven: u64 = (*last_tick_proven).saturated_into();
                 Bsp::update_last_tick_proven(
                     conn,
                     provider.to_string(),
-                    (*last_tick_proven).into(),
+                    last_tick_proven.saturated_into(),
                 )
                 .await?;
             }
@@ -641,7 +656,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
     async fn index_providers_event<'a, 'b: 'a>(
         &'b self,
         conn: &mut DbConnection<'a>,
-        event: &pallet_storage_providers::Event<storage_hub_runtime::Runtime>,
+        event: &pallet_storage_providers::Event<Runtime>,
         block_hash: H256,
     ) -> Result<(), diesel::result::Error> {
         match event {
@@ -674,7 +689,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 Bsp::create(
                     conn,
                     who.to_string(),
-                    capacity.into(),
+                    (*capacity).into(),
                     root.as_ref().to_vec(),
                     sql_multiaddresses,
                     bsp_id.to_string(),
@@ -696,7 +711,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 next_block_when_change_allowed: _next_block_when_change_allowed,
             } => match provider_id {
                 StorageProviderId::BackupStorageProvider(bsp_id) => {
-                    Bsp::update_capacity(conn, who.to_string(), new_capacity.into()).await?;
+                    Bsp::update_capacity(conn, who.to_string(), (*new_capacity).into()).await?;
 
                     // update also the stake
                     let stake = self
@@ -710,7 +725,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     Bsp::update_stake(conn, bsp_id.to_string(), stake).await?;
                 }
                 StorageProviderId::MainStorageProvider(_) => {
-                    Bsp::update_capacity(conn, who.to_string(), new_capacity.into()).await?;
+                    Bsp::update_capacity(conn, who.to_string(), (*new_capacity).into()).await?;
                 }
             },
             pallet_storage_providers::Event::SignUpRequestCanceled { .. } => {}
@@ -738,7 +753,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 Msp::create(
                     conn,
                     who.to_string(),
-                    capacity.into(),
+                    (*capacity).into(),
                     value_prop,
                     sql_multiaddresses,
                     msp_id.to_string(),
@@ -815,7 +830,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
     async fn index_randomness_event<'a, 'b: 'a>(
         &'b self,
         _conn: &mut DbConnection<'a>,
-        event: &pallet_randomness::Event<storage_hub_runtime::Runtime>,
+        event: &pallet_randomness::Event<Runtime>,
     ) -> Result<(), diesel::result::Error> {
         match event {
             pallet_randomness::Event::NewOneEpochAgoRandomnessAvailable { .. } => {}

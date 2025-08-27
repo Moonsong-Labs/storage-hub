@@ -1,17 +1,22 @@
 use log::{debug, info, warn};
 use sc_network::{PeerId, RequestFailure};
 use sp_core::H256;
-use sp_runtime::AccountId32;
+use sp_runtime::traits::SaturatedConversion;
 use std::collections::HashSet;
 
+use serde::{Deserialize, Serialize};
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceCommandInterface,
     events::{AcceptedBspVolunteer, NewStorageRequest},
 };
-use shc_common::traits::StorageEnableRuntime;
-use shc_common::types::{
-    FileMetadata, HashT, StorageProofsMerkleTrieLayout, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
+use shc_common::task_context::TaskContext;
+use shc_common::telemetry_error::TelemetryErrorCategory;
+use shc_common::{
+    traits::StorageEnableRuntime,
+    types::{
+        FileMetadata, HashT, StorageProofsMerkleTrieLayout, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
+    },
 };
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::commands::{
@@ -20,9 +25,6 @@ use shc_file_transfer_service::commands::{
 use shc_telemetry_service::{
     create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryServiceCommandInterfaceExt,
 };
-use shc_common::task_context::TaskContext;
-use shc_common::telemetry_error::TelemetryErrorCategory;
-use serde::{Deserialize, Serialize};
 use shp_file_metadata::ChunkId;
 
 // Local user telemetry event definitions
@@ -110,7 +112,7 @@ const LOG_TARGET: &str = "user-sends-file-task";
 /// it reacts to every [`AcceptedBspVolunteer`] from the runtime.
 pub struct UserSendsFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
+    NT: ShNodeType<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
@@ -118,7 +120,7 @@ where
 
 impl<NT, Runtime> Clone for UserSendsFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
+    NT: ShNodeType<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> Self {
@@ -130,7 +132,7 @@ where
 
 impl<NT, Runtime> UserSendsFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
+    NT: ShNodeType<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
@@ -140,14 +142,14 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<NewStorageRequest> for UserSendsFileTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<NewStorageRequest<Runtime>> for UserSendsFileTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
+    NT: ShNodeType<Runtime> + 'static,
     Runtime: StorageEnableRuntime,
 {
     /// Reacts to a new storage request from the runtime, which is triggered by a user sending a file to be stored.
     /// It generates the file metadata and sends it to the BSPs volunteering to store the file.
-    async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: NewStorageRequest<Runtime>) -> anyhow::Result<()> {
         // Create task context for tracking
         let ctx = TaskContext::new("user_sends_file");
         let node_pub_key = self
@@ -165,11 +167,15 @@ where
         // Send task started telemetry event
         if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
             let start_event = UserFileUploadStartedEvent {
-                base: create_base_event("user_file_upload_started", "storage-hub-user".to_string(), None),
+                base: create_base_event(
+                    "user_file_upload_started",
+                    "storage-hub-user".to_string(),
+                    None,
+                ),
                 task_id: ctx.task_id.clone(),
                 task_name: ctx.task_name.clone(),
                 file_key: format!("{:?}", event.file_key),
-                file_size_bytes: event.size as u64,
+                file_size_bytes: event.size.saturated_into(),
                 location: hex::encode(event.location.as_slice()),
                 fingerprint: format!("{:?}", event.fingerprint),
                 peer_ids: format!("{:?}", event.user_peer_ids),
@@ -226,11 +232,12 @@ where
             .extract_peer_ids_and_register_known_addresses(multiaddress_vec)
             .await;
 
+        let who = event.who.as_ref().to_vec();
         let file_metadata = FileMetadata::new(
-            <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
+            who,
             event.bucket_id.as_ref().to_vec(),
             event.location.into_inner(),
-            event.size.into(),
+            event.size.saturated_into(),
             event.fingerprint,
         )
         .map_err(|_| anyhow::anyhow!("Invalid file metadata"))?;
@@ -252,20 +259,31 @@ where
             match &result {
                 Ok(_) => {
                     let completed_event = UserUploadCompletedEvent {
-                        base: create_base_event("user_upload_completed", "storage-hub-user".to_string(), None),
+                        base: create_base_event(
+                            "user_upload_completed",
+                            "storage-hub-user".to_string(),
+                            None,
+                        ),
                         task_id: ctx.task_id.clone(),
                         file_key: format!("{:?}", file_key),
-                        file_size_bytes: event.size as u64,
+                        file_size_bytes: event.size.saturated_into(),
                         duration_ms: ctx.elapsed_ms(),
                         total_chunks: file_metadata.chunks_count(),
                         fingerprint: format!("{:?}", event.fingerprint),
                         peer_id: "multiple".to_string(), // Could be multiple peers
                     };
-                    telemetry_service.queue_typed_event(completed_event).await.ok();
+                    telemetry_service
+                        .queue_typed_event(completed_event)
+                        .await
+                        .ok();
                 }
                 Err(e) => {
                     let failed_event = UserUploadFailedEvent {
-                        base: create_base_event("user_upload_failed", "storage-hub-user".to_string(), None),
+                        base: create_base_event(
+                            "user_upload_failed",
+                            "storage-hub-user".to_string(),
+                            None,
+                        ),
                         task_id: ctx.task_id.clone(),
                         file_key: format!("{:?}", file_key),
                         error_type: e.telemetry_category().to_string(),
@@ -282,16 +300,16 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<AcceptedBspVolunteer> for UserSendsFileTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<AcceptedBspVolunteer<Runtime>> for UserSendsFileTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
+    NT: ShNodeType<Runtime> + 'static,
     Runtime: StorageEnableRuntime,
 {
     /// Reacts to BSPs volunteering (`AcceptedBspVolunteer` from the runtime) to store the user's file,
     /// establishes a connection to each BSPs through the p2p network and sends the file.
     /// At this point we assume that the file is merkleised and already in file storage, and
     /// for this reason the file transfer to the BSP should not fail unless the p2p connection fails.
-    async fn handle_event(&mut self, event: AcceptedBspVolunteer) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: AcceptedBspVolunteer<Runtime>) -> anyhow::Result<()> {
         // Create task context for tracking
         let ctx = TaskContext::new("user_sends_file_bsp");
         info!(
@@ -301,11 +319,13 @@ where
             event.location,
         );
 
+        let owner = event.owner.as_ref().to_vec();
+        let location_hex = hex::encode(event.location.as_slice());
         let file_metadata = FileMetadata::new(
-            <AccountId32 as AsRef<[u8]>>::as_ref(&event.owner).to_vec(),
+            owner,
             event.bucket_id.as_ref().to_vec(),
-            event.location.clone().into_inner(),
-            event.size.into(),
+            event.location.into_inner(),
+            event.size.saturated_into(),
             event.fingerprint,
         )
         .map_err(|_| anyhow::anyhow!("Invalid file metadata"))?;
@@ -331,12 +351,16 @@ where
         // Send task started telemetry event for BSP volunteer
         if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
             let start_event = UserFileUploadStartedEvent {
-                base: create_base_event("user_file_upload_started", "storage-hub-user".to_string(), None),
+                base: create_base_event(
+                    "user_file_upload_started",
+                    "storage-hub-user".to_string(),
+                    None,
+                ),
                 task_id: ctx.task_id.clone(),
                 task_name: ctx.task_name.clone(),
                 file_key: format!("{:?}", file_key),
-                file_size_bytes: event.size as u64,
-                location: hex::encode(event.location.as_slice()),
+                file_size_bytes: event.size.saturated_into(),
+                location: location_hex,
                 fingerprint: format!("{:?}", event.fingerprint),
                 peer_ids: format!("{:?}", peer_ids),
             };
@@ -350,20 +374,31 @@ where
             match &result {
                 Ok(_) => {
                     let completed_event = UserUploadCompletedEvent {
-                        base: create_base_event("user_upload_completed", "storage-hub-user".to_string(), None),
+                        base: create_base_event(
+                            "user_upload_completed",
+                            "storage-hub-user".to_string(),
+                            None,
+                        ),
                         task_id: ctx.task_id.clone(),
                         file_key: format!("{:?}", file_key),
-                        file_size_bytes: event.size as u64,
+                        file_size_bytes: event.size.saturated_into(),
                         duration_ms: ctx.elapsed_ms(),
                         total_chunks: file_metadata.chunks_count(),
                         fingerprint: format!("{:?}", event.fingerprint),
                         peer_id: "bsp_volunteer".to_string(),
                     };
-                    telemetry_service.queue_typed_event(completed_event).await.ok();
+                    telemetry_service
+                        .queue_typed_event(completed_event)
+                        .await
+                        .ok();
                 }
                 Err(e) => {
                     let failed_event = UserUploadFailedEvent {
-                        base: create_base_event("user_upload_failed", "storage-hub-user".to_string(), None),
+                        base: create_base_event(
+                            "user_upload_failed",
+                            "storage-hub-user".to_string(),
+                            None,
+                        ),
                         task_id: ctx.task_id.clone(),
                         file_key: format!("{:?}", file_key),
                         error_type: e.telemetry_category().to_string(),
@@ -382,7 +417,7 @@ where
 
 impl<NT, Runtime> UserSendsFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
+    NT: ShNodeType<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn send_chunks_to_provider(
@@ -494,13 +529,20 @@ where
                             // Send chunk sent telemetry event
                             if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
                                 let chunk_event = UserChunkSentEvent {
-                                    base: create_base_event("user_chunk_sent", "storage-hub-user".to_string(), None),
+                                    base: create_base_event(
+                                        "user_chunk_sent",
+                                        "storage-hub-user".to_string(),
+                                        None,
+                                    ),
                                     task_id: ctx.task_id.clone(),
                                     file_key: format!("{:?}", file_key),
                                     chunk_count: current_batch.len() as u32,
                                     chunk_size_bytes: current_batch_size as u64,
                                     peer_id: format!("{:?}", peer_id),
-                                    batch_index: (chunk_id as usize / (BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE / shc_common::types::FILE_CHUNK_SIZE as usize)) as u32,
+                                    batch_index: (chunk_id as usize
+                                        / (BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE
+                                            / shc_common::types::FILE_CHUNK_SIZE as usize))
+                                        as u32,
                                 };
                                 telemetry_service.queue_typed_event(chunk_event).await.ok();
                             }
@@ -555,7 +597,7 @@ where
                             // Wait a bit for the MSP to be online
                             self.storage_hub_handler
                                 .blockchain
-                                .wait_for_num_blocks(5)
+                                .wait_for_num_blocks(5u32.into())
                                 .await?;
                         }
                         Err(RequestFailure::Refused)
@@ -634,13 +676,20 @@ where
                             // Send final chunk sent telemetry event
                             if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
                                 let chunk_event = UserChunkSentEvent {
-                                    base: create_base_event("user_chunk_sent", "storage-hub-user".to_string(), None),
+                                    base: create_base_event(
+                                        "user_chunk_sent",
+                                        "storage-hub-user".to_string(),
+                                        None,
+                                    ),
                                     task_id: ctx.task_id.clone(),
                                     file_key: format!("{:?}", file_key),
                                     chunk_count: current_batch.len() as u32,
                                     chunk_size_bytes: current_batch_size as u64,
                                     peer_id: format!("{:?}", peer_id),
-                                    batch_index: (chunk_count as usize / (BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE / shc_common::types::FILE_CHUNK_SIZE as usize)) as u32,
+                                    batch_index: (chunk_count as usize
+                                        / (BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE
+                                            / shc_common::types::FILE_CHUNK_SIZE as usize))
+                                        as u32,
                                 };
                                 telemetry_service.queue_typed_event(chunk_event).await.ok();
                             }
@@ -692,7 +741,7 @@ where
                             // Wait a bit for the MSP to be online
                             self.storage_hub_handler
                                 .blockchain
-                                .wait_for_num_blocks(5)
+                                .wait_for_num_blocks(5u32.into())
                                 .await?;
                         }
                         Err(RequestFailure::Refused)

@@ -1,5 +1,7 @@
 import assert, { strictEqual } from "node:assert";
-import { describeMspNet, shUser, waitFor, type EnrichedBspApi } from "../../../util";
+import { u8aToHex } from "@polkadot/util";
+import { decodeAddress } from "@polkadot/util-crypto";
+import { type EnrichedBspApi, describeMspNet, shUser, waitFor } from "../../../util";
 
 describeMspNet(
   "Single MSP accepting storage request",
@@ -34,12 +36,13 @@ describeMspNet(
 
       assert(newBucketEventDataBlob, "Event doesn't match Type");
 
+      const ownerHex = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
       const {
         file_metadata: { location, fingerprint, file_size }
       } = await userApi.rpc.storagehubclient.loadFileInStorage(
         source,
         destination,
-        userApi.shConsts.NODE_INFOS.user.AddressId,
+        ownerHex,
         newBucketEventDataBlob.bucketId
       );
 

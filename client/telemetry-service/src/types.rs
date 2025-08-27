@@ -14,13 +14,13 @@
 use async_trait::async_trait;
 use axiom_rs::Client as AxiomClient;
 use chrono::{DateTime, Utc};
+use log::error;
 use serde::{Deserialize, Serialize};
 use std::{
     env,
     sync::atomic::{AtomicU64, Ordering},
     sync::Arc,
 };
-use log::error;
 
 /// Telemetry configuration
 #[derive(Clone, Debug)]
@@ -129,7 +129,6 @@ pub trait TelemetryEvent: Serialize + Send + Sync {
         })
     }
 }
-
 
 /// Telemetry backend trait for extensibility
 #[async_trait]
@@ -284,14 +283,14 @@ mod tests {
         // Test environment variable loading
         std::env::set_var("AXIOM_TOKEN", "test-token");
         std::env::set_var("AXIOM_DATASET", "test-dataset");
-        
+
         let config = AxiomConfig::from_env();
         assert!(config.is_some());
-        
+
         let config = config.unwrap();
         assert_eq!(config.token, "test-token");
         assert_eq!(config.dataset, "test-dataset");
-        
+
         // Clean up
         std::env::remove_var("AXIOM_TOKEN");
         std::env::remove_var("AXIOM_DATASET");

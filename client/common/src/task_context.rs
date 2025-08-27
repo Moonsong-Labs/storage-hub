@@ -71,11 +71,11 @@ pub fn calculate_transfer_rate_mbps(bytes: u64, duration: Duration) -> f64 {
     if duration.as_secs_f64() == 0.0 {
         return 0.0;
     }
-    
+
     let bits = (bytes * 8) as f64;
     let megabits = bits / 1_000_000.0;
     let seconds = duration.as_secs_f64();
-    
+
     megabits / seconds
 }
 
@@ -88,7 +88,7 @@ mod tests {
     #[test]
     fn test_task_context_creation() {
         let ctx = TaskContext::new("test_task");
-        
+
         assert_eq!(ctx.task_name, "test_task");
         assert!(!ctx.task_id.is_empty());
         assert!(ctx.correlation_id.is_none());
@@ -98,7 +98,7 @@ mod tests {
     fn test_task_context_with_correlation() {
         let correlation_id = TaskContext::generate_correlation_id();
         let ctx = TaskContext::with_correlation("test_task", correlation_id.clone());
-        
+
         assert_eq!(ctx.task_name, "test_task");
         assert_eq!(ctx.correlation_id, Some(correlation_id));
     }
@@ -107,7 +107,7 @@ mod tests {
     fn test_elapsed_time() {
         let ctx = TaskContext::new("test_task");
         thread::sleep(Duration::from_millis(100));
-        
+
         let elapsed_ms = ctx.elapsed_ms();
         assert!(elapsed_ms >= 100);
         assert!(elapsed_ms < 200); // Allow some margin
@@ -117,7 +117,7 @@ mod tests {
     fn test_transfer_rate_calculation() {
         let bytes = 10_000_000; // 10 MB
         let duration = Duration::from_secs(2);
-        
+
         let rate = calculate_transfer_rate_mbps(bytes, duration);
         // 10 MB * 8 = 80 Mb / 2s = 40 Mbps
         assert!((rate - 40.0).abs() < 0.01);

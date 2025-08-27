@@ -1,17 +1,17 @@
 use anyhow::anyhow;
 use sc_tracing::tracing::*;
+use serde::{Deserialize, Serialize};
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::events::FinalisedBspConfirmStoppedStoring;
 use shc_common::consts::CURRENT_FOREST_KEY;
 use shc_common::task_context::TaskContext;
+use shc_common::telemetry_error::TelemetryErrorCategory;
 use shc_common::traits::StorageEnableRuntime;
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shc_telemetry_service::{
     create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryServiceCommandInterfaceExt,
 };
-use shc_common::telemetry_error::TelemetryErrorCategory;
-use serde::{Deserialize, Serialize};
 use sp_core::H256;
 
 use crate::{
@@ -76,8 +76,8 @@ const LOG_TARGET: &str = "bsp-delete-file-task";
 
 pub struct BspDeleteFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
@@ -85,8 +85,8 @@ where
 
 impl<NT, Runtime> Clone for BspDeleteFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> BspDeleteFileTask<NT, Runtime> {
@@ -98,8 +98,8 @@ where
 
 impl<NT, Runtime> BspDeleteFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
@@ -110,7 +110,7 @@ where
 
     async fn handle_file_deletion_event(
         &mut self,
-        event: FinalisedBspConfirmStoppedStoring,
+        event: FinalisedBspConfirmStoppedStoring<Runtime>,
     ) -> anyhow::Result<(bool, bool)> {
         // Check that the file_key is not in the Forest.
         let current_forest_key = CURRENT_FOREST_KEY.to_vec();
@@ -120,14 +120,14 @@ where
             .get(&current_forest_key)
             .await
             .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
-        
+
         let removed_from_forest = !read_fs
             .read()
             .await
             .contains_file_key(&event.file_key.into())?;
-        
+
         let mut removed_from_file_storage = false;
-        
+
         if removed_from_forest {
             // If file key is not in Forest, we can now safely remove it from the File Storage.
             self.remove_file_from_file_storage(&event.file_key.into())
@@ -140,7 +140,7 @@ where
                 event.file_key,
             );
         }
-        
+
         Ok((removed_from_forest, removed_from_file_storage))
     }
 
@@ -162,15 +162,16 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<FinalisedBspConfirmStoppedStoring> for BspDeleteFileTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<FinalisedBspConfirmStoppedStoring<Runtime>>
+    for BspDeleteFileTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(
         &mut self,
-        event: FinalisedBspConfirmStoppedStoring,
+        event: FinalisedBspConfirmStoppedStoring<Runtime>,
     ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
@@ -185,7 +186,11 @@ where
         // Send task started telemetry event
         if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
             let start_event = BspFileDeletionStartedEvent {
-                base: create_base_event("bsp_file_deletion_started", "storage-hub-bsp".to_string(), None),
+                base: create_base_event(
+                    "bsp_file_deletion_started",
+                    "storage-hub-bsp".to_string(),
+                    None,
+                ),
                 task_id: ctx.task_id.clone(),
                 task_name: ctx.task_name.clone(),
                 file_key: format!("{:?}", event.file_key),
@@ -201,7 +206,11 @@ where
             match &result {
                 Ok((removed_from_forest, removed_from_file_storage)) => {
                     let completed_event = BspFileDeletionCompletedEvent {
-                        base: create_base_event("bsp_file_deletion_completed", "storage-hub-bsp".to_string(), None),
+                        base: create_base_event(
+                            "bsp_file_deletion_completed",
+                            "storage-hub-bsp".to_string(),
+                            None,
+                        ),
                         task_id: ctx.task_id.clone(),
                         file_key: format!("{:?}", event.file_key),
                         bsp_id: format!("{:?}", event.bsp_id),
@@ -209,11 +218,18 @@ where
                         removed_from_forest: *removed_from_forest,
                         removed_from_file_storage: *removed_from_file_storage,
                     };
-                    telemetry_service.queue_typed_event(completed_event).await.ok();
+                    telemetry_service
+                        .queue_typed_event(completed_event)
+                        .await
+                        .ok();
                 }
                 Err(e) => {
                     let failed_event = BspFileDeletionFailedEvent {
-                        base: create_base_event("bsp_file_deletion_failed", "storage-hub-bsp".to_string(), None),
+                        base: create_base_event(
+                            "bsp_file_deletion_failed",
+                            "storage-hub-bsp".to_string(),
+                            None,
+                        ),
                         task_id: ctx.task_id.clone(),
                         file_key: format!("{:?}", event.file_key),
                         bsp_id: format!("{:?}", event.bsp_id),

@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 pub struct MspUploadAcceptedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     pub file_key: String,
     /// Bucket storing the file
@@ -38,7 +38,7 @@ impl TelemetryEvent for MspUploadAcceptedEvent {
 pub struct MspUploadRejectedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     pub file_key: String,
     pub bucket_id: String,
@@ -61,7 +61,7 @@ impl TelemetryEvent for MspUploadRejectedEvent {
 pub struct MspFeesChargedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     /// Total fee amount charged
     pub fee_amount: u128,
@@ -92,7 +92,7 @@ impl TelemetryEvent for MspFeesChargedEvent {
 pub struct MspCapacityAutoIncreasedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     /// Previous capacity in bytes
     pub previous_capacity_bytes: u64,
@@ -117,7 +117,7 @@ impl TelemetryEvent for MspCapacityAutoIncreasedEvent {
 pub struct MspBucketDeletedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     pub bucket_id: String,
     /// User who owned the bucket
@@ -141,7 +141,7 @@ impl TelemetryEvent for MspBucketDeletedEvent {
 pub struct MspBucketMoveRespondedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     pub bucket_id: String,
     /// MSP requesting the move
@@ -167,7 +167,7 @@ impl TelemetryEvent for MspBucketMoveRespondedEvent {
 pub struct MspBucketMoveRetriedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     pub bucket_id: String,
     /// Target MSP for the move
@@ -189,7 +189,7 @@ impl TelemetryEvent for MspBucketMoveRetriedEvent {
 pub struct MspStopStoringInsolventUserEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     /// User being stopped
     pub user_id: String,
@@ -214,7 +214,7 @@ impl TelemetryEvent for MspStopStoringInsolventUserEvent {
 pub struct MspStorageFailedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     pub operation: String,
     pub error_type: String,
@@ -229,7 +229,7 @@ impl TelemetryEvent for MspStorageFailedEvent {
     fn event_type(&self) -> &str {
         "msp_storage_failed"
     }
-    
+
     fn strategy(&self) -> TelemetryStrategy {
         TelemetryStrategy::Guaranteed
     }

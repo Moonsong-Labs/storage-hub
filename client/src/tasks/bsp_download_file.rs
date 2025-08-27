@@ -1,6 +1,8 @@
 use sc_tracing::tracing::{error, trace};
+use serde::{Deserialize, Serialize};
 use shc_actors_framework::event_bus::EventHandler;
 use shc_common::task_context::TaskContext;
+use shc_common::telemetry_error::TelemetryErrorCategory;
 use shc_common::traits::StorageEnableRuntime;
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::{
@@ -9,8 +11,6 @@ use shc_file_transfer_service::{
 use shc_telemetry_service::{
     create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryServiceCommandInterfaceExt,
 };
-use shc_common::telemetry_error::TelemetryErrorCategory;
-use serde::{Deserialize, Serialize};
 
 // Local BSP download telemetry event definitions
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -94,8 +94,8 @@ const LOG_TARGET: &str = "bsp-download-file-task";
 
 pub struct BspDownloadFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
@@ -103,8 +103,8 @@ where
 
 impl<NT, Runtime> Clone for BspDownloadFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> BspDownloadFileTask<NT, Runtime> {
@@ -116,8 +116,8 @@ where
 
 impl<NT, Runtime> BspDownloadFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
@@ -131,13 +131,13 @@ where
 ///
 /// This will generate a proof for the chunk and send it back to the requester.
 /// If there is a bucket ID provided, this will also check that it matches the local file's bucket.
-impl<NT, Runtime> EventHandler<RemoteDownloadRequest> for BspDownloadFileTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<RemoteDownloadRequest<Runtime>> for BspDownloadFileTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: RemoteDownloadRequest) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: RemoteDownloadRequest<Runtime>) -> anyhow::Result<()> {
         trace!(target: LOG_TARGET, "Received remote download request with id {:?} for file {:?}", event.request_id, event.file_key);
 
         // Create task context for tracking
@@ -146,7 +146,11 @@ where
         // Send task started telemetry event
         if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
             let start_event = BspDownloadRequestedEvent {
-                base: create_base_event("bsp_download_requested", "storage-hub-bsp".to_string(), None),
+                base: create_base_event(
+                    "bsp_download_requested",
+                    "storage-hub-bsp".to_string(),
+                    None,
+                ),
                 task_id: ctx.task_id.clone(),
                 task_name: ctx.task_name.clone(),
                 file_key: format!("{:?}", event.file_key),
@@ -164,7 +168,11 @@ where
             match &result {
                 Ok((chunk_count, total_size_bytes)) => {
                     let completed_event = BspDownloadCompletedEvent {
-                        base: create_base_event("bsp_download_completed", "storage-hub-bsp".to_string(), None),
+                        base: create_base_event(
+                            "bsp_download_completed",
+                            "storage-hub-bsp".to_string(),
+                            None,
+                        ),
                         task_id: ctx.task_id.clone(),
                         file_key: format!("{:?}", event.file_key),
                         request_id: format!("{:?}", event.request_id),
@@ -172,11 +180,18 @@ where
                         chunk_count: *chunk_count,
                         total_size_bytes: *total_size_bytes,
                     };
-                    telemetry_service.queue_typed_event(completed_event).await.ok();
+                    telemetry_service
+                        .queue_typed_event(completed_event)
+                        .await
+                        .ok();
                 }
                 Err(e) => {
                     let failed_event = BspDownloadFailedEvent {
-                        base: create_base_event("bsp_download_failed", "storage-hub-bsp".to_string(), None),
+                        base: create_base_event(
+                            "bsp_download_failed",
+                            "storage-hub-bsp".to_string(),
+                            None,
+                        ),
                         task_id: ctx.task_id.clone(),
                         file_key: format!("{:?}", event.file_key),
                         error_type: e.telemetry_category().to_string(),
@@ -195,13 +210,13 @@ where
 
 impl<NT, Runtime> BspDownloadFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_download_request_internal(
         &mut self,
-        event: RemoteDownloadRequest,
+        event: RemoteDownloadRequest<Runtime>,
     ) -> anyhow::Result<(u32, u64)> {
         let RemoteDownloadRequest {
             chunk_ids,
@@ -254,7 +269,11 @@ where
                 if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
                     let ctx = TaskContext::new("bsp_download_chunk");
                     let chunk_sent_event = BspDownloadChunkSentEvent {
-                        base: create_base_event("bsp_download_chunk_sent", "storage-hub-bsp".to_string(), None),
+                        base: create_base_event(
+                            "bsp_download_chunk_sent",
+                            "storage-hub-bsp".to_string(),
+                            None,
+                        ),
                         task_id: ctx.task_id.clone(),
                         file_key: format!("{:?}", event.file_key),
                         chunk_ids: format!("{:?}", chunk_ids),
@@ -262,7 +281,10 @@ where
                         chunk_count,
                         total_size_bytes,
                     };
-                    telemetry_service.queue_typed_event(chunk_sent_event).await.ok();
+                    telemetry_service
+                        .queue_typed_event(chunk_sent_event)
+                        .await
+                        .ok();
                 }
 
                 // Send the chunk data and proof back to the requester.

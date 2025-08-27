@@ -19,8 +19,8 @@ use shc_actors_framework::actor::Actor;
 use crate::{
     commands::TelemetryServiceCommand,
     types::{
-        TelemetryBackend, TelemetryConfig, TelemetryEventWrapper,
-        TelemetryMetrics, TelemetryStrategy,
+        TelemetryBackend, TelemetryConfig, TelemetryEventWrapper, TelemetryMetrics,
+        TelemetryStrategy,
     },
 };
 
@@ -274,10 +274,7 @@ impl Actor for TelemetryService {
     ) -> impl std::future::Future<Output = ()> + Send {
         async move {
             match message {
-                TelemetryServiceCommand::QueueEvent {
-                    event,
-                    strategy,
-                } => {
+                TelemetryServiceCommand::QueueEvent { event, strategy } => {
                     self.queue_event_internal(event, strategy);
                 }
             }
@@ -307,20 +304,20 @@ impl shc_actors_framework::actor::ActorEventLoop<TelemetryService> for Telemetry
             actor.service_name,
             actor.node_id
         );
-        
+
         // Take the receiver for the background worker
         let worker_rx = actor.receiver.take().expect("Receiver should be available");
-        
+
         // Create shutdown channel
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
         actor.shutdown_tx = Some(shutdown_tx);
-        
+
         // Spawn the background worker task
         let backend = actor.backend.clone();
         let config = actor.config.clone();
         let metrics = actor.metrics.clone();
         let is_shutting_down = actor.is_shutting_down.clone();
-        
+
         tokio::spawn(async move {
             TelemetryService::process_events(
                 worker_rx,
@@ -332,19 +329,19 @@ impl shc_actors_framework::actor::ActorEventLoop<TelemetryService> for Telemetry
             )
             .await;
         });
-        
+
         Self { actor, receiver }
     }
 
     async fn run(mut self) {
         info!(target: LOG_TARGET, "Starting telemetry service event loop");
-        
+
         while let Some(message) = self.receiver.next().await {
             self.actor.handle_message(message).await;
         }
-        
+
         info!(target: LOG_TARGET, "Telemetry service event loop stopped");
-        
+
         // Shutdown the background worker
         self.actor.is_shutting_down.store(true, Ordering::Relaxed);
         if let Some(tx) = self.actor.shutdown_tx.take() {

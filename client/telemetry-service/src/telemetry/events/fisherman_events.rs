@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 pub struct FishermanChallengeStartedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     /// Provider being challenged
     pub provider_id: String,
@@ -36,7 +36,7 @@ impl TelemetryEvent for FishermanChallengeStartedEvent {
 pub struct FishermanChallengeCompletedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     pub provider_id: String,
     pub provider_type: String,
@@ -61,7 +61,7 @@ impl TelemetryEvent for FishermanChallengeCompletedEvent {
 pub struct FishermanSlashingInitiatedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     /// Provider being slashed
     pub provider_id: String,
@@ -80,7 +80,7 @@ impl TelemetryEvent for FishermanSlashingInitiatedEvent {
     fn event_type(&self) -> &str {
         "fisherman_slashing_initiated"
     }
-    
+
     fn strategy(&self) -> TelemetryStrategy {
         TelemetryStrategy::Guaranteed
     }
@@ -91,7 +91,7 @@ impl TelemetryEvent for FishermanSlashingInitiatedEvent {
 pub struct FishermanFileDeletionProcessedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     pub file_key: String,
     /// Provider storing the file
@@ -115,7 +115,7 @@ impl TelemetryEvent for FishermanFileDeletionProcessedEvent {
 pub struct FishermanSuspiciousActivityDetectedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     /// Type of suspicious activity
     pub activity_type: String,
@@ -136,7 +136,7 @@ impl TelemetryEvent for FishermanSuspiciousActivityDetectedEvent {
     fn event_type(&self) -> &str {
         "fisherman_suspicious_activity_detected"
     }
-    
+
     fn strategy(&self) -> TelemetryStrategy {
         TelemetryStrategy::Guaranteed
     }
@@ -147,7 +147,7 @@ impl TelemetryEvent for FishermanSuspiciousActivityDetectedEvent {
 pub struct FishermanAuditCompletedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     /// Number of providers audited
     pub providers_audited: u32,

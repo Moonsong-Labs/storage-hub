@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 pub struct IndexerBlockProcessedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     /// Handler name ("fishing" or "lite")
     pub handler_name: String,
     /// Block number
@@ -39,7 +39,7 @@ impl TelemetryEvent for IndexerBlockProcessedEvent {
 pub struct IndexerEventProcessedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     /// Handler name
     pub handler_name: String,
     /// Block number containing the event
@@ -50,7 +50,7 @@ pub struct IndexerEventProcessedEvent {
     pub event_index: u32,
     /// Processing time in milliseconds
     pub processing_time_ms: u64,
-    
+
     // Event-specific optional fields (filled based on event type)
     /// File key if this is a file-related event
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -80,7 +80,7 @@ impl TelemetryEvent for IndexerEventProcessedEvent {
 pub struct IndexerSyncStartedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     /// Handler name
     pub handler_name: String,
     /// Starting block number
@@ -104,7 +104,7 @@ impl TelemetryEvent for IndexerSyncStartedEvent {
 pub struct IndexerSyncCompletedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     /// Handler name
     pub handler_name: String,
     /// Number of blocks synced
@@ -130,7 +130,7 @@ impl TelemetryEvent for IndexerSyncCompletedEvent {
 pub struct IndexerErrorEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     /// Handler name
     pub handler_name: String,
     /// Block number where error occurred
@@ -151,7 +151,7 @@ impl TelemetryEvent for IndexerErrorEvent {
     fn event_type(&self) -> &str {
         "indexer_error"
     }
-    
+
     fn strategy(&self) -> TelemetryStrategy {
         TelemetryStrategy::Guaranteed
     }
@@ -162,7 +162,7 @@ impl TelemetryEvent for IndexerErrorEvent {
 pub struct IndexerReorgEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     /// Handler name
     pub handler_name: String,
     /// Common ancestor block
@@ -181,7 +181,7 @@ impl TelemetryEvent for IndexerReorgEvent {
     fn event_type(&self) -> &str {
         "indexer_reorg"
     }
-    
+
     fn strategy(&self) -> TelemetryStrategy {
         TelemetryStrategy::Guaranteed
     }
@@ -192,7 +192,7 @@ impl TelemetryEvent for IndexerReorgEvent {
 pub struct IndexerHealthEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     /// Handler name
     pub handler_name: String,
     /// Current block being indexed

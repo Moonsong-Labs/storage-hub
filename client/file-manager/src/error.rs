@@ -49,7 +49,7 @@ pub fn other_io_error(err: String) -> io::Error {
 impl TelemetryErrorCategory for FileStorageError {
     fn telemetry_category(&self) -> ErrorCategory {
         match self {
-            Self::FileAlreadyExists 
+            Self::FileAlreadyExists
             | Self::FileDoesNotExist
             | Self::IncompleteFile
             | Self::FileIsEmpty
@@ -59,7 +59,7 @@ impl TelemetryErrorCategory for FileStorageError {
             | Self::FailedToParseFingerprint
             | Self::FailedToParseChunkWithId
             | Self::FailedToConstructFileKeyProof => ErrorCategory::FileOperation,
-            
+
             Self::FailedToReadStorage
             | Self::FailedToWriteToStorage
             | Self::FailedToInsertFileChunk
@@ -73,7 +73,7 @@ impl TelemetryErrorCategory for FileStorageError {
             | Self::FailedToAddEntityToExcludeList
             | Self::FailedToAddEntityFromExcludeList
             | Self::ErrorParsingExcludeType => ErrorCategory::Storage,
-            
+
             Self::FailedToGenerateCompactProof => ErrorCategory::Proof,
         }
     }
@@ -89,7 +89,7 @@ impl TelemetryErrorCategory for FileStorageWriteError {
             | Self::FailedToParseFileMetadata
             | Self::FailedToParseFingerprint
             | Self::FailedToParsePartialRoot => ErrorCategory::FileOperation,
-            
+
             Self::FailedToInsertFileChunk
             | Self::FailedToGetFileChunk
             | Self::FailedToPersistChanges
@@ -99,7 +99,7 @@ impl TelemetryErrorCategory for FileStorageWriteError {
             | Self::FailedToReadStorage
             | Self::FailedToUpdatePartialRoot
             | Self::FailedToGetStoredChunksCount => ErrorCategory::Storage,
-            
+
             Self::ChunkCountOverflow => ErrorCategory::Capacity,
         }
     }

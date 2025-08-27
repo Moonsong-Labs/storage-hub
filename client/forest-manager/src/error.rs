@@ -1,5 +1,5 @@
-use shc_common::types::HasherOutT;
 use shc_common::telemetry_error::{ErrorCategory, TelemetryErrorCategory};
+use shc_common::types::HasherOutT;
 use trie_db::CError;
 
 pub(crate) type ErrorT<T> = Error<HasherOutT<T>, CError<T>>;
@@ -74,14 +74,15 @@ impl<H> TelemetryErrorCategory for ForestStorageError<H> {
             | Self::FailedToParseKey
             | Self::FailedToDecodeValue
             | Self::FailedToConstructProvenLeaves => ErrorCategory::ForestOperation,
-            
+
             Self::ExpectingRootToBeInStorage
             | Self::FailedToReadStorage
             | Self::FailedToWriteToStorage
             | Self::FailedToCopyRocksDB => ErrorCategory::Storage,
-            
-            Self::FailedToGenerateCompactProof
-            | Self::InvalidProvingScenario => ErrorCategory::Proof,
+
+            Self::FailedToGenerateCompactProof | Self::InvalidProvingScenario => {
+                ErrorCategory::Proof
+            }
         }
     }
 }

@@ -45,25 +45,36 @@ pub trait TelemetryErrorCategory {
     fn telemetry_category(&self) -> ErrorCategory;
 }
 
-
 /// Implementation for anyhow::Error
 /// Attempts to categorize based on error message content with fallback to Configuration
 impl TelemetryErrorCategory for anyhow::Error {
     fn telemetry_category(&self) -> ErrorCategory {
         let error_msg = self.to_string().to_lowercase();
-        
+
         // Try to categorize based on error message content
         if error_msg.contains("timeout") || error_msg.contains("deadline") {
             ErrorCategory::Timeout
-        } else if error_msg.contains("network") || error_msg.contains("connection") || error_msg.contains("peer") {
+        } else if error_msg.contains("network")
+            || error_msg.contains("connection")
+            || error_msg.contains("peer")
+        {
             ErrorCategory::Network
-        } else if error_msg.contains("permission") || error_msg.contains("access") || error_msg.contains("unauthorized") {
+        } else if error_msg.contains("permission")
+            || error_msg.contains("access")
+            || error_msg.contains("unauthorized")
+        {
             ErrorCategory::Permission
-        } else if error_msg.contains("storage") || error_msg.contains("file") || error_msg.contains("directory") {
+        } else if error_msg.contains("storage")
+            || error_msg.contains("file")
+            || error_msg.contains("directory")
+        {
             ErrorCategory::Storage
         } else if error_msg.contains("proof") || error_msg.contains("merkle") {
             ErrorCategory::Proof
-        } else if error_msg.contains("blockchain") || error_msg.contains("extrinsic") || error_msg.contains("transaction") {
+        } else if error_msg.contains("blockchain")
+            || error_msg.contains("extrinsic")
+            || error_msg.contains("transaction")
+        {
             ErrorCategory::Blockchain
         } else if error_msg.contains("capacity") || error_msg.contains("full") {
             ErrorCategory::Capacity

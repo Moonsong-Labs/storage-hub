@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 pub struct UserSendFileStartedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     pub task_name: String,
     /// User account ID
@@ -37,7 +37,7 @@ impl TelemetryEvent for UserSendFileStartedEvent {
 pub struct UserSendFileCompletedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     pub task_name: String,
     pub user_id: String,
@@ -60,7 +60,7 @@ impl TelemetryEvent for UserSendFileCompletedEvent {
 pub struct UserSendFileFailedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     pub task_name: String,
     pub user_id: String,
@@ -77,7 +77,7 @@ impl TelemetryEvent for UserSendFileFailedEvent {
     fn event_type(&self) -> &str {
         "user_send_file_failed"
     }
-    
+
     fn strategy(&self) -> TelemetryStrategy {
         TelemetryStrategy::Guaranteed
     }
@@ -88,7 +88,7 @@ impl TelemetryEvent for UserSendFileFailedEvent {
 pub struct UserDownloadFileStartedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     pub user_id: String,
     pub file_key: String,
@@ -108,7 +108,7 @@ impl TelemetryEvent for UserDownloadFileStartedEvent {
 pub struct UserDownloadFileCompletedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     pub user_id: String,
     pub file_key: String,
@@ -128,7 +128,7 @@ impl TelemetryEvent for UserDownloadFileCompletedEvent {
 pub struct UserBucketCreatedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     pub user_id: String,
     pub bucket_id: String,
@@ -151,7 +151,7 @@ impl TelemetryEvent for UserBucketCreatedEvent {
 pub struct UserBucketDeletedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     pub user_id: String,
     pub bucket_id: String,
@@ -172,7 +172,7 @@ impl TelemetryEvent for UserBucketDeletedEvent {
 pub struct UserPaymentProcessedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     pub user_id: String,
     /// Payment amount

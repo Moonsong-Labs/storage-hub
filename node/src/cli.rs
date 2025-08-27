@@ -1,7 +1,7 @@
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Deserializer};
+use shp_types::StorageDataUnit;
 use std::{path::PathBuf, str::FromStr};
-use storage_hub_runtime::StorageDataUnit;
 
 use crate::command::ProviderOptions;
 
@@ -270,7 +270,7 @@ pub struct ProviderConfigurations {
             ("provider_type", "msp"),
         ])
     )]
-    pub msp_move_bucket_max_tip: Option<f64>,
+    pub msp_move_bucket_max_tip: Option<u128>,
 
     // ============== BSP Upload File task options ==============
     /// Enable and configure BSP Upload File task.
@@ -299,7 +299,7 @@ pub struct ProviderConfigurations {
             ("provider_type", "bsp"),
         ])
     )]
-    pub bsp_upload_file_max_tip: Option<f64>,
+    pub bsp_upload_file_max_tip: Option<u128>,
 
     // ============== BSP Move Bucket task options ==============
     /// Enable and configure BSP Move Bucket task.
@@ -491,9 +491,9 @@ impl ProviderConfigurations {
             bsp_submit_proof,
             blockchain_service,
             maintenance_mode: self.maintenance_mode,
-            telemetry_enabled: false,  // This will be set from telemetry_config
-            axiom_token: None,         // This will be set from telemetry_config
-            axiom_dataset: None,        // This will be set from telemetry_config
+            telemetry_enabled: false, // This will be set from telemetry_config
+            axiom_token: None,        // This will be set from telemetry_config
+            axiom_dataset: None,      // This will be set from telemetry_config
         }
     }
 }

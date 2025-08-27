@@ -1,13 +1,13 @@
 use sc_tracing::tracing::*;
+use serde::{Deserialize, Serialize};
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::events::FileDeletionRequest;
+use shc_common::task_context::TaskContext;
+use shc_common::telemetry_error::TelemetryErrorCategory;
 use shc_common::traits::StorageEnableRuntime;
 use shc_telemetry_service::{
     create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryServiceCommandInterfaceExt,
 };
-use shc_common::task_context::TaskContext;
-use shc_common::telemetry_error::TelemetryErrorCategory;
-use serde::{Deserialize, Serialize};
 
 // Local Fisherman telemetry event definitions
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,8 +71,8 @@ const LOG_TARGET: &str = "fisherman-process-file-deletion-task";
 
 pub struct FishermanProcessFileDeletionTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: FishermanForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: FishermanForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
@@ -80,8 +80,8 @@ where
 
 impl<NT, Runtime> Clone for FishermanProcessFileDeletionTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: FishermanForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: FishermanForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> FishermanProcessFileDeletionTask<NT, Runtime> {
@@ -93,8 +93,8 @@ where
 
 impl<NT, Runtime> FishermanProcessFileDeletionTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: FishermanForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: FishermanForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
@@ -104,14 +104,14 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<FileDeletionRequest>
+impl<NT, Runtime> EventHandler<FileDeletionRequest<Runtime>>
     for FishermanProcessFileDeletionTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: FishermanForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: FishermanForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: FileDeletionRequest) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: FileDeletionRequest<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Processing file deletion request for file key: {:?}",
@@ -124,14 +124,21 @@ where
         // Send deletion request received telemetry event
         if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
             let deletion_request_event = FishermanDeletionRequestReceivedEvent {
-                base: create_base_event("fisherman_deletion_request_received", "storage-hub-fisherman".to_string(), None),
+                base: create_base_event(
+                    "fisherman_deletion_request_received",
+                    "storage-hub-fisherman".to_string(),
+                    None,
+                ),
                 task_id: ctx.task_id.clone(),
                 task_name: ctx.task_name.clone(),
                 file_key: format!("{:?}", event.file_key),
                 user: format!("{:?}", event.user),
                 bucket_id: format!("{:?}", event.bucket_id),
             };
-            telemetry_service.queue_typed_event(deletion_request_event).await.ok();
+            telemetry_service
+                .queue_typed_event(deletion_request_event)
+                .await
+                .ok();
         }
 
         let result = self.process_file_deletion(&event, &ctx).await;
@@ -140,7 +147,11 @@ where
         if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
             let deletion_processed_event = match &result {
                 Ok(_) => FishermanDeletionProcessedEvent {
-                    base: create_base_event("fisherman_deletion_processed", "storage-hub-fisherman".to_string(), None),
+                    base: create_base_event(
+                        "fisherman_deletion_processed",
+                        "storage-hub-fisherman".to_string(),
+                        None,
+                    ),
                     task_id: ctx.task_id.clone(),
                     file_key: format!("{:?}", event.file_key),
                     deletion_result: "success".to_string(),
@@ -149,7 +160,11 @@ where
                     error_message: None,
                 },
                 Err(e) => FishermanDeletionProcessedEvent {
-                    base: create_base_event("fisherman_deletion_processed", "storage-hub-fisherman".to_string(), None),
+                    base: create_base_event(
+                        "fisherman_deletion_processed",
+                        "storage-hub-fisherman".to_string(),
+                        None,
+                    ),
                     task_id: ctx.task_id.clone(),
                     file_key: format!("{:?}", event.file_key),
                     deletion_result: "failure".to_string(),
@@ -158,7 +173,10 @@ where
                     error_message: Some(e.to_string()),
                 },
             };
-            telemetry_service.queue_typed_event(deletion_processed_event).await.ok();
+            telemetry_service
+                .queue_typed_event(deletion_processed_event)
+                .await
+                .ok();
         }
 
         result
@@ -167,13 +185,13 @@ where
 
 impl<NT, Runtime> FishermanProcessFileDeletionTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: FishermanForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: FishermanForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn process_file_deletion(
         &mut self,
-        event: &FileDeletionRequest,
+        event: &FileDeletionRequest<Runtime>,
         ctx: &TaskContext,
     ) -> anyhow::Result<()> {
         // Start verification process
@@ -188,7 +206,7 @@ where
         // TODO: Implement file deletion request handling (non-exhaustive):
         // 1. Fetch file metadata and identify storage providers
         let storage_providers_checked = 0u32; // Placeholder for actual implementation
-        
+
         // 2. Construct Bucket/BSP forest based on deletion target
         // 3. Construct proof of inclusion for file key
         // 4. Submit proof to blockchain
@@ -199,14 +217,21 @@ where
         // Send verification completed telemetry event
         if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
             let verification_event = FishermanVerificationCompletedEvent {
-                base: create_base_event("fisherman_verification_completed", "storage-hub-fisherman".to_string(), None),
+                base: create_base_event(
+                    "fisherman_verification_completed",
+                    "storage-hub-fisherman".to_string(),
+                    None,
+                ),
                 task_id: ctx.task_id.clone(),
                 file_key: format!("{:?}", event.file_key),
                 verification_result: verification_result.clone(),
                 duration_ms: verification_duration.as_millis() as u64,
                 storage_providers_checked,
             };
-            telemetry_service.queue_typed_event(verification_event).await.ok();
+            telemetry_service
+                .queue_typed_event(verification_event)
+                .await
+                .ok();
         }
 
         Ok(())

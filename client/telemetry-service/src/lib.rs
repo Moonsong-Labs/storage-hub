@@ -1,5 +1,5 @@
 //! StorageHub Telemetry Service
-//! 
+//!
 //! This crate provides an actor-based telemetry service for the StorageHub client.
 //! It uses a fire-and-forget pattern to ensure telemetry never blocks the main application.
 
@@ -13,18 +13,24 @@ use std::sync::Arc;
 use log::{error, info, warn};
 use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 
-pub use commands::{TelemetryServiceCommand, TelemetryServiceCommandInterface, TelemetryServiceCommandInterfaceExt};
+pub use commands::{
+    TelemetryServiceCommand, TelemetryServiceCommandInterface, TelemetryServiceCommandInterfaceExt,
+};
 pub use handler::TelemetryService;
 pub use telemetry::events;
 pub use types::{
-    AxiomBackend, AxiomConfig, BaseTelemetryEvent, NoOpBackend, OverflowStrategy,
-    TelemetryBackend, TelemetryConfig, TelemetryEvent, TelemetryStrategy,
+    AxiomBackend, AxiomConfig, BaseTelemetryEvent, NoOpBackend, OverflowStrategy, TelemetryBackend,
+    TelemetryConfig, TelemetryEvent, TelemetryStrategy,
 };
 
 use chrono::Utc;
 
 /// Helper function to create a base telemetry event
-pub fn create_base_event(event_type: &str, service: String, node_id: Option<String>) -> BaseTelemetryEvent {
+pub fn create_base_event(
+    event_type: &str,
+    service: String,
+    node_id: Option<String>,
+) -> BaseTelemetryEvent {
     BaseTelemetryEvent {
         timestamp: Utc::now(),
         service,
@@ -90,12 +96,8 @@ pub async fn spawn_telemetry_service(
         return None;
     }
 
-    let telemetry_service = TelemetryService::new(
-        service_name,
-        node_id,
-        backend,
-        TelemetryConfig::default(),
-    );
+    let telemetry_service =
+        TelemetryService::new(service_name, node_id, backend, TelemetryConfig::default());
 
     Some(task_spawner.spawn_actor(telemetry_service))
 }

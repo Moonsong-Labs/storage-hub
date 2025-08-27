@@ -4,6 +4,7 @@ use std::{sync::Arc, time::Duration};
 use tokio::sync::Semaphore;
 
 use sc_tracing::tracing::*;
+use serde::{Deserialize, Serialize};
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceCommandInterface,
@@ -18,7 +19,6 @@ use shc_forest_manager::traits::ForestStorageHandler;
 use shc_telemetry_service::{
     create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryServiceCommandInterfaceExt,
 };
-use serde::{Deserialize, Serialize};
 use sp_core::H256;
 
 // Local MSP telemetry event definitions
@@ -108,8 +108,8 @@ const MAX_CONCURRENT_STOP_STORING_EXTRINSICS: usize = 20;
 /// 	- Deletes all the files that were in the bucket from the MSP's file storage.
 pub struct MspStopStoringInsolventUserTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
@@ -117,8 +117,8 @@ where
 
 impl<NT, Runtime> Clone for MspStopStoringInsolventUserTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> MspStopStoringInsolventUserTask<NT, Runtime> {
@@ -130,8 +130,8 @@ where
 
 impl<NT, Runtime> MspStopStoringInsolventUserTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
@@ -141,13 +141,14 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<UserWithoutFunds> for MspStopStoringInsolventUserTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<UserWithoutFunds<Runtime>>
+    for MspStopStoringInsolventUserTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: UserWithoutFunds) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: UserWithoutFunds<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Processing UserWithoutFunds for user {:?}. Stopping storing all buckets for the insolvent user.",
@@ -194,13 +195,20 @@ where
             // Send insolvent user detected telemetry event
             if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
                 let detected_event = MspInsolventUserDetectedEvent {
-                    base: create_base_event("msp_insolvent_user_detected", "storage-hub-msp".to_string(), None),
+                    base: create_base_event(
+                        "msp_insolvent_user_detected",
+                        "storage-hub-msp".to_string(),
+                        None,
+                    ),
                     task_id: ctx.task_id.clone(),
                     task_name: ctx.task_name.clone(),
                     insolvent_user: format!("{:?}", insolvent_user),
                     buckets_count: amount_of_buckets_to_stop_storing as u64,
                 };
-                telemetry_service.queue_typed_event(detected_event).await.ok();
+                telemetry_service
+                    .queue_typed_event(detected_event)
+                    .await
+                    .ok();
             }
 
             // Create a semaphore to allow sending parallel stop storing bucket extrinsics.
@@ -264,7 +272,11 @@ where
                         insolvent_user
                     );
                     let failed_event = MspInsolventProcessingFailedEvent {
-                        base: create_base_event("msp_insolvent_processing_failed", "storage-hub-msp".to_string(), None),
+                        base: create_base_event(
+                            "msp_insolvent_processing_failed",
+                            "storage-hub-msp".to_string(),
+                            None,
+                        ),
                         task_id: ctx.task_id.clone(),
                         insolvent_user: format!("{:?}", insolvent_user),
                         error_type: "partial_failure".to_string(),
@@ -292,13 +304,20 @@ where
                 // Send storage stopped successfully telemetry event
                 if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
                     let stopped_event = MspStorageStoppedEvent {
-                        base: create_base_event("msp_storage_stopped", "storage-hub-msp".to_string(), None),
+                        base: create_base_event(
+                            "msp_storage_stopped",
+                            "storage-hub-msp".to_string(),
+                            None,
+                        ),
                         task_id: ctx.task_id.clone(),
                         insolvent_user: format!("{:?}", insolvent_user),
                         buckets_processed: amount_of_buckets_to_stop_storing as u64,
                         duration_ms: ctx.elapsed_ms(),
                     };
-                    telemetry_service.queue_typed_event(stopped_event).await.ok();
+                    telemetry_service
+                        .queue_typed_event(stopped_event)
+                        .await
+                        .ok();
                 }
             }
         } else {
@@ -311,13 +330,20 @@ where
             // Send insolvent user detected event with 0 buckets
             if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
                 let detected_event = MspInsolventUserDetectedEvent {
-                    base: create_base_event("msp_insolvent_user_detected", "storage-hub-msp".to_string(), None),
+                    base: create_base_event(
+                        "msp_insolvent_user_detected",
+                        "storage-hub-msp".to_string(),
+                        None,
+                    ),
                     task_id: ctx.task_id.clone(),
                     task_name: ctx.task_name.clone(),
                     insolvent_user: format!("{:?}", insolvent_user),
                     buckets_count: 0,
                 };
-                telemetry_service.queue_typed_event(detected_event).await.ok();
+                telemetry_service
+                    .queue_typed_event(detected_event)
+                    .await
+                    .ok();
             }
         }
 
@@ -333,16 +359,16 @@ where
 /// This task will:
 /// - Delete the bucket from the MSP's storage.
 /// - Delete all the files in the bucket.
-impl<NT, Runtime> EventHandler<FinalisedMspStopStoringBucketInsolventUser>
+impl<NT, Runtime> EventHandler<FinalisedMspStopStoringBucketInsolventUser<Runtime>>
     for MspStopStoringInsolventUserTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(
         &mut self,
-        event: FinalisedMspStopStoringBucketInsolventUser,
+        event: FinalisedMspStopStoringBucketInsolventUser<Runtime>,
     ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
@@ -383,26 +409,25 @@ where
 
 impl<NT, Runtime> MspStopStoringInsolventUserTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     /// Common function to handle submitting an extrinsic to stop storing a bucket that belongs to an insolvent user.
     async fn stop_storing_bucket_for_insolvent_user(&self, bucket_id: &H256) -> anyhow::Result<()> {
         // Build the extrinsic to stop storing the bucket of the insolvent user
-        let stop_storing_bucket_for_insolvent_user_call =
-            storage_hub_runtime::RuntimeCall::FileSystem(
-                pallet_file_system::Call::msp_stop_storing_bucket_for_insolvent_user {
-                    bucket_id: *bucket_id,
-                },
-            );
+        let stop_storing_bucket_for_insolvent_user_call: Runtime::Call =
+            pallet_file_system::Call::msp_stop_storing_bucket_for_insolvent_user {
+                bucket_id: *bucket_id,
+            }
+            .into();
 
         // Send the transaction and wait for it to be included in the block.
         if let Err(e) = self
             .storage_hub_handler
             .blockchain
             .send_extrinsic(
-                stop_storing_bucket_for_insolvent_user_call.into(),
+                stop_storing_bucket_for_insolvent_user_call,
                 SendExtrinsicOptions::new(Duration::from_secs(
                     self.storage_hub_handler
                         .provider_config

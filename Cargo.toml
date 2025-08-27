@@ -15,24 +15,26 @@ lto = true
 
 [workspace]
 members = [
-    "runtime",
-    "pallets/*",
-    "node",
-    "client",
-    "client/actors-framework",
-    "client/blockchain-service",
-    "client/common",
-    "client/file-manager",
-    "client/file-transfer-service",
-    "client/fisherman-service",
-    "client/forest-manager",
-    "client/indexer-db",
-    "client/indexer-service",
-    "client/rpc",
-    "client/telemetry-service",
-    "primitives/*",
-    "xcm-simulator",
-    "sdk/core/wasm",
+	"runtime",
+	"pallets/*",
+	"node",
+	"client",
+	"client/actors-framework",
+	"client/blockchain-service",
+	"client/common",
+	"client/file-manager",
+	"client/file-transfer-service",
+	"client/fisherman-service",
+	"client/forest-manager",
+	"client/indexer-db",
+	"client/indexer-service",
+	"client/rpc",
+	"client/telemetry-service",
+	"primitives/*",
+	"xcm-simulator",
+	"sdk/core/wasm",
+	"backend/bin",
+	"backend/lib",
 ]
 resolver = "2"
 
@@ -42,6 +44,8 @@ array-bytes = "6.1"
 async-channel = "1.8.0"
 async-io = "2.3.2"
 async-trait = "0.1.42"
+axum = "0.7"
+axum-test = "15"
 bigdecimal = { version = "0.4.5", features = ["serde"] }
 bincode = "1.3.3"
 clap = { version = "4.5.3", features = ["derive", "env"] }
@@ -67,6 +71,7 @@ lazy-static = { package = "lazy_static", version = "1.4.0" }
 log = { version = "0.4.21", default-features = false }
 num-bigint = { version = "0.4.3", default-features = false }
 ordered-float = "3.9.1"
+parking_lot = "0.12.4"
 priority-queue = "1.3.2"
 prost = "0.12"
 prost-build = "0.12.3"
@@ -82,13 +87,15 @@ strum = { version = "0.26.3", features = ["derive"] }
 thiserror = "1.0.48"
 tokio = "1.36.0"
 toml = "0.8.19"
+tower-http = { version = "0.5", features = ["cors"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 trie-db = { version = "0.29", default-features = false }
 trybuild = "1.0"
 proc-macro2 = "1.0.79"
 quote = "1.0.35"
 syn = { version = "2.0.52", features = ["full", "extra-traits"] }
 once_cell = "1.18.0"
-tracing = "0.1"
 uuid = { version = "1.4", features = ["v4", "serde"] }
 axiom-rs = { version = "0.11.4", default-features = false, features = ["tokio", "rustls-tls"] }
 
@@ -110,6 +117,7 @@ sp-inherents = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "
 sp-keyring = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sp-keystore = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sp-offchain = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
+sp-rpc = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sp-session = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sp-state-machine = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sp-timestamp = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
@@ -265,11 +273,11 @@ shp-data-price-updater = { path = "primitives/data-price-updater", default-featu
 shp-file-key-verifier = { path = "primitives/file-key-verifier", default-features = false }
 shp-file-metadata = { path = "primitives/file-metadata", default-features = false }
 shp-forest-verifier = { path = "primitives/forest-verifier", default-features = false }
+shp-opaque = { path = "primitives/opaque", default-features = false }
 shp-session-keys = { path = "primitives/session-keys", default-features = false }
 shp-traits = { path = "primitives/traits", default-features = false }
 shp-treasury-funding = { path = "primitives/treasury-funding", default-features = false }
-shp-opaque = { path = "primitives/opaque", default-features = false }
-
+shp-types = { path = "primitives/types", default-features = false }
 
 # Lcoal - StorageHub Runtime
 storage-hub-runtime = { path = "runtime", default-features = false }

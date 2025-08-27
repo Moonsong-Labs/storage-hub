@@ -1,16 +1,19 @@
 use anyhow::anyhow;
 use sc_tracing::tracing::*;
+use serde::{Deserialize, Serialize};
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{commands::BlockchainServiceCommandInterface, events::NotifyPeriod};
-use shc_common::traits::StorageEnableRuntime;
-use shc_common::types::{MaxUsersToCharge, StorageProviderId};
-use shc_common::task_context::TaskContext;
-use shc_common::telemetry_error::TelemetryErrorCategory;
+use shc_common::{
+    task_context::TaskContext,
+    telemetry_error::TelemetryErrorCategory,
+    traits::StorageEnableRuntime,
+    types::{MaxUsersToCharge, StorageProviderId},
+};
 use shc_telemetry_service::{
     create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryServiceCommandInterfaceExt,
 };
-use serde::{Deserialize, Serialize};
 use sp_core::Get;
+use sp_runtime::traits::SaturatedConversion;
 
 // Local MSP telemetry event definitions
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -90,8 +93,8 @@ impl Default for MspChargeFeesConfig {
 
 pub struct MspChargeFeesTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
@@ -101,8 +104,8 @@ where
 
 impl<NT, Runtime> Clone for MspChargeFeesTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> MspChargeFeesTask<NT, Runtime> {
@@ -115,8 +118,8 @@ where
 
 impl<NT, Runtime> MspChargeFeesTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
@@ -135,8 +138,8 @@ where
 /// - Charge users for the MSP when triggered
 impl<NT, Runtime> EventHandler<NotifyPeriod> for MspChargeFeesTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, _event: NotifyPeriod) -> anyhow::Result<()> {
@@ -161,11 +164,15 @@ where
                     let err_msg = "Current node account is a Backup Storage Provider. Expected a Main Storage Provider ID.";
                     error!(target: LOG_TARGET, err_msg);
                     let error = anyhow!(err_msg);
-                    
+
                     // Send failure telemetry
                     if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
                         let failed_event = MspFeeCollectionFailedEvent {
-                            base: create_base_event("msp_fee_collection_failed", "storage-hub-msp".to_string(), None),
+                            base: create_base_event(
+                                "msp_fee_collection_failed",
+                                "storage-hub-msp".to_string(),
+                                None,
+                            ),
                             task_id: ctx.task_id.clone(),
                             msp_id: "unknown".to_string(),
                             error_type: error.telemetry_category().to_string(),
@@ -176,7 +183,7 @@ where
                         };
                         telemetry_service.queue_typed_event(failed_event).await.ok();
                     }
-                    
+
                     return Err(error);
                 }
             },
@@ -189,7 +196,11 @@ where
         // Send task started telemetry event
         if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
             let start_event = MspFeeCalculationStartedEvent {
-                base: create_base_event("msp_fee_calculation_started", "storage-hub-msp".to_string(), None),
+                base: create_base_event(
+                    "msp_fee_calculation_started",
+                    "storage-hub-msp".to_string(),
+                    None,
+                ),
                 task_id: ctx.task_id.clone(),
                 task_name: ctx.task_name.clone(),
                 msp_id: format!("{:?}", own_msp_id),
@@ -201,7 +212,7 @@ where
         let users_with_debt = match self
             .storage_hub_handler
             .blockchain
-            .query_users_with_debt(own_msp_id, self.config.min_debt as u128)
+            .query_users_with_debt(own_msp_id, self.config.min_debt.saturated_into())
             .await
         {
             Ok(users) => users,
@@ -210,11 +221,15 @@ where
                     "Failed to retrieve users with debt from the runtime: {:?}",
                     e
                 );
-                
+
                 // Send failure telemetry
                 if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
                     let failed_event = MspFeeCollectionFailedEvent {
-                        base: create_base_event("msp_fee_collection_failed", "storage-hub-msp".to_string(), None),
+                        base: create_base_event(
+                            "msp_fee_collection_failed",
+                            "storage-hub-msp".to_string(),
+                            None,
+                        ),
                         task_id: ctx.task_id.clone(),
                         msp_id: format!("{:?}", own_msp_id),
                         error_type: error.telemetry_category().to_string(),
@@ -225,7 +240,7 @@ where
                     };
                     telemetry_service.queue_typed_event(failed_event).await.ok();
                 }
-                
+
                 return Err(error);
             }
         };
@@ -233,25 +248,24 @@ where
         // Divides the users to charge in chunks of MaxUsersToCharge to avoid exceeding the block limit.
         // Calls the `charge_multiple_users_payment_streams` extrinsic for each chunk in the list to be charged.
         // Logs an error in case of failure and continues.
-        let user_chunk_size: u32 = MaxUsersToCharge::get();
+        let user_chunk_size: u32 = <MaxUsersToCharge<Runtime> as Get<u32>>::get();
         let total_users = users_with_debt.len() as u32;
         let total_chunks = users_with_debt.chunks(user_chunk_size as usize).len() as u32;
         let mut transaction_hashes = Vec::new();
         let mut successful_chunks = 0u32;
         let mut failed_chunks = 0u32;
-
         for users_chunk in users_with_debt.chunks(user_chunk_size as usize) {
-            let call = storage_hub_runtime::RuntimeCall::PaymentStreams(
-                pallet_payment_streams::Call::charge_multiple_users_payment_streams {
+            let call: Runtime::Call =
+                pallet_payment_streams::Call::<Runtime>::charge_multiple_users_payment_streams {
                     user_accounts: users_chunk.to_vec().try_into().expect("Chunk size is the same as MaxUsersToCharge, it has to fit in the BoundedVec"),
-                },
-            );
+                }
+            .into();
 
             // TODO: watch for success (we might want to do it for BSP too)
             let charging_result = self
                 .storage_hub_handler
                 .blockchain
-                .send_extrinsic(call.into(), Default::default())
+                .send_extrinsic(call, Default::default())
                 .await;
 
             match charging_result {
@@ -272,7 +286,11 @@ where
             if failed_chunks == 0 {
                 // All chunks processed successfully
                 let success_event = MspFeesChargedEvent {
-                    base: create_base_event("msp_fees_charged", "storage-hub-msp".to_string(), None),
+                    base: create_base_event(
+                        "msp_fees_charged",
+                        "storage-hub-msp".to_string(),
+                        None,
+                    ),
                     task_id: ctx.task_id.clone(),
                     msp_id: format!("{:?}", own_msp_id),
                     users_charged: total_users,
@@ -280,15 +298,25 @@ where
                     duration_ms: ctx.elapsed_ms(),
                     transaction_hashes,
                 };
-                telemetry_service.queue_typed_event(success_event).await.ok();
+                telemetry_service
+                    .queue_typed_event(success_event)
+                    .await
+                    .ok();
             } else {
                 // Some or all chunks failed
                 let failed_event = MspFeeCollectionFailedEvent {
-                    base: create_base_event("msp_fee_collection_failed", "storage-hub-msp".to_string(), None),
+                    base: create_base_event(
+                        "msp_fee_collection_failed",
+                        "storage-hub-msp".to_string(),
+                        None,
+                    ),
                     task_id: ctx.task_id.clone(),
                     msp_id: format!("{:?}", own_msp_id),
                     error_type: "partial_failure".to_string(),
-                    error_message: format!("{} out of {} chunks failed to process", failed_chunks, total_chunks),
+                    error_message: format!(
+                        "{} out of {} chunks failed to process",
+                        failed_chunks, total_chunks
+                    ),
                     duration_ms: Some(ctx.elapsed_ms()),
                     users_attempted: total_users,
                     chunks_processed: successful_chunks,

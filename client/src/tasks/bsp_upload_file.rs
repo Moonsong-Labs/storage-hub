@@ -9,8 +9,9 @@ use pallet_file_system_runtime_api::QueryBspConfirmChunksToProveForFileError;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
 use sp_core::H256;
-use sp_runtime::AccountId32;
+use sp_runtime::traits::{Hash, SaturatedConversion, Zero};
 
+use serde::{Deserialize, Serialize};
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     capacity_manager::CapacityRequestData,
@@ -18,10 +19,11 @@ use shc_blockchain_service::{
     events::{NewStorageRequest, ProcessConfirmStoringRequest},
     types::{ConfirmStoringRequest, RetryStrategy, SendExtrinsicOptions},
 };
-use shc_common::traits::StorageEnableRuntime;
+use shc_common::telemetry_error::{ErrorCategory, TelemetryErrorCategory};
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
     task_context::TaskContext,
+    traits::StorageEnableRuntime,
     types::{
         FileKey, FileKeyWithProof, FileMetadata, HashT, StorageProofsMerkleTrieLayout,
         StorageProviderId, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
@@ -35,120 +37,127 @@ use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shc_telemetry_service::{
     create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryServiceCommandInterfaceExt,
 };
-use shc_common::telemetry_error::{TelemetryErrorCategory, ErrorCategory};
-use serde::{Deserialize, Serialize};
 
 /// Strongly-typed errors for BSP upload file task
 #[derive(thiserror::Error, Debug)]
 pub enum BspUploadError {
     #[error("Forest root write tx already taken - this is a critical bug")]
     ForestRootTxTaken,
-    
+
     #[error("Failed to get BSP ID")]
     BspIdNotFound,
-    
-    #[error("Current node account is a Main Storage Provider. Expected a Backup Storage Provider ID")]
+
+    #[error(
+        "Current node account is a Main Storage Provider. Expected a Backup Storage Provider ID"
+    )]
     WrongProviderType,
-    
+
     #[error("File size cannot be zero")]
     InvalidFileSize,
-    
+
     #[error("Failed to get forest storage")]
     ForestStorageNotFound,
-    
+
     #[error("Failed to generate proofs for ALL the requested files")]
     ProofGenerationFailed,
-    
+
     #[error("Failed to convert file keys and proofs to BoundedVec - critical bug")]
     BoundedVecConversion,
-    
+
     #[error("Failed to confirm file after {max_retries} retries: {last_error}")]
-    ConfirmationFailed { max_retries: u32, last_error: String },
-    
+    ConfirmationFailed {
+        max_retries: u32,
+        last_error: String,
+    },
+
     #[error("Invalid file metadata")]
     InvalidFileMetadata,
-    
+
     #[error("BSP is not allowed to receive this storage request: {reason}")]
     NotAllowedToReceive { reason: String },
-    
+
     #[error("Failed to query storage provider capacity: {details}")]
     CapacityQueryFailed { details: String },
-    
+
     #[error("BSP does not have enough storage capacity to store this file")]
     InsufficientCapacity,
-    
+
     #[error("Failed to send capacity request: {details}")]
     CapacityRequestFailed { details: String },
-    
+
     #[error("Capacity request was rejected")]
     CapacityRequestRejected,
-    
+
     #[error("Failed to query file earliest volunteer tick: {details}")]
     VolunteerTickQueryFailed { details: String },
-    
+
     #[error("Failed to query if storage request is open to volunteers: {details}")]
     VolunteerCheckFailed { details: String },
-    
+
     #[error("Storage request is no longer open to volunteers")]
     StorageRequestClosed,
-    
+
     #[error("Failed to insert file in file storage: {details}")]
     FileInsertionFailed { details: String },
-    
+
     #[error("Failed to convert peer ID to a string: {details}")]
     PeerIdConversion { details: String },
-    
+
     #[error("Failed to register new file peer: {details}")]
     FilePeerRegistrationFailed { details: String },
-    
+
     #[error("Failed to get file metadata: {details}")]
     FileMetadataRetrievalFailed { details: String },
-    
+
     #[error("File metadata not found")]
     FileMetadataNotFound,
-    
+
     #[error("Fingerprint mismatch")]
     FingerprintMismatch,
-    
+
     #[error("Expected at least one proven chunk but got none")]
     NoProvenChunks,
-    
-    #[error("Total batch size {total_size} bytes exceeds maximum allowed size of {max_size} bytes")]
+
+    #[error(
+        "Total batch size {total_size} bytes exceeds maximum allowed size of {max_size} bytes"
+    )]
     BatchSizeExceeded { total_size: u64, max_size: u64 },
-    
+
     #[error("Failed to verify and get proven file key chunks: {details}")]
     ChunkVerificationFailed { details: String },
-    
+
     #[error("Invalid chunk size. Expected {expected}, got {actual}")]
     InvalidChunkSize { expected: u64, actual: u64 },
-    
+
     #[error("Chunk data mismatch for chunk {chunk_id}")]
     ChunkDataMismatch { chunk_id: String },
-    
-    #[error("File does not exist for key {file_key:?}. Maybe we forgot to unregister before deleting?")]
+
+    #[error(
+        "File does not exist for key {file_key:?}. Maybe we forgot to unregister before deleting?"
+    )]
     FileNotFound { file_key: H256 },
-    
+
     #[error("Invariant broken! This is a bug! Fingerprint and stored file mismatch for key {file_key:?}")]
     FingerprintInvariantBroken { file_key: H256 },
-    
+
     #[error("This is a bug! Failed to construct trie iter for key {file_key:?}")]
     TrieConstructionBug { file_key: H256 },
-    
+
     #[error("Internal trie read/write error {file_key:?}:{chunk_key:?}")]
     TrieReadWriteError { file_key: H256, chunk_key: String },
-    
+
     /// Wrapper for file storage errors
     #[error("File storage error: {0}")]
     FileStorage(#[from] shc_file_manager::traits::FileStorageError),
-    
+
     /// Wrapper for file storage write errors
     #[error("File storage write error: {0}")]
     FileStorageWrite(#[from] FileStorageWriteError),
-    
+
     /// Wrapper for forest storage errors
     #[error("Forest storage error: {0}")]
     ForestStorage(#[from] shc_forest_manager::error::ForestStorageError<H256>),
-    
+
     /// Wrapper for blockchain service errors
     #[error("Blockchain service error: {0}")]
     Blockchain(#[from] shc_blockchain_service::types::WatchTransactionError),
@@ -157,39 +166,46 @@ pub enum BspUploadError {
 impl TelemetryErrorCategory for BspUploadError {
     fn telemetry_category(&self) -> ErrorCategory {
         match self {
-            Self::ForestRootTxTaken | Self::BspIdNotFound | Self::WrongProviderType 
-            | Self::ForestStorageNotFound | Self::BoundedVecConversion 
-            | Self::FingerprintInvariantBroken { .. } | Self::TrieConstructionBug { .. }
-                => ErrorCategory::Configuration,
-                
-            Self::InvalidFileSize | Self::InvalidFileMetadata | Self::FileMetadataNotFound
-            | Self::FileMetadataRetrievalFailed { .. } | Self::FingerprintMismatch 
-            | Self::NoProvenChunks | Self::ChunkVerificationFailed { .. }
-            | Self::InvalidChunkSize { .. } | Self::ChunkDataMismatch { .. }
-            | Self::FileNotFound { .. } | Self::FileInsertionFailed { .. }
-                => ErrorCategory::FileOperation,
-                
-            Self::InsufficientCapacity | Self::BatchSizeExceeded { .. }
-                => ErrorCategory::Capacity,
-                
-            Self::ProofGenerationFailed
-                => ErrorCategory::Proof,
-                
-            Self::NotAllowedToReceive { .. } | Self::CapacityQueryFailed { .. }
-            | Self::CapacityRequestFailed { .. } | Self::CapacityRequestRejected
-            | Self::VolunteerTickQueryFailed { .. } | Self::VolunteerCheckFailed { .. }
-            | Self::StorageRequestClosed
-                => ErrorCategory::Blockchain,
-                
-            Self::ConfirmationFailed { .. }
-                => ErrorCategory::Timeout,
-                
-            Self::PeerIdConversion { .. } | Self::FilePeerRegistrationFailed { .. }
-                => ErrorCategory::Network,
-                
-            Self::TrieReadWriteError { .. }
-                => ErrorCategory::Storage,
-            
+            Self::ForestRootTxTaken
+            | Self::BspIdNotFound
+            | Self::WrongProviderType
+            | Self::ForestStorageNotFound
+            | Self::BoundedVecConversion
+            | Self::FingerprintInvariantBroken { .. }
+            | Self::TrieConstructionBug { .. } => ErrorCategory::Configuration,
+
+            Self::InvalidFileSize
+            | Self::InvalidFileMetadata
+            | Self::FileMetadataNotFound
+            | Self::FileMetadataRetrievalFailed { .. }
+            | Self::FingerprintMismatch
+            | Self::NoProvenChunks
+            | Self::ChunkVerificationFailed { .. }
+            | Self::InvalidChunkSize { .. }
+            | Self::ChunkDataMismatch { .. }
+            | Self::FileNotFound { .. }
+            | Self::FileInsertionFailed { .. } => ErrorCategory::FileOperation,
+
+            Self::InsufficientCapacity | Self::BatchSizeExceeded { .. } => ErrorCategory::Capacity,
+
+            Self::ProofGenerationFailed => ErrorCategory::Proof,
+
+            Self::NotAllowedToReceive { .. }
+            | Self::CapacityQueryFailed { .. }
+            | Self::CapacityRequestFailed { .. }
+            | Self::CapacityRequestRejected
+            | Self::VolunteerTickQueryFailed { .. }
+            | Self::VolunteerCheckFailed { .. }
+            | Self::StorageRequestClosed => ErrorCategory::Blockchain,
+
+            Self::ConfirmationFailed { .. } => ErrorCategory::Timeout,
+
+            Self::PeerIdConversion { .. } | Self::FilePeerRegistrationFailed { .. } => {
+                ErrorCategory::Network
+            }
+
+            Self::TrieReadWriteError { .. } => ErrorCategory::Storage,
+
             // Delegate to wrapped error types
             Self::FileStorage(e) => e.telemetry_category(),
             Self::FileStorageWrite(e) => e.telemetry_category(),
@@ -343,14 +359,14 @@ pub struct BspUploadFileConfig {
     /// Maximum number of times to retry an upload file request
     pub max_try_count: u32,
     /// Maximum tip amount to use when submitting an upload file request extrinsic
-    pub max_tip: f64,
+    pub max_tip: u128,
 }
 
 impl Default for BspUploadFileConfig {
     fn default() -> Self {
         Self {
             max_try_count: 3,
-            max_tip: 500.0,
+            max_tip: 500,
         }
     }
 }
@@ -372,20 +388,20 @@ impl Default for BspUploadFileConfig {
 ///   extrinsic, waiting for it to be successfully included in a block.
 pub struct BspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
-    file_key_cleanup: Option<H256>,
+    file_key_cleanup: Option<Runtime::Hash>,
     /// Configuration for this task
     config: BspUploadFileConfig,
 }
 
 impl<NT, Runtime> Clone for BspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> BspUploadFileTask<NT, Runtime> {
@@ -399,8 +415,8 @@ where
 
 impl<NT, Runtime> BspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
@@ -419,13 +435,13 @@ where
 /// receiving the file. This task optimistically assumes the transaction will succeed, and registers
 /// the user and file key in the registry of the File Transfer Service, which handles incoming p2p
 /// upload requests.
-impl<NT, Runtime> EventHandler<NewStorageRequest> for BspUploadFileTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<NewStorageRequest<Runtime>> for BspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: NewStorageRequest<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Initiating BSP volunteer for file_key {:x}, location 0x{}, fingerprint {:x}",
@@ -439,42 +455,46 @@ where
 
         // Send task started telemetry event
         if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
-                let start_event = BspUploadStartedEvent {
-                    base: create_base_event("bsp_upload_started", "storage-hub-bsp".to_string(), None),
-                    task_id: ctx.task_id.clone(),
-                    task_name: ctx.task_name.clone(),
-                    file_key: format!("{:?}", event.file_key),
-                    file_size_bytes: event.size as u64,
-                    location: hex::encode(event.location.as_slice()),
-                    fingerprint: format!("{:?}", event.fingerprint),
-                    peer_id: format!("{:?}", event.user_peer_ids),
-                };
-                telemetry_service.queue_typed_event(start_event).await.ok();
+            let start_event = BspUploadStartedEvent {
+                base: create_base_event("bsp_upload_started", "storage-hub-bsp".to_string(), None),
+                task_id: ctx.task_id.clone(),
+                task_name: ctx.task_name.clone(),
+                file_key: format!("{:?}", event.file_key),
+                file_size_bytes: event.size.saturated_into(),
+                location: hex::encode(event.location.as_slice()),
+                fingerprint: format!("{:?}", event.fingerprint),
+                peer_id: format!("{:?}", event.user_peer_ids),
+            };
+            telemetry_service.queue_typed_event(start_event).await.ok();
         }
 
         let result = self.handle_new_storage_request_event(event.clone()).await;
 
         // Send completion or failure telemetry
         if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
-                match &result {
-                    Ok(_) => {
-                        // Success event will be sent when file upload completes
-                        // This is just volunteering, not actual completion
-                    }
-                    Err(e) => {
-                        let failed_event = BspUploadFailedEvent {
-                            base: create_base_event("bsp_upload_failed", "storage-hub-bsp".to_string(), None),
-                            task_id: ctx.task_id.clone(),
-                            file_key: format!("{:?}", event.file_key),
-                            error_type: e.telemetry_category().to_string(),
-                            error_message: e.to_string(),
-                            duration_ms: Some(ctx.elapsed_ms()),
-                            chunks_received: Some(0),
-                            bytes_received: Some(0),
-                        };
-                        telemetry_service.queue_typed_event(failed_event).await.ok();
-                    }
+            match &result {
+                Ok(_) => {
+                    // Success event will be sent when file upload completes
+                    // This is just volunteering, not actual completion
                 }
+                Err(e) => {
+                    let failed_event = BspUploadFailedEvent {
+                        base: create_base_event(
+                            "bsp_upload_failed",
+                            "storage-hub-bsp".to_string(),
+                            None,
+                        ),
+                        task_id: ctx.task_id.clone(),
+                        file_key: format!("{:?}", event.file_key),
+                        error_type: e.telemetry_category().to_string(),
+                        error_message: e.to_string(),
+                        duration_ms: Some(ctx.elapsed_ms()),
+                        chunks_received: Some(0),
+                        bytes_received: Some(0),
+                    };
+                    telemetry_service.queue_typed_event(failed_event).await.ok();
+                }
+            }
         }
 
         if result.is_err() {
@@ -490,13 +510,13 @@ where
 ///
 /// This event is triggered by a user sending a chunk of the file to the BSP. It checks the proof
 /// for the chunk and if it is valid, stores it, until the whole file is stored.
-impl<NT, Runtime> EventHandler<RemoteUploadRequest> for BspUploadFileTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<RemoteUploadRequest<Runtime>> for BspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: RemoteUploadRequest<Runtime>) -> anyhow::Result<()> {
         trace!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
 
         let file_complete = match self.handle_remote_upload_request_event(event.clone()).await {
@@ -558,13 +578,17 @@ where
 ///
 /// This event is triggered by the runtime when it decides it is the right time to submit a confirm
 /// storing extrinsic (and update the local forest root).
-impl<NT, Runtime> EventHandler<ProcessConfirmStoringRequest> for BspUploadFileTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<ProcessConfirmStoringRequest<Runtime>>
+    for BspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: ProcessConfirmStoringRequest) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: ProcessConfirmStoringRequest<Runtime>,
+    ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Processing ConfirmStoringRequest: {:?}",
@@ -659,10 +683,17 @@ where
         if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
             if !confirm_storing_requests_with_chunks_to_prove.is_empty() {
                 let proof_start_event = BspProofGenerationStartedEvent {
-                    base: create_base_event("bsp_proof_generation_started", "storage-hub-bsp".to_string(), None),
+                    base: create_base_event(
+                        "bsp_proof_generation_started",
+                        "storage-hub-bsp".to_string(),
+                        None,
+                    ),
                     task_id: ctx.task_id.clone(),
                     proof_type: "storage".to_string(),
-                    file_key: format!("{:?}", confirm_storing_requests_with_chunks_to_prove[0].0.file_key),
+                    file_key: format!(
+                        "{:?}",
+                        confirm_storing_requests_with_chunks_to_prove[0].0.file_key
+                    ),
                     challenge_block: 0, // TODO: Get actual challenge block when available
                 };
                 telemetry_service
@@ -735,16 +766,15 @@ where
         let file_keys_for_telemetry = file_keys_and_proofs.clone();
 
         // Build extrinsic.
-        let call = storage_hub_runtime::RuntimeCall::FileSystem(
-            pallet_file_system::Call::bsp_confirm_storing {
+        let call: Runtime::Call =
+            pallet_file_system::Call::<Runtime>::bsp_confirm_storing {
                 non_inclusion_forest_proof: non_inclusion_forest_proof.proof,
                 file_keys_and_proofs: BoundedVec::try_from(file_keys_and_proofs)
                 .map_err(|_| {
                     error!("CRITICAL❗️❗️ This is a bug! Failed to convert file keys and proofs to BoundedVec. Please report it to the StorageHub team.");
                     BspUploadError::BoundedVecConversion
                 })?,
-            },
-        );
+            }.into();
 
         // Send the confirmation transaction and wait for it to be included in the block and
         // continue only if it is successful.
@@ -763,7 +793,7 @@ where
                 )),
                 RetryStrategy::default()
                     .with_max_retries(self.config.max_try_count)
-                    .with_max_tip(self.config.max_tip)
+                    .with_max_tip(self.config.max_tip.saturated_into())
                     .retry_only_if_timeout(),
                 true,
             )
@@ -793,10 +823,11 @@ where
                         .ok();
                 }
 
-                return Err(BspUploadError::ConfirmationFailed { 
-                    max_retries: self.config.max_try_count, 
-                    last_error: e.to_string() 
-                }.into());
+                return Err(BspUploadError::ConfirmationFailed {
+                    max_retries: self.config.max_try_count,
+                    last_error: e.to_string(),
+                }
+                .into());
             }
         };
 
@@ -811,37 +842,37 @@ where
                 generation_time_ms: proof_generation_time_ms,
                 submission_attempts: self.config.max_try_count,
                 transaction_hash: Some(format!("{:?}", extrinsic_hash)),
-                };
-                telemetry_service
-                    .queue_typed_event(proof_submitted_event)
-                    .await
-                    .ok();
+            };
+            telemetry_service
+                .queue_typed_event(proof_submitted_event)
+                .await
+                .ok();
 
-                // Also send upload completed events for all files
-                for file_key_with_proof in &file_keys_for_telemetry {
-                    if let Some(metadata) = file_metadatas.get(&file_key_with_proof.file_key) {
-                        let completed_event = BspUploadCompletedEvent {
-                            base: create_base_event(
-                                "bsp_upload_completed",
-                                "storage-hub-bsp".to_string(),
-                                None,
-                            ),
-                            task_id: ctx.task_id.clone(),
-                            file_key: format!("{:?}", file_key_with_proof.file_key),
-                            file_size_bytes: metadata.file_size(),
-                            duration_ms: ctx.elapsed_ms(),
-                            avg_transfer_rate_mbps: 0.0, // Could calculate if we track timing
-                            chunks_received: 1, // Single chunk for now
-                            fingerprint: format!("{:?}", file_key_with_proof.file_key), // Use file key as fingerprint identifier
-                            peer_id: "unknown".to_string(), // Could track if needed
-                        };
-                        telemetry_service
-                            .queue_typed_event(completed_event)
-                            .await
-                            .ok();
-                    }
+            // Also send upload completed events for all files
+            for file_key_with_proof in &file_keys_for_telemetry {
+                if let Some(metadata) = file_metadatas.get(&file_key_with_proof.file_key) {
+                    let completed_event = BspUploadCompletedEvent {
+                        base: create_base_event(
+                            "bsp_upload_completed",
+                            "storage-hub-bsp".to_string(),
+                            None,
+                        ),
+                        task_id: ctx.task_id.clone(),
+                        file_key: format!("{:?}", file_key_with_proof.file_key),
+                        file_size_bytes: metadata.file_size(),
+                        duration_ms: ctx.elapsed_ms(),
+                        avg_transfer_rate_mbps: 0.0, // Could calculate if we track timing
+                        chunks_received: 1,          // Single chunk for now
+                        fingerprint: format!("{:?}", file_key_with_proof.file_key), // Use file key as fingerprint identifier
+                        peer_id: "unknown".to_string(), // Could track if needed
+                    };
+                    telemetry_service
+                        .queue_typed_event(completed_event)
+                        .await
+                        .ok();
                 }
             }
+        }
 
         // Release the forest root write "lock" and finish the task.
         self.storage_hub_handler
@@ -853,15 +884,15 @@ where
 
 impl<NT, Runtime> BspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_new_storage_request_event(
         &mut self,
-        event: NewStorageRequest,
+        event: NewStorageRequest<Runtime>,
     ) -> anyhow::Result<()> {
-        if event.size == 0 {
+        if event.size == Zero::zero() {
             let err_msg = "File size cannot be 0";
             error!(target: LOG_TARGET, err_msg);
             return Err(BspUploadError::InvalidFileSize.into());
@@ -894,11 +925,12 @@ where
         }
 
         // Construct file metadata.
+        let who = event.who.as_ref().to_vec();
         let metadata = FileMetadata::new(
-            <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
+            who,
             event.bucket_id.as_ref().to_vec(),
             event.location.to_vec(),
-            event.size as u64,
+            event.size.saturated_into(),
             event.fingerprint,
         )
         .map_err(|_| BspUploadError::InvalidFileMetadata)?;
@@ -936,7 +968,9 @@ where
                     target: LOG_TARGET,
                     err_msg
                 );
-                BspUploadError::CapacityQueryFailed { details: format!("{:?}", e) }
+                BspUploadError::CapacityQueryFailed {
+                    details: format!("{:?}", e),
+                }
             })?;
 
         // Increase storage capacity if the available capacity is less than the file size.
@@ -958,7 +992,9 @@ where
                         target: LOG_TARGET,
                         "Failed to query storage provider capacity: {:?}", e
                     );
-                    BspUploadError::CapacityQueryFailed { details: format!("{:?}", e) }
+                    BspUploadError::CapacityQueryFailed {
+                        details: format!("{:?}", e),
+                    }
                 })?;
 
             let max_storage_capacity = self
@@ -992,7 +1028,9 @@ where
                         target: LOG_TARGET,
                         err_msg
                     );
-                    BspUploadError::CapacityQueryFailed { details: format!("{:?}", e) }
+                    BspUploadError::CapacityQueryFailed {
+                        details: format!("{:?}", e),
+                    }
                 })?;
 
             // Skip volunteering if the new available capacity is still less than the file size.
@@ -1019,12 +1057,15 @@ where
             .blockchain
             .query_file_earliest_volunteer_tick(own_bsp_id, file_key.into())
             .await
-            .map_err(|e| BspUploadError::VolunteerTickQueryFailed { details: format!("{:?}", e) })?;
+            .map_err(|e| BspUploadError::VolunteerTickQueryFailed {
+                details: format!("{:?}", e),
+            })?;
 
         // Calculate the tick in which the BSP should send the extrinsic. It's one less that the tick
         // in which the BSP can volunteer for the file because that way it the extrinsic will get included
         // in the tick where the BSP can actually volunteer for the file.
-        let tick_to_wait_to_submit_volunteer = earliest_volunteer_tick.saturating_sub(1);
+        use sp_runtime::Saturating;
+        let tick_to_wait_to_submit_volunteer = earliest_volunteer_tick.saturating_sub(1u32.into());
 
         info!(
             target: LOG_TARGET,
@@ -1047,7 +1088,9 @@ where
             .blockchain
             .is_storage_request_open_to_volunteers(file_key.into())
             .await
-            .map_err(|e| BspUploadError::VolunteerCheckFailed { details: format!("{:?}", e) })?;
+            .map_err(|e| BspUploadError::VolunteerCheckFailed {
+                details: format!("{:?}", e),
+            })?;
 
         // Skip volunteering if the storage request is no longer open to volunteers.
         // TODO: Handle the case where were catching up to the latest block. We probably either want to skip volunteering or wait until
@@ -1067,7 +1110,9 @@ where
                 metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>(),
                 metadata,
             )
-            .map_err(|e| BspUploadError::FileInsertionFailed { details: format!("{:?}", e) })?;
+            .map_err(|e| BspUploadError::FileInsertionFailed {
+                details: format!("{:?}", e),
+            })?;
         drop(write_file_storage);
 
         // Optimistically register the file for upload in the file transfer service.
@@ -1079,20 +1124,27 @@ where
                     error!(target: LOG_TARGET, "Failed to convert peer ID to PeerId: {}", e);
                     e
                 })?,
-                Err(e) => return Err(BspUploadError::PeerIdConversion { details: e.to_string() }.into()),
+                Err(e) => {
+                    return Err(BspUploadError::PeerIdConversion {
+                        details: e.to_string(),
+                    }
+                    .into())
+                }
             };
             self.storage_hub_handler
                 .file_transfer
                 .register_new_file(peer_id, file_key)
                 .await
-                .map_err(|e| BspUploadError::FilePeerRegistrationFailed { details: format!("{:?}", e) })?;
+                .map_err(|e| BspUploadError::FilePeerRegistrationFailed {
+                    details: format!("{:?}", e),
+                })?;
         }
 
         // Build extrinsic.
-        let call =
-            storage_hub_runtime::RuntimeCall::FileSystem(pallet_file_system::Call::bsp_volunteer {
-                file_key: H256(file_key.into()),
-            });
+        let call: Runtime::Call = pallet_file_system::Call::<Runtime>::bsp_volunteer {
+            file_key: file_key.into(),
+        }
+        .into();
 
         // Send extrinsic and wait for it to be included in the block.
         let result = self
@@ -1131,7 +1183,7 @@ where
                 .storage_hub_handler
                 .blockchain
                 .send_extrinsic(
-                    call.into(),
+                    call,
                     SendExtrinsicOptions::new(Duration::from_secs(
                         self.storage_hub_handler
                             .provider_config
@@ -1163,7 +1215,7 @@ where
     /// Returns `true` if the file is complete, `false` if the file is incomplete.
     async fn handle_remote_upload_request_event(
         &mut self,
-        event: RemoteUploadRequest,
+        event: RemoteUploadRequest<Runtime>,
     ) -> anyhow::Result<bool> {
         let file_key = event.file_key.into();
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
@@ -1171,7 +1223,9 @@ where
         // Get the file metadata to verify the fingerprint
         let file_metadata = write_file_storage
             .get_metadata(&file_key)
-            .map_err(|e| BspUploadError::FileMetadataRetrievalFailed { details: format!("{:?}", e) })?
+            .map_err(|e| BspUploadError::FileMetadataRetrievalFailed {
+                details: format!("{:?}", e),
+            })?
             .ok_or_else(|| BspUploadError::FileMetadataNotFound)?;
 
         // Create task context for tracking chunk upload
@@ -1201,17 +1255,17 @@ where
                     let total_batch_size: usize = proven.iter().map(|chunk| chunk.data.len()).sum();
 
                     if total_batch_size > BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE {
-                        Err(BspUploadError::BatchSizeExceeded { 
-                            total_size: total_batch_size as u64, 
-                            max_size: BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE as u64 
+                        Err(BspUploadError::BatchSizeExceeded {
+                            total_size: total_batch_size as u64,
+                            max_size: BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE as u64,
                         })
                     } else {
                         Ok(proven)
                     }
                 }
             }
-            Err(e) => Err(BspUploadError::ChunkVerificationFailed { 
-                details: format!("{:?}", e)
+            Err(e) => Err(BspUploadError::ChunkVerificationFailed {
+                details: format!("{:?}", e),
             }),
         };
 
@@ -1251,10 +1305,11 @@ where
                                 actual_chunk_size,
                             chunk.data.len()
                         );
-                        return Err(BspUploadError::InvalidChunkSize { 
-                            expected: actual_chunk_size as u64, 
-                            actual: chunk.data.len() as u64 
-                        }.into());
+                        return Err(BspUploadError::InvalidChunkSize {
+                            expected: actual_chunk_size as u64,
+                            actual: chunk.data.len() as u64,
+                        }
+                        .into());
                     }
                     Err(e) => {
                         let err_msg = format!(
@@ -1266,7 +1321,10 @@ where
                             "{}",
                             err_msg
                         );
-                        return Err(BspUploadError::ChunkDataMismatch { chunk_id: chunk.key.as_u64().to_string() }.into());
+                        return Err(BspUploadError::ChunkDataMismatch {
+                            chunk_id: chunk.key.as_u64().to_string(),
+                        }
+                        .into());
                     }
                 }
             }
@@ -1292,7 +1350,10 @@ where
                         continue;
                     }
                     FileStorageWriteError::FileDoesNotExist => {
-                        return Err(BspUploadError::FileNotFound { file_key: event.file_key.into() }.into());
+                        return Err(BspUploadError::FileNotFound {
+                            file_key: event.file_key.into(),
+                        }
+                        .into());
                     }
                     FileStorageWriteError::FailedToGetFileChunk
                     | FileStorageWriteError::FailedToInsertFileChunk
@@ -1306,21 +1367,24 @@ where
                     | FileStorageWriteError::FailedToParsePartialRoot
                     | FileStorageWriteError::FailedToGetStoredChunksCount
                     | FileStorageWriteError::ChunkCountOverflow => {
-                        return Err(BspUploadError::TrieReadWriteError { 
-                            file_key: event.file_key.into(), 
-                            chunk_key: chunk.key.as_u64().to_string()
-                        }.into());
+                        return Err(BspUploadError::TrieReadWriteError {
+                            file_key: event.file_key.into(),
+                            chunk_key: chunk.key.as_u64().to_string(),
+                        }
+                        .into());
                     }
                     FileStorageWriteError::FingerprintAndStoredFileMismatch => {
-                        return Err(BspUploadError::FingerprintInvariantBroken { 
-                            file_key: event.file_key.into() 
-                        }.into());
+                        return Err(BspUploadError::FingerprintInvariantBroken {
+                            file_key: event.file_key.into(),
+                        }
+                        .into());
                     }
                     FileStorageWriteError::FailedToConstructTrieIter
                     | FileStorageWriteError::FailedToContructFileTrie => {
-                        return Err(BspUploadError::TrieConstructionBug { 
-                            file_key: event.file_key.into() 
-                        }.into());
+                        return Err(BspUploadError::TrieConstructionBug {
+                            file_key: event.file_key.into(),
+                        }
+                        .into());
                     }
                 },
             }
@@ -1328,28 +1392,32 @@ where
 
         // Send chunk received telemetry event
         if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
-                // Get current stored chunks count
-                let stored_chunks_after = write_file_storage
-                    .stored_chunks_count(&file_key)
-                    .unwrap_or(stored_chunks_before);
+            // Get current stored chunks count
+            let stored_chunks_after = write_file_storage
+                .stored_chunks_count(&file_key)
+                .unwrap_or(stored_chunks_before);
 
-                let chunk_event = BspUploadChunkReceivedEvent {
-                    base: create_base_event("bsp_upload_chunk_received", "storage-hub-bsp".to_string(), None),
-                    task_id: ctx.task_id.clone(),
-                    file_key: format!("{:?}", file_key),
-                    chunk_index: stored_chunks_after as u32 - 1, // Last chunk index
-                    chunk_size_bytes: batch_size_bytes,
-                    total_chunks: total_chunks as u32,
-                    bytes_received: stored_chunks_after * shc_common::types::FILE_CHUNK_SIZE as u64,
-                    bytes_total: file_metadata.file_size(),
-                };
-                telemetry_service.queue_typed_event(chunk_event).await.ok();
+            let chunk_event = BspUploadChunkReceivedEvent {
+                base: create_base_event(
+                    "bsp_upload_chunk_received",
+                    "storage-hub-bsp".to_string(),
+                    None,
+                ),
+                task_id: ctx.task_id.clone(),
+                file_key: format!("{:?}", file_key),
+                chunk_index: stored_chunks_after as u32 - 1, // Last chunk index
+                chunk_size_bytes: batch_size_bytes,
+                total_chunks: total_chunks as u32,
+                bytes_received: stored_chunks_after * shc_common::types::FILE_CHUNK_SIZE as u64,
+                bytes_total: file_metadata.file_size(),
+            };
+            telemetry_service.queue_typed_event(chunk_event).await.ok();
         }
 
         Ok(file_complete)
     }
 
-    async fn is_allowed(&self, event: &NewStorageRequest) -> anyhow::Result<bool> {
+    async fn is_allowed(&self, event: &NewStorageRequest<Runtime>) -> anyhow::Result<bool> {
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
         let mut is_allowed = read_file_storage
             .is_allowed(
@@ -1362,7 +1430,9 @@ where
                     target: LOG_TARGET,
                     err_msg
                 );
-                BspUploadError::CapacityQueryFailed { details: format!("{:?}", e) }
+                BspUploadError::CapacityQueryFailed {
+                    details: format!("{:?}", e),
+                }
             })?;
 
         if !is_allowed {
@@ -1382,7 +1452,9 @@ where
                     target: LOG_TARGET,
                     err_msg
                 );
-                BspUploadError::CapacityQueryFailed { details: format!("{:?}", e) }
+                BspUploadError::CapacityQueryFailed {
+                    details: format!("{:?}", e),
+                }
             })?;
 
         if !is_allowed {
@@ -1391,7 +1463,7 @@ where
             return Ok(false);
         }
 
-        let owner = H256::from(event.who.as_ref());
+        let owner = Runtime::Hashing::hash(event.who.as_ref());
         is_allowed = read_file_storage
             .is_allowed(&owner, shc_file_manager::traits::ExcludeType::User)
             .map_err(|e| {
@@ -1400,7 +1472,9 @@ where
                     target: LOG_TARGET,
                     err_msg
                 );
-                BspUploadError::CapacityQueryFailed { details: format!("{:?}", e) }
+                BspUploadError::CapacityQueryFailed {
+                    details: format!("{:?}", e),
+                }
             })?;
 
         if !is_allowed {
@@ -1420,7 +1494,9 @@ where
                     target: LOG_TARGET,
                     err_msg
                 );
-                BspUploadError::CapacityQueryFailed { details: format!("{:?}", e) }
+                BspUploadError::CapacityQueryFailed {
+                    details: format!("{:?}", e),
+                }
             })?;
 
         if !is_allowed {
@@ -1434,7 +1510,7 @@ where
         return Ok(true);
     }
 
-    async fn unvolunteer_file(&self, file_key: H256) {
+    async fn unvolunteer_file(&self, file_key: Runtime::Hash) {
         warn!(target: LOG_TARGET, "Unvolunteering file {:?}", file_key);
 
         // Unregister the file from the file transfer service.

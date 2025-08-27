@@ -11,12 +11,12 @@ use serde::{Deserialize, Serialize};
 pub struct BspUploadStartedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     /// Unique task instance ID
     pub task_id: String,
     /// Task name (always "bsp_upload_file")
     pub task_name: String,
-    
+
     /// Hex-encoded file key
     pub file_key: String,
     /// Total file size in bytes
@@ -40,7 +40,7 @@ impl TelemetryEvent for BspUploadStartedEvent {
 pub struct BspUploadChunkReceivedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     /// Links to BspUploadStartedEvent
     pub task_id: String,
     /// File key being uploaded
@@ -70,7 +70,7 @@ impl TelemetryEvent for BspUploadChunkReceivedEvent {
 pub struct BspUploadCompletedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     pub task_name: String,
     pub file_key: String,
@@ -98,7 +98,7 @@ impl TelemetryEvent for BspUploadCompletedEvent {
 pub struct BspUploadFailedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     pub task_name: String,
     pub file_key: String,
@@ -120,7 +120,7 @@ impl TelemetryEvent for BspUploadFailedEvent {
     fn event_type(&self) -> &str {
         "bsp_upload_failed"
     }
-    
+
     fn strategy(&self) -> TelemetryStrategy {
         TelemetryStrategy::Guaranteed
     }
@@ -131,7 +131,7 @@ impl TelemetryEvent for BspUploadFailedEvent {
 pub struct BspDownloadStartedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     pub task_name: String,
     pub file_key: String,
@@ -151,7 +151,7 @@ impl TelemetryEvent for BspDownloadStartedEvent {
 pub struct BspDownloadCompletedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     pub task_name: String,
     pub file_key: String,
@@ -171,7 +171,7 @@ impl TelemetryEvent for BspDownloadCompletedEvent {
 pub struct BspProofGenerationStartedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     /// Type of proof: "storage" or "challenge"
     pub proof_type: String,
@@ -192,7 +192,7 @@ impl TelemetryEvent for BspProofGenerationStartedEvent {
 pub struct BspProofSubmittedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     pub proof_type: String,
     /// Challenges successfully answered
@@ -218,7 +218,7 @@ impl TelemetryEvent for BspProofSubmittedEvent {
 pub struct BspProofFailedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     pub proof_type: String,
     pub error_type: String,
@@ -231,7 +231,7 @@ impl TelemetryEvent for BspProofFailedEvent {
     fn event_type(&self) -> &str {
         "bsp_proof_failed"
     }
-    
+
     fn strategy(&self) -> TelemetryStrategy {
         TelemetryStrategy::Guaranteed
     }
@@ -242,7 +242,7 @@ impl TelemetryEvent for BspProofFailedEvent {
 pub struct BspFeesChargedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     /// Total fee amount charged
     pub fee_amount: u128,
@@ -271,7 +271,7 @@ impl TelemetryEvent for BspFeesChargedEvent {
 pub struct BspFileDeletedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     pub file_key: String,
     pub file_size_bytes: u64,
@@ -294,7 +294,7 @@ impl TelemetryEvent for BspFileDeletedEvent {
 pub struct BspBucketMovedEvent {
     #[serde(flatten)]
     pub base: BaseTelemetryEvent,
-    
+
     pub task_id: String,
     pub bucket_id: String,
     /// Previous MSP ID

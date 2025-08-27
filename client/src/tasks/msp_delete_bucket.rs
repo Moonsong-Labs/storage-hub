@@ -2,6 +2,7 @@ use std::time::Instant;
 
 use anyhow::anyhow;
 use sc_tracing::tracing::*;
+use serde::{Deserialize, Serialize};
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::events::{FinalisedBucketMovedAway, FinalisedMspStoppedStoringBucket};
 use shc_common::task_context::TaskContext;
@@ -13,7 +14,6 @@ use shc_forest_manager::traits::ForestStorageHandler;
 use shc_telemetry_service::{
     create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryServiceCommandInterfaceExt,
 };
-use serde::{Deserialize, Serialize};
 
 use crate::{
     handler::StorageHubHandler,
@@ -88,8 +88,8 @@ impl TelemetryEvent for MspBucketDeletionFailedEvent {
 /// [`ForestStorageHandler`]: shc_forest_manager::traits::ForestStorageHandler
 pub struct MspDeleteBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
@@ -97,8 +97,8 @@ where
 
 impl<NT, Runtime> Clone for MspDeleteBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> MspDeleteBucketTask<NT, Runtime> {
@@ -110,8 +110,8 @@ where
 
 impl<NT, Runtime> MspDeleteBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
@@ -121,16 +121,19 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<FinalisedBucketMovedAway> for MspDeleteBucketTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<FinalisedBucketMovedAway<Runtime>>
+    for MspDeleteBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: FinalisedBucketMovedAway) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: FinalisedBucketMovedAway<Runtime>,
+    ) -> anyhow::Result<()> {
         let start_time = Instant::now();
         let ctx = TaskContext::new("msp_delete_bucket");
-        
         info!(
             target: LOG_TARGET,
             "MSP: bucket {:?} moved to MSP {:?}, starting cleanup",
@@ -141,7 +144,11 @@ where
         // Send telemetry event for bucket deletion started
         if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
             let start_event = MspBucketDeletionStartedEvent {
-                base: create_base_event("msp_bucket_deletion_started", "storage-hub-msp".to_string(), None),
+                base: create_base_event(
+                    "msp_bucket_deletion_started",
+                    "storage-hub-msp".to_string(),
+                    None,
+                ),
                 task_id: ctx.task_id.clone(),
                 task_name: "msp_delete_bucket".to_string(),
                 bucket_id: event.bucket_id.to_string(),
@@ -161,13 +168,20 @@ where
                 // Send telemetry event for bucket deletion completed
                 if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
                     let completed_event = MspBucketDeletionCompletedEvent {
-                        base: create_base_event("msp_bucket_deletion_completed", "storage-hub-msp".to_string(), None),
+                        base: create_base_event(
+                            "msp_bucket_deletion_completed",
+                            "storage-hub-msp".to_string(),
+                            None,
+                        ),
                         task_id: ctx.task_id.clone(),
                         bucket_id: event.bucket_id.to_string(),
                         trigger: "bucket_moved".to_string(),
                         duration_ms: start_time.elapsed().as_millis() as u64,
                     };
-                    telemetry_service.queue_typed_event(completed_event).await.ok();
+                    telemetry_service
+                        .queue_typed_event(completed_event)
+                        .await
+                        .ok();
                 }
 
                 Ok(())
@@ -185,7 +199,11 @@ where
                     let error_type = e.telemetry_category().to_string();
                     let error_message = e.to_string();
                     let failed_event = MspBucketDeletionFailedEvent {
-                        base: create_base_event("msp_bucket_deletion_failed", "storage-hub-msp".to_string(), None),
+                        base: create_base_event(
+                            "msp_bucket_deletion_failed",
+                            "storage-hub-msp".to_string(),
+                            None,
+                        ),
                         task_id: ctx.task_id.clone(),
                         bucket_id: event.bucket_id.to_string(),
                         trigger: "bucket_moved".to_string(),
@@ -202,20 +220,20 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<FinalisedMspStoppedStoringBucket>
+impl<NT, Runtime> EventHandler<FinalisedMspStoppedStoringBucket<Runtime>>
     for MspDeleteBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(
         &mut self,
-        event: FinalisedMspStoppedStoringBucket,
+        event: FinalisedMspStoppedStoringBucket<Runtime>,
     ) -> anyhow::Result<()> {
         let start_time = Instant::now();
         let ctx = TaskContext::new("msp_delete_bucket");
-        
+
         info!(
             target: LOG_TARGET,
             "MSP: deleting bucket {:?} for MSP {:?}",
@@ -226,7 +244,11 @@ where
         // Send telemetry event for bucket deletion started
         if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
             let start_event = MspBucketDeletionStartedEvent {
-                base: create_base_event("msp_bucket_deletion_started", "storage-hub-msp".to_string(), None),
+                base: create_base_event(
+                    "msp_bucket_deletion_started",
+                    "storage-hub-msp".to_string(),
+                    None,
+                ),
                 task_id: ctx.task_id.clone(),
                 task_name: "msp_delete_bucket".to_string(),
                 bucket_id: event.bucket_id.to_string(),
@@ -246,13 +268,20 @@ where
                 // Send telemetry event for bucket deletion completed
                 if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
                     let completed_event = MspBucketDeletionCompletedEvent {
-                        base: create_base_event("msp_bucket_deletion_completed", "storage-hub-msp".to_string(), None),
+                        base: create_base_event(
+                            "msp_bucket_deletion_completed",
+                            "storage-hub-msp".to_string(),
+                            None,
+                        ),
                         task_id: ctx.task_id.clone(),
                         bucket_id: event.bucket_id.to_string(),
                         trigger: "stopped_storing".to_string(),
                         duration_ms: start_time.elapsed().as_millis() as u64,
                     };
-                    telemetry_service.queue_typed_event(completed_event).await.ok();
+                    telemetry_service
+                        .queue_typed_event(completed_event)
+                        .await
+                        .ok();
                 }
 
                 Ok(())
@@ -270,7 +299,11 @@ where
                     let error_type = e.telemetry_category().to_string();
                     let error_message = e.to_string();
                     let failed_event = MspBucketDeletionFailedEvent {
-                        base: create_base_event("msp_bucket_deletion_failed", "storage-hub-msp".to_string(), None),
+                        base: create_base_event(
+                            "msp_bucket_deletion_failed",
+                            "storage-hub-msp".to_string(),
+                            None,
+                        ),
                         task_id: ctx.task_id.clone(),
                         bucket_id: event.bucket_id.to_string(),
                         trigger: "stopped_storing".to_string(),
@@ -289,12 +322,12 @@ where
 
 impl<NT, Runtime> MspDeleteBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     /// Deletes all files in a bucket and removes the bucket's forest storage
-    async fn delete_bucket(&mut self, bucket_id: &BucketId) -> anyhow::Result<()> {
+    async fn delete_bucket(&mut self, bucket_id: &BucketId<Runtime>) -> anyhow::Result<()> {
         self.storage_hub_handler
             .file_storage
             .write()

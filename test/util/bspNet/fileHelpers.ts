@@ -1,14 +1,16 @@
+import assert from "node:assert";
 import type { ApiPromise } from "@polkadot/api";
-import type { FileMetadata } from "./types";
+import type { KeyringPair } from "@polkadot/keyring/types";
+import { GenericAccountId } from "@polkadot/types";
+import type { AccountId32, H256 } from "@polkadot/types/interfaces";
+import { u8aToHex } from "@polkadot/util";
+import { decodeAddress } from "@polkadot/util-crypto";
+import type { HexString } from "@polkadot/util/types";
 import { assertEventPresent } from "../asserts";
 import { shUser } from "../pjsKeyring";
-import * as ShConsts from "./consts";
 import { sealBlock } from "./block";
-import assert from "node:assert";
-import type { HexString } from "@polkadot/util/types";
-import type { KeyringPair } from "@polkadot/keyring/types";
-import type { AccountId32, H256 } from "@polkadot/types/interfaces";
-import { GenericAccountId } from "@polkadot/types";
+import * as ShConsts from "./consts";
+import type { FileMetadata } from "./types";
 
 export const sendNewStorageRequest = async (
   api: ApiPromise,
@@ -18,10 +20,11 @@ export const sendNewStorageRequest = async (
   owner?: KeyringPair,
   mspId?: HexString
 ): Promise<FileMetadata> => {
+  const ownerHexString = u8aToHex(decodeAddress(ShConsts.NODE_INFOS.user.AddressId));
   const { file_metadata: fileMetadata } = await api.rpc.storagehubclient.loadFileInStorage(
     source,
     location,
-    ShConsts.NODE_INFOS.user.AddressId,
+    ownerHexString.slice(2),
     bucketId
   );
 
@@ -109,10 +112,11 @@ export const createBucketAndSendNewStorageRequest = async (
 
   assert(newBucketEventDataBlob, "Event doesn't match Type");
 
+  const ownerHexString = u8aToHex(decodeAddress(ShConsts.NODE_INFOS.user.AddressId));
   const { file_metadata: fileMetadata } = await api.rpc.storagehubclient.loadFileInStorage(
     source,
     location,
-    ShConsts.NODE_INFOS.user.AddressId,
+    ownerHexString.slice(2),
     newBucketEventDataBlob.bucketId
   );
 

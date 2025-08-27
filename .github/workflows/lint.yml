@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - main
-      - perm-*
   workflow_dispatch:
     inputs:
       pull_request:
@@ -19,8 +18,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
+        with:
+          toolchain: nightly
+          components: rustfmt
       - name: Rustfmt Check
-        run: cargo fmt --all -- --check
+        run: cargo +nightly fmt --all -- --check
 
   check-rust-lint:
     name: "Check lint with clippy"

@@ -16,6 +16,7 @@ workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+bigdecimal = { workspace = true }
 bincode = { workspace = true }
 codec = { workspace = true }
 rocksdb = { workspace = true }
@@ -37,6 +38,9 @@ frame-benchmarking = { workspace = true }
 frame-metadata-hash-extension = { workspace = true }
 frame-support = { workspace = true }
 frame-system = { workspace = true }
+pallet-balances = { workspace = true }
+pallet-nfts = { workspace = true }
+pallet-transaction-payment = { workspace = true }
 pallet-transaction-payment-rpc = { workspace = true }
 sc-client-api = { workspace = true }
 sc-executor = { workspace = true }
@@ -50,6 +54,7 @@ sp-keystore = { workspace = true }
 sp-trie = { workspace = true, default-features = true }
 sp-io = { workspace = true, default-features = true }
 sp-runtime = { workspace = true, default-features = true }
+sp-rpc = { workspace = true }
 sp-std = { workspace = true }
 substrate-frame-rpc-system = { workspace = true }
 
@@ -65,24 +70,25 @@ cumulus-primitives-storage-weight-reclaim = { workspace = true }
 fp-account = { workspace = true }
 
 # Local
-storage-hub-runtime = { workspace = true }
 shp-constants = { workspace = true }
 shp-file-key-verifier = { workspace = true }
 shp-file-metadata = { workspace = true }
 shp-forest-verifier = { workspace = true }
-shp-traits = { workspace = true }
 shp-opaque = { workspace = true }
+shp-traits = { workspace = true }
+shp-types = { workspace = true }
 
 # Local pallets
+pallet-bucket-nfts = { workspace = true }
 pallet-file-system = { workspace = true }
 pallet-file-system-runtime-api = { workspace = true }
 pallet-payment-streams = { workspace = true }
 pallet-payment-streams-runtime-api = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
 pallet-proofs-dealer-runtime-api = { workspace = true }
+pallet-randomness = { workspace = true }
 pallet-storage-providers = { workspace = true }
 pallet-storage-providers-runtime-api = { workspace = true }
-pallet-transaction-payment = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.8"
@@ -113,18 +119,26 @@ std = [
 	"shp-file-metadata/std",
 	"shp-forest-verifier/std",
 	"shp-traits/std",
+	"pallet-balances/std",
+	"pallet-bucket-nfts/std",
 	"pallet-file-system/std",
+	"pallet-nfts/std",
 	"pallet-payment-streams/std",
 	"pallet-proofs-dealer/std",
+	"pallet-randomness/std",
 	"pallet-storage-providers/std",
 	"pallet-transaction-payment/std",
 ]
 runtime-benchmarks = [
 	"frame-benchmarking/runtime-benchmarks",
 	"frame-system/runtime-benchmarks",
+	"pallet-balances/runtime-benchmarks",
+	"pallet-bucket-nfts/runtime-benchmarks",
 	"pallet-file-system/runtime-benchmarks",
+	"pallet-nfts/runtime-benchmarks",
 	"pallet-payment-streams/runtime-benchmarks",
 	"pallet-proofs-dealer/runtime-benchmarks",
+	"pallet-randomness/runtime-benchmarks",
 	"pallet-storage-providers/runtime-benchmarks",
 	"pallet-transaction-payment/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",

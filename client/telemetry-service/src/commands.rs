@@ -40,7 +40,7 @@ impl TelemetryServiceCommandInterfaceExt for ActorHandle<TelemetryService> {
     {
         let json = event.to_json();
         let strategy = event.strategy();
-        
+
         // Fire and forget - we don't wait for the result
         self.queue_event(json, strategy).await;
         Ok(())
