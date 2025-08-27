@@ -1,6 +1,6 @@
 use axum_extra::headers::{authorization::Bearer, Authorization};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use rand::Rng;
 use serde_json::Value;
 
