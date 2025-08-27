@@ -56,7 +56,7 @@ describeMspNet(
     let fileKey: string;
 
     // Track files created in unfinalized blocks
-    let unfinalizedFiles: Array<{
+    const unfinalizedFiles: Array<{
       fileKey: string;
       bucketId: string;
       location: string;

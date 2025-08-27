@@ -81,7 +81,7 @@ export const createBucketAndSendNewStorageRequest = async (
   mspId?: HexString | null,
   owner?: KeyringPair | null,
   replicationTarget?: number | null,
-  finalizeBlock: boolean = true
+  finalizeBlock = true
 ): Promise<FileMetadata> => {
   let localValuePropId = valuePropId;
   let localOwner = owner;
