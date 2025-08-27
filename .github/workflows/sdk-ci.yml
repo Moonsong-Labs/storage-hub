@@ -7,6 +7,7 @@ on:
   pull_request:
     paths:
       - "sdk/**"
+  workflow_dispatch:
 
 jobs:
   sdk:
