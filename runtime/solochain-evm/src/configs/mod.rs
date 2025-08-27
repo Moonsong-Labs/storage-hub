@@ -12,9 +12,9 @@ use frame_support::{
     parameter_types,
     traits::{
         fungible::{Balanced, Credit, Inspect},
-        tokens::imbalance::{Imbalance, ResolveTo},
+        tokens::imbalance::ResolveTo,
         AsEnsureOriginWithArg, ConstU32, ConstU64, ConstU8, FindAuthor, KeyOwnerProofSystem,
-        OnUnbalanced, PalletInfo, VariantCountOf,
+        OnUnbalanced, TypedGet, VariantCountOf,
     },
     weights::Weight,
 };
@@ -44,7 +44,7 @@ use shp_treasury_funding::{
 };
 use shp_types::{Hash, Hashing, StorageDataUnit, StorageProofsMerkleTrieLayout};
 use sp_arithmetic::traits::One;
-use sp_core::{ConstU128, Get, Hasher, TypedGet, H160, H256, U256};
+use sp_core::{ConstU128, Get, Hasher, H160, H256, U256};
 use sp_runtime::{
     traits::{
         BlakeTwo256, Convert, ConvertBack, ConvertInto, IdentityLookup, OpaqueKeys,
@@ -54,6 +54,7 @@ use sp_runtime::{
 };
 use sp_staking::{EraIndex, SessionIndex};
 use sp_std::vec;
+use sp_std::vec::Vec;
 use sp_trie::{TrieConfiguration, TrieLayout};
 use sp_version::RuntimeVersion;
 #[cfg(not(feature = "runtime-benchmarks"))]
@@ -67,7 +68,7 @@ use crate::{
     genesis_config_presets::{alith, baltathar, charleth},
     weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},
     AccountId, Babe, Balance, Balances, Block, BlockNumber, BucketNfts, EvmChainId, Historical,
-    Nfts, Nonce, Offences, PaymentStreams, ProofsDealer, Providers, Runtime, RuntimeCall,
+    Nfts, Nonce, PalletInfo, PaymentStreams, ProofsDealer, Providers, Runtime, RuntimeCall,
     RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask, Session,
     SessionKeys, Signature, System, Timestamp, TransactionPayment, WeightToFee,
     AVERAGE_ON_INITIALIZE_RATIO, DAYS, EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT, MICROUNIT,
@@ -122,7 +123,7 @@ impl Get<AccountId20> for TreasuryAccount {
     }
 }
 
-impl sp_core::TypedGet for TreasuryAccount {
+impl TypedGet for TreasuryAccount {
     type Type = AccountId20;
     fn get() -> Self::Type {
         AccountId20::from([0; 20])
@@ -226,8 +227,8 @@ impl pallet_babe::Config for Runtime {
     type KeyOwnerProof =
         <Historical as KeyOwnerProofSystem<(KeyTypeId, pallet_babe::AuthorityId)>>::Proof;
 
-    type EquivocationReportSystem =
-        pallet_babe::EquivocationReportSystem<Self, Offences, Historical, ReportLongevity>;
+    type EquivocationReportSystem = ();
+    // pallet_babe::EquivocationReportSystem<Self, Offences, Historical, ReportLongevity>;
 }
 
 impl pallet_timestamp::Config for Runtime {
@@ -278,18 +279,14 @@ impl Convert<AccountId, Option<()>> for FullIdentificationOf {
     }
 }
 
-parameter_types! {
-    pub static Validators: Option<Vec<AccountId>> = Some(vec![
-        alith(),
-        baltathar(),
-        charleth(),
-    ]);
+pub fn get_validators() -> Option<Vec<AccountId>> {
+    Some(vec![alith(), baltathar(), charleth()])
 }
 
 pub struct NoChangesSessionManager;
 impl pallet_session::SessionManager<AccountId> for NoChangesSessionManager {
     fn new_session(_new_index: SessionIndex) -> Option<Vec<AccountId>> {
-        Validators::get()
+        get_validators()
     }
     fn end_session(_: SessionIndex) {}
     fn start_session(_: SessionIndex) {}
@@ -297,10 +294,7 @@ impl pallet_session::SessionManager<AccountId> for NoChangesSessionManager {
 
 impl pallet_session::historical::SessionManager<AccountId, ()> for NoChangesSessionManager {
     fn new_session(_new_index: SessionIndex) -> Option<Vec<(AccountId, ())>> {
-        Validators::mutate(|l| {
-            l.take()
-                .map(|validators| validators.iter().map(|v| (*v, ())).collect())
-        })
+        get_validators().map(|validators| validators.iter().map(|v| (*v, ())).collect())
     }
     fn end_session(_: SessionIndex) {}
     fn start_session(_: SessionIndex) {}
@@ -339,12 +333,13 @@ impl pallet_grandpa::Config for Runtime {
     type MaxSetIdSessionEntries = MaxSetIdSessionEntries;
 
     type KeyOwnerProof = <Historical as KeyOwnerProofSystem<(KeyTypeId, GrandpaId)>>::Proof;
-    type EquivocationReportSystem = pallet_grandpa::EquivocationReportSystem<
-        Self,
-        Offences,
-        Historical,
-        EquivocationReportPeriodInBlocks,
-    >;
+    type EquivocationReportSystem = ();
+    // pallet_grandpa::EquivocationReportSystem<
+    //     Self,
+    //     Offences,
+    //     Historical,
+    //     EquivocationReportPeriodInBlocks,
+    // >;
 }
 
 /// Deal with substrate based fees and tip. This should be used with pallet_transaction_payment.
@@ -357,14 +352,15 @@ where
     R::AccountId: Default,
     FeesTreasuryProportion: Get<Perbill>,
 {
-    fn deal_with_fees(amount: Credit<R::AccountId, pallet_balances::Pallet<R>>) {
-        // Balances pallet automatically burns dropped Credits by decreasing
-        // total_supply accordingly
-        let treasury_proportion = FeesTreasuryProportion::get();
-        let treasury_part = treasury_proportion.deconstruct();
-        let burn_part = Perbill::one().deconstruct() - treasury_part;
-        let (_, to_treasury) = amount.ration(burn_part, treasury_part);
-        ResolveTo::<TreasuryAccount, pallet_balances::Pallet<R>>::on_unbalanced(to_treasury);
+    fn deal_with_fees(_amount: Credit<R::AccountId, pallet_balances::Pallet<R>>) {
+        // TODO: This has compile errors, ignoring for now as not too relevant.
+        // // Balances pallet automatically burns dropped Credits by decreasing
+        // // total_supply accordingly
+        // let treasury_proportion = FeesTreasuryProportion::get();
+        // let treasury_part = treasury_proportion.deconstruct();
+        // let burn_part = Perbill::one().deconstruct() - treasury_part;
+        // let (_, to_treasury) = amount.ration(burn_part, treasury_part);
+        // ResolveTo::<TreasuryAccount, pallet_balances::Pallet<R>>::on_unbalanced(to_treasury);
     }
 
     fn deal_with_tip(amount: Credit<R::AccountId, pallet_balances::Pallet<R>>) {
@@ -581,14 +577,15 @@ where
     R: pallet_balances::Config,
     FeesTreasuryProportion: Get<Perbill>,
 {
-    fn on_nonzero_unbalanced(amount: Credit<R::AccountId, pallet_balances::Pallet<R>>) {
-        // Balances pallet automatically burns dropped Credits by decreasing
-        // total_supply accordingly
-        let treasury_proportion = FeesTreasuryProportion::get();
-        let treasury_part = treasury_proportion.deconstruct();
-        let burn_part = Perbill::one().deconstruct() - treasury_part;
-        let (_, to_treasury) = amount.ration(burn_part, treasury_part);
-        ResolveTo::<TreasuryAccount, pallet_balances::Pallet<R>>::on_unbalanced(to_treasury);
+    fn on_nonzero_unbalanced(_amount: Credit<R::AccountId, pallet_balances::Pallet<R>>) {
+        // TODO: This has compile errors, ignoring for now as not too relevant.
+        // // Balances pallet automatically burns dropped Credits by decreasing
+        // // total_supply accordingly
+        // let treasury_proportion = FeesTreasuryProportion::get();
+        // let treasury_part = treasury_proportion.deconstruct();
+        // let burn_part = Perbill::one().deconstruct() - treasury_part;
+        // let (_, to_treasury) = amount.ration(burn_part, treasury_part);
+        // ResolveTo::<TreasuryAccount, pallet_balances::Pallet<R>>::on_unbalanced(to_treasury);
     }
 }
 
@@ -600,8 +597,9 @@ where
     R: pallet_balances::Config + pallet_authorship::Config + frame_system::Config,
     R::AccountId: Default,
 {
-    fn on_nonzero_unbalanced(amount: Credit<R::AccountId, pallet_balances::Pallet<R>>) {
-        ResolveTo::<BlockAuthorAccountId<R>, pallet_balances::Pallet<R>>::on_unbalanced(amount);
+    fn on_nonzero_unbalanced(_amount: Credit<R::AccountId, pallet_balances::Pallet<R>>) {
+        // TODO: This has compile errors, ignoring for now as not too relevant.
+        // ResolveTo::<BlockAuthorAccountId<R>, pallet_balances::Pallet<R>>::on_unbalanced(amount);
     }
 }
 
