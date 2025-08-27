@@ -15,7 +15,6 @@ on:
 env:
   FORCE_COLOR: 1
   HEADLESS: false
-  RUN_MSP_E2E: ${{ inputs.run_msp || 'false' }}
 
 concurrency:
   group: sdk-e2e-${{ github.ref }}
@@ -134,7 +133,7 @@ jobs:
           retention-days: 14
 
   e2e-msp:
-    if: env.RUN_MSP_E2E == 'true'
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_msp == 'true' }}
     needs: setup-e2e
     runs-on: ubuntu-latest
     # Placeholder services for DB and Backend (enable later)
