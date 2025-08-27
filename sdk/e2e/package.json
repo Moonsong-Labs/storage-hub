@@ -15,7 +15,8 @@
         "@playwright/test": "^1.54.2",
         "@tenkeylabs/dappwright": "^2.11.2",
         "playwright": "^1.54.2",
-        "@storagehub/wasm": "file:../core/wasm/pkg"
+        "@storagehub-sdk/core": "workspace:*",
+        "@storagehub-sdk/msp-client": "workspace:*"
     },
     "engines": {
         "node": ">=23"
