@@ -1,5 +1,6 @@
 use crate::{
     api::validation::{generate_mock_jwt, validate_eth_address},
+    constants::mocks::MOCK_ADDRESS,
     error::Error,
     models::auth::{NonceResponse, ProfileResponse, TokenResponse, User, VerifyResponse},
 };
@@ -45,7 +46,7 @@ impl AuthService {
         Ok(VerifyResponse {
             token: generate_mock_jwt(),
             user: User {
-                address: "0x1234567890123456789012345678901234567890".to_string(),
+                address: MOCK_ADDRESS.to_string(),
             },
         })
     }
@@ -60,7 +61,7 @@ impl AuthService {
     pub async fn get_profile(&self, _token: &str) -> Result<ProfileResponse, Error> {
         // TODO(MOCK): retrieve profile from token
         Ok(ProfileResponse {
-            address: "0x1234567890123456789012345678901234567890".to_string(),
+            address: MOCK_ADDRESS.to_string(),
             ens: "user.eth".to_string(),
         })
     }
