@@ -47,6 +47,20 @@ impl From<OnchainBspId> for H256 {
     }
 }
 
+/// TODO: Do not assume account Ids are only 32 bytes long - we must be generic over the runtime
+impl TryFrom<String> for OnchainBspId {
+    type Error = String;
+
+    fn try_from(id: String) -> Result<Self, Self::Error> {
+        let hex_str = id.trim_start_matches("0x");
+        let bytes =
+            hex::decode(hex_str).map_err(|e| format!("Failed to decode BSP ID from hex: {}", e))?;
+        let mut array = [0u8; 32];
+        array.copy_from_slice(&bytes);
+        Ok(Self(H256(array)))
+    }
+}
+
 impl fmt::Display for OnchainBspId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:#x}", self.0)

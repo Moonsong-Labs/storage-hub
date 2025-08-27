@@ -24,6 +24,7 @@ tower-http = { workspace = true }
 
 # Workspace dependencies
 shc-indexer-db = { workspace = true, default-features = true }
+shp-types = { workspace = true }
 
 [dev-dependencies]
 axum-test = { workspace = true }

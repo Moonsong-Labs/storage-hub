@@ -162,7 +162,7 @@ describeMspNet(
         deletionRequestResult.events
       );
 
-      await waitForIndexing(userApi);
+      await waitForIndexing(userApi, false);
 
       // Verify delete_file extrinsics are submitted
       const deleteFileFound = await waitForDeleteFileExtrinsic(userApi, 2, 30000);

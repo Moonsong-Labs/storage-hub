@@ -73,7 +73,7 @@ impl<'de> serde::Deserialize<'de> for ProviderType {
             _ => {
                 return Err(serde::de::Error::custom(
                     "Cannot parse `provider_type`. Invalid value.",
-                ));
+                ))
             }
         };
 
@@ -99,7 +99,7 @@ impl<'de> serde::Deserialize<'de> for StorageLayer {
             _ => {
                 return Err(serde::de::Error::custom(
                     "Cannot parse `storage_type`. Invalid value.",
-                ));
+                ))
             }
         };
 

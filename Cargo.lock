@@ -14572,6 +14572,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shc-indexer-db",
+ "shp-types",
  "thiserror 1.0.69",
  "tokio",
  "toml 0.8.23",
