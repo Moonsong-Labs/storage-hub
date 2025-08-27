@@ -88,10 +88,10 @@ export class MspClient {
     form.append('file', part as any);
 
     const path = `/buckets/${encodeURIComponent(bucketId)}/upload/${encodeURIComponent(fileKey)}`;
-    const res = await this.http.put<any>(path, {
-      body: form as unknown as BodyInit,
-      headers: this.withAuth(),
-    });
+    const authHeaders = this.withAuth();
+    const res = await this.http.put<any>(path, authHeaders
+      ? { body: form as unknown as BodyInit, headers: authHeaders }
+      : { body: form as unknown as BodyInit });
     return res;
   }
 
@@ -111,11 +111,10 @@ export class MspClient {
     fileKey: string,
     _options?: DownloadOptions,
   ): Promise<DownloadResult> {
-    const path = `/buckets/${encodeURIComponent(bucketId)}/${encodeURIComponent(fileKey)}`;
-    const headers: Record<string, string> = { Accept: '*/*' };
-    const res = await this.http.getRaw(path, {
-      headers: this.withAuth(headers),
-    });
+    const path = `/buckets/${encodeURIComponent(bucketId)}/download/${encodeURIComponent(fileKey)}`;
+    const baseHeaders: Record<string, string> = { Accept: '*/*' };
+    const headers = this.withAuth(baseHeaders);
+    const res = await this.http.getRaw(path, headers ? { headers } : {});
 
     if (!res.body) {
       throw new Error('Response body is null - unable to create stream');
@@ -146,11 +145,10 @@ export class MspClient {
   ): Promise<DownloadResult> {
     const normalized = filePath.replace(/^\/+/, '');
     const encodedPath = normalized.split('/').map(encodeURIComponent).join('/');
-    const path = `/buckets/${encodeURIComponent(bucketId)}/files/${encodedPath}`;
-    const headers: Record<string, string> = { Accept: '*/*' };
-    const res = await this.http.getRaw(path, {
-      headers: this.withAuth(headers),
-    });
+    const path = `/buckets/${encodeURIComponent(bucketId)}/download/path/${encodedPath}`;
+    const baseHeaders: Record<string, string> = { Accept: '*/*' };
+    const headers = this.withAuth(baseHeaders);
+    const res = await this.http.getRaw(path, headers ? { headers } : {});
 
     if (!res.body) {
       throw new Error('Response body is null - unable to create stream');
