@@ -71,9 +71,16 @@ pub struct ProviderOptions {
 
 fn load_spec(id: &str) -> std::result::Result<Box<dyn ChainSpec>, String> {
     Ok(match id {
-        "dev" => Box::new(chain_spec::development_config()),
-        "template-rococo" => Box::new(chain_spec::local_testnet_config()),
-        "" | "local" => Box::new(chain_spec::local_testnet_config()),
+        // Parachain variants (default fallback for compatibility)
+        "dev" | "parachain-dev" => Box::new(chain_spec::parachain::development_config()),
+        "" | "local" | "parachain-local" => Box::new(chain_spec::parachain::local_testnet_config()),
+        "template-rococo" => Box::new(chain_spec::parachain::local_testnet_config()),
+
+        // Solochain EVM variants
+        "solochain-evm-dev" => Box::new(chain_spec::solochain_evm::development_config()?),
+        "solochain-evm-local" => Box::new(chain_spec::solochain_evm::local_testnet_config()?),
+
+        // Custom chain spec from file
         path => Box::new(chain_spec::ChainSpec::from_json_file(
             std::path::PathBuf::from(path),
         )?),

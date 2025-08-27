@@ -44,6 +44,7 @@ pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-storage-providers = { workspace = true }
 pallet-storage-providers-runtime-api = { workspace = true }
 storage-hub-runtime = { workspace = true }
+shr-solochain-evm = { workspace = true }
 shc-actors-framework = { workspace = true }
 shc-actors-derive = { workspace = true }
 shc-blockchain-service = { workspace = true }
@@ -102,6 +103,7 @@ sp-block-builder = { workspace = true }
 sp-blockchain = { workspace = true }
 sp-consensus-aura = { workspace = true }
 sp-core = { workspace = true, default-features = true }
+sp-genesis-builder = { workspace = true }
 sp-keyring = { workspace = true, default-features = true }
 sp-keystore = { workspace = true }
 sp-io = { workspace = true, default-features = true }
@@ -131,6 +133,17 @@ cumulus-primitives-parachain-inherent = { workspace = true }
 cumulus-primitives-storage-weight-reclaim = { workspace = true }
 cumulus-relay-chain-interface = { workspace = true }
 
+# Frontier (for EVM support)
+fc-api = { workspace = true }
+fc-cli = { workspace = true }
+fc-consensus = { workspace = true }
+fc-db = { workspace = true }
+fc-mapping-sync = { workspace = true }
+fc-rpc = { workspace = true }
+fc-rpc-core = { workspace = true }
+fc-storage = { workspace = true }
+fp-rpc = { workspace = true }
+
 [build-dependencies]
 substrate-build-script-utils = { workspace = true }
 
@@ -145,9 +158,11 @@ runtime-benchmarks = [
     "sc-service/runtime-benchmarks",
     "sp-runtime/runtime-benchmarks",
     "storage-hub-runtime/runtime-benchmarks",
+    "shr-solochain-evm/runtime-benchmarks",
 ]
 try-runtime = [
     "polkadot-cli/try-runtime",
     "sp-runtime/try-runtime",
     "storage-hub-runtime/try-runtime",
+    "shr-solochain-evm/try-runtime",
 ]
