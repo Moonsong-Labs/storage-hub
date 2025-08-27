@@ -1,5 +1,6 @@
 use axum_extra::headers::{authorization::Bearer, Authorization};
-use base64::{engine::general_purpose, Engine};
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
 use rand::Rng;
 use serde_json::Value;
 
@@ -35,37 +36,53 @@ pub fn generate_hex_string(len: usize) -> String {
 }
 
 pub fn generate_mock_jwt() -> String {
-    format!(
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.{}.{}",
-        general_purpose::STANDARD.encode("mock_payload"),
-        general_purpose::STANDARD.encode("mock_signature")
-    )
-}
+    // Create a proper mock JWT with valid base64url encoding
+    // TODO(MOCK): We manually construct the JWT instead of using jsonwebtoken::encode()
+    // because encode() requires real cryptographic signing, which we're avoiding for mocks
+    // Header: {"alg":"HS256","typ":"JWT"} already encoded
+    let header = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9";
 
-// TODO(MOCK): verify JWT signature
-fn validate_token(jtw: Value) -> Result<Value, Error> {
-    Ok(jtw)
+    // Create a mock payload with proper structure
+    let payload = serde_json::json!({
+        // Standard JWT claims
+        "sub": "0x1234567890123456789012345678901234567890", // Subject: user's ETH address
+        "exp": 9999999999i64, // Expiration: far future for mock
+        "iat": 1704067200i64, // Issued at: 2024-01-01
+
+        // TODO(MOCK): Include relevant claim items here as siblings to exp, iat, sub
+        // For example:
+        // "iss": "storagehub-api",  // Issuer
+        // "address": "0x...",       // User's actual Ethereum address
+        // "ens": "user.eth",        // ENS domain name
+        // "chain_id": 1,            // Network ID
+        // "role": "user",           // User permissions
+    });
+
+    // Encode payload using base64url (no padding) - proper JWT format
+    let payload_json = serde_json::to_string(&payload).unwrap();
+    let payload_b64 = URL_SAFE_NO_PAD.encode(payload_json.as_bytes());
+
+    // Mock signature (base64url encoded)
+    let signature = URL_SAFE_NO_PAD.encode("mock_signature");
+
+    format!("{}.{}.{}", header, payload_b64, signature)
 }
 
 /// Extracts, decodes and verifies the JWT
 pub fn extract_bearer_token(auth: &Authorization<Bearer>) -> Result<Value, Error> {
-    auth.token()
-        .split('.') // JWT is header.payload.signature
-        .nth(1)
-        .ok_or_else(|| Error::Unauthorized("Invalid token payload format".to_string()))
-        .and_then(|payload| {
-            use base64::{engine::general_purpose, Engine};
-            general_purpose::STANDARD
-                .decode(payload)
-                .map_err(|e| Error::Unauthorized(format!("Base64 decode error: {}", e)))
-        })
-        .and_then(|bytes| {
-            String::from_utf8(bytes)
-                .map_err(|e| Error::Unauthorized(format!("UTF-8 decode error: {}", e)))
-        })
-        .and_then(|s| {
-            serde_json::from_str::<serde_json::Value>(&s)
-                .map_err(|e| Error::Unauthorized(format!("JSON decode error: {}", e)))
-        })
-        .and_then(validate_token)
+    let token = auth.token();
+
+    // TODO(MOCK): decode with verification
+    let mut validation = Validation::new(Algorithm::HS256);
+    validation.insecure_disable_signature_validation();
+    validation.validate_exp = false; // Don't validate expiry for mocks
+
+    // handles base64url decoding properly
+    decode::<Value>(
+        token,
+        &DecodingKey::from_secret(b"mock_secret"), // TODO(MOCK): use configurable secret
+        &validation,
+    )
+    .map_err(|e| Error::Unauthorized(format!("JWT decode error: {}", e)))?
+    .map(|token| token.claims)
 }
