@@ -1,8 +1,8 @@
 export { MspClient } from './MspClient';
 export type {
-    HealthStatus,
-    HealthState,
     ComponentHealth,
+    HealthState,
+    HealthStatus,
     UploadOptions,
     UploadReceipt,
     UploadState,

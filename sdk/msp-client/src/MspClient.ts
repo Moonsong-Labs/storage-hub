@@ -1,14 +1,14 @@
-import { HttpClient } from '@storagehub-sdk/core';
-import type { HttpClientConfig } from '@storagehub-sdk/core';
 import type {
-  HealthStatus,
-  UploadOptions,
-  UploadReceipt,
-  NonceResponse,
-  VerifyResponse,
   DownloadOptions,
   DownloadResult,
+  HealthStatus,
+  NonceResponse,
+  UploadOptions,
+  UploadReceipt,
+  VerifyResponse,
 } from './types';
+import type { HttpClientConfig } from '@storagehub-sdk/core';
+import { HttpClient } from '@storagehub-sdk/core';
 
 export class MspClient {
   public readonly config: HttpClientConfig;
@@ -79,25 +79,26 @@ export class MspClient {
   async uploadFile(
     bucketId: string,
     fileKey: string,
-    file: Blob | ArrayBuffer | Uint8Array | ReadableStream<Uint8Array> | any,
+    file: Blob | ArrayBuffer | Uint8Array | ReadableStream<Uint8Array> | unknown,
     _options?: UploadOptions,
-  ): Promise<UploadReceipt | any> {
+  ): Promise<UploadReceipt> {
+    void _options;
     const form = new FormData();
 
     const part = this.coerceToFormPart(file);
-    form.append('file', part as any);
+    form.append('file', part as unknown as Blob);
 
     const path = `/buckets/${encodeURIComponent(bucketId)}/upload/${encodeURIComponent(fileKey)}`;
     const authHeaders = this.withAuth();
-    const res = await this.http.put<any>(path, authHeaders
+    const res = await this.http.put<UploadReceipt>(path, authHeaders
       ? { body: form as unknown as BodyInit, headers: authHeaders }
       : { body: form as unknown as BodyInit });
     return res;
   }
 
   private coerceToFormPart(
-    file: Blob | ArrayBuffer | Uint8Array | ReadableStream<Uint8Array> | any,
-  ): Blob | any {
+    file: Blob | ArrayBuffer | Uint8Array | ReadableStream<Uint8Array> | unknown,
+  ): Blob | unknown {
     if (typeof Blob !== 'undefined' && file instanceof Blob) return file;
     if (file instanceof Uint8Array) return new Blob([file]);
     if (typeof ArrayBuffer !== 'undefined' && file instanceof ArrayBuffer) return new Blob([file]);
@@ -111,6 +112,7 @@ export class MspClient {
     fileKey: string,
     _options?: DownloadOptions,
   ): Promise<DownloadResult> {
+    void _options;
     const path = `/buckets/${encodeURIComponent(bucketId)}/download/${encodeURIComponent(fileKey)}`;
     const baseHeaders: Record<string, string> = { Accept: '*/*' };
     const headers = this.withAuth(baseHeaders);
@@ -143,6 +145,7 @@ export class MspClient {
     filePath: string,
     _options?: DownloadOptions,
   ): Promise<DownloadResult> {
+    void _options;
     const normalized = filePath.replace(/^\/+/, '');
     const encodedPath = normalized.split('/').map(encodeURIComponent).join('/');
     const path = `/buckets/${encodeURIComponent(bucketId)}/download/path/${encodedPath}`;
