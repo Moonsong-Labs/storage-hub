@@ -31,8 +31,6 @@ impl ExtensionOperations<crate::RuntimeCall, crate::Runtime> for crate::TxExtens
             pallet_transaction_payment::ChargeTransactionPayment::<crate::Runtime>::from(
                 minimal.tip,
             ),
-            cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim::<crate::Runtime>::new(
-            ),
             frame_metadata_hash_extension::CheckMetadataHash::new(false),
         )
     }
@@ -44,7 +42,6 @@ impl ExtensionOperations<crate::RuntimeCall, crate::Runtime> for crate::TxExtens
             crate::VERSION.transaction_version,
             genesis_block_hash,
             current_block_hash,
-            (),
             (),
             (),
             (),

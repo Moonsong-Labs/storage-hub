@@ -113,6 +113,7 @@ parachain-info = { workspace = true }
 
 # Frontier
 fp-account = { workspace = true, features = ["serde"] }
+fp-rpc = { workspace = true }
 fp-self-contained = { workspace = true, features = ["serde"] }
 pallet-ethereum = { workspace = true }
 pallet-evm = { workspace = true }
@@ -132,6 +133,7 @@ std = [
 	"cumulus-primitives-utility/std",
 	"cumulus-primitives-storage-weight-reclaim/std",
 	"fp-account/std",
+	"fp-rpc/std",
 	"fp-self-contained/std",
 	"frame-benchmarking?/std",
 	"frame-executive/std",

@@ -15320,6 +15320,7 @@ dependencies = [
  "cumulus-primitives-utility",
  "docify",
  "fp-account",
+ "fp-rpc",
  "fp-self-contained",
  "frame-benchmarking 39.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "frame-executive 39.1.0",

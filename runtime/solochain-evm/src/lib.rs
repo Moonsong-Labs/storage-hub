@@ -22,7 +22,10 @@ pub use parachains_common::BlockNumber;
 use smallvec::smallvec;
 use sp_runtime::{
     generic, impl_opaque_keys,
-    traits::{BlakeTwo256, IdentifyAccount, Verify},
+    traits::{
+        BlakeTwo256, DispatchInfoOf, Dispatchable, IdentifyAccount, PostDispatchInfoOf, Verify,
+    },
+    transaction_validity::{TransactionValidity, TransactionValidityError},
     Perbill,
 };
 use sp_std::prelude::{Vec, *};
@@ -211,15 +214,6 @@ pub const MAXIMUM_BLOCK_WEIGHT: Weight = Weight::from_parts(
     cumulus_primitives_core::relay_chain::MAX_POV_SIZE as u64,
 );
 
-/// Maximum number of blocks simultaneously accepted by the Runtime, not yet included into the
-/// relay chain.
-const UNINCLUDED_SEGMENT_CAPACITY: u32 = 2;
-/// How many parachain blocks are processed by the relay chain per parent. Limits the number of
-/// blocks authored per slot.
-const BLOCK_PROCESSING_VELOCITY: u32 = 1;
-/// Relay chain slot duration, in milliseconds.
-const RELAY_CHAIN_SLOT_DURATION_MILLIS: u32 = 6000;
-
 // Create the runtime by composing the FRAME pallets that were previously configured.
 #[frame_support::runtime]
 mod runtime {
@@ -338,4 +332,58 @@ mod benches {
         [pallet_file_system, FileSystem]
         [pallet_bucket_nfts, BucketNfts]
     );
+}
+
+impl fp_self_contained::SelfContainedCall for RuntimeCall {
+    type SignedInfo = sp_core::H160;
+
+    fn is_self_contained(&self) -> bool {
+        match self {
+            RuntimeCall::Ethereum(call) => call.is_self_contained(),
+            _ => false,
+        }
+    }
+
+    fn check_self_contained(&self) -> Option<Result<Self::SignedInfo, TransactionValidityError>> {
+        match self {
+            RuntimeCall::Ethereum(call) => call.check_self_contained(),
+            _ => None,
+        }
+    }
+
+    fn validate_self_contained(
+        &self,
+        info: &Self::SignedInfo,
+        dispatch_info: &DispatchInfoOf<Self>,
+        len: usize,
+    ) -> Option<TransactionValidity> {
+        match self {
+            RuntimeCall::Ethereum(call) => call.validate_self_contained(info, dispatch_info, len),
+            _ => None,
+        }
+    }
+
+    fn pre_dispatch_self_contained(
+        &self,
+        info: &Self::SignedInfo,
+        dispatch_info: &DispatchInfoOf<Self>,
+        len: usize,
+    ) -> Option<Result<(), TransactionValidityError>> {
+        match self {
+            RuntimeCall::Ethereum(call) => {
+                call.pre_dispatch_self_contained(info, dispatch_info, len)
+            }
+            _ => None,
+        }
+    }
+
+    fn apply_self_contained(
+        self,
+        _info: Self::SignedInfo,
+    ) -> Option<sp_runtime::DispatchResultWithInfo<PostDispatchInfoOf<Self>>> {
+        match self {
+            call @ RuntimeCall::Ethereum(_) => Some(call.dispatch(RuntimeOrigin::none())),
+            _ => None,
+        }
+    }
 }

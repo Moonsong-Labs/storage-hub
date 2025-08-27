@@ -1,9 +1,11 @@
 use crate::*;
+use codec::Encode;
 use frame_support::{
     genesis_builder_helper::{build_state, get_preset},
+    traits::{Get, KeyOwnerProofSystem, OnFinalize},
     weights::Weight,
 };
-use pallet_aura::Authorities;
+use pallet_evm::{FeeCalculator, GasWeightMapping, Runner};
 use pallet_file_system::types::StorageRequestMetadata;
 use pallet_file_system_runtime_api::*;
 use pallet_payment_streams_runtime_api::*;
@@ -18,7 +20,6 @@ use pallet_storage_providers::types::{
 use pallet_storage_providers_runtime_api::*;
 use shp_file_metadata::ChunkId;
 use sp_api::impl_runtime_apis;
-use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata, H256};
 use sp_runtime::{
     traits::Block as BlockT,
@@ -27,42 +28,14 @@ use sp_runtime::{
 };
 use sp_std::{collections::btree_map::BTreeMap, prelude::Vec};
 use sp_version::RuntimeVersion;
-use xcm::Version;
-use xcm::{
-    latest::prelude::AssetId, VersionedAssetId, VersionedAssets, VersionedLocation, VersionedXcm,
-};
-use xcm_runtime_apis::{
-    dry_run::{CallDryRunEffects, Error as XcmDryRunApiError, XcmDryRunEffects},
-    fees::Error as XcmPaymentApiError,
-};
 
 // Local module imports
 use super::{
-    AccountId, Balance, Block, Executive, InherentDataExt, Nonce, ParachainSystem, Runtime,
-    RuntimeCall, RuntimeGenesisConfig, SessionKeys, System, TransactionPayment, VERSION,
+    AccountId, Balance, Block, Executive, InherentDataExt, Nonce, Runtime, RuntimeCall,
+    RuntimeGenesisConfig, SessionKeys, System, TransactionPayment, VERSION,
 };
 
 impl_runtime_apis! {
-    /// Allows the collator client to query its runtime to determine whether it should author a block
-    impl cumulus_primitives_aura::AuraUnincludedSegmentApi<Block> for Runtime {
-        fn can_build_upon(
-            included_hash: <Block as BlockT>::Hash,
-            slot: cumulus_primitives_aura::Slot,
-        ) -> bool {
-            configs::ConsensusHook::can_build_upon(included_hash, slot)
-        }
-    }
-
-    impl sp_consensus_aura::AuraApi<Block, AuraId> for Runtime {
-        fn slot_duration() -> sp_consensus_aura::SlotDuration {
-            sp_consensus_aura::SlotDuration::from_millis(SLOT_DURATION)
-        }
-
-        fn authorities() -> Vec<AuraId> {
-            Authorities::<Runtime>::get().into_inner()
-        }
-    }
-
     impl sp_api::Core<Block> for Runtime {
         fn version() -> RuntimeVersion {
             VERSION
@@ -140,6 +113,89 @@ impl_runtime_apis! {
         }
     }
 
+    impl sp_consensus_babe::BabeApi<Block> for Runtime {
+        fn configuration() -> sp_consensus_babe::BabeConfiguration {
+            let epoch_config = Babe::epoch_config().unwrap_or(crate::configs::BABE_GENESIS_EPOCH_CONFIG);
+            sp_consensus_babe::BabeConfiguration {
+                slot_duration: Babe::slot_duration(),
+                epoch_length: crate::configs::time::EpochDurationInBlocks::get().into(),
+                c: epoch_config.c,
+                authorities: Babe::authorities().to_vec(),
+                randomness: Babe::randomness(),
+                allowed_slots: epoch_config.allowed_slots,
+            }
+        }
+
+        fn current_epoch_start() -> sp_consensus_babe::Slot {
+            Babe::current_epoch_start()
+        }
+
+        fn current_epoch() -> sp_consensus_babe::Epoch {
+            Babe::current_epoch()
+        }
+
+        fn next_epoch() -> sp_consensus_babe::Epoch {
+            Babe::next_epoch()
+        }
+
+        fn generate_key_ownership_proof(
+            _slot: sp_consensus_babe::Slot,
+            authority_id: sp_consensus_babe::AuthorityId,
+        ) -> Option<sp_consensus_babe::OpaqueKeyOwnershipProof> {
+            use codec::Encode;
+
+            Historical::prove((sp_consensus_babe::KEY_TYPE, authority_id))
+                .map(|p| p.encode())
+                .map(sp_consensus_babe::OpaqueKeyOwnershipProof::new)
+        }
+
+        fn submit_report_equivocation_unsigned_extrinsic(
+            equivocation_proof: sp_consensus_babe::EquivocationProof<<Block as BlockT>::Header>,
+            key_owner_proof: sp_consensus_babe::OpaqueKeyOwnershipProof,
+        ) -> Option<()> {
+            let key_owner_proof = key_owner_proof.decode()?;
+
+            Babe::submit_unsigned_equivocation_report(
+                equivocation_proof,
+                key_owner_proof,
+            )
+        }
+    }
+
+    impl sp_consensus_grandpa::GrandpaApi<Block> for Runtime {
+        fn grandpa_authorities() -> Vec<(pallet_grandpa::AuthorityId, u64)> {
+            Grandpa::grandpa_authorities()
+        }
+
+        fn current_set_id() -> sp_consensus_grandpa::SetId {
+            Grandpa::current_set_id()
+        }
+
+        fn submit_report_equivocation_unsigned_extrinsic(
+            equivocation_proof: sp_consensus_grandpa::EquivocationProof<
+                <Block as BlockT>::Hash,
+                sp_runtime::traits::NumberFor<Block>,
+            >,
+            key_owner_proof: sp_consensus_grandpa::OpaqueKeyOwnershipProof,
+        ) -> Option<()> {
+            let key_owner_proof = key_owner_proof.decode()?;
+
+            Grandpa::submit_unsigned_equivocation_report(
+                equivocation_proof,
+                key_owner_proof,
+            )
+        }
+
+        fn generate_key_ownership_proof(
+            _set_id: sp_consensus_grandpa::SetId,
+            authority_id: sp_consensus_grandpa::AuthorityId,
+        ) -> Option<sp_consensus_grandpa::OpaqueKeyOwnershipProof> {
+            Historical::prove((sp_consensus_grandpa::KEY_TYPE, authority_id))
+                .map(|p| p.encode())
+                .map(sp_consensus_grandpa::OpaqueKeyOwnershipProof::new)
+        }
+    }
+
     impl frame_system_rpc_runtime_api::AccountNonceApi<Block, AccountId, Nonce> for Runtime {
         fn account_nonce(account: AccountId) -> Nonce {
             System::account_nonce(account)
@@ -190,63 +246,6 @@ impl_runtime_apis! {
         }
     }
 
-    impl xcm_runtime_apis::fees::XcmPaymentApi<Block> for Runtime {
-        fn query_acceptable_payment_assets(xcm_version: xcm::Version) -> Result<Vec<VersionedAssetId>, XcmPaymentApiError> {
-
-            let acceptable_assets = vec![AssetId(configs::xcm_config::RelayLocation::get())];
-            PolkadotXcm::query_acceptable_payment_assets(xcm_version, acceptable_assets)
-        }
-        fn query_weight_to_asset_fee(weight: Weight, asset: VersionedAssetId) -> Result<u128, XcmPaymentApiError> {
-            match asset.try_as::<AssetId>() {
-                Ok(asset_id) if asset_id.0 == configs::xcm_config::RelayLocation::get() => {
-                    // for native token
-                    Ok(<WeightToFee as sp_weights::WeightToFee>::weight_to_fee(&weight))
-                },
-                Ok(asset_id) => {
-                    log::trace!(target: "xcm::xcm_runtime_apis", "query_weight_to_asset_fee - unhandled asset_id: {asset_id:?}!");
-                    Err(XcmPaymentApiError::AssetNotFound)
-                },
-                Err(_) => {
-                    log::trace!(target: "xcm::xcm_runtime_apis", "query_weight_to_asset_fee - failed to convert asset: {asset:?}!");
-                    Err(XcmPaymentApiError::VersionedConversionFailed)
-                }
-            }
-        }
-        fn query_xcm_weight(message: VersionedXcm<()>) -> Result<Weight, XcmPaymentApiError> {
-            PolkadotXcm::query_xcm_weight(message)
-        }
-        fn query_delivery_fees(destination: VersionedLocation, message: VersionedXcm<()>) -> Result<VersionedAssets, XcmPaymentApiError> {
-            PolkadotXcm::query_delivery_fees(destination, message)
-        }
-    }
-
-    impl xcm_runtime_apis::dry_run::DryRunApi<Block, RuntimeCall, RuntimeEvent, OriginCaller> for Runtime {
-        fn dry_run_call(origin: OriginCaller, call: RuntimeCall, result_xcms_version: Version) -> Result<CallDryRunEffects<RuntimeEvent>, XcmDryRunApiError> {
-            PolkadotXcm::dry_run_call::<Runtime, configs::xcm_config::XcmRouter, OriginCaller, RuntimeCall>(origin, call, result_xcms_version)
-        }
-        fn dry_run_xcm(origin_location: VersionedLocation, xcm: VersionedXcm<RuntimeCall>) -> Result<XcmDryRunEffects<RuntimeEvent>, XcmDryRunApiError> {
-            PolkadotXcm::dry_run_xcm::<Runtime, configs::xcm_config::XcmRouter, RuntimeCall, configs::xcm_config::XcmConfig>(origin_location, xcm)
-        }
-    }
-
-    impl xcm_runtime_apis::conversions::LocationToAccountApi<Block, AccountId> for Runtime {
-        fn convert_location(location: VersionedLocation) -> Result<
-            AccountId,
-            xcm_runtime_apis::conversions::Error
-        > {
-            xcm_runtime_apis::conversions::LocationToAccountHelper::<
-                AccountId,
-                xcm_config::LocationToAccountId,
-            >::convert_location(location)
-        }
-    }
-
-    impl cumulus_primitives_core::CollectCollationInfo<Block> for Runtime {
-        fn collect_collation_info(header: &<Block as BlockT>::Header) -> cumulus_primitives_core::CollationInfo {
-            ParachainSystem::collect_collation_info(header)
-        }
-    }
-
     #[cfg(feature = "try-runtime")]
     impl frame_try_runtime::TryRuntime<Block> for Runtime {
         fn on_runtime_upgrade(checks: frame_try_runtime::UpgradeCheckSelect) -> (Weight, Weight) {
@@ -272,10 +271,10 @@ impl_runtime_apis! {
             Vec<frame_benchmarking::BenchmarkList>,
             Vec<frame_support::traits::StorageInfo>,
         ) {
-            use frame_benchmarking::{Benchmarking, BenchmarkList};
+            use frame_benchmarking::{baseline, Benchmarking, BenchmarkList};
             use frame_support::traits::StorageInfoTrait;
             use frame_system_benchmarking::Pallet as SystemBench;
-            use cumulus_pallet_session_benchmarking::Pallet as SessionBench;
+            use baseline::Pallet as BaselineBench;
 
             let mut list = Vec::<BenchmarkList>::new();
             list_benchmarks!(list, extra);
@@ -284,34 +283,25 @@ impl_runtime_apis! {
             (list, storage_info)
         }
 
+        #[allow(non_local_definitions)]
         fn dispatch_benchmark(
             config: frame_benchmarking::BenchmarkConfig
         ) -> Result<Vec<frame_benchmarking::BenchmarkBatch>, alloc::string::String> {
-            use frame_benchmarking::{BenchmarkError, Benchmarking, BenchmarkBatch};
-
+            use frame_benchmarking::{baseline, Benchmarking, BenchmarkBatch};
+            use sp_storage::TrackedStorageKey;
             use frame_system_benchmarking::Pallet as SystemBench;
-            impl frame_system_benchmarking::Config for Runtime {
-                fn setup_set_code_requirements(code: &sp_std::vec::Vec<u8>) -> Result<(), BenchmarkError> {
-                    ParachainSystem::initialize_for_set_code_benchmark(code.len() as u32);
-                    Ok(())
-                }
+            use baseline::Pallet as BaselineBench;
 
-                fn verify_set_code() {
-                    System::assert_last_event(cumulus_pallet_parachain_system::Event::<Runtime>::ValidationFunctionStored.into());
-                }
-            }
-
-            use cumulus_pallet_session_benchmarking::Pallet as SessionBench;
-            impl cumulus_pallet_session_benchmarking::Config for Runtime {}
+            impl frame_system_benchmarking::Config for Runtime {}
+            impl baseline::Config for Runtime {}
 
             use frame_support::traits::WhitelistedStorageKeys;
-            let whitelist = AllPalletsWithSystem::whitelisted_storage_keys();
+            let whitelist: Vec<TrackedStorageKey> = AllPalletsWithSystem::whitelisted_storage_keys();
 
             let mut batches = Vec::<BenchmarkBatch>::new();
             let params = (&config, &whitelist);
             add_benchmarks!(params, batches);
 
-            if batches.is_empty() { return Err("Benchmark not found for this pallet.".into()) }
             Ok(batches)
         }
     }
@@ -472,6 +462,223 @@ impl_runtime_apis! {
 
         fn query_buckets_of_user_stored_by_msp(msp_id: &ProviderIdFor<Runtime>, user: &AccountId) -> Result<sp_runtime::Vec<BucketId<Runtime>>, QueryBucketsOfUserStoredByMspError> {
             Ok(sp_runtime::Vec::from_iter(Providers::query_buckets_of_user_stored_by_msp(msp_id, user)?))
+        }
+    }
+
+    impl fp_rpc::EthereumRuntimeRPCApi<Block> for Runtime {
+        fn chain_id() -> u64 {
+            <Runtime as pallet_evm::Config>::ChainId::get()
+        }
+
+        fn account_basic(address: sp_core::H160) -> pallet_evm::Account {
+            let (account, _) = pallet_evm::Pallet::<Runtime>::account_basic(&address);
+            account
+        }
+
+        fn gas_price() -> sp_core::U256 {
+            let (gas_price, _) = <Runtime as pallet_evm::Config>::FeeCalculator::min_gas_price();
+            gas_price
+        }
+
+        fn account_code_at(address: sp_core::H160) -> Vec<u8> {
+            pallet_evm::AccountCodes::<Runtime>::get(address)
+        }
+
+        fn author() -> sp_core::H160 {
+            <pallet_evm::Pallet<Runtime>>::find_author()
+        }
+
+        fn storage_at(address: sp_core::H160, index: sp_core::U256) -> H256 {
+            let tmp = index.to_big_endian();
+            pallet_evm::AccountStorages::<Runtime>::get(address, H256::from_slice(&tmp[..]))
+        }
+
+        fn call(
+            from: sp_core::H160,
+            to: sp_core::H160,
+            data: Vec<u8>,
+            value: sp_core::U256,
+            gas_limit: sp_core::U256,
+            max_fee_per_gas: Option<sp_core::U256>,
+            max_priority_fee_per_gas: Option<sp_core::U256>,
+            nonce: Option<sp_core::U256>,
+            estimate: bool,
+            access_list: Option<Vec<(sp_core::H160, Vec<H256>)>>,
+        ) -> Result<pallet_evm::CallInfo, sp_runtime::DispatchError> {
+            let config = if estimate {
+                let mut config = <Runtime as pallet_evm::Config>::config().clone();
+                config.estimate = true;
+                Some(config)
+            } else {
+                None
+            };
+            let is_transactional = false;
+            let validate = true;
+
+            // Estimated encoded transaction size must be based on the heaviest transaction
+            // type (EIP1559Transaction) to be compatible with all transaction types.
+            let mut estimated_transaction_len = data.len() +
+                // pallet ethereum index: 1
+                // transact call index: 1
+                // Transaction enum variant: 1
+                // chain_id 8 bytes
+                // nonce: 32
+                // max_priority_fee_per_gas: 32
+                // max_fee_per_gas: 32
+                // gas_limit: 32
+                // action: 21 (enum variant + call address)
+                // value: 32
+                // access_list: 1 (empty vec size)
+                // 65 bytes signature
+                258;
+
+            if access_list.is_some() {
+                estimated_transaction_len += access_list.encoded_size();
+            }
+
+            let gas_limit = gas_limit.min(u64::MAX.into()).low_u64();
+            let without_base_extrinsic_weight = true;
+
+            let (weight_limit, proof_size_base_cost) =
+                match <Runtime as pallet_evm::Config>::GasWeightMapping::gas_to_weight(
+                    gas_limit,
+                    without_base_extrinsic_weight
+                ) {
+                    weight_limit if weight_limit.proof_size() > 0 => {
+                        (Some(weight_limit), Some(estimated_transaction_len as u64))
+                    }
+                    _ => (None, None),
+                };
+
+            <Runtime as pallet_evm::Config>::Runner::call(
+                from,
+                to,
+                data,
+                value,
+                gas_limit,
+                max_fee_per_gas,
+                max_priority_fee_per_gas,
+                nonce,
+                access_list.unwrap_or_default(),
+                is_transactional,
+                validate,
+                weight_limit,
+                proof_size_base_cost,
+                config.as_ref().unwrap_or(<Runtime as pallet_evm::Config>::config()),
+            ).map_err(|err| err.error.into())
+        }
+
+        fn create(
+            from: sp_core::H160,
+            data: Vec<u8>,
+            value: sp_core::U256,
+            gas_limit: sp_core::U256,
+            max_fee_per_gas: Option<sp_core::U256>,
+            max_priority_fee_per_gas: Option<sp_core::U256>,
+            nonce: Option<sp_core::U256>,
+            estimate: bool,
+            access_list: Option<Vec<(sp_core::H160, Vec<H256>)>>,
+        ) -> Result<pallet_evm::CreateInfo, sp_runtime::DispatchError> {
+            let config = if estimate {
+                let mut config = <Runtime as pallet_evm::Config>::config().clone();
+                config.estimate = true;
+                Some(config)
+            } else {
+                None
+            };
+            let is_transactional = false;
+            let validate = true;
+
+            let gas_limit = if gas_limit > sp_core::U256::from(u64::MAX) {
+                u64::MAX
+            } else {
+                gas_limit.low_u64()
+            };
+
+            let (weight_limit, proof_size_base_cost) = (None, None);
+
+            #[allow(clippy::or_fun_call)]
+            <Runtime as pallet_evm::Config>::Runner::create(
+                from,
+                data,
+                value,
+                gas_limit,
+                max_fee_per_gas,
+                max_priority_fee_per_gas,
+                nonce,
+                access_list.unwrap_or_default(),
+                is_transactional,
+                validate,
+                weight_limit,
+                proof_size_base_cost,
+                config.as_ref().unwrap_or(<Runtime as pallet_evm::Config>::config()),
+            ).map_err(|err| err.error.into())
+        }
+
+        fn current_transaction_statuses() -> Option<Vec<fp_rpc::TransactionStatus>> {
+            pallet_ethereum::CurrentTransactionStatuses::<Runtime>::get()
+        }
+
+        fn current_block() -> Option<pallet_ethereum::Block> {
+            pallet_ethereum::CurrentBlock::<Runtime>::get()
+        }
+
+        fn current_receipts() -> Option<Vec<pallet_ethereum::Receipt>> {
+            pallet_ethereum::CurrentReceipts::<Runtime>::get()
+        }
+
+        fn current_all() -> (
+            Option<pallet_ethereum::Block>,
+            Option<Vec<pallet_ethereum::Receipt>>,
+            Option<Vec<fp_rpc::TransactionStatus>>,
+        ) {
+            (
+                pallet_ethereum::CurrentBlock::<Runtime>::get(),
+                pallet_ethereum::CurrentReceipts::<Runtime>::get(),
+                pallet_ethereum::CurrentTransactionStatuses::<Runtime>::get()
+            )
+        }
+
+        fn extrinsic_filter(
+            xts: Vec<<Block as BlockT>::Extrinsic>,
+        ) -> Vec<pallet_ethereum::Transaction> {
+            xts.into_iter().filter_map(|xt| match xt.0.function {
+                RuntimeCall::Ethereum(pallet_ethereum::Call::transact { transaction }) => Some(transaction),
+                _ => None
+            }).collect::<Vec<pallet_ethereum::Transaction>>()
+        }
+
+        fn elasticity() -> Option<sp_runtime::Permill> {
+            None
+        }
+
+        fn gas_limit_multiplier_support() {}
+
+        fn pending_block(
+            xts: Vec<<Block as BlockT>::Extrinsic>,
+        ) -> (Option<pallet_ethereum::Block>, Option<Vec<fp_rpc::TransactionStatus>>) {
+            for ext in xts.into_iter() {
+                let _ = Executive::apply_extrinsic(ext);
+            }
+
+            Ethereum::on_finalize(System::block_number() + 1);
+
+            (
+                pallet_ethereum::CurrentBlock::<Runtime>::get(),
+                pallet_ethereum::CurrentTransactionStatuses::<Runtime>::get()
+            )
+        }
+
+        fn initialize_pending_block(header: &<Block as BlockT>::Header) {
+            Executive::initialize_block(header);
+        }
+    }
+
+    impl fp_rpc::ConvertTransactionRuntimeApi<Block> for Runtime {
+        fn convert_transaction(transaction: pallet_ethereum::Transaction) -> <Block as BlockT>::Extrinsic {
+            UncheckedExtrinsic::new_bare(
+                pallet_ethereum::Call::<Runtime>::transact { transaction }.into(),
+            )
         }
     }
 }
