@@ -11,7 +11,7 @@
         "wasm/pkg"
     ],
     "scripts": {
-        "build": "node ../scripts/build.js",
+        "build": "node ../scripts/build.js && tsc -p tsconfig.json --emitDeclarationOnly --declaration --outDir dist",
         "build:wasm": "wasm-pack build ./wasm --target web --release --out-dir pkg",
         "dev": "node ../scripts/build.js --watch",
         "lint": "eslint \"{src/**/*.ts,src/**/*.tsx}\"",
@@ -23,7 +23,7 @@
     },
     "dependencies": {
         "@polkadot/types": "^10.10.3",
-        "@storagehub/wasm": "file:./wasm/pkg",
+        "@storagehub/wasm": "workspace:*",
         "ethers": "^6.15.0"
     },
     "devDependencies": {

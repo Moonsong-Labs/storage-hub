@@ -2,4 +2,3 @@ packages:
   - 'core'
   - 'core/wasm/pkg'
   - 'msp-client'
-  - 'e2e'

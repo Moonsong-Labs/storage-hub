@@ -5,12 +5,8 @@
         "outDir": "dist",
         "module": "ESNext",
         "moduleResolution": "Bundler",
-        "paths": {
-            "@storagehub-sdk/core": [
-                "../core/src/index.ts",
-                "../core/src"
-            ]
-        }
+        "declaration": true,
+        "emitDeclarationOnly": false
     },
     "include": [
         "src/**/*"
