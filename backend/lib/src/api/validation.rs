@@ -1,6 +1,7 @@
-use axum::http::HeaderMap;
+use axum_extra::headers::{authorization::Bearer, Authorization};
 use base64::{engine::general_purpose, Engine};
 use rand::Rng;
+use serde_json::Value;
 
 use crate::error::Error;
 
@@ -41,23 +42,30 @@ pub fn generate_mock_jwt() -> String {
     )
 }
 
-pub fn extract_bearer_token(auth_header: Option<&str>) -> Result<String, Error> {
-    match auth_header {
-        Some(header) if header.starts_with("Bearer ") => Ok(header[7..].to_string()),
-        _ => Err(Error::Unauthorized(
-            "Missing or invalid authorization header".to_string(),
-        )),
-    }
+// TODO(MOCK): verify JWT signature
+fn validate_token(jtw: Value) -> Result<Value, Error> {
+    Ok(jtw)
 }
 
-pub fn extract_token(headers: &HeaderMap) -> Result<String, Error> {
-    let auth_header = headers
-        .get(axum::http::header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok());
-    extract_bearer_token(auth_header)
-}
-
-pub fn validate_token(_token: &str) -> Result<(), Error> {
-    // Mock validation - in production this would verify JWT
-    Ok(())
+/// Extracts, decodes and verifies the JWT
+pub fn extract_bearer_token(auth: &Authorization<Bearer>) -> Result<Value, Error> {
+    auth.token()
+        .split('.') // JWT is header.payload.signature
+        .nth(1)
+        .ok_or_else(|| Error::Unauthorized("Invalid token payload format".to_string()))
+        .and_then(|payload| {
+            use base64::{engine::general_purpose, Engine};
+            general_purpose::STANDARD
+                .decode(payload)
+                .map_err(|e| Error::Unauthorized(format!("Base64 decode error: {}", e)))
+        })
+        .and_then(|bytes| {
+            String::from_utf8(bytes)
+                .map_err(|e| Error::Unauthorized(format!("UTF-8 decode error: {}", e)))
+        })
+        .and_then(|s| {
+            serde_json::from_str::<serde_json::Value>(&s)
+                .map_err(|e| Error::Unauthorized(format!("JSON decode error: {}", e)))
+        })
+        .and_then(validate_token)
 }

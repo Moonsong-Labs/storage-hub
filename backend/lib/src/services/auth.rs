@@ -6,7 +6,7 @@ use crate::{
 
 #[derive(Clone, Default)]
 pub struct AuthService {
-    // In real implementation, would store nonces and sessions
+    // TODO(MOCK): store nonces and sessions
 }
 
 impl AuthService {
@@ -32,11 +32,12 @@ impl AuthService {
         })
     }
 
-    pub async fn verify_signature(
+    pub async fn verify_eth_signature(
         &self,
         _message: &str,
         signature: &str,
     ) -> Result<VerifyResponse, Error> {
+        // TODO(MOCK): check that the address matches the signature
         if !signature.starts_with("0x") || signature.len() != 132 {
             return Err(Error::Unauthorized("Invalid signature".to_string()));
         }
@@ -50,12 +51,14 @@ impl AuthService {
     }
 
     pub async fn refresh_token(&self, _old_token: &str) -> Result<TokenResponse, Error> {
+        // TODO(MOCK): refresh token
         Ok(TokenResponse {
             token: generate_mock_jwt(),
         })
     }
 
     pub async fn get_profile(&self, _token: &str) -> Result<ProfileResponse, Error> {
+        // TODO(MOCK): retrieve profile from token
         Ok(ProfileResponse {
             address: "0x1234567890123456789012345678901234567890".to_string(),
             ens: "user.eth".to_string(),
@@ -63,7 +66,7 @@ impl AuthService {
     }
 
     pub async fn logout(&self, _token: &str) -> Result<(), Error> {
-        // In real implementation, would invalidate the token
+        // TODO(MOCK): invalidate the token
         Ok(())
     }
 }
