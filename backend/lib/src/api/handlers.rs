@@ -16,6 +16,7 @@ use tokio_util::io::ReaderStream;
 
 use crate::{
     api::validation::extract_bearer_token,
+    constants::mocks::MOCK_ADDRESS,
     error::Error,
     models::{
         auth::{NonceRequest, VerifyRequest},
@@ -109,8 +110,7 @@ pub async fn list_buckets(
     let address = payload
         .get("address")
         .and_then(|a| a.as_str())
-        // TODO(MOCK): address used for mocking
-        .unwrap_or("0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac");
+        .unwrap_or(MOCK_ADDRESS);
 
     let response = services.msp.list_user_buckets(address).await?;
     Ok(Json(response))
@@ -255,8 +255,7 @@ pub async fn payment_stream(
     let address = auth
         .get("address")
         .and_then(|a| a.as_str())
-        // TODO(MOCK): address used for mocking
-        .unwrap_or("0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac");
+        .unwrap_or(MOCK_ADDRESS);
     let response = services.msp.get_payment_stream(address).await?;
     Ok(Json(response))
 }
