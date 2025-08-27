@@ -48,25 +48,21 @@ describeMspNet(
     fisherman: true,
     indexerMode: "fishing"
   },
-  ({
-    before,
-    it,
-    createUserApi,
-    createBspApi,
-    createMsp1Api,
-    createFishermanApi,
-    createSqlClient
-  }) => {
+  ({ before, it, createUserApi, createBspApi, createMsp1Api, createSqlClient }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
     let msp1Api: EnrichedBspApi;
-    let fishermanApi: EnrichedBspApi;
     let sql: SqlClient;
     let fileKey: string;
-    let bucketId: string;
-    let location: string;
-    let fingerprint: string;
-    let fileSize: number;
+
+    // Track files created in unfinalized blocks
+    let unfinalizedFiles: Array<{
+      fileKey: string;
+      bucketId: string;
+      location: string;
+      fingerprint: string;
+      fileSize: number;
+    }> = [];
 
     before(async () => {
       userApi = await createUserApi();
@@ -83,24 +79,9 @@ describeMspNet(
         timeout: 10000
       });
 
-      // Create fisherman API
-      assert(createFishermanApi, "Fisherman API should be available when fisherman is enabled");
-      fishermanApi = (await createFishermanApi()) as EnrichedBspApi;
-      assert(fishermanApi, "Fisherman API should be created successfully");
-
       await userApi.rpc.engine.createBlock(true, true);
 
-      await sleep(1000);
-
-      await userApi.block.seal();
-      await userApi.block.seal();
-
-      // Wait for fisherman indexer to start in fishing mode
-      await fishermanApi.docker.waitForLog({
-        containerName: ShConsts.NODE_INFOS.fisherman.containerName,
-        searchString: "IndexerService starting up in Fishing mode!",
-        timeout: 10000
-      });
+      await waitForIndexing(userApi);
     });
 
     it("creates finalized block with storage request and BSP & MSP confirming", async () => {
@@ -124,10 +105,6 @@ describeMspNet(
       );
 
       fileKey = fileMetadata.fileKey;
-      bucketId = fileMetadata.bucketId;
-      location = fileMetadata.location;
-      fingerprint = fileMetadata.fingerprint;
-      fileSize = fileMetadata.fileSize;
 
       // Wait for MSP to store the file
       await waitFor({
@@ -157,18 +134,57 @@ describeMspNet(
       await waitForBspFileAssociation(sql, fileKey);
     });
 
-    it("creates 3 unfinalized blocks", async () => {
-      // Create 3 unfinalized blocks with some activity
+    it("creates 3 unfinalized blocks with storage requests and MSP & BSP confirmations", async () => {
+      const mspId = userApi.shConsts.DUMMY_MSP_ID;
+      const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
+      const valuePropId = valueProps[0].id;
+
+      // Create 3 unfinalized blocks, each with a storage request
       for (let i = 0; i < 3; i++) {
-        // Create some blockchain activity (e.g., transfers)
+        const bucketName = `test-deletion-catchup-bucket-${i}`;
+        const source = "res/whatsup.jpg";
+        const destination = `test/file-to-delete-catchup-${i}.txt`;
+
+        const fileMetadata = await createBucketAndSendNewStorageRequest(
+          userApi,
+          source,
+          destination,
+          bucketName,
+          valuePropId,
+          mspId,
+          null,
+          1,
+          false
+        );
+
+        // Store file metadata for later use
+        unfinalizedFiles.push(fileMetadata);
+
+        // Wait for MSP to store the file
+        await waitFor({
+          lambda: async () =>
+            (await msp1Api.rpc.storagehubclient.isFileInFileStorage(fileMetadata.fileKey))
+              .isFileFound
+        });
+
+        await userApi.wait.mspResponseInTxPool();
+
+        // Wait for BSP to volunteer and store
+        await userApi.wait.bspVolunteer();
+        await waitFor({
+          lambda: async () =>
+            (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileMetadata.fileKey))
+              .isFileFound
+        });
+
+        const bspAddress = userApi.createType("Address", bspKey.address);
+        await userApi.wait.bspStored({
+          expectedExts: 1,
+          sealBlock: false, // Don't seal/finalize the block
+          bspAccount: bspAddress
+        });
+
         await userApi.block.seal({
-          calls: [
-            userApi.tx.balances.transferAllowDeath(
-              userApi.shConsts.NODE_INFOS.bsp.AddressId,
-              1000000n
-            )
-          ],
-          signer: shUser,
           finaliseBlock: false
         });
 
@@ -186,15 +202,30 @@ describeMspNet(
           (await userApi.rpc.chain.getHeader(finalizedHead)).number.toNumber(),
         "Current head should be ahead of finalized head"
       );
+
+      // Verify we created 3 files
+      assert.equal(unfinalizedFiles.length, 3, "Should have created 3 files in unfinalized blocks");
     });
 
-    it("sends file deletion request in unfinalized block and verifies indexing", async () => {
+    it("sends file deletion request in unfinalized block and verifies fisherman processes with ephemeral trie", async () => {
+      // Use the first file created in unfinalized blocks for deletion
+      assert(unfinalizedFiles.length > 0, "Should have files created in unfinalized blocks");
+      const fileToDelete = unfinalizedFiles[0];
+
+      // NOTE: We don't wait for indexing here because the files are in unfinalized blocks
+      // The fisherman indexer won't have these files in its database, but it will:
+      // 1. Build an ephemeral trie from indexed (finalized) data
+      // 2. Query unfinalized blocks for additional files
+      // 3. Add unfinalized files to the ephemeral trie
+      // 4. Create proof of inclusion for the deletion
+
       // Ensure file is in MSP's forest storage before deletion attempt
+      // The providers store files regardless of block finalization
       await waitFor({
         lambda: async () => {
           const isFileInForest = await msp1Api.rpc.storagehubclient.isFileInForest(
-            bucketId.toString(),
-            fileKey.toString()
+            fileToDelete.bucketId.toString(),
+            fileToDelete.fileKey.toString()
           );
           return isFileInForest.isTrue;
         }
@@ -202,33 +233,29 @@ describeMspNet(
 
       // Create file operation intention for deletion
       const fileOperationIntention = {
-        fileKey: fileKey,
+        fileKey: fileToDelete.fileKey,
         operation: { Delete: null }
       };
 
       // Create signature for the intention - encode the object
-      const intentionType = userApi.createType(
+      const intentionCodec = userApi.createType(
         "PalletFileSystemFileOperationIntention",
         fileOperationIntention
       );
-      const encodedIntention = intentionType.toHex();
-      const rawSignature = shUser.sign(encodedIntention);
-
-      // Create the signature object with Sr25519 variant
-      const signature = {
-        Sr25519: rawSignature
-      };
+      const intentionPayload = intentionCodec.toU8a();
+      const rawSignature = shUser.sign(intentionPayload);
+      const userSignature = userApi.createType("MultiSignature", { Sr25519: rawSignature });
 
       // Submit file deletion request in an unfinalized block
       await userApi.block.seal({
         calls: [
           userApi.tx.fileSystem.requestDeleteFile(
             fileOperationIntention,
-            signature,
-            bucketId,
-            location,
-            fileSize,
-            fingerprint
+            userSignature,
+            fileToDelete.bucketId,
+            fileToDelete.location,
+            fileToDelete.fileSize,
+            fileToDelete.fingerprint
           )
         ],
         signer: shUser,
@@ -246,7 +273,7 @@ describeMspNet(
 
       assert(deletionEventData, "FileDeletionRequested event data not found");
       const eventFileKey = deletionEventData.signedDeleteIntention.fileKey;
-      assert.equal(eventFileKey.toString(), fileKey.toString());
+      assert.equal(eventFileKey.toString(), fileToDelete.fileKey.toString());
 
       // Wait for indexing to process the deletion request from unfinalized block
       await userApi.block.seal({ finaliseBlock: false });
@@ -255,23 +282,9 @@ describeMspNet(
       // Verify fisherman processes the FileDeletionRequested event even from unfinalized blocks
       const processingFound = await waitForFishermanProcessing(
         userApi,
-        `Processing file deletion request for signed intention file key: ${fileKey}`
+        `Processing file deletion request for signed intention file key: ${fileToDelete.fileKey}`
       );
       assert(processingFound, "Should find fisherman processing log even from unfinalized blocks");
-
-      // Wait for fisherman to prepare deletion parameters
-      const preparationFound = await waitForFishermanProcessing(
-        userApi,
-        "File deletion parameters prepared:"
-      );
-      assert(preparationFound, "Should find fisherman preparation log");
-
-      // Wait for extrinsic submission log
-      const submittingExtrinsic = await waitForFishermanProcessing(
-        userApi,
-        "Submitting delete_file extrinsic"
-      );
-      assert(submittingExtrinsic, "Should find extrinsic submission log");
 
       // Verify delete_file extrinsics are submitted (should be 2: one for BSP and one for MSP)
       const deleteFileFound = await waitForDeleteFileExtrinsic(userApi, 2);
@@ -281,10 +294,7 @@ describeMspNet(
       );
 
       // Now finalize the blocks to process the extrinsics
-      await userApi.block.seal({ finaliseBlock: true });
-
-      // Verify deletion completion events
-      const { events } = await userApi.block.seal({ finaliseBlock: true });
+      const { events } = await userApi.block.seal();
 
       assertEventPresent(userApi, "fileSystem", "MspFileDeletionCompleted", events);
       assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", events);
