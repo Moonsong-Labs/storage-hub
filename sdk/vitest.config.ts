@@ -6,11 +6,6 @@ import { resolve } from 'node:path';
 const COVERAGE_THRESHOLD = 0;
 
 export default defineConfig({
-    resolve: {
-        alias: {
-            '@storagehub/wasm': resolve(fileURLToPath(new URL('.', import.meta.url)), 'core/wasm/pkg'),
-        },
-    },
     test: {
         environment: 'node',
         setupFiles: ['./vitest.setup.ts'],

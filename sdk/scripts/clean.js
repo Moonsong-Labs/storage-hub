@@ -20,13 +20,13 @@ pathsToRemove.forEach((relativePath) => {
     }
 });
 
-// Remove files inside core/wasm/pkg but keep the directory itself
+// Remove files inside core/wasm/pkg but keep the directory itself (and its package.json)
 const pkgDir = join(root, 'core', 'wasm', 'pkg');
 if (existsSync(pkgDir)) {
     const { readdirSync } = await import('node:fs');
     for (const entry of readdirSync(pkgDir)) {
-        // Preserve hidden files such as .gitkeep
-        if (entry.startsWith('.')) continue;
+        // Preserve hidden files such as .gitkeep and the workspace package manifest
+        if (entry.startsWith('.') || entry === 'package.json') continue;
         const entryPath = join(pkgDir, entry);
         rmSync(entryPath, { recursive: true, force: true });
     }

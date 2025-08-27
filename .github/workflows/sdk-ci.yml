@@ -2,11 +2,11 @@ name: sdk-ci
 
 on:
   push:
-    paths:
-      - "sdk/**"
+    branches:
+      - '**'
   pull_request:
-    paths:
-      - "sdk/**"
+    branches:
+      - '**'
   workflow_dispatch:
 
 jobs:

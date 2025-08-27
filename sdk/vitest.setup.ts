@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import initWasm from '@storagehub/wasm';
+import initWasm from './core/wasm/pkg/storagehub_wasm.js';
 
 // Resolve the path to the *.wasm file relative to the compiled JS wrapper
 const pkgDir = resolve(dirname(fileURLToPath(import.meta.url)), 'core/wasm/pkg');
