@@ -1,10 +1,10 @@
 import { WalletBase } from './base.js';
 import {
   BrowserProvider,
-  Transaction,
-  hexlify,
-  type TransactionRequest,
   type Eip1193Provider,
+  hexlify,
+  Transaction,
+  type TransactionRequest,
 } from 'ethers';
 
 declare global {

@@ -52,21 +52,19 @@ export class HttpClient {
 
         try {
             // Auto-encode JSON bodies if caller passed a plain object and no Content-Type
-            let body = options.body as any;
             const hasExplicitContentType = Object.keys(headers).some(
                 (h) => h.toLowerCase() === 'content-type'
             );
-            const isBodyInitLike =
-                typeof body === 'string' ||
-                body instanceof Uint8Array ||
-                (typeof ArrayBuffer !== 'undefined' && body instanceof ArrayBuffer) ||
-                (typeof Blob !== 'undefined' && body instanceof Blob) ||
-                (typeof FormData !== 'undefined' && body instanceof FormData) ||
-                (typeof ReadableStream !== 'undefined' && body instanceof ReadableStream);
-
-            if (body !== undefined && body !== null && !isBodyInitLike && !hasExplicitContentType) {
-                headers['Content-Type'] = 'application/json';
-                body = JSON.stringify(body);
+            const candidate = options.body;
+            let body: BodyInit | null = null;
+            if (candidate !== undefined && candidate !== null) {
+                if (this.isBodyInit(candidate)) {
+                    body = candidate;
+                } else {
+                    // For non-BodyInit payloads, send JSON
+                    if (!hasExplicitContentType) headers['Content-Type'] = 'application/json';
+                    body = JSON.stringify(candidate);
+                }
             }
 
             const res = await this.fetchImpl(url, {
@@ -96,12 +94,13 @@ export class HttpClient {
             }
 
             return (maybeJson as T) ?? (text as unknown as T);
-        } catch (err: any) {
-            if (err?.name === 'AbortError') {
+        } catch (err: unknown) {
+            if (this.isAbortError(err)) {
                 throw new TimeoutError(`Request timed out for ${method} ${path}`);
             }
             if (err instanceof HttpError) throw err;
-            throw new NetworkError(err?.message ?? `Network error for ${method} ${path}`);
+            const msg = this.getErrorMessage(err);
+            throw new NetworkError(msg ?? `Network error for ${method} ${path}`);
         } finally {
             if (timer) clearTimeout(timer);
         }
@@ -147,5 +146,35 @@ export class HttpClient {
         } catch {
             return undefined;
         }
+    }
+
+    private isBodyInit(value: unknown): value is BodyInit {
+        return (
+            typeof value === 'string' ||
+            value instanceof Uint8Array ||
+            (typeof ArrayBuffer !== 'undefined' && value instanceof ArrayBuffer) ||
+            (typeof Blob !== 'undefined' && value instanceof Blob) ||
+            (typeof FormData !== 'undefined' && value instanceof FormData) ||
+            (typeof ReadableStream !== 'undefined' && value instanceof ReadableStream)
+        );
+    }
+
+    private isAbortError(err: unknown): err is { name: string } {
+        return (
+            typeof err === 'object' &&
+            err !== null &&
+            'name' in err &&
+            typeof (err as { name?: unknown }).name === 'string' &&
+            (err as { name: string }).name === 'AbortError'
+        );
+    }
+
+    private getErrorMessage(err: unknown): string | undefined {
+        if (typeof err === 'string') return err;
+        if (typeof err === 'object' && err !== null && 'message' in err) {
+            const m = (err as { message?: unknown }).message;
+            if (typeof m === 'string') return m;
+        }
+        return undefined;
     }
 }
