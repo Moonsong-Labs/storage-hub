@@ -1,4 +1,6 @@
 //! MSP service implementation with mock data
+//!
+//! TODO(MOCK): the entire set of methods of the MspService returns mocked data
 
 use std::sync::Arc;
 
