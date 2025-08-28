@@ -64,6 +64,12 @@ importers:
         specifier: ^20.11.19
         version: 20.19.9
 
+  msp-client:
+    dependencies:
+      '@storagehub-sdk/core':
+        specifier: workspace:*
+        version: link:../core
+
 packages:
 
   /@adraffy/ens-normalize@1.10.1:
@@ -2674,5 +2680,5 @@ packages:
 
   file:core/wasm/pkg:
     resolution: {directory: core/wasm/pkg, type: directory}
-    name: storagehub-wasm
+    name: pkg
     dev: false
