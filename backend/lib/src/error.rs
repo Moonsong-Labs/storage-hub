@@ -22,6 +22,18 @@ pub enum Error {
     #[error("Not found: {0}")]
     NotFound(String),
 
+    #[error("Bad request: {0}")]
+    BadRequest(String),
+
+    #[error("Unauthorized: {0}")]
+    Unauthorized(String),
+
+    #[error("Forbidden: {0}")]
+    Forbidden(String),
+
+    #[error("Conflict: {0}")]
+    Conflict(String),
+
     #[error("Internal server error")]
     Internal,
 }
@@ -36,6 +48,10 @@ impl IntoResponse for Error {
             Error::Storage(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
             Error::Database(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
             Error::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
+            Error::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
+            Error::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg),
+            Error::Forbidden(msg) => (StatusCode::FORBIDDEN, msg),
+            Error::Conflict(msg) => (StatusCode::CONFLICT, msg),
             Error::Internal => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Internal error".to_string(),
