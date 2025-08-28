@@ -495,7 +495,10 @@ impl<Runtime: StorageEnableRuntime> ActorEventLoop<FishermanService<Runtime>>
                             let block_number = *notification.header.number();
                             let block_hash = notification.hash;
 
-                            // TODO: Only monitor block if it is the new best block
+                            // Only process new best blocks
+                            if !notification.is_new_best {
+                                return;
+                            }
 
                             if let Err(e) = self
                                 .service
