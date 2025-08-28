@@ -6,14 +6,7 @@
         "module": "NodeNext",
         "moduleResolution": "NodeNext",
         "baseUrl": ".",
-        "paths": {
-            "@storagehub-sdk/core": [
-                "../core/dist/index.d.ts"
-            ],
-            "@storagehub-sdk/core/*": [
-                "../core/dist/*"
-            ]
-        },
+        "paths": {},
         "declaration": true,
         "emitDeclarationOnly": false
     },
