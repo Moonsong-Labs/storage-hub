@@ -348,26 +348,24 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
             .client
             .runtime_api()
             .decode_generic_apply_delta_event_info(*block_hash, event_info)
-        {
-            Ok(runtime_api_result) => match runtime_api_result {
-                Ok(bucket_id) => bucket_id,
-                Err(e) => {
-                    error!(
-                        target: LOG_TARGET,
-                        "Failed to decode BucketId from event info: {:?}",
-                        e
-                    );
-                    return;
-                }
-            },
-            Err(e) => {
+            .map_err(|e| {
                 error!(
                     target: LOG_TARGET,
                     "Error while calling runtime API to decode BucketId from event info: {:?}",
                     e
                 );
-                return;
-            }
+            })
+            .and_then(|res| {
+                res.map_err(|e| {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to decode BucketId from event info: {:?}",
+                        e
+                    );
+                })
+            }) {
+            Ok(bucket_id) => bucket_id,
+            Err(_) => return,
         };
 
         // Check if bucket ID matches the target bucket
