@@ -10,6 +10,7 @@ use crate::{schema::msp_file, types::OnchainMspId, DbConnection};
 #[diesel(belongs_to(super::File, foreign_key = file_id))]
 pub struct MspFile {
     pub msp_id: i64,
+    // TODO: Why is this is a signed int?
     pub file_id: i64,
 }
 

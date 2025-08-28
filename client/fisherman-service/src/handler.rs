@@ -334,14 +334,13 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
         file_key_states: &mut HashMap<Hash, FileKeyOperation>,
     ) {
         // Check that event_info contains bucket ID
-        if event_info.is_none() {
+        let Some(event_info) = event_info else {
             error!(
                 target: LOG_TARGET,
                 "MutationsApplied event with `None` event info, when it is expected to contain the BucketId of the bucket that was mutated."
             );
             return;
-        }
-        let event_info = event_info.expect("Just checked that this is not None; qed");
+        };
 
         // Decode bucket ID from event info
         let bucket_id = match self

@@ -257,6 +257,7 @@ impl BspFile {
     }
 
     // TODO: Add paging for performance
+    // TODO: Make this and other db model functions return actual types instead of raw bytes for example
     pub async fn get_all_file_keys_for_bsp<'a>(
         conn: &mut DbConnection<'a>,
         onchain_bsp_id: OnchainBspId,

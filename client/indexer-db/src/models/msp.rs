@@ -11,6 +11,7 @@ use crate::{
 };
 
 /// Table that holds the MSPs.
+// TODO: Use UUIDs instead of id
 #[derive(Debug, Queryable, Insertable, Selectable)]
 #[diesel(table_name = msp)]
 pub struct Msp {

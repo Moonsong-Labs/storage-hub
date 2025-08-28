@@ -76,6 +76,7 @@ impl ToSql<Text, Pg> for OnchainBspId {
     }
 }
 
+// TODO: Add unit tests demonstrating read and write operations
 impl FromSql<Text, Pg> for OnchainBspId {
     fn from_sql(bytes: diesel::pg::PgValue) -> DeserializeResult<Self> {
         let hex_string = <String as FromSql<Text, Pg>>::from_sql(bytes)?;
@@ -151,6 +152,7 @@ impl ToSql<Text, Pg> for OnchainMspId {
     }
 }
 
+// TODO: Add unit tests demonstrating read and write operations
 impl FromSql<Text, Pg> for OnchainMspId {
     fn from_sql(bytes: diesel::pg::PgValue) -> DeserializeResult<Self> {
         let hex_string = <String as FromSql<Text, Pg>>::from_sql(bytes)?;
