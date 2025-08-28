@@ -2,11 +2,11 @@ name: sdk-ci
 
 on:
   push:
-    paths:
-      - "sdk/**"
+    branches:
+      - '**'
   pull_request:
-    paths:
-      - "sdk/**"
+    branches:
+      - '**'
 
 jobs:
   sdk:
@@ -56,6 +56,10 @@ jobs:
       # Install dependencies
       - name: Install dependencies
         run: pnpm install
+
+      # Build packages
+      - name: Build
+        run: pnpm build
 
       # Lint & format check
       - name: Lint
