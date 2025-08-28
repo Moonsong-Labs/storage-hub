@@ -1,0 +1,237 @@
+name: SDK E2E (Playwright)
+
+on:
+  pull_request:
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
+    inputs:
+      run_msp:
+        description: 'Run MSP E2E tests'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  FORCE_COLOR: 1
+  HEADLESS: false
+
+concurrency:
+  group: sdk-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  setup-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm & cache
+        uses: ./.github/workflow-templates/setup-pnpm
+        with:
+          node_version: 23
+
+      - name: Install Rust toolchain (for wasm)
+        uses: actions-rust-lang/setup-rust-toolchain@v1.8
+        with:
+          target: wasm32-unknown-unknown
+          cache: false
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache wasm-pack
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/wasm-pack
+          key: wasm-pack-v0.12.1
+
+      - name: Install wasm-pack
+        run: curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
+
+      - name: Install dependencies (sdk)
+        working-directory: sdk
+        run: pnpm install --ignore-scripts
+
+      - name: Build core WASM pkg
+        working-directory: sdk
+        run: pnpm build:wasm
+
+      - name: Build SDK
+        working-directory: sdk
+        run: pnpm build
+
+      - name: Install e2e deps (sdk/e2e) to warm cache
+        working-directory: sdk/e2e
+        run: pnpm install --ignore-scripts
+
+      - name: Pre-install Playwright browsers to warm cache (no system deps)
+        working-directory: sdk/e2e
+        run: pnpm exec playwright install chromium
+
+      - name: Upload SDK build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-build-dist
+          if-no-files-found: error
+          path: |
+            sdk/core/dist
+            sdk/msp-client/dist
+            sdk/core/wasm/pkg
+
+  e2e-metamask:
+    needs: setup-e2e
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm & cache
+        uses: ./.github/workflow-templates/setup-pnpm
+        with:
+          node_version: 23
+
+      - name: Download SDK build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: sdk-build-dist
+          path: .
+
+      - name: Install dependencies (sdk)
+        working-directory: sdk
+        run: pnpm install --ignore-scripts
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-ms-playwright-${{ hashFiles('sdk/e2e/pnpm-lock.yaml', 'sdk/e2e/package.json') }}
+
+      - name: Install e2e deps (sdk/e2e)
+        working-directory: sdk/e2e
+        run: pnpm install --ignore-scripts
+
+      - name: Install Playwright Chromium with system deps (sdk/e2e)
+        working-directory: sdk/e2e
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Start dApp server (sdk root)
+        working-directory: sdk
+        run: |
+          nohup python3 -m http.server 3000 --directory . > /dev/null 2>&1 &
+          echo "Waiting for http://localhost:3000/e2e/page/index.html ..."
+          for i in {1..60}; do
+            if curl -sSf http://localhost:3000/e2e/page/index.html > /dev/null; then echo "Server is up"; break; fi
+            sleep 1
+          done
+
+      - name: Run Playwright tests (metamask) (xvfb)
+        working-directory: sdk/e2e
+        run: xvfb-run -a pnpm exec playwright test --project metamask
+
+      - name: Upload Playwright report (metamask)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-metamask
+          path: /tmp/playwright-report/
+          retention-days: 14
+
+      - name: Upload Playwright artifacts (metamask)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts-metamask
+          path: /tmp/test-results/
+          retention-days: 14
+
+  e2e-msp:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_msp == 'true' }}
+    needs: setup-e2e
+    runs-on: ubuntu-latest
+    # Placeholder services for DB and Backend (enable later)
+    # services:
+    #   db:
+    #     image: postgres:16
+    #     env:
+    #       POSTGRES_USER: storagehub
+    #       POSTGRES_PASSWORD: storagehub
+    #       POSTGRES_DB: storagehub
+    #     ports:
+    #       - 5432:5432
+    #     options: >-
+    #       --health-cmd="pg_isready -U storagehub"
+    #       --health-interval=10s
+    #       --health-timeout=5s
+    #       --health-retries=30
+    #   backend:
+    #     image: ghcr.io/your-org/storagehub-msp-backend:latest
+    #     env:
+    #       DATABASE_URL: postgres://storagehub:storagehub@localhost:5432/storagehub
+    #     ports:
+    #       - 8080:8080
+    #     options: >-
+    #       --health-cmd="curl -sf http://localhost:8080/health || exit 1"
+    #       --health-interval=10s
+    #       --health-timeout=5s
+    #       --health-retries=60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm & cache
+        uses: ./.github/workflow-templates/setup-pnpm
+        with:
+          node_version: 23
+
+      - name: Download SDK build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: sdk-build-dist
+          path: .
+
+      - name: Install dependencies (sdk)
+        working-directory: sdk
+        run: pnpm install --ignore-scripts
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-ms-playwright-${{ hashFiles('sdk/e2e/pnpm-lock.yaml', 'sdk/e2e/package.json') }}
+
+      - name: Install e2e deps (sdk/e2e)
+        working-directory: sdk/e2e
+        run: pnpm install --ignore-scripts
+
+      - name: Install Playwright Chromium with system deps (sdk/e2e)
+        working-directory: sdk/e2e
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: MSP tests placeholder (disabled)
+        run: echo "MSP E2E tests are disabled in this workflow. Use workflow_dispatch with run_msp=true to enable."
+
+      - name: Upload Playwright report (msp)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-msp
+          path: /tmp/playwright-report/
+          retention-days: 14
+
+      - name: Upload Playwright artifacts (msp)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts-msp
+          path: /tmp/test-results/
+          retention-days: 14
+
+

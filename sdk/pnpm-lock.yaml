@@ -64,6 +64,24 @@ importers:
         specifier: ^20.11.19
         version: 20.19.9
 
+  e2e:
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.54.2
+        version: 1.55.0
+      '@storagehub-sdk/core':
+        specifier: workspace:*
+        version: link:../core
+      '@storagehub-sdk/msp-client':
+        specifier: workspace:*
+        version: link:../msp-client
+      '@tenkeylabs/dappwright':
+        specifier: ^2.11.2
+        version: 2.11.2(playwright-core@1.55.0)
+      playwright:
+        specifier: ^1.54.2
+        version: 1.55.0
+
   msp-client:
     dependencies:
       '@storagehub-sdk/core':
@@ -558,6 +576,14 @@ packages:
     dev: true
     optional: true
 
+  /@playwright/test@1.55.0:
+    resolution: {integrity: sha512-04IXzPwHrW69XusN/SIdDdKZBzMfOT9UNT/YiJit/xpy2VuAoB8NHc8Aplb96zsWDddLnbkPL3TsmrS04ZU2xQ==}
+    engines: {node: '>=18'}
+    hasBin: true
+    dependencies:
+      playwright: 1.55.0
+    dev: true
+
   /@polkadot/keyring@12.6.2(@polkadot/util-crypto@12.6.2)(@polkadot/util@12.6.2):
     resolution: {integrity: sha512-O3Q7GVmRYm8q7HuB3S0+Yf/q/EB2egKRRU3fv9b3B7V+A52tKzA+vIwEmNVaD1g5FKW9oB97rmpggs0zaKFqHw==}
     engines: {node: '>=18'}
@@ -940,6 +966,16 @@ packages:
   /@substrate/ss58-registry@1.51.0:
     resolution: {integrity: sha512-TWDurLiPxndFgKjVavCniytBIw+t4ViOi7TYp9h/D0NMmkEc9klFTo+827eyEJ0lELpqO207Ey7uGxUa+BS1jQ==}
     dev: false
+
+  /@tenkeylabs/dappwright@2.11.2(playwright-core@1.55.0):
+    resolution: {integrity: sha512-ITIY1yKqSMoupuu3kKvUMdXOWUg4+T5O5NZLQKIuAf84zk7oxoIjIAgV2Go5QGynQTpSZhKK7o7YmE93PKPWtQ==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      playwright-core: '>1.0'
+    dependencies:
+      node-stream-zip: 1.15.0
+      playwright-core: 1.55.0
+    dev: true
 
   /@types/bn.js@5.2.0:
     resolution: {integrity: sha512-DLbJ1BPqxvQhIGbeu8VbUC1DiAiahHtAYvA0ZEAa4P31F7IaArc8z3C3BRQdWX4mtLQuABG4yzp76ZrS02Ui1Q==}
@@ -1720,6 +1756,14 @@ packages:
       signal-exit: 4.1.0
     dev: true
 
+  /fsevents@2.3.2:
+    resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==}
+    engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
+    os: [darwin]
+    requiresBuild: true
+    dev: true
+    optional: true
+
   /fsevents@2.3.3:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
@@ -2065,6 +2109,11 @@ packages:
     resolution: {integrity: sha512-OWND8ei3VtNC9h7V60qff3SVobHr996CTwgxubgyQYEpg290h9J0buyECNNJexkFm5sOajh5G116RYA1c8ZMSw==}
     dev: true
 
+  /node-stream-zip@1.15.0:
+    resolution: {integrity: sha512-LN4fydt9TqhZhThkZIVQnF9cwjU3qmUH9h78Mx/K7d3VvfRqqwthLwJEUOEL0QPZ0XQmNN7be5Ggit5+4dq3Bw==}
+    engines: {node: '>=0.12.0'}
+    dev: true
+
   /onetime@7.0.0:
     resolution: {integrity: sha512-VXJjc87FScF88uafS3JllDgvAm+c/Slfz06lorj2uAY34rlUu0Nt+v8wreiImcrgAjjIHp1rXpTDlLOGw29WwQ==}
     engines: {node: '>=18'}
@@ -2154,6 +2203,22 @@ packages:
     resolution: {integrity: sha512-eG2dWTVw5bzqGRztnHExczNxt5VGsE6OwTeCG3fdUf9KBsZzO3R5OIIIzWR+iZA0NtZ+RDVdaoE2dK1cn6jH4g==}
     engines: {node: '>=0.10'}
     hasBin: true
+    dev: true
+
+  /playwright-core@1.55.0:
+    resolution: {integrity: sha512-GvZs4vU3U5ro2nZpeiwyb0zuFaqb9sUiAJuyrWpcGouD8y9/HLgGbNRjIph7zU9D3hnPaisMl9zG9CgFi/biIg==}
+    engines: {node: '>=18'}
+    hasBin: true
+    dev: true
+
+  /playwright@1.55.0:
+    resolution: {integrity: sha512-sdCWStblvV1YU909Xqx0DhOjPZE4/5lJsIS84IfN9dAZfcl/CIZ5O8l3o0j7hPMjDvqoTF8ZUcc+i/GL5erstA==}
+    engines: {node: '>=18'}
+    hasBin: true
+    dependencies:
+      playwright-core: 1.55.0
+    optionalDependencies:
+      fsevents: 2.3.2
     dev: true
 
   /postcss@8.5.6:
@@ -2680,5 +2745,5 @@ packages:
 
   file:core/wasm/pkg:
     resolution: {directory: core/wasm/pkg, type: directory}
-    name: pkg
+    name: storagehub-wasm
     dev: false

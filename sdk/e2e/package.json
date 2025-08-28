@@ -4,18 +4,19 @@
     "description": "StorageHub SDK E2E tests using dAppwright for MetaMask automation",
     "type": "module",
     "scripts": {
-        "test": "npm run test:headless",
-        "test:headed": "HEADLESS=false playwright test",
-        "test:headless": "HEADLESS=true playwright test",
+        "test": "playwright test",
+        "test:metamask": "HEADLESS=false playwright test --project metamask",
+        "test:msp": "playwright test --project msp",
         "test:ui": "playwright test --ui",
-        "test:debug": "HEADLESS=false playwright test --debug",
-        "dev": "python3 -m http.server 3000 --directory ..",
-        "install-deps": "npm install && npx playwright install chromium"
+        "test:debug": "HEADLESS=false playwright test --debug --project metamask",
+        "install-deps": "pnpm install --ignore-workspace && pnpm exec playwright install chromium"
     },
     "devDependencies": {
         "@playwright/test": "^1.54.2",
         "@tenkeylabs/dappwright": "^2.11.2",
-        "playwright": "^1.54.2"
+        "playwright": "^1.54.2",
+        "@storagehub-sdk/core": "workspace:*",
+        "@storagehub-sdk/msp-client": "workspace:*"
     },
     "engines": {
         "node": ">=22"
