@@ -240,6 +240,7 @@ impl BspFile {
         Ok(())
     }
 
+    // TODO: Add paging for performance
     pub async fn get_bsps_for_file_key<'a>(
         conn: &mut DbConnection<'a>,
         file_key: &[u8],
@@ -255,6 +256,7 @@ impl BspFile {
         Ok(bsp_ids)
     }
 
+    // TODO: Add paging for performance
     pub async fn get_all_file_keys_for_bsp<'a>(
         conn: &mut DbConnection<'a>,
         onchain_bsp_id: OnchainBspId,
