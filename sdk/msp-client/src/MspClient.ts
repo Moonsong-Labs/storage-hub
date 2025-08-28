@@ -25,16 +25,18 @@ export class MspClient {
 
     const http = new HttpClient({
       baseUrl: config.baseUrl,
-      timeoutMs: config.timeoutMs,
-      defaultHeaders: config.defaultHeaders,
-      fetchImpl: config.fetchImpl,
+      ...(config.timeoutMs !== undefined && { timeoutMs: config.timeoutMs }),
+      ...(config.defaultHeaders !== undefined && { defaultHeaders: config.defaultHeaders }),
+      ...(config.fetchImpl !== undefined && { fetchImpl: config.fetchImpl }),
     });
 
     return new MspClient(config, http);
   }
 
   getHealth(options?: { signal?: AbortSignal }): Promise<HealthStatus> {
-    return this.http.get<HealthStatus>('/health', { signal: options?.signal });
+    return this.http.get<HealthStatus>('/health', {
+      ...(options?.signal !== undefined && { signal: options.signal }),
+    });
   }
 
   /** Request a SIWE-style nonce message for the given address and chainId */
@@ -45,8 +47,8 @@ export class MspClient {
   ): Promise<NonceResponse> {
     return this.http.post<NonceResponse>('/auth/nonce', {
       body: JSON.stringify({ address, chainId }),
-      signal: options?.signal,
       headers: { 'Content-Type': 'application/json' },
+      ...(options?.signal !== undefined && { signal: options.signal }),
     });
   }
 
@@ -58,8 +60,8 @@ export class MspClient {
   ): Promise<VerifyResponse> {
     return this.http.post<VerifyResponse>('/auth/verify', {
       body: JSON.stringify({ message, signature }),
-      signal: options?.signal,
       headers: { 'Content-Type': 'application/json' },
+      ...(options?.signal !== undefined && { signal: options.signal }),
     });
   }
 
