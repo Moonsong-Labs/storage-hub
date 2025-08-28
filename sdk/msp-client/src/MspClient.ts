@@ -6,7 +6,7 @@ import type {
   UploadOptions,
   UploadReceipt,
   VerifyResponse,
-} from './types.js';
+} from './types';
 import type { HttpClientConfig } from '@storagehub-sdk/core';
 import { HttpClient } from '@storagehub-sdk/core';
 

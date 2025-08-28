@@ -3,9 +3,17 @@
     "compilerOptions": {
         "rootDir": "src",
         "outDir": "dist",
-        "module": "NodeNext",
-        "moduleResolution": "NodeNext",
+        "module": "ESNext",
+        "moduleResolution": "Bundler",
         "baseUrl": ".",
+        "paths": {
+            "@storagehub-sdk/core": [
+                "../core/dist/index.d.ts"
+            ],
+            "@storagehub-sdk/core/*": [
+                "../core/dist/*"
+            ]
+        },
         "declaration": true,
         "emitDeclarationOnly": false
     },

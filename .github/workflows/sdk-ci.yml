@@ -67,7 +67,7 @@ jobs:
 
       # Build workspace so type declarations are available for all packages
       - name: Build SDK
-        run: pnpm build
+        run: pnpm run build:wasm && pnpm build
 
       # TypeScript type-check
       - name: Type check
