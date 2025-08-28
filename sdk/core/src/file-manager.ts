@@ -1,4 +1,4 @@
-import { CHUNK_SIZE } from './constants';
+import { CHUNK_SIZE } from './constants.js';
 import { TypeRegistry } from '@polkadot/types';
 import type { AccountId, H256 } from '@polkadot/types/interfaces';
 import { FileMetadata, FileTrie } from '@storagehub/wasm';

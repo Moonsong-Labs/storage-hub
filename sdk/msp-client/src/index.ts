@@ -1,9 +1,8 @@
-export { MspClient } from './MspClient';
+export { MspClient } from './MspClient.js';
 export type {
-  ComponentHealth,
-  HealthState,
   HealthStatus,
+  NonceResponse,
   UploadOptions,
   UploadReceipt,
-  UploadState,
-} from './types';
+  VerifyResponse,
+} from './types.js';
