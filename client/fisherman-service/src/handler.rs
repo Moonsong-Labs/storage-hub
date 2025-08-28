@@ -15,7 +15,7 @@ use shp_types::Hash;
 
 use crate::{
     commands::{FishermanServiceCommand, FishermanServiceError},
-    events::FishermanServiceEventBusProvider,
+    events::{FileDeletionTarget, FishermanServiceEventBusProvider},
 };
 
 pub(crate) const LOG_TARGET: &str = "fisherman-service";
@@ -159,15 +159,15 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
         Ok(())
     }
 
-    /// Get file key changes between two blocks for a specific provider.
+    /// Get file key changes between two blocks for a specific target.
     ///
     /// Note:
     /// - `from_block` is excluded from being processed.
-    /// - `provider` is either a BSP id or a Bucket id
+    /// - `target` is either a BSP id or a Bucket id to delete the file from
     pub async fn get_file_key_changes_since_block(
         &self,
         from_block: BlockNumber<Runtime>,
-        provider: crate::events::FileDeletionTarget<Runtime>,
+        target: FileDeletionTarget<Runtime>,
     ) -> Result<Vec<FileKeyChange>, FishermanServiceError> {
         // Get the current best block
         let best_block_info = self.client.info();
@@ -207,43 +207,42 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                     Err(_) => continue,
                 };
 
-                match event {
+                match (event, &target) {
                     // Process BSP mutations from MutationsAppliedForProvider events
-                    StorageEnableEvents::ProofsDealer(
-                        pallet_proofs_dealer::Event::MutationsAppliedForProvider {
-                            provider_id,
-                            mutations,
-                            ..
-                        },
-                    ) => {
-                        if let crate::events::FileDeletionTarget::BspId(target_bsp_id) = &provider {
-                            self.process_bsp_mutations(
-                                &mutations,
-                                target_bsp_id,
-                                &provider_id,
-                                &mut file_key_states,
-                            );
-                        }
+                    (
+                        StorageEnableEvents::ProofsDealer(
+                            pallet_proofs_dealer::Event::MutationsAppliedForProvider {
+                                provider_id,
+                                mutations,
+                                ..
+                            },
+                        ),
+                        FileDeletionTarget::BspId(target_bsp_id),
+                    ) if &provider_id == target_bsp_id => {
+                        self.process_bsp_mutations(
+                            &mutations,
+                            &target_bsp_id,
+                            &mut file_key_states,
+                        );
                     }
                     // Process MSP/bucket mutations from MutationsApplied events
-                    StorageEnableEvents::ProofsDealer(
-                        pallet_proofs_dealer::Event::MutationsApplied {
-                            mutations,
-                            event_info,
-                            ..
-                        },
-                    ) => {
-                        if let crate::events::FileDeletionTarget::BucketId(target_bucket_id) =
-                            &provider
-                        {
-                            self.process_msp_bucket_mutations(
-                                &block_hash,
-                                &mutations,
-                                target_bucket_id,
+                    (
+                        StorageEnableEvents::ProofsDealer(
+                            pallet_proofs_dealer::Event::MutationsApplied {
+                                mutations,
                                 event_info,
-                                &mut file_key_states,
-                            );
-                        }
+                                ..
+                            },
+                        ),
+                        FileDeletionTarget::BucketId(target_bucket_id),
+                    ) => {
+                        self.process_msp_bucket_mutations(
+                            &block_hash,
+                            &mutations,
+                            &target_bucket_id,
+                            event_info,
+                            &mut file_key_states,
+                        );
                     }
                     _ => {}
                 }
@@ -266,7 +265,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
             target: LOG_TARGET,
             "🎣 Found {} file key changes for provider {:?} between blocks {} and {}",
             changes.len(),
-            provider,
+            target,
             from_block,
             best_block_number
         );
@@ -279,20 +278,8 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
         &self,
         mutations: &[(Hash, shc_common::types::TrieMutation)],
         target_bsp_id: &Hash,
-        provider_id: &Hash,
         file_key_states: &mut HashMap<Hash, FileKeyOperation>,
     ) {
-        // Check if the provider_id matches the target BSP
-        if provider_id != target_bsp_id {
-            debug!(
-                target: LOG_TARGET,
-                "Provider ID [{:?}] is not the target BSP ID [{:?}]. Skipping mutations.",
-                provider_id,
-                target_bsp_id
-            );
-            return;
-        }
-
         // Process mutations
         for (file_key, mutation) in mutations {
             match mutation {
@@ -320,7 +307,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
             target: LOG_TARGET,
             "Processed {} BSP mutations for provider {:?}",
             mutations.len(),
-            provider_id
+            target_bsp_id
         );
     }
 

@@ -1,4 +1,4 @@
-import assert from "node:assert";
+import assert, { strictEqual, notEqual } from "node:assert";
 import { BN } from "@polkadot/util";
 import {
   describeMspNet,
@@ -513,6 +513,44 @@ describeMspNet(
 
       assertEventPresent(userApi, "fileSystem", "MspFileDeletionCompleted", deletionResult.events);
       assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", deletionResult.events);
+
+      // Extract deletion events to verify root changes
+      const mspDeletionEvent = userApi.assert.fetchEvent(
+        userApi.events.fileSystem.MspFileDeletionCompleted,
+        deletionResult.events
+      );
+      const bspDeletionEvent = userApi.assert.fetchEvent(
+        userApi.events.fileSystem.BspFileDeletionCompleted,
+        deletionResult.events
+      );
+
+      // Verify MSP root changed
+      notEqual(
+        mspDeletionEvent.data.oldRoot.toString(),
+        mspDeletionEvent.data.newRoot.toString(),
+        "MSP forest root should have changed after file deletion"
+      );
+      const currentBucketRoot = await msp1Api.rpc.storagehubclient.getForestRoot(
+        mspDeletionEvent.data.bucketId.toString()
+      );
+      strictEqual(
+        currentBucketRoot.toString(),
+        mspDeletionEvent.data.newRoot.toString(),
+        "Current bucket forest root should match the new root from deletion event"
+      );
+
+      // Verify BSP root changed
+      notEqual(
+        bspDeletionEvent.data.oldRoot.toString(),
+        bspDeletionEvent.data.newRoot.toString(),
+        "BSP forest root should have changed after file deletion"
+      );
+      const currentBspRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
+      strictEqual(
+        currentBspRoot.toString(),
+        bspDeletionEvent.data.newRoot.toString(),
+        "Current BSP forest root should match the new root from deletion event"
+      );
 
       await waitForIndexing(userApi);
 

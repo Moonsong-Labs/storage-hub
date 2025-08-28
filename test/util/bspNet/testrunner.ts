@@ -116,6 +116,8 @@ export async function describeBspNet<
  * Implementation of the describeMspNet function.
  * @param title The title of the test suite.
  * @param args Additional arguments (either tests function or options and tests function).
+ *
+ * TODO: Add a new docker container service in compose to run a standalone indexer node (right now the user node runs the indexer)
  */
 export async function describeMspNet<
   T extends [(context: FullNetContext) => void] | [TestOptions, (context: FullNetContext) => void]

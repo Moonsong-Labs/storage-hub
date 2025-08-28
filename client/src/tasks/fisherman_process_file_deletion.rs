@@ -2,20 +2,23 @@ use anyhow::anyhow;
 use futures::future::{join_all, BoxFuture};
 use hex;
 use sc_tracing::tracing::*;
-use shc_actors_framework::actor::ActorHandle;
-use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::commands::BlockchainServiceCommandInterface;
-use shc_blockchain_service::types::SendExtrinsicOptions;
-use shc_common::traits::StorageEnableRuntime;
-use shc_common::types::{
-    Fingerprint, ForestProof as CommonForestProof, OffchainSignature,
-    StorageProofsMerkleTrieLayout, StorageProviderId,
+use shc_actors_framework::{actor::ActorHandle, event_bus::EventHandler};
+use shc_blockchain_service::{
+    commands::BlockchainServiceCommandInterface, types::SendExtrinsicOptions,
 };
-use shc_fisherman_service::commands::FishermanServiceCommandInterface;
-use shc_fisherman_service::events::{ProcessFileDeletionRequest, ProcessIncompleteStorageRequest};
-use shc_fisherman_service::{FileKeyOperation, FishermanService};
-use shc_forest_manager::in_memory::InMemoryForestStorage;
-use shc_forest_manager::traits::ForestStorage;
+use shc_common::{
+    traits::StorageEnableRuntime,
+    types::{
+        Fingerprint, ForestProof as CommonForestProof, OffchainSignature,
+        StorageProofsMerkleTrieLayout, StorageProviderId,
+    },
+};
+use shc_fisherman_service::{
+    commands::FishermanServiceCommandInterface,
+    events::{ProcessFileDeletionRequest, ProcessIncompleteStorageRequest},
+    {FileKeyOperation, FishermanService},
+};
+use shc_forest_manager::{in_memory::InMemoryForestStorage, traits::ForestStorage};
 use sp_core::H256;
 use sp_runtime::traits::SaturatedConversion;
 use std::time::Duration;
@@ -74,12 +77,8 @@ where
         .await
         .map_err(|e| anyhow!("Failed to get file from indexer: {:?}", e))?;
 
-    let bucket = shc_indexer_db::models::Bucket::get_by_id(&mut conn, file.bucket_id)
-        .await
-        .map_err(|e| anyhow!("Failed to get bucket from indexer: {:?}", e))?;
-
     let file_metadata = file
-        .to_file_metadata(bucket.onchain_bucket_id.clone())
+        .to_file_metadata(file.onchain_bucket_id.clone())
         .map_err(|e| anyhow!("Failed to convert file to metadata: {:?}", e))?;
 
     // Query for BSPs storing this file
@@ -90,7 +89,8 @@ where
 
     drop(conn);
 
-    let bucket_id_array: [u8; 32] = bucket
+    // TODO: Make this generic over runtime
+    let bucket_id_array: [u8; 32] = file
         .onchain_bucket_id
         .clone()
         .try_into()
@@ -369,58 +369,14 @@ where
     }
 }
 
-impl<NT, Runtime> FishermanProcessIncompleteStorageTask<NT, Runtime>
-where
-    NT: ShNodeType<Runtime>,
-    NT::FSH: FishermanForestStorageHandlerT<Runtime>,
-    Runtime: StorageEnableRuntime,
-{
-    /// Processes file deletion for incomplete storage scenarios.
-    ///
-    /// This method prepares deletion parameters using the common logic but does not
-    /// submit extrinsics, as these deletions don't require user signatures.
-    ///
-    /// # Arguments
-    /// * `file_key` - Key of the file to delete
-    /// * `deletion_target` - Target (BSP or bucket) for the deletion
-    /// * `file_metadata` - Metadata of the file being deleted
-    async fn process_deletion_for_target_incomplete(
-        &self,
-        file_key: &shp_types::Hash,
-        deletion_target: shc_fisherman_service::events::FileDeletionTarget<Runtime>,
-        file_metadata: &shc_common::types::FileMetadata,
-    ) -> anyhow::Result<()> {
-        info!(
-            target: LOG_TARGET_INCOMPLETE,
-            "Processing deletion for file key {:?} and target {:?} (incomplete storage)",
-            file_key,
-            deletion_target
-        );
-
-        // Use the common logic function to get parameters
-        let (_file_owner, _bucket_id, _location, _size, _fingerprint, _provider_id, _forest_proof) =
-            process_deletion_common(
-                &self.storage_hub_handler,
-                &self.fisherman_service,
-                file_key,
-                deletion_target,
-                file_metadata,
-            )
-            .await?;
-
-        // TODO: Submit the extrinsic here without requiring user signature
-
-        Ok(())
-    }
-}
-
 impl<NT, Runtime> FishermanProcessFileDeletionTask<NT, Runtime>
 where
     NT: ShNodeType<Runtime>,
     NT::FSH: FishermanForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    /// Processes file deletion for a specific target with user signature validation.
+    /// Processes file deletion for a specific target (BSP id or Bucket id) with user signature validation (which is required for the runtime to validate
+    /// that the user does indeed want to delete the file).
     ///
     /// This method constructs and submits a delete_file extrinsic for the given target,
     /// using the signed file operation intention and signature from the user.
@@ -513,6 +469,52 @@ where
     }
 }
 
+impl<NT, Runtime> FishermanProcessIncompleteStorageTask<NT, Runtime>
+where
+    NT: ShNodeType<Runtime>,
+    NT::FSH: FishermanForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
+{
+    /// Processes file deletion for incomplete storage scenarios (see. [`monitor_block`](shc_fisherman_service::handler::FishermanService::monitor_block)
+    /// for on chain events which trigger this task to process `ProcessIncompleteStorageRequest` events)
+    ///
+    /// This method prepares deletion parameters using the common logic but does not
+    /// submit extrinsics, as these deletions don't require user signatures.
+    ///
+    /// # Arguments
+    /// * `file_key` - Key of the file to delete
+    /// * `deletion_target` - Target (BSP or bucket) for the deletion
+    /// * `file_metadata` - Metadata of the file being deleted
+    async fn process_deletion_for_target_incomplete(
+        &self,
+        file_key: &shp_types::Hash,
+        deletion_target: shc_fisherman_service::events::FileDeletionTarget<Runtime>,
+        file_metadata: &shc_common::types::FileMetadata,
+    ) -> anyhow::Result<()> {
+        info!(
+            target: LOG_TARGET_INCOMPLETE,
+            "Processing deletion for file key {:?} and target {:?} (incomplete storage)",
+            file_key,
+            deletion_target
+        );
+
+        // Use the common logic function to get parameters
+        let (_file_owner, _bucket_id, _location, _size, _fingerprint, _provider_id, _forest_proof) =
+            process_deletion_common(
+                &self.storage_hub_handler,
+                &self.fisherman_service,
+                file_key,
+                deletion_target,
+                file_metadata,
+            )
+            .await?;
+
+        // TODO: Submit the extrinsic here without requiring user signature
+
+        Ok(())
+    }
+}
+
 /// Common deletion processing logic shared between both task implementations.
 ///
 /// This function implements the core logic for preparing file deletion parameters,
@@ -522,7 +524,9 @@ where
 ///
 /// The forest proof ensures the deletion extrinsic has the correct Merkle proof
 /// for the current blockchain state by using the indexer's last processed block
-/// as the baseline and applying catch-up changes to reach the current state.
+/// as the baseline and applying catch-up changes to reach the current state. That
+/// way, the runtime can validate that the file key belongs to the BSP or Bucket Merkle
+/// Forest so it may delete the file from the proof on chain.
 ///
 /// # Arguments
 /// * `storage_hub_handler` - Handler providing access to blockchain and indexer

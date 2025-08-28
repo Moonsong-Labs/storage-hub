@@ -339,6 +339,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     who,
                     file_key.as_ref().to_vec(),
                     bucket.id,
+                    bucket_id.as_ref().to_vec(),
                     location.to_vec(),
                     fingerprint.as_ref().to_vec(),
                     size.saturated_into(),
