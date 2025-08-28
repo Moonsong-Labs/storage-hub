@@ -9,8 +9,8 @@ use sc_cli::{
 };
 use sc_service::config::{BasePath, PrometheusConfig};
 use serde::Deserialize;
+use sh_parachain_runtime::Block;
 use shp_types::StorageDataUnit;
-use shr_parachain::Block;
 
 use crate::{
     chain_spec,

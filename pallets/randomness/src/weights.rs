@@ -13,7 +13,7 @@
 // benchmark
 // pallet
 // --runtime
-// target/production/wbuild/shr-parachain/shr_parachain.wasm
+// target/production/wbuild/sh-parachain-runtime/sh_parachain_runtime.wasm
 // --pallet
 // pallet_randomness
 // --extrinsic

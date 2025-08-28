@@ -283,7 +283,7 @@ shp-treasury-funding = { path = "primitives/treasury-funding", default-features 
 shp-types = { path = "primitives/types", default-features = false }
 
 # Local - StorageHub Runtime
-shr-parachain = { path = "runtime/parachain", default-features = false }
+sh-parachain-runtime = { path = "runtime/parachain", default-features = false }
 shr-solochain-evm = { path = "runtime/solochain-evm", default-features = false }
 
 [workspace.lints.rust]

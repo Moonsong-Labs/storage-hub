@@ -12,7 +12,7 @@
 // benchmark
 // pallet
 // --runtime
-// ./target/release/wbuild/shr-parachain/shr_parachain.wasm
+// ./target/release/wbuild/sh-parachain-runtime/sh_parachain_runtime.wasm
 // --genesis-builder
 // runtime
 // --wasm-execution

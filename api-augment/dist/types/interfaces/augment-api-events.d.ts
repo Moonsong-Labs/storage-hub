@@ -32,9 +32,9 @@ import type {
   PalletStorageProvidersTopUpMetadata,
   PalletStorageProvidersValueProposition,
   PalletStorageProvidersValuePropositionWithId,
+  ShParachainRuntimeConfigsRuntimeParamsRuntimeParametersKey,
+  ShParachainRuntimeConfigsRuntimeParamsRuntimeParametersValue,
   ShpTraitsTrieMutation,
-  ShrParachainConfigsRuntimeParamsRuntimeParametersKey,
-  ShrParachainConfigsRuntimeParamsRuntimeParametersValue,
   SpRuntimeDispatchError,
   SpRuntimeMultiSignature,
   SpWeightsWeightV2Weight,
@@ -1670,14 +1670,14 @@ declare module "@polkadot/api-base/types/events" {
       Updated: AugmentedEvent<
         ApiType,
         [
-          key: ShrParachainConfigsRuntimeParamsRuntimeParametersKey,
-          oldValue: Option<ShrParachainConfigsRuntimeParamsRuntimeParametersValue>,
-          newValue: Option<ShrParachainConfigsRuntimeParamsRuntimeParametersValue>
+          key: ShParachainRuntimeConfigsRuntimeParamsRuntimeParametersKey,
+          oldValue: Option<ShParachainRuntimeConfigsRuntimeParamsRuntimeParametersValue>,
+          newValue: Option<ShParachainRuntimeConfigsRuntimeParamsRuntimeParametersValue>
         ],
         {
-          key: ShrParachainConfigsRuntimeParamsRuntimeParametersKey;
-          oldValue: Option<ShrParachainConfigsRuntimeParamsRuntimeParametersValue>;
-          newValue: Option<ShrParachainConfigsRuntimeParamsRuntimeParametersValue>;
+          key: ShParachainRuntimeConfigsRuntimeParamsRuntimeParametersKey;
+          oldValue: Option<ShParachainRuntimeConfigsRuntimeParamsRuntimeParametersValue>;
+          newValue: Option<ShParachainRuntimeConfigsRuntimeParamsRuntimeParametersValue>;
         }
       >;
       /**

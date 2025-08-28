@@ -5,4 +5,7 @@ packages:
 
 onlyBuiltDependencies:
   - '@biomejs/biome'
+  - cpu-features
   - esbuild
+  - protobufjs
+  - ssh2

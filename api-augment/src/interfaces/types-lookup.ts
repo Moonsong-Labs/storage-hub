@@ -2903,22 +2903,23 @@ declare module "@polkadot/types/lookup" {
   interface PalletParametersEvent extends Enum {
     readonly isUpdated: boolean;
     readonly asUpdated: {
-      readonly key: ShrParachainConfigsRuntimeParamsRuntimeParametersKey;
-      readonly oldValue: Option<ShrParachainConfigsRuntimeParamsRuntimeParametersValue>;
-      readonly newValue: Option<ShrParachainConfigsRuntimeParamsRuntimeParametersValue>;
+      readonly key: ShParachainRuntimeConfigsRuntimeParamsRuntimeParametersKey;
+      readonly oldValue: Option<ShParachainRuntimeConfigsRuntimeParamsRuntimeParametersValue>;
+      readonly newValue: Option<ShParachainRuntimeConfigsRuntimeParamsRuntimeParametersValue>;
     } & Struct;
     readonly type: "Updated";
   }
 
-  /** @name ShrParachainConfigsRuntimeParamsRuntimeParametersKey (196) */
-  interface ShrParachainConfigsRuntimeParamsRuntimeParametersKey extends Enum {
+  /** @name ShParachainRuntimeConfigsRuntimeParamsRuntimeParametersKey (196) */
+  interface ShParachainRuntimeConfigsRuntimeParamsRuntimeParametersKey extends Enum {
     readonly isRuntimeConfig: boolean;
-    readonly asRuntimeConfig: ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey;
+    readonly asRuntimeConfig: ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey;
     readonly type: "RuntimeConfig";
   }
 
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey (197) */
-  interface ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey extends Enum {
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey (197) */
+  interface ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey
+    extends Enum {
     readonly isSlashAmountPerMaxFileSize: boolean;
     readonly isStakeToChallengePeriod: boolean;
     readonly isCheckpointChallengePeriod: boolean;
@@ -2982,110 +2983,119 @@ declare module "@polkadot/types/lookup" {
       | "UpfrontTicksToPay";
   }
 
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize (198) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize = Null;
-
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod (199) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod = Null;
-
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod (200) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod = Null;
-
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod (201) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod = Null;
-
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage (202) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage =
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize (198) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize =
     Null;
 
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage (203) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage =
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod (199) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod =
     Null;
 
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMostlyStablePrice (204) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMostlyStablePrice = Null;
-
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice (205) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice = Null;
-
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice (206) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice = Null;
-
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor (207) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor = Null;
-
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor (208) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor = Null;
-
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigZeroSizeBucketFixedRate (209) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigZeroSizeBucketFixedRate = Null;
-
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate (210) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate = Null;
-
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigDecayRate (211) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigDecayRate = Null;
-
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMinimumTreasuryCut (212) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMinimumTreasuryCut = Null;
-
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMaximumTreasuryCut (213) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMaximumTreasuryCut = Null;
-
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigBspStopStoringFilePenalty (214) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigBspStopStoringFilePenalty = Null;
-
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigProviderTopUpTtl (215) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigProviderTopUpTtl = Null;
-
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigBasicReplicationTarget (216) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigBasicReplicationTarget = Null;
-
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigStandardReplicationTarget (217) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigStandardReplicationTarget = Null;
-
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigHighSecurityReplicationTarget (218) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigHighSecurityReplicationTarget =
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod (200) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod =
     Null;
 
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigSuperHighSecurityReplicationTarget (219) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigSuperHighSecurityReplicationTarget =
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod (201) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod = Null;
+
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage (202) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage =
     Null;
 
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigUltraHighSecurityReplicationTarget (220) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigUltraHighSecurityReplicationTarget =
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage (203) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage =
     Null;
 
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxReplicationTarget (221) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxReplicationTarget = Null;
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMostlyStablePrice (204) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMostlyStablePrice = Null;
 
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigTickRangeToMaximumThreshold (222) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigTickRangeToMaximumThreshold = Null;
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice (205) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice = Null;
 
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigStorageRequestTtl (223) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigStorageRequestTtl = Null;
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice (206) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice = Null;
 
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMinWaitForStopStoring (224) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMinWaitForStopStoring = Null;
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor (207) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor = Null;
 
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMinSeedPeriod (225) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMinSeedPeriod = Null;
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor (208) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor = Null;
 
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToSeedPeriod (226) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToSeedPeriod = Null;
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigZeroSizeBucketFixedRate (209) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigZeroSizeBucketFixedRate =
+    Null;
 
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigUpfrontTicksToPay (227) */
-  type ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigUpfrontTicksToPay = Null;
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate (210) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate = Null;
 
-  /** @name ShrParachainConfigsRuntimeParamsRuntimeParametersValue (229) */
-  interface ShrParachainConfigsRuntimeParamsRuntimeParametersValue extends Enum {
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigDecayRate (211) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigDecayRate = Null;
+
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinimumTreasuryCut (212) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinimumTreasuryCut = Null;
+
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaximumTreasuryCut (213) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaximumTreasuryCut = Null;
+
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBspStopStoringFilePenalty (214) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBspStopStoringFilePenalty =
+    Null;
+
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigProviderTopUpTtl (215) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigProviderTopUpTtl = Null;
+
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBasicReplicationTarget (216) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBasicReplicationTarget =
+    Null;
+
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStandardReplicationTarget (217) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStandardReplicationTarget =
+    Null;
+
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigHighSecurityReplicationTarget (218) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigHighSecurityReplicationTarget =
+    Null;
+
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSuperHighSecurityReplicationTarget (219) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSuperHighSecurityReplicationTarget =
+    Null;
+
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUltraHighSecurityReplicationTarget (220) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUltraHighSecurityReplicationTarget =
+    Null;
+
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxReplicationTarget (221) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxReplicationTarget = Null;
+
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigTickRangeToMaximumThreshold (222) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigTickRangeToMaximumThreshold =
+    Null;
+
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStorageRequestTtl (223) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStorageRequestTtl = Null;
+
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinWaitForStopStoring (224) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinWaitForStopStoring = Null;
+
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinSeedPeriod (225) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinSeedPeriod = Null;
+
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToSeedPeriod (226) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToSeedPeriod = Null;
+
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpfrontTicksToPay (227) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpfrontTicksToPay = Null;
+
+  /** @name ShParachainRuntimeConfigsRuntimeParamsRuntimeParametersValue (229) */
+  interface ShParachainRuntimeConfigsRuntimeParamsRuntimeParametersValue extends Enum {
     readonly isRuntimeConfig: boolean;
-    readonly asRuntimeConfig: ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue;
+    readonly asRuntimeConfig: ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue;
     readonly type: "RuntimeConfig";
   }
 
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue (230) */
-  interface ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue extends Enum {
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue (230) */
+  interface ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue
+    extends Enum {
     readonly isSlashAmountPerMaxFileSize: boolean;
     readonly asSlashAmountPerMaxFileSize: u128;
     readonly isStakeToChallengePeriod: boolean;
@@ -3530,8 +3540,8 @@ declare module "@polkadot/types/lookup" {
     readonly amount: u128;
   }
 
-  /** @name ShrParachainRuntimeHoldReason (305) */
-  interface ShrParachainRuntimeHoldReason extends Enum {
+  /** @name ShParachainRuntimeRuntimeHoldReason (305) */
+  interface ShParachainRuntimeRuntimeHoldReason extends Enum {
     readonly isProviders: boolean;
     readonly asProviders: PalletStorageProvidersHoldReason;
     readonly isFileSystem: boolean;
@@ -3742,15 +3752,15 @@ declare module "@polkadot/types/lookup" {
   interface PalletSessionCall extends Enum {
     readonly isSetKeys: boolean;
     readonly asSetKeys: {
-      readonly keys_: ShrParachainSessionKeys;
+      readonly keys_: ShParachainRuntimeSessionKeys;
       readonly proof: Bytes;
     } & Struct;
     readonly isPurgeKeys: boolean;
     readonly type: "SetKeys" | "PurgeKeys";
   }
 
-  /** @name ShrParachainSessionKeys (323) */
-  interface ShrParachainSessionKeys extends Struct {
+  /** @name ShParachainRuntimeSessionKeys (323) */
+  interface ShParachainRuntimeSessionKeys extends Struct {
     readonly aura: SpConsensusAuraSr25519AppSr25519Public;
   }
 
@@ -5423,187 +5433,218 @@ declare module "@polkadot/types/lookup" {
   interface PalletParametersCall extends Enum {
     readonly isSetParameter: boolean;
     readonly asSetParameter: {
-      readonly keyValue: ShrParachainConfigsRuntimeParamsRuntimeParameters;
+      readonly keyValue: ShParachainRuntimeConfigsRuntimeParamsRuntimeParameters;
     } & Struct;
     readonly type: "SetParameter";
   }
 
-  /** @name ShrParachainConfigsRuntimeParamsRuntimeParameters (411) */
-  interface ShrParachainConfigsRuntimeParamsRuntimeParameters extends Enum {
+  /** @name ShParachainRuntimeConfigsRuntimeParamsRuntimeParameters (411) */
+  interface ShParachainRuntimeConfigsRuntimeParamsRuntimeParameters extends Enum {
     readonly isRuntimeConfig: boolean;
-    readonly asRuntimeConfig: ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters;
+    readonly asRuntimeConfig: ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters;
     readonly type: "RuntimeConfig";
   }
 
-  /** @name ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters (412) */
-  interface ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters extends Enum {
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters (412) */
+  interface ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters
+    extends Enum {
     readonly isSlashAmountPerMaxFileSize: boolean;
     readonly asSlashAmountPerMaxFileSize: ITuple<
       [
-        ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize,
+        ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize,
         Option<u128>
       ]
     >;
     readonly isStakeToChallengePeriod: boolean;
     readonly asStakeToChallengePeriod: ITuple<
       [
-        ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod,
+        ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod,
         Option<u128>
       ]
     >;
     readonly isCheckpointChallengePeriod: boolean;
     readonly asCheckpointChallengePeriod: ITuple<
       [
-        ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod,
+        ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod,
         Option<u32>
       ]
     >;
     readonly isMinChallengePeriod: boolean;
     readonly asMinChallengePeriod: ITuple<
-      [ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod, Option<u32>]
+      [
+        ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod,
+        Option<u32>
+      ]
     >;
     readonly isSystemUtilisationLowerThresholdPercentage: boolean;
     readonly asSystemUtilisationLowerThresholdPercentage: ITuple<
       [
-        ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage,
+        ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage,
         Option<Perbill>
       ]
     >;
     readonly isSystemUtilisationUpperThresholdPercentage: boolean;
     readonly asSystemUtilisationUpperThresholdPercentage: ITuple<
       [
-        ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage,
+        ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage,
         Option<Perbill>
       ]
     >;
     readonly isMostlyStablePrice: boolean;
     readonly asMostlyStablePrice: ITuple<
-      [ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMostlyStablePrice, Option<u128>]
+      [
+        ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMostlyStablePrice,
+        Option<u128>
+      ]
     >;
     readonly isMaxPrice: boolean;
     readonly asMaxPrice: ITuple<
-      [ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice, Option<u128>]
+      [ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice, Option<u128>]
     >;
     readonly isMinPrice: boolean;
     readonly asMinPrice: ITuple<
-      [ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice, Option<u128>]
+      [ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice, Option<u128>]
     >;
     readonly isUpperExponentFactor: boolean;
     readonly asUpperExponentFactor: ITuple<
-      [ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor, Option<u32>]
+      [
+        ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor,
+        Option<u32>
+      ]
     >;
     readonly isLowerExponentFactor: boolean;
     readonly asLowerExponentFactor: ITuple<
-      [ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor, Option<u32>]
+      [
+        ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor,
+        Option<u32>
+      ]
     >;
     readonly isZeroSizeBucketFixedRate: boolean;
     readonly asZeroSizeBucketFixedRate: ITuple<
       [
-        ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigZeroSizeBucketFixedRate,
+        ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigZeroSizeBucketFixedRate,
         Option<u128>
       ]
     >;
     readonly isIdealUtilisationRate: boolean;
     readonly asIdealUtilisationRate: ITuple<
       [
-        ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate,
+        ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate,
         Option<Perbill>
       ]
     >;
     readonly isDecayRate: boolean;
     readonly asDecayRate: ITuple<
-      [ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigDecayRate, Option<Perbill>]
+      [ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigDecayRate, Option<Perbill>]
     >;
     readonly isMinimumTreasuryCut: boolean;
     readonly asMinimumTreasuryCut: ITuple<
       [
-        ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMinimumTreasuryCut,
+        ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinimumTreasuryCut,
         Option<Perbill>
       ]
     >;
     readonly isMaximumTreasuryCut: boolean;
     readonly asMaximumTreasuryCut: ITuple<
       [
-        ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMaximumTreasuryCut,
+        ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaximumTreasuryCut,
         Option<Perbill>
       ]
     >;
     readonly isBspStopStoringFilePenalty: boolean;
     readonly asBspStopStoringFilePenalty: ITuple<
       [
-        ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigBspStopStoringFilePenalty,
+        ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBspStopStoringFilePenalty,
         Option<u128>
       ]
     >;
     readonly isProviderTopUpTtl: boolean;
     readonly asProviderTopUpTtl: ITuple<
-      [ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigProviderTopUpTtl, Option<u32>]
+      [
+        ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigProviderTopUpTtl,
+        Option<u32>
+      ]
     >;
     readonly isBasicReplicationTarget: boolean;
     readonly asBasicReplicationTarget: ITuple<
       [
-        ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigBasicReplicationTarget,
+        ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBasicReplicationTarget,
         Option<u32>
       ]
     >;
     readonly isStandardReplicationTarget: boolean;
     readonly asStandardReplicationTarget: ITuple<
       [
-        ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigStandardReplicationTarget,
+        ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStandardReplicationTarget,
         Option<u32>
       ]
     >;
     readonly isHighSecurityReplicationTarget: boolean;
     readonly asHighSecurityReplicationTarget: ITuple<
       [
-        ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigHighSecurityReplicationTarget,
+        ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigHighSecurityReplicationTarget,
         Option<u32>
       ]
     >;
     readonly isSuperHighSecurityReplicationTarget: boolean;
     readonly asSuperHighSecurityReplicationTarget: ITuple<
       [
-        ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigSuperHighSecurityReplicationTarget,
+        ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSuperHighSecurityReplicationTarget,
         Option<u32>
       ]
     >;
     readonly isUltraHighSecurityReplicationTarget: boolean;
     readonly asUltraHighSecurityReplicationTarget: ITuple<
       [
-        ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigUltraHighSecurityReplicationTarget,
+        ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUltraHighSecurityReplicationTarget,
         Option<u32>
       ]
     >;
     readonly isMaxReplicationTarget: boolean;
     readonly asMaxReplicationTarget: ITuple<
-      [ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxReplicationTarget, Option<u32>]
+      [
+        ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxReplicationTarget,
+        Option<u32>
+      ]
     >;
     readonly isTickRangeToMaximumThreshold: boolean;
     readonly asTickRangeToMaximumThreshold: ITuple<
       [
-        ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigTickRangeToMaximumThreshold,
+        ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigTickRangeToMaximumThreshold,
         Option<u32>
       ]
     >;
     readonly isStorageRequestTtl: boolean;
     readonly asStorageRequestTtl: ITuple<
-      [ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigStorageRequestTtl, Option<u32>]
+      [
+        ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStorageRequestTtl,
+        Option<u32>
+      ]
     >;
     readonly isMinWaitForStopStoring: boolean;
     readonly asMinWaitForStopStoring: ITuple<
-      [ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMinWaitForStopStoring, Option<u32>]
+      [
+        ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinWaitForStopStoring,
+        Option<u32>
+      ]
     >;
     readonly isMinSeedPeriod: boolean;
     readonly asMinSeedPeriod: ITuple<
-      [ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMinSeedPeriod, Option<u32>]
+      [ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinSeedPeriod, Option<u32>]
     >;
     readonly isStakeToSeedPeriod: boolean;
     readonly asStakeToSeedPeriod: ITuple<
-      [ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToSeedPeriod, Option<u128>]
+      [
+        ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToSeedPeriod,
+        Option<u128>
+      ]
     >;
     readonly isUpfrontTicksToPay: boolean;
     readonly asUpfrontTicksToPay: ITuple<
-      [ShrParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigUpfrontTicksToPay, Option<u32>]
+      [
+        ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpfrontTicksToPay,
+        Option<u32>
+      ]
     >;
     readonly type:
       | "SlashAmountPerMaxFileSize"
@@ -6645,6 +6686,6 @@ declare module "@polkadot/types/lookup" {
     readonly type: "Disabled" | "Enabled";
   }
 
-  /** @name ShrParachainRuntime (545) */
-  type ShrParachainRuntime = Null;
+  /** @name ShParachainRuntimeRuntime (545) */
+  type ShParachainRuntimeRuntime = Null;
 } // declare module
