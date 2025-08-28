@@ -21,6 +21,10 @@ max_page_size = 100
 # WebSocket RPC endpoint for the StorageHub node
 # Use ws:// for unencrypted or wss:// for TLS-encrypted connections
 rpc_url = "ws://localhost:9944"
+# MSP ID that this backend instance represents
+# This should be a valid MSP ID registered on the StorageHub chain
+# Example uses DUMMY_MSP_ID from test configuration
+msp_id = "0x0000000000000000000000000000000000000000000000000000000000000300"
 # Request timeout in seconds (optional, default: 30)
 # Increase this value for slower networks or heavy operations
 timeout_secs = 30
