@@ -36,6 +36,9 @@ import { waitForDeleteFileExtrinsic } from "../../../util/fisherman/fishermanHel
  * 4. User sends file deletion request
  * 5. Verifies fisherman indexes all events correctly and processes deletions
  * 6. Verifies both BSP and MSP forest root changes after deletion
+ *
+ * Note: The user node is running the indexer, so any finalize blocks we seal on the user node, directly affects the data that is being
+ * indexed in the database.
  */
 describeMspNet(
   "Fisherman File Deletion Flow",
