@@ -32,9 +32,12 @@ pub fn routes(services: Services) -> Router {
         .route("/value-props", get(handlers::value_props))
         .route("/health", get(handlers::msp_health))
         // Bucket routes
-        .route("/buckets", get(handlers::list_buckets))
-        .route("/buckets/{bucket_id}", get(handlers::get_bucket))
-        .route("/buckets/{bucket_id}/files", get(handlers::get_files))
+        .route("/buckets", get(handlers::buckets::list_buckets))
+        .route("/buckets/{bucket_id}", get(handlers::buckets::get_bucket))
+        .route(
+            "/buckets/{bucket_id}/files",
+            get(handlers::buckets::get_files),
+        )
         // File routes
         .route(
             "/buckets/{bucket_id}/info/{file_key}",

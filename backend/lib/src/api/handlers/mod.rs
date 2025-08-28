@@ -20,10 +20,12 @@ use crate::{
     error::Error,
     models::{
         auth::{NonceRequest, VerifyRequest},
-        files::{FileListResponse, FileUploadResponse},
+        files::FileUploadResponse,
     },
     services::Services,
 };
+
+pub mod buckets;
 
 // TODO: we could move from `TypedHeader` to axum-jwt (needs rust 1.88)
 
@@ -97,48 +99,6 @@ pub async fn value_props(State(services): State<Services>) -> Result<impl IntoRe
 
 pub async fn msp_health(State(services): State<Services>) -> Result<impl IntoResponse, Error> {
     let response = services.msp.get_health().await?;
-    Ok(Json(response))
-}
-
-// ==================== Bucket Handlers ====================
-
-pub async fn list_buckets(
-    State(services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
-) -> Result<impl IntoResponse, Error> {
-    let payload = extract_bearer_token(&auth)?;
-    let address = payload
-        .get("address")
-        .and_then(|a| a.as_str())
-        .unwrap_or(MOCK_ADDRESS);
-
-    let response = services.msp.list_user_buckets(address).await?;
-    Ok(Json(response))
-}
-
-pub async fn get_bucket(
-    State(services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
-    Path(bucket_id): Path<String>,
-) -> Result<impl IntoResponse, Error> {
-    let _auth = extract_bearer_token(&auth)?;
-
-    let response = services.msp.get_bucket(&bucket_id).await?;
-    Ok(Json(response))
-}
-
-pub async fn get_files(
-    State(services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
-    Path(bucket_id): Path<String>,
-) -> Result<impl IntoResponse, Error> {
-    let _auth = extract_bearer_token(&auth)?;
-
-    let file_tree = services.msp.get_file_tree(&bucket_id).await?;
-    let response = FileListResponse {
-        bucket_id: bucket_id.clone(),
-        files: vec![file_tree],
-    };
     Ok(Json(response))
 }
 
