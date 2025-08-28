@@ -79,16 +79,16 @@ import type {
   PolkadotPrimitivesV8PersistedValidationData,
   PolkadotPrimitivesV8UpgradeGoAhead,
   PolkadotPrimitivesV8UpgradeRestriction,
+  ShrParachainConfigsRuntimeParamsRuntimeParametersKey,
+  ShrParachainConfigsRuntimeParamsRuntimeParametersValue,
+  ShrParachainRuntimeHoldReason,
+  ShrParachainSessionKeys,
   SpConsensusAuraSr25519AppSr25519Public,
   SpCoreCryptoKeyTypeId,
   SpRuntimeDigest,
   SpTrieStorageProof,
   SpWeightsWeightV2Weight,
   StagingXcmV5Instruction,
-  StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey,
-  StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue,
-  StorageHubRuntimeRuntimeHoldReason,
-  StorageHubRuntimeSessionKeys,
   XcmVersionedAssetId,
   XcmVersionedLocation
 } from "@polkadot/types/lookup";
@@ -208,7 +208,7 @@ declare module "@polkadot/api-base/types/storage" {
         (arg: AccountId32 | string | Uint8Array) => Observable<
           Vec<
             {
-              readonly id: StorageHubRuntimeRuntimeHoldReason;
+              readonly id: ShrParachainRuntimeHoldReason;
               readonly amount: u128;
             } & Struct
           >
@@ -946,14 +946,14 @@ declare module "@polkadot/api-base/types/storage" {
         ApiType,
         (
           arg:
-            | StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey
+            | ShrParachainConfigsRuntimeParamsRuntimeParametersKey
             | { RuntimeConfig: any }
             | string
             | Uint8Array
-        ) => Observable<Option<StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue>>,
-        [StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey]
+        ) => Observable<Option<ShrParachainConfigsRuntimeParamsRuntimeParametersValue>>,
+        [ShrParachainConfigsRuntimeParamsRuntimeParametersKey]
       > &
-        QueryableStorageEntry<ApiType, [StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey]>;
+        QueryableStorageEntry<ApiType, [ShrParachainConfigsRuntimeParamsRuntimeParametersKey]>;
       /**
        * Generic query
        **/
@@ -1804,9 +1804,7 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       nextKeys: AugmentedQuery<
         ApiType,
-        (
-          arg: AccountId32 | string | Uint8Array
-        ) => Observable<Option<StorageHubRuntimeSessionKeys>>,
+        (arg: AccountId32 | string | Uint8Array) => Observable<Option<ShrParachainSessionKeys>>,
         [AccountId32]
       > &
         QueryableStorageEntry<ApiType, [AccountId32]>;
@@ -1822,7 +1820,7 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       queuedKeys: AugmentedQuery<
         ApiType,
-        () => Observable<Vec<ITuple<[AccountId32, StorageHubRuntimeSessionKeys]>>>,
+        () => Observable<Vec<ITuple<[AccountId32, ShrParachainSessionKeys]>>>,
         []
       > &
         QueryableStorageEntry<ApiType, []>;

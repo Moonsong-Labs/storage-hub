@@ -33,6 +33,8 @@ import type {
   PalletStorageProvidersValueProposition,
   PalletStorageProvidersValuePropositionWithId,
   ShpTraitsTrieMutation,
+  ShrParachainConfigsRuntimeParamsRuntimeParametersKey,
+  ShrParachainConfigsRuntimeParamsRuntimeParametersValue,
   SpRuntimeDispatchError,
   SpRuntimeMultiSignature,
   SpWeightsWeightV2Weight,
@@ -41,8 +43,6 @@ import type {
   StagingXcmV5Response,
   StagingXcmV5TraitsOutcome,
   StagingXcmV5Xcm,
-  StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey,
-  StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue,
   XcmV5TraitsError,
   XcmVersionedAssets,
   XcmVersionedLocation
@@ -1670,14 +1670,14 @@ declare module "@polkadot/api-base/types/events" {
       Updated: AugmentedEvent<
         ApiType,
         [
-          key: StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey,
-          oldValue: Option<StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue>,
-          newValue: Option<StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue>
+          key: ShrParachainConfigsRuntimeParamsRuntimeParametersKey,
+          oldValue: Option<ShrParachainConfigsRuntimeParamsRuntimeParametersValue>,
+          newValue: Option<ShrParachainConfigsRuntimeParamsRuntimeParametersValue>
         ],
         {
-          key: StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey;
-          oldValue: Option<StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue>;
-          newValue: Option<StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue>;
+          key: ShrParachainConfigsRuntimeParamsRuntimeParametersKey;
+          oldValue: Option<ShrParachainConfigsRuntimeParamsRuntimeParametersValue>;
+          newValue: Option<ShrParachainConfigsRuntimeParamsRuntimeParametersValue>;
         }
       >;
       /**

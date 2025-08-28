@@ -409,7 +409,7 @@ const addContainer = async (
   const chainName = api.consts.system.version.specName.toString();
 
   assert(
-    chainName === "storage-hub-runtime",
+    chainName === "shr-parachain",
     `Error connecting to ${providerType.toUpperCase()} via api ${containerName}`
   );
 

@@ -39,7 +39,7 @@ shc-common = { workspace = true }
 [dev-dependencies]
 shp-forest-verifier = { workspace = true }
 shp-traits = { workspace = true }
-storage-hub-runtime = { workspace = true }
+shr-parachain = { workspace = true }
 
 [features]
 default = ["std"]
