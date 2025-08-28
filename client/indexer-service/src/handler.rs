@@ -669,7 +669,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     (*capacity).into(),
                     root.as_ref().to_vec(),
                     sql_multiaddresses,
-                    *bsp_id,
+                    OnchainBspId::new(*bsp_id),
                     stake,
                 )
                 .await?;
@@ -733,7 +733,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     (*capacity).into(),
                     value_prop,
                     sql_multiaddresses,
-                    *msp_id,
+                    OnchainMspId::new(*msp_id),
                 )
                 .await?;
             }

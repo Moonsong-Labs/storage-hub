@@ -211,9 +211,9 @@ pub mod pallet {
             // Ensure the mandatory inherent was included in the block or the block is invalid
             // We use take() to make sure this is storage is not set for the next block
             assert!(
-                <InherentIncluded<T>>::take().is_some(),
-                "Mandatory randomness inherent not included; InherentIncluded storage item is empty"
-            );
+				<InherentIncluded<T>>::take().is_some(),
+				"Mandatory randomness inherent not included; InherentIncluded storage item is empty"
+			);
         }
     }
 

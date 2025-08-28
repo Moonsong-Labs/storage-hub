@@ -161,7 +161,9 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
 
     /// Get file key changes between two blocks for a specific provider.
     ///
-    /// `provider` is either a BSP id or a Bucket id
+    /// Note:
+    /// - `from_block` is excluded from being processed.
+    /// - `provider` is either a BSP id or a Bucket id
     pub async fn get_file_key_changes_since_block(
         &self,
         from_block: BlockNumber<Runtime>,
@@ -180,7 +182,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
         // TODO: Add proper memory management and block range limits to prevent OOM
         let mut file_key_states: HashMap<Hash, FileKeyOperation> = HashMap::new();
 
-        // Process blocks from from_block + 1 to best_block
+        // Process blocks from `from_block` (excluding) to `best_block_number`
         let mut block_num = from_block.saturating_add(One::one());
         while block_num <= best_block_number {
             let num: u32 = (block_num.into()).as_u64().saturated_into();

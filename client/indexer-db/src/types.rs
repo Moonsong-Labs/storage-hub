@@ -9,6 +9,7 @@ use sp_core::H256;
 use std::{fmt, io::Write};
 
 /// Wrapper for onchain BSP IDs that automatically handles DB encoding
+// TODO(Datahaven): Add `Runtime: StorageEnableRuntime` to be id length agnostic
 #[derive(Debug, Clone, Copy, PartialEq, AsExpression, FromSqlRow)]
 #[diesel(sql_type = Text)]
 pub struct OnchainBspId(H256);
@@ -97,6 +98,7 @@ impl FromSql<Text, Pg> for OnchainBspId {
 }
 
 /// Wrapper for onchain MSP IDs that automatically handles DB encoding
+// TODO(Datahaven): Add `Runtime: StorageEnableRuntime` to be id length agnostic
 #[derive(Debug, Clone, Copy, PartialEq, AsExpression, FromSqlRow)]
 #[diesel(sql_type = Text)]
 pub struct OnchainMspId(H256);

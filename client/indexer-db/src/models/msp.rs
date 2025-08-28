@@ -9,7 +9,6 @@ use crate::{
     types::OnchainMspId,
     DbConnection,
 };
-use sp_core::H256;
 
 /// Table that holds the MSPs.
 #[derive(Debug, Queryable, Insertable, Selectable)]
@@ -42,7 +41,7 @@ impl Msp {
         capacity: BigDecimal,
         value_prop: String,
         multiaddresses: Vec<MultiAddress>,
-        onchain_msp_id: H256,
+        onchain_msp_id: OnchainMspId,
     ) -> Result<Self, diesel::result::Error> {
         let msp = diesel::insert_into(msp::table)
             .values((

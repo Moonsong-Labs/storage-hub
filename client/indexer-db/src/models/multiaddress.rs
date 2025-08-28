@@ -9,6 +9,7 @@ use crate::{schema::multiaddress, DbConnection};
 #[diesel(table_name = multiaddress)]
 pub struct MultiAddress {
     pub id: i64,
+    ///  Represents the address used to connect to
     pub address: Vec<u8>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,

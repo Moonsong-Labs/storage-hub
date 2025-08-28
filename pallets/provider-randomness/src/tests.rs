@@ -328,8 +328,7 @@ mod add_randomness {
 
             // Advance a few ticks to simulate a realistic scenario, but not enough to
             // reach the first deadline since that would get Alice slashed
-            let first_deadline =
-                ProvidersWithoutCommitment::<Test>::get(alice_provider_id).unwrap();
+            let first_deadline = ProvidersWithoutCommitment::<Test>::get(alice_provider_id).unwrap();
             run_to_block(first_deadline - 1);
 
             // Alice submits a commitment

@@ -9,7 +9,6 @@ use crate::{
     types::OnchainBspId,
     DbConnection,
 };
-use shp_types::Hash;
 
 /// Table that holds the BSPs.
 /// The account is guaranteed to be unique across both MSPs and BSPs.
@@ -45,7 +44,7 @@ impl Bsp {
         capacity: BigDecimal,
         merkle_root: Vec<u8>,
         multiaddresses: Vec<MultiAddress>,
-        onchain_bsp_id: Hash,
+        onchain_bsp_id: OnchainBspId,
         stake: BigDecimal,
     ) -> Result<Self, diesel::result::Error> {
         let bsp = diesel::insert_into(bsp::table)

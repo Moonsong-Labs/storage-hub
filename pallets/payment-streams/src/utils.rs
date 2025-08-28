@@ -665,10 +665,10 @@ where
                                         user_account,
                                         |payment_stream| {
                                             let payment_stream = expect_or_err!(
-                                                payment_stream,
-                                                "Payment stream should exist if it was found before.",
-                                                Error::<T>::PaymentStreamNotFound
-                                            );
+                                            payment_stream,
+                                            "Payment stream should exist if it was found before.",
+                                            Error::<T>::PaymentStreamNotFound
+                                        );
                                             payment_stream.out_of_funds_tick = Some(current_tick);
                                             Ok::<(), DispatchError>(())
                                         },
@@ -708,12 +708,12 @@ where
 
                             // Get the payment account of the SP
                             let provider_payment_account = expect_or_err!(
-                                <T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(
-                                    *provider_id
-                                ),
-                                "Provider should exist and have a payment account if its ID exists.",
-                                Error::<T>::ProviderInconsistencyError
-                            );
+                            	<T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(
+                                	*provider_id
+                            	),
+                            	"Provider should exist and have a payment account if its ID exists.",
+                            	Error::<T>::ProviderInconsistencyError
+                        	);
 
                             // Check if the total amount charged would overflow
                             ensure!(
@@ -820,10 +820,10 @@ where
                                         user_account,
                                         |payment_stream| {
                                             let payment_stream = expect_or_err!(
-                                                payment_stream,
-                                                "Payment stream should exist if it was found before.",
-                                                Error::<T>::PaymentStreamNotFound
-                                            );
+                                            payment_stream,
+                                            "Payment stream should exist if it was found before.",
+                                            Error::<T>::PaymentStreamNotFound
+                                        );
                                             payment_stream.out_of_funds_tick = Some(current_tick);
                                             Ok::<(), DispatchError>(())
                                         },
@@ -863,12 +863,12 @@ where
 
                             // Get the payment account of the SP
                             let provider_payment_account = expect_or_err!(
-                                <T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(
-                                    *provider_id
-                                ),
-                                "Provider should exist and have a payment account if its ID exists.",
-                                Error::<T>::ProviderInconsistencyError
-                            );
+                            <T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(
+                                *provider_id
+                            ),
+                            "Provider should exist and have a payment account if its ID exists.",
+                            Error::<T>::ProviderInconsistencyError
+                        );
 
                             // Check if the total amount charged would overflow
                             // NOTE: We check this BEFORE transferring the amount to the provider.
