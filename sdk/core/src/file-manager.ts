@@ -110,7 +110,7 @@ export class FileManager {
       owner.toU8a(),
       bucketId.toU8a(),
       new TextEncoder().encode(location),
-      this.file.size,
+      BigInt(this.file.size),
       fp.toU8a(),
     );
 
