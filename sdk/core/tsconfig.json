@@ -8,9 +8,6 @@
         "declaration": true,
         "emitDeclarationOnly": false,
         "paths": {
-            "./wasm": [
-                "./src/wasm.ts"
-            ],
             "@storagehub/wasm": [
                 "wasm/pkg"
             ]
