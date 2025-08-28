@@ -662,6 +662,11 @@ where
         // Create ephemeral in-memory forest storage
         let mut ephemeral_forest = InMemoryForestStorage::<StorageProofsMerkleTrieLayout>::new();
 
+        // TODO: Forests are constructed on the fly and fisherman tasks are run in parallel.
+        // TODO: It is entirely possible that there me be more than 1 file deletion for the same bucket that
+        // TODO: is submitted in the same block as another task. This means that only a single task will have successfully
+        // TODO: deleted a file while the other tasks will have a invalid forest root.
+        // TODO: We could adopt the same strategy as the InMemoryForestStorage which tracks per bucket forests and have a lock on it.
         // Insert all file keys from finalized data
         <InMemoryForestStorage<StorageProofsMerkleTrieLayout> as ForestStorage<
             StorageProofsMerkleTrieLayout,
@@ -674,6 +679,8 @@ where
             "Ephemeral trie built with root: {:?}",
             <InMemoryForestStorage<StorageProofsMerkleTrieLayout> as ForestStorage<StorageProofsMerkleTrieLayout, Runtime>>::root(&ephemeral_forest)
         );
+
+        // TODO: Check if the root matches the one on chain
 
         trace!(
             target: LOG_TARGET,

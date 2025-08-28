@@ -236,7 +236,7 @@ describeMspNet(
         operation: { Delete: null }
       };
 
-      // Create signature for the intention - encode the object
+      // Create the user signature for the file deletion intention
       const intentionCodec = userApi.createType(
         "PalletFileSystemFileOperationIntention",
         fileOperationIntention
