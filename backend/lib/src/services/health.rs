@@ -1,3 +1,7 @@
+//! TODO(MOCK): this service returns pretty rough health status of the underlying services
+//! it doesn't check ALL services in use by the backend, nor does an accurate analysis
+//! of all the parts that it does check
+
 use std::sync::Arc;
 
 use serde::Serialize;
