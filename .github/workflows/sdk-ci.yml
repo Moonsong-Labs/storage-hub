@@ -61,6 +61,13 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # Debug: verify dist typings exist and show tsc version
+      - name: Debug artifacts
+        run: |
+          echo "Node: $(node -v)" && echo "pnpm: $(pnpm -v)" && npx tsc -v || true
+          ls -la core/dist || true
+          test -f core/dist/index.d.ts && echo "Found core/dist/index.d.ts" || (echo "Missing core/dist/index.d.ts" && exit 1)
+
       # Lint & format check
       - name: Lint
         run: pnpm lint
