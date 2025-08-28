@@ -12,7 +12,7 @@
 // benchmark
 // pallet
 // --runtime
-// ./target/release/wbuild/storage-hub-runtime/storage_hub_runtime.wasm
+// ./target/release/wbuild/shr-parachain/shr_parachain.wasm
 // --genesis-builder
 // runtime
 // --wasm-execution

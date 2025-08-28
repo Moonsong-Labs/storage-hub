@@ -275,8 +275,8 @@ shp-traits = { path = "primitives/traits", default-features = false }
 shp-treasury-funding = { path = "primitives/treasury-funding", default-features = false }
 shp-types = { path = "primitives/types", default-features = false }
 
-# Lcoal - StorageHub Runtime
-storage-hub-runtime = { path = "runtime", default-features = false }
+# Local - StorageHub Runtime
+shr-parachain = { path = "runtime", default-features = false }
 
 [workspace.lints.rust]
 suspicious_double_ref_op = { level = "allow", priority = 2 }

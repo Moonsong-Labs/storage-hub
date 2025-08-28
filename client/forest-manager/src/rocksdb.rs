@@ -541,7 +541,7 @@ mod tests {
 
         let file_key = ForestStorage::<
             StorageProofsMerkleTrieLayout,
-            storage_hub_runtime::Runtime,
+            shr_parachain::Runtime,
         >::insert_files_metadata(
             &mut forest_storage,
             &[file_metadata],
@@ -550,7 +550,7 @@ mod tests {
 
         assert!(ForestStorage::<
             StorageProofsMerkleTrieLayout,
-            storage_hub_runtime::Runtime,
+            shr_parachain::Runtime,
         >::contains_file_key(&forest_storage, &file_key.first().unwrap())
             .unwrap()
         );
@@ -571,7 +571,7 @@ mod tests {
 
         let file_key = ForestStorage::<
             StorageProofsMerkleTrieLayout,
-            storage_hub_runtime::Runtime,
+            shr_parachain::Runtime,
         >::insert_files_metadata(
             &mut forest_storage,
             &[file_metadata],
@@ -582,13 +582,13 @@ mod tests {
 
         assert!(ForestStorage::<
             StorageProofsMerkleTrieLayout,
-            storage_hub_runtime::Runtime,
+            shr_parachain::Runtime,
         >::delete_file_key(&mut forest_storage, &file_key)
             .is_ok()
         );
         assert!(!ForestStorage::<
             StorageProofsMerkleTrieLayout,
-            storage_hub_runtime::Runtime,
+            shr_parachain::Runtime,
         >::contains_file_key(&forest_storage, &file_key)
             .unwrap()
         );
@@ -599,7 +599,7 @@ mod tests {
         let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>, InMemory>().unwrap();
         assert!(ForestStorage::<
             StorageProofsMerkleTrieLayout,
-            storage_hub_runtime::Runtime,
+            shr_parachain::Runtime,
         >::delete_file_key(&mut forest_storage, &[0u8; 32].into())
             .is_ok()
         );
@@ -622,7 +622,7 @@ mod tests {
 
             let file_key = ForestStorage::<
                 StorageProofsMerkleTrieLayout,
-                storage_hub_runtime::Runtime,
+                shr_parachain::Runtime,
             >::insert_files_metadata(
                 &mut forest_storage, &[file_metadata]
             )
@@ -633,7 +633,7 @@ mod tests {
 
         let file_metadata = ForestStorage::<
             StorageProofsMerkleTrieLayout,
-            storage_hub_runtime::Runtime,
+            shr_parachain::Runtime,
         >::get_file_metadata(&forest_storage, &keys[0])
         .unwrap()
         .unwrap();
@@ -661,7 +661,7 @@ mod tests {
 
             let file_key = ForestStorage::<
                 StorageProofsMerkleTrieLayout,
-                storage_hub_runtime::Runtime,
+                shr_parachain::Runtime,
             >::insert_files_metadata(
                 &mut forest_storage, &[file_metadata]
             )
@@ -674,7 +674,7 @@ mod tests {
 
         let proof = ForestStorage::<
             StorageProofsMerkleTrieLayout,
-            storage_hub_runtime::Runtime,
+            shr_parachain::Runtime,
         >::generate_proof(&forest_storage, vec![challenge])
             .unwrap();
 
@@ -701,7 +701,7 @@ mod tests {
 
             let file_key = ForestStorage::<
                 StorageProofsMerkleTrieLayout,
-                storage_hub_runtime::Runtime,
+                shr_parachain::Runtime,
             >::insert_files_metadata(
                 &mut forest_storage, &[file_metadata]
             )
@@ -716,7 +716,7 @@ mod tests {
 
         let proof = ForestStorage::<
             StorageProofsMerkleTrieLayout,
-            storage_hub_runtime::Runtime,
+            shr_parachain::Runtime,
         >::generate_proof(&forest_storage, vec![challenge])
             .unwrap();
         let included_keys = vec![keys[0], keys[1], keys[2]];
@@ -732,7 +732,7 @@ mod tests {
         let new_challenges = vec![keys[10], keys[40]];
         let proof = ForestStorage::<
             StorageProofsMerkleTrieLayout,
-            storage_hub_runtime::Runtime,
+            shr_parachain::Runtime,
         >::generate_proof(&forest_storage, new_challenges)
             .unwrap();
         let included_keys = vec![keys[9], keys[10], keys[11], keys[39], keys[40], keys[41]];
@@ -752,7 +752,7 @@ mod tests {
             println!("Trying to remove key: {:?}", key.as_bytes());
             let proof = ForestStorage::<
                 StorageProofsMerkleTrieLayout,
-                storage_hub_runtime::Runtime,
+                shr_parachain::Runtime,
             >::generate_proof(&forest_storage, vec![*key])
                 .unwrap();
             let proof = proof.proof;
@@ -791,7 +791,7 @@ mod tests {
 
             let file_key = ForestStorage::<
                 StorageProofsMerkleTrieLayout,
-                storage_hub_runtime::Runtime,
+                shr_parachain::Runtime,
             >::insert_files_metadata(
                 &mut forest_storage, &[file_metadata]
             )
@@ -818,7 +818,7 @@ mod tests {
 
         let proof = ForestStorage::<
             StorageProofsMerkleTrieLayout,
-            storage_hub_runtime::Runtime,
+            shr_parachain::Runtime,
         >::generate_proof(&forest_storage, vec![challenge_hash])
             .unwrap();
 
@@ -852,7 +852,7 @@ mod tests {
 
         let file_keys = ForestStorage::<
             StorageProofsMerkleTrieLayout,
-            storage_hub_runtime::Runtime,
+            shr_parachain::Runtime,
         >::insert_files_metadata(
             &mut forest_storage,
             &[file_metadata_one, file_metadata_two],
@@ -868,7 +868,7 @@ mod tests {
 
         let proof = ForestStorage::<
             StorageProofsMerkleTrieLayout,
-            storage_hub_runtime::Runtime,
+            shr_parachain::Runtime,
         >::generate_proof(&forest_storage, vec![challenge])
             .unwrap();
 
@@ -900,7 +900,7 @@ mod tests {
 
             let file_key = ForestStorage::<
                 StorageProofsMerkleTrieLayout,
-                storage_hub_runtime::Runtime,
+                shr_parachain::Runtime,
             >::insert_files_metadata(
                 &mut forest_storage, &[file_metadata]
             )
@@ -916,7 +916,7 @@ mod tests {
 
         let proof = ForestStorage::<
             StorageProofsMerkleTrieLayout,
-            storage_hub_runtime::Runtime,
+            shr_parachain::Runtime,
         >::generate_proof(&forest_storage, vec![challenge])
             .unwrap();
 
@@ -943,7 +943,7 @@ mod tests {
 
             let file_key = ForestStorage::<
                 StorageProofsMerkleTrieLayout,
-                storage_hub_runtime::Runtime,
+                shr_parachain::Runtime,
             >::insert_files_metadata(
                 &mut forest_storage, &[file_metadata]
             )
@@ -963,7 +963,7 @@ mod tests {
         for key in &keys_to_remove {
             assert!(ForestStorage::<
                 StorageProofsMerkleTrieLayout,
-                storage_hub_runtime::Runtime,
+                shr_parachain::Runtime,
             >::delete_file_key(&mut forest_storage, &key)
                 .is_ok()
             );
@@ -974,7 +974,7 @@ mod tests {
             assert!(
                 !ForestStorage::<
                     StorageProofsMerkleTrieLayout,
-                    storage_hub_runtime::Runtime,
+                    shr_parachain::Runtime,
                 >::contains_file_key(&forest_storage, &key)
                     .unwrap()
             );

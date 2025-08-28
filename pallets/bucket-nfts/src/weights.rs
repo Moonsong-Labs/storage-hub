@@ -13,7 +13,7 @@
 // benchmark
 // pallet
 // --runtime
-// ./target/production/wbuild/storage-hub-runtime/storage_hub_runtime.wasm
+// ./target/production/wbuild/shr-parachain/shr_parachain.wasm
 // --pallet
 // pallet-bucket-nfts
 // --extrinsic

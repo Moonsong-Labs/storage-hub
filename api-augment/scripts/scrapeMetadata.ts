@@ -38,13 +38,7 @@ const fetchMetadata = async () => {
 };
 
 async function main() {
-  const nodePath = path.join(process.cwd(), "..", "target", "release", "storage-hub-node");
   const metadataPath = path.join(process.cwd(), "storagehub.json");
-
-  if (!fs.existsSync(nodePath)) {
-    console.error("Storage Hub Node not found at path: ", nodePath);
-    throw new Error("File not found");
-  }
 
   // TODO: replace with dockerode
   spawn(
