@@ -91,7 +91,7 @@ export class BspNetTestApi implements AsyncDisposable {
   public static async connect(endpoint: `ws://${string}` | `wss://${string}`) {
     const api = await ApiPromise.create({
       provider: new WsProvider(endpoint),
-      isPedantic:false,
+      isPedantic: false,
       noInitWarn: true,
       throwOnConnect: false,
       throwOnUnknown: false,
