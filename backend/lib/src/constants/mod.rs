@@ -52,13 +52,6 @@ pub mod api {
     pub const MAX_PAGE_SIZE: usize = 100;
 }
 
-/// Counter service constants
-/// TODO(SCAFFOLDING): Counter constants are for demonstration only
-/// Remove this entire module when implementing real MSP features
-pub mod counter {
-    /// Default counter increment value
-    pub const DEFAULT_INCREMENT: i64 = 1;
-
-    /// Default counter key
-    pub const DEFAULT_COUNTER_KEY: &str = "default";
+pub mod mocks {
+    pub const MOCK_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 }
