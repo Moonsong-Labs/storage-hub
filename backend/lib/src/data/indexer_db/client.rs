@@ -6,10 +6,11 @@
 
 use std::sync::Arc;
 
-use shc_indexer_db::models::Bsp;
+use shc_indexer_db::models::{Bsp, Bucket, Msp};
 
 use crate::{
     constants::database::DEFAULT_PAGE_LIMIT, data::indexer_db::repository::StorageOperations,
+    error::Result,
 };
 
 /// Database client that delegates to a repository implementation
@@ -47,7 +48,7 @@ impl DBClient {
     }
 
     /// Test the database connection
-    pub async fn test_connection(&self) -> crate::error::Result<()> {
+    pub async fn test_connection(&self) -> Result<()> {
         // Try to list BSPs with a limit of 1 to test the connection
         self.repository
             .list_bsps(1, 0)
@@ -57,16 +58,43 @@ impl DBClient {
     }
 
     /// Get all BSPs with optional pagination
-    pub async fn get_all_bsps(
-        &self,
-        limit: Option<i64>,
-        offset: Option<i64>,
-    ) -> crate::error::Result<Vec<Bsp>> {
+    pub async fn get_all_bsps(&self, limit: Option<i64>, offset: Option<i64>) -> Result<Vec<Bsp>> {
         let limit = limit.unwrap_or(DEFAULT_PAGE_LIMIT);
         let offset = offset.unwrap_or(0);
 
         self.repository
             .list_bsps(limit, offset)
+            .await
+            .map_err(|e| crate::error::Error::Database(e.to_string()))
+    }
+
+    /// Retrieve a given MSP's entry by its onchain ID
+    pub async fn get_msp(&self, msp_onchain_id: &str) -> Result<Msp> {
+        // TODO: should we cache this?
+        // since we always reference the same msp
+        self.repository
+            .get_msp_by_onchain_id(msp_onchain_id.into())
+            .await
+            .map_err(|e| crate::error::Error::Database(e.to_string()))
+    }
+
+    /// Get all the `user`'s buckets with the given MSP
+    pub async fn get_user_buckets(
+        &self,
+        msp: &str,
+        user: &str,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<Vec<Bucket>> {
+        let msp = self.get_msp(msp).await?;
+
+        self.repository
+            .list_user_buckets_by_msp(
+                msp.id,
+                user,
+                limit.unwrap_or(DEFAULT_PAGE_LIMIT),
+                offset.unwrap_or(0),
+            )
             .await
             .map_err(|e| crate::error::Error::Database(e.to_string()))
     }
@@ -76,7 +104,7 @@ impl DBClient {
 #[cfg(test)]
 impl DBClient {
     /// Delete a BSP
-    pub async fn delete_bsp(&self, account: &str) -> crate::error::Result<()> {
+    pub async fn delete_bsp(&self, account: &str) -> Result<()> {
         self.repository
             .delete_bsp(account)
             .await

@@ -80,7 +80,8 @@ impl Default for Config {
             },
             storage_hub: StorageHubConfig {
                 rpc_url: DEFAULT_RPC_URL.to_string(),
-                msp_id: "0x0000000000000000000000000000000000000000000000000000000000000300".to_string(),
+                msp_id: "0x0000000000000000000000000000000000000000000000000000000000000300"
+                    .to_string(),
                 timeout_secs: Some(DEFAULT_TIMEOUT_SECS),
                 max_concurrent_requests: Some(DEFAULT_MAX_CONCURRENT_REQUESTS),
                 verify_tls: true,

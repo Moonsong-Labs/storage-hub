@@ -25,13 +25,24 @@
 //! ```
 
 use async_trait::async_trait;
-use shc_indexer_db::models::Bsp;
+use shc_indexer_db::models::{Bsp, Bucket, Msp};
 
 pub mod error;
 pub mod pool;
 pub mod postgres;
 
 use error::RepositoryResult;
+
+/// Represents a ProviderId, like an MSP or BSP ID
+///
+/// This is used to differentiate between the database id and the onchain id
+// TODO: replace with appropriate type from runtime
+pub struct ProviderId<'a>(pub &'a str);
+impl<'a> From<&'a str> for ProviderId<'a> {
+    fn from(value: &'a str) -> Self {
+        Self(value)
+    }
+}
 
 /// Read-only operations for indexer data access.
 ///
@@ -58,6 +69,22 @@ pub trait IndexerOps: Send + Sync {
     /// # Returns
     /// * Vector of BSPs
     async fn list_bsps(&self, limit: i64, offset: i64) -> RepositoryResult<Vec<Bsp>>;
+
+    /// Retrieve the specified MSP's information given its onchain id
+    async fn get_msp_by_onchain_id(&self, msp: ProviderId<'_>) -> RepositoryResult<Msp>;
+
+    /// List the account's buckets with the given MSP
+    ///
+    /// # Arguments
+    /// * `msp` - the MSP (database) ID where the bucket is held
+    /// * `account` - the User account that owns the bucket
+    async fn list_user_buckets_by_msp(
+        &self,
+        msp: i64,
+        account: &str,
+        limit: i64,
+        offset: i64,
+    ) -> RepositoryResult<Vec<Bucket>>;
 }
 
 /// Mutable operations for test environments.

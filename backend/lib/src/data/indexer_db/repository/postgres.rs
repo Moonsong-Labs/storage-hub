@@ -15,11 +15,16 @@
 use async_trait::async_trait;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
-use shc_indexer_db::{models::Bsp, schema::bsp};
+use shc_indexer_db::{
+    models::{Bsp, Bucket, Msp},
+    schema::{bsp, bucket},
+};
 
 #[cfg(test)]
 use crate::data::indexer_db::repository::IndexerOpsMut;
-use crate::data::indexer_db::repository::{error::RepositoryResult, pool::SmartPool, IndexerOps};
+use crate::data::indexer_db::repository::{
+    error::RepositoryResult, pool::SmartPool, IndexerOps, ProviderId,
+};
 
 /// PostgreSQL repository implementation.
 ///
@@ -58,6 +63,38 @@ impl IndexerOps for Repository {
             .await?;
 
         Ok(results)
+    }
+
+    // ============ MSP Read Operations ============
+    async fn get_msp_by_onchain_id(&self, msp: ProviderId<'_>) -> RepositoryResult<Msp> {
+        let mut conn = self.pool.get().await?;
+
+        Msp::get_by_onchain_msp_id(&mut conn, msp.0.to_owned())
+            .await
+            .map_err(Into::into)
+    }
+
+    // ============ Bucket Read Operations ============
+    async fn list_user_buckets_by_msp(
+        &self,
+        msp: i64,
+        account: &str,
+        limit: i64,
+        offset: i64,
+    ) -> RepositoryResult<Vec<Bucket>> {
+        let mut conn = self.pool.get().await?;
+
+        // Same as Bucket::get_user_buckets_by_msp but with pagination
+        let buckets = bucket::table
+            .order(bucket::id.asc())
+            .filter(bucket::account.eq(account))
+            .filter(bucket::msp_id.eq(msp))
+            .limit(limit)
+            .offset(offset)
+            .load(&mut conn)
+            .await?;
+
+        Ok(buckets)
     }
 }
 

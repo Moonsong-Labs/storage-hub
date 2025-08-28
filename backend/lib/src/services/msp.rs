@@ -7,6 +7,7 @@ use std::sync::Arc;
 use chrono::Utc;
 
 use crate::{
+    config::Config,
     data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage},
     error::Error,
     models::{
@@ -20,22 +21,23 @@ use crate::{
 /// Service for handling MSP-related operations
 #[derive(Clone)]
 pub struct MspService {
-    #[allow(dead_code)]
+    msp_id: String,
+
     storage: Arc<dyn BoxedStorage>,
-    #[allow(dead_code)]
     postgres: Arc<DBClient>,
-    #[allow(dead_code)]
     rpc: Arc<StorageHubRpcClient>,
 }
 
 impl MspService {
     /// Create a new MSP service
     pub fn new(
+        config: &Config,
         storage: Arc<dyn BoxedStorage>,
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
     ) -> Self {
         Self {
+            msp_id: config.storage_hub.msp_id.clone(),
             storage,
             postgres,
             rpc,
@@ -47,7 +49,7 @@ impl MspService {
         Ok(InfoResponse {
             client: "storagehub-node v1.0.0".to_string(),
             version: "StorageHub MSP v0.1.0".to_string(),
-            msp_id: "4c310f61f81475048e8ce5eadf4ee718c42ba285579bb37ac6da55a92c638f42".to_string(),
+            msp_id: self.msp_id.clone(),
             multiaddresses: vec![
                 "/ip4/192.168.0.10/tcp/30333/p2p/12D3KooWJAgnKUrQkGsKxRxojxcFRhtH6ovWfJTPJjAkhmAz2yC8".to_string()
             ],
@@ -125,45 +127,9 @@ impl MspService {
     }
 
     /// List buckets for a user
-    pub async fn list_user_buckets(&self, _user_address: &str) -> Result<Vec<Bucket>, Error> {
-        // Mock implementation returns sample buckets
-        Ok(vec![
-            Bucket {
-                bucket_id: "d8793e4187f5642e96016a96fb33849a7e03eda91358b311bbd426ed38b26692"
-                    .to_string(),
-                name: "Documents".to_string(),
-                root: "3de0c6d1959ece558ec030f37292e383a9c95f497e8235b89701b914be9bd1fb"
-                    .to_string(),
-                is_public: false,
-                size_bytes: 12345678,
-                value_prop_id: "f32282ba18056b02cf2feb4cea92aa4552131617cdb7da03acaa554e4e736c32"
-                    .to_string(),
-                file_count: 12,
-            },
-            Bucket {
-                bucket_id: "a1234e4187f5642e96016a96fb33849a7e03eda91358b311bbd426ed38b26693"
-                    .to_string(),
-                name: "Photos".to_string(),
-                root: "4ef1d7e2070fd659bd1d060b3096f38b5a1d65e608347ca90802c0a1b9bde2fc"
-                    .to_string(),
-                is_public: true,
-                size_bytes: 987654321,
-                value_prop_id: "a12345ba18056b02cf2feb4cea92aa4552131617cdb7da03acaa554e4e736c45"
-                    .to_string(),
-                file_count: 156,
-            },
-            Bucket {
-                bucket_id: "b5678e4187f5642e96016a96fb33849a7e03eda91358b311bbd426ed38b26694"
-                    .to_string(),
-                name: "Projects".to_string(),
-                root: "5af2e8f3181ge770ce2e161c4107g49c6b2e76f719458db01913d1c1c9ce3gd".to_string(),
-                is_public: false,
-                size_bytes: 45678901,
-                value_prop_id: "f32282ba18056b02cf2feb4cea92aa4552131617cdb7da03acaa554e4e736c32"
-                    .to_string(),
-                file_count: 34,
-            },
-        ])
+    pub async fn list_user_buckets(&self, user_address: &str) -> Result<Vec<Bucket>, Error> {
+        self.postgres
+            .get_user_buckets(&self.msp_id, user_address, None, None)
     }
 
     /// Get a specific bucket by ID

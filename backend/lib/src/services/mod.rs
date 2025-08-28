@@ -2,12 +2,15 @@
 
 use std::sync::Arc;
 
-use crate::data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage};
 #[cfg(all(test, feature = "mocks"))]
 use crate::data::{
     indexer_db::mock_repository::MockRepository,
     rpc::{AnyRpcConnection, MockConnection},
     storage::{BoxedStorageWrapper, InMemoryStorage},
+};
+use crate::{
+    config::Config,
+    data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage},
 };
 
 pub mod auth;
@@ -21,6 +24,7 @@ use msp::MspService;
 /// Container for all backend services
 #[derive(Clone)]
 pub struct Services {
+    pub config: Config,
     pub auth: Arc<AuthService>,
     pub health: Arc<HealthService>,
     pub msp: Arc<MspService>,
@@ -32,6 +36,7 @@ pub struct Services {
 impl Services {
     /// Create a new services struct
     pub fn new(
+        config: Config,
         storage: Arc<dyn BoxedStorage>,
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
@@ -48,6 +53,7 @@ impl Services {
             rpc.clone(),
         ));
         Self {
+            config,
             auth,
             health,
             msp,
