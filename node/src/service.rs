@@ -74,14 +74,30 @@ use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::traits::SaturatedConversion;
 use substrate_prometheus_endpoint::Registry;
 
+// Frontier / EVM imports (solochain)
+use fc_consensus::FrontierBlockImport;
+use fc_db::{self, DatabaseSource};
+use fc_storage::{self, StorageOverride, StorageOverrideHandler};
+use sc_consensus_babe::ImportQueueParams as BabeImportQueueParams;
+use sc_consensus_grandpa::{self, SharedVoterState};
+use sc_transaction_pool::BasicPool;
+
 use crate::{
     cli::{self, ProviderType, StorageLayer},
     command::ProviderOptions,
 };
 
+//╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
+//║                                        Generic Types over Runtime                                             ║
+//╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
+
 // Generic client type over Runtime
 pub(crate) type StorageEnableClient<Runtime> =
     shc_common::types::ParachainClient<<Runtime as StorageEnableRuntime>::RuntimeApi>;
+
+//╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
+//║                                        StorageHub Parachain Types                                             ║
+//╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 
 // Other generic types
 pub(crate) type StorageEnableBackend = TFullBackend<Block>;
@@ -103,6 +119,56 @@ pub type Service<Runtime> = PartialComponents<
         Option<TelemetryWorkerHandle>,
     ),
 >;
+
+//╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
+//║                                      StorageHub Solochain EVM Types                                           ║
+//╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
+
+// Solochain EVM specific types
+type SolochainClient =
+    sc_service::TFullClient<Block, SolochainEvmRuntimeApi, shc_common::types::ParachainExecutor>;
+type SolochainBackend = TFullBackend<Block>;
+type SolochainSelectChain = sc_consensus::LongestChain<SolochainBackend, Block>;
+
+type SolochainPool = sc_transaction_pool::TransactionPoolHandle<Block, SolochainClient>;
+
+/// Partial components returned by the Solochain EVM `new_partial_solochain_evm` path.
+type SolochainService = sc_service::PartialComponents<
+    SolochainClient,
+    SolochainBackend,
+    SolochainSelectChain,
+    sc_consensus::DefaultImportQueue<Block>,
+    SolochainPool,
+    (
+        sc_consensus_babe::BabeBlockImport<
+            Block,
+            SolochainClient,
+            FrontierBlockImport<
+                Block,
+                sc_consensus_grandpa::GrandpaBlockImport<
+                    SolochainBackend,
+                    Block,
+                    SolochainClient,
+                    SolochainSelectChain,
+                >,
+                SolochainClient,
+            >,
+        >,
+        sc_consensus_grandpa::LinkHalf<Block, SolochainClient, SolochainSelectChain>,
+        sc_consensus_babe::BabeLink<Block>,
+        Arc<fc_db::Backend<Block, SolochainClient>>,
+        Arc<dyn StorageOverride<Block>>,
+        Option<Telemetry>,
+    ),
+>;
+
+fn frontier_database_dir(config: &Configuration, path: &str) -> std::path::PathBuf {
+    config
+        .base_path
+        .config_dir(config.chain_spec.id())
+        .join("frontier")
+        .join(path)
+}
 
 //╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
 //║                                   StorageHub Client Setup Utilities                                           ║
@@ -1860,6 +1926,159 @@ pub async fn start_solochain_evm_node<Network: NetworkBackend<OpaqueBlock, Block
 pub fn new_partial_solochain_evm(
     config: &Configuration,
     dev_service: bool,
-) -> Result<Service<ParachainRuntime>, sc_service::Error> {
-    todo!("Not implemented")
+) -> Result<SolochainService, sc_service::Error> {
+    // Telemetry
+    let telemetry = config
+        .telemetry_endpoints
+        .clone()
+        .filter(|x| !x.is_empty())
+        .map(|endpoints| -> Result<_, sc_telemetry::Error> {
+            let worker = TelemetryWorker::new(16)?;
+            let telemetry = worker.handle().new_telemetry(endpoints);
+            Ok((worker, telemetry))
+        })
+        .transpose()?;
+
+    // Wasm executor (reuse ParachainExecutor host functions)
+    let heap_pages = config
+        .executor
+        .default_heap_pages
+        .map_or(DEFAULT_HEAP_ALLOC_STRATEGY, |h| HeapAllocStrategy::Static {
+            extra_pages: h as _,
+        });
+
+    let executor = shc_common::types::ParachainExecutor::builder()
+        .with_execution_method(config.executor.wasm_method)
+        .with_onchain_heap_alloc_strategy(heap_pages)
+        .with_offchain_heap_alloc_strategy(heap_pages)
+        .with_max_runtime_instances(config.executor.max_runtime_instances)
+        .with_runtime_cache_size(config.executor.runtime_cache_size)
+        .build();
+
+    let (client, backend, keystore_container, mut task_manager) =
+        sc_service::new_full_parts::<Block, SolochainEvmRuntimeApi, _>(
+            config,
+            telemetry.as_ref().map(|(_, telemetry)| telemetry.handle()),
+            executor,
+        )?;
+
+    let client = Arc::new(client);
+
+    let telemetry = telemetry.map(|(worker, telemetry)| {
+        task_manager
+            .spawn_handle()
+            .spawn("telemetry", None, worker.run());
+        telemetry
+    });
+
+    let select_chain = sc_consensus::LongestChain::new(backend.clone());
+
+    // Transaction pool (use builder to honor config)
+    let transaction_pool = Arc::from(
+        sc_transaction_pool::Builder::new(
+            task_manager.spawn_essential_handle(),
+            client.clone(),
+            config.role.is_authority().into(),
+        )
+        .with_options(config.transaction_pool.clone())
+        .with_prometheus(config.prometheus_registry())
+        .build(),
+    );
+
+    // GRANDPA block import and link
+    let (grandpa_block_import, grandpa_link) = sc_consensus_grandpa::block_import(
+        client.clone(),
+        512u32, // justification period
+        &client,
+        select_chain.clone(),
+        telemetry.as_ref().map(|x| x.handle()),
+    )?;
+
+    // Frontier block import on top of GRANDPA
+    let frontier_block_import =
+        FrontierBlockImport::new(grandpa_block_import.clone(), client.clone());
+
+    // BABE block import and link
+    let (block_import, babe_link) = sc_consensus_babe::block_import(
+        sc_consensus_babe::configuration(&*client)?,
+        frontier_block_import,
+        client.clone(),
+    )?;
+
+    // Frontier storage override and backend
+    let storage_override: Arc<dyn StorageOverride<Block>> =
+        Arc::new(StorageOverrideHandler::<Block, _, _>::new(client.clone()));
+
+    let frontier_backend: Arc<fc_db::Backend<Block, SolochainClient>> = {
+        // Only Key-Value backend for now
+        let db_settings = match config.database {
+            sc_service::config::DatabaseSource::RocksDb { .. } => DatabaseSource::RocksDb {
+                path: frontier_database_dir(config, "db"),
+                cache_size: 0,
+            },
+            sc_service::config::DatabaseSource::ParityDb { .. } => DatabaseSource::ParityDb {
+                path: frontier_database_dir(config, "paritydb"),
+            },
+            sc_service::config::DatabaseSource::Auto { .. } => DatabaseSource::Auto {
+                rocksdb_path: frontier_database_dir(config, "db"),
+                paritydb_path: frontier_database_dir(config, "paritydb"),
+                cache_size: 0,
+            },
+            _ => DatabaseSource::RocksDb {
+                path: frontier_database_dir(config, "db"),
+                cache_size: 0,
+            },
+        };
+        Arc::new(fc_db::Backend::KeyValue(Arc::new(fc_db::kv::Backend::<
+            Block,
+            SolochainClient,
+        >::new(
+            client.clone(),
+            &fc_db::kv::DatabaseSettings {
+                source: db_settings,
+            },
+        )?)))
+    };
+
+    // Import queue (BABE)
+    let slot_duration = babe_link.config().slot_duration();
+    let (import_queue, _babe_worker_handle) = sc_consensus_babe::import_queue(
+        BabeImportQueueParams {
+            link: babe_link.clone(),
+            block_import: block_import.clone(),
+            justification_import: Some(Box::new(grandpa_block_import.clone())),
+            client: client.clone(),
+            select_chain: select_chain.clone(),
+            create_inherent_data_providers: move |_, ()| async move {
+                let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
+                let slot = sp_consensus_babe::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
+                *timestamp,
+                slot_duration,
+            );
+                Ok((slot, timestamp))
+            },
+            spawner: &task_manager.spawn_essential_handle(),
+            registry: config.prometheus_registry(),
+            telemetry: telemetry.as_ref().map(|x| x.handle()),
+            offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(transaction_pool.clone()),
+        },
+    )?;
+
+    Ok(sc_service::PartialComponents {
+        client,
+        backend,
+        task_manager,
+        import_queue,
+        keystore_container,
+        select_chain,
+        transaction_pool,
+        other: (
+            block_import,
+            grandpa_link,
+            babe_link,
+            frontier_backend,
+            storage_override,
+            telemetry,
+        ),
+    })
 }

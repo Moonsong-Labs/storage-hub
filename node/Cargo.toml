@@ -86,6 +86,8 @@ sc-client-api = { workspace = true }
 sc-offchain = { workspace = true }
 sc-consensus = { workspace = true }
 sc-consensus-aura = { workspace = true }
+sc-consensus-babe = { workspace = true }
+sc-consensus-grandpa = { workspace = true }
 sc-consensus-manual-seal = { workspace = true }
 sc-executor = { workspace = true }
 sc-network = { workspace = true }
@@ -102,6 +104,7 @@ sp-api = { workspace = true }
 sp-block-builder = { workspace = true }
 sp-blockchain = { workspace = true }
 sp-consensus-aura = { workspace = true }
+sp-consensus-babe = { workspace = true }
 sp-core = { workspace = true, default-features = true }
 sp-genesis-builder = { workspace = true }
 sp-keyring = { workspace = true, default-features = true }
