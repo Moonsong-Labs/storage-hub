@@ -13,7 +13,6 @@ use crate::{
     models::files::FileListResponse, services::Services,
 };
 
-/// Retrieve
 pub async fn list_buckets(
     State(services): State<Services>,
     TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
@@ -24,7 +23,11 @@ pub async fn list_buckets(
         .and_then(|a| a.as_str())
         .unwrap_or(MOCK_ADDRESS);
 
-    let response = services.msp.list_user_buckets(address).await?;
+    let response = services
+        .msp
+        .list_user_buckets(address)
+        .await?
+        .collect::<Vec<_>>();
     Ok(Json(response))
 }
 
@@ -33,9 +36,14 @@ pub async fn get_bucket(
     TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
     Path(bucket_id): Path<String>,
 ) -> Result<impl IntoResponse, Error> {
-    let _auth = extract_bearer_token(&auth)?;
+    let payload = extract_bearer_token(&auth)?;
+    let address = payload
+        .get("address")
+        .and_then(|a| a.as_str())
+        .unwrap_or(MOCK_ADDRESS);
 
-    let response = services.msp.get_bucket(&bucket_id).await?;
+    let response = services.msp.get_bucket(&bucket_id, address).await?;
+
     Ok(Json(response))
 }
 

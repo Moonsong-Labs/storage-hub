@@ -1,10 +1,12 @@
 //! MSP service implementation with mock data
 //!
-//! TODO(MOCK): the entire set of methods of the MspService returns mocked data
+//! TODO(MOCK): many of methods of the MspService returns mocked data
 
 use std::sync::Arc;
 
 use chrono::Utc;
+
+use shc_indexer_db::models::Bucket as DBBucket;
 
 use crate::{
     config::Config,
@@ -137,9 +139,6 @@ impl MspService {
             .await
             .map(|buckets| {
                 buckets.into_iter().map(|entry| {
-                    // TODO: the bucket size in bytes and file count are not indexed currently
-                    // We can retrieve all files in the DB by bucket and compute it that way
-                    // using `File::get_by_onchain_bucket_id`
                     Bucket::from_db(
                         &entry,
                         PLACEHOLDER_BUCKET_SIZE_BYTES,
@@ -149,19 +148,41 @@ impl MspService {
             })
     }
 
+    /// Verifies user can access the given bucket
+    fn can_user_view_bucket(&self, bucket: DBBucket, user: &str) -> Result<DBBucket, Error> {
+        // TODO: NFT ownership
+        if bucket.private {
+            if bucket.account.as_str() == user {
+                Ok(bucket)
+            } else {
+                Err(Error::Unauthorized(format!(
+                    "Specified user is not authorized to view this bucket"
+                )))
+            }
+        } else {
+            Ok(bucket)
+        }
+    }
+
     /// Get a specific bucket by ID
-    pub async fn get_bucket(&self, bucket_id: &str) -> Result<Bucket, Error> {
-        // Mock implementation - in real implementation would query database
-        Ok(Bucket {
-            bucket_id: bucket_id.to_string(),
-            name: "Documents".to_string(),
-            root: "3de0c6d1959ece558ec030f37292e383a9c95f497e8235b89701b914be9bd1fb".to_string(),
-            is_public: false,
-            size_bytes: 12345678,
-            value_prop_id: "f32282ba18056b02cf2feb4cea92aa4552131617cdb7da03acaa554e4e736c32"
-                .to_string(),
-            file_count: 12,
-        })
+    ///
+    /// Verifies ownership of bucket is `user`
+    pub async fn get_bucket(&self, bucket_id: &str, user: &str) -> Result<Bucket, Error> {
+        let bucket_id = hex::decode(bucket_id.trim_start_matches("0x")).map_err(|_| {
+            Error::BadRequest(format!("Invalid Bucket ID. Expected a valid hex string"))
+        })?;
+
+        self.postgres
+            .get_bucket(&bucket_id)
+            .await
+            .and_then(|bucket| self.can_user_view_bucket(bucket, user))
+            .map(|bucket| {
+                Bucket::from_db(
+                    &bucket,
+                    PLACEHOLDER_BUCKET_SIZE_BYTES,
+                    PLACEHOLDER_BUCKET_FILE_COUNT,
+                )
+            })
     }
 
     /// Get file tree for a bucket
