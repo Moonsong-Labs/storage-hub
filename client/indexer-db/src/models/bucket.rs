@@ -5,7 +5,7 @@ use diesel_async::RunQueryDsl;
 use crate::{schema::bucket, DbConnection};
 
 /// Table that holds the Buckets.
-#[derive(Debug, Queryable, Insertable, Selectable)]
+#[derive(Debug, Clone, Queryable, Insertable, Selectable)]
 #[diesel(table_name = bucket)]
 #[diesel(belongs_to(Msp, foreign_key = msp_id))]
 pub struct Bucket {

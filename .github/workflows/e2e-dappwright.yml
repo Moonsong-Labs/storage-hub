@@ -1,0 +1,74 @@
+name: E2E DappWright (MetaMask)
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  FORCE_COLOR: 1
+  HEADLESS: false
+
+jobs:
+  e2e-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm & cache
+        uses: ./.github/workflow-templates/setup-pnpm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Install Rust toolchain (for wasm)
+        uses: actions-rust-lang/setup-rust-toolchain@v1.8
+        with:
+          target: wasm32-unknown-unknown
+          cache: false
+
+      - name: Install wasm-pack
+        run: curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
+
+      - name: Install dependencies (sdk)
+        working-directory: sdk
+        run: pnpm install
+
+      - name: Build SDK (core dist + wasm)
+        working-directory: sdk
+        run: pnpm build
+
+      - name: Install e2e deps (sdk/e2e)
+        working-directory: sdk/e2e
+        run: pnpm install --ignore-workspace
+
+      - name: Install Playwright Chromium with system deps (sdk/e2e)
+        working-directory: sdk/e2e
+        run: |
+          pnpm exec playwright install --with-deps chromium
+
+      - name: Start dApp server (sdk root)
+        working-directory: sdk
+        run: |
+          nohup python3 -m http.server 3000 --directory . > /dev/null 2>&1 &
+          echo "Waiting for http://localhost:3000/e2e/page/index.html ..."
+          for i in {1..60}; do
+            if curl -sSf http://localhost:3000/e2e/page/index.html > /dev/null; then echo "Server is up"; break; fi
+            sleep 1
+          done
+
+      - name: Run Playwright tests (headless via xvfb) (sdk/e2e)
+        working-directory: sdk/e2e
+        run: |
+          xvfb-run -a pnpm exec playwright test
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: sdk/e2e/playwright-report/
+          retention-days: 14
+
+

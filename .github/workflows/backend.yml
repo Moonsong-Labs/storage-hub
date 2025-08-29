@@ -1,0 +1,34 @@
+name: Backend CI
+
+on:
+  pull_request:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend.yml'
+  workflow_dispatch:
+
+jobs:
+  check-backend-fmt:
+    name: "Check backend format with rustfmt"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1.8
+      - name: Rustfmt Check Backend
+        run: |
+          cargo fmt --manifest-path backend/lib/Cargo.toml -- --check
+          cargo fmt --manifest-path backend/bin/Cargo.toml -- --check
+
+  # Note: Clippy check is handled by the main lint.yml workflow
+  # which runs clippy on the entire workspace from the root.
+  # This avoids issues with Substrate pallet dependencies.
+
+  # Note: Backend tests are handled by the main rust-tests.yml workflow
+  # which runs tests on the entire workspace from the root.
+  # This avoids issues with Substrate pallet dependencies.
