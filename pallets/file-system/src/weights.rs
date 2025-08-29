@@ -13,7 +13,7 @@
 // benchmark
 // pallet
 // --runtime
-// target/production/wbuild/sh-parachain-runtime/sh_parachain_runtime.wasm
+// target/production/wbuild/storage-hub-runtime/storage_hub_runtime.wasm
 // --pallet
 // pallet-file-system
 // --extrinsic
