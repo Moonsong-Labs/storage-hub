@@ -8,10 +8,10 @@ import type {
   U8aFixed,
   Vec,
   bool,
-  u8,
+  u128,
   u32,
   u64,
-  u128
+  u8
 } from "@polkadot/types-codec";
 import type { ITuple } from "@polkadot/types-codec/types";
 import type { AccountId32, H256 } from "@polkadot/types/interfaces/runtime";
@@ -32,6 +32,8 @@ import type {
   PalletStorageProvidersTopUpMetadata,
   PalletStorageProvidersValueProposition,
   PalletStorageProvidersValuePropositionWithId,
+  ShParachainRuntimeConfigsRuntimeParamsRuntimeParametersKey,
+  ShParachainRuntimeConfigsRuntimeParamsRuntimeParametersValue,
   ShpFileMetadataFileMetadata,
   ShpTraitsTrieMutation,
   SpRuntimeDispatchError,

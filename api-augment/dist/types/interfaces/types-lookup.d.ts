@@ -13,11 +13,11 @@ import type {
   U8aFixed,
   Vec,
   bool,
-  u8,
+  u128,
   u16,
   u32,
   u64,
-  u128
+  u8
 } from "@polkadot/types-codec";
 import type { ITuple } from "@polkadot/types-codec/types";
 import type {
@@ -2796,14 +2796,14 @@ declare module "@polkadot/types/lookup" {
     } & Struct;
     readonly type: "Updated";
   }
-  /** @name StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey (199) */
-  interface StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey extends Enum {
+  /** @name ShParachainRuntimeConfigsRuntimeParamsRuntimeParametersKey (199) */
+  interface ShParachainRuntimeConfigsRuntimeParamsRuntimeParametersKey extends Enum {
     readonly isRuntimeConfig: boolean;
     readonly asRuntimeConfig: ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey;
     readonly type: "RuntimeConfig";
   }
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey (200) */
-  interface StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey (200) */
+  interface ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey
     extends Enum {
     readonly isSlashAmountPerMaxFileSize: boolean;
     readonly isStakeToChallengePeriod: boolean;
@@ -2867,85 +2867,87 @@ declare module "@polkadot/types/lookup" {
       | "StakeToSeedPeriod"
       | "UpfrontTicksToPay";
   }
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize (201) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize =
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize (201) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize =
     Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod (202) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod = Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod (203) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod =
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod (202) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod =
     Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod (204) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod = Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage (205) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage =
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod (203) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod =
     Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage (206) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage =
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod (204) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod = Null;
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage (205) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage =
     Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMostlyStablePrice (207) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMostlyStablePrice = Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice (208) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice = Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice (209) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice = Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor (210) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor = Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor (211) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor = Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigZeroSizeBucketFixedRate (212) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigZeroSizeBucketFixedRate =
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage (206) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage =
     Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate (213) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate = Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigDecayRate (214) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigDecayRate = Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinimumTreasuryCut (215) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinimumTreasuryCut = Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaximumTreasuryCut (216) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaximumTreasuryCut = Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBspStopStoringFilePenalty (217) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBspStopStoringFilePenalty =
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMostlyStablePrice (207) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMostlyStablePrice = Null;
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice (208) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice = Null;
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice (209) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice = Null;
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor (210) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor = Null;
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor (211) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor = Null;
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigZeroSizeBucketFixedRate (212) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigZeroSizeBucketFixedRate =
     Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigProviderTopUpTtl (218) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigProviderTopUpTtl = Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBasicReplicationTarget (219) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBasicReplicationTarget = Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStandardReplicationTarget (220) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStandardReplicationTarget =
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate (213) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate = Null;
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigDecayRate (214) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigDecayRate = Null;
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinimumTreasuryCut (215) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinimumTreasuryCut = Null;
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaximumTreasuryCut (216) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaximumTreasuryCut = Null;
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBspStopStoringFilePenalty (217) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBspStopStoringFilePenalty =
     Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigHighSecurityReplicationTarget (221) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigHighSecurityReplicationTarget =
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigProviderTopUpTtl (218) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigProviderTopUpTtl = Null;
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBasicReplicationTarget (219) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBasicReplicationTarget =
     Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSuperHighSecurityReplicationTarget (222) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSuperHighSecurityReplicationTarget =
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStandardReplicationTarget (220) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStandardReplicationTarget =
     Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUltraHighSecurityReplicationTarget (223) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUltraHighSecurityReplicationTarget =
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigHighSecurityReplicationTarget (221) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigHighSecurityReplicationTarget =
     Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxReplicationTarget (224) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxReplicationTarget = Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigTickRangeToMaximumThreshold (225) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigTickRangeToMaximumThreshold =
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSuperHighSecurityReplicationTarget (222) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSuperHighSecurityReplicationTarget =
     Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStorageRequestTtl (226) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStorageRequestTtl = Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinWaitForStopStoring (227) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinWaitForStopStoring = Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinSeedPeriod (228) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinSeedPeriod = Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToSeedPeriod (229) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToSeedPeriod = Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpfrontTicksToPay (230) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpfrontTicksToPay = Null;
-  /** @name StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue (232) */
-  interface StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue extends Enum {
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUltraHighSecurityReplicationTarget (223) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUltraHighSecurityReplicationTarget =
+    Null;
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxReplicationTarget (224) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxReplicationTarget = Null;
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigTickRangeToMaximumThreshold (225) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigTickRangeToMaximumThreshold =
+    Null;
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStorageRequestTtl (226) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStorageRequestTtl = Null;
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinWaitForStopStoring (227) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinWaitForStopStoring = Null;
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinSeedPeriod (228) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinSeedPeriod = Null;
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToSeedPeriod (229) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToSeedPeriod = Null;
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpfrontTicksToPay (230) */
+  type ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpfrontTicksToPay = Null;
+  /** @name ShParachainRuntimeConfigsRuntimeParamsRuntimeParametersValue (232) */
+  interface ShParachainRuntimeConfigsRuntimeParamsRuntimeParametersValue extends Enum {
     readonly isRuntimeConfig: boolean;
     readonly asRuntimeConfig: ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue;
     readonly type: "RuntimeConfig";
   }
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue (233) */
-  interface StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue (233) */
+  interface ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue
     extends Enum {
     readonly isSlashAmountPerMaxFileSize: boolean;
     readonly asSlashAmountPerMaxFileSize: u128;
@@ -3354,8 +3356,8 @@ declare module "@polkadot/types/lookup" {
     readonly id: U8aFixed;
     readonly amount: u128;
   }
-  /** @name StorageHubRuntimeRuntimeHoldReason (308) */
-  interface StorageHubRuntimeRuntimeHoldReason extends Enum {
+  /** @name ShParachainRuntimeRuntimeHoldReason (308) */
+  interface ShParachainRuntimeRuntimeHoldReason extends Enum {
     readonly isProviders: boolean;
     readonly asProviders: PalletStorageProvidersHoldReason;
     readonly isFileSystem: boolean;
@@ -3561,8 +3563,8 @@ declare module "@polkadot/types/lookup" {
     readonly isPurgeKeys: boolean;
     readonly type: "SetKeys" | "PurgeKeys";
   }
-  /** @name StorageHubRuntimeSessionKeys (326) */
-  interface StorageHubRuntimeSessionKeys extends Struct {
+  /** @name ShParachainRuntimeSessionKeys (326) */
+  interface ShParachainRuntimeSessionKeys extends Struct {
     readonly aura: SpConsensusAuraSr25519AppSr25519Public;
   }
   /** @name SpConsensusAuraSr25519AppSr25519Public (327) */
@@ -5188,14 +5190,15 @@ declare module "@polkadot/types/lookup" {
     } & Struct;
     readonly type: "SetParameter";
   }
-  /** @name StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters (414) */
-  interface StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters extends Enum {
+  /** @name ShParachainRuntimeConfigsRuntimeParamsRuntimeParameters (414) */
+  interface ShParachainRuntimeConfigsRuntimeParamsRuntimeParameters extends Enum {
     readonly isRuntimeConfig: boolean;
     readonly asRuntimeConfig: ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters;
     readonly type: "RuntimeConfig";
   }
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters (415) */
-  interface StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters extends Enum {
+  /** @name ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters (415) */
+  interface ShParachainRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters
+    extends Enum {
     readonly isSlashAmountPerMaxFileSize: boolean;
     readonly asSlashAmountPerMaxFileSize: ITuple<
       [
@@ -6373,6 +6376,6 @@ declare module "@polkadot/types/lookup" {
     readonly isEnabled: boolean;
     readonly type: "Disabled" | "Enabled";
   }
-  /** @name StorageHubRuntimeRuntime (548) */
-  type StorageHubRuntimeRuntime = Null;
+  /** @name ShParachainRuntimeRuntime (548) */
+  type ShParachainRuntimeRuntime = Null;
 }
