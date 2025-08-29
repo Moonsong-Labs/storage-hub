@@ -1183,9 +1183,6 @@ impl pallet_payment_streams::Config for Runtime {
     type BaseDeposit = ConstU128<10>;
 }
 
-/****** ****** ****** ******/
-
-/****** Bucket NFTs pallet ******/
 impl pallet_bucket_nfts::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type WeightInfo = pallet_bucket_nfts::weights::SubstrateWeight<Runtime>;
@@ -1193,9 +1190,7 @@ impl pallet_bucket_nfts::Config for Runtime {
     #[cfg(feature = "runtime-benchmarks")]
     type Helper = ();
 }
-/****** ****** ****** ******/
 
-/****** Commit-Reveal Randomness pallet ******/
 /* pub type Seed = Hash;
 pub type SeedCommitment = Hash;
 
@@ -1316,5 +1311,3 @@ pub mod benchmark_helpers {
         }
     }
 }
-
-/****** ****** ****** ******/
