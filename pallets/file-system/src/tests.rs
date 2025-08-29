@@ -14099,10 +14099,6 @@ mod delete_file_for_incomplete_storage_request_tests {
                     "Incomplete storage request should not exist when no BSPs confirmed, even if MSP accepted"
                 );
 
-                // TODO: we should emit this event on this case
-                // Verify the StorageRequestFulfilled event was emitted
-                // System::assert_has_event(Event::StorageRequestFulfilled { file_key }.into());
-
                 // Verify the expired storage request event was emitted
                 System::assert_has_event(Event::StorageRequestExpired { file_key }.into());
             });
