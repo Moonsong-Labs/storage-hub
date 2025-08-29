@@ -876,9 +876,11 @@ pub mod pallet {
             // Check that `CheckpointChallengePeriod` is greater or equal to the longest period a Provider can have plus the tolerance.
             assert!(
                 T::CheckpointChallengePeriod::get() > max_period + T::ChallengeTicksTolerance::get(),
-                "CheckpointChallengePeriod ({:?}) const in ProofsDealer pallet should be greater or equal than the longest period a Provider can have ({:?}).",
+                "CheckpointChallengePeriod ({:?}) const in ProofsDealer pallet should be greater than the longest period a Provider can have ({:?}) plus the tolerance ({:?}) = {:?}.",
                 T::CheckpointChallengePeriod::get(),
-                max_period
+                max_period,
+                T::ChallengeTicksTolerance::get(),
+                max_period + T::ChallengeTicksTolerance::get()
             );
 
             // Check that `BlockFullnessPeriod` is smaller or equal than `ChallengeTicksTolerance`.
