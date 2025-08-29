@@ -25,7 +25,7 @@
 //! ```
 
 use async_trait::async_trait;
-use shc_indexer_db::models::Bsp;
+use shc_indexer_db::{models::Bsp, OnchainBspId};
 
 pub mod error;
 pub mod pool;
@@ -79,7 +79,7 @@ pub trait IndexerOpsMut: IndexerOps {
     ///
     /// # Arguments
     /// * `account` - Account of the BSP to delete
-    async fn delete_bsp(&self, account: &str) -> RepositoryResult<()>;
+    async fn delete_bsp(&self, account: &OnchainBspId) -> RepositoryResult<()>;
 }
 
 // The following trait aliases are so when compiling for unit tests we get access to write operations
