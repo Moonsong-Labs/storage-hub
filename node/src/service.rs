@@ -383,10 +383,204 @@ where
 //║                                 StorageHub Parachain Node Setup Functions                                     ║
 //╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 
-/// Starts a `ServiceBuilder` for a full service.
+/// Start the StorageHub Parachain node in development mode.
 ///
-/// Use this macro if you don't actually need the full service, but just the builder in order to
-/// be able to perform chain operations.
+/// This is the entrypoint function to launch a StorageHub Parachain node,
+/// when running in development mode.
+pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
+    config: Configuration,
+    provider_options: Option<ProviderOptions>,
+    indexer_options: Option<IndexerOptions>,
+    fisherman_options: Option<FishermanOptions>,
+    hwbench: Option<sc_sysinfo::HwBench>,
+    para_id: ParaId,
+    sealing: cli::Sealing,
+) -> sc_service::error::Result<TaskManager> {
+    if let Some(provider_options) = provider_options {
+        match (
+            &provider_options.provider_type,
+            &provider_options.storage_layer,
+        ) {
+            (&ProviderType::Bsp, &StorageLayer::Memory) => {
+                start_dev_impl::<BspProvider, InMemoryStorageLayer, Network>(
+                    config,
+                    Some(provider_options),
+                    indexer_options,
+                    fisherman_options,
+                    hwbench,
+                    para_id,
+                    sealing,
+                )
+                .await
+            }
+            (&ProviderType::Bsp, &StorageLayer::RocksDB) => {
+                start_dev_impl::<BspProvider, RocksDbStorageLayer, Network>(
+                    config,
+                    Some(provider_options),
+                    indexer_options,
+                    fisherman_options,
+                    hwbench,
+                    para_id,
+                    sealing,
+                )
+                .await
+            }
+            (&ProviderType::Msp, &StorageLayer::Memory) => {
+                start_dev_impl::<MspProvider, InMemoryStorageLayer, Network>(
+                    config,
+                    Some(provider_options),
+                    indexer_options,
+                    fisherman_options,
+                    hwbench,
+                    para_id,
+                    sealing,
+                )
+                .await
+            }
+            (&ProviderType::Msp, &StorageLayer::RocksDB) => {
+                start_dev_impl::<MspProvider, RocksDbStorageLayer, Network>(
+                    config,
+                    Some(provider_options),
+                    indexer_options,
+                    fisherman_options,
+                    hwbench,
+                    para_id,
+                    sealing,
+                )
+                .await
+            }
+            (&ProviderType::User, _) => {
+                start_dev_impl::<UserRole, NoStorageLayer, Network>(
+                    config,
+                    Some(provider_options),
+                    indexer_options,
+                    fisherman_options,
+                    hwbench,
+                    para_id,
+                    sealing,
+                )
+                .await
+            }
+        }
+    } else {
+        // Start node without provider options which in turn will not start any storage hub related role services (e.g. Storage Provider, User)
+        start_dev_impl::<UserRole, NoStorageLayer, Network>(
+            config,
+            None,
+            indexer_options,
+            fisherman_options,
+            hwbench,
+            para_id,
+            sealing,
+        )
+        .await
+    }
+}
+
+/// Start the StorageHub Parachain node.
+///
+/// This is the entrypoint function to launch a StorageHub Parachain node.
+pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
+    parachain_config: Configuration,
+    polkadot_config: Configuration,
+    collator_options: CollatorOptions,
+    provider_options: Option<ProviderOptions>,
+    indexer_options: Option<IndexerOptions>,
+    fisherman_options: Option<FishermanOptions>,
+    para_id: ParaId,
+    hwbench: Option<sc_sysinfo::HwBench>,
+) -> sc_service::error::Result<(TaskManager, Arc<StorageEnableClient<ParachainRuntime>>)> {
+    if let Some(provider_options) = provider_options {
+        match (
+            &provider_options.provider_type,
+            &provider_options.storage_layer,
+        ) {
+            (&ProviderType::Bsp, &StorageLayer::Memory) => {
+                start_node_impl::<BspProvider, InMemoryStorageLayer, Network>(
+                    parachain_config,
+                    polkadot_config,
+                    collator_options,
+                    Some(provider_options),
+                    indexer_options,
+                    fisherman_options,
+                    para_id,
+                    hwbench,
+                )
+                .await
+            }
+            (&ProviderType::Bsp, &StorageLayer::RocksDB) => {
+                start_node_impl::<BspProvider, RocksDbStorageLayer, Network>(
+                    parachain_config,
+                    polkadot_config,
+                    collator_options,
+                    Some(provider_options),
+                    indexer_options,
+                    fisherman_options,
+                    para_id,
+                    hwbench,
+                )
+                .await
+            }
+            (&ProviderType::Msp, &StorageLayer::Memory) => {
+                start_node_impl::<MspProvider, InMemoryStorageLayer, Network>(
+                    parachain_config,
+                    polkadot_config,
+                    collator_options,
+                    Some(provider_options),
+                    indexer_options,
+                    fisherman_options,
+                    para_id,
+                    hwbench,
+                )
+                .await
+            }
+            (&ProviderType::Msp, &StorageLayer::RocksDB) => {
+                start_node_impl::<MspProvider, RocksDbStorageLayer, Network>(
+                    parachain_config,
+                    polkadot_config,
+                    collator_options,
+                    Some(provider_options),
+                    indexer_options,
+                    fisherman_options,
+                    para_id,
+                    hwbench,
+                )
+                .await
+            }
+            (&ProviderType::User, _) => {
+                start_node_impl::<UserRole, NoStorageLayer, Network>(
+                    parachain_config,
+                    polkadot_config,
+                    collator_options,
+                    Some(provider_options),
+                    indexer_options,
+                    fisherman_options,
+                    para_id,
+                    hwbench,
+                )
+                .await
+            }
+        }
+    } else {
+        // Start node without provider options which in turn will not start any storage hub related role services (e.g. Storage Provider, User)
+        start_node_impl::<UserRole, NoStorageLayer, Network>(
+            parachain_config,
+            polkadot_config,
+            collator_options,
+            None,
+            indexer_options,
+            fisherman_options,
+            para_id,
+            hwbench,
+        )
+        .await
+    }
+}
+
+/// Create a new partial components for the StorageHub Parachain node.
+///
+/// This is the entrypoint function used when executing subcommands of the
+/// StorageHub Parachain node.
 pub fn new_partial(
     config: &Configuration,
     dev_service: bool,
@@ -1621,189 +1815,8 @@ fn start_consensus(
     Ok(())
 }
 
-pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
-    config: Configuration,
-    provider_options: Option<ProviderOptions>,
-    indexer_options: Option<IndexerOptions>,
-    fisherman_options: Option<FishermanOptions>,
-    hwbench: Option<sc_sysinfo::HwBench>,
-    para_id: ParaId,
-    sealing: cli::Sealing,
-) -> sc_service::error::Result<TaskManager> {
-    if let Some(provider_options) = provider_options {
-        match (
-            &provider_options.provider_type,
-            &provider_options.storage_layer,
-        ) {
-            (&ProviderType::Bsp, &StorageLayer::Memory) => {
-                start_dev_impl::<BspProvider, InMemoryStorageLayer, Network>(
-                    config,
-                    Some(provider_options),
-                    indexer_options,
-                    fisherman_options,
-                    hwbench,
-                    para_id,
-                    sealing,
-                )
-                .await
-            }
-            (&ProviderType::Bsp, &StorageLayer::RocksDB) => {
-                start_dev_impl::<BspProvider, RocksDbStorageLayer, Network>(
-                    config,
-                    Some(provider_options),
-                    indexer_options,
-                    fisherman_options,
-                    hwbench,
-                    para_id,
-                    sealing,
-                )
-                .await
-            }
-            (&ProviderType::Msp, &StorageLayer::Memory) => {
-                start_dev_impl::<MspProvider, InMemoryStorageLayer, Network>(
-                    config,
-                    Some(provider_options),
-                    indexer_options,
-                    fisherman_options,
-                    hwbench,
-                    para_id,
-                    sealing,
-                )
-                .await
-            }
-            (&ProviderType::Msp, &StorageLayer::RocksDB) => {
-                start_dev_impl::<MspProvider, RocksDbStorageLayer, Network>(
-                    config,
-                    Some(provider_options),
-                    indexer_options,
-                    fisherman_options,
-                    hwbench,
-                    para_id,
-                    sealing,
-                )
-                .await
-            }
-            (&ProviderType::User, _) => {
-                start_dev_impl::<UserRole, NoStorageLayer, Network>(
-                    config,
-                    Some(provider_options),
-                    indexer_options,
-                    fisherman_options,
-                    hwbench,
-                    para_id,
-                    sealing,
-                )
-                .await
-            }
-        }
-    } else {
-        // Start node without provider options which in turn will not start any storage hub related role services (e.g. Storage Provider, User)
-        start_dev_impl::<UserRole, NoStorageLayer, Network>(
-            config,
-            None,
-            indexer_options,
-            fisherman_options,
-            hwbench,
-            para_id,
-            sealing,
-        )
-        .await
-    }
-}
+//╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
+//║                               StorageHub Solochain EVM Node Setup Functions                                   ║
+//╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 
-pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
-    parachain_config: Configuration,
-    polkadot_config: Configuration,
-    collator_options: CollatorOptions,
-    provider_options: Option<ProviderOptions>,
-    indexer_options: Option<IndexerOptions>,
-    fisherman_options: Option<FishermanOptions>,
-    para_id: ParaId,
-    hwbench: Option<sc_sysinfo::HwBench>,
-) -> sc_service::error::Result<(TaskManager, Arc<StorageEnableClient<ParachainRuntime>>)> {
-    if let Some(provider_options) = provider_options {
-        match (
-            &provider_options.provider_type,
-            &provider_options.storage_layer,
-        ) {
-            (&ProviderType::Bsp, &StorageLayer::Memory) => {
-                start_node_impl::<BspProvider, InMemoryStorageLayer, Network>(
-                    parachain_config,
-                    polkadot_config,
-                    collator_options,
-                    Some(provider_options),
-                    indexer_options,
-                    fisherman_options,
-                    para_id,
-                    hwbench,
-                )
-                .await
-            }
-            (&ProviderType::Bsp, &StorageLayer::RocksDB) => {
-                start_node_impl::<BspProvider, RocksDbStorageLayer, Network>(
-                    parachain_config,
-                    polkadot_config,
-                    collator_options,
-                    Some(provider_options),
-                    indexer_options,
-                    fisherman_options,
-                    para_id,
-                    hwbench,
-                )
-                .await
-            }
-            (&ProviderType::Msp, &StorageLayer::Memory) => {
-                start_node_impl::<MspProvider, InMemoryStorageLayer, Network>(
-                    parachain_config,
-                    polkadot_config,
-                    collator_options,
-                    Some(provider_options),
-                    indexer_options,
-                    fisherman_options,
-                    para_id,
-                    hwbench,
-                )
-                .await
-            }
-            (&ProviderType::Msp, &StorageLayer::RocksDB) => {
-                start_node_impl::<MspProvider, RocksDbStorageLayer, Network>(
-                    parachain_config,
-                    polkadot_config,
-                    collator_options,
-                    Some(provider_options),
-                    indexer_options,
-                    fisherman_options,
-                    para_id,
-                    hwbench,
-                )
-                .await
-            }
-            (&ProviderType::User, _) => {
-                start_node_impl::<UserRole, NoStorageLayer, Network>(
-                    parachain_config,
-                    polkadot_config,
-                    collator_options,
-                    Some(provider_options),
-                    indexer_options,
-                    fisherman_options,
-                    para_id,
-                    hwbench,
-                )
-                .await
-            }
-        }
-    } else {
-        // Start node without provider options which in turn will not start any storage hub related role services (e.g. Storage Provider, User)
-        start_node_impl::<UserRole, NoStorageLayer, Network>(
-            parachain_config,
-            polkadot_config,
-            collator_options,
-            None,
-            indexer_options,
-            fisherman_options,
-            para_id,
-            hwbench,
-        )
-        .await
-    }
-}
+// TODO
