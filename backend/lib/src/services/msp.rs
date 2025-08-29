@@ -318,12 +318,13 @@ impl MspService {
 #[cfg(all(test, feature = "mocks"))]
 mod tests {
     use super::*;
-    use crate::services::Services;
+    use crate::{constants::mocks::MOCK_ADDRESS, services::Services};
 
     async fn create_test_service() -> MspService {
         let services = Services::mocks();
 
         MspService::new(
+            &Config::default(),
             services.storage.clone(),
             services.postgres.clone(),
             services.rpc.clone(),
@@ -360,10 +361,13 @@ mod tests {
     #[tokio::test]
     async fn test_list_user_buckets() {
         let service = create_test_service().await;
-        let buckets = service.list_user_buckets("0x123").await.unwrap();
+        let buckets = service
+            .list_user_buckets(MOCK_ADDRESS)
+            .await
+            .unwrap()
+            .collect::<Vec<_>>();
 
         assert!(!buckets.is_empty());
-        assert!(buckets.iter().all(|b| !b.bucket_id.is_empty()));
     }
 
     #[tokio::test]

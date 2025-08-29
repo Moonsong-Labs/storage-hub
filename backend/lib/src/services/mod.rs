@@ -47,11 +47,14 @@ impl Services {
             postgres.clone(),
             rpc.clone(),
         ));
+
         let msp = Arc::new(MspService::new(
-            storage.clone(),
-            postgres.clone(),
-            rpc.clone(),
+            &config,
+            Arc::clone(&storage),
+            Arc::clone(&postgres),
+            Arc::clone(&rpc),
         ));
+
         Self {
             config,
             auth,
@@ -81,6 +84,6 @@ impl Services {
         let rpc_conn = Arc::new(AnyRpcConnection::Mock(mock_conn));
         let rpc = Arc::new(StorageHubRpcClient::new(rpc_conn));
 
-        Self::new(storage, postgres, rpc)
+        Self::new(Config::default(), storage, postgres, rpc)
     }
 }
