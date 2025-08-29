@@ -26,7 +26,9 @@ use sp_core::H256;
 
 // Local Runtime Types
 use shp_opaque::{Block, Hash};
-use shr_solochain_evm::Runtime as SolochainEvmRuntime;
+use shr_solochain_evm::{
+    apis::RuntimeApi as SolochainEvmRuntimeApi, Runtime as SolochainEvmRuntime,
+};
 use storage_hub_runtime::{apis::RuntimeApi as ParachainRuntimeApi, Runtime as ParachainRuntime};
 
 // Cumulus Imports
@@ -78,18 +80,18 @@ use crate::{
 };
 
 // Generic client type over Runtime
-pub(crate) type StorageEnableClient<Runtime: StorageEnableRuntime> =
-    shc_common::types::ParachainClient<Runtime::RuntimeApi>;
+pub(crate) type StorageEnableClient<Runtime> =
+    shc_common::types::ParachainClient<<Runtime as StorageEnableRuntime>::RuntimeApi>;
 
 // Other generic types
 pub(crate) type StorageEnableBackend = TFullBackend<Block>;
 pub(crate) type StorageEnableSelectChain = sc_consensus::LongestChain<StorageEnableBackend, Block>;
 
-pub(crate) type StorageEnableBlockImport<Runtime: StorageEnableRuntime> =
+pub(crate) type StorageEnableBlockImport<Runtime> =
     TParachainBlockImport<Block, Arc<StorageEnableClient<Runtime>>, StorageEnableBackend>;
 
 /// Assembly of PartialComponents (enough to run chain ops subcommands)
-pub type Service<Runtime: StorageEnableRuntime> = PartialComponents<
+pub type Service<Runtime> = PartialComponents<
     StorageEnableClient<Runtime>,
     StorageEnableBackend,
     Option<StorageEnableSelectChain>,
@@ -387,7 +389,7 @@ where
 ///
 /// This is the entrypoint function to launch a StorageHub Parachain node,
 /// when running in development mode.
-pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
+pub async fn start_dev_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
     indexer_options: Option<IndexerOptions>,
@@ -402,7 +404,7 @@ pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
             &provider_options.storage_layer,
         ) {
             (&ProviderType::Bsp, &StorageLayer::Memory) => {
-                start_dev_impl::<BspProvider, InMemoryStorageLayer, Network>(
+                start_dev_parachain_impl::<BspProvider, InMemoryStorageLayer, Network>(
                     config,
                     Some(provider_options),
                     indexer_options,
@@ -414,7 +416,7 @@ pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
                 .await
             }
             (&ProviderType::Bsp, &StorageLayer::RocksDB) => {
-                start_dev_impl::<BspProvider, RocksDbStorageLayer, Network>(
+                start_dev_parachain_impl::<BspProvider, RocksDbStorageLayer, Network>(
                     config,
                     Some(provider_options),
                     indexer_options,
@@ -426,7 +428,7 @@ pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
                 .await
             }
             (&ProviderType::Msp, &StorageLayer::Memory) => {
-                start_dev_impl::<MspProvider, InMemoryStorageLayer, Network>(
+                start_dev_parachain_impl::<MspProvider, InMemoryStorageLayer, Network>(
                     config,
                     Some(provider_options),
                     indexer_options,
@@ -438,7 +440,7 @@ pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
                 .await
             }
             (&ProviderType::Msp, &StorageLayer::RocksDB) => {
-                start_dev_impl::<MspProvider, RocksDbStorageLayer, Network>(
+                start_dev_parachain_impl::<MspProvider, RocksDbStorageLayer, Network>(
                     config,
                     Some(provider_options),
                     indexer_options,
@@ -450,7 +452,7 @@ pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
                 .await
             }
             (&ProviderType::User, _) => {
-                start_dev_impl::<UserRole, NoStorageLayer, Network>(
+                start_dev_parachain_impl::<UserRole, NoStorageLayer, Network>(
                     config,
                     Some(provider_options),
                     indexer_options,
@@ -464,7 +466,7 @@ pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
         }
     } else {
         // Start node without provider options which in turn will not start any storage hub related role services (e.g. Storage Provider, User)
-        start_dev_impl::<UserRole, NoStorageLayer, Network>(
+        start_dev_parachain_impl::<UserRole, NoStorageLayer, Network>(
             config,
             None,
             indexer_options,
@@ -496,7 +498,7 @@ pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash
             &provider_options.storage_layer,
         ) {
             (&ProviderType::Bsp, &StorageLayer::Memory) => {
-                start_node_impl::<BspProvider, InMemoryStorageLayer, Network>(
+                start_parachain_node_impl::<BspProvider, InMemoryStorageLayer, Network>(
                     parachain_config,
                     polkadot_config,
                     collator_options,
@@ -509,7 +511,7 @@ pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash
                 .await
             }
             (&ProviderType::Bsp, &StorageLayer::RocksDB) => {
-                start_node_impl::<BspProvider, RocksDbStorageLayer, Network>(
+                start_parachain_node_impl::<BspProvider, RocksDbStorageLayer, Network>(
                     parachain_config,
                     polkadot_config,
                     collator_options,
@@ -522,7 +524,7 @@ pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash
                 .await
             }
             (&ProviderType::Msp, &StorageLayer::Memory) => {
-                start_node_impl::<MspProvider, InMemoryStorageLayer, Network>(
+                start_parachain_node_impl::<MspProvider, InMemoryStorageLayer, Network>(
                     parachain_config,
                     polkadot_config,
                     collator_options,
@@ -535,7 +537,7 @@ pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash
                 .await
             }
             (&ProviderType::Msp, &StorageLayer::RocksDB) => {
-                start_node_impl::<MspProvider, RocksDbStorageLayer, Network>(
+                start_parachain_node_impl::<MspProvider, RocksDbStorageLayer, Network>(
                     parachain_config,
                     polkadot_config,
                     collator_options,
@@ -548,7 +550,7 @@ pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash
                 .await
             }
             (&ProviderType::User, _) => {
-                start_node_impl::<UserRole, NoStorageLayer, Network>(
+                start_parachain_node_impl::<UserRole, NoStorageLayer, Network>(
                     parachain_config,
                     polkadot_config,
                     collator_options,
@@ -563,7 +565,7 @@ pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash
         }
     } else {
         // Start node without provider options which in turn will not start any storage hub related role services (e.g. Storage Provider, User)
-        start_node_impl::<UserRole, NoStorageLayer, Network>(
+        start_parachain_node_impl::<UserRole, NoStorageLayer, Network>(
             parachain_config,
             polkadot_config,
             collator_options,
@@ -581,7 +583,7 @@ pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash
 ///
 /// This is the entrypoint function used when executing subcommands of the
 /// StorageHub Parachain node.
-pub fn new_partial(
+pub fn new_partial_parachain(
     config: &Configuration,
     dev_service: bool,
 ) -> Result<Service<ParachainRuntime>, sc_service::Error> {
@@ -659,7 +661,7 @@ pub fn new_partial(
             config.prometheus_registry(),
         )
     } else {
-        build_import_queue(
+        build_parachain_import_queue(
             client.clone(),
             block_import.clone(),
             config,
@@ -687,7 +689,7 @@ pub fn new_partial(
 }
 
 /// Start a development node with the given solo chain `Configuration`.
-async fn start_dev_impl<R, S, Network>(
+async fn start_dev_parachain_impl<R, S, Network>(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
     indexer_options: Option<IndexerOptions>,
@@ -716,7 +718,7 @@ where
         log::info!("🛠️  Running dev node in maintenance mode");
         log::info!("🛠️  Network participation is disabled");
         log::info!("🛠️  Only storage management RPC methods are available");
-        return start_dev_in_maintenance_mode::<R, S, Network>(
+        return start_dev_parachain_in_maintenance_mode::<R, S, Network>(
             config,
             provider_options,
             indexer_options,
@@ -735,7 +737,7 @@ where
         select_chain: maybe_select_chain,
         transaction_pool,
         other: (_, mut telemetry, _),
-    } = new_partial(&config, true)?;
+    } = new_partial_parachain(&config, true)?;
 
     let signing_dev_key = config
         .dev_key_seed
@@ -1104,7 +1106,7 @@ where
     Ok(task_manager)
 }
 
-async fn start_dev_in_maintenance_mode<R, S, Network>(
+async fn start_dev_parachain_in_maintenance_mode<R, S, Network>(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
     indexer_options: Option<IndexerOptions>,
@@ -1129,7 +1131,7 @@ where
         select_chain: _maybe_select_chain,
         transaction_pool,
         other: (_, mut telemetry, _),
-    } = new_partial(&config, true)?;
+    } = new_partial_parachain(&config, true)?;
 
     let signing_dev_key = config
         .dev_key_seed
@@ -1278,7 +1280,7 @@ where
 /// Start a node with the given parachain `Configuration` and relay chain `Configuration`.
 ///
 /// This is the actual implementation that is abstract over the executor and the runtime api.
-async fn start_node_impl<R, S, Network>(
+async fn start_parachain_node_impl<R, S, Network>(
     parachain_config: Configuration,
     polkadot_config: Configuration,
     collator_options: CollatorOptions,
@@ -1305,7 +1307,7 @@ where
         log::info!("🛠️  Running dev node in maintenance mode");
         log::info!("🛠️  Network participation is disabled");
         log::info!("🛠️  Only storage management RPC methods are available");
-        return start_node_in_maintenance_mode::<R, S, Network>(
+        return start_parachain_node_in_maintenance_mode::<R, S, Network>(
             parachain_config,
             polkadot_config,
             collator_options,
@@ -1320,7 +1322,7 @@ where
 
     let parachain_config = prepare_node_config(parachain_config);
 
-    let params = new_partial(&parachain_config, false)?;
+    let params = new_partial_parachain(&parachain_config, false)?;
     let (block_import, mut telemetry, telemetry_worker_handle) = params.other;
     let mut net_config = sc_network::config::FullNetworkConfiguration::<_, _, Network>::new(
         &parachain_config.network,
@@ -1520,7 +1522,7 @@ where
     })?;
 
     if validator {
-        start_consensus(
+        start_parachain_consensus(
             client.clone(),
             backend.clone(),
             block_import,
@@ -1543,7 +1545,7 @@ where
     Ok((task_manager, client))
 }
 
-async fn start_node_in_maintenance_mode<R, S, Network>(
+async fn start_parachain_node_in_maintenance_mode<R, S, Network>(
     parachain_config: Configuration,
     polkadot_config: Configuration,
     collator_options: CollatorOptions,
@@ -1564,7 +1566,7 @@ where
 {
     let parachain_config = prepare_node_config(parachain_config);
 
-    let params = new_partial(&parachain_config, false)?;
+    let params = new_partial_parachain(&parachain_config, false)?;
     let (_block_import, mut telemetry, telemetry_worker_handle) = params.other;
 
     // Create network configuration
@@ -1715,7 +1717,7 @@ where
 }
 
 /// Build the import queue for the parachain runtime.
-fn build_import_queue(
+fn build_parachain_import_queue(
     client: Arc<StorageEnableClient<ParachainRuntime>>,
     block_import: StorageEnableBlockImport<ParachainRuntime>,
     config: &Configuration,
@@ -1742,7 +1744,7 @@ fn build_import_queue(
     )
 }
 
-fn start_consensus(
+fn start_parachain_consensus(
     client: Arc<StorageEnableClient<ParachainRuntime>>,
     backend: Arc<StorageEnableBackend>,
     block_import: StorageEnableBlockImport<ParachainRuntime>,
@@ -1819,4 +1821,45 @@ fn start_consensus(
 //║                               StorageHub Solochain EVM Node Setup Functions                                   ║
 //╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 
-// TODO
+/// Start the StorageHub Solochain EVM node in development mode.
+///
+/// This is the entrypoint function to launch a StorageHub Solochain EVM node,
+/// when running in development mode.
+pub async fn start_dev_solochain_evm_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
+    config: Configuration,
+    provider_options: Option<ProviderOptions>,
+    indexer_options: Option<IndexerOptions>,
+    fisherman_options: Option<FishermanOptions>,
+    hwbench: Option<sc_sysinfo::HwBench>,
+    para_id: ParaId,
+    sealing: cli::Sealing,
+) -> sc_service::error::Result<TaskManager> {
+    todo!("Not implemented")
+}
+
+/// Start the StorageHub Solochain EVM node.
+///
+/// This is the entrypoint function to launch a StorageHub Solochain EVM node.
+pub async fn start_solochain_evm_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
+    parachain_config: Configuration,
+    polkadot_config: Configuration,
+    collator_options: CollatorOptions,
+    provider_options: Option<ProviderOptions>,
+    indexer_options: Option<IndexerOptions>,
+    fisherman_options: Option<FishermanOptions>,
+    para_id: ParaId,
+    hwbench: Option<sc_sysinfo::HwBench>,
+) -> sc_service::error::Result<(TaskManager, Arc<StorageEnableClient<ParachainRuntime>>)> {
+    todo!("Not implemented")
+}
+
+/// Create a new partial components for the StorageHub Solochain EVM node.
+///
+/// This is the entrypoint function used when executing subcommands of the
+/// StorageHub Solochain EVM node.
+pub fn new_partial_solochain_evm(
+    config: &Configuration,
+    dev_service: bool,
+) -> Result<Service<ParachainRuntime>, sc_service::Error> {
+    todo!("Not implemented")
+}
