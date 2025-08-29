@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use shc_indexer_db::models::{Bsp, Bucket, Msp};
+use shc_indexer_db::models::{Bsp, Bucket, File, Msp};
 
 use crate::{
     constants::database::DEFAULT_PAGE_LIMIT, data::indexer_db::repository::StorageOperations,
@@ -57,7 +57,7 @@ impl DBClient {
         Ok(())
     }
 
-    /// Get all BSPs with optional pagination
+    /// Get all BSPs with pagination
     pub async fn get_all_bsps(&self, limit: Option<i64>, offset: Option<i64>) -> Result<Vec<Bsp>> {
         let limit = limit.unwrap_or(DEFAULT_PAGE_LIMIT);
         let offset = offset.unwrap_or(0);
@@ -79,9 +79,25 @@ impl DBClient {
     }
 
     /// Retrieve info on a specific bucket given its onchain ID
-    pub async fn get_bucket(&self, bucket_id: &[u8]) -> Result<Bucket> {
+    pub async fn get_bucket(&self, bucket_onchain_id: &[u8]) -> Result<Bucket> {
         self.repository
-            .get_bucket(bucket_id.into())
+            .get_bucket_by_onchain_id(bucket_onchain_id.into())
+            .await
+            .map_err(|e| crate::error::Error::Database(e.to_string()))
+    }
+
+    /// Get the files of the given bucket with pagination
+    pub async fn get_bucket_files(
+        &self,
+        bucket: i64,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<Vec<File>> {
+        let limit = limit.unwrap_or(DEFAULT_PAGE_LIMIT);
+        let offset = offset.unwrap_or(0);
+
+        self.repository
+            .get_files_by_bucket(bucket, limit, offset)
             .await
             .map_err(|e| crate::error::Error::Database(e.to_string()))
     }

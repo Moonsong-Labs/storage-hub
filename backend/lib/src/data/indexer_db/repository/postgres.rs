@@ -17,8 +17,8 @@ use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
 use shc_indexer_db::{
-    models::{Bsp, Bucket, Msp},
-    schema::{bsp, bucket},
+    models::{Bsp, Bucket, File, Msp},
+    schema::{bsp, bucket, file},
 };
 
 #[cfg(test)]
@@ -75,15 +75,6 @@ impl IndexerOps for Repository {
             .map_err(Into::into)
     }
 
-    // ============ Bucket Read Operations ============
-    async fn get_bucket(&self, bid: BucketId<'_>) -> RepositoryResult<Bucket> {
-        let mut conn = self.pool.get().await?;
-
-        Bucket::get_by_onchain_bucket_id(&mut conn, bid.0.to_owned())
-            .await
-            .map_err(Into::into)
-    }
-
     async fn list_user_buckets_by_msp(
         &self,
         msp: i64,
@@ -104,6 +95,34 @@ impl IndexerOps for Repository {
             .await?;
 
         Ok(buckets)
+    }
+
+    // ============ Bucket Read Operations ============
+    async fn get_bucket_by_onchain_id(&self, bid: BucketId<'_>) -> RepositoryResult<Bucket> {
+        let mut conn = self.pool.get().await?;
+
+        Bucket::get_by_onchain_bucket_id(&mut conn, bid.0.to_owned())
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn get_files_by_bucket(
+        &self,
+        bucket: i64,
+        limit: i64,
+        offset: i64,
+    ) -> RepositoryResult<Vec<File>> {
+        let mut conn = self.pool.get().await?;
+
+        // Same as File::get_by_bucket_id but with pagination
+        let files = file::table
+            .filter(file::bucket_id.eq(bucket))
+            .limit(limit)
+            .offset(offset)
+            .load(&mut conn)
+            .await?;
+
+        Ok(files)
     }
 }
 

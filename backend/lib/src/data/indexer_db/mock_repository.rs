@@ -14,7 +14,7 @@ use std::{
 use async_trait::async_trait;
 use tokio::sync::RwLock;
 
-use shc_indexer_db::models::{Bsp, Bucket, Msp};
+use shc_indexer_db::models::{Bsp, Bucket, File, Msp};
 
 use crate::data::indexer_db::repository::{
     error::{RepositoryError, RepositoryResult},
@@ -69,11 +69,6 @@ impl IndexerOps for MockRepository {
         todo!()
     }
 
-    // ============ Bucket Read Operations ============
-    async fn get_bucket(&self, bid: BucketId<'_>) -> RepositoryResult<Bucket> {
-        todo!()
-    }
-
     async fn list_user_buckets_by_msp(
         &self,
         msp: i64,
@@ -81,6 +76,20 @@ impl IndexerOps for MockRepository {
         limit: i64,
         offset: i64,
     ) -> RepositoryResult<Vec<Bucket>> {
+        todo!()
+    }
+
+    // ============ Bucket Read Operations ============
+    async fn get_bucket_by_onchain_id(&self, bid: BucketId<'_>) -> RepositoryResult<Bucket> {
+        todo!()
+    }
+
+    async fn get_files_by_bucket(
+        &self,
+        bucket: i64,
+        limit: i64,
+        offset: i64,
+    ) -> RepositoryResult<Vec<File>> {
         todo!()
     }
 }

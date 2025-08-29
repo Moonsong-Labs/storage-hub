@@ -25,7 +25,7 @@
 //! ```
 
 use async_trait::async_trait;
-use shc_indexer_db::models::{Bsp, Bucket, Msp};
+use shc_indexer_db::models::{Bsp, Bucket, File, Msp};
 
 pub mod error;
 pub mod pool;
@@ -100,8 +100,19 @@ pub trait IndexerOps: Send + Sync {
     /// Retrieve the information of the given bucket
     ///
     /// # Arguments
-    /// * `id` - the Bucket ID (onchain)
-    async fn get_bucket(&self, bucket_id: BucketId<'_>) -> RepositoryResult<Bucket>;
+    /// * `bucket` - the Bucket ID (onchain)
+    async fn get_bucket_by_onchain_id(&self, bucket: BucketId<'_>) -> RepositoryResult<Bucket>;
+
+    /// Retrieve all the files belonging to the given bucket
+    ///
+    /// # Arguments
+    /// * `bucket` - the Bucket (database) ID to search
+    async fn get_files_by_bucket(
+        &self,
+        bucket: i64,
+        limit: i64,
+        offset: i64,
+    ) -> RepositoryResult<Vec<File>>;
 }
 
 /// Mutable operations for test environments.

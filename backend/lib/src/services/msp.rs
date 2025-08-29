@@ -165,10 +165,12 @@ impl MspService {
         }
     }
 
-    /// Get a specific bucket by ID
-    ///
-    /// Verifies ownership of bucket is `user`
-    pub async fn get_bucket(&self, bucket_id: &str, user: &str) -> Result<Bucket, Error> {
+    /// Retrieve a bucket from the DB and verify read permission
+    async fn get_db_bucket(
+        &self,
+        bucket_id: &str,
+        user: &str,
+    ) -> Result<shc_indexer_db::models::Bucket, Error> {
         let bucket_id = hex::decode(bucket_id.trim_start_matches("0x")).map_err(|_| {
             Error::BadRequest(format!("Invalid Bucket ID. Expected a valid hex string"))
         })?;
@@ -177,25 +179,34 @@ impl MspService {
             .get_bucket(&bucket_id)
             .await
             .and_then(|bucket| self.can_user_view_bucket(bucket, user))
-            .map(|bucket| {
-                Bucket::from_db(
-                    &bucket,
-                    PLACEHOLDER_BUCKET_SIZE_BYTES,
-                    PLACEHOLDER_BUCKET_FILE_COUNT,
-                )
-            })
+    }
+
+    /// Get a specific bucket by ID
+    ///
+    /// Verifies ownership of bucket is `user`
+    pub async fn get_bucket(&self, bucket_id: &str, user: &str) -> Result<Bucket, Error> {
+        self.get_db_bucket(bucket_id, user).await.map(|bucket| {
+            Bucket::from_db(
+                &bucket,
+                PLACEHOLDER_BUCKET_SIZE_BYTES,
+                PLACEHOLDER_BUCKET_FILE_COUNT,
+            )
+        })
     }
 
     /// Get file tree for a bucket
     ///
     /// Verifies ownership of bucket is `user`
     pub async fn get_file_tree(&self, bucket_id: &str, user: &str) -> Result<FileTree, Error> {
-        // first, get the bucket to determine if user can view the bucket
-        let bucket = self.get_bucket(bucket_id, user).await?;
+        // first, get the bucket from the db and determine if user can view the bucket
+        let bucket = self.get_db_bucket(bucket_id, user).await?;
 
-        // TODO: paginate
+        // TODO: request by page
+        let files = self
+            .postgres
+            .get_bucket_files(bucket.id, None, None)
+            .await?;
 
-        // 1. get files of bucket
         // 2. create hierarchy based on location segments
         todo!("file tree of bucket")
     }
