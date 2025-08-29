@@ -139,7 +139,9 @@ where
     /// Cannot be added if the Blockchain Service has already been spawned.
     pub fn with_notify_period(&mut self, notify_period: Option<u32>) -> &mut Self {
         if self.blockchain.is_some() {
-            panic!("`with_notify_period` should be called before starting the Blockchain Service. Use `with_blockchain` after calling `with_notify_period`.");
+            panic!(
+                "`with_notify_period` should be called before starting the Blockchain Service. Use `with_blockchain` after calling `with_notify_period`."
+            );
         }
         self.notify_period = notify_period;
         self
@@ -450,17 +452,15 @@ where
     }
 }
 
-impl<RuntimeApi> StorageLayerBuilder
-    for StorageHubBuilder<FishermanRole, NoStorageLayer, RuntimeApi>
-where
-    RuntimeApi: StorageEnableRuntime,
+impl<Runtime: StorageEnableRuntime> StorageLayerBuilder
+    for StorageHubBuilder<FishermanRole, NoStorageLayer, Runtime>
 {
     fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
         // Fisherman only needs forest storage for proof construction
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
-        self.forest_storage_handler = Some(<(FishermanRole, NoStorageLayer) as ShNodeType<
-            RuntimeApi,
-        >>::FSH::new());
+        // Ephemeral storage layer
+        self.forest_storage_handler =
+            Some(<(FishermanRole, NoStorageLayer) as ShNodeType<Runtime>>::FSH::new());
 
         self
     }
@@ -516,6 +516,7 @@ where
             },
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
+            None,
         )
     }
 }
@@ -561,6 +562,7 @@ where
             },
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
+            None,
         )
     }
 }
@@ -607,6 +609,7 @@ where
             },
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
+            None,
         )
     }
 }
@@ -625,6 +628,7 @@ where
                 .as_ref()
                 .expect("Task Spawner not set")
                 .clone(),
+            // Not needed by the fisherman service
             self.file_transfer
                 .as_ref()
                 .expect("File Transfer not set.")
@@ -633,6 +637,7 @@ where
                 .as_ref()
                 .expect("Blockchain Service not set.")
                 .clone(),
+            // Not needed by the fisherman service
             self.file_storage
                 .as_ref()
                 .expect("File Storage not set.")
@@ -641,6 +646,7 @@ where
                 .as_ref()
                 .expect("Forest Storage Handler not set.")
                 .clone(),
+            // Not needed by the fisherman service
             ProviderConfig {
                 // Use minimal/default config for fisherman
                 capacity_config: self.capacity_config.unwrap_or_default(),
@@ -653,7 +659,9 @@ where
                 blockchain_service: self.blockchain_service_config.unwrap_or_default(),
             },
             self.indexer_db_pool.clone(),
+            // Not needed by the fisherman service
             self.peer_manager.expect("Peer Manager not set"),
+            self.fisherman,
         )
     }
 }

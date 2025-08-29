@@ -1,7 +1,7 @@
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
-use crate::{schema::msp_file, DbConnection};
+use crate::{schema::msp_file, types::OnchainMspId, DbConnection};
 
 /// Association table between MSP and File
 #[derive(Debug, Queryable, Insertable, Selectable, Associations)]
@@ -10,6 +10,7 @@ use crate::{schema::msp_file, DbConnection};
 #[diesel(belongs_to(super::File, foreign_key = file_id))]
 pub struct MspFile {
     pub msp_id: i64,
+    // TODO: Why is this is a signed int?
     pub file_id: i64,
 }
 
@@ -31,13 +32,13 @@ impl MspFile {
     pub async fn delete<'a>(
         conn: &mut DbConnection<'a>,
         file_key: &[u8],
-        onchain_msp_id: String,
+        onchain_msp_id: OnchainMspId,
     ) -> Result<(), diesel::result::Error> {
         use crate::schema::{file, msp};
 
         // First, get the database MSP ID from the onchain MSP ID
         let msp_db_id: i64 = msp::table
-            .filter(msp::onchain_msp_id.eq(&onchain_msp_id))
+            .filter(msp::onchain_msp_id.eq(onchain_msp_id))
             .select(msp::id)
             .first(conn)
             .await?;
@@ -191,5 +192,23 @@ impl MspFile {
         );
 
         Ok(updated_count)
+    }
+
+    pub async fn get_msp_for_file_key<'a>(
+        conn: &mut DbConnection<'a>,
+        file_key: &[u8],
+    ) -> Result<Option<OnchainMspId>, diesel::result::Error> {
+        use crate::schema::{file, msp};
+
+        let msp_id: Option<OnchainMspId> = file::table
+            .filter(file::file_key.eq(file_key))
+            .inner_join(msp_file::table.on(file::id.eq(msp_file::file_id)))
+            .inner_join(msp::table.on(msp_file::msp_id.eq(msp::id)))
+            .select(msp::onchain_msp_id)
+            .first(conn)
+            .await
+            .optional()?;
+
+        Ok(msp_id)
     }
 }
