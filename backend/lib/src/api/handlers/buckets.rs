@@ -52,9 +52,13 @@ pub async fn get_files(
     TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
     Path(bucket_id): Path<String>,
 ) -> Result<impl IntoResponse, Error> {
-    let _auth = extract_bearer_token(&auth)?;
+    let payload = extract_bearer_token(&auth)?;
+    let address = payload
+        .get("address")
+        .and_then(|a| a.as_str())
+        .unwrap_or(MOCK_ADDRESS);
 
-    let file_tree = services.msp.get_file_tree(&bucket_id).await?;
+    let file_tree = services.msp.get_file_tree(&bucket_id, address).await?;
     let response = FileListResponse {
         bucket_id: bucket_id.clone(),
         files: vec![file_tree],

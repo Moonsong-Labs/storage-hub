@@ -134,6 +134,7 @@ impl MspService {
         &self,
         user_address: &str,
     ) -> Result<impl Iterator<Item = Bucket>, Error> {
+        // TODO: request by page
         self.postgres
             .get_user_buckets(&self.msp_id, user_address, None, None)
             .await
@@ -186,91 +187,17 @@ impl MspService {
     }
 
     /// Get file tree for a bucket
-    pub async fn get_file_tree(&self, _bucket_id: &str) -> Result<FileTree, Error> {
-        Ok(FileTree {
-            name: "/".to_string(),
-            node_type: "folder".to_string(),
-            children: Some(vec![
-                FileTree {
-                    name: "Thesis".to_string(),
-                    node_type: "folder".to_string(),
-                    children: Some(vec![
-                        FileTree {
-                            name: "Initial_results.png".to_string(),
-                            node_type: "file".to_string(),
-                            children: None,
-                            size_bytes: Some(54321),
-                            file_key: Some(
-                                "d298c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f2"
-                                    .to_string(),
-                            ),
-                        },
-                        FileTree {
-                            name: "chapter1.pdf".to_string(),
-                            node_type: "file".to_string(),
-                            children: None,
-                            size_bytes: Some(234567),
-                            file_key: Some(
-                                "a123c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f3"
-                                    .to_string(),
-                            ),
-                        },
-                        FileTree {
-                            name: "references.docx".to_string(),
-                            node_type: "file".to_string(),
-                            children: None,
-                            size_bytes: Some(45678),
-                            file_key: Some(
-                                "b456c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f4"
-                                    .to_string(),
-                            ),
-                        },
-                    ]),
-                    size_bytes: None,
-                    file_key: None,
-                },
-                FileTree {
-                    name: "Reports".to_string(),
-                    node_type: "folder".to_string(),
-                    children: Some(vec![
-                        FileTree {
-                            name: "Q1-2024.pdf".to_string(),
-                            node_type: "file".to_string(),
-                            children: None,
-                            size_bytes: Some(123456),
-                            file_key: Some(
-                                "c789c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f5"
-                                    .to_string(),
-                            ),
-                        },
-                        FileTree {
-                            name: "Q2-2024.pdf".to_string(),
-                            node_type: "file".to_string(),
-                            children: None,
-                            size_bytes: Some(134567),
-                            file_key: Some(
-                                "d890c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f6"
-                                    .to_string(),
-                            ),
-                        },
-                    ]),
-                    size_bytes: None,
-                    file_key: None,
-                },
-                FileTree {
-                    name: "README.md".to_string(),
-                    node_type: "file".to_string(),
-                    children: None,
-                    size_bytes: Some(2048),
-                    file_key: Some(
-                        "e901c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f7"
-                            .to_string(),
-                    ),
-                },
-            ]),
-            size_bytes: None,
-            file_key: None,
-        })
+    ///
+    /// Verifies ownership of bucket is `user`
+    pub async fn get_file_tree(&self, bucket_id: &str, user: &str) -> Result<FileTree, Error> {
+        // first, get the bucket to determine if user can view the bucket
+        let bucket = self.get_bucket(bucket_id, user).await?;
+
+        // TODO: paginate
+
+        // 1. get files of bucket
+        // 2. create hierarchy based on location segments
+        todo!("file tree of bucket")
     }
 
     /// Get file information
@@ -373,9 +300,11 @@ mod tests {
     #[tokio::test]
     async fn test_get_file_tree() {
         let service = create_test_service().await;
-        let tree = service.get_file_tree("bucket123").await.unwrap();
+        let tree = service
+            .get_file_tree("bucket123", MOCK_ADDRESS)
+            .await
+            .unwrap();
 
-        assert_eq!(tree.node_type, "folder");
-        assert!(tree.children.is_some());
+        tree.entry.folder().expect("first entry to be a folder");
     }
 }

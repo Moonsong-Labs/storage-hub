@@ -38,14 +38,44 @@ impl Bucket {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileTreeFile {
+    pub size_bytes: u64,
+    pub file_key: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FileTreeFolder {
+    pub children: Vec<FileTreeEntry>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum FileTreeEntry {
+    File(FileTreeFile),
+    Folder(FileTreeFolder),
+}
+
+impl FileTreeEntry {
+    pub fn file(&self) -> Option<&FileTreeFile> {
+        match self {
+            Self::File(file) => Some(file),
+            _ => None,
+        }
+    }
+
+    pub fn folder(&self) -> Option<&FileTreeFolder> {
+        match self {
+            Self::Folder(folder) => Some(folder),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
 pub struct FileTree {
     pub name: String,
-    #[serde(rename = "type")]
-    pub node_type: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub children: Option<Vec<FileTree>>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "sizeBytes")]
-    pub size_bytes: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "fileKey")]
-    pub file_key: Option<String>,
+
+    #[serde(flatten)]
+    pub entry: FileTreeEntry,
 }
