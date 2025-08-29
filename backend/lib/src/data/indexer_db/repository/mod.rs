@@ -48,9 +48,9 @@ impl<'a> From<&'a str> for ProviderId<'a> {
 ///
 /// This is used to differentiate between the database id and the onchain id
 // TODO: replace with appropriate type from runtime
-pub struct BucketId<'a>(pub &'a str);
-impl<'a> From<&'a str> for BucketId<'a> {
-    fn from(value: &'a str) -> Self {
+pub struct BucketId<'a>(pub &'a [u8]);
+impl<'a> From<&'a [u8]> for BucketId<'a> {
+    fn from(value: &'a [u8]) -> Self {
         Self(value)
     }
 }

@@ -20,6 +20,9 @@ pub struct Msp {
     pub value_prop: String,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
+    /// The onchain MSP ID
+    ///
+    /// It's stored as a hex-encoded string
     pub onchain_msp_id: String,
 }
 
