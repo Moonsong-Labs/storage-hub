@@ -72,12 +72,17 @@ export class HttpClient {
         }
       }
 
-      const res = await this.fetchImpl(url, {
+      const init: RequestInit = {
         method,
         headers,
-        signal: (signal ?? null) as AbortSignal | null,
-        body,
-      });
+        ...(signal ? { signal } : {}),
+        ...(body !== null ? { body } : {}),
+      };
+      const fetchFn =
+        (typeof globalThis !== 'undefined' && this.fetchImpl === (globalThis as unknown as { fetch: typeof fetch }).fetch)
+          ? ((globalThis as unknown as { fetch: typeof fetch }).fetch.bind(globalThis))
+          : this.fetchImpl;
+      const res = await fetchFn(url, init);
 
       // If raw response requested, return it without consuming the body
       if (options.raw) {
