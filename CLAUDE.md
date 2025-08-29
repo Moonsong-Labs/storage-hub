@@ -10,9 +10,18 @@ StorageHub is a Substrate-based parachain for the Polkadot ecosystem, focused on
 
 ## Build Commands
 
+### ⚠️ IMPORTANT: Cargo Build Restrictions
+**NEVER run cargo commands in subfolders or with package-specific flags!**
+- ❌ DO NOT run `cargo` in any subfolder (e.g., `cd pallets/file-system && cargo build`)
+- ❌ DO NOT use `-p` or `--package` flags (e.g., `cargo build -p pallet-file-system`)
+- ✅ ALWAYS run `cargo` from the project root directory
+- ✅ ALWAYS build the entire workspace to avoid compilation errors
+
+This is due to workspace dependencies that require the full context to compile correctly.
+
 ### Rust/Node Build
 ```bash
-# Standard build
+# Standard build - MUST be run from project root
 cargo build --release
 
 # macOS cross-build (requires zig)
@@ -25,7 +34,7 @@ pnpm docker:build
 
 ### Tests
 ```bash
-# Rust unit tests
+# Rust unit tests - MUST be run from project root
 cargo test
 
 # Integration tests (requires Docker)
