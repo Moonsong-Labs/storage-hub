@@ -282,6 +282,16 @@ async fn configure_and_spawn_fisherman(
     // Convert rocksdb_root_path to PathBuf first
     let rocksdb_path: PathBuf = rocksdb_root_path.into();
 
+    // Set the indexer db pool
+    fisherman_builder.with_indexer_db_pool(Some(db_pool.clone()));
+
+    // Spawn the fisherman service
+    fisherman_builder.with_fisherman(client.clone()).await;
+
+    // All variables below are not needed for the fisherman service to operate but required by the StorageHubHandler
+    // TODO: Refactor this once we have a proper setup to support role based StorageHubHandler builder
+    fisherman_builder.setup_storage_layer(None);
+
     // Setup blockchain service
     fisherman_builder
         .with_blockchain(
@@ -293,15 +303,6 @@ async fn configure_and_spawn_fisherman(
         )
         .await;
 
-    // Set the indexer db pool
-    fisherman_builder.with_indexer_db_pool(Some(db_pool.clone()));
-
-    // Spawn the fisherman service
-    fisherman_builder.with_fisherman(client.clone()).await;
-
-    // All variables below are not needed for the fisherman service to operate but required by the StorageHubHandler
-    // TODO: Refactor this once we have a proper setup to support role based StorageHubHandler builder
-    fisherman_builder.setup_storage_layer(None);
     fisherman_builder.with_peer_manager(rocksdb_path);
     let (_sender, receiver) = async_channel::bounded(1);
     let protocol_name = ProtocolName::from("/storage-hub/file-transfer/1");
@@ -428,10 +429,6 @@ async fn finish_sh_builder_and_run_tasks<R, S>(
     keystore: KeystorePtr,
     rocksdb_root_path: impl Into<PathBuf>,
     maintenance_mode: bool,
-    indexer_options: Option<IndexerOptions>,
-    fisherman_options: Option<FishermanOptions>,
-    task_manager: &TaskManager,
-    network: Arc<dyn NetworkService>,
 ) -> Result<(), sc_service::Error>
 where
     R: ShRole,
@@ -441,19 +438,6 @@ where
     StorageHubHandler<(R, S), Runtime>: RunnableTasks,
 {
     let rocks_db_path = rocksdb_root_path.into();
-
-    // Spawn fisherman service if enabled
-    configure_and_spawn_fisherman(
-        &fisherman_options,
-        &indexer_options,
-        &task_manager,
-        client.clone(),
-        keystore.clone(),
-        Arc::new(rpc_handlers.clone()),
-        rocks_db_path.clone(),
-        network.clone(),
-    )
-    .await?;
 
     // Spawn the Blockchain Service if node is running as a Storage Provider
     sh_builder
@@ -628,7 +612,9 @@ where
             }
             cli::Sealing::Interval(millis) => {
                 if millis < 3000 {
-                    log::info!("⚠️ Sealing interval is very short. Normally setting this to 6000 ms is recommended.");
+                    log::info!(
+                        "⚠️ Sealing interval is very short. Normally setting this to 6000 ms is recommended."
+                    );
                 }
 
                 Box::new(StreamExt::map(
@@ -697,17 +683,25 @@ where
         finish_sh_builder_and_run_tasks(
             sh_builder.expect("StorageHubBuilder should already be initialised."),
             client.clone(),
-            rpc_handlers,
+            rpc_handlers.clone(),
             keystore.clone(),
-            base_path,
+            base_path.clone(),
             maintenance_mode,
-            indexer_options,
-            fisherman_options,
-            &task_manager,
-            network.clone(),
         )
         .await?;
     }
+
+    configure_and_spawn_fisherman(
+        &fisherman_options,
+        &indexer_options,
+        &task_manager,
+        client.clone(),
+        keystore.clone(),
+        Arc::new(rpc_handlers.clone()),
+        base_path,
+        network.clone(),
+    )
+    .await?;
 
     if let Some(hwbench) = hwbench {
         sc_sysinfo::print_hwbench(&hwbench);
@@ -716,10 +710,7 @@ where
         // requirements for a para-chain are dictated by its relay-chain.
         match SUBSTRATE_REFERENCE_HARDWARE.check_hardware(&hwbench, false) {
             Err(err) if collator => {
-                log::warn!(
-				"⚠️  The hardware does not meet the minimal requirements {} for role 'Authority'.",
-				err
-			);
+                log::warn!("⚠️  The hardware does not meet the minimal requirements {} for role 'Authority'.", err);
             }
             _ => {}
         }
@@ -1030,10 +1021,6 @@ where
             keystore.clone(),
             base_path,
             true,
-            indexer_options,
-            fisherman_options,
-            &task_manager,
-            network.clone(),
         )
         .await?;
     }
@@ -1237,17 +1224,25 @@ where
         finish_sh_builder_and_run_tasks(
             sh_builder.expect("StorageHubBuilder should already be initialised."),
             client.clone(),
-            rpc_handlers,
+            rpc_handlers.clone(),
             keystore.clone(),
-            base_path,
+            base_path.clone(),
             maintenance_mode,
-            indexer_options,
-            fisherman_options,
-            &task_manager,
-            network.clone(),
         )
         .await?;
     }
+
+    configure_and_spawn_fisherman(
+        &fisherman_options,
+        &indexer_options,
+        &task_manager,
+        client.clone(),
+        keystore.clone(),
+        Arc::new(rpc_handlers.clone()),
+        base_path,
+        network.clone(),
+    )
+    .await?;
 
     if let Some(hwbench) = hwbench {
         sc_sysinfo::print_hwbench(&hwbench);
@@ -1256,10 +1251,7 @@ where
         // requirements for a para-chain are dictated by its relay-chain.
         match SUBSTRATE_REFERENCE_HARDWARE.check_hardware(&hwbench, false) {
             Err(err) if validator => {
-                log::warn!(
-				"⚠️  The hardware does not meet the minimal requirements {} for role 'Authority'.",
-				err
-			);
+                log::warn!("⚠️  The hardware does not meet the minimal requirements {} for role 'Authority'.", err);
             }
             _ => {}
         }
@@ -1457,17 +1449,25 @@ where
         finish_sh_builder_and_run_tasks(
             sh_builder.expect("StorageHubBuilder should already be initialised."),
             client.clone(),
-            rpc_handlers,
+            rpc_handlers.clone(),
             keystore.clone(),
-            base_path,
+            base_path.clone(),
             true,
-            indexer_options,
-            fisherman_options,
-            &task_manager,
-            network.clone(),
         )
         .await?;
     }
+
+    configure_and_spawn_fisherman(
+        &fisherman_options,
+        &indexer_options,
+        &task_manager,
+        client.clone(),
+        keystore.clone(),
+        Arc::new(rpc_handlers.clone()),
+        base_path,
+        network.clone(),
+    )
+    .await?;
 
     if let Some(hwbench) = hwbench {
         sc_sysinfo::print_hwbench(&hwbench);
