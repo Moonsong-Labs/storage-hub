@@ -1,32 +1,41 @@
+use codec::Decode;
 use futures::stream::{self, StreamExt};
 use log::{debug, error, info, warn};
-use sc_client_api::BlockchainEvents;
-use shc_common::{blockchain_utils::EventsRetrievalError, traits::StorageEnableRuntime};
-use sp_runtime::traits::Header;
-use std::sync::Arc;
-use thiserror::Error;
+use pallet_file_system_runtime_api::FileSystemApi;
+use sc_client_api::{BlockImportNotification, BlockchainEvents, HeaderBackend};
+use shc_common::types::{FileOperation, OpaqueBlock, StorageEnableEvents};
+use shc_common::{blockchain_utils::get_events_at_block, traits::StorageEnableRuntime};
+use sp_api::ProvideRuntimeApi;
+use sp_runtime::traits::{Header, One, SaturatedConversion, Saturating};
+use std::{collections::HashMap, sync::Arc};
 
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::types::{BlockNumber, ParachainClient};
-use sp_core::H256;
+use shp_types::Hash;
 
-use crate::events::FishermanServiceEventBusProvider;
+use crate::{
+    commands::{FishermanServiceCommand, FishermanServiceError},
+    events::{FileDeletionTarget, FishermanServiceEventBusProvider},
+};
 
 pub(crate) const LOG_TARGET: &str = "fisherman-service";
 
-/// Commands that can be sent to the FishermanService actor
-#[derive(Debug)]
-pub enum FishermanServiceCommand {}
+/// Represents an operation that occurred on a file key
+#[derive(Debug, Clone)]
+pub enum FileKeyOperation {
+    /// File key was added with complete metadata
+    Add(shc_common::types::FileMetadata),
+    /// File key was removed
+    Remove,
+}
 
-/// Errors that can occur in the fisherman service
-#[derive(Error, Debug)]
-pub enum FishermanServiceError {
-    #[error("Database error: {0}")]
-    Database(#[from] diesel::result::Error),
-    #[error("Blockchain client error: {0}")]
-    Client(String),
-    #[error("Events retrieval error: {0}")]
-    EventsRetrieval(#[from] EventsRetrievalError),
+/// Represents a change to a file key between blocks
+#[derive(Debug, Clone)]
+pub struct FileKeyChange {
+    /// The file key that changed
+    pub file_key: Hash,
+    /// The operation that was applied
+    pub operation: FileKeyOperation,
 }
 
 /// The main FishermanService actor
@@ -57,29 +66,374 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
     async fn monitor_block(
         &mut self,
         block_number: BlockNumber<Runtime>,
-        block_hash: H256,
+        block_hash: Runtime::Hash,
     ) -> Result<(), FishermanServiceError> {
         debug!(target: LOG_TARGET, "🎣 Monitoring block #{}: {}", block_number, block_hash);
 
-        // TODO: Emit ProcessFileDeletionRequest event
+        let events = get_events_at_block::<Runtime>(&self.client, &block_hash)?;
+
+        for event_record in events.iter() {
+            let event: Result<StorageEnableEvents<Runtime>, _> =
+                event_record.event.clone().try_into();
+            let event = match event {
+                Ok(e) => e,
+                Err(e) => {
+                    warn!(
+                        target: LOG_TARGET,
+                        "Failed to decode event: {:?}",
+                        e
+                    );
+                    continue;
+                }
+            };
+            match event {
+                StorageEnableEvents::FileSystem(
+                    pallet_file_system::Event::FileDeletionRequested {
+                        signed_delete_intention,
+                        signature,
+                    },
+                ) if signed_delete_intention.operation == FileOperation::Delete => {
+                    info!(
+                        target: LOG_TARGET,
+                        "🎣 Found FileDeletionRequested event for file key: {:?}",
+                        signed_delete_intention.file_key
+                    );
+
+                    let event = crate::events::ProcessFileDeletionRequest {
+                        signed_file_operation_intention: signed_delete_intention,
+                        signature,
+                    };
+
+                    self.emit(event);
+                }
+                StorageEnableEvents::FileSystem(
+                    pallet_file_system::Event::StorageRequestExpired { file_key },
+                ) => {
+                    info!(
+                        target: LOG_TARGET,
+                        "🎣 Found StorageRequestExpired event for file key: {:?}",
+                        file_key
+                    );
+
+                    let event = crate::events::ProcessIncompleteStorageRequest {
+                        file_key: file_key.into(),
+                    };
+
+                    self.emit(event);
+                }
+                StorageEnableEvents::FileSystem(
+                    pallet_file_system::Event::StorageRequestRevoked { file_key },
+                ) => {
+                    info!(
+                        target: LOG_TARGET,
+                        "🎣 Found StorageRequestRevoked event for file key: {:?}",
+                        file_key
+                    );
+
+                    let event = crate::events::ProcessIncompleteStorageRequest {
+                        file_key: file_key.into(),
+                    };
+
+                    self.emit(event);
+                }
+                StorageEnableEvents::FileSystem(
+                    pallet_file_system::Event::StorageRequestRejected { file_key, .. },
+                ) => {
+                    info!(
+                        target: LOG_TARGET,
+                        "🎣 Found StorageRequestRejected event for file key: {:?}",
+                        file_key
+                    );
+
+                    let event = crate::events::ProcessIncompleteStorageRequest {
+                        file_key: file_key.into(),
+                    };
+
+                    self.emit(event);
+                }
+                _ => {}
+            }
+        }
 
         self.last_processed_block = Some(block_number);
         Ok(())
+    }
+
+    /// Get file key changes between two blocks for a specific target.
+    ///
+    /// Note:
+    /// - `from_block` is excluded from being processed.
+    /// - `target` is either a BSP id or a Bucket id to delete the file from
+    pub async fn get_file_key_changes_since_block(
+        &self,
+        from_block: BlockNumber<Runtime>,
+        target: FileDeletionTarget<Runtime>,
+    ) -> Result<Vec<FileKeyChange>, FishermanServiceError> {
+        // Get the current best block
+        let best_block_info = self.client.info();
+        let best_block_number: BlockNumber<Runtime> = best_block_info.best_number.into();
+
+        debug!(
+            target: LOG_TARGET,
+            "🎣 Fetching file key changes from block {} to {}", from_block, best_block_number
+        );
+
+        // Track file key states
+        // TODO: Add proper memory management and block range limits to prevent OOM
+        let mut file_key_states: HashMap<Hash, FileKeyOperation> = HashMap::new();
+
+        // Process blocks from `from_block` (excluding) to `best_block_number`
+        let mut block_num = from_block.saturating_add(One::one());
+        while block_num <= best_block_number {
+            let num: u32 = (block_num.into()).as_u64().saturated_into();
+            // Get block hash
+            let block_hash = self
+                .client
+                .hash(num)
+                .map_err(|e| FishermanServiceError::Client(e.to_string()))?
+                .ok_or_else(|| {
+                    FishermanServiceError::Client(format!("Block {} not found", block_num))
+                })?;
+
+            // Get events at this block
+            let events = get_events_at_block::<Runtime>(&self.client, &block_hash)?;
+
+            // Process ProofsDealer events for file key changes
+            for event_record in events.iter() {
+                let event: Result<StorageEnableEvents<Runtime>, _> =
+                    event_record.event.clone().try_into();
+                let event = match event {
+                    Ok(e) => e,
+                    Err(_) => continue,
+                };
+
+                match (event, &target) {
+                    // Process BSP mutations from MutationsAppliedForProvider events
+                    (
+                        StorageEnableEvents::ProofsDealer(
+                            pallet_proofs_dealer::Event::MutationsAppliedForProvider {
+                                provider_id,
+                                mutations,
+                                ..
+                            },
+                        ),
+                        FileDeletionTarget::BspId(target_bsp_id),
+                    ) if &provider_id == target_bsp_id => {
+                        self.process_bsp_mutations(
+                            &mutations,
+                            &target_bsp_id,
+                            &mut file_key_states,
+                        );
+                    }
+                    // Process MSP/bucket mutations from MutationsApplied events
+                    (
+                        StorageEnableEvents::ProofsDealer(
+                            pallet_proofs_dealer::Event::MutationsApplied {
+                                mutations,
+                                event_info,
+                                ..
+                            },
+                        ),
+                        FileDeletionTarget::BucketId(target_bucket_id),
+                    ) => {
+                        self.process_msp_bucket_mutations(
+                            &block_hash,
+                            &mutations,
+                            &target_bucket_id,
+                            event_info,
+                            &mut file_key_states,
+                        );
+                    }
+                    _ => {}
+                }
+            }
+
+            // Increment block number for next iteration
+            block_num = block_num.saturating_add(One::one());
+        }
+
+        // Convert HashMap to Vec<FileKeyChange>
+        let changes: Vec<FileKeyChange> = file_key_states
+            .into_iter()
+            .map(|(file_key, operation)| FileKeyChange {
+                file_key,
+                operation,
+            })
+            .collect();
+
+        info!(
+            target: LOG_TARGET,
+            "🎣 Found {} file key changes for provider {:?} between blocks {} and {}",
+            changes.len(),
+            target,
+            from_block,
+            best_block_number
+        );
+
+        Ok(changes)
+    }
+
+    /// Process BSP mutations from MutationsAppliedForProvider events
+    fn process_bsp_mutations(
+        &self,
+        mutations: &[(Hash, shc_common::types::TrieMutation)],
+        target_bsp_id: &Hash,
+        file_key_states: &mut HashMap<Hash, FileKeyOperation>,
+    ) {
+        // Process mutations
+        for (file_key, mutation) in mutations {
+            match mutation {
+                shc_common::types::TrieMutation::Add(add_mutation) => {
+                    // Try to decode the value as FileMetadata
+                    if let Ok(metadata) =
+                        shc_common::types::FileMetadata::decode(&mut &add_mutation.value[..])
+                    {
+                        file_key_states.insert(*file_key, FileKeyOperation::Add(metadata));
+                    } else {
+                        debug!(
+                            target: LOG_TARGET,
+                            "Failed to decode FileMetadata from mutation value for file key: {:?}",
+                            file_key
+                        );
+                    }
+                }
+                shc_common::types::TrieMutation::Remove(_) => {
+                    file_key_states.insert(*file_key, FileKeyOperation::Remove);
+                }
+            }
+        }
+
+        debug!(
+            target: LOG_TARGET,
+            "Processed {} BSP mutations for provider {:?}",
+            mutations.len(),
+            target_bsp_id
+        );
+    }
+
+    /// Process MSP/bucket mutations from MutationsApplied events
+    fn process_msp_bucket_mutations(
+        &self,
+        block_hash: &Runtime::Hash,
+        mutations: &[(Hash, shc_common::types::TrieMutation)],
+        target_bucket_id: &shc_common::types::BucketId<Runtime>,
+        event_info: Option<Vec<u8>>,
+        file_key_states: &mut HashMap<Hash, FileKeyOperation>,
+    ) {
+        // Check that event_info contains bucket ID
+        let Some(event_info) = event_info else {
+            error!(
+                target: LOG_TARGET,
+                "MutationsApplied event with `None` event info, when it is expected to contain the BucketId of the bucket that was mutated."
+            );
+            return;
+        };
+
+        // Decode bucket ID from event info
+        let bucket_id = match self
+            .client
+            .runtime_api()
+            .decode_generic_apply_delta_event_info(*block_hash, event_info)
+            .map_err(|e| {
+                error!(
+                    target: LOG_TARGET,
+                    "Error while calling runtime API to decode BucketId from event info: {:?}",
+                    e
+                );
+            })
+            .and_then(|res| {
+                res.map_err(|e| {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to decode BucketId from event info: {:?}",
+                        e
+                    );
+                })
+            }) {
+            Ok(bucket_id) => bucket_id,
+            Err(_) => return,
+        };
+
+        // Check if bucket ID matches the target bucket
+        if &bucket_id != target_bucket_id {
+            debug!(
+                target: LOG_TARGET,
+                "Bucket [{:?}] is not the target bucket [{:?}]. Skipping mutations.",
+                bucket_id,
+                target_bucket_id
+            );
+            return;
+        }
+
+        // Process mutations
+        for (file_key, mutation) in mutations {
+            match mutation {
+                shc_common::types::TrieMutation::Add(add_mutation) => {
+                    // Try to decode the value as FileMetadata
+                    if let Ok(metadata) =
+                        shc_common::types::FileMetadata::decode(&mut &add_mutation.value[..])
+                    {
+                        file_key_states.insert(*file_key, FileKeyOperation::Add(metadata));
+                    } else {
+                        debug!(
+                            target: LOG_TARGET,
+                            "Failed to decode FileMetadata from mutation value for file key: {:?}",
+                            file_key
+                        );
+                    }
+                }
+                shc_common::types::TrieMutation::Remove(_) => {
+                    file_key_states.insert(*file_key, FileKeyOperation::Remove);
+                }
+            }
+        }
+
+        debug!(
+            target: LOG_TARGET,
+            "Processed {} MSP/bucket mutations for bucket {:?}",
+            mutations.len(),
+            bucket_id
+        );
     }
 }
 
 /// Implement the Actor trait for FishermanService
 impl<Runtime: StorageEnableRuntime> Actor for FishermanService<Runtime> {
-    type Message = FishermanServiceCommand;
+    type Message = FishermanServiceCommand<Runtime>;
     type EventLoop = FishermanServiceEventLoop<Runtime>;
     type EventBusProvider = FishermanServiceEventBusProvider<Runtime>;
 
     fn handle_message(
         &mut self,
-        _message: Self::Message,
+        message: Self::Message,
     ) -> impl std::future::Future<Output = ()> + Send {
         async move {
-            // TODO: handle fisherman catch up command
+            match message {
+                FishermanServiceCommand::GetFileKeyChangesSinceBlock {
+                    from_block,
+                    provider,
+                    callback,
+                } => {
+                    debug!(
+                        target: LOG_TARGET,
+                        "🎣 GetFileKeyChangesSinceBlock from block {} for provider {:?}",
+                        from_block,
+                        provider
+                    );
+
+                    let result = self
+                        .get_file_key_changes_since_block(from_block, provider)
+                        .await;
+
+                    // Send the result back through the callback
+                    if let Err(_) = callback.send(result) {
+                        warn!(
+                            target: LOG_TARGET,
+                            "Failed to send GetFileKeyChangesSinceBlock response - receiver dropped"
+                        );
+                    }
+                }
+            }
         }
     }
 
@@ -89,12 +443,9 @@ impl<Runtime: StorageEnableRuntime> Actor for FishermanService<Runtime> {
 }
 
 /// Messages that can be received in the event loop
-enum MergedEventLoopMessage<Block>
-where
-    Block: sp_runtime::traits::Block,
-{
-    Command(FishermanServiceCommand),
-    BlockImportNotification(sc_client_api::BlockImportNotification<Block>),
+enum MergedEventLoopMessage<Runtime: StorageEnableRuntime> {
+    Command(FishermanServiceCommand<Runtime>),
+    BlockImportNotification(BlockImportNotification<OpaqueBlock>),
 }
 
 /// Event loop for the FishermanService actor
@@ -104,7 +455,7 @@ where
 /// starting [`ProcessFileDeletionRequest`] tasks.
 pub struct FishermanServiceEventLoop<Runtime: StorageEnableRuntime> {
     service: FishermanService<Runtime>,
-    receiver: sc_utils::mpsc::TracingUnboundedReceiver<FishermanServiceCommand>,
+    receiver: sc_utils::mpsc::TracingUnboundedReceiver<FishermanServiceCommand<Runtime>>,
 }
 
 impl<Runtime: StorageEnableRuntime> ActorEventLoop<FishermanService<Runtime>>
@@ -112,7 +463,7 @@ impl<Runtime: StorageEnableRuntime> ActorEventLoop<FishermanService<Runtime>>
 {
     fn new(
         actor: FishermanService<Runtime>,
-        receiver: sc_utils::mpsc::TracingUnboundedReceiver<FishermanServiceCommand>,
+        receiver: sc_utils::mpsc::TracingUnboundedReceiver<FishermanServiceCommand<Runtime>>,
     ) -> Self {
         Self {
             service: actor,
@@ -144,7 +495,10 @@ impl<Runtime: StorageEnableRuntime> ActorEventLoop<FishermanService<Runtime>>
                             let block_number = *notification.header.number();
                             let block_hash = notification.hash;
 
-                            // TODO: Only monitor block if it is the new best block
+                            // Only process new best blocks
+                            if !notification.is_new_best {
+                                return;
+                            }
 
                             if let Err(e) = self
                                 .service

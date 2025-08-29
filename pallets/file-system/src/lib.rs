@@ -593,7 +593,10 @@ pub mod pallet {
         /// # Note
         /// This event is not emitted when the storage request is immediately fulfilled upon
         /// MSP acceptance. In such cases, a [`StorageRequestFulfilled`] event is emitted instead.
-        MspAcceptedStorageRequest { file_key: MerkleHash<T> },
+        MspAcceptedStorageRequest {
+            file_key: MerkleHash<T>,
+            file_metadata: FileMetadata,
+        },
         /// Notifies that a BSP has been accepted to store a given file.
         AcceptedBspVolunteer {
             bsp_id: ProviderIdFor<T>,
@@ -608,7 +611,8 @@ pub mod pallet {
         BspConfirmedStoring {
             who: T::AccountId,
             bsp_id: ProviderIdFor<T>,
-            confirmed_file_keys: BoundedVec<MerkleHash<T>, T::MaxBatchConfirmStorageRequests>,
+            confirmed_file_keys:
+                BoundedVec<(MerkleHash<T>, FileMetadata), T::MaxBatchConfirmStorageRequests>,
             skipped_file_keys: BoundedVec<MerkleHash<T>, T::MaxBatchConfirmStorageRequests>,
             new_root: MerkleHash<T>,
         },
@@ -1599,35 +1603,47 @@ pub mod pallet {
                 "Basic security replication target cannot be zero."
             );
             assert!(
-				standard_replication_target >= basic_replication_target,
-				"Standard security replication target cannot be smaller than basic security replication target."
-			);
+                standard_replication_target >= basic_replication_target,
+                "Standard security replication target cannot be smaller than basic security replication target."
+            );
             assert!(
-				high_security_replication_target >= standard_replication_target,
-				"High security replication target cannot be smaller than standard security replication target."
-			);
+                high_security_replication_target >= standard_replication_target,
+                "High security replication target cannot be smaller than standard security replication target."
+            );
             assert!(
-				super_high_security_replication_target >= high_security_replication_target,
-				"Super high security replication target cannot be smaller than high security replication target."
-			);
+                super_high_security_replication_target >= high_security_replication_target,
+                "Super high security replication target cannot be smaller than high security replication target."
+            );
             assert!(
-				ultra_high_security_replication_target >= super_high_security_replication_target,
-				"Ultra high security replication target cannot be smaller than super high security replication target."
-			);
+                ultra_high_security_replication_target >= super_high_security_replication_target,
+                "Ultra high security replication target cannot be smaller than super high security replication target."
+            );
             assert!(
                 max_replication_target >= ultra_high_security_replication_target,
                 "Max replication target cannot be smaller than the most secure replication target."
             );
 
-            assert!(tick_range_to_max_threshold < storage_request_ttl.into(), "Storage request TTL must be greater than the tick range to maximum threshold so storage requests get to their maximum threshold before expiring.");
+            assert!(
+                tick_range_to_max_threshold < storage_request_ttl.into(),
+                "Storage request TTL must be greater than the tick range to maximum threshold so storage requests get to their maximum threshold before expiring."
+            );
 
             // The checkpoint challenge period already greater than the longest challenge period a BSP can have + the tolerance,
             // so by ensuring the minimum wait for stop storing is greater than the checkpoint challenge period, we ensure that
             // the BSP cannot immediately stop storing a file it has lost when receiving a challenge for it.
-            assert!(min_wait_for_stop_storing > checkpoint_challenge_period, "Minimum amount of blocks between the stop storing request opening and being able to confirm it cannot be smaller than the checkpoint challenge period.");
+            assert!(
+                min_wait_for_stop_storing > checkpoint_challenge_period,
+                "Minimum amount of blocks between the stop storing request opening and being able to confirm it cannot be smaller than the checkpoint challenge period."
+            );
 
             // The base deposit for a storage request creation should be enough to cover the fees to volunteer for at least `basic_replication_target` BSPs.
-            assert!(base_storage_request_creation_deposit >= bsp_volunteer_fee.saturating_mul(T::ReplicationTargetToBalance::convert(basic_replication_target)), "Base storage request creation deposit should be enough to cover the fees to volunteer for at least `basic_replication_target` BSPs.");
+            assert!(
+                base_storage_request_creation_deposit
+                    >= bsp_volunteer_fee.saturating_mul(T::ReplicationTargetToBalance::convert(
+                        basic_replication_target
+                    )),
+                "Base storage request creation deposit should be enough to cover the fees to volunteer for at least `basic_replication_target` BSPs."
+            );
         }
     }
 }

@@ -12,7 +12,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use shc_indexer_db::models::Bsp;
+use shc_indexer_db::{models::Bsp, OnchainBspId};
 use tokio::sync::RwLock;
 
 use crate::data::indexer_db::repository::{
@@ -67,9 +67,12 @@ impl IndexerOps for MockRepository {
 #[async_trait]
 impl IndexerOpsMut for MockRepository {
     // ============ BSP Write Operations ============
-    async fn delete_bsp(&self, account: &str) -> RepositoryResult<()> {
+    async fn delete_bsp(&self, account: &OnchainBspId) -> RepositoryResult<()> {
         let mut bsps = self.bsps.write().await;
-        let id_to_remove = bsps.values().find(|b| b.account == account).map(|b| b.id);
+        let id_to_remove = bsps
+            .values()
+            .find(|b| &b.onchain_bsp_id == account)
+            .map(|b| b.id);
 
         if let Some(id) = id_to_remove {
             bsps.remove(&id);
@@ -103,7 +106,7 @@ pub mod tests {
                 last_tick_proven: 0,
                 created_at: now,
                 updated_at: now,
-                onchain_bsp_id: DEFAULT_BSP_ID.to_string(),
+                onchain_bsp_id: OnchainBspId::new(DEFAULT_BSP_ID),
                 merkle_root: BSP_MERKLE_ROOT.to_vec(),
             },
         );
@@ -132,7 +135,7 @@ pub mod tests {
         let bsp = &bsps[0];
 
         // Delete BSP
-        repo.delete_bsp(&bsp.account).await.unwrap();
+        repo.delete_bsp(&bsp.onchain_bsp_id).await.unwrap();
 
         let found = repo.list_bsps(1, 0).await.unwrap();
         assert!(found.is_empty());

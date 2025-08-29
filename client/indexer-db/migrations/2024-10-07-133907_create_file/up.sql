@@ -3,6 +3,7 @@ CREATE TABLE file (
     account BYTEA NOT NULL,
     file_key BYTEA NOT NULL,
     bucket_id BIGINT NOT NULL,
+    onchain_bucket_id BYTEA NOT NULL,
     location BYTEA NOT NULL,
     fingerprint BYTEA NOT NULL,
     size BIGINT NOT NULL,

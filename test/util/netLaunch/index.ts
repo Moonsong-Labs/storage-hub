@@ -882,4 +882,12 @@ export type NetLaunchConfig = {
    * Optional parameter to run the fisherman service.
    */
   fisherman?: boolean;
+
+  /**
+   * Optional parameter to set the indexer mode when indexer is enabled.
+   * 'full' - indexes all events (default)
+   * 'lite' - indexes only essential events as defined in LITE_MODE_EVENTS.md
+   * 'fishing' - indexes only events related to fishing (fisherman service)
+   */
+  indexerMode?: "full" | "lite" | "fishing";
 };
