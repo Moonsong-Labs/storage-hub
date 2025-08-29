@@ -1,3 +1,7 @@
+# Playwright output
+playwright-report/
+test-results/
+
 # Local Playwright artifacts (package-level)
 playwright-report/
 test-results/

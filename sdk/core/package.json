@@ -12,6 +12,7 @@
     ],
     "scripts": {
         "build": "node ../scripts/build.js",
+        "build:types": "tsc --emitDeclarationOnly -p tsconfig.json",
         "dev": "node ../scripts/build.js --watch",
         "lint": "eslint \"{src/**/*.ts,src/**/*.tsx}\"",
         "format": "prettier --write \"{src/**/*.ts,src/**/*.tsx}\"",

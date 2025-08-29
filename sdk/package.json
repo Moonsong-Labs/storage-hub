@@ -7,10 +7,11 @@
     "packageManager": "pnpm@8.12.1",
     "workspaces": [
         "core",
-        "msp-client"
+        "msp-client",
+        "e2e"
     ],
     "scripts": {
-        "build": "pnpm --filter ./core run build && pnpm --filter ./msp-client run build",
+        "build": "pnpm --filter ./core run build && pnpm --filter ./core run build:types && pnpm --filter ./msp-client run build",
         "build:wasm": "pnpm --filter ./core run build:wasm",
         "test": "pnpm run test:core && pnpm run test:msp-client",
         "test:core": "pnpm --filter ./core run test -- --run",

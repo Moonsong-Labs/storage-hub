@@ -5,6 +5,8 @@
         "outDir": "dist",
         "module": "ESNext",
         "moduleResolution": "Bundler",
+        "declaration": true,
+        "declarationDir": "./dist",
         "paths": {
             "./wasm": [
                 "./src/wasm.ts"
