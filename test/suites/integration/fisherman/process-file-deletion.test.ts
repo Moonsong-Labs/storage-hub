@@ -190,32 +190,42 @@ describeMspNet(
       );
 
       // Verify MSP root changed
-      notEqual(
-        mspDeletionEvent.data.oldRoot.toString(),
-        mspDeletionEvent.data.newRoot.toString(),
-        "MSP forest root should have changed after file deletion"
-      );
-      const currentBucketRoot = await msp1Api.rpc.storagehubclient.getForestRoot(
-        mspDeletionEvent.data.bucketId.toString()
-      );
-      strictEqual(
-        currentBucketRoot.toString(),
-        mspDeletionEvent.data.newRoot.toString(),
-        "Current bucket forest root should match the new root from deletion event"
-      );
+      await waitFor({
+        lambda: async () => {
+          notEqual(
+            mspDeletionEvent.data.oldRoot.toString(),
+            mspDeletionEvent.data.newRoot.toString(),
+            "MSP forest root should have changed after file deletion"
+          );
+          const currentBucketRoot = await msp1Api.rpc.storagehubclient.getForestRoot(
+            mspDeletionEvent.data.bucketId.toString()
+          );
+          strictEqual(
+            currentBucketRoot.toString(),
+            mspDeletionEvent.data.newRoot.toString(),
+            "Current bucket forest root should match the new root from deletion event"
+          );
+          return true;
+        }
+      });
 
       // Verify BSP root changed
-      notEqual(
-        bspDeletionEvent.data.oldRoot.toString(),
-        bspDeletionEvent.data.newRoot.toString(),
-        "BSP forest root should have changed after file deletion"
-      );
-      const currentBspRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
-      strictEqual(
-        currentBspRoot.toString(),
-        bspDeletionEvent.data.newRoot.toString(),
-        "Current BSP forest root should match the new root from deletion event"
-      );
+      await waitFor({
+        lambda: async () => {
+          notEqual(
+            bspDeletionEvent.data.oldRoot.toString(),
+            bspDeletionEvent.data.newRoot.toString(),
+            "BSP forest root should have changed after file deletion"
+          );
+          const currentBspRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
+          strictEqual(
+            currentBspRoot.toString(),
+            bspDeletionEvent.data.newRoot.toString(),
+            "Current BSP forest root should match the new root from deletion event"
+          );
+          return true;
+        }
+      });
     });
 
     it("processes StorageRequestRejected event when MSP doesn't accept in time", async () => {
@@ -439,32 +449,42 @@ describeMspNet(
       );
 
       // Verify MSP root changed
-      notEqual(
-        mspDeletionEvent.data.oldRoot.toString(),
-        mspDeletionEvent.data.newRoot.toString(),
-        "MSP forest root should have changed after file deletion"
-      );
-      const currentBucketRoot = await msp1Api.rpc.storagehubclient.getForestRoot(
-        mspDeletionEvent.data.bucketId.toString()
-      );
-      strictEqual(
-        currentBucketRoot.toString(),
-        mspDeletionEvent.data.newRoot.toString(),
-        "Current bucket forest root should match the new root from deletion event"
-      );
+      await waitFor({
+        lambda: async () => {
+          notEqual(
+            mspDeletionEvent.data.oldRoot.toString(),
+            mspDeletionEvent.data.newRoot.toString(),
+            "MSP forest root should have changed after file deletion"
+          );
+          const currentBucketRoot = await msp1Api.rpc.storagehubclient.getForestRoot(
+            mspDeletionEvent.data.bucketId.toString()
+          );
+          strictEqual(
+            currentBucketRoot.toString(),
+            mspDeletionEvent.data.newRoot.toString(),
+            "Current bucket forest root should match the new root from deletion event"
+          );
+          return true;
+        }
+      });
 
       // Verify BSP root changed
-      notEqual(
-        bspDeletionEvent.data.oldRoot.toString(),
-        bspDeletionEvent.data.newRoot.toString(),
-        "BSP forest root should have changed after file deletion"
-      );
-      const currentBspRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
-      strictEqual(
-        currentBspRoot.toString(),
-        bspDeletionEvent.data.newRoot.toString(),
-        "Current BSP forest root should match the new root from deletion event"
-      );
+      await waitFor({
+        lambda: async () => {
+          notEqual(
+            bspDeletionEvent.data.oldRoot.toString(),
+            bspDeletionEvent.data.newRoot.toString(),
+            "BSP forest root should have changed after file deletion"
+          );
+          const currentBspRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
+          strictEqual(
+            currentBspRoot.toString(),
+            bspDeletionEvent.data.newRoot.toString(),
+            "Current BSP forest root should match the new root from deletion event"
+          );
+          return true;
+        }
+      });
     });
 
     it("handles StorageRequestRejected event processing", async () => {

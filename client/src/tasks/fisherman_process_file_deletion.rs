@@ -89,7 +89,6 @@ where
 
     drop(conn);
 
-    // TODO: Make this generic over runtime
     let bucket_id_array: [u8; 32] = file
         .onchain_bucket_id
         .clone()
@@ -640,12 +639,8 @@ where
                 .await
                 .map_err(|e| anyhow!("Failed to get file: {:?}", e))?;
 
-            let bucket = shc_indexer_db::models::Bucket::get_by_id(&mut conn, file.bucket_id)
-                .await
-                .map_err(|e| anyhow!("Failed to get bucket: {:?}", e))?;
-
             let metadata = file
-                .to_file_metadata(bucket.onchain_bucket_id)
+                .to_file_metadata(file.onchain_bucket_id.clone())
                 .map_err(|e| anyhow!("Failed to convert file to metadata: {:?}", e))?;
 
             file_metadatas.push(metadata);
