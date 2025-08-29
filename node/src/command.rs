@@ -191,7 +191,7 @@ pub fn run() -> Result<()> {
                 })
             } else if load_spec(&chain)?.is_solochain_evm() {
                 runner.async_run(|config| {
-                    let components = new_partial_solochain_evm(&config, dev_service)?;
+                    let components = new_partial_solochain_evm(&config)?;
                     let task_manager = components.task_manager;
                     Ok((
                         cmd.run(components.client, components.import_queue),
@@ -220,7 +220,7 @@ pub fn run() -> Result<()> {
                 })
             } else if load_spec(&chain)?.is_solochain_evm() {
                 runner.async_run(|config| {
-                    let components = new_partial_solochain_evm(&config, dev_service)?;
+                    let components = new_partial_solochain_evm(&config)?;
                     let task_manager = components.task_manager;
                     Ok((cmd.run(components.client, config.database), task_manager))
                 })
@@ -246,7 +246,7 @@ pub fn run() -> Result<()> {
                 })
             } else if load_spec(&chain)?.is_solochain_evm() {
                 runner.async_run(|config| {
-                    let components = new_partial_solochain_evm(&config, dev_service)?;
+                    let components = new_partial_solochain_evm(&config)?;
                     let task_manager = components.task_manager;
                     Ok((cmd.run(components.client, config.chain_spec), task_manager))
                 })
@@ -275,7 +275,7 @@ pub fn run() -> Result<()> {
                 })
             } else if load_spec(&chain)?.is_solochain_evm() {
                 runner.async_run(|config| {
-                    let components = new_partial_solochain_evm(&config, dev_service)?;
+                    let components = new_partial_solochain_evm(&config)?;
                     let task_manager = components.task_manager;
                     Ok((
                         cmd.run(components.client, components.import_queue),
@@ -307,7 +307,7 @@ pub fn run() -> Result<()> {
                 })
             } else if load_spec(&chain)?.is_solochain_evm() {
                 runner.async_run(|config| {
-                    let components = new_partial_solochain_evm(&config, dev_service)?;
+                    let components = new_partial_solochain_evm(&config)?;
                     let task_manager = components.task_manager;
                     Ok((
                         cmd.run(components.client, components.backend, None),
@@ -346,7 +346,7 @@ pub fn run() -> Result<()> {
                     let partials = new_partial_parachain(&config, dev_service)?;
                     cmd.run(partials.client)
                 } else if config.chain_spec.is_solochain_evm() {
-                    let partials = new_partial_solochain_evm(&config, dev_service)?;
+                    let partials = new_partial_solochain_evm(&config)?;
                     cmd.run(partials.client)
                 } else {
                     unreachable!("Invalid chain spec")
@@ -378,7 +378,7 @@ pub fn run() -> Result<()> {
                         let partials = new_partial_parachain(&config, dev_service)?;
                         cmd.run(partials.client)
                     } else if config.chain_spec.is_solochain_evm() {
-                        let partials = new_partial_solochain_evm(&config, dev_service)?;
+                        let partials = new_partial_solochain_evm(&config)?;
                         cmd.run(partials.client)
                     } else {
                         unreachable!("Invalid chain spec")

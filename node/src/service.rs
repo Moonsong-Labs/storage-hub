@@ -1918,7 +1918,6 @@ pub async fn start_solochain_evm_node<Network: NetworkBackend<OpaqueBlock, Block
 /// StorageHub Solochain EVM node.
 pub fn new_partial_solochain_evm(
     config: &Configuration,
-    dev_service: bool,
 ) -> Result<SolochainService, sc_service::Error> {
     // Telemetry
     let telemetry = config
