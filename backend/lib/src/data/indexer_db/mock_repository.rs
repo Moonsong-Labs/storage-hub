@@ -12,12 +12,13 @@ use std::{
 };
 
 use async_trait::async_trait;
-use shc_indexer_db::models::Bsp;
 use tokio::sync::RwLock;
+
+use shc_indexer_db::models::{Bsp, Bucket, Msp};
 
 use crate::data::indexer_db::repository::{
     error::{RepositoryError, RepositoryResult},
-    IndexerOps, IndexerOpsMut,
+    BucketId, IndexerOps, IndexerOpsMut, ProviderId,
 };
 
 /// Mock repository implementation using in-memory storage
@@ -61,6 +62,26 @@ impl IndexerOps for MockRepository {
             .skip(offset as usize)
             .take(limit as usize)
             .collect())
+    }
+
+    // ============ MSP Read Operations ============
+    async fn get_msp_by_onchain_id(&self, msp: ProviderId<'_>) -> RepositoryResult<Msp> {
+        todo!()
+    }
+
+    // ============ Bucket Read Operations ============
+    async fn get_bucket(&self, bid: BucketId<'_>) -> RepositoryResult<Bucket> {
+        todo!()
+    }
+
+    async fn list_user_buckets_by_msp(
+        &self,
+        msp: i64,
+        account: &str,
+        limit: i64,
+        offset: i64,
+    ) -> RepositoryResult<Vec<Bucket>> {
+        todo!()
     }
 }
 

@@ -59,8 +59,9 @@ pub mod mocks {
     /// The user address to mock
     pub const MOCK_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 
-    // TODO: These are placeholder values that will need to be retrieved somehow
-    // or added to indexing
+    // TODO: These are placeholder that are not indexed currently but we could compute.
+    // For example, we could retrieve all files in the DB by bucket and compute it that way
+    // using `File::get_by_onchain_bucket_id`
 
     pub const PLACEHOLDER_BUCKET_SIZE_BYTES: u64 = 0;
     pub const PLACEHOLDER_BUCKET_FILE_COUNT: u64 = 0;

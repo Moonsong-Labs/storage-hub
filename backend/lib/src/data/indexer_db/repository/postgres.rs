@@ -15,6 +15,7 @@
 use async_trait::async_trait;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
+
 use shc_indexer_db::{
     models::{Bsp, Bucket, Msp},
     schema::{bsp, bucket},
