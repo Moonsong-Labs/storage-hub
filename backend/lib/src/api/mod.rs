@@ -2,6 +2,7 @@
 
 pub mod handlers;
 pub mod routes;
+pub mod validation;
 
 use axum::{
     http::{header::CONTENT_TYPE, Method},
