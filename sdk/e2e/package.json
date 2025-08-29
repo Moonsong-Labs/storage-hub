@@ -9,7 +9,8 @@
         "test:msp": "playwright test --project msp",
         "test:ui": "playwright test --ui",
         "test:debug": "HEADLESS=false playwright test --debug --project metamask",
-        "install-deps": "pnpm install --ignore-workspace && pnpm exec playwright install chromium"
+        "install-deps": "pnpm install --ignore-workspace && pnpm exec playwright install chromium",
+        "serve:web": "bash -lc 'PID=$(lsof -ti tcp:3000 || true); if [ -n \"$PID\" ]; then kill -9 \"$PID\"; fi; python3 -m http.server 3000 --directory ..'"
     },
     "devDependencies": {
         "@playwright/test": "^1.54.2",
