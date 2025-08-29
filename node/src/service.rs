@@ -1948,7 +1948,7 @@ pub fn new_partial_solochain_evm(
         .with_runtime_cache_size(config.executor.runtime_cache_size)
         .build();
 
-    let (client, backend, keystore_container, mut task_manager) =
+    let (client, backend, keystore_container, task_manager) =
         sc_service::new_full_parts::<Block, SolochainEvmRuntimeApi, _>(
             config,
             telemetry.as_ref().map(|(_, telemetry)| telemetry.handle()),
@@ -1966,7 +1966,7 @@ pub fn new_partial_solochain_evm(
 
     let select_chain = sc_consensus::LongestChain::new(backend.clone());
 
-    // Transaction pool (use builder to honor config)
+    // Transaction pool (use builder to honour config)
     let transaction_pool = Arc::from(
         sc_transaction_pool::Builder::new(
             task_manager.spawn_essential_handle(),
@@ -1999,8 +1999,7 @@ pub fn new_partial_solochain_evm(
     )?;
 
     // Frontier storage override and backend
-    let storage_override: Arc<dyn StorageOverride<Block>> =
-        Arc::new(StorageOverrideHandler::<Block, _, _>::new(client.clone()));
+    let storage_override = Arc::new(StorageOverrideHandler::<Block, _, _>::new(client.clone()));
 
     let frontier_backend: Arc<fc_db::Backend<Block, StorageEnableClient<SolochainEvmRuntime>>> = {
         // Only Key-Value backend for now
