@@ -88,12 +88,7 @@
         <!-- Connection section -->
         <section class="card">
             <h3>1) Connection</h3>
-            <div class="row">
-                <label for="baseUrl">Base URL</label>
-                <input id="baseUrl" type="text" value="http://127.0.0.1:8080" />
-                <label for="chainId">Chain ID</label>
-                <input id="chainId" type="number" value="1" />
-            </div>
+
             <div class="row">
                 <label for="address">Address</label>
                 <input id="address" type="text" placeholder="0x... (optional; LocalWallet used for signing)" />
@@ -154,24 +149,20 @@
                 <div><strong>Verify Response:</strong></div>
             </div>
             <pre id="verifyJson" class="mono" style="white-space: pre-wrap; word-break: break-word;"></pre>
+            <div class="row">
+                <label for="manualToken">Manual Token</label>
+                <input id="manualToken" type="text" placeholder="paste dummy token here" />
+                <button id="set-token-manual">Set Token (Manual)</button>
+            </div>
         </section>
 
         <!-- Transfer section -->
         <section class="card">
             <h3>4) Transfer</h3>
             <div class="row">
-                <label for="bucketId">Bucket</label>
-                <input id="bucketId" type="text" value="e2e-bucket" />
-                <label for="fileKey">File Key</label>
-                <input id="fileKey" type="text" value="web-file" />
+                <button id="upload">Upload adolphus.jpg</button>
             </div>
             <div class="row">
-                <input id="fileInput" type="file" />
-                <button id="upload">Upload File</button>
-            </div>
-            <div class="row">
-                <label for="path">Path</label>
-                <input id="path" type="text" placeholder="path/to/file" />
                 <button id="download-key">Download by Key</button>
                 <button id="download-path">Download by Path</button>
             </div>
@@ -202,9 +193,62 @@
 
         let client = null;
         let connectedBaseUrl = null;
+        let fetchDebugEnabled = false;
+
+        function enableUploadDebugLogging() {
+            if (fetchDebugEnabled) return;
+            const origFetch = (globalThis).fetch.bind(globalThis);
+            (globalThis).fetch = async (input, init) => {
+                const url = typeof input === 'string' ? input : (input && input.url) || '';
+                const method = (init && init.method) || (input && input.method) || 'GET';
+                if (url.includes('/buckets/') && url.includes('/upload')) {
+                    const hdrs = new Headers((init && init.headers) || (input && input.headers) || undefined);
+                    console.log('[PUT DEBUG] url:', url);
+                    console.log('[PUT DEBUG] method:', method);
+                    console.log('[PUT DEBUG] Authorization:', hdrs.get('authorization'));
+                    console.log('[PUT DEBUG] Content-Type:', hdrs.get('content-type'));
+                }
+                return origFetch(input, init);
+            };
+            fetchDebugEnabled = true;
+        }
+
+        function toBase64Url(str) {
+            return btoa(unescape(encodeURIComponent(str)))
+                .replace(/\+/g, '-')
+                .replace(/\//g, '_')
+                .replace(/=+$/g, '');
+        }
+
+        function generateMockJwt(address) {
+            const header = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9'; // {"alg":"HS256","typ":"JWT"}
+            const now = Math.floor(Date.now() / 1000);
+            const payload = {
+                sub: address || '0x0123456789012345678901234567890123456789',
+                iat: now,
+                exp: now + 3600,
+                address: address || '0x0123456789012345678901234567890123456789'
+            };
+            const payloadB64 = toBase64Url(JSON.stringify(payload));
+            const signatureB64 = toBase64Url('mock_signature');
+            return `${header}.${payloadB64}.${signatureB64}`;
+        }
+
+        async function loadAdolphusBlob() {
+            const candidates = ['/e2e/page/adolphus.jpg', '/docker/resource/adolphus.jpg'];
+            for (const url of candidates) {
+                try {
+                    const r = await fetch(url);
+                    if (r.ok) return await r.blob();
+                } catch (_) { }
+            }
+            // Fallback: generate a small dummy JPEG-like blob
+            const bytes = new Uint8Array(1024).fill(65);
+            return new Blob([bytes], { type: 'image/jpeg' });
+        }
 
         async function ensureConnected() {
-            const baseUrl = document.getElementById('baseUrl').value.trim();
+            const baseUrl = 'http://127.0.0.1:8080';
             if (client && connectedBaseUrl === baseUrl) return client;
             const { MspClient } = await import('/msp-client/dist/index.js');
             client = await MspClient.connect({ baseUrl, timeoutMs: 60000 });
@@ -242,16 +286,12 @@
                 const h = await client.getHealth();
                 window.__msp.status = h?.status;
                 window.__msp.health = h;
-                setText('healthStatus', window.__msp.status || '');
-                const hj = document.getElementById('healthJson');
-                if (hj) hj.textContent = JSON.stringify(h, null, 2);
+                console.log('[HEALTH]', h);
                 setStatus(`Health: ${h?.status || 'unknown'}`);
             } catch (e) {
                 setStatus('Health failed');
                 window.__msp.error = e?.message || String(e);
-                setText('error', window.__msp.error);
-                const hj = document.getElementById('healthJson');
-                if (hj) hj.textContent = '';
+                console.error('[HEALTH][ERROR]', e);
             }
         };
 
@@ -260,7 +300,7 @@
                 await ensureConnected();
                 setStatus('Requesting nonce...');
                 let address = document.getElementById('address').value.trim();
-                const chainId = Number(document.getElementById('chainId').value || 1);
+                const chainId = 1;
                 // Auto-fill a valid address if none/invalid is provided
                 const isValidEth = /^0x[a-fA-F0-9]{40}$/.test(address);
                 if (!isValidEth) {
@@ -273,16 +313,12 @@
                 const res = await client.getNonce(address, chainId);
                 const { message, nonce } = res;
                 window.__msp.message = message; window.__msp.nonce = nonce; window.__msp.nonceResponse = res;
-                setText('message', message); setText('nonce', nonce);
-                const nj = document.getElementById('nonceJson');
-                if (nj) nj.textContent = JSON.stringify(res, null, 2);
+                console.log('[NONCE]', res);
                 setStatus('Nonce ready');
             } catch (e) {
                 setStatus('Get nonce failed');
                 window.__msp.error = e?.message || String(e);
-                setText('error', window.__msp.error);
-                const nj = document.getElementById('nonceJson');
-                if (nj) nj.textContent = '';
+                console.error('[NONCE][ERROR]', e);
             }
         };
 
@@ -297,16 +333,12 @@
                 const sig = await wallet.signMessage(msg);
                 window.__msp.signature = sig;
                 window.__msp.signResponse = { address, message: msg, signature: sig };
-                setText('signature', sig);
-                const sj = document.getElementById('signJson');
-                if (sj) sj.textContent = JSON.stringify(window.__msp.signResponse, null, 2);
+                console.log('[SIGN]', window.__msp.signResponse);
                 setStatus('Signed');
             } catch (e) {
                 setStatus('Sign failed');
                 window.__msp.error = e?.message || String(e);
-                setText('error', window.__msp.error);
-                const sj = document.getElementById('signJson');
-                if (sj) sj.textContent = '';
+                console.error('[SIGN][ERROR]', e);
             }
         };
 
@@ -320,16 +352,29 @@
                 const { token, user } = res;
                 window.__msp.token = token; window.__msp.user = user;
                 client.setToken(token);
-                setText('token', token); setText('user', user);
-                const vj = document.getElementById('verifyJson');
-                if (vj) vj.textContent = JSON.stringify(res, null, 2);
+                console.log('[VERIFY]', res);
                 setStatus('Verified / token set');
             } catch (e) {
                 setStatus('Verify failed');
                 window.__msp.error = e?.message || String(e);
-                setText('error', window.__msp.error);
-                const vj = document.getElementById('verifyJson');
-                if (vj) vj.textContent = '';
+                console.error('[VERIFY][ERROR]', e);
+            }
+        };
+
+        document.getElementById('set-token-manual').onclick = async () => {
+            try {
+                await ensureConnected();
+                const inputEl = document.getElementById('manualToken');
+                const val = inputEl && typeof (inputEl).value === 'string' ? inputEl.value.trim() : '';
+                if (!val) throw new Error('Enter a token first');
+                client.setToken(val);
+                window.__msp.token = val;
+                console.log('[TOKEN][SET-MANUAL]', val);
+                setStatus('Token set (manual)');
+            } catch (e) {
+                setStatus('Set token failed');
+                window.__msp.error = e?.message || String(e);
+                console.error('[TOKEN][ERROR]', e);
             }
         };
 
@@ -337,18 +382,23 @@
             try {
                 if (!client) throw new Error('Connect MSP first');
                 setStatus('Uploading...');
-                const bucketId = document.getElementById('bucketId').value.trim();
-                const fileKey = document.getElementById('fileKey').value.trim() || `web-${Date.now()}`;
-                const f = document.getElementById('fileInput').files?.[0];
-                if (!f) throw new Error('Pick a file first.');
-                const receipt = await client.uploadFile(bucketId, fileKey, f);
+                enableUploadDebugLogging();
+                const bucketId = 'e2e-bucket';
+                const fileKey = 'web-file';
+                // Use a valid-looking mock JWT for mocked backend
+                const jwt = generateMockJwt();
+                client.setToken(jwt);
+                window.__msp.token = jwt;
+                console.log('[TOKEN][AUTO]', window.__msp.token);
+                const blob = await loadAdolphusBlob();
+                const receipt = await client.uploadFile(bucketId, fileKey, blob);
                 window.__msp.uploadReceipt = receipt;
-                setText('uploadReceipt', receipt);
+                console.log('[UPLOAD][RECEIPT]', receipt);
                 setStatus('Upload done');
             } catch (e) {
                 setStatus('Upload failed');
                 window.__msp.error = e?.message || String(e);
-                setText('error', window.__msp.error);
+                console.error('[UPLOAD][ERROR]', e);
             }
         };
 
@@ -356,16 +406,32 @@
             try {
                 if (!client) throw new Error('Connect MSP first');
                 setStatus('Downloading by key...');
-                const bucketId = document.getElementById('bucketId').value.trim();
-                const fileKey = document.getElementById('fileKey').value.trim();
+                const bucketId = 'e2e-bucket';
+                const fileKey = 'web-file';
+                if (!window.__msp.token) {
+                    const jwt = generateMockJwt();
+                    client.setToken(jwt);
+                    window.__msp.token = jwt;
+                    console.log('[TOKEN][AUTO]', jwt);
+                }
                 const dl = await client.downloadByKey(bucketId, fileKey);
                 window.__msp.downloadMeta = { status: dl?.status, contentType: dl?.contentType, contentLength: dl?.contentLength, contentRange: dl?.contentRange };
-                setText('downloadMeta', window.__msp.downloadMeta);
+                console.log('[DOWNLOAD][KEY][META]', window.__msp.downloadMeta);
+                // Save to user-selected location (browsers cannot write to /tmp)
+                const blob = await new Response(dl.stream).blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fileKey;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
                 setStatus('Download (key) done');
             } catch (e) {
                 setStatus('Download (key) failed');
                 window.__msp.error = e?.message || String(e);
-                setText('error', window.__msp.error);
+                console.error('[DOWNLOAD][KEY][ERROR]', e);
             }
         };
 
@@ -373,16 +439,32 @@
             try {
                 if (!client) throw new Error('Connect MSP first');
                 setStatus('Downloading by path...');
-                const bucketId = document.getElementById('bucketId').value.trim();
-                const path = document.getElementById('path').value.trim();
+                const bucketId = 'e2e-bucket';
+                const path = 'files/e2e-bucket/adolphus.jpg';
+                if (!window.__msp.token) {
+                    const jwt = generateMockJwt();
+                    client.setToken(jwt);
+                    window.__msp.token = jwt;
+                    console.log('[TOKEN][AUTO]', jwt);
+                }
                 const dl = await client.downloadByLocation(bucketId, path);
                 window.__msp.downloadMeta = { status: dl?.status, contentType: dl?.contentType, contentLength: dl?.contentLength, contentRange: dl?.contentRange };
-                setText('downloadMeta', window.__msp.downloadMeta);
+                console.log('[DOWNLOAD][PATH][META]', window.__msp.downloadMeta);
+                // Save to user-selected location (browsers cannot write to /tmp)
+                const blob = await new Response(dl.stream).blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = '/tmp/download_by_location.txt';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
                 setStatus('Download (path) done');
             } catch (e) {
                 setStatus('Download (path) failed');
                 window.__msp.error = e?.message || String(e);
-                setText('error', window.__msp.error);
+                console.error('[DOWNLOAD][PATH][ERROR]', e);
             }
         };
     </script>

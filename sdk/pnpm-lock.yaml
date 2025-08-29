@@ -51,8 +51,8 @@ importers:
         specifier: ^10.10.3
         version: 10.13.1
       '@storagehub/wasm':
-        specifier: file:./wasm/pkg
-        version: file:core/wasm/pkg
+        specifier: npm:storagehub-wasm@file:./wasm/pkg
+        version: link:npm:storagehub-wasm@file:./wasm/pkg
       ethers:
         specifier: ^6.15.0
         version: 6.15.0
@@ -75,6 +75,9 @@ importers:
       '@storagehub-sdk/msp-client':
         specifier: workspace:*
         version: link:../msp-client
+      '@storagehub/wasm':
+        specifier: npm:storagehub-wasm@file:../core/wasm/pkg
+        version: link:npm:storagehub-wasm@file:../core/wasm/pkg
       '@tenkeylabs/dappwright':
         specifier: ^2.11.2
         version: 2.11.2(playwright-core@1.55.0)
@@ -2742,8 +2745,3 @@ packages:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
     dev: true
-
-  file:core/wasm/pkg:
-    resolution: {directory: core/wasm/pkg, type: directory}
-    name: storagehub-wasm
-    dev: false
