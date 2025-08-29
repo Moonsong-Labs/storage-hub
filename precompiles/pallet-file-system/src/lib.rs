@@ -175,7 +175,6 @@ pub fn log_file_deletion_requested(
 #[derive(Debug, Clone)]
 pub struct FileSystemPrecompile<Runtime>(PhantomData<Runtime>);
 
-// TODO: Change all concrete types (AccountId20, EthereumSignature, etc.) to `storage_hub_runtime::` types once the EVM-compatible SH runtime is ready
 #[precompile_utils::precompile]
 #[precompile::test_concrete_types(mock::Test)]
 impl<Runtime> FileSystemPrecompile<Runtime>
@@ -195,8 +194,6 @@ where
 	<<Runtime as pallet_file_system::Config>::Nfts as frame_support::traits::nonfungibles_v2::Inspect<AccountId20>>::CollectionId: Into<U256>,
     Fingerprint<Runtime>: From<H256> + Into<H256>,
     <Runtime as pallet_file_system::Config>::OffchainSignature: From<EthereumSignature>,
-
-
 {
     #[precompile::public("createBucket(bytes32,bytes,bool,bytes32)")]
     fn create_bucket(
