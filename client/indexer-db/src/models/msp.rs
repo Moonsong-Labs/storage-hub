@@ -6,10 +6,12 @@ use diesel_async::RunQueryDsl;
 use crate::{
     models::multiaddress::MultiAddress,
     schema::{msp, msp_multiaddress},
+    types::OnchainMspId,
     DbConnection,
 };
 
 /// Table that holds the MSPs.
+// TODO: Consider using UUIDs instead of i64
 #[derive(Debug, Queryable, Insertable, Selectable)]
 #[diesel(table_name = msp)]
 pub struct Msp {
@@ -20,7 +22,7 @@ pub struct Msp {
     pub value_prop: String,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
-    pub onchain_msp_id: String,
+    pub onchain_msp_id: OnchainMspId,
 }
 
 /// Association table between MSP and MultiAddress
@@ -40,14 +42,14 @@ impl Msp {
         capacity: BigDecimal,
         value_prop: String,
         multiaddresses: Vec<MultiAddress>,
-        onchain_msp_id: String,
+        onchain_msp_id: OnchainMspId,
     ) -> Result<Self, diesel::result::Error> {
         let msp = diesel::insert_into(msp::table)
             .values((
                 msp::account.eq(account),
                 msp::capacity.eq(capacity),
                 msp::value_prop.eq(value_prop),
-                msp::onchain_msp_id.eq(onchain_msp_id),
+                msp::onchain_msp_id.eq(OnchainMspId::from(onchain_msp_id)),
             ))
             .returning(Msp::as_select())
             .get_result(conn)
@@ -73,6 +75,17 @@ impl Msp {
 
     pub async fn delete<'a>(
         conn: &mut DbConnection<'a>,
+        onchain_msp_id: OnchainMspId,
+    ) -> Result<(), diesel::result::Error> {
+        diesel::delete(msp::table)
+            .filter(msp::onchain_msp_id.eq(onchain_msp_id))
+            .execute(conn)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn delete_by_account<'a>(
+        conn: &mut DbConnection<'a>,
         account: String,
     ) -> Result<(), diesel::result::Error> {
         diesel::delete(msp::table)
@@ -84,7 +97,7 @@ impl Msp {
 
     pub async fn get_by_onchain_msp_id<'a>(
         conn: &mut DbConnection<'a>,
-        onchain_msp_id: String,
+        onchain_msp_id: OnchainMspId,
     ) -> Result<Self, diesel::result::Error> {
         let msp = msp::table
             .filter(msp::onchain_msp_id.eq(onchain_msp_id))

@@ -121,6 +121,8 @@ services:
       - "30666:30666"
     volumes:
       - ./dev-keystores/user:/keystore:rw
+    environment:
+      - RUST_LOG=fisherman-service=info,fisherman-process-file-deletion-task=info,fisherman-process-incomplete-storage-task=info
     command:
       [
         "--dev",

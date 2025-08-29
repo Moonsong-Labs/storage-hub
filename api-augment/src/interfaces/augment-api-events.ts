@@ -38,6 +38,7 @@ import type {
   PalletStorageProvidersTopUpMetadata,
   PalletStorageProvidersValueProposition,
   PalletStorageProvidersValuePropositionWithId,
+  ShpFileMetadataFileMetadata,
   ShpTraitsTrieMutation,
   SpRuntimeDispatchError,
   SpRuntimeMultiSignature,
@@ -416,14 +417,14 @@ declare module "@polkadot/api-base/types/events" {
         [
           who: AccountId32,
           bspId: H256,
-          confirmedFileKeys: Vec<H256>,
+          confirmedFileKeys: Vec<ITuple<[H256, ShpFileMetadataFileMetadata]>>,
           skippedFileKeys: Vec<H256>,
           newRoot: H256
         ],
         {
           who: AccountId32;
           bspId: H256;
-          confirmedFileKeys: Vec<H256>;
+          confirmedFileKeys: Vec<ITuple<[H256, ShpFileMetadataFileMetadata]>>;
           skippedFileKeys: Vec<H256>;
           newRoot: H256;
         }
@@ -632,7 +633,11 @@ declare module "@polkadot/api-base/types/events" {
        * This event is not emitted when the storage request is immediately fulfilled upon
        * MSP acceptance. In such cases, a [`StorageRequestFulfilled`] event is emitted instead.
        **/
-      MspAcceptedStorageRequest: AugmentedEvent<ApiType, [fileKey: H256], { fileKey: H256 }>;
+      MspAcceptedStorageRequest: AugmentedEvent<
+        ApiType,
+        [fileKey: H256, fileMetadata: ShpFileMetadataFileMetadata],
+        { fileKey: H256; fileMetadata: ShpFileMetadataFileMetadata }
+      >;
       /**
        * Notifies that a file deletion has been completed successfully for an MSP.
        **/
