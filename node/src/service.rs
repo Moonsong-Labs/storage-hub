@@ -79,8 +79,6 @@ use fc_consensus::FrontierBlockImport;
 use fc_db::{self, DatabaseSource};
 use fc_storage::{self, StorageOverride, StorageOverrideHandler};
 use sc_consensus_babe::ImportQueueParams as BabeImportQueueParams;
-use sc_consensus_grandpa::{self, SharedVoterState};
-use sc_transaction_pool::BasicPool;
 
 use crate::{
     cli::{self, ProviderType, StorageLayer},
@@ -94,27 +92,27 @@ use crate::{
 // Generic client type over Runtime
 pub(crate) type StorageEnableClient<Runtime> =
     shc_common::types::ParachainClient<<Runtime as StorageEnableRuntime>::RuntimeApi>;
+pub(crate) type StorageEnableBackend = TFullBackend<Block>;
+pub(crate) type StorageEnableSelectChain = sc_consensus::LongestChain<StorageEnableBackend, Block>;
+pub(crate) type StorageEnablePool<Runtime> =
+    sc_transaction_pool::TransactionPoolHandle<Block, StorageEnableClient<Runtime>>;
 
 //╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
 //║                                        StorageHub Parachain Types                                             ║
 //╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 
-// Other generic types
-pub(crate) type StorageEnableBackend = TFullBackend<Block>;
-pub(crate) type StorageEnableSelectChain = sc_consensus::LongestChain<StorageEnableBackend, Block>;
-
-pub(crate) type StorageEnableBlockImport<Runtime> =
-    TParachainBlockImport<Block, Arc<StorageEnableClient<Runtime>>, StorageEnableBackend>;
+pub(crate) type ParachainBlockImport =
+    TParachainBlockImport<Block, Arc<StorageEnableClient<ParachainRuntime>>, StorageEnableBackend>;
 
 /// Assembly of PartialComponents (enough to run chain ops subcommands)
-pub type Service<Runtime> = PartialComponents<
-    StorageEnableClient<Runtime>,
+pub type ParachainService = PartialComponents<
+    StorageEnableClient<ParachainRuntime>,
     StorageEnableBackend,
     Option<StorageEnableSelectChain>,
     sc_consensus::DefaultImportQueue<Block>,
-    sc_transaction_pool::TransactionPoolHandle<Block, StorageEnableClient<Runtime>>,
+    StorageEnablePool<ParachainRuntime>,
     (
-        StorageEnableBlockImport<Runtime>,
+        ParachainBlockImport,
         Option<Telemetry>,
         Option<TelemetryWorkerHandle>,
     ),
@@ -124,39 +122,35 @@ pub type Service<Runtime> = PartialComponents<
 //║                                      StorageHub Solochain EVM Types                                           ║
 //╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 
-// Solochain EVM specific types
-type SolochainClient =
-    sc_service::TFullClient<Block, SolochainEvmRuntimeApi, shc_common::types::ParachainExecutor>;
-type SolochainBackend = TFullBackend<Block>;
-type SolochainSelectChain = sc_consensus::LongestChain<SolochainBackend, Block>;
-
-type SolochainPool = sc_transaction_pool::TransactionPoolHandle<Block, SolochainClient>;
-
-/// Partial components returned by the Solochain EVM `new_partial_solochain_evm` path.
+/// Partial components returned by the Solochain EVM.
 type SolochainService = sc_service::PartialComponents<
-    SolochainClient,
-    SolochainBackend,
-    SolochainSelectChain,
+    StorageEnableClient<SolochainEvmRuntime>,
+    StorageEnableBackend,
+    StorageEnableSelectChain,
     sc_consensus::DefaultImportQueue<Block>,
-    SolochainPool,
+    StorageEnablePool<SolochainEvmRuntime>,
     (
         sc_consensus_babe::BabeBlockImport<
             Block,
-            SolochainClient,
+            StorageEnableClient<SolochainEvmRuntime>,
             FrontierBlockImport<
                 Block,
                 sc_consensus_grandpa::GrandpaBlockImport<
-                    SolochainBackend,
+                    StorageEnableBackend,
                     Block,
-                    SolochainClient,
-                    SolochainSelectChain,
+                    StorageEnableClient<SolochainEvmRuntime>,
+                    StorageEnableSelectChain,
                 >,
-                SolochainClient,
+                StorageEnableClient<SolochainEvmRuntime>,
             >,
         >,
-        sc_consensus_grandpa::LinkHalf<Block, SolochainClient, SolochainSelectChain>,
+        sc_consensus_grandpa::LinkHalf<
+            Block,
+            StorageEnableClient<SolochainEvmRuntime>,
+            StorageEnableSelectChain,
+        >,
         sc_consensus_babe::BabeLink<Block>,
-        Arc<fc_db::Backend<Block, SolochainClient>>,
+        Arc<fc_db::Backend<Block, StorageEnableClient<SolochainEvmRuntime>>>,
         Arc<dyn StorageOverride<Block>>,
         Option<Telemetry>,
     ),
@@ -652,7 +646,7 @@ pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash
 pub fn new_partial_parachain(
     config: &Configuration,
     dev_service: bool,
-) -> Result<Service<ParachainRuntime>, sc_service::Error> {
+) -> Result<ParachainService, sc_service::Error> {
     let telemetry = config
         .telemetry_endpoints
         .clone()
@@ -717,8 +711,7 @@ pub fn new_partial_parachain(
         .build(),
     );
 
-    let block_import =
-        StorageEnableBlockImport::<ParachainRuntime>::new(client.clone(), backend.clone());
+    let block_import = ParachainBlockImport::new(client.clone(), backend.clone());
 
     let import_queue = if dev_service {
         sc_consensus_manual_seal::import_queue(
@@ -1785,7 +1778,7 @@ where
 /// Build the import queue for the parachain runtime.
 fn build_parachain_import_queue(
     client: Arc<StorageEnableClient<ParachainRuntime>>,
-    block_import: StorageEnableBlockImport<ParachainRuntime>,
+    block_import: ParachainBlockImport,
     config: &Configuration,
     telemetry: Option<TelemetryHandle>,
     task_manager: &TaskManager,
@@ -1813,7 +1806,7 @@ fn build_parachain_import_queue(
 fn start_parachain_consensus(
     client: Arc<StorageEnableClient<ParachainRuntime>>,
     backend: Arc<StorageEnableBackend>,
-    block_import: StorageEnableBlockImport<ParachainRuntime>,
+    block_import: ParachainBlockImport,
     prometheus_registry: Option<&Registry>,
     telemetry: Option<TelemetryHandle>,
     task_manager: &TaskManager,
@@ -2009,7 +2002,7 @@ pub fn new_partial_solochain_evm(
     let storage_override: Arc<dyn StorageOverride<Block>> =
         Arc::new(StorageOverrideHandler::<Block, _, _>::new(client.clone()));
 
-    let frontier_backend: Arc<fc_db::Backend<Block, SolochainClient>> = {
+    let frontier_backend: Arc<fc_db::Backend<Block, StorageEnableClient<SolochainEvmRuntime>>> = {
         // Only Key-Value backend for now
         let db_settings = match config.database {
             sc_service::config::DatabaseSource::RocksDb { .. } => DatabaseSource::RocksDb {
@@ -2031,7 +2024,7 @@ pub fn new_partial_solochain_evm(
         };
         Arc::new(fc_db::Backend::KeyValue(Arc::new(fc_db::kv::Backend::<
             Block,
-            SolochainClient,
+            StorageEnableClient<SolochainEvmRuntime>,
         >::new(
             client.clone(),
             &fc_db::kv::DatabaseSettings {
