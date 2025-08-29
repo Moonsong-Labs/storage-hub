@@ -13973,6 +13973,97 @@ mod delete_file_for_incomplete_storage_request_tests {
                 );
             });
         }
+
+        #[test]
+        fn msp_accept_with_no_bsp_threshold_reached_is_fulfilled_storage_request() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+
+                // Setup MSP and bucket
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                    setup_file_in_msp_bucket(&owner, &msp);
+
+                // Issue storage request
+                assert_ok!(FileSystem::issue_storage_request(
+                    RuntimeOrigin::signed(owner.clone()),
+                    bucket_id, location.clone(), fingerprint, size, msp_id,
+                    PeerIds::<Test>::try_from(vec![]).unwrap(),
+                    ReplicationTarget::Basic,
+                ));
+
+                // Verify storage request exists initially
+                let initial_request = StorageRequests::<Test>::get(&file_key);
+                assert!(initial_request.is_some(), "Storage request should exist initially");
+                assert_eq!(initial_request.unwrap().bsps_confirmed, 0, "No BSPs should be confirmed initially");
+
+                // Verify storage request is in BucketsWithStorageRequests
+                assert!(
+                    file_system::BucketsWithStorageRequests::<Test>::get(&bucket_id, &file_key).is_some(),
+                    "File key should be in bucket storage requests"
+                );
+
+                // MSP accepts storage request (but no BSPs confirm)
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
+                    RuntimeOrigin::signed(msp.clone()),
+                    vec![StorageRequestMspBucketResponse {
+                        bucket_id,
+                        accept: Some(StorageRequestMspAcceptedFileKeys {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_key,
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                }
+                            }],
+                            forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
+                        }),
+                        reject: vec![],
+                    }],
+                ));
+
+                // Verify MSP accepted but no BSPs confirmed
+                let request_before_expiry = StorageRequests::<Test>::get(&file_key).unwrap();
+                assert_eq!(request_before_expiry.bsps_confirmed, 0, "No BSPs should be confirmed");
+                assert_eq!(request_before_expiry.msp, Some((msp_id, true)), "MSP should have accepted");
+
+                // Trigger storage request expiration: MSP accepted but no BSPs confirmed,
+                // We treat this as an fulfilled storage request.
+                // This will cleanup the storage request completely and no incomplete storage request will be created.
+                trigger_storage_request_expiration();
+
+                // Verify full cleanup occurred:
+                // 1. Storage request should be completely removed
+                assert!(
+                    StorageRequests::<Test>::get(&file_key).is_none(),
+                    "Storage request should be completely cleaned up after expiration with MSP accept but no BSP confirmations"
+                );
+
+                // 2. BSP associations should be completely cleaned up
+                let final_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
+                assert_eq!(final_bsps.len(), 0, "BSP associations should be completely cleaned up");
+
+                // 3. Bucket storage requests should be cleaned up
+                assert!(
+                    file_system::BucketsWithStorageRequests::<Test>::get(&bucket_id, &file_key).is_none(),
+                    "File key should be removed from bucket storage requests after cleanup"
+                );
+
+                // 4. Verify incomplete storage request was not created as we treat this as an fulfilled storage request
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_none(),
+                    "Incomplete storage request should not exist when no BSPs confirmed, even if MSP accepted"
+                );
+
+                // TODO: we should emit this event on this case
+                // Verify the StorageRequestFulfilled event was emitted
+                // System::assert_has_event(Event::StorageRequestFulfilled { file_key }.into());
+
+                // Verify the expired storage request event was emitted
+                System::assert_has_event(Event::StorageRequestExpired { file_key }.into());
+            });
+        }
     }
 
     mod failure {
