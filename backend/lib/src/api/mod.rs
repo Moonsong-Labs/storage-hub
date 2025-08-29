@@ -5,7 +5,10 @@ pub mod routes;
 pub mod validation;
 
 use axum::{
-    http::{header::CONTENT_TYPE, Method},
+    http::{
+        header::{ACCEPT, AUTHORIZATION, CONTENT_RANGE, CONTENT_TYPE},
+        Method,
+    },
     Router,
 };
 use tower_http::cors::CorsLayer;
@@ -20,7 +23,7 @@ pub fn create_app(services: Services) -> Router {
     let cors = CorsLayer::new()
         .allow_origin(tower_http::cors::Any)
         .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
-        .allow_headers([CONTENT_TYPE])
+        .allow_headers([AUTHORIZATION, CONTENT_TYPE, ACCEPT, CONTENT_RANGE])
         .allow_credentials(false);
 
     router.layer(cors)
