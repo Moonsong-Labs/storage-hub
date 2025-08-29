@@ -45,7 +45,11 @@ async-channel = "1.8.0"
 async-io = "2.3.2"
 async-trait = "0.1.42"
 axum = "0.8"
-axum-extra = { version = "0.10", features = ["multipart", "typed-header", "file-stream"] }
+axum-extra = { version = "0.10", features = [
+	"multipart",
+	"typed-header",
+	"file-stream",
+] }
 axum-test = "18"
 base64 = "0.21"
 bigdecimal = { version = "0.4.5", features = ["serde"] }
@@ -289,7 +293,7 @@ shp-types = { path = "primitives/types", default-features = false }
 
 # Local - StorageHub Runtime
 sh-parachain-runtime = { path = "runtime/parachain", default-features = false }
-shr-solochain-evm = { path = "runtime/solochain-evm", default-features = false }
+sh-solochain-evm-runtime = { path = "runtime/solochain-evm", default-features = false }
 
 [workspace.lints.rust]
 suspicious_double_ref_op = { level = "allow", priority = 2 }
