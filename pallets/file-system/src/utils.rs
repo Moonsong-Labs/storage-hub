@@ -41,11 +41,11 @@ use crate::{
     types::{
         BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
         CollectionIdFor, ExpirationItem, FileKeyHasher, FileKeyWithProof, FileLocation,
-        FileMetadata, FileOperation, FileOperationIntention, Fingerprint, ForestProof, MerkleHash,
-        MoveBucketRequestMetadata, MultiAddresses, PeerIds, PendingStopStoringRequest,
-        ProviderIdFor, RejectedStorageRequest, ReplicationTarget, ReplicationTargetType,
-        StorageDataUnit, StorageRequestBspsMetadata, StorageRequestMetadata,
-        StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
+        FileMetadata, FileOperation, FileOperationIntention, Fingerprint, ForestProof,
+        IncompleteStorageRequestMetadata, MerkleHash, MoveBucketRequestMetadata, MultiAddresses,
+        PeerIds, PendingStopStoringRequest, ProviderIdFor, RejectedStorageRequest,
+        ReplicationTarget, ReplicationTargetType, StorageDataUnit, StorageRequestBspsMetadata,
+        StorageRequestMetadata, StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
         StorageRequestMspResponse, TickNumber, ValuePropId,
     },
     weights::WeightInfo,
@@ -1024,6 +1024,18 @@ where
                 let storage_request_metadata = <StorageRequests<T>>::get(file_key)
                     .ok_or(Error::<T>::StorageRequestNotFound)?;
 
+                // We check if there are any BSP that has already confirmed the storage request
+                if !storage_request_metadata.bsps_confirmed.is_zero() {
+                    // We create the incomplete storage request metadata and insert it into the incomplete storage requests
+                    let incomplete_storage_request_metadata: IncompleteStorageRequestMetadata<T> =
+                        (&storage_request_metadata, &file_key).into();
+                    <IncompleteStorageRequests<T>>::insert(
+                        &file_key,
+                        incomplete_storage_request_metadata,
+                    );
+                }
+
+                // We cleanup the storage request
                 Self::cleanup_storage_request(&file_key, &storage_request_metadata);
 
                 Self::deposit_event(Event::StorageRequestRejected { file_key, reason });
@@ -2083,6 +2095,20 @@ where
             Error::<T>::StorageRequestNotAuthorized
         );
 
+        // We check if there are any BSP or MSP that has already confirmed the storage request
+        // This means, either the confirmed BSPs count in not zero, or the msp is some, and the confirmed flag is true
+        if !storage_request_metadata.bsps_confirmed.is_zero()
+            || storage_request_metadata
+                .msp
+                .is_some_and(|(_, confirmed)| confirmed)
+        {
+            // We create the incomplete storage request metadata and insert it into the incomplete storage requests
+            let incomplete_storage_request_metadata: IncompleteStorageRequestMetadata<T> =
+                (&storage_request_metadata, &file_key).into();
+            <IncompleteStorageRequests<T>>::insert(&file_key, incomplete_storage_request_metadata);
+        }
+
+        // We cleanup the storage request
         Self::cleanup_storage_request(&file_key, &storage_request_metadata);
 
         Ok(())
