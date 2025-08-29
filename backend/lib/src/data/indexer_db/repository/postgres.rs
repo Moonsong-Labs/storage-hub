@@ -23,7 +23,7 @@ use shc_indexer_db::{
 #[cfg(test)]
 use crate::data::indexer_db::repository::IndexerOpsMut;
 use crate::data::indexer_db::repository::{
-    error::RepositoryResult, pool::SmartPool, IndexerOps, ProviderId,
+    error::RepositoryResult, pool::SmartPool, BucketId, IndexerOps, ProviderId,
 };
 
 /// PostgreSQL repository implementation.
@@ -75,6 +75,14 @@ impl IndexerOps for Repository {
     }
 
     // ============ Bucket Read Operations ============
+    async fn get_bucket(&self, bid: BucketId<'_>) -> RepositoryResult<Bucket> {
+        let mut conn = self.pool.get().await?;
+
+        Bucket::get_by_onchain_bucket_id(&mut conn, bid.0.to_owned())
+            .await
+            .map_err(Into::into)
+    }
+
     async fn list_user_buckets_by_msp(
         &self,
         msp: i64,

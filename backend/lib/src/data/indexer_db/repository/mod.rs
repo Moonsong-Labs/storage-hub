@@ -96,6 +96,12 @@ pub trait IndexerOps: Send + Sync {
         limit: i64,
         offset: i64,
     ) -> RepositoryResult<Vec<Bucket>>;
+
+    /// Retrieve the information of the given bucket
+    ///
+    /// # Arguments
+    /// * `id` - the Bucket ID (onchain)
+    async fn get_bucket(&self, bucket_id: BucketId<'_>) -> RepositoryResult<Bucket>;
 }
 
 /// Mutable operations for test environments.

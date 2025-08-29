@@ -78,6 +78,14 @@ impl DBClient {
             .map_err(|e| crate::error::Error::Database(e.to_string()))
     }
 
+    /// Retrieve info on a specific bucket given its onchain ID
+    pub async fn get_bucket(&self, bucket_id: &[u8]) -> Result<Bucket> {
+        self.repository
+            .get_bucket(bucket_id.into())
+            .await
+            .map_err(|e| crate::error::Error::Database(e.to_string()))
+    }
+
     /// Get all the `user`'s buckets with the given MSP
     pub async fn get_user_buckets(
         &self,
