@@ -79,8 +79,9 @@ export class HttpClient {
         ...(body !== null ? { body } : {}),
       };
       const fetchFn =
-        (typeof globalThis !== 'undefined' && this.fetchImpl === (globalThis as unknown as { fetch: typeof fetch }).fetch)
-          ? ((globalThis as unknown as { fetch: typeof fetch }).fetch.bind(globalThis))
+        typeof globalThis !== 'undefined' &&
+        this.fetchImpl === (globalThis as unknown as { fetch: typeof fetch }).fetch
+          ? (globalThis as unknown as { fetch: typeof fetch }).fetch.bind(globalThis)
           : this.fetchImpl;
       const res = await fetchFn(url, init);
 
