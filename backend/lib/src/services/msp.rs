@@ -130,6 +130,7 @@ impl MspService {
     pub async fn list_user_buckets(&self, user_address: &str) -> Result<Vec<Bucket>, Error> {
         self.postgres
             .get_user_buckets(&self.msp_id, user_address, None, None)
+            .await
     }
 
     /// Get a specific bucket by ID
