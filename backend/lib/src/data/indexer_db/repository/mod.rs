@@ -44,6 +44,17 @@ impl<'a> From<&'a str> for ProviderId<'a> {
     }
 }
 
+/// Represents an onchain Bucket ID
+///
+/// This is used to differentiate between the database id and the onchain id
+// TODO: replace with appropriate type from runtime
+pub struct BucketId<'a>(pub &'a str);
+impl<'a> From<&'a str> for BucketId<'a> {
+    fn from(value: &'a str) -> Self {
+        Self(value)
+    }
+}
+
 /// Read-only operations for indexer data access.
 ///
 /// This trait provides read-only access to database entities,

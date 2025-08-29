@@ -8,6 +8,7 @@ use chrono::Utc;
 
 use crate::{
     config::Config,
+    constants::mocks::{PLACEHOLDER_BUCKET_FILE_COUNT, PLACEHOLDER_BUCKET_SIZE_BYTES},
     data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage},
     error::Error,
     models::{
@@ -127,10 +128,25 @@ impl MspService {
     }
 
     /// List buckets for a user
-    pub async fn list_user_buckets(&self, user_address: &str) -> Result<Vec<Bucket>, Error> {
+    pub async fn list_user_buckets(
+        &self,
+        user_address: &str,
+    ) -> Result<impl Iterator<Item = Bucket>, Error> {
         self.postgres
             .get_user_buckets(&self.msp_id, user_address, None, None)
             .await
+            .map(|buckets| {
+                buckets.into_iter().map(|entry| {
+                    // TODO: the bucket size in bytes and file count are not indexed currently
+                    // We can retrieve all files in the DB by bucket and compute it that way
+                    // using `File::get_by_onchain_bucket_id`
+                    Bucket::from_db(
+                        &entry,
+                        PLACEHOLDER_BUCKET_SIZE_BYTES,
+                        PLACEHOLDER_BUCKET_FILE_COUNT,
+                    )
+                })
+            })
     }
 
     /// Get a specific bucket by ID
