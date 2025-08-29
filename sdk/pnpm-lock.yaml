@@ -2739,5 +2739,5 @@ packages:
 
   file:core/wasm/pkg:
     resolution: {directory: core/wasm/pkg, type: directory}
-    name: storagehub-wasm
+    name: pkg
     dev: false
