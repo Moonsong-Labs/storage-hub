@@ -234,6 +234,7 @@ import type {
   ContractContractSpecV3,
   ContractContractSpecV4,
   ContractContractSpecV5,
+  ContractContractSpecV6,
   ContractCryptoHasher,
   ContractDiscriminant,
   ContractDisplayName,
@@ -270,11 +271,14 @@ import type {
   ContractMetadataV3,
   ContractMetadataV4,
   ContractMetadataV5,
+  ContractMetadataV6,
   ContractProject,
   ContractProjectContract,
   ContractProjectInfo,
   ContractProjectSource,
   ContractProjectV0,
+  ContractReviveProjectInfo,
+  ContractReviveProjectSource,
   ContractSelector,
   ContractStorageLayout,
   ContractTypeSpec
@@ -340,12 +344,17 @@ import type {
   BlockV0,
   BlockV1,
   BlockV2,
+  BlockV3,
   EIP1559Transaction,
   EIP2930Transaction,
+  EIP7702Transaction,
   EthAccessList,
   EthAccessListItem,
   EthAccount,
   EthAddress,
+  EthAuthorizationList,
+  EthAuthorizationListItem,
+  EthAuthorizationSignature,
   EthBlock,
   EthBloom,
   EthCallRequest,
@@ -357,10 +366,12 @@ import type {
   EthFilterTopicEntry,
   EthFilterTopicInner,
   EthHeader,
+  EthLegacyTransactionSignature,
   EthLog,
   EthReceipt,
   EthReceiptV0,
   EthReceiptV3,
+  EthReceiptV4,
   EthRichBlock,
   EthRichHeader,
   EthStorageProof,
@@ -383,7 +394,8 @@ import type {
   LegacyTransaction,
   TransactionV0,
   TransactionV1,
-  TransactionV2
+  TransactionV2,
+  TransactionV3
 } from "@polkadot/types/interfaces/eth";
 import type {
   EvmAccount,
@@ -498,6 +510,7 @@ import type { CallIndex, LotteryConfig } from "@polkadot/types/interfaces/lotter
 import type {
   CustomMetadata15,
   CustomValueMetadata15,
+  EnumDeprecationInfoV16,
   ErrorMetadataLatest,
   ErrorMetadataV10,
   ErrorMetadataV11,
@@ -518,6 +531,7 @@ import type {
   ExtrinsicMetadataV13,
   ExtrinsicMetadataV14,
   ExtrinsicMetadataV15,
+  ExtrinsicMetadataV16,
   FunctionArgumentMetadataLatest,
   FunctionArgumentMetadataV10,
   FunctionArgumentMetadataV11,
@@ -532,6 +546,7 @@ import type {
   FunctionMetadataV13,
   FunctionMetadataV14,
   FunctionMetadataV9,
+  ItemDeprecationInfoV16,
   MetadataAll,
   MetadataLatest,
   MetadataV10,
@@ -540,6 +555,7 @@ import type {
   MetadataV13,
   MetadataV14,
   MetadataV15,
+  MetadataV16,
   MetadataV9,
   ModuleConstantMetadataV10,
   ModuleConstantMetadataV11,
@@ -553,24 +569,34 @@ import type {
   ModuleMetadataV9,
   OpaqueMetadata,
   OuterEnums15,
+  PalletAssociatedTypeMetadataV16,
   PalletCallMetadataLatest,
   PalletCallMetadataV14,
+  PalletCallMetadataV16,
   PalletConstantMetadataLatest,
   PalletConstantMetadataV14,
+  PalletConstantMetadataV16,
   PalletErrorMetadataLatest,
   PalletErrorMetadataV14,
+  PalletErrorMetadataV16,
   PalletEventMetadataLatest,
   PalletEventMetadataV14,
+  PalletEventMetadataV16,
   PalletMetadataLatest,
   PalletMetadataV14,
   PalletMetadataV15,
+  PalletMetadataV16,
   PalletStorageMetadataLatest,
   PalletStorageMetadataV14,
+  PalletStorageMetadataV16,
+  PalletViewFunctionMetadataV16,
   PortableType,
   PortableTypeV14,
   RuntimeApiMetadataLatest,
   RuntimeApiMetadataV15,
+  RuntimeApiMetadataV16,
   RuntimeApiMethodMetadataV15,
+  RuntimeApiMethodMetadataV16,
   RuntimeApiMethodParamMetadataV15,
   SignedExtensionMetadataLatest,
   SignedExtensionMetadataV14,
@@ -580,6 +606,7 @@ import type {
   StorageEntryMetadataV12,
   StorageEntryMetadataV13,
   StorageEntryMetadataV14,
+  StorageEntryMetadataV16,
   StorageEntryMetadataV9,
   StorageEntryModifierLatest,
   StorageEntryModifierV10,
@@ -606,7 +633,10 @@ import type {
   StorageMetadataV11,
   StorageMetadataV12,
   StorageMetadataV13,
-  StorageMetadataV9
+  StorageMetadataV9,
+  TransactionExtensionMetadataLatest,
+  TransactionExtensionMetadataV16,
+  VariantDeprecationInfoV16
 } from "@polkadot/types/interfaces/metadata";
 import type {
   Mixnode,
@@ -1518,6 +1548,7 @@ declare module "@polkadot/types/types/registry" {
     BlockV0: BlockV0;
     BlockV1: BlockV1;
     BlockV2: BlockV2;
+    BlockV3: BlockV3;
     BlockWeights: BlockWeights;
     BodyId: BodyId;
     BodyIdV2: BodyIdV2;
@@ -1602,6 +1633,7 @@ declare module "@polkadot/types/types/registry" {
     ContractContractSpecV3: ContractContractSpecV3;
     ContractContractSpecV4: ContractContractSpecV4;
     ContractContractSpecV5: ContractContractSpecV5;
+    ContractContractSpecV6: ContractContractSpecV6;
     ContractCryptoHasher: ContractCryptoHasher;
     ContractDiscriminant: ContractDiscriminant;
     ContractDisplayName: ContractDisplayName;
@@ -1652,12 +1684,15 @@ declare module "@polkadot/types/types/registry" {
     ContractMetadataV3: ContractMetadataV3;
     ContractMetadataV4: ContractMetadataV4;
     ContractMetadataV5: ContractMetadataV5;
+    ContractMetadataV6: ContractMetadataV6;
     ContractProject: ContractProject;
     ContractProjectContract: ContractProjectContract;
     ContractProjectInfo: ContractProjectInfo;
     ContractProjectSource: ContractProjectSource;
     ContractProjectV0: ContractProjectV0;
     ContractReturnFlags: ContractReturnFlags;
+    ContractReviveProjectInfo: ContractReviveProjectInfo;
+    ContractReviveProjectSource: ContractReviveProjectSource;
     ContractSelector: ContractSelector;
     ContractStorageKey: ContractStorageKey;
     ContractStorageLayout: ContractStorageLayout;
@@ -1718,6 +1753,7 @@ declare module "@polkadot/types/types/registry" {
     Ed25519Signature: Ed25519Signature;
     EIP1559Transaction: EIP1559Transaction;
     EIP2930Transaction: EIP2930Transaction;
+    EIP7702Transaction: EIP7702Transaction;
     ElectionCompute: ElectionCompute;
     ElectionPhase: ElectionPhase;
     ElectionResult: ElectionResult;
@@ -1727,6 +1763,7 @@ declare module "@polkadot/types/types/registry" {
     ElectionStatus: ElectionStatus;
     EncodedFinalityProofs: EncodedFinalityProofs;
     EncodedJustification: EncodedJustification;
+    EnumDeprecationInfoV16: EnumDeprecationInfoV16;
     Epoch: Epoch;
     EpochAuthorship: EpochAuthorship;
     Era: Era;
@@ -1746,6 +1783,9 @@ declare module "@polkadot/types/types/registry" {
     EthAccessListItem: EthAccessListItem;
     EthAccount: EthAccount;
     EthAddress: EthAddress;
+    EthAuthorizationList: EthAuthorizationList;
+    EthAuthorizationListItem: EthAuthorizationListItem;
+    EthAuthorizationSignature: EthAuthorizationSignature;
     EthBlock: EthBlock;
     EthBloom: EthBloom;
     EthCallRequest: EthCallRequest;
@@ -1761,10 +1801,12 @@ declare module "@polkadot/types/types/registry" {
     EthFilterTopicEntry: EthFilterTopicEntry;
     EthFilterTopicInner: EthFilterTopicInner;
     EthHeader: EthHeader;
+    EthLegacyTransactionSignature: EthLegacyTransactionSignature;
     EthLog: EthLog;
     EthReceipt: EthReceipt;
     EthReceiptV0: EthReceiptV0;
     EthReceiptV3: EthReceiptV3;
+    EthReceiptV4: EthReceiptV4;
     EthRichBlock: EthRichBlock;
     EthRichHeader: EthRichHeader;
     EthStorageProof: EthStorageProof;
@@ -1820,6 +1862,7 @@ declare module "@polkadot/types/types/registry" {
     ExtrinsicMetadataV13: ExtrinsicMetadataV13;
     ExtrinsicMetadataV14: ExtrinsicMetadataV14;
     ExtrinsicMetadataV15: ExtrinsicMetadataV15;
+    ExtrinsicMetadataV16: ExtrinsicMetadataV16;
     ExtrinsicOrHash: ExtrinsicOrHash;
     ExtrinsicPayload: ExtrinsicPayload;
     ExtrinsicPayloadUnknown: ExtrinsicPayloadUnknown;
@@ -1983,6 +2026,7 @@ declare module "@polkadot/types/types/registry" {
     isize: isize;
     ISize: ISize;
     IsStorageRequestOpenToVolunteersError: IsStorageRequestOpenToVolunteersError;
+    ItemDeprecationInfoV16: ItemDeprecationInfoV16;
     Json: Json;
     Junction: Junction;
     Junctions: Junctions;
@@ -2049,6 +2093,7 @@ declare module "@polkadot/types/types/registry" {
     MetadataV13: MetadataV13;
     MetadataV14: MetadataV14;
     MetadataV15: MetadataV15;
+    MetadataV16: MetadataV16;
     MetadataV9: MetadataV9;
     MigrationStatusResult: MigrationStatusResult;
     Mixnode: Mixnode;
@@ -2175,14 +2220,19 @@ declare module "@polkadot/types/types/registry" {
     Owner: Owner;
     PageCounter: PageCounter;
     PageIndexData: PageIndexData;
+    PalletAssociatedTypeMetadataV16: PalletAssociatedTypeMetadataV16;
     PalletCallMetadataLatest: PalletCallMetadataLatest;
     PalletCallMetadataV14: PalletCallMetadataV14;
+    PalletCallMetadataV16: PalletCallMetadataV16;
     PalletConstantMetadataLatest: PalletConstantMetadataLatest;
     PalletConstantMetadataV14: PalletConstantMetadataV14;
+    PalletConstantMetadataV16: PalletConstantMetadataV16;
     PalletErrorMetadataLatest: PalletErrorMetadataLatest;
     PalletErrorMetadataV14: PalletErrorMetadataV14;
+    PalletErrorMetadataV16: PalletErrorMetadataV16;
     PalletEventMetadataLatest: PalletEventMetadataLatest;
     PalletEventMetadataV14: PalletEventMetadataV14;
+    PalletEventMetadataV16: PalletEventMetadataV16;
     PalletId: PalletId;
     PalletInfoV3: PalletInfoV3;
     PalletInfoV4: PalletInfoV4;
@@ -2190,10 +2240,13 @@ declare module "@polkadot/types/types/registry" {
     PalletMetadataLatest: PalletMetadataLatest;
     PalletMetadataV14: PalletMetadataV14;
     PalletMetadataV15: PalletMetadataV15;
+    PalletMetadataV16: PalletMetadataV16;
     PalletsOrigin: PalletsOrigin;
     PalletStorageMetadataLatest: PalletStorageMetadataLatest;
     PalletStorageMetadataV14: PalletStorageMetadataV14;
+    PalletStorageMetadataV16: PalletStorageMetadataV16;
     PalletVersion: PalletVersion;
+    PalletViewFunctionMetadataV16: PalletViewFunctionMetadataV16;
     ParachainDispatchOrigin: ParachainDispatchOrigin;
     ParachainInherentData: ParachainInherentData;
     ParachainProposal: ParachainProposal;
@@ -2348,7 +2401,9 @@ declare module "@polkadot/types/types/registry" {
     RpcMethods: RpcMethods;
     RuntimeApiMetadataLatest: RuntimeApiMetadataLatest;
     RuntimeApiMetadataV15: RuntimeApiMetadataV15;
+    RuntimeApiMetadataV16: RuntimeApiMetadataV16;
     RuntimeApiMethodMetadataV15: RuntimeApiMethodMetadataV15;
+    RuntimeApiMethodMetadataV16: RuntimeApiMethodMetadataV16;
     RuntimeApiMethodParamMetadataV15: RuntimeApiMethodParamMetadataV15;
     RuntimeCall: RuntimeCall;
     RuntimeDbWeight: RuntimeDbWeight;
@@ -2496,6 +2551,7 @@ declare module "@polkadot/types/types/registry" {
     StorageEntryMetadataV12: StorageEntryMetadataV12;
     StorageEntryMetadataV13: StorageEntryMetadataV13;
     StorageEntryMetadataV14: StorageEntryMetadataV14;
+    StorageEntryMetadataV16: StorageEntryMetadataV16;
     StorageEntryMetadataV9: StorageEntryMetadataV9;
     StorageEntryModifierLatest: StorageEntryModifierLatest;
     StorageEntryModifierV10: StorageEntryModifierV10;
@@ -2550,6 +2606,8 @@ declare module "@polkadot/types/types/registry" {
     TraceBlockResponse: TraceBlockResponse;
     TraceError: TraceError;
     TransactionalError: TransactionalError;
+    TransactionExtensionMetadataLatest: TransactionExtensionMetadataLatest;
+    TransactionExtensionMetadataV16: TransactionExtensionMetadataV16;
     TransactionInfo: TransactionInfo;
     TransactionLongevity: TransactionLongevity;
     TransactionPriority: TransactionPriority;
@@ -2559,6 +2617,7 @@ declare module "@polkadot/types/types/registry" {
     TransactionV0: TransactionV0;
     TransactionV1: TransactionV1;
     TransactionV2: TransactionV2;
+    TransactionV3: TransactionV3;
     TransactionValidity: TransactionValidity;
     TransactionValidityError: TransactionValidityError;
     TransientValidationData: TransientValidationData;
@@ -2618,6 +2677,7 @@ declare module "@polkadot/types/types/registry" {
     ValuePropId: ValuePropId;
     ValueProposition: ValueProposition;
     ValuePropositionWithId: ValuePropositionWithId;
+    VariantDeprecationInfoV16: VariantDeprecationInfoV16;
     VecInboundHrmpMessage: VecInboundHrmpMessage;
     VersionedMultiAsset: VersionedMultiAsset;
     VersionedMultiAssets: VersionedMultiAssets;

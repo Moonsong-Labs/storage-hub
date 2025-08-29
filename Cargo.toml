@@ -1,7 +1,7 @@
 [workspace.package]
 authors = ["Moonsong Labs"]
 edition = "2021"
-repository = "https://github.com/Moonsong-Labs/storage-hub-runtime.git"
+repository = "https://github.com/Moonsong-Labs/storage-hub.git"
 license = "GPL-3.0-only"
 homepage = "https://moonsonglabs.com/"
 
@@ -15,7 +15,8 @@ lto = true
 
 [workspace]
 members = [
-	"runtime",
+	"runtime/parachain",
+	"runtime/solochain-evm",
 	"pallets/*",
 	"node",
 	"client",
@@ -44,7 +45,11 @@ async-channel = "1.8.0"
 async-io = "2.3.2"
 async-trait = "0.1.42"
 axum = "0.8"
-axum-extra = { version = "0.10", features = ["multipart", "typed-header", "file-stream"] }
+axum-extra = { version = "0.10", features = [
+	"multipart",
+	"typed-header",
+	"file-stream",
+] }
 axum-test = "18"
 base64 = "0.21"
 bigdecimal = { version = "0.4.5", features = ["serde"] }
@@ -107,6 +112,7 @@ sp-io = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkado
 sp-runtime = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sp-runtime-interface = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sp-std = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
+sp-storage = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sp-trie = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sp-api = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sp-arithmetic = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
@@ -114,6 +120,7 @@ sp-blockchain = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = 
 sp-block-builder = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sp-consensus-aura = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sp-consensus-babe = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
+sp-consensus-grandpa = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sp-genesis-builder = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sp-inherents = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sp-keyring = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
@@ -121,6 +128,7 @@ sp-keystore = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "p
 sp-offchain = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sp-rpc = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sp-session = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
+sp-staking = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sp-state-machine = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sp-timestamp = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sp-tracing = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
@@ -163,9 +171,12 @@ frame-system-rpc-runtime-api = { git = "https://github.com/paritytech/polkadot-s
 frame-try-runtime = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 pallet-aura = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 pallet-authorship = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
+pallet-babe = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 pallet-balances = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
+pallet-grandpa = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 pallet-message-queue = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 pallet-nfts = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
+pallet-offences = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 pallet-parameters = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 pallet-session = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 pallet-sudo = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
@@ -280,8 +291,9 @@ shp-traits = { path = "primitives/traits", default-features = false }
 shp-treasury-funding = { path = "primitives/treasury-funding", default-features = false }
 shp-types = { path = "primitives/types", default-features = false }
 
-# Lcoal - StorageHub Runtime
-storage-hub-runtime = { path = "runtime", default-features = false }
+# Local - StorageHub Runtime
+sh-parachain-runtime = { path = "runtime/parachain", default-features = false }
+sh-solochain-evm-runtime = { path = "runtime/solochain-evm", default-features = false }
 
 [workspace.lints.rust]
 suspicious_double_ref_op = { level = "allow", priority = 2 }

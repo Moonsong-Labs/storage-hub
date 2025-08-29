@@ -304,7 +304,7 @@ Here's an example from the StorageHub codebase:
 pub enum BlockchainServiceCommand {
     #[command(success_type = SubmittedTransaction)]
     SendExtrinsic {
-        call: storage_hub_runtime::RuntimeCall,
+        call: sh_parachain_runtime::RuntimeCall,
         options: SendExtrinsicOptions,
     },
     #[command(success_type = Extrinsic)]

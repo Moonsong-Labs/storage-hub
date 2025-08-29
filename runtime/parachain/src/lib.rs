@@ -124,8 +124,8 @@ impl_opaque_keys! {
 
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
-    spec_name: alloc::borrow::Cow::Borrowed("storage-hub-runtime"),
-    impl_name: alloc::borrow::Cow::Borrowed("storage-hub-runtime"),
+    spec_name: alloc::borrow::Cow::Borrowed("sh-parachain-runtime"),
+    impl_name: alloc::borrow::Cow::Borrowed("sh-parachain-runtime"),
     authoring_version: 1,
     spec_version: 1,
     impl_version: 0,

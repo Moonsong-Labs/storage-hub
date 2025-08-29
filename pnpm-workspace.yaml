@@ -1,5 +1,11 @@
 packages:
-  - "api-augment"
-  - "types-bundle"
-  - "test"
-  - "sdk"
+  - api-augment
+  - types-bundle
+  - test
+
+onlyBuiltDependencies:
+  - '@biomejs/biome'
+  - cpu-features
+  - esbuild
+  - protobufjs
+  - ssh2
