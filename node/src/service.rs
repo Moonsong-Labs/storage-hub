@@ -18,7 +18,7 @@ use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, 
 use polkadot_primitives::{BlakeTwo256, HashT, HeadData};
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use shc_actors_framework::actor::TaskSpawner;
-use shc_common::types::*;
+use shc_common::{traits::StorageEnableRuntime, types::*};
 use shc_rpc::StorageHubClientRpcConfig;
 use sp_blockchain::HeaderBackend;
 use sp_consensus_aura::Slot;
@@ -26,7 +26,8 @@ use sp_core::H256;
 
 // Local Runtime Types
 use shp_opaque::{Block, Hash};
-use storage_hub_runtime::{apis::RuntimeApi, Runtime};
+use shr_solochain_evm::Runtime as SolochainEvmRuntime;
+use storage_hub_runtime::{apis::RuntimeApi as ParachainRuntimeApi, Runtime as ParachainRuntime};
 
 // Cumulus Imports
 use cumulus_client_collator::service::CollatorService;
@@ -68,6 +69,7 @@ use shc_client::{
 use shc_file_transfer_service::configure_file_transfer_network;
 use sp_api::ProvideRuntimeApi;
 use sp_keystore::{Keystore, KeystorePtr};
+use sp_runtime::traits::SaturatedConversion;
 use substrate_prometheus_endpoint::Registry;
 
 use crate::{
@@ -75,139 +77,34 @@ use crate::{
     command::ProviderOptions,
 };
 
-//* These type definitions were moved from this file to the common crate to be used by'
-//* the StorageHub services crates
-type ParachainExecutor = shc_common::types::ParachainExecutor;
-type ParachainClient = shc_common::types::ParachainClient<RuntimeApi>;
+// Generic client type over Runtime
+pub(crate) type StorageEnableClient<Runtime: StorageEnableRuntime> =
+    shc_common::types::ParachainClient<Runtime::RuntimeApi>;
 
-pub(crate) type ParachainBackend = TFullBackend<Block>;
+// Other generic types
+pub(crate) type StorageEnableBackend = TFullBackend<Block>;
+pub(crate) type StorageEnableSelectChain = sc_consensus::LongestChain<StorageEnableBackend, Block>;
 
-pub(crate) type ParachainBlockImport =
-    TParachainBlockImport<Block, Arc<ParachainClient>, ParachainBackend>;
-
-type MaybeSelectChain = Option<sc_consensus::LongestChain<ParachainBackend, Block>>;
+pub(crate) type StorageEnableBlockImport<Runtime: StorageEnableRuntime> =
+    TParachainBlockImport<Block, Arc<StorageEnableClient<Runtime>>, StorageEnableBackend>;
 
 /// Assembly of PartialComponents (enough to run chain ops subcommands)
-pub type Service = PartialComponents<
-    ParachainClient,
-    ParachainBackend,
-    MaybeSelectChain,
+pub type Service<Runtime: StorageEnableRuntime> = PartialComponents<
+    StorageEnableClient<Runtime>,
+    StorageEnableBackend,
+    Option<StorageEnableSelectChain>,
     sc_consensus::DefaultImportQueue<Block>,
-    sc_transaction_pool::TransactionPoolHandle<Block, ParachainClient>,
+    sc_transaction_pool::TransactionPoolHandle<Block, StorageEnableClient<Runtime>>,
     (
-        ParachainBlockImport,
+        StorageEnableBlockImport<Runtime>,
         Option<Telemetry>,
         Option<TelemetryWorkerHandle>,
     ),
 >;
 
-/// Starts a `ServiceBuilder` for a full service.
-///
-/// Use this macro if you don't actually need the full service, but just the builder in order to
-/// be able to perform chain operations.
-pub fn new_partial(
-    config: &Configuration,
-    dev_service: bool,
-) -> Result<Service, sc_service::Error> {
-    let telemetry = config
-        .telemetry_endpoints
-        .clone()
-        .filter(|x| !x.is_empty())
-        .map(|endpoints| -> Result<_, sc_telemetry::Error> {
-            let worker = TelemetryWorker::new(16)?;
-            let telemetry = worker.handle().new_telemetry(endpoints);
-            Ok((worker, telemetry))
-        })
-        .transpose()?;
-
-    let heap_pages = config
-        .executor
-        .default_heap_pages
-        .map_or(DEFAULT_HEAP_ALLOC_STRATEGY, |h| HeapAllocStrategy::Static {
-            extra_pages: h as _,
-        });
-
-    let executor = ParachainExecutor::builder()
-        .with_execution_method(config.executor.wasm_method)
-        .with_onchain_heap_alloc_strategy(heap_pages)
-        .with_offchain_heap_alloc_strategy(heap_pages)
-        .with_max_runtime_instances(config.executor.max_runtime_instances)
-        .with_runtime_cache_size(config.executor.runtime_cache_size)
-        .build();
-
-    let (client, backend, keystore_container, task_manager) =
-        sc_service::new_full_parts_record_import::<Block, RuntimeApi, _>(
-            config,
-            telemetry.as_ref().map(|(_, telemetry)| telemetry.handle()),
-            executor,
-            true,
-        )?;
-    let client = Arc::new(client);
-
-    let telemetry_worker_handle = telemetry.as_ref().map(|(worker, _)| worker.handle());
-
-    let telemetry = telemetry.map(|(worker, telemetry)| {
-        task_manager
-            .spawn_handle()
-            .spawn("telemetry", None, worker.run());
-        telemetry
-    });
-
-    // FIXME: The `config.transaction_pool.options` field is private, so for now use its default value
-    // let transaction_pool = Arc::from(BasicPool::new_full(
-    //     Default::default(),
-    //     config.role.is_authority().into(),
-    //     config.prometheus_registry(),
-    //     task_manager.spawn_essential_handle(),
-    //     client.clone(),
-    // ));
-
-    let transaction_pool = Arc::from(
-        sc_transaction_pool::Builder::new(
-            task_manager.spawn_essential_handle(),
-            client.clone(),
-            config.role.is_authority().into(),
-        )
-        .with_options(config.transaction_pool.clone())
-        .with_prometheus(config.prometheus_registry())
-        .build(),
-    );
-
-    let block_import = ParachainBlockImport::new(client.clone(), backend.clone());
-
-    let import_queue = if dev_service {
-        sc_consensus_manual_seal::import_queue(
-            Box::new(client.clone()),
-            &task_manager.spawn_essential_handle(),
-            config.prometheus_registry(),
-        )
-    } else {
-        build_import_queue(
-            client.clone(),
-            block_import.clone(),
-            config,
-            telemetry.as_ref().map(|telemetry| telemetry.handle()),
-            &task_manager,
-        )
-    };
-
-    let select_chain = if dev_service {
-        Some(LongestChain::new(backend.clone()))
-    } else {
-        None
-    };
-
-    Ok(PartialComponents {
-        backend,
-        client,
-        import_queue,
-        keystore_container,
-        task_manager,
-        transaction_pool,
-        select_chain,
-        other: (block_import, telemetry, telemetry_worker_handle),
-    })
-}
+//╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
+//║                                   StorageHub Client Setup Utilities                                           ║
+//╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 
 /// Helper function to setup database pool
 async fn setup_database_pool(database_url: String) -> Result<DbPool, sc_service::Error> {
@@ -216,10 +113,11 @@ async fn setup_database_pool(database_url: String) -> Result<DbPool, sc_service:
         .map_err(|e| sc_service::Error::Application(Box::new(e)))
 }
 
-async fn configure_and_spawn_indexer(
+/// Configure and spawn the indexer service.
+async fn configure_and_spawn_indexer<Runtime: StorageEnableRuntime>(
     indexer_options: &Option<IndexerOptions>,
     task_manager: &TaskManager,
-    client: Arc<ParachainClient>,
+    client: Arc<StorageEnableClient<Runtime>>,
 ) -> Result<Option<DbPool>, sc_service::Error> {
     let indexer_options = match indexer_options {
         Some(config) => config,
@@ -246,11 +144,11 @@ async fn configure_and_spawn_indexer(
     Ok(Some(db_pool))
 }
 
-async fn configure_and_spawn_fisherman(
+async fn configure_and_spawn_fisherman<Runtime: StorageEnableRuntime>(
     fisherman_options: &Option<FishermanOptions>,
     indexer_config: &Option<IndexerOptions>,
     task_manager: &TaskManager,
-    client: Arc<ParachainClient>,
+    client: Arc<StorageEnableClient<Runtime>>,
     keystore: KeystorePtr,
     rpc_handlers: Arc<RpcHandlers>,
     rocksdb_root_path: impl Into<PathBuf>,
@@ -318,13 +216,14 @@ async fn configure_and_spawn_fisherman(
     Ok(Some(db_pool))
 }
 
-async fn init_sh_builder<R, S>(
+/// Initialize the StorageHubBuilder for the StorageHub node.
+async fn init_sh_builder<R, S, Runtime: StorageEnableRuntime>(
     provider_options: &Option<ProviderOptions>,
     task_manager: &TaskManager,
     file_transfer_request_protocol: Option<(ProtocolName, Receiver<IncomingRequest>)>,
     network: Arc<dyn NetworkService>,
     keystore: KeystorePtr,
-    client: Arc<ParachainClient>,
+    client: Arc<StorageEnableClient<Runtime>>,
     indexer_options: Option<IndexerOptions>,
 ) -> Result<
     Option<(
@@ -344,7 +243,8 @@ where
     StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder,
 {
     let maybe_indexer_db_pool =
-        configure_and_spawn_indexer(&indexer_options, &task_manager, client.clone()).await?;
+        configure_and_spawn_indexer::<Runtime>(&indexer_options, &task_manager, client.clone())
+            .await?;
 
     match provider_options {
         Some(ProviderOptions {
@@ -389,8 +289,8 @@ where
             storage_hub_builder
                 .setup_storage_layer(storage_path.clone())
                 .with_capacity_config(Some(CapacityConfig::new(
-                    max_storage_capacity.unwrap_or_default(),
-                    jump_capacity.unwrap_or_default(),
+                    max_storage_capacity.unwrap_or_default().saturated_into(),
+                    jump_capacity.unwrap_or_default().saturated_into(),
                 )));
 
             storage_hub_builder.with_msp_charge_fees_config(msp_charge_fees.clone());
@@ -421,9 +321,10 @@ where
     }
 }
 
-async fn finish_sh_builder_and_run_tasks<R, S>(
+/// Finish the StorageHubBuilder and run the tasks.
+async fn finish_sh_builder_and_run_tasks<R, S, Runtime: StorageEnableRuntime>(
     mut sh_builder: StorageHubBuilder<R, S, Runtime>,
-    client: Arc<ParachainClient>,
+    client: Arc<StorageEnableClient<Runtime>>,
     rpc_handlers: RpcHandlers,
     keystore: KeystorePtr,
     rocksdb_root_path: impl Into<PathBuf>,
@@ -443,7 +344,7 @@ where
     let rocks_db_path = rocksdb_root_path.into();
 
     // Spawn fisherman service if enabled
-    configure_and_spawn_fisherman(
+    configure_and_spawn_fisherman::<Runtime>(
         &fisherman_options,
         &indexer_options,
         &task_manager,
@@ -478,6 +379,119 @@ where
     Ok(())
 }
 
+//╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
+//║                                 StorageHub Parachain Node Setup Functions                                     ║
+//╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
+
+/// Starts a `ServiceBuilder` for a full service.
+///
+/// Use this macro if you don't actually need the full service, but just the builder in order to
+/// be able to perform chain operations.
+pub fn new_partial(
+    config: &Configuration,
+    dev_service: bool,
+) -> Result<Service<ParachainRuntime>, sc_service::Error> {
+    let telemetry = config
+        .telemetry_endpoints
+        .clone()
+        .filter(|x| !x.is_empty())
+        .map(|endpoints| -> Result<_, sc_telemetry::Error> {
+            let worker = TelemetryWorker::new(16)?;
+            let telemetry = worker.handle().new_telemetry(endpoints);
+            Ok((worker, telemetry))
+        })
+        .transpose()?;
+
+    let heap_pages = config
+        .executor
+        .default_heap_pages
+        .map_or(DEFAULT_HEAP_ALLOC_STRATEGY, |h| HeapAllocStrategy::Static {
+            extra_pages: h as _,
+        });
+
+    let executor = ParachainExecutor::builder()
+        .with_execution_method(config.executor.wasm_method)
+        .with_onchain_heap_alloc_strategy(heap_pages)
+        .with_offchain_heap_alloc_strategy(heap_pages)
+        .with_max_runtime_instances(config.executor.max_runtime_instances)
+        .with_runtime_cache_size(config.executor.runtime_cache_size)
+        .build();
+
+    let (client, backend, keystore_container, task_manager) =
+        sc_service::new_full_parts_record_import::<Block, ParachainRuntimeApi, _>(
+            config,
+            telemetry.as_ref().map(|(_, telemetry)| telemetry.handle()),
+            executor,
+            true,
+        )?;
+    let client = Arc::new(client);
+
+    let telemetry_worker_handle = telemetry.as_ref().map(|(worker, _)| worker.handle());
+
+    let telemetry = telemetry.map(|(worker, telemetry)| {
+        task_manager
+            .spawn_handle()
+            .spawn("telemetry", None, worker.run());
+        telemetry
+    });
+
+    // FIXME: The `config.transaction_pool.options` field is private, so for now use its default value
+    // let transaction_pool = Arc::from(BasicPool::new_full(
+    //     Default::default(),
+    //     config.role.is_authority().into(),
+    //     config.prometheus_registry(),
+    //     task_manager.spawn_essential_handle(),
+    //     client.clone(),
+    // ));
+
+    let transaction_pool = Arc::from(
+        sc_transaction_pool::Builder::new(
+            task_manager.spawn_essential_handle(),
+            client.clone(),
+            config.role.is_authority().into(),
+        )
+        .with_options(config.transaction_pool.clone())
+        .with_prometheus(config.prometheus_registry())
+        .build(),
+    );
+
+    let block_import =
+        StorageEnableBlockImport::<ParachainRuntime>::new(client.clone(), backend.clone());
+
+    let import_queue = if dev_service {
+        sc_consensus_manual_seal::import_queue(
+            Box::new(client.clone()),
+            &task_manager.spawn_essential_handle(),
+            config.prometheus_registry(),
+        )
+    } else {
+        build_import_queue(
+            client.clone(),
+            block_import.clone(),
+            config,
+            telemetry.as_ref().map(|telemetry| telemetry.handle()),
+            &task_manager,
+        )
+    };
+
+    let select_chain = if dev_service {
+        Some(LongestChain::new(backend.clone()))
+    } else {
+        None
+    };
+
+    Ok(PartialComponents {
+        backend,
+        client,
+        import_queue,
+        keystore_container,
+        task_manager,
+        transaction_pool,
+        select_chain,
+        other: (block_import, telemetry, telemetry_worker_handle),
+    })
+}
+
 /// Start a development node with the given solo chain `Configuration`.
 async fn start_dev_impl<R, S, Network>(
     config: Configuration,
@@ -491,9 +505,10 @@ async fn start_dev_impl<R, S, Network>(
 where
     R: ShRole,
     S: ShStorageLayer,
-    (R, S): ShNodeType<Runtime>,
-    StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder + Buildable<(R, S), Runtime>,
-    StorageHubHandler<(R, S), Runtime>: RunnableTasks,
+    (R, S): ShNodeType<ParachainRuntime>,
+    StorageHubBuilder<R, S, ParachainRuntime>:
+        StorageLayerBuilder + Buildable<(R, S), ParachainRuntime>,
+    StorageHubHandler<(R, S), ParachainRuntime>: RunnableTasks,
     Network: sc_network::NetworkBackend<OpaqueBlock, BlockHash>,
 {
     use async_io::Timer;
@@ -555,11 +570,12 @@ where
     // If we are a provider or fisherman we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
     if provider_options.is_some() || fisherman_options.is_some() {
-        file_transfer_request_protocol = Some(configure_file_transfer_network::<_, Runtime>(
-            client.clone(),
-            &config,
-            &mut net_config,
-        ));
+        file_transfer_request_protocol =
+            Some(configure_file_transfer_network::<_, ParachainRuntime>(
+                client.clone(),
+                &config,
+                &mut net_config,
+            ));
     }
 
     let metrics = Network::register_notification_metrics(
@@ -644,20 +660,21 @@ where
         };
 
     // If node is running as a Storage Provider, start building the StorageHubHandler using the StorageHubBuilder.
-    let (sh_builder, maybe_storage_hub_client_rpc_config) = match init_sh_builder::<R, S>(
-        &provider_options,
-        &task_manager,
-        file_transfer_request_protocol,
-        network.clone(),
-        keystore.clone(),
-        client.clone(),
-        indexer_options.clone(),
-    )
-    .await?
-    {
-        Some((shb, rpc)) => (Some(shb), Some(rpc)),
-        None => (None, None),
-    };
+    let (sh_builder, maybe_storage_hub_client_rpc_config) =
+        match init_sh_builder::<R, S, ParachainRuntime>(
+            &provider_options,
+            &task_manager,
+            file_transfer_request_protocol,
+            network.clone(),
+            keystore.clone(),
+            client.clone(),
+            indexer_options.clone(),
+        )
+        .await?
+        {
+            Some((shb, rpc)) => (Some(shb), Some(rpc)),
+            None => (None, None),
+        };
 
     let rpc_builder = {
         let client = client.clone();
@@ -671,7 +688,7 @@ where
                 command_sink: command_sink.clone(),
             };
 
-            crate::rpc::create_full::<_, _, _, Runtime>(deps).map_err(Into::into)
+            crate::rpc::create_full::<_, _, _, ParachainRuntime>(deps).map_err(Into::into)
         })
     };
 
@@ -903,9 +920,10 @@ async fn start_dev_in_maintenance_mode<R, S, Network>(
 where
     R: ShRole,
     S: ShStorageLayer,
-    (R, S): ShNodeType<Runtime>,
-    StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder + Buildable<(R, S), Runtime>,
-    StorageHubHandler<(R, S), Runtime>: RunnableTasks,
+    (R, S): ShNodeType<ParachainRuntime>,
+    StorageHubBuilder<R, S, ParachainRuntime>:
+        StorageLayerBuilder + Buildable<(R, S), ParachainRuntime>,
+    StorageHubHandler<(R, S), ParachainRuntime>: RunnableTasks,
     Network: sc_network::NetworkBackend<OpaqueBlock, BlockHash>,
 {
     let sc_service::PartialComponents {
@@ -942,11 +960,12 @@ where
     // If we are a provider or fisherman we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
     if provider_options.is_some() || fisherman_options.is_some() {
-        file_transfer_request_protocol = Some(configure_file_transfer_network::<_, Runtime>(
-            client.clone(),
-            &config,
-            &mut net_config,
-        ));
+        file_transfer_request_protocol =
+            Some(configure_file_transfer_network::<_, ParachainRuntime>(
+                client.clone(),
+                &config,
+                &mut net_config,
+            ));
     }
 
     let metrics = Network::register_notification_metrics(
@@ -973,20 +992,21 @@ where
     let (command_sink, _) = futures::channel::mpsc::channel(1000);
 
     // If node is running as a Storage Provider, start building the StorageHubHandler using the StorageHubBuilder.
-    let (sh_builder, maybe_storage_hub_client_rpc_config) = match init_sh_builder::<R, S>(
-        &provider_options,
-        &task_manager,
-        file_transfer_request_protocol,
-        network.clone(),
-        keystore.clone(),
-        client.clone(),
-        indexer_options.clone(),
-    )
-    .await?
-    {
-        Some((shb, rpc)) => (Some(shb), Some(rpc)),
-        None => (None, None),
-    };
+    let (sh_builder, maybe_storage_hub_client_rpc_config) =
+        match init_sh_builder::<R, S, ParachainRuntime>(
+            &provider_options,
+            &task_manager,
+            file_transfer_request_protocol,
+            network.clone(),
+            keystore.clone(),
+            client.clone(),
+            indexer_options.clone(),
+        )
+        .await?
+        {
+            Some((shb, rpc)) => (Some(shb), Some(rpc)),
+            None => (None, None),
+        };
 
     let rpc_builder = {
         let client = client.clone();
@@ -1000,7 +1020,7 @@ where
                 command_sink: Some(command_sink.clone()),
             };
 
-            crate::rpc::create_full::<_, _, _, Runtime>(deps).map_err(Into::into)
+            crate::rpc::create_full::<_, _, _, ParachainRuntime>(deps).map_err(Into::into)
         })
     };
 
@@ -1073,13 +1093,14 @@ async fn start_node_impl<R, S, Network>(
     fisherman_options: Option<FishermanOptions>,
     para_id: ParaId,
     hwbench: Option<sc_sysinfo::HwBench>,
-) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)>
+) -> sc_service::error::Result<(TaskManager, Arc<StorageEnableClient<ParachainRuntime>>)>
 where
     R: ShRole,
     S: ShStorageLayer,
-    (R, S): ShNodeType<Runtime>,
-    StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder + Buildable<(R, S), Runtime>,
-    StorageHubHandler<(R, S), Runtime>: RunnableTasks,
+    (R, S): ShNodeType<ParachainRuntime>,
+    StorageHubBuilder<R, S, ParachainRuntime>:
+        StorageLayerBuilder + Buildable<(R, S), ParachainRuntime>,
+    StorageHubHandler<(R, S), ParachainRuntime>: RunnableTasks,
     Network: NetworkBackend<OpaqueBlock, BlockHash>,
 {
     // Check if we're in maintenance mode and build the node in maintenance mode if so
@@ -1123,11 +1144,12 @@ where
     // If we are a provider we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
     if provider_options.is_some() {
-        file_transfer_request_protocol = Some(configure_file_transfer_network::<_, Runtime>(
-            client.clone(),
-            &parachain_config,
-            &mut net_config,
-        ));
+        file_transfer_request_protocol =
+            Some(configure_file_transfer_network::<_, ParachainRuntime>(
+                client.clone(),
+                &parachain_config,
+                &mut net_config,
+            ));
     }
 
     let (relay_chain_interface, collator_key) = build_relay_chain_interface(
@@ -1184,20 +1206,21 @@ where
     }
 
     // If node is running as a Storage Provider, start building the StorageHubHandler using the StorageHubBuilder.
-    let (sh_builder, maybe_storage_hub_client_rpc_config) = match init_sh_builder::<R, S>(
-        &provider_options,
-        &task_manager,
-        file_transfer_request_protocol,
-        network.clone(),
-        keystore.clone(),
-        client.clone(),
-        indexer_options.clone(),
-    )
-    .await?
-    {
-        Some((shb, rpc)) => (Some(shb), Some(rpc)),
-        None => (None, None),
-    };
+    let (sh_builder, maybe_storage_hub_client_rpc_config) =
+        match init_sh_builder::<R, S, ParachainRuntime>(
+            &provider_options,
+            &task_manager,
+            file_transfer_request_protocol,
+            network.clone(),
+            keystore.clone(),
+            client.clone(),
+            indexer_options.clone(),
+        )
+        .await?
+        {
+            Some((shb, rpc)) => (Some(shb), Some(rpc)),
+            None => (None, None),
+        };
 
     let rpc_builder = {
         let client = client.clone();
@@ -1211,7 +1234,7 @@ where
                 command_sink: None,
             };
 
-            crate::rpc::create_full::<_, _, _, Runtime>(deps).map_err(Into::into)
+            crate::rpc::create_full::<_, _, _, ParachainRuntime>(deps).map_err(Into::into)
         })
     };
 
@@ -1335,13 +1358,14 @@ async fn start_node_in_maintenance_mode<R, S, Network>(
     fisherman_options: Option<FishermanOptions>,
     para_id: ParaId,
     hwbench: Option<sc_sysinfo::HwBench>,
-) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)>
+) -> sc_service::error::Result<(TaskManager, Arc<StorageEnableClient<ParachainRuntime>>)>
 where
     R: ShRole,
     S: ShStorageLayer,
-    (R, S): ShNodeType<Runtime>,
-    StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder + Buildable<(R, S), Runtime>,
-    StorageHubHandler<(R, S), Runtime>: RunnableTasks,
+    (R, S): ShNodeType<ParachainRuntime>,
+    StorageHubBuilder<R, S, ParachainRuntime>:
+        StorageLayerBuilder + Buildable<(R, S), ParachainRuntime>,
+    StorageHubHandler<(R, S), ParachainRuntime>: RunnableTasks,
     Network: NetworkBackend<OpaqueBlock, BlockHash>,
 {
     let parachain_config = prepare_node_config(parachain_config);
@@ -1366,11 +1390,12 @@ where
     // If we are a provider we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
     if provider_options.is_some() {
-        file_transfer_request_protocol = Some(configure_file_transfer_network::<_, Runtime>(
-            client.clone(),
-            &parachain_config,
-            &mut net_config,
-        ));
+        file_transfer_request_protocol =
+            Some(configure_file_transfer_network::<_, ParachainRuntime>(
+                client.clone(),
+                &parachain_config,
+                &mut net_config,
+            ));
     }
 
     // Create relay chain interface
@@ -1404,20 +1429,21 @@ where
     // No need for offchain workers in maintenance mode
 
     // If node is running as a Storage Provider, start building the StorageHubHandler using the StorageHubBuilder.
-    let (sh_builder, maybe_storage_hub_client_rpc_config) = match init_sh_builder::<R, S>(
-        &provider_options,
-        &task_manager,
-        file_transfer_request_protocol,
-        network.clone(),
-        keystore.clone(),
-        client.clone(),
-        indexer_options.clone(),
-    )
-    .await?
-    {
-        Some((shb, rpc)) => (Some(shb), Some(rpc)),
-        None => (None, None),
-    };
+    let (sh_builder, maybe_storage_hub_client_rpc_config) =
+        match init_sh_builder::<R, S, ParachainRuntime>(
+            &provider_options,
+            &task_manager,
+            file_transfer_request_protocol,
+            network.clone(),
+            keystore.clone(),
+            client.clone(),
+            indexer_options.clone(),
+        )
+        .await?
+        {
+            Some((shb, rpc)) => (Some(shb), Some(rpc)),
+            None => (None, None),
+        };
 
     let rpc_builder = {
         let client = client.clone();
@@ -1431,7 +1457,7 @@ where
                 command_sink: None,
             };
 
-            crate::rpc::create_full::<_, _, _, Runtime>(deps).map_err(Into::into)
+            crate::rpc::create_full::<_, _, _, ParachainRuntime>(deps).map_err(Into::into)
         })
     };
 
@@ -1496,8 +1522,8 @@ where
 
 /// Build the import queue for the parachain runtime.
 fn build_import_queue(
-    client: Arc<ParachainClient>,
-    block_import: ParachainBlockImport,
+    client: Arc<StorageEnableClient<ParachainRuntime>>,
+    block_import: StorageEnableBlockImport<ParachainRuntime>,
     config: &Configuration,
     telemetry: Option<TelemetryHandle>,
     task_manager: &TaskManager,
@@ -1523,14 +1549,16 @@ fn build_import_queue(
 }
 
 fn start_consensus(
-    client: Arc<ParachainClient>,
-    backend: Arc<ParachainBackend>,
-    block_import: ParachainBlockImport,
+    client: Arc<StorageEnableClient<ParachainRuntime>>,
+    backend: Arc<StorageEnableBackend>,
+    block_import: StorageEnableBlockImport<ParachainRuntime>,
     prometheus_registry: Option<&Registry>,
     telemetry: Option<TelemetryHandle>,
     task_manager: &TaskManager,
     relay_chain_interface: Arc<dyn RelayChainInterface>,
-    transaction_pool: Arc<sc_transaction_pool::TransactionPoolHandle<Block, ParachainClient>>,
+    transaction_pool: Arc<
+        sc_transaction_pool::TransactionPoolHandle<Block, StorageEnableClient<ParachainRuntime>>,
+    >,
     keystore: KeystorePtr,
     relay_chain_slot_duration: Duration,
     para_id: ParaId,
@@ -1692,7 +1720,7 @@ pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash
     fisherman_options: Option<FishermanOptions>,
     para_id: ParaId,
     hwbench: Option<sc_sysinfo::HwBench>,
-) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)> {
+) -> sc_service::error::Result<(TaskManager, Arc<StorageEnableClient<ParachainRuntime>>)> {
     if let Some(provider_options) = provider_options {
         match (
             &provider_options.provider_type,
