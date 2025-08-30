@@ -46,6 +46,40 @@ pub mod merkle {
     pub const BSP_MERKLE_ROOT: &[u8] = &[1, 2, 3];
 }
 
+/// Test bucket data
+pub mod bucket {
+    /// Default bucket name
+    pub const DEFAULT_BUCKET_NAME: &str = "test_bucket";
+
+    /// Default bucket onchain ID (valid 32-byte hex string = 64 hex chars)
+    pub const DEFAULT_BUCKET_ID: &str =
+        "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
+
+    /// Default bucket is public
+    pub const DEFAULT_IS_PUBLIC: bool = true;
+}
+
+/// Test file data
+pub mod file {
+    /// Default file key
+    pub const DEFAULT_FILE_KEY: &str = "test_file.txt";
+
+    /// Default file location
+    pub const DEFAULT_LOCATION: &str = "/files/test_file.txt";
+
+    /// Default file fingerprint (32 bytes)
+    pub const DEFAULT_FINGERPRINT: &[u8; 32] = &[
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+        26, 27, 28, 29, 30, 31, 32,
+    ];
+
+    /// Default file size
+    pub const DEFAULT_SIZE: i64 = 1024;
+
+    /// Default file step (0 = requested, 1 = fulfilled)
+    pub const DEFAULT_STEP: i32 = 1;
+}
+
 /// Mock connection test data
 pub mod mock_rpc {
     /// Test method names

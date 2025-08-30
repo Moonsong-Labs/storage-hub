@@ -4,7 +4,7 @@
 //! database operations without requiring a real database connection.
 
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     sync::{
         atomic::{AtomicI64, Ordering},
         Arc,
@@ -26,6 +26,9 @@ use crate::data::indexer_db::repository::{
 pub struct MockRepository {
     bsps: Arc<RwLock<HashMap<i64, Bsp>>>,
     msps: Arc<RwLock<HashMap<i64, Msp>>>,
+    buckets: Arc<RwLock<HashMap<i64, Bucket>>>,
+    /// Files stored in BTreeMap to maintain natural ordering by ID
+    files: Arc<RwLock<BTreeMap<i64, File>>>,
     next_id: Arc<AtomicI64>,
 }
 
@@ -35,6 +38,8 @@ impl MockRepository {
         Self {
             bsps: Arc::new(RwLock::new(HashMap::new())),
             msps: Arc::new(RwLock::new(HashMap::new())),
+            buckets: Arc::new(RwLock::new(HashMap::new())),
+            files: Arc::new(RwLock::new(BTreeMap::new())),
             next_id: Arc::new(AtomicI64::new(1)),
         }
     }
@@ -96,7 +101,15 @@ impl IndexerOps for MockRepository {
         limit: i64,
         offset: i64,
     ) -> RepositoryResult<Vec<File>> {
-        todo!()
+        let files = self.files.read().await;
+
+        Ok(files
+            .values()
+            .filter(|f| f.bucket_id == bucket)
+            .skip(offset as usize)
+            .take(limit as usize)
+            .cloned()
+            .collect())
     }
 }
 
@@ -123,7 +136,7 @@ pub mod tests {
 
     use super::*;
     use crate::constants::rpc::DUMMY_MSP_ID;
-    use crate::constants::test::{accounts::*, bsp, merkle::*, msp};
+    use crate::constants::test::{accounts::*, bsp, bucket, file, merkle::*, msp};
 
     pub async fn inject_sample_bsp(repo: &MockRepository) -> i64 {
         let id = repo.next_id();
@@ -163,6 +176,58 @@ pub mod tests {
                 created_at: now,
                 updated_at: now,
                 onchain_msp_id: DUMMY_MSP_ID.to_string(),
+            },
+        );
+
+        id
+    }
+
+    pub async fn inject_sample_bucket(repo: &MockRepository, msp_id: Option<i64>) -> i64 {
+        let id = repo.next_id();
+        let now = Utc::now().naive_utc();
+
+        repo.buckets.write().await.insert(
+            id,
+            Bucket {
+                id,
+                msp_id,
+                account: TEST_BSP_ACCOUNT_STR.to_string(),
+                onchain_bucket_id: bucket::DEFAULT_BUCKET_ID.as_bytes().to_vec(),
+                name: bucket::DEFAULT_BUCKET_NAME.as_bytes().to_vec(),
+                collection_id: None,
+                private: !bucket::DEFAULT_IS_PUBLIC,
+                merkle_root: vec![],
+                created_at: now,
+                updated_at: now,
+            },
+        );
+
+        id
+    }
+
+    pub async fn inject_sample_file(
+        repo: &MockRepository,
+        bucket_id: i64,
+        file_key: Option<&str>,
+    ) -> i64 {
+        let id = repo.next_id();
+        let now = Utc::now().naive_utc();
+        let key = file_key.unwrap_or(file::DEFAULT_FILE_KEY);
+
+        repo.files.write().await.insert(
+            id,
+            File {
+                id,
+                account: TEST_BSP_ACCOUNT_STR.as_bytes().to_vec(),
+                file_key: key.as_bytes().to_vec(),
+                bucket_id,
+                location: file::DEFAULT_LOCATION.as_bytes().to_vec(),
+                fingerprint: file::DEFAULT_FINGERPRINT.to_vec(),
+                size: file::DEFAULT_SIZE,
+                step: file::DEFAULT_STEP,
+                deletion_status: None,
+                created_at: now,
+                updated_at: now,
             },
         );
 
@@ -218,7 +283,107 @@ pub mod tests {
             .await;
         assert!(result.is_err());
         if let Err(e) = result {
-            assert!(matches!(e, RepositoryError::NotFound(_)));
+            assert!(matches!(e, RepositoryError::NotFound { entity: _ }));
         }
+    }
+
+    #[tokio::test]
+    async fn test_get_files_by_bucket_filters_correctly() {
+        let repo = MockRepository::new();
+
+        // Create a bucket with files
+        let bucket_id = inject_sample_bucket(&repo, None).await;
+        let file1_id = inject_sample_file(&repo, bucket_id, Some("file1.txt")).await;
+        let file2_id = inject_sample_file(&repo, bucket_id, Some("file2.txt")).await;
+        let file3_id = inject_sample_file(&repo, bucket_id, Some("file3.txt")).await;
+
+        // Create another bucket with a file
+        let other_bucket_id = inject_sample_bucket(&repo, None).await;
+        let _other_file_id = inject_sample_file(&repo, other_bucket_id, Some("other.txt")).await;
+
+        // Retrieve files from the first bucket only
+        let files = repo
+            .get_files_by_bucket(bucket_id, 10, 0)
+            .await
+            .expect("should retrieve files by bucket");
+
+        assert_eq!(files.len(), 3);
+        assert_eq!(files[0].id, file1_id);
+        assert_eq!(files[1].id, file2_id);
+        assert_eq!(files[2].id, file3_id);
+        assert_eq!(files[0].file_key, b"file1.txt");
+        assert_eq!(files[1].file_key, b"file2.txt");
+        assert_eq!(files[2].file_key, b"file3.txt");
+
+        // Verify the other bucket's file is not included
+        for file in &files {
+            assert_eq!(file.bucket_id, bucket_id);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_files_by_bucket_pagination() {
+        let repo = MockRepository::new();
+
+        let bucket_id = inject_sample_bucket(&repo, None).await;
+        let file1_id = inject_sample_file(&repo, bucket_id, Some("file1.txt")).await;
+        let file2_id = inject_sample_file(&repo, bucket_id, Some("file2.txt")).await;
+        let file3_id = inject_sample_file(&repo, bucket_id, Some("file3.txt")).await;
+
+        // Test limit
+        let limited_files = repo
+            .get_files_by_bucket(bucket_id, 2, 0)
+            .await
+            .expect("should retrieve limited files");
+
+        assert_eq!(limited_files.len(), 2);
+        assert_eq!(limited_files[0].id, file1_id);
+        assert_eq!(limited_files[1].id, file2_id);
+
+        // Test offset
+        let offset_files = repo
+            .get_files_by_bucket(bucket_id, 10, 1)
+            .await
+            .expect("should retrieve files with offset");
+
+        assert_eq!(offset_files.len(), 2);
+        assert_eq!(offset_files[0].id, file2_id);
+        assert_eq!(offset_files[1].id, file3_id);
+
+        // Test limit and offset combined
+        let paginated_files = repo
+            .get_files_by_bucket(bucket_id, 1, 1)
+            .await
+            .expect("should retrieve paginated files");
+
+        assert_eq!(paginated_files.len(), 1);
+        assert_eq!(paginated_files[0].id, file2_id);
+    }
+
+    #[tokio::test]
+    async fn test_get_files_by_bucket_empty_bucket() {
+        let repo = MockRepository::new();
+
+        let empty_bucket_id = inject_sample_bucket(&repo, None).await;
+
+        let empty_files = repo
+            .get_files_by_bucket(empty_bucket_id, 10, 0)
+            .await
+            .expect("should handle empty bucket");
+
+        assert!(empty_files.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_get_files_by_bucket_nonexistent_bucket() {
+        let repo = MockRepository::new();
+
+        // Use a bucket ID that doesn't exist
+        let non_existent_files = repo
+            .get_files_by_bucket(999999, 10, 0)
+            .await
+            .expect("should handle non-existent bucket");
+
+        assert!(non_existent_files.is_empty());
     }
 }
