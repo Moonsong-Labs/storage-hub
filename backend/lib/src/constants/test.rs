@@ -11,6 +11,9 @@ pub const DEFAULT_TEST_DATABASE_URL: &str = "postgres://test:test@localhost/test
 pub mod accounts {
     /// Test BSP account string
     pub const TEST_BSP_ACCOUNT_STR: &str = "test_account";
+
+    /// Test MSP account string
+    pub const TEST_MSP_ACCOUNT_STR: &str = "msp_test_account";
 }
 
 /// Test BSP (Backup Storage Provider) data
@@ -26,6 +29,15 @@ pub mod bsp {
 
     /// Default BSP ID
     pub const DEFAULT_BSP_ID: i64 = 1;
+}
+
+/// Test MSP (Main Storage Provider) data
+pub mod msp {
+    /// Default MSP capacity
+    pub const DEFAULT_CAPACITY: i64 = 5000;
+
+    /// Default MSP value proposition
+    pub const DEFAULT_VALUE_PROP: &str = "Test MSP Value Proposition";
 }
 
 /// Test merkle tree data

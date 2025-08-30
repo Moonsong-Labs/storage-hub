@@ -25,6 +25,7 @@ use crate::data::indexer_db::repository::{
 // TODO: add failure-injection mechanism (similar to RPC mocks)
 pub struct MockRepository {
     bsps: Arc<RwLock<HashMap<i64, Bsp>>>,
+    msps: Arc<RwLock<HashMap<i64, Msp>>>,
     next_id: Arc<AtomicI64>,
 }
 
@@ -33,6 +34,7 @@ impl MockRepository {
     pub fn new() -> Self {
         Self {
             bsps: Arc::new(RwLock::new(HashMap::new())),
+            msps: Arc::new(RwLock::new(HashMap::new())),
             next_id: Arc::new(AtomicI64::new(1)),
         }
     }
@@ -66,7 +68,11 @@ impl IndexerOps for MockRepository {
 
     // ============ MSP Read Operations ============
     async fn get_msp_by_onchain_id(&self, msp: ProviderId<'_>) -> RepositoryResult<Msp> {
-        todo!()
+        let msps = self.msps.read().await;
+        msps.values()
+            .find(|m| m.onchain_msp_id == msp.0)
+            .cloned()
+            .ok_or_else(|| RepositoryError::not_found("MSP"))
     }
 
     async fn list_user_buckets_by_msp(
@@ -116,7 +122,8 @@ pub mod tests {
     use chrono::Utc;
 
     use super::*;
-    use crate::constants::test::{accounts::*, bsp::*, merkle::*};
+    use crate::constants::rpc::DUMMY_MSP_ID;
+    use crate::constants::test::{accounts::*, bsp, merkle::*, msp};
 
     pub async fn inject_sample_bsp(repo: &MockRepository) -> i64 {
         let id = repo.next_id();
@@ -128,13 +135,34 @@ pub mod tests {
             Bsp {
                 id,
                 account: TEST_BSP_ACCOUNT_STR.to_string(),
-                capacity: BigDecimal::from_i64(DEFAULT_CAPACITY).unwrap(),
-                stake: BigDecimal::from_i64(DEFAULT_STAKE).unwrap(),
+                capacity: BigDecimal::from_i64(bsp::DEFAULT_CAPACITY).unwrap(),
+                stake: BigDecimal::from_i64(bsp::DEFAULT_STAKE).unwrap(),
                 last_tick_proven: 0,
                 created_at: now,
                 updated_at: now,
-                onchain_bsp_id: DEFAULT_BSP_ID.to_string(),
+                onchain_bsp_id: bsp::DEFAULT_BSP_ID.to_string(),
                 merkle_root: BSP_MERKLE_ROOT.to_vec(),
+            },
+        );
+
+        id
+    }
+
+    pub async fn inject_sample_msp(repo: &MockRepository) -> i64 {
+        let id = repo.next_id();
+        let now = Utc::now().naive_utc();
+
+        // fixture
+        repo.msps.write().await.insert(
+            id,
+            Msp {
+                id,
+                account: TEST_MSP_ACCOUNT_STR.to_string(),
+                capacity: BigDecimal::from_i64(msp::DEFAULT_CAPACITY).unwrap(),
+                value_prop: msp::DEFAULT_VALUE_PROP.to_string(),
+                created_at: now,
+                updated_at: now,
+                onchain_msp_id: DUMMY_MSP_ID.to_string(),
             },
         );
 
@@ -166,5 +194,31 @@ pub mod tests {
 
         let found = repo.list_bsps(1, 0).await.unwrap();
         assert!(found.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_get_msp_by_onchain_id() {
+        let repo = MockRepository::new();
+        let id = inject_sample_msp(&repo).await;
+
+        // Test successful retrieval
+        let msp = repo
+            .get_msp_by_onchain_id(ProviderId(DUMMY_MSP_ID))
+            .await
+            .expect("should find MSP by onchain ID");
+
+        assert_eq!(msp.id, id);
+        assert_eq!(msp.onchain_msp_id, DUMMY_MSP_ID);
+        assert_eq!(msp.account, TEST_MSP_ACCOUNT_STR);
+        assert_eq!(msp.value_prop, msp::DEFAULT_VALUE_PROP);
+
+        // Test not found case
+        let result = repo
+            .get_msp_by_onchain_id(ProviderId("0xnonexistent"))
+            .await;
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(matches!(e, RepositoryError::NotFound(_)));
+        }
     }
 }
