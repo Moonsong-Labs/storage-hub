@@ -207,8 +207,8 @@ impl MspService {
             .get_bucket_files(bucket.id, None, None)
             .await?;
 
-        // 2. create hierarchy based on location segments
-        todo!("file tree of bucket")
+        // Create hierarchy based on location segments
+        Ok(FileTree::from_files(files))
     }
 
     /// Get file information
