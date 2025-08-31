@@ -4,9 +4,13 @@ on:
   push:
     branches:
       - '**'
+    paths:
+      - 'sdk/**'
   pull_request:
     branches:
       - '**'
+    paths:
+      - 'sdk/**'
 
 jobs:
   sdk:

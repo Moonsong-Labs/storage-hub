@@ -2,9 +2,13 @@ name: E2E DappWright (MetaMask)
 
 on:
   pull_request:
+    paths:
+      - 'sdk/**'
   push:
     branches:
       - '**'
+    paths:
+      - 'sdk/**'
   workflow_dispatch:
 
 env:
