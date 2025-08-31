@@ -4,7 +4,7 @@
     "description": "StorageHub SDK E2E tests using dAppwright for MetaMask automation",
     "type": "module",
     "scripts": {
-        "test:metamask": "HEADLESS=false playwright test --project metamask",
+        "test:metamask": "playwright test --project metamask",
         "test:msp": "playwright test --project msp",
         "serve:web": "bash -lc 'PID=$(lsof -ti tcp:3000 || true); if [ -n \"$PID\" ]; then kill -9 \"$PID\"; fi; python3 -m http.server 3000 --directory ..'"
     },

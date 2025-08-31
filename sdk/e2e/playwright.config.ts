@@ -11,7 +11,7 @@ export default defineConfig({
         trace: 'on-first-retry',
         video: 'retain-on-failure',
         screenshot: 'only-on-failure',
-        headless: process.env.HEADLESS === 'true',
+        headless: false,
         storageState: undefined,
     },
     outputDir: '/tmp/test-results',
