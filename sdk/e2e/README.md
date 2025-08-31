@@ -6,7 +6,7 @@ End-to-end tests for StorageHub SDK
 
 - **SDK-backed flows**: Use `Eip1193Wallet.connect()`, `signMessage()`, and `sendTransaction()`
 - **Automated MetaMask**: Install, import seed, handle popups via dAppWright
-- **Headed and “headless” (Xvfb)**: Local headed and Docker/Xvfb for CI-like runs
+- **Always headed**: Tests run in headed mode; CI uses Xvfb to provide a display
 - **No chain dependency**: Tx step is initiated and then rejected (no funds required)
 
 ## 📁 Structure
@@ -17,16 +17,13 @@ sdk/e2e/
 ├── playwright.config.ts
 ├── Dockerfile
 ├── page/
-│   └── index.html          # Minimal dApp using SDK Eip1193Wallet
+│   ├── index.html          # Minimal dApp using SDK Eip1193Wallet
+│   └── msp.html            # MSP SDK debug page (buttons)
 └── tests/
     ├── wallet/
     │   └── metamask-sdk-sign.spec.ts
     └── msp/
-        ├── auth-localwallet.spec.ts
-        ├── health.spec.ts
-        ├── upload.spec.ts
-        ├── download.spec.ts
-        └── unauthorized.spec.ts
+        └── web-page.spec.ts
 ```
 
 ## 🛠️ Setup
@@ -55,11 +52,11 @@ pnpm -C sdk build
 cd sdk/e2e && pnpm install
 pnpm exec playwright test
 
-# Only MetaMask (headed recommended)
-HEADLESS=false pnpm exec playwright test --project metamask
+# Only MetaMask
+pnpm exec playwright test --project metamask
 
-# Only MSP (web project)
-pnpm exec playwright test --project web
+# Only MSP
+pnpm exec playwright test --project msp
 ```
 
 ## 🔧 How it works
@@ -85,8 +82,8 @@ pnpm exec playwright test --project web
 ## 🧰 CI notes
 
 - Build SDK before tests (`pnpm -C sdk build`).
-- Playwright webServer auto-starts the server; reports and artifacts are written to `/tmp`.
-- Use `xvfb-run` with `HEADLESS=false` for MetaMask.
+- Playwright webServer auto-starts the static server; reports/artifacts are written to `/tmp`.
+- CI runs headed browsers under Xvfb.
 
 ## ✅ Success criteria
 
