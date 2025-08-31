@@ -72,3 +72,67 @@ jobs:
           path: /tmp/playwright-report/
           retention-days: 14
 
+  e2e-msp-web:
+    name: MSP E2E (web, mocks)
+    runs-on: ubuntu-latest
+    env:
+      HEADLESS: 'false'
+      RUST_LOG: info
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm & cache
+        uses: ./.github/workflow-templates/setup-pnpm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Install Rust toolchain (for wasm)
+        uses: actions-rust-lang/setup-rust-toolchain@v1.8
+        with:
+          target: wasm32-unknown-unknown
+          cache: false
+
+      - name: Setup Protobuf (protoc)
+        uses: arduino/setup-protoc@v2
+        with:
+          version: '25.x'
+
+      - name: Install wasm-pack
+        run: curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
+
+      - name: Install dependencies (sdk workspace, no scripts)
+        working-directory: sdk
+        run: pnpm install
+
+      - name: Build SDK (core dist + types + msp-client)
+        working-directory: sdk
+        run: pnpm build
+
+      - name: Build backend (mocks)
+        run: cargo build --bin sh-msp-backend --features mocks
+
+      - name: Run backend (mocks)
+        run: |
+          nohup bash -lc "./target/debug/sh-msp-backend --host 127.0.0.1 --port 8080 > /dev/null 2>&1 &"
+          sleep 5
+
+      - name: Install e2e deps (sdk/e2e)
+        working-directory: sdk/e2e
+        run: pnpm install
+
+      - name: Install Playwright Chromium with system deps (sdk/e2e)
+        working-directory: sdk/e2e
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run MSP E2E (web)
+        working-directory: sdk/e2e
+        run: xvfb-run -a pnpm exec playwright test --project msp
+
+      - name: Upload Playwright report (MSP)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-msp
+          path: /tmp/playwright-report/
+          retention-days: 14
