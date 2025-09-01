@@ -83,6 +83,7 @@ use sc_consensus_babe::ImportQueueParams as BabeImportQueueParams;
 use crate::{
     cli::{self, ProviderType, StorageLayer},
     command::ProviderOptions,
+    rpc::FrontierDeps,
 };
 
 //╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
@@ -941,6 +942,7 @@ where
                 pool: transaction_pool.clone(),
                 maybe_storage_hub_client_config: maybe_storage_hub_client_rpc_config.clone(),
                 command_sink: command_sink.clone(),
+                maybe_frontier_deps: None,
             };
 
             crate::rpc::create_full::<_, _, _, ParachainRuntime>(deps).map_err(Into::into)
@@ -1273,6 +1275,7 @@ where
                 pool: transaction_pool.clone(),
                 maybe_storage_hub_client_config: maybe_storage_hub_client_rpc_config.clone(),
                 command_sink: Some(command_sink.clone()),
+                maybe_frontier_deps: None,
             };
 
             crate::rpc::create_full::<_, _, _, ParachainRuntime>(deps).map_err(Into::into)
@@ -1487,6 +1490,7 @@ where
                 pool: transaction_pool.clone(),
                 maybe_storage_hub_client_config: maybe_storage_hub_client_rpc_config.clone(),
                 command_sink: None,
+                maybe_frontier_deps: None,
             };
 
             crate::rpc::create_full::<_, _, _, ParachainRuntime>(deps).map_err(Into::into)
@@ -1710,6 +1714,7 @@ where
                 pool: transaction_pool.clone(),
                 maybe_storage_hub_client_config: maybe_storage_hub_client_rpc_config.clone(),
                 command_sink: None,
+                maybe_frontier_deps: None,
             };
 
             crate::rpc::create_full::<_, _, _, ParachainRuntime>(deps).map_err(Into::into)
@@ -2267,15 +2272,24 @@ where
             None => (None, None),
         };
 
+    // Capture values needed later before moving config
+    let role = config.role;
+    let is_authority_role = role.is_authority();
+
     let rpc_builder = {
         let client = client.clone();
         let transaction_pool = transaction_pool.clone();
+        let is_authority = is_authority_role;
         Box::new(move |_| {
             let deps = crate::rpc::FullDeps {
                 client: client.clone(),
                 pool: transaction_pool.clone(),
                 maybe_storage_hub_client_config: maybe_storage_hub_client_rpc_config.clone(),
                 command_sink: None,
+                maybe_frontier_deps: Some(FrontierDeps::<SolochainEvmRuntime> {
+                    is_authority,
+                    _phantom: std::marker::PhantomData,
+                }),
             };
             crate::rpc::create_full::<_, _, _, SolochainEvmRuntime>(deps).map_err(Into::into)
         })
@@ -2285,12 +2299,8 @@ where
 
     let node_name = config.network.node_name.clone();
     let prometheus_registry = config.prometheus_registry().cloned();
-    let role = config.role;
-    let is_authority_role = role.is_authority();
     let disable_grandpa = config.disable_grandpa;
     let force_authoring = config.force_authoring;
-
-    // config moved into spawn_tasks below; use captured values afterwards
 
     let rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
         rpc_builder,
@@ -2522,6 +2532,7 @@ where
                 pool: transaction_pool.clone(),
                 maybe_storage_hub_client_config: maybe_storage_hub_client_rpc_config.clone(),
                 command_sink: None,
+                maybe_frontier_deps: None,
             };
             crate::rpc::create_full::<_, _, _, SolochainEvmRuntime>(deps).map_err(Into::into)
         })

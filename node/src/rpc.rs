@@ -13,15 +13,24 @@ use sc_consensus_manual_seal::{
 };
 use sc_rpc::DenyUnsafe;
 use sc_transaction_pool_api::TransactionPool;
+use shc_client::types::FileStorageT;
 use shc_common::{traits::StorageEnableRuntime, types::ParachainClient};
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_rpc::{StorageHubClientApiServer, StorageHubClientRpc, StorageHubClientRpcConfig};
 use sp_core::H256;
 
-use shc_client::types::FileStorageT;
-
 /// A type representing all RPC extensions.
 pub type RpcExtension = jsonrpsee::RpcModule<()>;
+
+// Frontier deps (only used for solochain-evm runtime)
+pub struct FrontierDeps<Runtime>
+where
+    Runtime: StorageEnableRuntime,
+{
+    // Minimal scaffolding for conditional Frontier RPC exposure; populated from service for solochain
+    pub is_authority: bool,
+    pub _phantom: std::marker::PhantomData<Runtime>,
+}
 
 /// Full client dependencies
 pub struct FullDeps<P, FL, FS, Runtime>
@@ -36,6 +45,8 @@ where
     pub maybe_storage_hub_client_config: Option<StorageHubClientRpcConfig<FL, FS, Runtime>>,
     /// Manual seal command sink
     pub command_sink: Option<futures::channel::mpsc::Sender<EngineCommand<H256>>>,
+    /// Optional Frontier deps (present only for solochain-evm runtime)
+    pub maybe_frontier_deps: Option<FrontierDeps<Runtime>>,
 }
 
 /// Instantiate all RPC extensions.
@@ -57,6 +68,7 @@ where
         pool,
         maybe_storage_hub_client_config,
         command_sink,
+        maybe_frontier_deps: _maybe_frontier_deps,
     } = deps;
 
     io.merge(System::new(client.clone(), pool).into_rpc())?;
