@@ -46,7 +46,7 @@ export class MspClient {
     options?: { signal?: AbortSignal },
   ): Promise<NonceResponse> {
     return this.http.post<NonceResponse>('/auth/nonce', {
-      body: JSON.stringify({ address, chainId }),
+      body: { address, chainId },
       headers: { 'Content-Type': 'application/json' },
       ...(options?.signal !== undefined && { signal: options.signal }),
     });
@@ -59,7 +59,7 @@ export class MspClient {
     options?: { signal?: AbortSignal },
   ): Promise<VerifyResponse> {
     return this.http.post<VerifyResponse>('/auth/verify', {
-      body: JSON.stringify({ message, signature }),
+      body: { message, signature },
       headers: { 'Content-Type': 'application/json' },
       ...(options?.signal !== undefined && { signal: options.signal }),
     });
