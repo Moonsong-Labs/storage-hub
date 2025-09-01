@@ -193,25 +193,6 @@
 
         let client = null;
         let connectedBaseUrl = null;
-        let fetchDebugEnabled = false;
-
-        function enableUploadDebugLogging() {
-            if (fetchDebugEnabled) return;
-            const origFetch = (globalThis).fetch.bind(globalThis);
-            (globalThis).fetch = async (input, init) => {
-                const url = typeof input === 'string' ? input : (input && input.url) || '';
-                const method = (init && init.method) || (input && input.method) || 'GET';
-                if (url.includes('/buckets/') && url.includes('/upload')) {
-                    const hdrs = new Headers((init && init.headers) || (input && input.headers) || undefined);
-                    console.log('[PUT DEBUG] url:', url);
-                    console.log('[PUT DEBUG] method:', method);
-                    console.log('[PUT DEBUG] Authorization:', hdrs.get('authorization'));
-                    console.log('[PUT DEBUG] Content-Type:', hdrs.get('content-type'));
-                }
-                return origFetch(input, init);
-            };
-            fetchDebugEnabled = true;
-        }
 
         function toBase64Url(str) {
             return btoa(unescape(encodeURIComponent(str)))
@@ -382,7 +363,6 @@
             try {
                 if (!client) throw new Error('Connect MSP first');
                 setStatus('Uploading...');
-                enableUploadDebugLogging();
                 const bucketId = 'e2e-bucket';
                 const fileKey = 'web-file';
                 // Use a valid-looking mock JWT for mocked backend
