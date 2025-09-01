@@ -18,6 +18,8 @@ pub mod accounts {
 
 /// Test BSP (Backup Storage Provider) data
 pub mod bsp {
+    use shp_types::Hash;
+
     /// Default BSP capacity
     pub const DEFAULT_CAPACITY: i64 = 1000;
 
@@ -28,7 +30,7 @@ pub mod bsp {
     pub const DEFAULT_STAKE: i64 = 100;
 
     /// Default BSP ID
-    pub const DEFAULT_BSP_ID: i64 = 1;
+    pub const DEFAULT_BSP_ID: Hash = Hash::zero();
 }
 
 /// Test MSP (Main Storage Provider) data

@@ -16,6 +16,8 @@ use async_trait::async_trait;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
+#[cfg(test)]
+use shc_indexer_db::OnchainBspId;
 use shc_indexer_db::{
     models::{Bsp, Bucket, File, Msp},
     schema::{bsp, bucket, file},
@@ -130,7 +132,7 @@ impl IndexerOps for Repository {
 #[async_trait]
 impl IndexerOpsMut for Repository {
     // ============ BSP Write Operations ============
-    async fn delete_bsp(&self, account: &str) -> RepositoryResult<()> {
+    async fn delete_bsp(&self, account: &OnchainBspId) -> RepositoryResult<()> {
         let mut conn = self.pool.get().await?;
 
         diesel::delete(bsp::table.filter(bsp::account.eq(account)))
@@ -168,7 +170,7 @@ mod tests {
         let original_bsps = repo.list_bsps(10, 0).await.expect("able to fetch bsps");
         let bsp = &original_bsps[0];
 
-        repo.delete_bsp(&bsp.account)
+        repo.delete_bsp(&OnchainBspId::try_from(bsp.account.clone()).unwrap())
             .await
             .expect("able to delete bsp");
 

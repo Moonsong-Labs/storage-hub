@@ -128,9 +128,11 @@ impl DBClient {
 #[cfg(test)]
 impl DBClient {
     /// Delete a BSP
-    pub async fn delete_bsp(&self, account: &str) -> Result<()> {
+    pub async fn delete_bsp(&self, account: &shp_types::Hash) -> crate::error::Result<()> {
+        use shc_indexer_db::OnchainBspId;
+
         self.repository
-            .delete_bsp(account)
+            .delete_bsp(&OnchainBspId::new(*account))
             .await
             .map_err(|e| crate::error::Error::Database(e.to_string()))
     }
@@ -149,7 +151,7 @@ mod tests {
         },
     };
 
-    async fn delete_bsp(client: DBClient, id: i64) {
+    async fn delete_bsp(client: DBClient, id: shp_types::Hash) {
         let bsps = client
             // ensure we get as many as possible
             .get_all_bsps(Some(i64::MAX), Some(0))
@@ -159,15 +161,7 @@ mod tests {
         let amount_of_bsps = bsps.len();
         assert!(amount_of_bsps > 0);
 
-        let target_bsp = bsps
-            .iter()
-            .find(|bsp| bsp.id == id)
-            .expect("bsp id in list of bsps");
-
-        client
-            .delete_bsp(&target_bsp.account)
-            .await
-            .expect("able to delete bsp");
+        client.delete_bsp(&id).await.expect("able to delete bsp");
 
         let bsps = client
             .get_all_bsps(Some(i64::MAX), Some(0))
@@ -181,11 +175,11 @@ mod tests {
     async fn delete_bsp_with_mock_repo() {
         // Create mock repository and add test data
         let repo = MockRepository::new();
-        let id = inject_sample_bsp(&repo).await;
+        let _id = inject_sample_bsp(&repo).await;
 
         // initialize client
         let client = DBClient::new(Arc::new(repo));
-        delete_bsp(client, id).await;
+        delete_bsp(client, DEFAULT_BSP_ID).await;
     }
 
     #[tokio::test]

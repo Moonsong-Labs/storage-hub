@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## StorageHub Overview
 
 StorageHub is a Substrate-based parachain for the Polkadot ecosystem, focused on decentralized storage. It implements two types of storage providers:
+
 - **MSP (Main Storage Providers)**: Primary data retrieval services
 - **BSP (Backup Storage Providers)**: Redundancy and backup services
 
@@ -20,6 +21,7 @@ StorageHub is a Substrate-based parachain for the Polkadot ecosystem, focused on
 This is due to workspace dependencies that require the full context to compile correctly.
 
 ### Rust/Node Build
+
 ```bash
 # Standard build - MUST be run from project root
 cargo build --release
@@ -33,6 +35,7 @@ pnpm docker:build
 ```
 
 ### Tests
+
 ```bash
 # Rust unit tests - MUST be run from project root
 cargo test
@@ -51,6 +54,7 @@ pnpm zombie:test:native
 ```
 
 ### Linting and Formatting
+
 ```bash
 # Rust
 cargo fmt --all -- --check
@@ -64,6 +68,7 @@ pnpm typecheck
 ```
 
 ### Type Generation
+
 ```bash
 # In /test directory
 pnpm typegen  # Generate TypeScript types from runtime
@@ -72,6 +77,7 @@ pnpm typegen  # Generate TypeScript types from runtime
 ## Architecture
 
 ### Core Components
+
 - `/runtime`: StorageHub runtime implementation
 - `/pallets`: Custom Substrate pallets (bucket-nfts, file-system, payment-streams, proofs-dealer, providers, randomness)
 - `/node`: Parachain node implementation
@@ -80,13 +86,16 @@ pnpm typegen  # Generate TypeScript types from runtime
 - `/test`: Comprehensive test suite
 
 ### Client Architecture
+
 The client uses an actor-based architecture (`/client/actors-framework`) with specialized services:
+
 - `blockchain-service`: Blockchain interaction
 - `file-manager`: File operations and chunking
 - `forest-manager`: Merkle tree management
 - `indexer-service`: Blockchain event indexing
 
 ### Testing Infrastructure
+
 - **Docker-based**: Most tests run in Docker containers for isolation
 - **Zombienet**: Network topology testing
 - **BSPNet**: Small dev network for file merklisation testing
@@ -95,6 +104,7 @@ The client uses an actor-based architecture (`/client/actors-framework`) with sp
 ## Development Workflow
 
 1. **Local Development**:
+
    ```bash
    # Start dev node
    ../target/release/storage-hub --dev
@@ -103,10 +113,11 @@ The client uses an actor-based architecture (`/client/actors-framework`) with sp
    ```
 
 2. **Running Networks**:
+
    ```bash
    # BSPNet (small test network)
    pnpm docker:start:bspnet
-   
+
    # Full Zombienet
    pnpm zombie:run:full:native
    pnpm zombie:setup:native
