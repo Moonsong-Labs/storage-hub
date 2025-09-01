@@ -92,7 +92,12 @@ impl IndexerOps for MockRepository {
 
     // ============ Bucket Read Operations ============
     async fn get_bucket_by_onchain_id(&self, bid: BucketId<'_>) -> RepositoryResult<Bucket> {
-        todo!()
+        let buckets = self.buckets.read().await;
+        buckets
+            .values()
+            .find(|b| b.onchain_bucket_id == bid.0)
+            .cloned()
+            .ok_or_else(|| RepositoryError::not_found("Bucket"))
     }
 
     async fn get_files_by_bucket(
@@ -385,5 +390,35 @@ pub mod tests {
             .expect("should handle non-existent bucket");
 
         assert!(non_existent_files.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_get_bucket_by_onchain_id() {
+        let repo = MockRepository::new();
+        let bucket_id = inject_sample_bucket(&repo, Some(1)).await;
+
+        let bucket = repo
+            .get_bucket_by_onchain_id(BucketId(bucket::DEFAULT_BUCKET_ID.as_bytes()))
+            .await
+            .expect("should find bucket by onchain ID");
+
+        assert_eq!(bucket.id, bucket_id);
+        assert_eq!(
+            bucket.onchain_bucket_id,
+            bucket::DEFAULT_BUCKET_ID.as_bytes()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_bucket_by_onchain_id_not_found() {
+        let repo = MockRepository::new();
+        inject_sample_bucket(&repo, None).await;
+
+        let result = repo
+            .get_bucket_by_onchain_id(BucketId(b"nonexistent_bucket_id"))
+            .await;
+
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), RepositoryError::NotFound(_)));
     }
 }
