@@ -84,6 +84,12 @@ pub trait IndexerOps: Send + Sync {
     /// Retrieve the specified MSP's information given its onchain id
     async fn get_msp_by_onchain_id(&self, msp: ProviderId<'_>) -> RepositoryResult<Msp>;
 
+    /// Retrieve the information of the given bucket
+    ///
+    /// # Arguments
+    /// * `bucket` - the Bucket ID (onchain)
+    async fn get_bucket_by_onchain_id(&self, bucket: BucketId<'_>) -> RepositoryResult<Bucket>;
+
     /// List the account's buckets with the given MSP
     ///
     /// # Arguments
@@ -96,12 +102,6 @@ pub trait IndexerOps: Send + Sync {
         limit: i64,
         offset: i64,
     ) -> RepositoryResult<Vec<Bucket>>;
-
-    /// Retrieve the information of the given bucket
-    ///
-    /// # Arguments
-    /// * `bucket` - the Bucket ID (onchain)
-    async fn get_bucket_by_onchain_id(&self, bucket: BucketId<'_>) -> RepositoryResult<Bucket>;
 
     /// Retrieve all the files belonging to the given bucket
     ///

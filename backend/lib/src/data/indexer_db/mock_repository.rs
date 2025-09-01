@@ -81,6 +81,16 @@ impl IndexerOps for MockRepository {
             .ok_or_else(|| RepositoryError::not_found("MSP"))
     }
 
+    // ============ Bucket Read Operations ============
+    async fn get_bucket_by_onchain_id(&self, bid: BucketId<'_>) -> RepositoryResult<Bucket> {
+        let buckets = self.buckets.read().await;
+        buckets
+            .values()
+            .find(|b| b.onchain_bucket_id == bid.0)
+            .cloned()
+            .ok_or_else(|| RepositoryError::not_found("Bucket"))
+    }
+
     async fn get_buckets_by_user_and_msp(
         &self,
         msp: i64,
@@ -97,16 +107,6 @@ impl IndexerOps for MockRepository {
             .take(limit as usize)
             .cloned()
             .collect())
-    }
-
-    // ============ Bucket Read Operations ============
-    async fn get_bucket_by_onchain_id(&self, bid: BucketId<'_>) -> RepositoryResult<Bucket> {
-        let buckets = self.buckets.read().await;
-        buckets
-            .values()
-            .find(|b| b.onchain_bucket_id == bid.0)
-            .cloned()
-            .ok_or_else(|| RepositoryError::not_found("Bucket"))
     }
 
     async fn get_files_by_bucket(

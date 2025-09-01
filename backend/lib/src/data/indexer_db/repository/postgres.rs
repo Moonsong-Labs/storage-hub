@@ -75,6 +75,15 @@ impl IndexerOps for Repository {
             .map_err(Into::into)
     }
 
+    // ============ Bucket Read Operations ============
+    async fn get_bucket_by_onchain_id(&self, bid: BucketId<'_>) -> RepositoryResult<Bucket> {
+        let mut conn = self.pool.get().await?;
+
+        Bucket::get_by_onchain_bucket_id(&mut conn, bid.0.to_owned())
+            .await
+            .map_err(Into::into)
+    }
+
     async fn get_buckets_by_user_and_msp(
         &self,
         msp: i64,
@@ -95,15 +104,6 @@ impl IndexerOps for Repository {
             .await?;
 
         Ok(buckets)
-    }
-
-    // ============ Bucket Read Operations ============
-    async fn get_bucket_by_onchain_id(&self, bid: BucketId<'_>) -> RepositoryResult<Bucket> {
-        let mut conn = self.pool.get().await?;
-
-        Bucket::get_by_onchain_bucket_id(&mut conn, bid.0.to_owned())
-            .await
-            .map_err(Into::into)
     }
 
     async fn get_files_by_bucket(
