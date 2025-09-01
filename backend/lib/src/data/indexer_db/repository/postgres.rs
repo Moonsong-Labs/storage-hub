@@ -75,7 +75,7 @@ impl IndexerOps for Repository {
             .map_err(Into::into)
     }
 
-    async fn list_user_buckets_by_msp(
+    async fn get_buckets_by_user_and_msp(
         &self,
         msp: i64,
         account: &str,

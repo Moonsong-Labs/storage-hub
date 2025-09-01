@@ -89,7 +89,7 @@ pub trait IndexerOps: Send + Sync {
     /// # Arguments
     /// * `msp` - the MSP (database) ID where the bucket is held
     /// * `account` - the User account that owns the bucket
-    async fn list_user_buckets_by_msp(
+    async fn get_buckets_by_user_and_msp(
         &self,
         msp: i64,
         account: &str,

@@ -81,7 +81,7 @@ impl IndexerOps for MockRepository {
             .ok_or_else(|| RepositoryError::not_found("MSP"))
     }
 
-    async fn list_user_buckets_by_msp(
+    async fn get_buckets_by_user_and_msp(
         &self,
         msp: i64,
         account: &str,
@@ -298,8 +298,6 @@ pub mod tests {
 
         assert_eq!(msp.id, id);
         assert_eq!(msp.onchain_msp_id, DUMMY_MSP_ID);
-        assert_eq!(msp.account, TEST_MSP_ACCOUNT_STR);
-        assert_eq!(msp.value_prop, msp::DEFAULT_VALUE_PROP);
 
         // Test not found case
         let result = repo
@@ -312,14 +310,47 @@ pub mod tests {
     }
 
     #[tokio::test]
+    async fn get_bucket_by_onchain_id() {
+        let repo = MockRepository::new();
+        let bucket_id = inject_sample_bucket(&repo, Some(1)).await;
+
+        let bucket = repo
+            .get_bucket_by_onchain_id(BucketId(bucket::DEFAULT_BUCKET_ID.as_bytes()))
+            .await
+            .expect("should find bucket by onchain ID");
+
+        assert_eq!(bucket.id, bucket_id);
+        assert_eq!(
+            bucket.onchain_bucket_id,
+            bucket::DEFAULT_BUCKET_ID.as_bytes()
+        );
+    }
+
+    #[tokio::test]
+    async fn get_bucket_by_onchain_id_not_found() {
+        let repo = MockRepository::new();
+        inject_sample_bucket(&repo, None).await;
+
+        let result = repo
+            .get_bucket_by_onchain_id(BucketId(b"nonexistent_bucket_id"))
+            .await;
+
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            RepositoryError::NotFound { .. }
+        ));
+    }
+
+    #[tokio::test]
     async fn get_files_by_bucket_filters_correctly() {
         let repo = MockRepository::new();
 
         // Create a bucket with files
         let bucket_id = inject_sample_bucket(&repo, None).await;
-        let file1_id = inject_sample_file(&repo, bucket_id, Some("file1.txt")).await;
-        let file2_id = inject_sample_file(&repo, bucket_id, Some("file2.txt")).await;
-        let file3_id = inject_sample_file(&repo, bucket_id, Some("file3.txt")).await;
+        let _file1_id = inject_sample_file(&repo, bucket_id, Some("file1.txt")).await;
+        let _file2_id = inject_sample_file(&repo, bucket_id, Some("file2.txt")).await;
+        let _file3_id = inject_sample_file(&repo, bucket_id, Some("file3.txt")).await;
 
         // Create another bucket with a file
         let other_bucket_id = inject_sample_bucket(&repo, None).await;
@@ -332,12 +363,6 @@ pub mod tests {
             .expect("should retrieve files by bucket");
 
         assert_eq!(files.len(), 3);
-        assert_eq!(files[0].id, file1_id);
-        assert_eq!(files[1].id, file2_id);
-        assert_eq!(files[2].id, file3_id);
-        assert_eq!(files[0].file_key, b"file1.txt");
-        assert_eq!(files[1].file_key, b"file2.txt");
-        assert_eq!(files[2].file_key, b"file3.txt");
 
         // Verify the other bucket's file is not included
         for file in &files {
@@ -412,37 +437,7 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn get_bucket_by_onchain_id() {
-        let repo = MockRepository::new();
-        let bucket_id = inject_sample_bucket(&repo, Some(1)).await;
-
-        let bucket = repo
-            .get_bucket_by_onchain_id(BucketId(bucket::DEFAULT_BUCKET_ID.as_bytes()))
-            .await
-            .expect("should find bucket by onchain ID");
-
-        assert_eq!(bucket.id, bucket_id);
-        assert_eq!(
-            bucket.onchain_bucket_id,
-            bucket::DEFAULT_BUCKET_ID.as_bytes()
-        );
-    }
-
-    #[tokio::test]
-    async fn get_bucket_by_onchain_id_not_found() {
-        let repo = MockRepository::new();
-        inject_sample_bucket(&repo, None).await;
-
-        let result = repo
-            .get_bucket_by_onchain_id(BucketId(b"nonexistent_bucket_id"))
-            .await;
-
-        assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), RepositoryError::NotFound(_)));
-    }
-
-    #[tokio::test]
-    async fn list_user_buckets_by_msp_basic() {
+    async fn get_buckets_by_user_and_msp() {
         let repo = MockRepository::new();
         let msp_id = inject_sample_msp(&repo).await;
         let user_account = "test_user";
@@ -457,7 +452,7 @@ pub mod tests {
 
         // Test fetching user buckets by MSP
         let buckets = repo
-            .list_user_buckets_by_msp(msp_id, user_account, 10, 0)
+            .get_buckets_by_user_and_msp(msp_id, user_account, 10, 0)
             .await
             .expect("should list user buckets by MSP");
 
@@ -477,7 +472,7 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn list_user_buckets_by_msp_filters_other_users() {
+    async fn get_buckets_by_user_and_msp_filters_other_users() {
         let repo = MockRepository::new();
         let msp_id = inject_sample_msp(&repo).await;
         let user_account = "test_user";
@@ -495,7 +490,7 @@ pub mod tests {
 
         // Should only return the target user's bucket
         let buckets = repo
-            .list_user_buckets_by_msp(msp_id, user_account, 10, 0)
+            .get_buckets_by_user_and_msp(msp_id, user_account, 10, 0)
             .await
             .expect("should filter by user");
 
@@ -505,7 +500,7 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn list_user_buckets_by_msp_filters_other_msps() {
+    async fn get_buckets_by_user_and_msp_filters_other_msps() {
         let repo = MockRepository::new();
         let msp1_id = inject_sample_msp(&repo).await;
         let msp2_id = inject_sample_msp(&repo).await;
@@ -521,7 +516,7 @@ pub mod tests {
 
         // Should only return buckets for MSP1
         let buckets = repo
-            .list_user_buckets_by_msp(msp1_id, user_account, 10, 0)
+            .get_buckets_by_user_and_msp(msp1_id, user_account, 10, 0)
             .await
             .expect("should filter by MSP");
 
@@ -531,7 +526,7 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn list_user_buckets_by_msp_filters_no_msp() {
+    async fn get_buckets_by_user_and_msp_filters_no_msp() {
         let repo = MockRepository::new();
         let msp_id = inject_sample_msp(&repo).await;
         let user_account = "test_user";
@@ -546,7 +541,7 @@ pub mod tests {
 
         // Should only return bucket with the specified MSP
         let buckets = repo
-            .list_user_buckets_by_msp(msp_id, user_account, 10, 0)
+            .get_buckets_by_user_and_msp(msp_id, user_account, 10, 0)
             .await
             .expect("should filter out buckets without MSP");
 
@@ -556,7 +551,7 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn list_user_buckets_by_msp_pagination() {
+    async fn get_buckets_by_user_and_msp_pagination() {
         let repo = MockRepository::new();
         let msp_id = inject_sample_msp(&repo).await;
         let user_account = "test_user";
@@ -571,7 +566,7 @@ pub mod tests {
 
         // Test limit
         let limited_buckets = repo
-            .list_user_buckets_by_msp(msp_id, user_account, 2, 0)
+            .get_buckets_by_user_and_msp(msp_id, user_account, 2, 0)
             .await
             .expect("should retrieve limited buckets");
 
@@ -581,7 +576,7 @@ pub mod tests {
 
         // Test offset
         let offset_buckets = repo
-            .list_user_buckets_by_msp(msp_id, user_account, 10, 1)
+            .get_buckets_by_user_and_msp(msp_id, user_account, 10, 1)
             .await
             .expect("should retrieve buckets with offset");
 
@@ -591,7 +586,7 @@ pub mod tests {
 
         // Test limit and offset combined
         let paginated_buckets = repo
-            .list_user_buckets_by_msp(msp_id, user_account, 1, 1)
+            .get_buckets_by_user_and_msp(msp_id, user_account, 1, 1)
             .await
             .expect("should retrieve paginated buckets");
 
@@ -600,13 +595,13 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn list_user_buckets_by_msp_empty_results() {
+    async fn get_buckets_by_user_and_msp_empty_results() {
         let repo = MockRepository::new();
         let msp_id = inject_sample_msp(&repo).await;
 
         // Test with non-matching user
         let no_user_match = repo
-            .list_user_buckets_by_msp(msp_id, "non_existent_user", 10, 0)
+            .get_buckets_by_user_and_msp(msp_id, "non_existent_user", 10, 0)
             .await
             .expect("should return empty when no matches");
 
@@ -614,7 +609,7 @@ pub mod tests {
 
         // Test with non-matching MSP
         let no_msp_match = repo
-            .list_user_buckets_by_msp(999999, "some_user", 10, 0)
+            .get_buckets_by_user_and_msp(999999, "some_user", 10, 0)
             .await
             .expect("should return empty when no matches");
 

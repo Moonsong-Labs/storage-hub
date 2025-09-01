@@ -113,7 +113,7 @@ impl DBClient {
         let msp = self.get_msp(msp).await?;
 
         self.repository
-            .list_user_buckets_by_msp(
+            .get_buckets_by_user_and_msp(
                 msp.id,
                 user,
                 limit.unwrap_or(DEFAULT_PAGE_LIMIT),
