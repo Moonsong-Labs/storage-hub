@@ -16,6 +16,7 @@
 		"test:core": "pnpm --filter ./core run test -- --run",
 		"test:msp-client": "pnpm --filter ./msp-client run test -- --run",
 		"lint": "pnpm --filter ./core run lint && pnpm --filter ./msp-client run lint",
+		"lint:fix": "pnpm -r --if-present run lint:fix",
 		"format": "pnpm --filter ./core run format && pnpm --filter ./msp-client run format",
 		"format:check": "pnpm --filter ./core run format:check && pnpm --filter ./msp-client run format:check",
 		"typecheck": "pnpm --filter ./core run typecheck && pnpm --filter ./msp-client run typecheck",
