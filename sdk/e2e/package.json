@@ -6,7 +6,7 @@
 	"scripts": {
 		"test:metamask": "playwright test --project metamask",
 		"test:msp": "playwright test --project msp",
-		"serve:web": "bash -lc 'PID=$(lsof -ti tcp:3000 || true); if [ -n \"$PID\" ]; then kill -9 \"$PID\"; fi; python3 -m http.server 3000 --directory ..'",
+		"serve:web": "bash -lc 'PID=$(lsof -ti tcp:3000 || true); if [ -n \"$PID\" ]; then kill -9 \"$PID\"; fi; python3 -m http.server 3000 --directory ..'"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.54.2",
