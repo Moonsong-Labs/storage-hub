@@ -6,7 +6,12 @@
 
 use std::sync::Arc;
 
-use shc_indexer_db::models::{Bsp, Bucket, File, Msp};
+#[cfg(test)]
+use shc_indexer_db::OnchainBspId;
+use shc_indexer_db::{
+    models::{Bsp, Bucket, File, Msp},
+    OnchainMspId,
+};
 
 use crate::{
     constants::database::DEFAULT_PAGE_LIMIT, data::indexer_db::repository::StorageOperations,
@@ -69,11 +74,11 @@ impl DBClient {
     }
 
     /// Retrieve a given MSP's entry by its onchain ID
-    pub async fn get_msp(&self, msp_onchain_id: &str) -> Result<Msp> {
+    pub async fn get_msp(&self, msp_onchain_id: &OnchainMspId) -> Result<Msp> {
         // TODO: should we cache this?
         // since we always reference the same msp
         self.repository
-            .get_msp_by_onchain_id(msp_onchain_id.into())
+            .get_msp_by_onchain_id(msp_onchain_id)
             .await
             .map_err(|e| crate::error::Error::Database(e.to_string()))
     }
@@ -105,7 +110,7 @@ impl DBClient {
     /// Get all the `user`'s buckets with the given MSP
     pub async fn get_user_buckets(
         &self,
-        msp: &str,
+        msp: &OnchainMspId,
         user: &str,
         limit: Option<i64>,
         offset: Option<i64>,
@@ -128,11 +133,9 @@ impl DBClient {
 #[cfg(test)]
 impl DBClient {
     /// Delete a BSP
-    pub async fn delete_bsp(&self, account: &shp_types::Hash) -> crate::error::Result<()> {
-        use shc_indexer_db::OnchainBspId;
-
+    pub async fn delete_bsp(&self, account: &OnchainBspId) -> crate::error::Result<()> {
         self.repository
-            .delete_bsp(&OnchainBspId::new(*account))
+            .delete_bsp(account)
             .await
             .map_err(|e| crate::error::Error::Database(e.to_string()))
     }
@@ -151,7 +154,7 @@ mod tests {
         },
     };
 
-    async fn delete_bsp(client: DBClient, id: shp_types::Hash) {
+    async fn delete_bsp(client: DBClient, id: OnchainBspId) {
         let bsps = client
             // ensure we get as many as possible
             .get_all_bsps(Some(i64::MAX), Some(0))

@@ -170,32 +170,34 @@ impl FileTree {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use chrono::NaiveDateTime;
+    use chrono::DateTime;
 
-    fn create_test_file(location: &str, file_key: &str, size: i64) -> DBFile {
+    use super::*;
+
+    fn test_file_with_location_key_and_size(location: &str, file_key: &str, size: i64) -> DBFile {
         DBFile {
             id: 1,
             account: vec![],
             file_key: file_key.as_bytes().to_vec(),
             bucket_id: 1,
+            onchain_bucket_id: vec![],
             location: location.as_bytes().to_vec(),
             fingerprint: vec![],
             size,
             step: 0,
             deletion_status: None,
-            created_at: NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
-            updated_at: NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
+            created_at: DateTime::from_timestamp(0, 0).unwrap().naive_utc(),
+            updated_at: DateTime::from_timestamp(0, 0).unwrap().naive_utc(),
         }
     }
 
     #[test]
-    fn test_file_tree_from_files() {
+    fn file_tree_from_files() {
         let files = vec![
-            create_test_file("/path/to/file/foo.txt", "key1", 100),
-            create_test_file("/path/to/file/bar.txt", "key2", 200),
-            create_test_file("/path/to/another/thing.txt", "key3", 300),
-            create_test_file("/a/different/file.txt", "key4", 400),
+            test_file_with_location_key_and_size("/path/to/file/foo.txt", "key1", 100),
+            test_file_with_location_key_and_size("/path/to/file/bar.txt", "key2", 200),
+            test_file_with_location_key_and_size("/path/to/another/thing.txt", "key3", 300),
+            test_file_with_location_key_and_size("/a/different/file.txt", "key4", 400),
         ];
 
         let tree = FileTree::from_files(files);

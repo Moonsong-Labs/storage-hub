@@ -6,7 +6,8 @@ use std::sync::Arc;
 
 use chrono::Utc;
 
-use shc_indexer_db::models::Bucket as DBBucket;
+use shc_indexer_db::{models::Bucket as DBBucket, OnchainMspId};
+use shp_types::Hash;
 
 use crate::{
     config::Config,
@@ -24,7 +25,7 @@ use crate::{
 /// Service for handling MSP-related operations
 #[derive(Clone)]
 pub struct MspService {
-    msp_id: String,
+    msp_id: OnchainMspId,
 
     storage: Arc<dyn BoxedStorage>,
     postgres: Arc<DBClient>,
@@ -39,8 +40,13 @@ impl MspService {
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
     ) -> Self {
+        let msp_id = hex::decode(&config.storage_hub.msp_id)
+            .map(|decoded| Hash::from_slice(&decoded))
+            .map(OnchainMspId::new)
+            .expect("valid MSP ID");
+
         Self {
-            msp_id: config.storage_hub.msp_id.clone(),
+            msp_id,
             storage,
             postgres,
             rpc,
@@ -52,7 +58,7 @@ impl MspService {
         Ok(InfoResponse {
             client: "storagehub-node v1.0.0".to_string(),
             version: "StorageHub MSP v0.1.0".to_string(),
-            msp_id: self.msp_id.clone(),
+            msp_id: self.msp_id.to_string(),
             multiaddresses: vec![
                 "/ip4/192.168.0.10/tcp/30333/p2p/12D3KooWJAgnKUrQkGsKxRxojxcFRhtH6ovWfJTPJjAkhmAz2yC8".to_string()
             ],

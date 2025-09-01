@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use shp_types::Hash;
+
 use crate::constants::{
     api::{DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE},
     database::DEFAULT_DATABASE_URL,
@@ -80,7 +82,7 @@ impl Default for Config {
             },
             storage_hub: StorageHubConfig {
                 rpc_url: DEFAULT_RPC_URL.to_string(),
-                msp_id: DUMMY_MSP_ID.to_string(),
+                msp_id: Hash::from_slice(&DUMMY_MSP_ID).to_string(),
                 timeout_secs: Some(DEFAULT_TIMEOUT_SECS),
                 max_concurrent_requests: Some(DEFAULT_MAX_CONCURRENT_REQUESTS),
                 verify_tls: true,

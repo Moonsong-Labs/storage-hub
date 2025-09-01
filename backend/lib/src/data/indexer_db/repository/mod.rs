@@ -25,24 +25,16 @@
 //! ```
 
 use async_trait::async_trait;
-use shc_indexer_db::{models::Bsp, OnchainBspId};
+use shc_indexer_db::{
+    models::{Bsp, Bucket, File, Msp},
+    OnchainBspId, OnchainMspId,
+};
 
 pub mod error;
 pub mod pool;
 pub mod postgres;
 
 use error::RepositoryResult;
-
-/// Represents a ProviderId, like an MSP or BSP ID
-///
-/// This is used to differentiate between the database id and the onchain id
-// TODO: replace with appropriate type from runtime
-pub struct ProviderId<'a>(pub &'a str);
-impl<'a> From<&'a str> for ProviderId<'a> {
-    fn from(value: &'a str) -> Self {
-        Self(value)
-    }
-}
 
 /// Represents an onchain Bucket ID
 ///
@@ -82,7 +74,7 @@ pub trait IndexerOps: Send + Sync {
     async fn list_bsps(&self, limit: i64, offset: i64) -> RepositoryResult<Vec<Bsp>>;
 
     /// Retrieve the specified MSP's information given its onchain id
-    async fn get_msp_by_onchain_id(&self, msp: ProviderId<'_>) -> RepositoryResult<Msp>;
+    async fn get_msp_by_onchain_id(&self, msp: &OnchainMspId) -> RepositoryResult<Msp>;
 
     /// Retrieve the information of the given bucket
     ///

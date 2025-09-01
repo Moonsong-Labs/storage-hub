@@ -15,6 +15,7 @@ diesel = { workspace = true }
 diesel-async = { workspace = true }
 headers = { workspace = true }
 hex = { workspace = true }
+hex-literal = { workspace = true }
 jsonrpsee = { workspace = true, features = ["client", "ws-client"] }
 jsonwebtoken = { workspace = true }
 parking_lot = { workspace = true }

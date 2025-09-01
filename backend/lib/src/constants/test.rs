@@ -18,6 +18,7 @@ pub mod accounts {
 
 /// Test BSP (Backup Storage Provider) data
 pub mod bsp {
+    use shc_indexer_db::OnchainBspId;
     use shp_types::Hash;
 
     /// Default BSP capacity
@@ -30,7 +31,7 @@ pub mod bsp {
     pub const DEFAULT_STAKE: i64 = 100;
 
     /// Default BSP ID
-    pub const DEFAULT_BSP_ID: Hash = Hash::zero();
+    pub const DEFAULT_BSP_ID: OnchainBspId = OnchainBspId::new(Hash::zero());
 }
 
 /// Test MSP (Main Storage Provider) data

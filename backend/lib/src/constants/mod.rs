@@ -15,6 +15,8 @@ pub mod server {
 
 /// RPC client configuration
 pub mod rpc {
+    use hex_literal::hex;
+
     /// Default RPC request timeout in seconds
     pub const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
@@ -24,8 +26,8 @@ pub mod rpc {
     /// Default RPC WebSocket URL
     pub const DEFAULT_RPC_URL: &str = "ws://localhost:9944";
 
-    pub const DUMMY_MSP_ID: &str =
-        "0x0000000000000000000000000000000000000000000000000000000000000300";
+    pub const DUMMY_MSP_ID: [u8; 32] =
+        hex!("0000000000000000000000000000000000000000000000000000000000000300");
 
     /// Timeout multiplier for simulating network delays in mocks
     pub const TIMEOUT_MULTIPLIER: u64 = 10;

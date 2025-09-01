@@ -21,12 +21,13 @@ use shc_indexer_db::OnchainBspId;
 use shc_indexer_db::{
     models::{Bsp, Bucket, File, Msp},
     schema::{bsp, bucket, file},
+    OnchainMspId,
 };
 
 #[cfg(test)]
 use crate::data::indexer_db::repository::IndexerOpsMut;
 use crate::data::indexer_db::repository::{
-    error::RepositoryResult, pool::SmartPool, BucketId, IndexerOps, ProviderId,
+    error::RepositoryResult, pool::SmartPool, BucketId, IndexerOps,
 };
 
 /// PostgreSQL repository implementation.
@@ -69,10 +70,10 @@ impl IndexerOps for Repository {
     }
 
     // ============ MSP Read Operations ============
-    async fn get_msp_by_onchain_id(&self, msp: ProviderId<'_>) -> RepositoryResult<Msp> {
+    async fn get_msp_by_onchain_id(&self, msp: &OnchainMspId) -> RepositoryResult<Msp> {
         let mut conn = self.pool.get().await?;
 
-        Msp::get_by_onchain_msp_id(&mut conn, msp.0.to_owned())
+        Msp::get_by_onchain_msp_id(&mut conn, msp.clone())
             .await
             .map_err(Into::into)
     }

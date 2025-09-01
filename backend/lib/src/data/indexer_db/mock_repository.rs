@@ -12,14 +12,16 @@ use std::{
 };
 
 use async_trait::async_trait;
-use shc_indexer_db::{models::Bsp, OnchainBspId};
 use tokio::sync::RwLock;
 
-use shc_indexer_db::models::{Bsp, Bucket, File, Msp};
+use shc_indexer_db::{
+    models::{Bsp, Bucket, File, Msp},
+    OnchainBspId, OnchainMspId,
+};
 
 use crate::data::indexer_db::repository::{
     error::{RepositoryError, RepositoryResult},
-    BucketId, IndexerOps, IndexerOpsMut, ProviderId,
+    BucketId, IndexerOps, IndexerOpsMut,
 };
 
 /// Mock repository implementation using in-memory storage
@@ -74,10 +76,10 @@ impl IndexerOps for MockRepository {
     }
 
     // ============ MSP Read Operations ============
-    async fn get_msp_by_onchain_id(&self, msp: ProviderId<'_>) -> RepositoryResult<Msp> {
+    async fn get_msp_by_onchain_id(&self, msp: &OnchainMspId) -> RepositoryResult<Msp> {
         let msps = self.msps.read().await;
         msps.values()
-            .find(|m| m.onchain_msp_id == msp.0)
+            .find(|m| &m.onchain_msp_id == msp)
             .cloned()
             .ok_or_else(|| RepositoryError::not_found("MSP"))
     }
@@ -152,9 +154,13 @@ pub mod tests {
     use bigdecimal::{BigDecimal, FromPrimitive};
     use chrono::Utc;
 
+    use shp_types::Hash;
+
     use super::*;
-    use crate::constants::rpc::DUMMY_MSP_ID;
-    use crate::constants::test::{accounts::*, bsp, bucket, file, merkle::*, msp};
+    use crate::constants::{
+        rpc::DUMMY_MSP_ID,
+        test::{accounts::*, bsp, bucket, file, merkle::*, msp},
+    };
 
     pub async fn inject_sample_bsp(repo: &MockRepository) -> i64 {
         let id = repo.next_id();
@@ -171,7 +177,7 @@ pub mod tests {
                 last_tick_proven: 0,
                 created_at: now,
                 updated_at: now,
-                onchain_bsp_id: OnchainBspId::new(DEFAULT_BSP_ID),
+                onchain_bsp_id: bsp::DEFAULT_BSP_ID.clone(),
                 merkle_root: BSP_MERKLE_ROOT.to_vec(),
             },
         );
@@ -193,7 +199,7 @@ pub mod tests {
                 value_prop: msp::DEFAULT_VALUE_PROP.to_string(),
                 created_at: now,
                 updated_at: now,
-                onchain_msp_id: DUMMY_MSP_ID.to_string(),
+                onchain_msp_id: OnchainMspId::new(Hash::from_slice(&DUMMY_MSP_ID)),
             },
         );
 
@@ -249,6 +255,7 @@ pub mod tests {
                 account: TEST_BSP_ACCOUNT_STR.as_bytes().to_vec(),
                 file_key: key.as_bytes().to_vec(),
                 bucket_id,
+                onchain_bucket_id: bucket::DEFAULT_BUCKET_ID.as_bytes().to_vec(),
                 location: file::DEFAULT_LOCATION.as_bytes().to_vec(),
                 fingerprint: file::DEFAULT_FINGERPRINT.to_vec(),
                 size: file::DEFAULT_SIZE,
@@ -296,16 +303,16 @@ pub mod tests {
 
         // Test successful retrieval
         let msp = repo
-            .get_msp_by_onchain_id(ProviderId(DUMMY_MSP_ID))
+            .get_msp_by_onchain_id(&OnchainMspId::new(Hash::from_slice(&DUMMY_MSP_ID)))
             .await
             .expect("should find MSP by onchain ID");
 
         assert_eq!(msp.id, id);
-        assert_eq!(msp.onchain_msp_id, DUMMY_MSP_ID);
+        assert_eq!(msp.onchain_msp_id.as_bytes(), &DUMMY_MSP_ID);
 
         // Test not found case
         let result = repo
-            .get_msp_by_onchain_id(ProviderId("0xnonexistent"))
+            .get_msp_by_onchain_id(&OnchainMspId::new(Hash::zero()))
             .await;
         assert!(result.is_err());
         if let Err(e) = result {

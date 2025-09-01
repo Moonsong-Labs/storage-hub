@@ -14762,6 +14762,7 @@ dependencies = [
  "futures",
  "headers",
  "hex",
+ "hex-literal",
  "jsonrpsee 0.24.9",
  "jsonwebtoken",
  "parking_lot 0.12.4",
