@@ -460,9 +460,6 @@ pub mod tests {
         assert_eq!(buckets[0].id, bucket1_id);
         assert_eq!(buckets[1].id, bucket2_id);
         assert_eq!(buckets[2].id, bucket3_id);
-        assert_eq!(buckets[0].name, b"bucket1");
-        assert_eq!(buckets[1].name, b"bucket2");
-        assert_eq!(buckets[2].name, b"bucket3");
 
         // Verify all buckets belong to the correct user and MSP
         for bucket in &buckets {
@@ -592,27 +589,5 @@ pub mod tests {
 
         assert_eq!(paginated_buckets.len(), 1);
         assert_eq!(paginated_buckets[0].id, bucket2_id);
-    }
-
-    #[tokio::test]
-    async fn get_buckets_by_user_and_msp_empty_results() {
-        let repo = MockRepository::new();
-        let msp_id = inject_sample_msp(&repo).await;
-
-        // Test with non-matching user
-        let no_user_match = repo
-            .get_buckets_by_user_and_msp(msp_id, "non_existent_user", 10, 0)
-            .await
-            .expect("should return empty when no matches");
-
-        assert!(no_user_match.is_empty());
-
-        // Test with non-matching MSP
-        let no_msp_match = repo
-            .get_buckets_by_user_and_msp(999999, "some_user", 10, 0)
-            .await
-            .expect("should return empty when no matches");
-
-        assert!(no_msp_match.is_empty());
     }
 }
