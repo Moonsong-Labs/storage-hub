@@ -12,7 +12,8 @@
     },
     "files": [
         "dist",
-        "wasm/pkg"
+        "wasm/pkg",
+        "README.md"
     ],
     "scripts": {
         "build": "node ../scripts/build.js",
