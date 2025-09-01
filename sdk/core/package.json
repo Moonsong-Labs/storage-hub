@@ -6,6 +6,12 @@
     "main": "./dist/index.js",
     "module": "./dist/index.js",
     "types": "./dist/index.d.ts",
+    "exports": {
+        ".": "./dist/index.js",
+        "./wasm/pkg/storagehub_wasm.js": "./wasm/pkg/storagehub_wasm.js",
+        "./wasm/pkg/storagehub_wasm_bg.wasm": "./wasm/pkg/storagehub_wasm_bg.wasm",
+        "./wasm/pkg/*": "./wasm/pkg/*"
+    },
     "publishConfig": {
         "access": "public",
         "registry": "https://registry.npmjs.org/"
@@ -25,12 +31,11 @@
         "test": "vitest",
         "typecheck": "tsc --noEmit",
         "coverage": "vitest run --coverage",
-        "build:wasm": "wasm-pack build ./wasm --target web --release --out-dir pkg",
-        "prepublishOnly": "pnpm run build:wasm"
+        "build:wasm": "wasm-pack build ./wasm --target web --release --out-dir pkg && rm -f ./wasm/pkg/package.json ./wasm/pkg/.gitignore",
+        "prepublishOnly": "pnpm run build:wasm && pnpm run build"
     },
     "dependencies": {
         "@polkadot/types": "^10.10.3",
-        "@storagehub/wasm": "file:./wasm/pkg",
         "ethers": "^6.15.0"
     },
     "devDependencies": {

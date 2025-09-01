@@ -95,8 +95,8 @@ export class MspClient {
     void _options;
     const form = new FormData();
 
-    const part = this.coerceToFormPart(file);
-    form.append('file', part as unknown as Blob);
+    const part = await this.coerceToFormPart(file);
+    form.append('file', part, 'file');
 
     const path = `/buckets/${encodeURIComponent(bucketId)}/upload/${encodeURIComponent(fileKey)}`;
     const authHeaders = this.withAuth();
@@ -109,14 +109,17 @@ export class MspClient {
     return res;
   }
 
-  private coerceToFormPart(
+  private async coerceToFormPart(
     file: Blob | ArrayBuffer | Uint8Array | ReadableStream<Uint8Array> | unknown,
-  ): Blob | unknown {
+  ): Promise<Blob> {
     if (typeof Blob !== 'undefined' && file instanceof Blob) return file;
     if (file instanceof Uint8Array) return new Blob([file]);
     if (typeof ArrayBuffer !== 'undefined' && file instanceof ArrayBuffer) return new Blob([file]);
-    // In Node environments, FormData accepts streams; pass-through as-is
-    return file;
+    if (file instanceof ReadableStream) {
+      const response = new Response(file);
+      return await response.blob();
+    }
+    return new Blob([file as any]);
   }
 
   /** Download a file by bucket and key. */
