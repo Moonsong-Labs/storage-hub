@@ -123,13 +123,20 @@ export class MspClient {
   async downloadByKey(
     bucketId: string,
     fileKey: string,
-    _options?: DownloadOptions,
+    options?: DownloadOptions,
   ): Promise<DownloadResult> {
-    void _options;
     const path = `/buckets/${encodeURIComponent(bucketId)}/download/${encodeURIComponent(fileKey)}`;
     const baseHeaders: Record<string, string> = { Accept: '*/*' };
+    if (options?.range) {
+      const { start, end } = options.range;
+      const rangeValue = `bytes=${start}-${end ?? ''}`;
+      baseHeaders.Range = rangeValue;
+    }
     const headers = this.withAuth(baseHeaders);
-    const res = await this.http.getRaw(path, headers ? { headers } : {});
+    const res = await this.http.getRaw(path, {
+      ...(headers ? { headers } : {}),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    });
 
     if (!res.body) {
       throw new Error('Response body is null - unable to create stream');
@@ -155,15 +162,22 @@ export class MspClient {
   async downloadByLocation(
     bucketId: string,
     filePath: string,
-    _options?: DownloadOptions,
+    options?: DownloadOptions,
   ): Promise<DownloadResult> {
-    void _options;
     const normalized = filePath.replace(/^\/+/, '');
     const encodedPath = normalized.split('/').map(encodeURIComponent).join('/');
     const path = `/buckets/${encodeURIComponent(bucketId)}/download/path/${encodedPath}`;
     const baseHeaders: Record<string, string> = { Accept: '*/*' };
+    if (options?.range) {
+      const { start, end } = options.range;
+      const rangeValue = `bytes=${start}-${end ?? ''}`;
+      baseHeaders.Range = rangeValue;
+    }
     const headers = this.withAuth(baseHeaders);
-    const res = await this.http.getRaw(path, headers ? { headers } : {});
+    const res = await this.http.getRaw(path, {
+      ...(headers ? { headers } : {}),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    });
 
     if (!res.body) {
       throw new Error('Response body is null - unable to create stream');

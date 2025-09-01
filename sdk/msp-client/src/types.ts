@@ -62,12 +62,11 @@ export interface UploadOptions {
 }
 
 export interface UploadReceipt {
-  state: UploadState;
+  status: string;
   fileKey: string;
   bucketId: string;
   fingerprint: string;
   location: string;
-  [k: string]: unknown;
 }
 
 // Auth
