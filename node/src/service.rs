@@ -83,7 +83,6 @@ use sc_consensus_babe::ImportQueueParams as BabeImportQueueParams;
 use crate::{
     cli::{self, ProviderType, StorageLayer},
     command::ProviderOptions,
-    rpc::FrontierDeps,
 };
 
 //╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
@@ -129,7 +128,10 @@ type SolochainService = sc_service::PartialComponents<
     StorageEnableBackend,
     StorageEnableSelectChain,
     sc_consensus::DefaultImportQueue<Block>,
-    StorageEnablePool<SolochainEvmRuntime>,
+    sc_transaction_pool::BasicPool<
+        sc_transaction_pool::FullChainApi<StorageEnableClient<SolochainEvmRuntime>, Block>,
+        Block,
+    >,
     (
         sc_consensus_babe::BabeBlockImport<
             Block,
@@ -942,10 +944,9 @@ where
                 pool: transaction_pool.clone(),
                 maybe_storage_hub_client_config: maybe_storage_hub_client_rpc_config.clone(),
                 command_sink: command_sink.clone(),
-                maybe_frontier_deps: None,
             };
 
-            crate::rpc::create_full::<_, _, _, ParachainRuntime>(deps).map_err(Into::into)
+            crate::rpc::create_full_parachain::<_, _, _, ParachainRuntime>(deps).map_err(Into::into)
         })
     };
 
@@ -1275,10 +1276,9 @@ where
                 pool: transaction_pool.clone(),
                 maybe_storage_hub_client_config: maybe_storage_hub_client_rpc_config.clone(),
                 command_sink: Some(command_sink.clone()),
-                maybe_frontier_deps: None,
             };
 
-            crate::rpc::create_full::<_, _, _, ParachainRuntime>(deps).map_err(Into::into)
+            crate::rpc::create_full_parachain::<_, _, _, ParachainRuntime>(deps).map_err(Into::into)
         })
     };
 
@@ -1490,10 +1490,9 @@ where
                 pool: transaction_pool.clone(),
                 maybe_storage_hub_client_config: maybe_storage_hub_client_rpc_config.clone(),
                 command_sink: None,
-                maybe_frontier_deps: None,
             };
 
-            crate::rpc::create_full::<_, _, _, ParachainRuntime>(deps).map_err(Into::into)
+            crate::rpc::create_full_parachain::<_, _, _, ParachainRuntime>(deps).map_err(Into::into)
         })
     };
 
@@ -1714,10 +1713,9 @@ where
                 pool: transaction_pool.clone(),
                 maybe_storage_hub_client_config: maybe_storage_hub_client_rpc_config.clone(),
                 command_sink: None,
-                maybe_frontier_deps: None,
             };
 
-            crate::rpc::create_full::<_, _, _, ParachainRuntime>(deps).map_err(Into::into)
+            crate::rpc::create_full_parachain::<_, _, _, ParachainRuntime>(deps).map_err(Into::into)
         })
     };
 
@@ -1816,9 +1814,7 @@ fn start_parachain_consensus(
     telemetry: Option<TelemetryHandle>,
     task_manager: &TaskManager,
     relay_chain_interface: Arc<dyn RelayChainInterface>,
-    transaction_pool: Arc<
-        sc_transaction_pool::TransactionPoolHandle<Block, StorageEnableClient<ParachainRuntime>>,
-    >,
+    transaction_pool: Arc<StorageEnablePool<ParachainRuntime>>,
     keystore: KeystorePtr,
     relay_chain_slot_duration: Duration,
     para_id: ParaId,
@@ -1834,7 +1830,7 @@ fn start_parachain_consensus(
     let proposer_factory = sc_basic_authorship::ProposerFactory::with_proof_recording(
         task_manager.spawn_handle(),
         client.clone(),
-        transaction_pool,
+        transaction_pool.clone(),
         prometheus_registry,
         telemetry.clone(),
     );
@@ -2032,17 +2028,14 @@ pub fn new_partial_solochain_evm(
 
     let select_chain = sc_consensus::LongestChain::new(backend.clone());
 
-    // Transaction pool (use builder to honour config)
-    let transaction_pool = Arc::from(
-        sc_transaction_pool::Builder::new(
-            task_manager.spawn_essential_handle(),
-            client.clone(),
-            config.role.is_authority().into(),
-        )
-        .with_options(config.transaction_pool.clone())
-        .with_prometheus(config.prometheus_registry())
-        .build(),
-    );
+    // Transaction pool (use BasicPool to access underlying graph via `.pool()` for Frontier RPC)
+    let transaction_pool = Arc::from(sc_transaction_pool::BasicPool::new_full(
+        Default::default(),
+        config.role.is_authority().into(),
+        config.prometheus_registry(),
+        task_manager.spawn_essential_handle(),
+        client.clone(),
+    ));
 
     // GRANDPA block import and link
     let (grandpa_block_import, grandpa_link) = sc_consensus_grandpa::block_import(
@@ -2279,19 +2272,47 @@ where
     let rpc_builder = {
         let client = client.clone();
         let transaction_pool = transaction_pool.clone();
-        let is_authority = is_authority_role;
+        let frontier_backend = frontier_backend.clone();
+        let storage_override = storage_override.clone();
+        let network = network.clone();
+        let sync_service = sync_service.clone();
+        let prometheus_registry = config.prometheus_registry().cloned();
+        let spawn_handle = task_manager.spawn_handle();
+        // Build default Frontier caches
+        let fee_history_cache: fc_rpc_core::types::FeeHistoryCache = Default::default();
+        let fee_history_limit: u64 = 2048;
+        let max_past_logs: u32 = 10_000;
+        let block_data_cache = Arc::new(fc_rpc::EthBlockDataCacheTask::new(
+            spawn_handle.clone(),
+            storage_override.clone(),
+            100, // log block cache
+            100, // statuses cache
+            prometheus_registry.clone(),
+        ));
         Box::new(move |_| {
-            let deps = crate::rpc::FullDeps {
-                client: client.clone(),
-                pool: transaction_pool.clone(),
-                maybe_storage_hub_client_config: maybe_storage_hub_client_rpc_config.clone(),
-                command_sink: None,
-                maybe_frontier_deps: Some(FrontierDeps::<SolochainEvmRuntime> {
-                    is_authority,
-                    _phantom: std::marker::PhantomData,
-                }),
-            };
-            crate::rpc::create_full::<_, _, _, SolochainEvmRuntime>(deps).map_err(Into::into)
+            crate::rpc::create_full_solochain_evm::<_, _, _, SolochainEvmRuntime, _>(
+                crate::rpc::SolochainEvmDeps {
+                    client: client.clone(),
+                    pool: transaction_pool.clone(),
+                    maybe_storage_hub_client_config: maybe_storage_hub_client_rpc_config.clone(),
+                    command_sink: None,
+                    network: network.clone(),
+                    sync: sync_service.clone(),
+                    overrides: storage_override.clone(),
+                    frontier_backend: match &*frontier_backend {
+                        fc_db::Backend::KeyValue(b) => b.clone(),
+                    },
+                    graph: transaction_pool.pool().clone(),
+                    block_data_cache: block_data_cache.clone(),
+                    filter_pool: Some(Default::default()),
+                    fee_history_cache: Default::default(),
+                    fee_history_limit: 2048,
+                    max_past_logs: 10_000,
+                    forced_parent_hashes: None,
+                    is_authority: is_authority_role,
+                },
+            )
+            .map_err(Into::into)
         })
     };
 
@@ -2469,8 +2490,8 @@ where
                 _block_import,
                 _grandpa_link,
                 _babe_link,
-                _frontier_backend,
-                _storage_override,
+                frontier_backend,
+                storage_override,
                 mut telemetry,
             ),
     } = new_partial_solochain_evm(&config)?;
@@ -2526,15 +2547,40 @@ where
     let rpc_builder = {
         let client = client.clone();
         let transaction_pool = transaction_pool.clone();
+        let network = network.clone();
+        let sync_service = sync_service.clone();
+        let prometheus_registry = config.prometheus_registry().cloned();
+        let spawn_handle = task_manager.spawn_handle();
         Box::new(move |_| {
-            let deps = crate::rpc::FullDeps {
-                client: client.clone(),
-                pool: transaction_pool.clone(),
-                maybe_storage_hub_client_config: maybe_storage_hub_client_rpc_config.clone(),
-                command_sink: None,
-                maybe_frontier_deps: None,
-            };
-            crate::rpc::create_full::<_, _, _, SolochainEvmRuntime>(deps).map_err(Into::into)
+            crate::rpc::create_full_solochain_evm::<_, _, _, SolochainEvmRuntime, _>(
+                crate::rpc::SolochainEvmDeps {
+                    client: client.clone(),
+                    pool: transaction_pool.clone(),
+                    maybe_storage_hub_client_config: maybe_storage_hub_client_rpc_config.clone(),
+                    command_sink: None,
+                    network: network.clone(),
+                    sync: sync_service.clone(),
+                    overrides: storage_override.clone(),
+                    frontier_backend: match &*frontier_backend {
+                        fc_db::Backend::KeyValue(b) => b.clone(),
+                    },
+                    graph: transaction_pool.pool().clone(),
+                    block_data_cache: Arc::new(fc_rpc::EthBlockDataCacheTask::new(
+                        spawn_handle.clone(),
+                        storage_override.clone(),
+                        100,
+                        100,
+                        prometheus_registry.clone(),
+                    )),
+                    filter_pool: Some(Default::default()),
+                    fee_history_cache: Default::default(),
+                    fee_history_limit: 2048,
+                    max_past_logs: 10_000,
+                    forced_parent_hashes: None,
+                    is_authority: false,
+                },
+            )
+            .map_err(Into::into)
         })
     };
 

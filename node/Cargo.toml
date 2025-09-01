@@ -142,10 +142,11 @@ fc-cli = { workspace = true }
 fc-consensus = { workspace = true }
 fc-db = { workspace = true }
 fc-mapping-sync = { workspace = true }
-fc-rpc = { workspace = true }
-fc-rpc-core = { workspace = true }
+fc-rpc = { workspace = true, features = ["txpool"] }
+fc-rpc-core = { workspace = true, features = ["txpool"] }
 fc-storage = { workspace = true }
 fp-rpc = { workspace = true }
+pallet-ethereum = { workspace = true }
 
 [build-dependencies]
 substrate-build-script-utils = { workspace = true }
