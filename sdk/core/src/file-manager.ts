@@ -4,7 +4,7 @@ import type { AccountId, H256 } from '@polkadot/types/interfaces';
 import { FileMetadata, FileTrie } from '@storagehub/wasm';
 
 export class FileManager {
-  constructor(private readonly file: { size: number; stream: () => ReadableStream<Uint8Array> }) {}
+  constructor(private readonly file: { size: number; stream: () => ReadableStream<Uint8Array> }) { }
 
   private fingerprint?: H256;
   private fileKey?: H256;
@@ -110,7 +110,7 @@ export class FileManager {
       owner.toU8a(),
       bucketId.toU8a(),
       new TextEncoder().encode(location),
-      this.file.size,
+      BigInt(this.file.size),
       fp.toU8a(),
     );
 
