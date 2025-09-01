@@ -85,31 +85,25 @@ export class HttpClient {
           : this.fetchImpl;
       const res = await fetchFn(url, init);
 
-      // If raw response requested, return it without consuming the body
-      if (options.raw) {
-        if (!res.ok) {
-          // For errors, we need to consume the body to get error details
-          const text = await res.text();
-          const maybeJson = this.parseJsonSafely(text);
-          throw new HttpError(
-            `HTTP ${res.status} for ${method} ${url}`,
-            res.status,
-            maybeJson ?? text,
-          );
-        }
-        return res as Response;
-      }
-
-      // Normal response processing - consume and parse the body
-      const text = await res.text();
-      const maybeJson = this.parseJsonSafely(text);
-
+      // For errors, consume the body to get the error details and throw
       if (!res.ok) {
+        const errorText = await res.text();
+        const maybeErrorJson = this.parseJsonSafely(text);
         throw new HttpError(
           `HTTP ${res.status} for ${method} ${url}`,
-          res.status,
-          maybeJson ?? text,
+            res.status,
+            maybeJson ?? text,
         );
+      }
+      
+      // If raw response requested, return it without consuming the body
+      if (options.raw) {
+        return res as Response;
+      } else {
+        // Normal response processing - consume and parse the body
+        const text = await res.text();
+        const maybeJson = this.parseJsonSafely(text);
+        return (maybeJson as T) ?? (text as unknown as T);
       }
 
       return (maybeJson as T) ?? (text as unknown as T);
