@@ -5,9 +5,13 @@
         "outDir": "dist",
         "module": "ESNext",
         "moduleResolution": "Bundler",
+        "baseUrl": ".",
         "paths": {
             "@storagehub-sdk/core": [
-                "../core/src"
+                "../core/dist"
+            ],
+            "@storagehub/wasm": [
+                "../core/wasm/pkg"
             ]
         }
     },

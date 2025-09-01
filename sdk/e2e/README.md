@@ -1,12 +1,12 @@
 # StorageHub E2E Tests with dAppWright + SDK
 
-End-to-end tests for StorageHub using dAppWright to automate MetaMask and the SDK’s `Eip1193Wallet` for signing.
+End-to-end tests for StorageHub SDK
 
 ## 🚀 Features
 
 - **SDK-backed flows**: Use `Eip1193Wallet.connect()`, `signMessage()`, and `sendTransaction()`
 - **Automated MetaMask**: Install, import seed, handle popups via dAppWright
-- **Headed and “headless” (Xvfb)**: Local headed and Docker/Xvfb for CI-like runs
+- **Always headed**: Tests run in headed mode; CI uses Xvfb to provide a display
 - **No chain dependency**: Tx step is initiated and then rejected (no funds required)
 
 ## 📁 Structure
@@ -17,9 +17,13 @@ sdk/e2e/
 ├── playwright.config.ts
 ├── Dockerfile
 ├── page/
-│   └── index.html          # Minimal dApp using SDK Eip1193Wallet
+│   ├── index.html          # Minimal dApp using SDK Eip1193Wallet
+│   └── msp.html            # MSP SDK debug page (buttons)
 └── tests/
-    └── metamask-sdk-sign.spec.ts
+    ├── wallet/
+    │   └── metamask-sdk-sign.spec.ts
+    └── msp/
+        └── web-page.spec.ts
 ```
 
 ## 🛠️ Setup
@@ -40,22 +44,19 @@ pnpm exec playwright install --with-deps chromium
 
 ## 🧪 Running
 
-Serve the sdk root (the test page is at `/e2e/page/index.html`):
-
-```bash
-pnpm run dev
-# serves http://localhost:3000 with sdk as document root
-```
-
 Run tests:
 
 ```bash
-# Headed
-pnpm run test:headed
+# All tests
+pnpm -C sdk build
+cd sdk/e2e && pnpm install
+pnpm exec playwright test
 
-# Headless-like via Docker (extension-friendly Xvfb)
-docker build -t storagehub-e2e -f sdk/e2e/Dockerfile .
-docker run --rm -it -p 3000:3000 storagehub-e2e
+# Only MetaMask
+pnpm exec playwright test --project metamask
+
+# Only MSP
+pnpm exec playwright test --project msp
 ```
 
 ## 🔧 How it works
@@ -81,12 +82,11 @@ docker run --rm -it -p 3000:3000 storagehub-e2e
 ## 🧰 CI notes
 
 - Build SDK before tests (`pnpm -C sdk build`).
-- Serve sdk root and wait for `/e2e/page/index.html` to be reachable.
-- Run tests with `xvfb-run -a pnpm exec playwright test` and `HEADLESS=false` so the extension loads.
+- Playwright webServer auto-starts the static server; reports/artifacts are written to `/tmp`.
+- CI runs headed browsers under Xvfb.
 
 ## ✅ Success criteria
 
 - Connect approved
 - Message signed via SDK; signature logged
 - Transaction request initiated via SDK and rejected; rejection logged
-
