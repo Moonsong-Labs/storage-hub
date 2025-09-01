@@ -544,12 +544,9 @@ pub fn run() -> Result<()> {
                                     sc_network::NetworkWorker<_, _>,
                                 >(
                                     config,
-                                    polkadot_config,
-                                    collator_options,
                                     provider_options,
                                     indexer_options,
                                     fisherman_options.clone(),
-                                    id,
                                     hwbench,
                                 )
                                 .await
@@ -630,12 +627,9 @@ pub fn run() -> Result<()> {
                                     sc_network::Litep2pNetworkBackend,
                                 >(
                                     config,
-                                    polkadot_config,
-                                    collator_options,
                                     provider_options,
                                     indexer_options,
                                     fisherman_options.clone(),
-                                    id,
                                     hwbench,
                                 )
                                 .await
