@@ -97,3 +97,33 @@ export interface DownloadResult {
   contentLength?: number | null;
   contentRange?: string | null;
 }
+
+// Buckets and files
+export interface Bucket {
+  bucketId: string;
+  name: string;
+  root: string;
+  isPublic: boolean;
+  sizeBytes: number;
+  valuePropId: string;
+  fileCount: number;
+}
+
+export type FileEntryType = 'file' | 'folder' | string;
+
+export interface FileEntry {
+  name: string;
+  type: FileEntryType;
+  sizeBytes?: number;
+  fileKey?: string;
+}
+
+export interface FileListResponse {
+  bucketId: string;
+  files: FileEntry[];
+}
+
+export interface GetFilesOptions {
+  path?: string;
+  signal?: AbortSignal;
+}

@@ -5,4 +5,7 @@ export type {
   UploadOptions,
   UploadReceipt,
   VerifyResponse,
+  Bucket,
+  FileEntry,
+  FileListResponse,
 } from './types.js';

@@ -174,6 +174,28 @@
             </div>
         </section>
 
+        <!-- Buckets section -->
+        <section class="card">
+            <h3>5) Buckets</h3>
+            <div class="row">
+                <button id="list-buckets">List Buckets</button>
+                <input id="bucketIdInput" type="text" placeholder="bucket id (optional uses first)" />
+                <button id="get-bucket">Get Bucket</button>
+                <input id="pathInput" type="text" placeholder="path (e.g., Thesis or Reports)" />
+                <button id="get-files">Get Files</button>
+            </div>
+            <div class="row">
+                <div><strong>Buckets Count:</strong> <span id="bucketsCount" class="mono"></span></div>
+            </div>
+            <div class="row">
+                <div><strong>Last Bucket:</strong> <span id="bucketJson" class="mono"></span></div>
+            </div>
+            <div class="row">
+                <div><strong>File Tree:</strong></div>
+            </div>
+            <pre id="filesJson" class="mono" style="white-space: pre-wrap; word-break: break-word;"></pre>
+        </section>
+
         <!-- Errors -->
         <section class="card">
             <h3>Errors</h3>
@@ -185,7 +207,7 @@
 
     <script>
         // Page state for Playwright assertions
-        window.__msp = { status: undefined, nonce: undefined, message: undefined, signature: undefined, token: undefined, user: undefined, uploadReceipt: undefined, downloadMeta: undefined, error: undefined };
+        window.__msp = { status: undefined, nonce: undefined, message: undefined, signature: undefined, token: undefined, user: undefined, uploadReceipt: undefined, downloadMeta: undefined, error: undefined, buckets: undefined, lastBucket: undefined, files: undefined };
 
         const statusEl = document.getElementById('status');
         const setStatus = (t) => { statusEl.textContent = t; };
@@ -445,6 +467,82 @@
                 setStatus('Download (path) failed');
                 window.__msp.error = e?.message || String(e);
                 console.error('[DOWNLOAD][PATH][ERROR]', e);
+            }
+        };
+
+        // Buckets
+        document.getElementById('list-buckets').onclick = async () => {
+            try {
+                if (!client) throw new Error('Connect MSP first');
+                setStatus('Listing buckets...');
+                if (!window.__msp.token) {
+                    const jwt = generateMockJwt();
+                    client.setToken(jwt);
+                    window.__msp.token = jwt;
+                }
+                const buckets = await client.listBuckets();
+                window.__msp.buckets = buckets;
+                document.getElementById('bucketsCount').textContent = String(buckets.length);
+                console.log('[BUCKETS][LIST]', buckets);
+                setStatus('Buckets listed');
+            } catch (e) {
+                setStatus('List buckets failed');
+                window.__msp.error = e?.message || String(e);
+                console.error('[BUCKETS][LIST][ERROR]', e);
+            }
+        };
+
+        async function getSelectedBucketId() {
+            const input = document.getElementById('bucketIdInput');
+            const val = input && typeof input.value === 'string' ? input.value.trim() : '';
+            if (val) return val;
+            if (Array.isArray(window.__msp.buckets) && window.__msp.buckets.length > 0) return window.__msp.buckets[0].bucketId;
+            return 'e2e-bucket';
+        }
+
+        document.getElementById('get-bucket').onclick = async () => {
+            try {
+                if (!client) throw new Error('Connect MSP first');
+                setStatus('Getting bucket...');
+                if (!window.__msp.token) {
+                    const jwt = generateMockJwt();
+                    client.setToken(jwt);
+                    window.__msp.token = jwt;
+                }
+                const bucketId = await getSelectedBucketId();
+                const bucket = await client.getBucket(bucketId);
+                window.__msp.lastBucket = bucket;
+                document.getElementById('bucketJson').textContent = JSON.stringify(bucket);
+                console.log('[BUCKETS][GET]', bucket);
+                setStatus('Bucket loaded');
+            } catch (e) {
+                setStatus('Get bucket failed');
+                window.__msp.error = e?.message || String(e);
+                console.error('[BUCKETS][GET][ERROR]', e);
+            }
+        };
+
+        document.getElementById('get-files').onclick = async () => {
+            try {
+                if (!client) throw new Error('Connect MSP first');
+                setStatus('Getting files...');
+                if (!window.__msp.token) {
+                    const jwt = generateMockJwt();
+                    client.setToken(jwt);
+                    window.__msp.token = jwt;
+                }
+                const bucketId = await getSelectedBucketId();
+                const pathEl = document.getElementById('pathInput');
+                const pathVal = pathEl && typeof pathEl.value === 'string' ? pathEl.value.trim() : '';
+                const files = await client.getFiles(bucketId, pathVal ? { path: pathVal } : undefined);
+                window.__msp.files = files;
+                document.getElementById('filesJson').textContent = JSON.stringify(files, null, 2);
+                console.log('[BUCKETS][FILES]', files);
+                setStatus('Files loaded');
+            } catch (e) {
+                setStatus('Get files failed');
+                window.__msp.error = e?.message || String(e);
+                console.error('[BUCKETS][FILES][ERROR]', e);
             }
         };
     </script>

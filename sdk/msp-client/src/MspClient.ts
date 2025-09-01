@@ -6,6 +6,9 @@ import type {
   UploadOptions,
   UploadReceipt,
   VerifyResponse,
+  Bucket,
+  FileListResponse,
+  GetFilesOptions,
 } from './types.js';
 import type { HttpClientConfig } from '@storagehub-sdk/core';
 import { HttpClient } from '@storagehub-sdk/core';
@@ -38,6 +41,8 @@ export class MspClient {
       ...(options?.signal !== undefined && { signal: options.signal }),
     });
   }
+
+	// Auth endpoints:
 
   /** Request a SIWE-style nonce message for the given address and chainId */
   getNonce(
@@ -75,6 +80,40 @@ export class MspClient {
     if (!this.token) return headers;
     return { ...(headers ?? {}), Authorization: `Bearer ${this.token}` };
   }
+
+  // Bucket endpoints:
+	
+	/** List all buckets for the current authenticateduser */
+  listBuckets(options?: { signal?: AbortSignal }): Promise<Bucket[]> {
+    const headers = this.withAuth();
+    return this.http.get<Bucket[]>('/buckets', {
+      ...(headers ? { headers } : {}),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    });
+  }
+
+	/** Get a specific bucket's metadata by its bucket ID */
+  getBucket(bucketId: string, options?: { signal?: AbortSignal }): Promise<Bucket> {
+    const headers = this.withAuth();
+    const path = `/buckets/${encodeURIComponent(bucketId)}`;
+    return this.http.get<Bucket>(path, {
+      ...(headers ? { headers } : {}),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    });
+  }
+
+	/** Gets the list of files and folders under the specified path for a bucket. If no path is provided, it returns the files and folders found at root. */
+  getFiles(bucketId: string, options?: GetFilesOptions): Promise<FileListResponse> {
+    const headers = this.withAuth();
+    const path = `/buckets/${encodeURIComponent(bucketId)}/files`;
+    return this.http.get<FileListResponse>(path, {
+      ...(headers ? { headers } : {}),
+      ...(options?.signal ? { signal: options.signal } : {}),
+      ...(options?.path ? { query: { path: options.path.replace(/^\/+/, '') } } : {}),
+    });
+  }
+	
+	// File endpoints:
 
   /**
    * Upload a file to a bucket for a specific fileKey using multipart/form-data.
