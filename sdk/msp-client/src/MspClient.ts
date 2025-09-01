@@ -42,7 +42,7 @@ export class MspClient {
     });
   }
 
-	// Auth endpoints:
+  // Auth endpoints:
 
   /** Request a SIWE-style nonce message for the given address and chainId */
   getNonce(
@@ -82,8 +82,8 @@ export class MspClient {
   }
 
   // Bucket endpoints:
-	
-	/** List all buckets for the current authenticateduser */
+
+  /** List all buckets for the current authenticateduser */
   listBuckets(options?: { signal?: AbortSignal }): Promise<Bucket[]> {
     const headers = this.withAuth();
     return this.http.get<Bucket[]>('/buckets', {
@@ -92,7 +92,7 @@ export class MspClient {
     });
   }
 
-	/** Get a specific bucket's metadata by its bucket ID */
+  /** Get a specific bucket's metadata by its bucket ID */
   getBucket(bucketId: string, options?: { signal?: AbortSignal }): Promise<Bucket> {
     const headers = this.withAuth();
     const path = `/buckets/${encodeURIComponent(bucketId)}`;
@@ -102,7 +102,7 @@ export class MspClient {
     });
   }
 
-	/** Gets the list of files and folders under the specified path for a bucket. If no path is provided, it returns the files and folders found at root. */
+  /** Gets the list of files and folders under the specified path for a bucket. If no path is provided, it returns the files and folders found at root. */
   getFiles(bucketId: string, options?: GetFilesOptions): Promise<FileListResponse> {
     const headers = this.withAuth();
     const path = `/buckets/${encodeURIComponent(bucketId)}/files`;
@@ -112,8 +112,8 @@ export class MspClient {
       ...(options?.path ? { query: { path: options.path.replace(/^\/+/, '') } } : {}),
     });
   }
-	
-	// File endpoints:
+
+  // File endpoints:
 
   /**
    * Upload a file to a bucket for a specific fileKey using multipart/form-data.
