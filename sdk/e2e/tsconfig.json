@@ -1,0 +1,21 @@
+{
+    "compilerOptions": {
+        "target": "ES2021",
+        "module": "ESNext",
+        "moduleResolution": "Node",
+        "types": [
+            "@playwright/test",
+            "node"
+        ],
+        "allowJs": true,
+        "checkJs": false,
+        "skipLibCheck": true,
+        "resolveJsonModule": true,
+        "esModuleInterop": true,
+        "noEmit": true
+    },
+    "include": [
+        "**/*.ts",
+        "**/*.tsx"
+    ]
+}
