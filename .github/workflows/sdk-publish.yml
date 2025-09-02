@@ -54,32 +54,22 @@ jobs:
         working-directory: sdk
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
-      NODE_AUTH_TOKEN: ${{ secrets.SH_SDK_PUBLISH_TOKEN }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       # Node & pnpm setup
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 8
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          cache: pnpm
-          registry-url: 'https://registry.npmjs.org'
-          scope: '@storagehub-sdk'
+      - name: Setup pnpm & cache
+        uses: ./.github/workflow-templates/setup-pnpm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.SH_SDK_PUBLISH_TOKEN }}
 
       # Rust toolchain with wasm target
-      - name: Setup Rust
-        uses: actions-rs/toolchain@v1
+      - name: Setup Rust toolchain (for wasm)
+        uses: actions-rust-lang/setup-rust-toolchain@v1.8
         with:
-          toolchain: stable
-          profile: minimal
           target: wasm32-unknown-unknown
-          override: true
+          cache: false
 
       # Cache wasm-pack binary
       - name: Cache wasm-pack
@@ -89,18 +79,15 @@ jobs:
           key: wasm-pack-v0.12.1
 
       - name: Install wasm-pack
-        run: |
-          if ! command -v wasm-pack >/dev/null; then
-            cargo install wasm-pack --locked
-          fi
+        run: curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
 
       # Install dependencies
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Build wasm for core
-      - name: Build wasm
-        run: pnpm --filter ./core run build:wasm
+      # Build WASM
+      - name: Build WASM
+        run: pnpm build:wasm
 
       # Set both package versions from input (no commit)
       - name: Set versions (no commit)
@@ -109,8 +96,8 @@ jobs:
           jq --arg v "$VERSION" '.version=$v' msp-client/package.json > msp-client/package.json.tmp && mv msp-client/package.json.tmp msp-client/package.json
 
       # Build packages
-      - name: Build packages
-        run: pnpm run build
+      - name: Build
+        run: pnpm build
 
       # Preflight publish (dry-run)
       - name: Preflight dry-run publish
