@@ -8,9 +8,11 @@
     <script type="importmap">
     {
       "imports": {
-        "@storagehub-sdk/msp-client": "/msp-client/dist/index.js",
-        "@storagehub-sdk/core": "/core/dist/index.js",
-        "@storagehub/wasm": "/core/wasm/pkg/storagehub_wasm.js",
+        "@storagehub-sdk/msp-client": "http://localhost:3001/msp-client/dist/index.js",
+        "@storagehub-sdk/core": "http://localhost:3001/core/dist/index.js",
+        "@storagehub/wasm": "http://localhost:3001/core/wasm/pkg/storagehub_wasm.js",
+        "@polkadot/types": "https://cdn.jsdelivr.net/npm/@polkadot/types@10.9.1/+esm",
+        "@polkadot/types/interfaces": "https://cdn.jsdelivr.net/npm/@polkadot/types@10.9.1/interfaces/+esm",
         "ethers": "https://cdn.jsdelivr.net/npm/ethers@6.15.0/+esm"
       }
     }
@@ -262,7 +264,7 @@
         // Optional: initialize WASM (for core types if needed by the browser)
         (async () => {
             try {
-                const initWasm = (await import('/core/wasm/pkg/storagehub_wasm.js')).default;
+                const { initWasm } = await import('/core/dist/index.js');
                 await initWasm();
                 console.log('WASM ready');
             } catch (e) {

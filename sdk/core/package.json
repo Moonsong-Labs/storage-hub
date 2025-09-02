@@ -6,9 +6,18 @@
 	"main": "./dist/index.js",
 	"module": "./dist/index.js",
 	"types": "./dist/index.d.ts",
+	"exports": {
+		".": "./dist/index.js",
+		"./wasm/pkg/*": "./wasm/pkg/*"
+	},
+	"publishConfig": {
+		"access": "public",
+		"registry": "https://registry.npmjs.org/"
+	},
 	"files": [
 		"dist",
-		"wasm/pkg"
+		"wasm/pkg",
+		"README.md"
 	],
 	"scripts": {
 		"build": "node ../scripts/build.js",
@@ -21,12 +30,10 @@
 		"test": "vitest",
 		"typecheck": "tsc --noEmit",
 		"coverage": "vitest run --coverage",
-		"build:wasm": "wasm-pack build ./wasm --target web --release --out-dir pkg",
-		"preinstall": "pnpm run build:wasm"
+		"build:wasm": "wasm-pack build ./wasm --target web --release --out-dir pkg && rm -f ./wasm/pkg/package.json ./wasm/pkg/.gitignore"
 	},
 	"dependencies": {
 		"@polkadot/types": "^10.10.3",
-		"@storagehub/wasm": "file:./wasm/pkg",
 		"ethers": "^6.15.0"
 	},
 	"devDependencies": {

@@ -1,7 +1,7 @@
 import { CHUNK_SIZE } from './constants';
+import { FileMetadata, FileTrie } from './wasm.js';
 import { TypeRegistry } from '@polkadot/types';
 import type { AccountId, H256 } from '@polkadot/types/interfaces';
-import { FileMetadata, FileTrie } from '@storagehub/wasm';
 
 export class FileManager {
   constructor(private readonly file: { size: number; stream: () => ReadableStream<Uint8Array> }) {}
@@ -110,7 +110,7 @@ export class FileManager {
       owner.toU8a(),
       bucketId.toU8a(),
       new TextEncoder().encode(location),
-      this.file.size,
+      BigInt(this.file.size),
       fp.toU8a(),
     );
 
