@@ -455,12 +455,6 @@ pub fn run() -> Result<()> {
                     }))
                     .flatten();
 
-                let para_id = chain_spec::Extensions::try_get(&*config.chain_spec)
-                    .map(|e| e.para_id)
-                    .ok_or("Could not find parachain ID in chain-spec.")?;
-
-                let id = ParaId::from(para_id);
-
                 info!(
                     "Is collating: {}",
                     if config.role.is_authority() {
@@ -477,6 +471,12 @@ pub fn run() -> Result<()> {
                     sc_network::config::NetworkBackendType::Libp2p => {
                         if dev_service {
                             if config.chain_spec.is_parachain() {
+                                let para_id = chain_spec::Extensions::try_get(&*config.chain_spec)
+                                    .map(|e| e.para_id)
+                                    .ok_or("Could not find parachain ID in chain-spec.")?;
+
+                                let id = ParaId::from(para_id);
+
                                 crate::service::start_dev_parachain_node::<
                                     sc_network::NetworkWorker<_, _>,
                                 >(
@@ -499,8 +499,6 @@ pub fn run() -> Result<()> {
                                     indexer_options,
                                     fisherman_options.clone(),
                                     hwbench,
-                                    id,
-                                    cli.run.sealing,
                                 )
                                 .await
                                 .map_err(Into::into)
@@ -524,6 +522,12 @@ pub fn run() -> Result<()> {
                             .map_err(|err| format!("Relay chain argument error: {}", err))?;
 
                             if config.chain_spec.is_parachain() {
+                                let para_id = chain_spec::Extensions::try_get(&*config.chain_spec)
+                                    .map(|e| e.para_id)
+                                    .ok_or("Could not find parachain ID in chain-spec.")?;
+
+                                let id = ParaId::from(para_id);
+
                                 crate::service::start_parachain_node::<
                                     sc_network::NetworkWorker<_, _>,
                                 >(
@@ -560,6 +564,12 @@ pub fn run() -> Result<()> {
                     sc_network::config::NetworkBackendType::Litep2p => {
                         if dev_service {
                             if config.chain_spec.is_parachain() {
+                                let para_id = chain_spec::Extensions::try_get(&*config.chain_spec)
+                                    .map(|e| e.para_id)
+                                    .ok_or("Could not find parachain ID in chain-spec.")?;
+
+                                let id = ParaId::from(para_id);
+
                                 crate::service::start_dev_parachain_node::<
                                     sc_network::Litep2pNetworkBackend,
                                 >(
@@ -582,8 +592,6 @@ pub fn run() -> Result<()> {
                                     indexer_options,
                                     fisherman_options.clone(),
                                     hwbench,
-                                    id,
-                                    cli.run.sealing,
                                 )
                                 .await
                                 .map_err(Into::into)
@@ -607,6 +615,12 @@ pub fn run() -> Result<()> {
                             .map_err(|err| format!("Relay chain argument error: {}", err))?;
 
                             if config.chain_spec.is_parachain() {
+                                let para_id = chain_spec::Extensions::try_get(&*config.chain_spec)
+                                    .map(|e| e.para_id)
+                                    .ok_or("Could not find parachain ID in chain-spec.")?;
+
+                                let id = ParaId::from(para_id);
+
                                 crate::service::start_parachain_node::<
                                     sc_network::Litep2pNetworkBackend,
                                 >(
