@@ -29,7 +29,7 @@
         "test": "vitest",
         "typecheck": "tsc --noEmit",
         "coverage": "vitest run --coverage",
-        "build:wasm": "wasm-pack build ./wasm --target web --release --out-dir pkg && rm -f ./wasm/pkg/package.json"
+        "build:wasm": "wasm-pack build ./wasm --target web --release --out-dir pkg && rm -f ./wasm/pkg/package.json ./wasm/pkg/.gitignore"
     },
     "dependencies": {
         "@polkadot/types": "^10.10.3",
