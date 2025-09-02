@@ -50,11 +50,11 @@ async function main() {
 
 	// Get files of the root folder of the bucket
 	const rootFiles = await client.getFiles(bucketId);
-	console.log('Root files:', files);
+	console.log('Root files:', rootFiles);
 
 	// Get files of the `/Thesis/` folder of the bucket
-	const files = await client.getFiles(bucketId, { path: '/Thesis/' });
-	console.log('Thesisfolder files:', files);
+	const thesisFiles = await client.getFiles(bucketId, { path: '/Thesis/' });
+	console.log('Thesisfolder files:', thesisFiles);
 }
 
 main().catch((err) => {
