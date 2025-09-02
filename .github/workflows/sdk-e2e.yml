@@ -1,4 +1,4 @@
-name: E2E DappWright (MetaMask)
+name: StorageHub SDK - E2E tests
 
 on:
   pull_request:
@@ -16,7 +16,8 @@ env:
   HEADLESS: 'false'
 
 jobs:
-  e2e-tests:
+  e2e-wallet-metamask:
+    name: E2E Wallet Tests (MetaMask)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -66,12 +67,12 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-wallet-metamask
           path: /tmp/playwright-report/
           retention-days: 14
 
-  e2e-msp-web:
-    name: MSP E2E (web, mocks)
+  e2e-backend-msp:
+    name: E2E Backend Tests (MSP Client)
     runs-on: ubuntu-latest
     env:
       HEADLESS: 'false'
@@ -131,10 +132,10 @@ jobs:
         working-directory: sdk/e2e
         run: xvfb-run -a pnpm exec playwright test --project msp
 
-      - name: Upload Playwright report (MSP)
+      - name: Upload Playwright report (Backend MSP)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-msp
+          name: playwright-report-backend-msp
           path: /tmp/playwright-report/
           retention-days: 14
