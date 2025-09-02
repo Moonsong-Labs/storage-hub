@@ -1891,8 +1891,6 @@ pub async fn start_dev_solochain_evm_node<Network: NetworkBackend<OpaqueBlock, B
     indexer_options: Option<IndexerOptions>,
     fisherman_options: Option<FishermanOptions>,
     hwbench: Option<sc_sysinfo::HwBench>,
-    para_id: ParaId,
-    sealing: cli::Sealing,
 ) -> sc_service::error::Result<TaskManager> {
     todo!("Not implemented")
 }
@@ -2278,10 +2276,6 @@ where
         let sync_service = sync_service.clone();
         let prometheus_registry = config.prometheus_registry().cloned();
         let spawn_handle = task_manager.spawn_handle();
-        // Build default Frontier caches
-        let fee_history_cache: fc_rpc_core::types::FeeHistoryCache = Default::default();
-        let fee_history_limit: u64 = 2048;
-        let max_past_logs: u32 = 10_000;
         let block_data_cache = Arc::new(fc_rpc::EthBlockDataCacheTask::new(
             spawn_handle.clone(),
             storage_override.clone(),

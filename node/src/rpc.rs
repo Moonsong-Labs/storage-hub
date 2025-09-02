@@ -16,7 +16,10 @@ use sc_network_sync::SyncingService;
 use sc_rpc::DenyUnsafe;
 use sc_transaction_pool_api::TransactionPool;
 use shc_client::types::FileStorageT;
-use shc_common::{traits::StorageEnableRuntime, types::ParachainClient};
+use shc_common::{
+    traits::StorageEnableRuntime,
+    types::{OpaqueBlock, ParachainClient},
+};
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_rpc::{StorageHubClientApiServer, StorageHubClientRpc, StorageHubClientRpcConfig};
 use shr_solochain_evm::configs::time;
@@ -67,7 +70,7 @@ where
 
     if let Some(storage_hub_client_config) = maybe_storage_hub_client_config {
         io.merge(
-            StorageHubClientRpc::<FL, FSH, Runtime, shc_common::types::OpaqueBlock>::new(
+            StorageHubClientRpc::<FL, FSH, Runtime, OpaqueBlock>::new(
                 client,
                 storage_hub_client_config,
             )
@@ -93,7 +96,7 @@ where
 pub struct SolochainEvmDeps<P, FL, FS, Runtime, A>
 where
     Runtime: StorageEnableRuntime,
-    A: sc_transaction_pool::ChainApi<Block = shc_common::types::OpaqueBlock>,
+    A: sc_transaction_pool::ChainApi<Block = OpaqueBlock>,
 {
     pub client: Arc<ParachainClient<Runtime::RuntimeApi>>,
     pub pool: Arc<P>,
@@ -102,11 +105,11 @@ where
 
     // Frontier deps
     pub network: Arc<dyn sc_network::service::traits::NetworkService>,
-    pub sync: Arc<SyncingService<shc_common::types::OpaqueBlock>>,
-    pub overrides: Arc<dyn fc_storage::StorageOverride<shc_common::types::OpaqueBlock>>,
-    pub frontier_backend: Arc<dyn fc_api::Backend<shc_common::types::OpaqueBlock>>,
+    pub sync: Arc<SyncingService<OpaqueBlock>>,
+    pub overrides: Arc<dyn fc_storage::StorageOverride<OpaqueBlock>>,
+    pub frontier_backend: Arc<dyn fc_api::Backend<OpaqueBlock>>,
     pub graph: Arc<sc_transaction_pool::Pool<A>>,
-    pub block_data_cache: Arc<fc_rpc::EthBlockDataCacheTask<shc_common::types::OpaqueBlock>>,
+    pub block_data_cache: Arc<fc_rpc::EthBlockDataCacheTask<OpaqueBlock>>,
     pub filter_pool: Option<fc_rpc_core::types::FilterPool>,
     pub fee_history_cache: fc_rpc_core::types::FeeHistoryCache,
     pub fee_history_limit: u64,
@@ -120,31 +123,25 @@ pub fn create_full_solochain_evm<P, FL, FSH, Runtime, A>(
 ) -> Result<RpcExtension, Box<dyn std::error::Error + Send + Sync>>
 where
     Runtime: StorageEnableRuntime,
-    P: sc_transaction_pool_api::TransactionPool<Block = shc_common::types::OpaqueBlock> + 'static,
+    P: sc_transaction_pool_api::TransactionPool<Block = OpaqueBlock> + 'static,
     FL: FileStorageT,
     FSH: ForestStorageHandler<Runtime> + Send + Sync + 'static,
-    A: sc_transaction_pool::ChainApi<Block = shc_common::types::OpaqueBlock> + 'static,
-    ParachainClient<Runtime::RuntimeApi>:
-        ProvideRuntimeApi<shc_common::types::OpaqueBlock>
-            + sc_client_api::HeaderBackend<shc_common::types::OpaqueBlock>
-            + sc_client_api::UsageProvider<shc_common::types::OpaqueBlock>
-            + sc_client_api::blockchain::HeaderMetadata<
-                shc_common::types::OpaqueBlock,
-                Error = sp_blockchain::Error,
-            >
-            + 'static,
-    <ParachainClient<Runtime::RuntimeApi> as ProvideRuntimeApi<shc_common::types::OpaqueBlock>>::Api:
-        fp_rpc::EthereumRuntimeRPCApi<shc_common::types::OpaqueBlock>
-            + fp_rpc::ConvertTransactionRuntimeApi<shc_common::types::OpaqueBlock>
-            + sp_block_builder::BlockBuilder<shc_common::types::OpaqueBlock>,
+    A: sc_transaction_pool::ChainApi<Block = OpaqueBlock> + 'static,
+    ParachainClient<Runtime::RuntimeApi>: ProvideRuntimeApi<OpaqueBlock>
+        + sc_client_api::HeaderBackend<OpaqueBlock>
+        + sc_client_api::UsageProvider<OpaqueBlock>
+        + sc_client_api::blockchain::HeaderMetadata<OpaqueBlock, Error = sp_blockchain::Error>
+        + 'static,
+    <ParachainClient<Runtime::RuntimeApi> as ProvideRuntimeApi<OpaqueBlock>>::Api:
+        fp_rpc::EthereumRuntimeRPCApi<OpaqueBlock>
+            + fp_rpc::ConvertTransactionRuntimeApi<OpaqueBlock>
+            + sp_block_builder::BlockBuilder<OpaqueBlock>,
 {
     // Frontier RPC traits
     use fc_rpc::{Eth, EthFilter, Net, Web3};
     use fc_rpc_core::{
         EthApiServer, EthFilterApiServer, NetApiServer, TxPoolApiServer, Web3ApiServer,
     };
-
-    type Block = shc_common::types::OpaqueBlock;
 
     let SolochainEvmDeps {
         client,
