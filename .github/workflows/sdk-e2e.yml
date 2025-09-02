@@ -57,16 +57,6 @@ jobs:
         run: |
           pnpm exec playwright install --with-deps chromium
 
-      - name: Start dApp server (sdk root)
-        working-directory: sdk
-        run: |
-          nohup python3 -m http.server 3000 --directory . > /dev/null 2>&1 &
-          echo "Waiting for http://localhost:3000/e2e/page/index.html ..."
-          for i in {1..60}; do
-            if curl -sSf http://localhost:3000/e2e/page/index.html > /dev/null; then echo "Server is up"; break; fi
-            sleep 1
-          done
-
       - name: Run Playwright tests (headless via xvfb) (sdk/e2e)
         working-directory: sdk/e2e
         run: |
