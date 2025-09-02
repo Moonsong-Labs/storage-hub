@@ -119,7 +119,7 @@ export class MspClient {
       const response = new Response(file);
       return await response.blob();
     }
-    return new Blob([file as any]);
+    return new Blob([file as BlobPart]);
   }
 
   /** Download a file by bucket and key. */

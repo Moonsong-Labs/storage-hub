@@ -1,10 +1,10 @@
 import { CHUNK_SIZE } from './constants';
+import { FileMetadata, FileTrie } from './wasm.js';
 import { TypeRegistry } from '@polkadot/types';
 import type { AccountId, H256 } from '@polkadot/types/interfaces';
-import { FileMetadata, FileTrie } from './wasm.js';
 
 export class FileManager {
-  constructor(private readonly file: { size: number; stream: () => ReadableStream<Uint8Array> }) { }
+  constructor(private readonly file: { size: number; stream: () => ReadableStream<Uint8Array> }) {}
 
   private fingerprint?: H256;
   private fileKey?: H256;

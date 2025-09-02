@@ -20,5 +20,3 @@ export async function initWasm(): Promise<void> {
 
   initialized = true;
 }
-
-
