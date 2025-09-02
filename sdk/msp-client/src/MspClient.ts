@@ -101,16 +101,16 @@ export class MspClient {
         path,
         authHeaders
           ? {
-            body: file,
-            headers: {
-              ...authHeaders,
-              'Content-Type': 'application/octet-stream'
+              body: file,
+              headers: {
+                ...authHeaders,
+                'Content-Type': 'application/octet-stream',
+              },
             }
-          }
           : {
-            body: file,
-            headers: { 'Content-Type': 'application/octet-stream' }
-          },
+              body: file,
+              headers: { 'Content-Type': 'application/octet-stream' },
+            },
       );
       return res;
     }
@@ -129,9 +129,7 @@ export class MspClient {
     return res;
   }
 
-  private async coerceToFormPart(
-    file: Blob | ArrayBuffer | Uint8Array | unknown,
-  ): Promise<Blob> {
+  private async coerceToFormPart(file: Blob | ArrayBuffer | Uint8Array | unknown): Promise<Blob> {
     if (typeof Blob !== 'undefined' && file instanceof Blob) return file;
     if (file instanceof Uint8Array) return new Blob([file]);
     if (typeof ArrayBuffer !== 'undefined' && file instanceof ArrayBuffer) return new Blob([file]);
