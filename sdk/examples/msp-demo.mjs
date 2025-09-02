@@ -39,6 +39,22 @@ async function main() {
   Readable.fromWeb(download.stream).pipe(out);
   await new Promise((resolve, reject) => out.on('finish', resolve).on('error', reject));
   console.log('download status:', download.status);
+
+	// List buckets
+	const buckets = await client.listBuckets();
+	console.log('Buckets:', buckets);
+
+	// Get bucket metadata
+	const bucket = await client.getBucket(bucketId);
+	console.log('Bucket metadata:', bucket);
+
+	// Get files of the root folder of the bucket
+	const rootFiles = await client.getFiles(bucketId);
+	console.log('Root files:', files);
+
+	// Get files of the `/Thesis/` folder of the bucket
+	const files = await client.getFiles(bucketId, { path: '/Thesis/' });
+	console.log('Thesisfolder files:', files);
 }
 
 main().catch((err) => {
