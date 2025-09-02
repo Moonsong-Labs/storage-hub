@@ -8,8 +8,6 @@
     "types": "./dist/index.d.ts",
     "exports": {
         ".": "./dist/index.js",
-        "./wasm/pkg/storagehub_wasm.js": "./wasm/pkg/storagehub_wasm.js",
-        "./wasm/pkg/storagehub_wasm_bg.wasm": "./wasm/pkg/storagehub_wasm_bg.wasm",
         "./wasm/pkg/*": "./wasm/pkg/*"
     },
     "publishConfig": {
@@ -31,7 +29,7 @@
         "test": "vitest",
         "typecheck": "tsc --noEmit",
         "coverage": "vitest run --coverage",
-        "build:wasm": "wasm-pack build ./wasm --target web --release --out-dir pkg && rm -f ./wasm/pkg/package.json",
+        "build:wasm": "wasm-pack build ./wasm --target web --release --out-dir pkg && rm -f ./wasm/pkg/package.json"
     },
     "dependencies": {
         "@polkadot/types": "^10.10.3",
