@@ -40,6 +40,10 @@ jobs:
         working-directory: sdk
         run: pnpm install
 
+      - name: Build WASM
+        working-directory: sdk
+        run: pnpm build:wasm
+
       - name: Build SDK (core dist + wasm)
         working-directory: sdk
         run: pnpm build
@@ -108,6 +112,10 @@ jobs:
       - name: Install dependencies (sdk workspace, no scripts)
         working-directory: sdk
         run: pnpm install
+
+      - name: Build WASM
+        working-directory: sdk
+        run: pnpm build:wasm
 
       - name: Build SDK (core dist + types + msp-client)
         working-directory: sdk

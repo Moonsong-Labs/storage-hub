@@ -61,6 +61,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      # Build WASM
+      - name: Build WASM
+        run: pnpm build:wasm
+
       # Build packages
       - name: Build
         run: pnpm build
