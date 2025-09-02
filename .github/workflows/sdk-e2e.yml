@@ -1,4 +1,4 @@
-name: E2E DappWright (MetaMask)
+name: StorageHub SDK - E2E tests
 
 on:
   pull_request:
@@ -16,7 +16,8 @@ env:
   HEADLESS: 'false'
 
 jobs:
-  e2e-tests:
+  e2e-wallet-metamask:
+    name: E2E Wallet Tests (MetaMask)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -40,7 +41,11 @@ jobs:
         working-directory: sdk
         run: pnpm install
 
-      - name: Build SDK (core dist + wasm)
+      - name: Build WASM
+        working-directory: sdk
+        run: pnpm build:wasm
+
+      - name: Build SDK (core dist)
         working-directory: sdk
         run: pnpm build
 
@@ -53,16 +58,6 @@ jobs:
         run: |
           pnpm exec playwright install --with-deps chromium
 
-      - name: Start dApp server (sdk root)
-        working-directory: sdk
-        run: |
-          nohup python3 -m http.server 3000 --directory . > /dev/null 2>&1 &
-          echo "Waiting for http://localhost:3000/e2e/page/index.html ..."
-          for i in {1..60}; do
-            if curl -sSf http://localhost:3000/e2e/page/index.html > /dev/null; then echo "Server is up"; break; fi
-            sleep 1
-          done
-
       - name: Run Playwright tests (headless via xvfb) (sdk/e2e)
         working-directory: sdk/e2e
         run: |
@@ -72,12 +67,12 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-wallet-metamask
           path: /tmp/playwright-report/
           retention-days: 14
 
-  e2e-msp-web:
-    name: MSP E2E (web, mocks)
+  e2e-backend-msp:
+    name: E2E Backend Tests (MSP Client)
     runs-on: ubuntu-latest
     env:
       HEADLESS: 'false'
@@ -109,6 +104,10 @@ jobs:
         working-directory: sdk
         run: pnpm install
 
+      - name: Build WASM
+        working-directory: sdk
+        run: pnpm build:wasm
+
       - name: Build SDK (core dist + types + msp-client)
         working-directory: sdk
         run: pnpm build
@@ -133,10 +132,10 @@ jobs:
         working-directory: sdk/e2e
         run: xvfb-run -a pnpm exec playwright test --project msp
 
-      - name: Upload Playwright report (MSP)
+      - name: Upload Playwright report (Backend MSP)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-msp
+          name: playwright-report-backend-msp
           path: /tmp/playwright-report/
           retention-days: 14

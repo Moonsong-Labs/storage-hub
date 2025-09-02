@@ -50,9 +50,6 @@ importers:
       '@polkadot/types':
         specifier: ^10.10.3
         version: 10.13.1
-      '@storagehub/wasm':
-        specifier: file:./wasm/pkg
-        version: file:core/wasm/pkg
       ethers:
         specifier: ^6.15.0
         version: 6.15.0
@@ -2736,8 +2733,3 @@ packages:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
     dev: true
-
-  file:core/wasm/pkg:
-    resolution: {directory: core/wasm/pkg, type: directory}
-    name: pkg
-    dev: false

@@ -1,51 +1,40 @@
-# StorageHub TypeScript SDK
+## StorageHub SDK
 
-> Early scaffold – subject to change as development continues.
+Developer-friendly SDK to integrate with the StorageHub network without learning internal details (nodes, pallets, EVM precompiles). The SDK is split into two packages for convenient separation of concerns: `@storagehub-sdk/core` provides backend‑agnostic primitives, while `@storagehub-sdk/msp-client` contains MSP‑specific APIs. Both package run in both browser and Node.js environments.
 
----
+### Packages
+- **@storagehub-sdk/core**
+  - Backend‑agnostic building blocks (wallets, EIP‑1193, precompile helpers bridging Substrate↔EVM, Merkle/WASM utilities, HttpClient, shared types).
+  - Read more: `sdk/core/README.md`.
+  - Includes: EVM account‑typed helpers, WASM‑backed file utilities, and stable primitives usable without any backend.
+  - Use for: signing, Merkle/proofs, precompile calls, low‑level HTTP, shared types.
+- **@storagehub-sdk/msp-client**
+  - MSP‑specific client (health, auth nonce/verify, upload/download endpoints). All MSP‑tied logic lives here.
+  - Read more: `sdk/msp-client/README.md`.
+  - Includes: REST contracts for MSP, token handling, streaming/multipart upload and download helpers.
+  - Use for: talking to an MSP backend (auth + file transfer).
 
-## Prerequisites
+### Why this separation?
+- **Abstraction boundary**: Core = stable, typed primitives. MSP client = backend contracts and token handling.
+- **Portability**: Core works in browser and Node.js, independent of a backend.
+- **Independent evolution**: MSP endpoints can change without affecting core primitives.
 
-1. **Node.js** ≥ 18 (recommended 20+)
-2. **pnpm** ≥ 8 – `npm i -g pnpm`
-3. **Rust toolchain** – <https://rustup.rs>
-4. **WASM target & tool** (one-time):
-   ```bash
-   rustup target add wasm32-unknown-unknown
-   cargo install wasm-pack
-   ```
+### Choosing a package
+- Building features that only need chain primitives or browser wallets → start with `@storagehub-sdk/core`.
+- Integrating MSP REST (auth, upload/download) → add `@storagehub-sdk/msp-client`.
+- Most real apps will use both: core for signing/proofs and msp-client for data transfer.
 
----
+### Examples
+Hands‑on examples are available under `sdk/examples/`:
+- `core-demo.mjs` – HttpClient (raw query), LocalWallet, FileManager getFingerprint
+- `msp-demo.mjs` – MSP connect, auth (nonce/verify), upload/download
+See `sdk/examples/README.md` for how to run them.
 
-## Quick start
+### Environments
+- **Browser**: first‑class support (auto‑bound `fetch`) and EIP‑1193 wallets.
+- **Node.js (LTS 18+)**: supported; older Node may require a `fetch` polyfill.
 
-```bash
-cd sdk
-pnpm install           # builds the WASM crate automatically
-pnpm run build
-```
-
-### Smoke-test the WASM helper
-
-```bash
-node -e "import('@storagehub/sdk').then(m => console.log('2+3 =', m.add(2,3)))"
-# → 2+3 = 5
-```
-
----
-
-## Scripts
-
-| Command | Description |
-|---------|-------------|
-| `pnpm run build:wasm` | Compile the Rust crate → `wasm/pkg` (runs automatically on install) |
-| `pnpm run build`      | Bundle TypeScript → `dist/` |
-| `pnpm test`           | Run Vitest unit tests |
-| `scripts/clean-install-test.sh` | Full clean build & test cycle |
-
----
-
-## Folder structure
+### Folder structure
 
 ```
 sdk/ – workspace root, pnpm workspace + shared tooling
