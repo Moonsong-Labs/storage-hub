@@ -73,6 +73,15 @@ importers:
         specifier: ^1.54.2
         version: 1.55.0
 
+  examples:
+    dependencies:
+      '@storagehub-sdk/core':
+        specifier: ^0.0.2
+        version: 0.0.2
+      '@storagehub-sdk/msp-client':
+        specifier: ^0.0.2
+        version: 0.0.2
+
   msp-client:
     dependencies:
       '@storagehub-sdk/core':
@@ -590,6 +599,14 @@ packages:
 
   '@scure/base@1.2.6':
     resolution: {integrity: sha512-g/nm5FgUa//MCj1gV09zTJTaM6KBAHqLN907YVQqf7zC49+DcO4B1so4ZX07Ef10Twr6nuqYEH9GEggFXA4Fmg==}
+
+  '@storagehub-sdk/core@0.0.2':
+    resolution: {integrity: sha512-rVDeSXExH8IoMX1PITtLkbVQwpc76t2j8lklb55EvaziSHCmedNDdFZCqVS2HTENqGBL3YOKusLAxGr1TH9kWQ==}
+    engines: {node: '>=22'}
+
+  '@storagehub-sdk/msp-client@0.0.2':
+    resolution: {integrity: sha512-RM5cap++6t67ZXY/T36cMcML1/i3RYeTxyRQj8V/FlhytopH0XBftZmKXISOlT9wN5N43SMNLl9/g/aqCIKzSA==}
+    engines: {node: '>=22'}
 
   '@substrate/ss58-registry@1.51.0':
     resolution: {integrity: sha512-TWDurLiPxndFgKjVavCniytBIw+t4ViOi7TYp9h/D0NMmkEc9klFTo+827eyEJ0lELpqO207Ey7uGxUa+BS1jQ==}
@@ -2006,6 +2023,21 @@ snapshots:
     optional: true
 
   '@scure/base@1.2.6': {}
+
+  '@storagehub-sdk/core@0.0.2':
+    dependencies:
+      '@polkadot/types': 10.13.1
+      ethers: 6.15.0
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
+  '@storagehub-sdk/msp-client@0.0.2':
+    dependencies:
+      '@storagehub-sdk/core': 0.0.2
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   '@substrate/ss58-registry@1.51.0': {}
 
