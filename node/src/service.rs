@@ -2091,7 +2091,7 @@ pub fn new_partial_solochain_evm(
 
     // Import queue (BABE)
     let slot_duration = babe_link.config().slot_duration();
-    let (import_queue, _babe_worker_handle) = sc_consensus_babe::import_queue(
+    let (import_queue, babe_worker_handle) = sc_consensus_babe::import_queue(
         BabeImportQueueParams {
             link: babe_link.clone(),
             block_import: block_import.clone(),
@@ -2112,6 +2112,9 @@ pub fn new_partial_solochain_evm(
             offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(transaction_pool.clone()),
         },
     )?;
+
+    // TODO: Wire up to RPC
+    std::mem::forget(babe_worker_handle);
 
     Ok(sc_service::PartialComponents {
         client,
