@@ -9,7 +9,7 @@ The `@storagehub-sdk/msp-client` is a TypeScript client library that provides a 
 - **File Storage & Retrieval**: Upload and download files to/from StorageHub MSP services
 - **Authentication**: SIWE-style (Sign-In With Ethereum) authentication with MSP providers
 - **Health Monitoring**: Check MSP service availability and status
-- **Bucket Management**: Interact with storage buckets and file keys
+- **Bucket Management**: Interact with storage buckets, listing the existent ones, getting their metadata and the files they contain
 
 This package is built on top of `@storagehub-sdk/core` and provides a more convenient API for common MSP operations, abstracting away the lower-level details.
 
@@ -99,6 +99,22 @@ await new Promise((resolve, reject) => {
 
 console.log('File downloaded successfully to:', outputPath);
 console.log('Download status:', download.status);
+
+// 6. List the buckets of the currently authenticated user
+const buckets = await client.listBuckets();
+console.log('Buckets:', buckets);
+
+// 7. Get the metadata of a specific bucket
+const bucket = await client.getBucket(bucketId);
+console.log('Bucket:', bucket);
+
+// 8. Get the files of the root folder of a specific bucket
+const files = await client.getFiles(bucketId);
+console.log('Root files:', files);
+
+// 9. Get the files of a specific folder of a specific bucket
+const files = await client.getFiles(bucketId, { path: '/path/to/folder' });
+console.log('Folder files:', files);
 ```
 
 ## API Reference
@@ -127,3 +143,10 @@ console.log('Download status:', download.status);
   - Returns: `{ stream: ReadableStream, status: string }`
 - **`downloadByLocation(bucketId, filePath)`** - Download file by bucket and path
   - Returns: `{ stream: ReadableStream, status: string }`
+- **`listBuckets()`** - List all buckets of the currently authenticated user
+- **`getBucket(bucketId)`** - Get the metadata of a specific bucket
+- **`getFiles(bucketId, options?)`** - Get the files of a specific bucket
+  - `bucketId: string` - Storage bucket identifier
+  - `options?: { path?: string, signal?: AbortSignal }` - Optional parameters
+    - `path?: string` - Path to the folder to get the files from
+    - `signal?: AbortSignal` - Abort signal to cancel the request
