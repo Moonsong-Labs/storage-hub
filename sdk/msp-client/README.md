@@ -60,6 +60,3 @@ console.log('status', download.status);
 - `uploadFile(bucketId, fileKey, file)`
 - `downloadByKey(bucketId, fileKey)`
 - `downloadByLocation(bucketId, filePath)`
-
-## License
-GPL-3.0 (see LICENSE)

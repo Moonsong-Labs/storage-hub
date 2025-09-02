@@ -64,6 +64,3 @@ const fm = new FileManager({ size, stream: () => webStream });
 const fingerprint = await fm.getFingerprint();
 console.log('H256 fingerprint', fingerprint.toHex());
 ```
-
-## License
-GPL-3.0 (see LICENSE)

@@ -6,6 +6,7 @@ async function main() {
   await initWasm();
   const baseUrl = process.env.BASE_URL || 'http://127.0.0.1:8080';
   const http = new HttpClient({ baseUrl });
+  // Using http directly allows you run raw queries
   const health = await http.get('/health');
   console.log('health:', health);
 
