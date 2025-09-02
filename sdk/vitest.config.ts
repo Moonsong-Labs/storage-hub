@@ -8,7 +8,7 @@ const COVERAGE_THRESHOLD = 0;
 export default defineConfig({
     resolve: {
         alias: {
-            '@storagehub/wasm': resolve(fileURLToPath(new URL('.', import.meta.url)), 'core/wasm/pkg'),
+            '@storagehub/wasm': resolve(fileURLToPath(new URL('.', import.meta.url)), 'core/wasm/pkg/storagehub_wasm.js'),
         },
     },
     test: {
