@@ -10,7 +10,7 @@ use crate::{
     data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage},
     error::Error,
     models::{
-        buckets::{Bucket, FileTree},
+        buckets::{Bucket, FileEntry},
         files::{DistributeResponse, FileInfo},
         msp_info::{Capacity, InfoResponse, MspHealthResponse, StatsResponse, ValueProp},
         payment::PaymentStream,
@@ -181,82 +181,33 @@ impl MspService {
         })
     }
 
-    /// Get file tree for a bucket
-    pub async fn get_file_tree(&self, _bucket_id: &str) -> Result<FileTree, Error> {
-        Ok(FileTree {
-            name: "/".to_string(),
-            node_type: "folder".to_string(),
-            children: Some(vec![
-                FileTree {
+    /// Get files under a path (immediate children only). Path is absolute from bucket root.
+    pub async fn get_files(
+        &self,
+        _bucket_id: &str,
+        path: Option<&str>,
+    ) -> Result<Vec<FileEntry>, Error> {
+        // Normalize path
+        let p = path.unwrap_or("");
+        let normalized = p.trim_matches('/');
+
+        match normalized {
+            "" => Ok(vec![
+                FileEntry {
                     name: "Thesis".to_string(),
-                    node_type: "folder".to_string(),
-                    children: Some(vec![
-                        FileTree {
-                            name: "Initial_results.png".to_string(),
-                            node_type: "file".to_string(),
-                            children: None,
-                            size_bytes: Some(54321),
-                            file_key: Some(
-                                "d298c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f2"
-                                    .to_string(),
-                            ),
-                        },
-                        FileTree {
-                            name: "chapter1.pdf".to_string(),
-                            node_type: "file".to_string(),
-                            children: None,
-                            size_bytes: Some(234567),
-                            file_key: Some(
-                                "a123c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f3"
-                                    .to_string(),
-                            ),
-                        },
-                        FileTree {
-                            name: "references.docx".to_string(),
-                            node_type: "file".to_string(),
-                            children: None,
-                            size_bytes: Some(45678),
-                            file_key: Some(
-                                "b456c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f4"
-                                    .to_string(),
-                            ),
-                        },
-                    ]),
+                    entry_type: "folder".to_string(),
                     size_bytes: None,
                     file_key: None,
                 },
-                FileTree {
+                FileEntry {
                     name: "Reports".to_string(),
-                    node_type: "folder".to_string(),
-                    children: Some(vec![
-                        FileTree {
-                            name: "Q1-2024.pdf".to_string(),
-                            node_type: "file".to_string(),
-                            children: None,
-                            size_bytes: Some(123456),
-                            file_key: Some(
-                                "c789c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f5"
-                                    .to_string(),
-                            ),
-                        },
-                        FileTree {
-                            name: "Q2-2024.pdf".to_string(),
-                            node_type: "file".to_string(),
-                            children: None,
-                            size_bytes: Some(134567),
-                            file_key: Some(
-                                "d890c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f6"
-                                    .to_string(),
-                            ),
-                        },
-                    ]),
+                    entry_type: "folder".to_string(),
                     size_bytes: None,
                     file_key: None,
                 },
-                FileTree {
+                FileEntry {
                     name: "README.md".to_string(),
-                    node_type: "file".to_string(),
-                    children: None,
+                    entry_type: "file".to_string(),
                     size_bytes: Some(2048),
                     file_key: Some(
                         "e901c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f7"
@@ -264,9 +215,57 @@ impl MspService {
                     ),
                 },
             ]),
-            size_bytes: None,
-            file_key: None,
-        })
+            s if s.eq_ignore_ascii_case("thesis") => Ok(vec![
+                FileEntry {
+                    name: "Initial_results.png".to_string(),
+                    entry_type: "file".to_string(),
+                    size_bytes: Some(54321),
+                    file_key: Some(
+                        "d298c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f2"
+                            .to_string(),
+                    ),
+                },
+                FileEntry {
+                    name: "chapter1.pdf".to_string(),
+                    entry_type: "file".to_string(),
+                    size_bytes: Some(234567),
+                    file_key: Some(
+                        "a123c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f3"
+                            .to_string(),
+                    ),
+                },
+                FileEntry {
+                    name: "references.docx".to_string(),
+                    entry_type: "file".to_string(),
+                    size_bytes: Some(45678),
+                    file_key: Some(
+                        "b456c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f4"
+                            .to_string(),
+                    ),
+                },
+            ]),
+            s if s.eq_ignore_ascii_case("reports") => Ok(vec![
+                FileEntry {
+                    name: "Q1-2024.pdf".to_string(),
+                    entry_type: "file".to_string(),
+                    size_bytes: Some(123456),
+                    file_key: Some(
+                        "c789c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f5"
+                            .to_string(),
+                    ),
+                },
+                FileEntry {
+                    name: "Q2-2024.pdf".to_string(),
+                    entry_type: "file".to_string(),
+                    size_bytes: Some(134567),
+                    file_key: Some(
+                        "d890c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f6"
+                            .to_string(),
+                    ),
+                },
+            ]),
+            _ => Err(Error::NotFound("Folder does not exist".to_string())),
+        }
     }
 
     /// Get file information
@@ -363,11 +362,35 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_file_tree() {
+    async fn test_get_files_root() {
         let service = create_test_service().await;
-        let tree = service.get_file_tree("bucket123").await.unwrap();
+        let files = service.get_files("bucket123", None).await.unwrap();
+        assert!(files
+            .iter()
+            .any(|f| f.name == "Thesis" && f.entry_type == "folder"));
+        assert!(files
+            .iter()
+            .any(|f| f.name == "Reports" && f.entry_type == "folder"));
+        assert!(files
+            .iter()
+            .any(|f| f.name == "README.md" && f.entry_type == "file"));
+    }
 
-        assert_eq!(tree.node_type, "folder");
-        assert!(tree.children.is_some());
+    #[tokio::test]
+    async fn test_get_files_thesis() {
+        let service = create_test_service().await;
+        let files = service
+            .get_files("bucket123", Some("thesis"))
+            .await
+            .unwrap();
+        assert!(files
+            .iter()
+            .any(|f| f.name == "Initial_results.png" && f.entry_type == "file"));
+        assert!(files
+            .iter()
+            .any(|f| f.name == "chapter1.pdf" && f.entry_type == "file"));
+        assert!(files
+            .iter()
+            .any(|f| f.name == "references.docx" && f.entry_type == "file"));
     }
 }

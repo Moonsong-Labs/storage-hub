@@ -1,6 +1,9 @@
 import type {
+  Bucket,
   DownloadOptions,
   DownloadResult,
+  FileListResponse,
+  GetFilesOptions,
   HealthStatus,
   NonceResponse,
   UploadOptions,
@@ -39,6 +42,8 @@ export class MspClient {
     });
   }
 
+  // Auth endpoints:
+
   /** Request a SIWE-style nonce message for the given address and chainId */
   getNonce(
     address: string,
@@ -75,6 +80,40 @@ export class MspClient {
     if (!this.token) return headers;
     return { ...(headers ?? {}), Authorization: `Bearer ${this.token}` };
   }
+
+  // Bucket endpoints:
+
+  /** List all buckets for the current authenticateduser */
+  listBuckets(options?: { signal?: AbortSignal }): Promise<Bucket[]> {
+    const headers = this.withAuth();
+    return this.http.get<Bucket[]>('/buckets', {
+      ...(headers ? { headers } : {}),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    });
+  }
+
+  /** Get a specific bucket's metadata by its bucket ID */
+  getBucket(bucketId: string, options?: { signal?: AbortSignal }): Promise<Bucket> {
+    const headers = this.withAuth();
+    const path = `/buckets/${encodeURIComponent(bucketId)}`;
+    return this.http.get<Bucket>(path, {
+      ...(headers ? { headers } : {}),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    });
+  }
+
+  /** Gets the list of files and folders under the specified path for a bucket. If no path is provided, it returns the files and folders found at root. */
+  getFiles(bucketId: string, options?: GetFilesOptions): Promise<FileListResponse> {
+    const headers = this.withAuth();
+    const path = `/buckets/${encodeURIComponent(bucketId)}/files`;
+    return this.http.get<FileListResponse>(path, {
+      ...(headers ? { headers } : {}),
+      ...(options?.signal ? { signal: options.signal } : {}),
+      ...(options?.path ? { query: { path: options.path.replace(/^\/+/, '') } } : {}),
+    });
+  }
+
+  // File endpoints:
 
   /**
    * Upload a file to a bucket with a specific key.
@@ -141,13 +180,20 @@ export class MspClient {
   async downloadByKey(
     bucketId: string,
     fileKey: string,
-    _options?: DownloadOptions,
+    options?: DownloadOptions,
   ): Promise<DownloadResult> {
-    void _options;
     const path = `/buckets/${encodeURIComponent(bucketId)}/download/${encodeURIComponent(fileKey)}`;
     const baseHeaders: Record<string, string> = { Accept: '*/*' };
+    if (options?.range) {
+      const { start, end } = options.range;
+      const rangeValue = `bytes=${start}-${end ?? ''}`;
+      baseHeaders.Range = rangeValue;
+    }
     const headers = this.withAuth(baseHeaders);
-    const res = await this.http.getRaw(path, headers ? { headers } : {});
+    const res = await this.http.getRaw(path, {
+      ...(headers ? { headers } : {}),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    });
 
     if (!res.body) {
       throw new Error('Response body is null - unable to create stream');
@@ -173,15 +219,22 @@ export class MspClient {
   async downloadByLocation(
     bucketId: string,
     filePath: string,
-    _options?: DownloadOptions,
+    options?: DownloadOptions,
   ): Promise<DownloadResult> {
-    void _options;
     const normalized = filePath.replace(/^\/+/, '');
     const encodedPath = normalized.split('/').map(encodeURIComponent).join('/');
     const path = `/buckets/${encodeURIComponent(bucketId)}/download/path/${encodedPath}`;
     const baseHeaders: Record<string, string> = { Accept: '*/*' };
+    if (options?.range) {
+      const { start, end } = options.range;
+      const rangeValue = `bytes=${start}-${end ?? ''}`;
+      baseHeaders.Range = rangeValue;
+    }
     const headers = this.withAuth(baseHeaders);
-    const res = await this.http.getRaw(path, headers ? { headers } : {});
+    const res = await this.http.getRaw(path, {
+      ...(headers ? { headers } : {}),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    });
 
     if (!res.body) {
       throw new Error('Response body is null - unable to create stream');

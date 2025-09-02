@@ -1,45 +1,46 @@
 {
-    "name": "@storagehub-sdk/core",
-    "version": "0.1.0",
-    "description": "Core primitives for StorageHub SDK (types, crypto, filemanager, storage, wasm bindings)",
-    "type": "module",
-    "main": "./dist/index.js",
-    "module": "./dist/index.js",
-    "types": "./dist/index.d.ts",
-    "exports": {
-        ".": "./dist/index.js",
-        "./wasm/pkg/*": "./wasm/pkg/*"
-    },
-    "publishConfig": {
-        "access": "public",
-        "registry": "https://registry.npmjs.org/"
-    },
-    "files": [
-        "dist",
-        "wasm/pkg",
-        "README.md"
-    ],
-    "scripts": {
-        "build": "node ../scripts/build.js",
-        "build:types": "tsc --emitDeclarationOnly -p tsconfig.json",
-        "dev": "node ../scripts/build.js --watch",
-        "lint": "eslint \"{src/**/*.ts,src/**/*.tsx}\"",
-        "format": "prettier --write \"{src/**/*.ts,src/**/*.tsx}\"",
-        "format:check": "prettier --check \"{src/**/*.ts,src/**/*.tsx}\"",
-        "test": "vitest",
-        "typecheck": "tsc --noEmit",
-        "coverage": "vitest run --coverage",
-        "build:wasm": "wasm-pack build ./wasm --target web --release --out-dir pkg && rm -f ./wasm/pkg/package.json ./wasm/pkg/.gitignore"
-    },
-    "dependencies": {
-        "@polkadot/types": "^10.10.3",
-        "ethers": "^6.15.0"
-    },
-    "devDependencies": {
-        "@eslint/eslintrc": "2.1.4",
-        "@types/node": "^20.11.19"
-    },
-    "engines": {
-        "node": ">=22"
-    }
+  "name": "@storagehub-sdk/core",
+  "version": "0.1.0",
+  "description": "Core primitives for StorageHub SDK (types, crypto, filemanager, storage, wasm bindings)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./wasm/pkg/*": "./wasm/pkg/*"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "files": [
+    "dist",
+    "wasm/pkg",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node ../scripts/build.js",
+    "build:types": "tsc --emitDeclarationOnly -p tsconfig.json",
+    "dev": "node ../scripts/build.js --watch",
+    "lint": "eslint \"{src/**/*.ts,src/**/*.tsx}\"",
+    "lint:fix": "eslint \"{src/**/*.ts,src/**/*.tsx}\" --fix",
+    "format": "prettier --write \"{src/**/*.ts,src/**/*.tsx}\"",
+    "format:check": "prettier --check \"{src/**/*.ts,src/**/*.tsx}\"",
+    "test": "vitest",
+    "typecheck": "tsc --noEmit",
+    "coverage": "vitest run --coverage",
+    "build:wasm": "wasm-pack build ./wasm --target web --release --out-dir pkg && rm -f ./wasm/pkg/package.json ./wasm/pkg/.gitignore"
+  },
+  "dependencies": {
+    "@polkadot/types": "^10.10.3",
+    "ethers": "^6.15.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "2.1.4",
+    "@types/node": "^20.11.19"
+  },
+  "engines": {
+    "node": ">=22"
+  }
 }
