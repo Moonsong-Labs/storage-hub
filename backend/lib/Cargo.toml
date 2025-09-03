@@ -35,6 +35,9 @@ shp-types = { workspace = true }
 [dev-dependencies]
 axum-test = { workspace = true }
 futures = { workspace = true }
+testcontainers = "0.24"
+testcontainers-modules = { version = "0.12", features = ["postgres"] }
+diesel_migrations = { version = "2.2", features = ["postgres"] }
 
 [features]
 default = []
