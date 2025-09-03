@@ -2,7 +2,7 @@ import { createReadStream, statSync } from 'node:fs';
 import { Readable } from 'node:stream';
 import { HttpClient, LocalWallet, FileManager, initWasm } from '@storagehub-sdk/core';
 
-async function main() {
+async function main(): Promise<void> {
   await initWasm();
   const baseUrl = process.env.BASE_URL || 'http://127.0.0.1:8080';
   const http = new HttpClient({ baseUrl });
@@ -34,5 +34,3 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
-
-

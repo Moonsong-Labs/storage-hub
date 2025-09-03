@@ -1,9 +1,9 @@
 import { createReadStream, createWriteStream } from 'node:fs';
 import { Readable } from 'node:stream';
-import { MspClient } from '@storagehub-sdk/msp-client';
+import { Bucket, MspClient, type FileListResponse } from '@storagehub-sdk/msp-client';
 import { LocalWallet, initWasm } from '@storagehub-sdk/core';
 
-async function main() {
+async function main(): Promise<void> {
   await initWasm();
   const baseUrl = process.env.BASE_URL || 'http://127.0.0.1:8080';
   const chainId = Number(process.env.CHAIN_ID || '1');
@@ -40,26 +40,30 @@ async function main() {
   await new Promise((resolve, reject) => out.on('finish', resolve).on('error', reject));
   console.log('download status:', download.status);
 
-	// List buckets
-	const buckets = await client.listBuckets();
-	console.log('Buckets:', buckets);
+  // List buckets
+  const buckets: Bucket[] = await client.listBuckets();
+  console.log(`Buckets size: ${buckets.length}`);
+  for (const bucket of buckets) {
+    console.log(` Bucket name: ${bucket.name}`);
+  }
 
-	// Get bucket metadata
-	const bucket = await client.getBucket(bucketId);
-	console.log('Bucket metadata:', bucket);
+  // Get bucket metadata
+  const bucket: Bucket = await client.getBucket(bucketId);
+  console.log('Bucket metadata:', bucket);
 
-	// Get files of the root folder of the bucket
-	const rootFiles = await client.getFiles(bucketId);
-	console.log('Root files:', rootFiles);
+  // Get files of the root folder of the bucket
+  const rootFiles = await client.getFiles(bucketId);
+  console.log('Root files:', rootFiles);
 
-	// Get files of the `/Thesis/` folder of the bucket
-	const thesisFiles = await client.getFiles(bucketId, { path: '/Thesis/' });
-	console.log('Thesisfolder files:', thesisFiles);
+  // Get files of the `/Thesis/` folder of the bucket
+  const thesisFiles: FileListResponse = await client.getFiles(bucketId, { path: '/Thesis/' });
+  console.log('Thesis folder size:', thesisFiles.files.length);
+  for (const entry of thesisFiles.files) {
+    console.log(` Entry name: ${entry.name}`);
+  }
 }
 
 main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
-
-

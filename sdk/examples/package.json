@@ -6,11 +6,16 @@
     "node": ">=22"
   },
   "scripts": {
-    "core": "node core-demo.mjs",
-    "msp": "node msp-demo.mjs"
+    "core": "tsx core-demo.ts",
+    "msp": "tsx msp-demo.ts",
+    "types": "tsx types-demo.ts"
   },
   "dependencies": {
-    "@storagehub-sdk/core": "^0.0.2",
-    "@storagehub-sdk/msp-client": "^0.0.2"
+    "@storagehub-sdk/core": ">=0.0.2",
+    "@storagehub-sdk/msp-client": ">=0.0.2"
+  },
+  "devDependencies": {
+    "tsx": "4.19.0",
+    "typescript": "~5.5.4"
   }
 }
