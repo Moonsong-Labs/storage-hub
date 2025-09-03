@@ -112,6 +112,96 @@ impl FileTree {
         }
     }
 
+    /// Create a file tree containing only direct children of the specified path
+    pub fn from_files_filtered(files: Vec<DBFile>, filter_path: &str) -> Self {
+        let mut children_map: BTreeMap<String, FileTreeEntry> = BTreeMap::new();
+
+        // Normalize the filter path to always have the format we need for strip_prefix:
+        // - "/" for root (we'll strip this from the beginning)
+        // - "/path/to/" for other paths (with trailing slash for clean separation)
+        let prefix_to_strip = if filter_path == "/" || filter_path.is_empty() {
+            "/".to_string()
+        } else {
+            // Ensure it starts with "/" and ends with "/" for clean stripping
+            let path = if filter_path.starts_with('/') {
+                filter_path.to_string()
+            } else {
+                format!("/{}", filter_path)
+            };
+            // Add trailing slash if not present
+            if path.ends_with('/') {
+                path
+            } else {
+                format!("{}/", path)
+            }
+        };
+
+        for file in files {
+            // Convert location from Vec<u8> to String
+            let location = String::from_utf8_lossy(&file.location);
+
+            // Ensure location starts with "/"
+            let location_with_slash = if location.starts_with('/') {
+                location.into_owned()
+            } else {
+                format!("/{}", location)
+            };
+
+            // Try to strip the prefix - no branching needed now
+            let remaining = match location_with_slash.strip_prefix(&prefix_to_strip) {
+                Some(remaining) => remaining,
+                None => continue, // File is not under this path
+            };
+
+            // Get the first segment - this is the direct child
+            let first_segment = remaining.split('/').next().unwrap_or("");
+            if first_segment.is_empty() {
+                continue; // Skip empty segments
+            }
+
+            // Check if this is a file or folder by looking for more segments
+            let is_file = !remaining.contains('/');
+
+            if is_file {
+                // This is a direct file under the path
+                children_map.insert(
+                    first_segment.to_string(),
+                    FileTreeEntry::File(FileTreeFile {
+                        size_bytes: file.size as u64,
+                        file_key: hex::encode(&file.file_key),
+                    }),
+                );
+            } else {
+                // This is a folder (has more segments after the first)
+                // We only want to create the folder entry once, not recurse into it
+                children_map
+                    .entry(first_segment.to_string())
+                    .or_insert_with(|| {
+                        FileTreeEntry::Folder(FileTreeFolder {
+                            children: Vec::new(), // Empty children since we don't recurse
+                        })
+                    });
+            }
+        }
+
+        // Convert the map to a FileTree structure
+        let children = Self::map_to_children(children_map);
+
+        // Use the last segment of the path as the name, or "/" for root
+        let name = prefix_to_strip
+            .trim_end_matches('/')
+            .split('/')
+            .last()
+            .filter(|s| !s.is_empty())
+            .unwrap_or("/")
+            .to_string();
+
+        FileTree {
+            name,
+            entry: FileTreeEntry::Folder(FileTreeFolder { children }),
+        }
+    }
+
     /// Recursively insert a file into the tree structure
     fn insert_file_into_tree(
         map: &mut BTreeMap<String, FileTreeEntry>,
@@ -274,6 +364,129 @@ mod tests {
             }
         } else {
             panic!("Root should be a folder");
+        }
+    }
+
+    #[test]
+    fn file_tree_from_files_filtered_root() {
+        let files = vec![
+            test_file_with_location_key_and_size("/path/to/file/foo.txt", "key1", 100),
+            test_file_with_location_key_and_size("/path/to/file/bar.txt", "key2", 200),
+            test_file_with_location_key_and_size("/path/to/another/thing.txt", "key3", 300),
+            test_file_with_location_key_and_size("/a/different/file.txt", "key4", 400),
+            test_file_with_location_key_and_size("/root_file.txt", "key5", 500),
+        ];
+
+        // Test root path (should show only direct children: "path", "a", and "root_file.txt")
+        let tree = FileTree::from_files_filtered(files.clone(), "/");
+        assert_eq!(tree.name, "/");
+
+        if let FileTreeEntry::Folder(folder) = &tree.entry {
+            assert_eq!(folder.children.len(), 3);
+
+            // Check for "a" folder
+            assert!(folder
+                .children
+                .iter()
+                .any(|c| c.name == "a" && matches!(c.entry, FileTreeEntry::Folder(_))));
+
+            // Check for "path" folder
+            assert!(folder
+                .children
+                .iter()
+                .any(|c| c.name == "path" && matches!(c.entry, FileTreeEntry::Folder(_))));
+
+            // Check for "root_file.txt" file
+            assert!(folder
+                .children
+                .iter()
+                .any(|c| c.name == "root_file.txt" && matches!(c.entry, FileTreeEntry::File(_))));
+        } else {
+            panic!("Root should be a folder");
+        }
+    }
+
+    #[test]
+    fn file_tree_from_files_filtered_specific_path() {
+        let files = vec![
+            test_file_with_location_key_and_size("/path/to/file/foo.txt", "key1", 100),
+            test_file_with_location_key_and_size("/path/to/file/bar.txt", "key2", 200),
+            test_file_with_location_key_and_size("/path/to/another/thing.txt", "key3", 300),
+            test_file_with_location_key_and_size("/path/direct_file.txt", "key6", 600),
+        ];
+
+        // Test "/path" - should show "to" folder and "direct_file.txt"
+        let tree = FileTree::from_files_filtered(files.clone(), "/path");
+        assert_eq!(tree.name, "path");
+
+        if let FileTreeEntry::Folder(folder) = &tree.entry {
+            assert_eq!(folder.children.len(), 2);
+
+            // Check for "to" folder (should be empty since we don't recurse)
+            let to_entry = folder.children.iter().find(|c| c.name == "to").unwrap();
+            if let FileTreeEntry::Folder(to_folder) = &to_entry.entry {
+                assert_eq!(to_folder.children.len(), 0); // No recursion
+            } else {
+                panic!("'to' should be a folder");
+            }
+
+            // Check for "direct_file.txt"
+            let file_entry = folder
+                .children
+                .iter()
+                .find(|c| c.name == "direct_file.txt")
+                .unwrap();
+            if let FileTreeEntry::File(file) = &file_entry.entry {
+                assert_eq!(file.size_bytes, 600);
+            } else {
+                panic!("'direct_file.txt' should be a file");
+            }
+        } else {
+            panic!("Result should be a folder");
+        }
+    }
+
+    #[test]
+    fn file_tree_from_files_filtered_deeper_path() {
+        let files = vec![
+            test_file_with_location_key_and_size("/path/to/file/foo.txt", "key1", 100),
+            test_file_with_location_key_and_size("/path/to/file/bar.txt", "key2", 200),
+            test_file_with_location_key_and_size("/path/to/another/thing.txt", "key3", 300),
+            test_file_with_location_key_and_size("/path/to/direct.txt", "key7", 700),
+        ];
+
+        // Test "/path/to" - should show "file" folder, "another" folder, and "direct.txt"
+        let tree = FileTree::from_files_filtered(files, "/path/to");
+        assert_eq!(tree.name, "to");
+
+        if let FileTreeEntry::Folder(folder) = &tree.entry {
+            assert_eq!(folder.children.len(), 3);
+
+            // Check for "file" folder (should be empty since we don't recurse)
+            let file_folder = folder.children.iter().find(|c| c.name == "file").unwrap();
+            assert!(matches!(file_folder.entry, FileTreeEntry::Folder(_)));
+
+            // Check for "another" folder
+            let another_folder = folder
+                .children
+                .iter()
+                .find(|c| c.name == "another")
+                .unwrap();
+            assert!(matches!(another_folder.entry, FileTreeEntry::Folder(_)));
+
+            // Check for "direct.txt" file
+            let direct_file = folder
+                .children
+                .iter()
+                .find(|c| c.name == "direct.txt")
+                .unwrap();
+            if let FileTreeEntry::File(file) = &direct_file.entry {
+                assert_eq!(file.size_bytes, 700);
+            } else {
+                panic!("'direct.txt' should be a file");
+            }
+        } else {
+            panic!("Result should be a folder");
         }
     }
 }

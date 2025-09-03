@@ -1,7 +1,7 @@
 //! This module contains the handlers for the bucket management endpoints
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, State},
     response::IntoResponse,
     Json,
 };
@@ -56,7 +56,7 @@ pub async fn get_files(
     State(services): State<Services>,
     TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
     Path(bucket_id): Path<String>,
-    Query(_query): Query<FilesQuery>,
+    Query(query): Query<FilesQuery>,
 ) -> Result<impl IntoResponse, Error> {
     let payload = extract_bearer_token(&auth)?;
     let address = payload
@@ -64,10 +64,15 @@ pub async fn get_files(
         .and_then(|a| a.as_str())
         .unwrap_or(MOCK_ADDRESS);
 
-    let file_tree = services.msp.get_file_tree(&bucket_id, address).await?;
+    let file_tree = services
+        .msp
+        .get_file_tree(&bucket_id, address, query.path.unwrap_or("/"))
+        .await?;
+
     let response = FileListResponse {
         bucket_id: bucket_id.clone(),
         files: vec![file_tree],
     };
+
     Ok(Json(response))
 }

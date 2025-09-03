@@ -208,9 +208,13 @@ impl MspService {
     /// Get file tree for a bucket
     ///
     /// Verifies ownership of bucket is `user`
-    ///
-    /// Get files under a path (immediate children only). Path is absolute from bucket root.
-    pub async fn get_file_tree(&self, bucket_id: &str, user: &str, path: Option<&str>) -> Result<FileTree, Error> {
+    /// Returns only direct children of the given path
+    pub async fn get_file_tree(
+        &self,
+        bucket_id: &str,
+        user: &str,
+        path: &str,
+    ) -> Result<FileTree, Error> {
         // first, get the bucket from the db and determine if user can view the bucket
         let bucket = self.get_db_bucket(bucket_id, user).await?;
 
@@ -219,13 +223,14 @@ impl MspService {
         let normalized = p.trim_matches('/');
 
         // TODO: request by page
+        // TODO: optimize query by requesting only matching paths
         let files = self
             .postgres
             .get_bucket_files(bucket.id, None, None)
             .await?;
 
         // Create hierarchy based on location segments
-        Ok(FileTree::from_files(files))
+        Ok(FileTree::from_files_filtered(files, path))
     }
 
     /// Get file information
@@ -329,7 +334,7 @@ mod tests {
     async fn test_get_files_root() {
         let service = create_test_service().await;
         let tree = service
-            .get_file_tree("bucket123", MOCK_ADDRESS)
+            .get_file_tree("bucket123", MOCK_ADDRESS, "/")
             .await
             .unwrap();
 
