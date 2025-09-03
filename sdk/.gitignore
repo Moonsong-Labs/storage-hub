@@ -13,5 +13,8 @@ node_modules/
 npm-debug.log*
 pnpm-debug.log*
 
+# WASM generated files
+**/wasm/pkg/
+
 # OS files
 .DS_Store
