@@ -281,7 +281,10 @@ impl Convert<AccountId, Option<()>> for FullIdentificationOf {
 
 pub fn get_validators() -> Option<Vec<AccountId>> {
     // Match dev preset initial authorities (Alice only)
-    Some(vec![get_account_id_from_seed::<ecdsa::Public>("Alice")])
+    Some(vec![
+        get_account_id_from_seed::<ecdsa::Public>("Alice"),
+        get_account_id_from_seed::<ecdsa::Public>("Bob"),
+    ])
 }
 
 pub struct NoChangesSessionManager;
