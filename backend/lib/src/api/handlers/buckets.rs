@@ -1,7 +1,7 @@
 //! This module contains the handlers for the bucket management endpoints
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     response::IntoResponse,
     Json,
 };
@@ -47,10 +47,16 @@ pub async fn get_bucket(
     Ok(Json(response))
 }
 
+#[derive(Debug, Deserialize)]
+pub struct FilesQuery {
+    pub path: Option<String>,
+}
+
 pub async fn get_files(
     State(services): State<Services>,
     TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
     Path(bucket_id): Path<String>,
+    Query(_query): Query<FilesQuery>,
 ) -> Result<impl IntoResponse, Error> {
     let payload = extract_bearer_token(&auth)?;
     let address = payload

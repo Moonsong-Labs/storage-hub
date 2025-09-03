@@ -25,8 +25,8 @@ use sp_consensus_aura::Slot;
 use sp_core::H256;
 
 // Local Runtime Types
+use sh_parachain_runtime::{apis::RuntimeApi, Runtime};
 use shp_opaque::{Block, Hash};
-use storage_hub_runtime::{apis::RuntimeApi, Runtime};
 
 // Cumulus Imports
 use cumulus_client_collator::service::CollatorService;
@@ -738,7 +738,7 @@ where
             inherent_data: &mut sp_inherents::InherentData,
         ) -> Result<(), sp_inherents::Error> {
             TIMESTAMP.with(|x| {
-                *x.borrow_mut() += storage_hub_runtime::SLOT_DURATION;
+                *x.borrow_mut() += sh_parachain_runtime::SLOT_DURATION;
                 inherent_data.put_data(sp_timestamp::INHERENT_IDENTIFIER, &*x.borrow())
             })
         }
@@ -828,7 +828,7 @@ where
                         });
 
                         // If we don't increment the timestamp, we will hit a para slot and relay slot mismatch.
-                        timestamp += storage_hub_runtime::SLOT_DURATION;
+                        timestamp += sh_parachain_runtime::SLOT_DURATION;
 
 						let relay_slot = sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
 							timestamp.into(),

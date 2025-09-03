@@ -15,7 +15,7 @@ use crate::{
     data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage},
     error::Error,
     models::{
-        buckets::{Bucket, FileTree},
+        buckets::{Bucket, FileEntry},
         files::{DistributeResponse, FileInfo},
         msp_info::{Capacity, InfoResponse, MspHealthResponse, StatsResponse, ValueProp},
         payment::PaymentStream,
@@ -208,9 +208,15 @@ impl MspService {
     /// Get file tree for a bucket
     ///
     /// Verifies ownership of bucket is `user`
-    pub async fn get_file_tree(&self, bucket_id: &str, user: &str) -> Result<FileTree, Error> {
+    ///
+    /// Get files under a path (immediate children only). Path is absolute from bucket root.
+    pub async fn get_file_tree(&self, bucket_id: &str, user: &str, path: Option<&str>) -> Result<FileTree, Error> {
         // first, get the bucket from the db and determine if user can view the bucket
         let bucket = self.get_db_bucket(bucket_id, user).await?;
+
+        // Normalize path
+        let p = path.unwrap_or("");
+        let normalized = p.trim_matches('/');
 
         // TODO: request by page
         let files = self
@@ -320,7 +326,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_file_tree() {
+    async fn test_get_files_root() {
         let service = create_test_service().await;
         let tree = service
             .get_file_tree("bucket123", MOCK_ADDRESS)

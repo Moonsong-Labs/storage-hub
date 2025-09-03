@@ -43,7 +43,7 @@ pallet-proofs-dealer = { workspace = true }
 pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-storage-providers = { workspace = true }
 pallet-storage-providers-runtime-api = { workspace = true }
-storage-hub-runtime = { workspace = true }
+sh-parachain-runtime = { workspace = true }
 shc-actors-framework = { workspace = true }
 shc-actors-derive = { workspace = true }
 shc-blockchain-service = { workspace = true }
@@ -144,10 +144,10 @@ runtime-benchmarks = [
     "polkadot-primitives/runtime-benchmarks",
     "sc-service/runtime-benchmarks",
     "sp-runtime/runtime-benchmarks",
-    "storage-hub-runtime/runtime-benchmarks",
+    "sh-parachain-runtime/runtime-benchmarks",
 ]
 try-runtime = [
     "polkadot-cli/try-runtime",
     "sp-runtime/try-runtime",
-    "storage-hub-runtime/try-runtime",
+    "sh-parachain-runtime/try-runtime",
 ]

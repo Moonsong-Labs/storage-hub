@@ -1,4 +1,5 @@
 packages:
-  - 'core'
-  - 'msp-client'
-  - 'e2e'
+  - core
+  - msp-client
+  - e2e
+  - examples

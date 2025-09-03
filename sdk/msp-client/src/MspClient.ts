@@ -1,6 +1,9 @@
 import type {
+  Bucket,
   DownloadOptions,
   DownloadResult,
+  FileListResponse,
+  GetFilesOptions,
   HealthStatus,
   NonceResponse,
   UploadOptions,
@@ -39,6 +42,8 @@ export class MspClient {
     });
   }
 
+  // Auth endpoints:
+
   /** Request a SIWE-style nonce message for the given address and chainId */
   getNonce(
     address: string,
@@ -76,15 +81,47 @@ export class MspClient {
     return { ...(headers ?? {}), Authorization: `Bearer ${this.token}` };
   }
 
+  // Bucket endpoints:
+
+  /** List all buckets for the current authenticateduser */
+  listBuckets(options?: { signal?: AbortSignal }): Promise<Bucket[]> {
+    const headers = this.withAuth();
+    return this.http.get<Bucket[]>('/buckets', {
+      ...(headers ? { headers } : {}),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    });
+  }
+
+  /** Get a specific bucket's metadata by its bucket ID */
+  getBucket(bucketId: string, options?: { signal?: AbortSignal }): Promise<Bucket> {
+    const headers = this.withAuth();
+    const path = `/buckets/${encodeURIComponent(bucketId)}`;
+    return this.http.get<Bucket>(path, {
+      ...(headers ? { headers } : {}),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    });
+  }
+
+  /** Gets the list of files and folders under the specified path for a bucket. If no path is provided, it returns the files and folders found at root. */
+  getFiles(bucketId: string, options?: GetFilesOptions): Promise<FileListResponse> {
+    const headers = this.withAuth();
+    const path = `/buckets/${encodeURIComponent(bucketId)}/files`;
+    return this.http.get<FileListResponse>(path, {
+      ...(headers ? { headers } : {}),
+      ...(options?.signal ? { signal: options.signal } : {}),
+      ...(options?.path ? { query: { path: options.path.replace(/^\/+/, '') } } : {}),
+    });
+  }
+
+  // File endpoints:
+
   /**
-   * Upload a file to a bucket for a specific fileKey using multipart/form-data.
+   * Upload a file to a bucket with a specific key.
    *
-   * This matches the backend's current expectation of a FormData field named
-   * "file" sent via PUT to `/buckets/:bucketId/upload/:fileKey`.
+   * For small files (Blob, ArrayBuffer, Uint8Array), uses multipart/form-data upload.
+   * For large files (ReadableStream), uses memory-efficient streaming upload with
+   * application/octet-stream to prevent loading entire file into memory.
    *
-   * Accepted `file` types depend on the environment. In browsers, pass a
-   * Blob/File or ArrayBuffer/Uint8Array. In Node 18+/23 with fetch, Node
-   * Readable streams are also accepted by FormData.
    */
   async uploadFile(
     bucketId: string,
@@ -93,13 +130,35 @@ export class MspClient {
     _options?: UploadOptions,
   ): Promise<UploadReceipt> {
     void _options;
-    const form = new FormData();
-
-    const part = this.coerceToFormPart(file);
-    form.append('file', part as unknown as Blob);
 
     const path = `/buckets/${encodeURIComponent(bucketId)}/upload/${encodeURIComponent(fileKey)}`;
     const authHeaders = this.withAuth();
+
+    // For ReadableStream, use direct streaming upload (memory efficient)
+    if (file instanceof ReadableStream) {
+      const res = await this.http.put<UploadReceipt>(
+        path,
+        authHeaders
+          ? {
+              body: file,
+              headers: {
+                ...authHeaders,
+                'Content-Type': 'application/octet-stream',
+              },
+            }
+          : {
+              body: file,
+              headers: { 'Content-Type': 'application/octet-stream' },
+            },
+      );
+      return res;
+    }
+
+    // For other types, use FormData (traditional multipart upload)
+    const form = new FormData();
+    const part = await this.coerceToFormPart(file);
+    form.append('file', part as Blob, 'file'); // part is now guaranteed to be Blob
+
     const res = await this.http.put<UploadReceipt>(
       path,
       authHeaders
@@ -109,27 +168,32 @@ export class MspClient {
     return res;
   }
 
-  private coerceToFormPart(
-    file: Blob | ArrayBuffer | Uint8Array | ReadableStream<Uint8Array> | unknown,
-  ): Blob | unknown {
+  private async coerceToFormPart(file: Blob | ArrayBuffer | Uint8Array | unknown): Promise<Blob> {
     if (typeof Blob !== 'undefined' && file instanceof Blob) return file;
     if (file instanceof Uint8Array) return new Blob([file]);
     if (typeof ArrayBuffer !== 'undefined' && file instanceof ArrayBuffer) return new Blob([file]);
-    // In Node environments, FormData accepts streams; pass-through as-is
-    return file;
+
+    return new Blob([file as BlobPart]);
   }
 
   /** Download a file by bucket and key. */
   async downloadByKey(
     bucketId: string,
     fileKey: string,
-    _options?: DownloadOptions,
+    options?: DownloadOptions,
   ): Promise<DownloadResult> {
-    void _options;
     const path = `/buckets/${encodeURIComponent(bucketId)}/download/${encodeURIComponent(fileKey)}`;
     const baseHeaders: Record<string, string> = { Accept: '*/*' };
+    if (options?.range) {
+      const { start, end } = options.range;
+      const rangeValue = `bytes=${start}-${end ?? ''}`;
+      baseHeaders.Range = rangeValue;
+    }
     const headers = this.withAuth(baseHeaders);
-    const res = await this.http.getRaw(path, headers ? { headers } : {});
+    const res = await this.http.getRaw(path, {
+      ...(headers ? { headers } : {}),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    });
 
     if (!res.body) {
       throw new Error('Response body is null - unable to create stream');
@@ -155,15 +219,22 @@ export class MspClient {
   async downloadByLocation(
     bucketId: string,
     filePath: string,
-    _options?: DownloadOptions,
+    options?: DownloadOptions,
   ): Promise<DownloadResult> {
-    void _options;
     const normalized = filePath.replace(/^\/+/, '');
     const encodedPath = normalized.split('/').map(encodeURIComponent).join('/');
     const path = `/buckets/${encodeURIComponent(bucketId)}/download/path/${encodedPath}`;
     const baseHeaders: Record<string, string> = { Accept: '*/*' };
+    if (options?.range) {
+      const { start, end } = options.range;
+      const rangeValue = `bytes=${start}-${end ?? ''}`;
+      baseHeaders.Range = rangeValue;
+    }
     const headers = this.withAuth(baseHeaders);
-    const res = await this.http.getRaw(path, headers ? { headers } : {});
+    const res = await this.http.getRaw(path, {
+      ...(headers ? { headers } : {}),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    });
 
     if (!res.body) {
       throw new Error('Response body is null - unable to create stream');
