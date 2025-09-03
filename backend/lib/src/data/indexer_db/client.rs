@@ -127,6 +127,13 @@ impl DBClient {
             .await
             .map_err(|e| crate::error::Error::Database(e.to_string()))
     }
+
+    pub async fn get_file_info(&self, file_key: &[u8]) -> Result<File> {
+        self.repository
+            .get_file_by_file_key(file_key.into())
+            .await
+            .map_err(|e| crate::error::Error::Database(e.to_string()))
+    }
 }
 
 // Test-only mutable operations

@@ -41,7 +41,7 @@ pub fn routes(services: Services) -> Router {
         // File routes
         .route(
             "/buckets/{bucket_id}/info/{file_key}",
-            get(handlers::get_file_info),
+            get(handlers::files::get_file_info),
         )
         .merge(file_upload)
         .route(

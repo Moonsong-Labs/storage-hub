@@ -27,6 +27,7 @@ use crate::{
 };
 
 pub mod buckets;
+pub mod files;
 
 // TODO: we could move from `TypedHeader` to axum-jwt (needs rust 1.88)
 
@@ -104,6 +105,7 @@ pub async fn msp_health(State(services): State<Services>) -> Result<impl IntoRes
 }
 
 // ==================== File Handlers ====================
+// TODO: move to mod `files`
 
 pub async fn download_by_location(
     State(_services): State<Services>,
@@ -133,17 +135,6 @@ pub async fn download_by_key(
     let file_stream_resp = FileStream::new(stream).file_name("by_key.txt");
 
     Ok(file_stream_resp.into_response())
-}
-
-pub async fn get_file_info(
-    State(services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
-    Path((bucket_id, file_key)): Path<(String, String)>,
-) -> Result<impl IntoResponse, Error> {
-    let _auth = extract_bearer_token(&auth)?;
-
-    let response = services.msp.get_file_info(&bucket_id, &file_key).await?;
-    Ok(Json(response))
 }
 
 pub async fn upload_file(

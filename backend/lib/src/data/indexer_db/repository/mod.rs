@@ -47,6 +47,15 @@ impl<'a> From<&'a [u8]> for BucketId<'a> {
     }
 }
 
+/// Represents an onchain File Key
+// TODO: replace with appropriate type from runtime
+pub struct FileKey<'a>(pub &'a [u8]);
+impl<'a> From<&'a [u8]> for FileKey<'a> {
+    fn from(value: &'a [u8]) -> Self {
+        Self(value)
+    }
+}
+
 /// Read-only operations for indexer data access.
 ///
 /// This trait provides read-only access to database entities,
@@ -101,6 +110,12 @@ pub trait IndexerOps: Send + Sync {
         limit: i64,
         offset: i64,
     ) -> RepositoryResult<Vec<File>>;
+
+    /// Retrieve the file identified with the given File Key
+    ///
+    /// # Arguments
+    /// * `key` - the File Key to search
+    async fn get_file_by_file_key(&self, key: FileKey<'_>) -> RepositoryResult<File>;
 }
 
 /// Mutable operations for test environments.

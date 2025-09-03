@@ -27,7 +27,7 @@ use shc_indexer_db::{
 #[cfg(test)]
 use crate::data::indexer_db::repository::IndexerOpsMut;
 use crate::data::indexer_db::repository::{
-    error::RepositoryResult, pool::SmartPool, BucketId, IndexerOps,
+    error::RepositoryResult, pool::SmartPool, BucketId, FileKey, IndexerOps,
 };
 
 /// PostgreSQL repository implementation.
@@ -126,6 +126,15 @@ impl IndexerOps for Repository {
             .await?;
 
         Ok(files)
+    }
+
+    // ============ File Read Operations ============
+    async fn get_file_by_file_key(&self, key: FileKey<'_>) -> RepositoryResult<File> {
+        let mut conn = self.pool.get().await?;
+
+        File::get_by_file_key(&mut conn, key.0)
+            .await
+            .map_err(Into::into)
     }
 }
 

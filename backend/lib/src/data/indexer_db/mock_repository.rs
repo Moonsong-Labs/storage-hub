@@ -128,6 +128,13 @@ impl IndexerOps for MockRepository {
             .cloned()
             .collect())
     }
+
+    // ============ File Read Operations ============
+    async fn get_file_by_file_key(&self, key: FileKey<'_>) -> RepositoryResult<File> {
+        let files = self.files.read().await;
+
+        files.values().find(|f| f.file_key.as_slice() == key.0).ok_or_err(|| RepositoryError::not_found("File"))
+    }
 }
 
 #[async_trait]

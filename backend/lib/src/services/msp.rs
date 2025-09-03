@@ -219,8 +219,7 @@ impl MspService {
         let bucket = self.get_db_bucket(bucket_id, user).await?;
 
         // Normalize path
-        let p = path.unwrap_or("");
-        let normalized = p.trim_matches('/');
+        let normalized = path.trim_matches('/');
 
         // TODO: request by page
         // TODO: optimize query by requesting only matching paths
@@ -230,23 +229,27 @@ impl MspService {
             .await?;
 
         // Create hierarchy based on location segments
-        Ok(FileTree::from_files_filtered(files, path))
+        Ok(FileTree::from_files_filtered(files, normalized))
     }
 
     /// Get file information
-    pub async fn get_file_info(&self, bucket_id: &str, file_key: &str) -> Result<FileInfo, Error> {
-        // Mock implementation
-        Ok(FileInfo {
-            file_key: file_key.to_string(),
-            fingerprint: "5d7a3700e1f7d973c064539f1b18c988dace6b4f1a57650165e9b58305db090f"
-                .to_string(),
-            bucket_id: bucket_id.to_string(),
-            name: "Q1-2024.pdf".to_string(),
-            location: "/files/documents/reports".to_string(),
-            size: 54321,
-            is_public: true,
-            uploaded_at: Utc::now() - chrono::Duration::days(30),
-        })
+    pub async fn get_file_info(
+        &self,
+        bucket_id: &str,
+        user: &str,
+        file_key: &str,
+    ) -> Result<FileInfo, Error> {
+        let file_key = hex::decode(file_key.trim_start_matches("0x")).map_err(|_| {
+            Error::BadRequest(format!("Invalid File Key. Expected a valid hex string"))
+        })?;
+
+        // get bucket determine if user can view it
+        let bucket = self.get_bucket(bucket_id, user).await?;
+
+        self.postgres
+            .get_file_info(&file_key)
+            .await
+            .map(|file| FileInfo::from_db(&file, bucket.is_public))
     }
 
     /// Distribute a file to BSPs
