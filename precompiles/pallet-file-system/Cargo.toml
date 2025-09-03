@@ -25,7 +25,7 @@ precompile-utils = { workspace = true }
 # StorageHub
 pallet-file-system = { workspace = true }
 shp-traits = { workspace = true }
-storage-hub-runtime = { workspace = true }
+sh-solochain-evm-runtime = { workspace = true }
 
 [dev-dependencies]
 codec = { workspace = true, features = ["max-encoded-len", "std"] }
@@ -73,5 +73,5 @@ std = [
 	"sp-io/std",
 	"sp-runtime/std",
 	"sp-std/std",
-	"storage-hub-runtime/std",
+	"sh-solochain-evm-runtime/std",
 ]
