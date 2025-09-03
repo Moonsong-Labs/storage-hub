@@ -1,3 +1,1 @@
-import * as wasm_export from '@storagehub/wasm';
-
-export const { add } = wasm_export;
+export { FileMetadata, FileTrie } from '../wasm/pkg/storagehub_wasm.js';
