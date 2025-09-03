@@ -98,7 +98,9 @@ tokio-util = { version = "0.7", features = ["io"] }
 toml = "0.8.19"
 tower-http = { version = "0.5", features = ["cors"] }
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "=0.3.19", features = [
+	"env-filter",
+] } # Dependency pinned because 0.3.20 messes up text formatting in substrate logs
 trie-db = { version = "0.29", default-features = false }
 trybuild = "1.0"
 proc-macro2 = "1.0.79"
