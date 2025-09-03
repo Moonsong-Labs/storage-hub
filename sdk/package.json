@@ -11,7 +11,10 @@
   ],
   "scripts": {
     "build": "pnpm --filter ./core run build && pnpm --filter ./core run build:types && pnpm --filter ./msp-client run build && pnpm --filter ./msp-client run build:types",
+    "build:core": "pnpm --filter ./core run build && pnpm --filter ./core run build:types",
+    "build:msp-client": "pnpm --filter ./msp-client run build && pnpm --filter ./msp-client run build:types",
     "build:wasm": "pnpm --filter ./core run build:wasm",
+    "build:types": "pnpm --filter ./core run build:types && pnpm --filter ./msp-client run build:types",
     "clean": "node scripts/clean.js",
     "coverage": "pnpm --filter ./core run coverage && pnpm --filter ./msp-client run coverage",
     "format": "pnpm --filter ./core run format && pnpm --filter ./msp-client run format",
