@@ -44,8 +44,9 @@ pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-storage-providers = { workspace = true }
 pallet-storage-providers-runtime-api = { workspace = true }
 sh-parachain-runtime = { workspace = true }
-shc-actors-framework = { workspace = true }
+sh-solochain-evm-runtime = { workspace = true }
 shc-actors-derive = { workspace = true }
+shc-actors-framework = { workspace = true }
 shc-blockchain-service = { workspace = true }
 shc-file-transfer-service = { workspace = true }
 shc-common = { workspace = true }
@@ -85,6 +86,8 @@ sc-client-api = { workspace = true }
 sc-offchain = { workspace = true }
 sc-consensus = { workspace = true }
 sc-consensus-aura = { workspace = true }
+sc-consensus-babe = { workspace = true }
+sc-consensus-grandpa = { workspace = true }
 sc-consensus-manual-seal = { workspace = true }
 sc-executor = { workspace = true }
 sc-network = { workspace = true }
@@ -101,7 +104,9 @@ sp-api = { workspace = true }
 sp-block-builder = { workspace = true }
 sp-blockchain = { workspace = true }
 sp-consensus-aura = { workspace = true }
+sp-consensus-babe = { workspace = true }
 sp-core = { workspace = true, default-features = true }
+sp-genesis-builder = { workspace = true }
 sp-keyring = { workspace = true, default-features = true }
 sp-keystore = { workspace = true }
 sp-io = { workspace = true, default-features = true }
@@ -131,6 +136,18 @@ cumulus-primitives-parachain-inherent = { workspace = true }
 cumulus-primitives-storage-weight-reclaim = { workspace = true }
 cumulus-relay-chain-interface = { workspace = true }
 
+# Frontier (for EVM support)
+fc-api = { workspace = true }
+fc-cli = { workspace = true }
+fc-consensus = { workspace = true }
+fc-db = { workspace = true }
+fc-mapping-sync = { workspace = true }
+fc-rpc = { workspace = true, features = ["txpool"] }
+fc-rpc-core = { workspace = true, features = ["txpool"] }
+fc-storage = { workspace = true }
+fp-rpc = { workspace = true }
+pallet-ethereum = { workspace = true }
+
 [build-dependencies]
 substrate-build-script-utils = { workspace = true }
 
@@ -145,9 +162,11 @@ runtime-benchmarks = [
     "sc-service/runtime-benchmarks",
     "sp-runtime/runtime-benchmarks",
     "sh-parachain-runtime/runtime-benchmarks",
+    "sh-solochain-evm-runtime/runtime-benchmarks",
 ]
 try-runtime = [
     "polkadot-cli/try-runtime",
     "sp-runtime/try-runtime",
     "sh-parachain-runtime/try-runtime",
+    "sh-solochain-evm-runtime/try-runtime",
 ]

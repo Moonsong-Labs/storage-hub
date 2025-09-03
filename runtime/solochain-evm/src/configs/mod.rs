@@ -14,7 +14,7 @@ use frame_support::{
         fungible::{Balanced, Credit, Inspect},
         tokens::imbalance::ResolveTo,
         AsEnsureOriginWithArg, ConstU32, ConstU64, ConstU8, FindAuthor, KeyOwnerProofSystem,
-        OnUnbalanced, TypedGet, VariantCountOf,
+        OnUnbalanced, Randomness, TypedGet, VariantCountOf,
     },
     weights::Weight,
 };
@@ -44,7 +44,7 @@ use shp_treasury_funding::{
 };
 use shp_types::{Hash, Hashing, StorageDataUnit, StorageProofsMerkleTrieLayout};
 use sp_arithmetic::traits::One;
-use sp_core::{ConstU128, Get, Hasher, H160, H256, U256};
+use sp_core::{ecdsa, ConstU128, Get, Hasher, H160, H256, U256};
 use sp_runtime::{
     traits::{
         BlakeTwo256, Convert, ConvertBack, ConvertInto, IdentityLookup, OpaqueKeys,
@@ -65,7 +65,7 @@ use sp_weights::RuntimeDbWeight;
 use crate::{
     currency::WEIGHT_FEE,
     gas::WEIGHT_PER_GAS,
-    genesis_config_presets::{alith, baltathar, charleth},
+    genesis_config_presets::get_account_id_from_seed,
     weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},
     AccountId, Babe, Balance, Balances, Block, BlockNumber, BucketNfts, EvmChainId, Historical,
     Nfts, Nonce, PalletInfo, PaymentStreams, ProofsDealer, Providers, Runtime, RuntimeCall,
@@ -280,7 +280,10 @@ impl Convert<AccountId, Option<()>> for FullIdentificationOf {
 }
 
 pub fn get_validators() -> Option<Vec<AccountId>> {
-    Some(vec![alith(), baltathar(), charleth()])
+    Some(vec![
+        get_account_id_from_seed::<ecdsa::Public>("Alice"),
+        get_account_id_from_seed::<ecdsa::Public>("Bob"),
+    ])
 }
 
 pub struct NoChangesSessionManager;
@@ -1113,24 +1116,29 @@ impl sp_runtime::traits::BlockNumberProvider for BlockNumberGetter {
     type BlockNumber = BlockNumberFor<Runtime>;
 
     fn current_block_number() -> Self::BlockNumber {
-        todo!()
+        frame_system::Pallet::<Runtime>::block_number()
     }
 }
 
 // TODO: Implement this
 pub struct BabeDataGetter;
 impl pallet_randomness::GetBabeData<u64, Hash> for BabeDataGetter {
-    // Tolerate panic here because this is only ever called in an inherent (so can be omitted)
     fn get_epoch_index() -> u64 {
-        todo!()
+        pallet_babe::Pallet::<Runtime>::epoch_index()
     }
     fn get_epoch_randomness() -> Hash {
-        todo!()
+        // We use `RandomnessFromOneEpochAgo` implementation of the `Randomness` trait here, which hashes the `NextRandomness`
+        // stored by the BABE pallet, and is valid for commitments until the last block of the last epoch (`_n`). The hashed
+        // received is the hash of `NextRandomness` concatenated with the `subject` parameter provided (in this case empty).
+        let (h, _n) = pallet_babe::RandomnessFromOneEpochAgo::<Runtime>::random(b"");
+        h
     }
     fn get_parent_randomness() -> Hash {
-        // Note: we use the `CURRENT_BLOCK_RANDOMNESS` key here as it also represents the parent randomness, the only difference
-        // is the block since this randomness is valid, but we don't care about that because we are setting that directly in the `randomness` pallet.
-        todo!()
+        // We use `ParentBlockRandomness` implementation of the `Randomness` trait here, which hashes the `AuthorVrfRandomness`
+        // stored by the BABE pallet, and is valid for commitments until the parent block (`_n`). The hashed received is the
+        // hash of `AuthorVrfRandomness` concatenated with the `subject` parameter provided (in this case empty).
+        let (h_opt, _n) = pallet_babe::ParentBlockRandomness::<Runtime>::random(b"");
+        h_opt.unwrap_or_default()
     }
 }
 
@@ -1183,9 +1191,6 @@ impl pallet_payment_streams::Config for Runtime {
     type BaseDeposit = ConstU128<10>;
 }
 
-/****** ****** ****** ******/
-
-/****** Bucket NFTs pallet ******/
 impl pallet_bucket_nfts::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type WeightInfo = pallet_bucket_nfts::weights::SubstrateWeight<Runtime>;
@@ -1193,9 +1198,7 @@ impl pallet_bucket_nfts::Config for Runtime {
     #[cfg(feature = "runtime-benchmarks")]
     type Helper = ();
 }
-/****** ****** ****** ******/
 
-/****** Commit-Reveal Randomness pallet ******/
 /* pub type Seed = Hash;
 pub type SeedCommitment = Hash;
 
@@ -1316,5 +1319,3 @@ pub mod benchmark_helpers {
         }
     }
 }
-
-/****** ****** ****** ******/

@@ -66,7 +66,10 @@ pub fn development_config_genesis() -> Value {
     endowed_accounts.sort();
 
     testnet_genesis(
-        vec![authority_keys_from_seed("Alice")],
+        vec![
+            authority_keys_from_seed("Alice"),
+            authority_keys_from_seed("Bob"),
+        ],
         alith(),
         endowed_accounts,
         STORAGEHUB_EVM_CHAIN_ID,
