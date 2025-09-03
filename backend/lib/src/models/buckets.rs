@@ -75,7 +75,7 @@ impl FileTreeEntry {
 }
 
 #[derive(Debug, Serialize)]
-pub struct FileEntry {
+pub struct FileTree {
     pub name: String,
 
     #[serde(flatten)]
