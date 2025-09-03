@@ -14,7 +14,7 @@ use frame_support::{
         fungible::{Balanced, Credit, Inspect},
         tokens::imbalance::ResolveTo,
         AsEnsureOriginWithArg, ConstU32, ConstU64, ConstU8, FindAuthor, KeyOwnerProofSystem,
-        OnUnbalanced, TypedGet, VariantCountOf,
+        OnUnbalanced, Randomness, TypedGet, VariantCountOf,
     },
     weights::Weight,
 };
@@ -1117,24 +1117,29 @@ impl sp_runtime::traits::BlockNumberProvider for BlockNumberGetter {
     type BlockNumber = BlockNumberFor<Runtime>;
 
     fn current_block_number() -> Self::BlockNumber {
-        todo!()
+        frame_system::Pallet::<Runtime>::block_number()
     }
 }
 
 // TODO: Implement this
 pub struct BabeDataGetter;
 impl pallet_randomness::GetBabeData<u64, Hash> for BabeDataGetter {
-    // Tolerate panic here because this is only ever called in an inherent (so can be omitted)
     fn get_epoch_index() -> u64 {
-        todo!()
+        pallet_babe::Pallet::<Runtime>::epoch_index()
     }
     fn get_epoch_randomness() -> Hash {
-        todo!()
+        // We use `RandomnessFromOneEpochAgo` implementation of the `Randomness` trait here, which hashes the `NextRandomness`
+        // stored by the BABE pallet, and is valid for commitments until the last block of the last epoch (`_n`). The hashed
+        // received is the hash of `NextRandomness` concatenated with the `subject` parameter provided (in this case empty).
+        let (h, _n) = pallet_babe::RandomnessFromOneEpochAgo::<Runtime>::random(b"");
+        h
     }
     fn get_parent_randomness() -> Hash {
-        // Note: we use the `CURRENT_BLOCK_RANDOMNESS` key here as it also represents the parent randomness, the only difference
-        // is the block since this randomness is valid, but we don't care about that because we are setting that directly in the `randomness` pallet.
-        todo!()
+        // We use `ParentBlockRandomness` implementation of the `Randomness` trait here, which hashes the `AuthorVrfRandomness`
+        // stored by the BABE pallet, and is valid for commitments until the parent block (`_n`). The hashed received is the
+        // hash of `AuthorVrfRandomness` concatenated with the `subject` parameter provided (in this case empty).
+        let (h_opt, _n) = pallet_babe::ParentBlockRandomness::<Runtime>::random(b"");
+        h_opt.unwrap_or_default()
     }
 }
 
