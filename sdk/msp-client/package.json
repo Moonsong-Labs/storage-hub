@@ -3,14 +3,15 @@
   "version": "0.1.0",
   "description": "High-level façade around @storagehub-sdk/core for easy StorageHub integration",
   "type": "module",
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
+  "main": "./dist/index.node.js",
+  "browser": "./dist/index.browser.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "default": "./dist/index.js"
+      "browser": "./dist/index.browser.js",
+      "import": "./dist/index.node.js",
+      "default": "./dist/index.node.js"
     }
   },
   "publishConfig": {
@@ -22,10 +23,10 @@
     "README.md"
   ],
   "scripts": {
-    "build": "node ../scripts/build.js",
+    "build": "node ./build.js",
     "build:types": "tsc --emitDeclarationOnly -p tsconfig.json",
     "coverage": "vitest run --coverage",
-    "dev": "node ../scripts/build.js --watch",
+    "dev": "node ./build.js --watch",
     "format": "prettier --write \"{src/**/*.ts,src/**/*.tsx}\"",
     "format:check": "prettier --check \"{src/**/*.ts,src/**/*.tsx}\"",
     "lint": "eslint \"{src/**/*.ts,src/**/*.tsx}\"",
