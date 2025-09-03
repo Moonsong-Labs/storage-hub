@@ -12,16 +12,16 @@
   "scripts": {
     "build": "pnpm --filter ./core run build && pnpm --filter ./core run build:types && pnpm --filter ./msp-client run build && pnpm --filter ./msp-client run build:types",
     "build:wasm": "pnpm --filter ./core run build:wasm",
+    "clean": "node scripts/clean.js",
+    "coverage": "pnpm --filter ./core run coverage && pnpm --filter ./msp-client run coverage",
+    "format": "pnpm --filter ./core run format && pnpm --filter ./msp-client run format",
+    "format:check": "pnpm --filter ./core run format:check && pnpm --filter ./msp-client run format:check",
+    "lint": "pnpm --filter ./core run lint && pnpm --filter ./msp-client run lint",
+    "lint:fix": "pnpm -r --if-present run lint:fix",
     "test": "pnpm run test:core && pnpm run test:msp-client",
     "test:core": "pnpm --filter ./core run test -- --run",
     "test:msp-client": "pnpm --filter ./msp-client run test -- --run",
-    "lint": "pnpm --filter ./core run lint && pnpm --filter ./msp-client run lint",
-    "lint:fix": "pnpm -r --if-present run lint:fix",
-    "format": "pnpm --filter ./core run format && pnpm --filter ./msp-client run format",
-    "format:check": "pnpm --filter ./core run format:check && pnpm --filter ./msp-client run format:check",
-    "typecheck": "pnpm --filter ./core run typecheck && pnpm --filter ./msp-client run typecheck",
-    "coverage": "pnpm --filter ./core run coverage && pnpm --filter ./msp-client run coverage",
-    "clean": "node scripts/clean.js"
+    "typecheck": "pnpm --filter ./core run typecheck && pnpm --filter ./msp-client run typecheck"
   },
   "devDependencies": {
     "@eslint/eslintrc": "2.1.4",

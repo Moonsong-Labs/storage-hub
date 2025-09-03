@@ -26,15 +26,15 @@
   "scripts": {
     "build": "node ../scripts/build.js",
     "build:types": "tsc --emitDeclarationOnly -p tsconfig.json",
+    "build:wasm": "wasm-pack build ./wasm --target web --release --out-dir pkg && rm -f ./wasm/pkg/package.json ./wasm/pkg/.gitignore",
+    "coverage": "vitest run --coverage",
     "dev": "node ../scripts/build.js --watch",
-    "lint": "eslint \"{src/**/*.ts,src/**/*.tsx}\"",
-    "lint:fix": "eslint \"{src/**/*.ts,src/**/*.tsx}\" --fix",
     "format": "prettier --write \"{src/**/*.ts,src/**/*.tsx}\"",
     "format:check": "prettier --check \"{src/**/*.ts,src/**/*.tsx}\"",
+    "lint": "eslint \"{src/**/*.ts,src/**/*.tsx}\"",
+    "lint:fix": "eslint \"{src/**/*.ts,src/**/*.tsx}\" --fix",
     "test": "vitest",
-    "typecheck": "tsc --noEmit",
-    "coverage": "vitest run --coverage",
-    "build:wasm": "wasm-pack build ./wasm --target web --release --out-dir pkg && rm -f ./wasm/pkg/package.json ./wasm/pkg/.gitignore"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@polkadot/types": "^10.10.3",
