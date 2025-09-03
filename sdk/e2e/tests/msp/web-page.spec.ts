@@ -1,0 +1,145 @@
+import { test, expect } from '@playwright/test';
+
+test.describe('MSP Web Page Flow', () => {
+    test.use({ acceptDownloads: true });
+
+    test('clicks through all buttons and validates via console + downloads', async ({ page }) => {
+        const baseUrl = 'http://localhost:3000/e2e/page/msp.html';
+
+        const seen = new Set<string>();
+        page.on('console', (msg) => {
+            const text = msg.text();
+            // Echo page console to terminal for debugging
+            console.log('[PAGE]', text);
+            if (text.startsWith('[HEALTH]')) seen.add('health');
+            if (text.startsWith('[NONCE]')) seen.add('nonce');
+            if (text.startsWith('[SIGN]')) seen.add('sign');
+            if (text.startsWith('[VERIFY]')) seen.add('verify');
+            if (text.startsWith('[UPLOAD][RECEIPT]')) seen.add('upload');
+            if (text.startsWith('[DOWNLOAD][KEY][META]')) seen.add('dl-key');
+            if (text.startsWith('[DOWNLOAD][PATH][META]')) seen.add('dl-path');
+            if (text.startsWith('[BUCKETS][LIST]')) seen.add('buckets-list');
+            if (text.startsWith('[BUCKETS][GET]')) seen.add('bucket-get');
+            if (text.startsWith('[BUCKETS][FILES]')) seen.add('bucket-files');
+        });
+
+        const waitForConsoleTag = async (tag: string, action: () => Promise<void>) => {
+            // Clear previous occurrence to avoid tests passing due to stale state
+            seen.delete(tag);
+            await action();
+            await expect.poll(() => seen.has(tag)).toBeTruthy();
+        };
+
+        console.log('[TEST] goto', baseUrl);
+        await page.goto(baseUrl);
+        console.log('✅ goto');
+
+        // Connect MSP
+        console.log('[TEST] click Connect MSP');
+        await page.getByRole('button', { name: 'Connect MSP' }).click();
+        await page.getByText('MSP connected', { exact: false }).waitFor({ timeout: 30000 });
+        console.log('✅ Connect MSP');
+
+        // Get Health
+        console.log('[TEST] click Get Health');
+        await page.getByRole('button', { name: 'Get Health' }).click();
+        await expect.poll(() => seen.has('health')).toBeTruthy();
+        console.log('✅ Get Health');
+
+        // Get Nonce
+        console.log('[TEST] click Get Nonce');
+        await page.getByRole('button', { name: 'Get Nonce' }).click();
+        await expect.poll(() => seen.has('nonce')).toBeTruthy();
+        console.log('✅ Get Nonce');
+
+        // Sign Message
+        console.log('[TEST] click Sign Message');
+        await page.getByRole('button', { name: 'Sign Message' }).click();
+        await expect.poll(() => seen.has('sign')).toBeTruthy();
+        console.log('✅ Sign Message');
+
+        // Verify (set token)
+        console.log('[TEST] click Verify (set token)');
+        await page.getByRole('button', { name: 'Verify (set token)' }).click();
+        await expect.poll(() => seen.has('verify')).toBeTruthy();
+        console.log('✅ Verify');
+
+        // Upload adolphus.jpg
+        console.log('[TEST] click Upload adolphus.jpg');
+        await page.getByRole('button', { name: 'Upload adolphus.jpg' }).click();
+        await expect.poll(() => seen.has('upload')).toBeTruthy();
+        console.log('✅ Upload');
+
+        // Download by Key (validate download)
+        console.log('[TEST] click Download by Key');
+        const keyDownload = page.waitForEvent('download');
+        await page.getByRole('button', { name: 'Download by Key' }).click();
+        const keyFile = await keyDownload;
+        const keyPath = await keyFile.path();
+        console.log('[TEST] key download path:', keyPath);
+        expect(keyPath).toBeTruthy();
+        console.log('✅ Download by Key');
+
+        // Download by Path (validate suggested filename)
+        console.log('[TEST] click Download by Path');
+        const pathDownload = page.waitForEvent('download');
+        await page.getByRole('button', { name: 'Download by Path' }).click();
+        const pathFile = await pathDownload;
+        const suggested = pathFile.suggestedFilename();
+        console.log('[TEST] path suggested filename:', suggested);
+        expect(suggested).toContain('download_by_location');
+        console.log('✅ Download by Path');
+
+        // Ensure console tags for downloads captured
+        await expect.poll(() => seen.has('dl-key')).toBeTruthy();
+        await expect.poll(() => seen.has('dl-path')).toBeTruthy();
+        console.log('✅ Console tags for downloads');
+
+        // List buckets
+        console.log('[TEST] click List Buckets');
+        await page.getByRole('button', { name: 'List Buckets' }).click();
+        await expect.poll(() => seen.has('buckets-list')).toBeTruthy();
+        const bucketsCountText = await page.locator('#bucketsCount').textContent();
+        expect(Number(bucketsCountText)).toBeGreaterThan(0);
+        console.log('✅ List Buckets');
+
+        // Get bucket (since we are not setting a bucket ID it will return the first one from the previous step)
+        console.log('[TEST] click Get Bucket');
+        await page.getByRole('button', { name: 'Get Bucket' }).click();
+        await expect.poll(() => seen.has('bucket-get')).toBeTruthy();
+        const lastBucketJson = await page.locator('#bucketJson').textContent();
+        expect(lastBucketJson && lastBucketJson.length > 0).toBeTruthy();
+        console.log('✅ Get Bucket');
+
+        // Get files of a bucket at root
+        console.log('[TEST] click Get Files (root)');
+        await waitForConsoleTag('bucket-files', async () => {
+            await page.getByRole('button', { name: 'Get Files' }).click();
+        });
+        let filesJson = await page.locator('#filesJson').textContent();
+        expect(filesJson && filesJson.includes('Thesis')).toBeTruthy();
+        console.log('✅ Get Files (root)');
+
+        // Get files of a bucket at path `/Thesis/`
+        console.log('[TEST] click Get Files (Thesis)');
+        await page.locator('#pathInput').fill('/Thesis/');
+        await waitForConsoleTag('bucket-files', async () => {
+            await page.getByRole('button', { name: 'Get Files' }).click();
+        });
+        filesJson = await page.locator('#filesJson').textContent();
+        expect(filesJson && filesJson.includes('chapter1.pdf')).toBeTruthy();
+        console.log('✅ Get Files (Thesis)');
+
+        // Get files of a bucket at path `/Reports/`
+        console.log('[TEST] click Get Files (Reports)');
+        await page.locator('#pathInput').fill('/Reports/');
+        await waitForConsoleTag('bucket-files', async () => {
+            await page.getByRole('button', { name: 'Get Files' }).click();
+        });
+        filesJson = await page.locator('#filesJson').textContent();
+        expect(filesJson && filesJson.includes('Q1-2024.pdf')).toBeTruthy();
+        console.log('✅ Get Files (Reports)');
+    });
+});
+
+

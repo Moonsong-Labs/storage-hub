@@ -8,7 +8,7 @@ const root = process.cwd();
 const pathsToRemove = [
     'node_modules', // SDK root dependencies
     join('core', 'node_modules'),
-    join('client', 'node_modules'),
+    join('msp-client', 'node_modules'),
     join('core', 'wasm', 'target'), // Cargo build artifacts (if present)
 ];
 

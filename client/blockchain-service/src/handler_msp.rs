@@ -481,11 +481,13 @@ where
                 // In StorageHub, we assume that all `MutationsApplied` events are emitted by bucket
                 // root changes, and they should contain the encoded `BucketId` of the bucket that was mutated
                 // in the `event_info` field.
-                if event_info.is_none() {
-                    error!(target: LOG_TARGET, "MutationsApplied event with `None` event info, when it is expected to contain the BucketId of the bucket that was mutated. This should never happen. This is a bug. Please report it to the StorageHub team.");
+                let Some(event_info) = event_info else {
+                    error!(
+                        target: LOG_TARGET,
+                        "MutationsApplied event with `None` event info, when it is expected to contain the BucketId of the bucket that was mutated."
+                    );
                     return;
-                }
-                let event_info = event_info.expect("Just checked that this is not None; qed");
+                };
                 let bucket_id = match self
                     .client
                     .runtime_api()

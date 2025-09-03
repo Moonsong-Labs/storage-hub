@@ -10,16 +10,20 @@ use crate::data::{
     storage::{BoxedStorageWrapper, InMemoryStorage},
 };
 
+pub mod auth;
 pub mod health;
+pub mod msp;
 
+use auth::AuthService;
 use health::HealthService;
+use msp::MspService;
 
 /// Container for all backend services
 #[derive(Clone)]
 pub struct Services {
-    // TODO(SCAFFOLDING): Health service is for demostration only
-    // Will be replaced with a proper health service is needed when we implement the backend proper
+    pub auth: Arc<AuthService>,
     pub health: Arc<HealthService>,
+    pub msp: Arc<MspService>,
     pub storage: Arc<dyn BoxedStorage>,
     pub postgres: Arc<DBClient>,
     pub rpc: Arc<StorageHubRpcClient>,
@@ -32,13 +36,21 @@ impl Services {
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
     ) -> Self {
+        let auth = Arc::new(AuthService::default());
         let health = Arc::new(HealthService::new(
             storage.clone(),
             postgres.clone(),
             rpc.clone(),
         ));
+        let msp = Arc::new(MspService::new(
+            storage.clone(),
+            postgres.clone(),
+            rpc.clone(),
+        ));
         Self {
+            auth,
             health,
+            msp,
             storage,
             postgres,
             rpc,

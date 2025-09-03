@@ -8,7 +8,6 @@ use frame_support::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::CollectionConfig;
 use scale_info::TypeInfo;
-use shp_file_metadata::FileMetadata;
 use shp_traits::{MutateBucketsInterface, ReadProvidersInterface};
 use sp_runtime::{traits::CheckedAdd, DispatchError, SaturatedConversion};
 use sp_std::{fmt::Debug, vec::Vec};
@@ -86,16 +85,7 @@ pub struct StorageRequestMetadata<T: Config> {
 }
 
 impl<T: Config> StorageRequestMetadata<T> {
-    pub fn to_file_metadata(
-        self,
-    ) -> Result<
-        FileMetadata<
-            { shp_constants::H_LENGTH },
-            { shp_constants::FILE_CHUNK_SIZE },
-            { shp_constants::FILE_SIZE_TO_CHALLENGES },
-        >,
-        DispatchError,
-    > {
+    pub fn to_file_metadata(self) -> Result<FileMetadata, DispatchError> {
         FileMetadata::new(
             self.owner.encode(),
             self.bucket_id.as_ref().to_vec(),
@@ -520,6 +510,13 @@ impl<T: Config> From<(&StorageRequestMetadata<T>, &MerkleHash<T>)>
     }
 }
 
+/// Alias for FileMetadata with the concrete constants used in StorageHub.
+pub type FileMetadata = shp_file_metadata::FileMetadata<
+    { shp_constants::H_LENGTH },
+    { shp_constants::FILE_CHUNK_SIZE },
+    { shp_constants::FILE_SIZE_TO_CHALLENGES },
+>;
+
 /// Alias for the `MerkleHash` type used in the ProofsDealerInterface representing file keys.
 pub type MerkleHash<T> =
     <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash;
@@ -626,3 +623,6 @@ pub type ThresholdType<T> = <T as crate::Config>::ThresholdType;
 /// Alias for the `TickNumber` used in the ProofsDealer pallet.
 pub type TickNumber<T> =
     <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::TickNumber;
+
+/// Alias for the `OffchainSignature` type used in the FileSystem pallet.
+pub type OffchainSignatureFor<T> = <T as crate::Config>::OffchainSignature;

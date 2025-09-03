@@ -1,5 +1,5 @@
 [package]
-name = "shr-solochain-evm"
+name = "sh-solochain-evm-runtime"
 version = "0.1.0"
 description = "A solochain StorageHub Runtime with EVM compatibility using Frontier."
 homepage = { workspace = true }

@@ -1,28 +1,271 @@
-//! Request handlers for StorageHub API endpoints
+use std::io::Cursor;
 
-use axum::{extract::State, Json};
+use axum::{
+    extract::{Path, Query, State},
+    http::StatusCode,
+    response::IntoResponse,
+    Json,
+};
+use axum_extra::{
+    extract::Multipart,
+    headers::{authorization::Bearer, Authorization},
+    response::file_stream::FileStream,
+    TypedHeader,
+};
+use serde::Deserialize;
+use tokio_util::io::ReaderStream;
 
-use crate::services::{health, Services};
+use crate::{
+    api::validation::extract_bearer_token,
+    constants::mocks::MOCK_ADDRESS,
+    error::Error,
+    models::{
+        auth::{NonceRequest, VerifyRequest},
+        files::{FileListResponse, FileUploadResponse},
+    },
+    services::Services,
+};
 
-// TODO(SCAFFOLDING): These are example endpoints for demonstration.
-// Replace with actual MSP API endpoints when implementing real features.
+// TODO: we could move from `TypedHeader` to axum-jwt (needs rust 1.88)
 
-/// Health check handler
-pub async fn health_check_detailed(
+// ==================== Auth Handlers ====================
+
+pub async fn nonce(
     State(services): State<Services>,
-) -> Json<health::DetailedHealthStatus> {
-    Json(services.health.check_health().await)
+    Json(payload): Json<NonceRequest>,
+) -> Result<impl IntoResponse, Error> {
+    let response = services
+        .auth
+        .generate_nonce(&payload.address, payload.chain_id)
+        .await?;
+    Ok(Json(response))
 }
 
-#[cfg(all(test, feature = "mocks"))]
-mod tests {
-    use super::*;
+pub async fn verify(
+    State(services): State<Services>,
+    Json(payload): Json<VerifyRequest>,
+) -> Result<impl IntoResponse, Error> {
+    let response = services
+        .auth
+        .verify_eth_signature(&payload.message, &payload.signature)
+        .await?;
+    Ok(Json(response))
+}
 
-    #[tokio::test]
-    async fn test_health_check() {
-        let services = Services::mocks();
-        let response = health_check_detailed(State(services)).await;
-        assert_eq!(response.0.status, "healthy");
-        assert!(!response.0.version.is_empty());
+pub async fn refresh(
+    State(services): State<Services>,
+    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+) -> Result<impl IntoResponse, Error> {
+    let token = auth.token();
+    let response = services.auth.refresh_token(token).await?;
+    Ok(Json(response))
+}
+
+pub async fn logout(
+    State(services): State<Services>,
+    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+) -> Result<impl IntoResponse, Error> {
+    let token = auth.token();
+    services.auth.logout(token).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn profile(
+    State(services): State<Services>,
+    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+) -> Result<impl IntoResponse, Error> {
+    let token = auth.token();
+    let response = services.auth.get_profile(token).await?;
+    Ok(Json(response))
+}
+
+// ==================== MSP Info Handlers ====================
+
+pub async fn info(State(services): State<Services>) -> Result<impl IntoResponse, Error> {
+    let response = services.msp.get_info().await?;
+    Ok(Json(response))
+}
+
+pub async fn stats(State(services): State<Services>) -> Result<impl IntoResponse, Error> {
+    let response = services.msp.get_stats().await?;
+    Ok(Json(response))
+}
+
+pub async fn value_props(State(services): State<Services>) -> Result<impl IntoResponse, Error> {
+    let response = services.msp.get_value_props().await?;
+    Ok(Json(response))
+}
+
+pub async fn msp_health(State(services): State<Services>) -> Result<impl IntoResponse, Error> {
+    let response = services.msp.get_health().await?;
+    Ok(Json(response))
+}
+
+// ==================== Bucket Handlers ====================
+
+pub async fn list_buckets(
+    State(services): State<Services>,
+    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+) -> Result<impl IntoResponse, Error> {
+    let payload = extract_bearer_token(&auth)?;
+    let address = payload
+        .get("address")
+        .and_then(|a| a.as_str())
+        .unwrap_or(MOCK_ADDRESS);
+
+    let response = services.msp.list_user_buckets(address).await?;
+    Ok(Json(response))
+}
+
+pub async fn get_bucket(
+    State(services): State<Services>,
+    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    Path(bucket_id): Path<String>,
+) -> Result<impl IntoResponse, Error> {
+    let _auth = extract_bearer_token(&auth)?;
+
+    let response = services.msp.get_bucket(&bucket_id).await?;
+    Ok(Json(response))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FilesQuery {
+    pub path: Option<String>,
+}
+
+pub async fn get_files(
+    State(services): State<Services>,
+    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    Path(bucket_id): Path<String>,
+    Query(query): Query<FilesQuery>,
+) -> Result<impl IntoResponse, Error> {
+    let _auth = extract_bearer_token(&auth)?;
+
+    let files = services
+        .msp
+        .get_files(&bucket_id, query.path.as_deref())
+        .await?;
+    let response = FileListResponse {
+        bucket_id: bucket_id.clone(),
+        files,
+    };
+    Ok(Json(response))
+}
+
+// ==================== File Handlers ====================
+
+pub async fn download_by_location(
+    State(_services): State<Services>,
+    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    Path((_bucket_id, _file_location)): Path<(String, String)>,
+) -> Result<impl IntoResponse, Error> {
+    let _auth = extract_bearer_token(&auth)?;
+
+    // TODO(MOCK): return proper data
+    let file_data = b"Mock file content for download".to_vec();
+    let stream = ReaderStream::new(Cursor::new(file_data));
+    let file_stream_resp = FileStream::new(stream).file_name("by_location.txt");
+
+    Ok(file_stream_resp.into_response())
+}
+
+pub async fn download_by_key(
+    State(_services): State<Services>,
+    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    Path((_bucket_id, _file_key)): Path<(String, String)>,
+) -> Result<impl IntoResponse, Error> {
+    let _auth = extract_bearer_token(&auth)?;
+
+    // TODO(MOCK): return proper data
+    let file_data = b"Mock file content for download".to_vec();
+    let stream = ReaderStream::new(Cursor::new(file_data));
+    let file_stream_resp = FileStream::new(stream).file_name("by_key.txt");
+
+    Ok(file_stream_resp.into_response())
+}
+
+pub async fn get_file_info(
+    State(services): State<Services>,
+    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    Path((bucket_id, file_key)): Path<(String, String)>,
+) -> Result<impl IntoResponse, Error> {
+    let _auth = extract_bearer_token(&auth)?;
+
+    let response = services.msp.get_file_info(&bucket_id, &file_key).await?;
+    Ok(Json(response))
+}
+
+pub async fn upload_file(
+    State(_services): State<Services>,
+    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    Path((bucket_id, file_key)): Path<(String, String)>,
+    mut multipart: Multipart,
+) -> Result<impl IntoResponse, Error> {
+    let _auth = extract_bearer_token(&auth)?;
+
+    // Extract file from multipart
+    let mut file_data = Vec::new();
+    let mut file_name = String::new();
+
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| Error::BadRequest(e.to_string()))?
+    {
+        if field.name() == Some("file") {
+            file_name = field
+                .file_name()
+                .ok_or_else(|| Error::BadRequest("Missing file name".to_string()))?
+                .to_string();
+            file_data = field
+                .bytes()
+                .await
+                .map_err(|e| Error::BadRequest(e.to_string()))?
+                .to_vec();
+            break;
+        }
     }
+
+    if file_data.is_empty() {
+        return Err(Error::BadRequest("No file provided".to_string()));
+    }
+
+    // TODO(MOCK): proper success response
+    let response = FileUploadResponse {
+        status: "upload_successful".to_string(),
+        file_key: file_key.clone(),
+        bucket_id: bucket_id.clone(),
+        fingerprint: "5d7a3700e1f7d973c064539f1b18c988dace6b4f1a57650165e9b58305db090f".to_string(),
+        // TODO: location is arbitrary, don't tie it to bucket_id and multipart filename
+        location: format!("/files/{}/{}", bucket_id, file_name),
+    };
+
+    Ok((StatusCode::CREATED, Json(response)))
+}
+
+pub async fn distribute_file(
+    State(services): State<Services>,
+    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    Path((bucket_id, file_key)): Path<(String, String)>,
+) -> Result<impl IntoResponse, Error> {
+    let _auth = extract_bearer_token(&auth)?;
+
+    let response = services.msp.distribute_file(&bucket_id, &file_key).await?;
+    Ok(Json(response))
+}
+
+// ==================== Payment Handler ====================
+
+pub async fn payment_stream(
+    State(services): State<Services>,
+    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+) -> Result<impl IntoResponse, Error> {
+    let auth = extract_bearer_token(&auth)?;
+
+    let address = auth
+        .get("address")
+        .and_then(|a| a.as_str())
+        .unwrap_or(MOCK_ADDRESS);
+    let response = services.msp.get_payment_stream(address).await?;
+    Ok(Json(response))
 }
