@@ -18,7 +18,17 @@ test.describe('MSP Web Page Flow', () => {
             if (text.startsWith('[UPLOAD][RECEIPT]')) seen.add('upload');
             if (text.startsWith('[DOWNLOAD][KEY][META]')) seen.add('dl-key');
             if (text.startsWith('[DOWNLOAD][PATH][META]')) seen.add('dl-path');
+            if (text.startsWith('[BUCKETS][LIST]')) seen.add('buckets-list');
+            if (text.startsWith('[BUCKETS][GET]')) seen.add('bucket-get');
+            if (text.startsWith('[BUCKETS][FILES]')) seen.add('bucket-files');
         });
+
+        const waitForConsoleTag = async (tag: string, action: () => Promise<void>) => {
+            // Clear previous occurrence to avoid tests passing due to stale state
+            seen.delete(tag);
+            await action();
+            await expect.poll(() => seen.has(tag)).toBeTruthy();
+        };
 
         console.log('[TEST] goto', baseUrl);
         await page.goto(baseUrl);
@@ -84,6 +94,51 @@ test.describe('MSP Web Page Flow', () => {
         await expect.poll(() => seen.has('dl-key')).toBeTruthy();
         await expect.poll(() => seen.has('dl-path')).toBeTruthy();
         console.log('✅ Console tags for downloads');
+
+        // List buckets
+        console.log('[TEST] click List Buckets');
+        await page.getByRole('button', { name: 'List Buckets' }).click();
+        await expect.poll(() => seen.has('buckets-list')).toBeTruthy();
+        const bucketsCountText = await page.locator('#bucketsCount').textContent();
+        expect(Number(bucketsCountText)).toBeGreaterThan(0);
+        console.log('✅ List Buckets');
+
+        // Get bucket (since we are not setting a bucket ID it will return the first one from the previous step)
+        console.log('[TEST] click Get Bucket');
+        await page.getByRole('button', { name: 'Get Bucket' }).click();
+        await expect.poll(() => seen.has('bucket-get')).toBeTruthy();
+        const lastBucketJson = await page.locator('#bucketJson').textContent();
+        expect(lastBucketJson && lastBucketJson.length > 0).toBeTruthy();
+        console.log('✅ Get Bucket');
+
+        // Get files of a bucket at root
+        console.log('[TEST] click Get Files (root)');
+        await waitForConsoleTag('bucket-files', async () => {
+            await page.getByRole('button', { name: 'Get Files' }).click();
+        });
+        let filesJson = await page.locator('#filesJson').textContent();
+        expect(filesJson && filesJson.includes('Thesis')).toBeTruthy();
+        console.log('✅ Get Files (root)');
+
+        // Get files of a bucket at path `/Thesis/`
+        console.log('[TEST] click Get Files (Thesis)');
+        await page.locator('#pathInput').fill('/Thesis/');
+        await waitForConsoleTag('bucket-files', async () => {
+            await page.getByRole('button', { name: 'Get Files' }).click();
+        });
+        filesJson = await page.locator('#filesJson').textContent();
+        expect(filesJson && filesJson.includes('chapter1.pdf')).toBeTruthy();
+        console.log('✅ Get Files (Thesis)');
+
+        // Get files of a bucket at path `/Reports/`
+        console.log('[TEST] click Get Files (Reports)');
+        await page.locator('#pathInput').fill('/Reports/');
+        await waitForConsoleTag('bucket-files', async () => {
+            await page.getByRole('button', { name: 'Get Files' }).click();
+        });
+        filesJson = await page.locator('#filesJson').textContent();
+        expect(filesJson && filesJson.includes('Q1-2024.pdf')).toBeTruthy();
+        console.log('✅ Get Files (Reports)');
     });
 });
 

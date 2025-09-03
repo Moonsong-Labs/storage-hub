@@ -6,13 +6,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MetaMask + SDK Test</title>
     <script type="importmap">
-    {
-      "imports": {
-        "@storagehub-sdk/core": "/core/dist/index.js",
-        "@storagehub/wasm": "/core/wasm/pkg/storagehub_wasm.js",
-        "ethers": "https://cdn.jsdelivr.net/npm/ethers@6.15.0/+esm"
+      {
+        "imports": {
+          "@storagehub-sdk/core": "http://localhost:3001/core/dist/index.js",
+          "@storagehub/wasm": "http://localhost:3001/core/wasm/pkg/storagehub_wasm.js",
+          "@polkadot/types": "https://cdn.jsdelivr.net/npm/@polkadot/types@10.9.1/+esm",
+          "@polkadot/types/interfaces": "https://cdn.jsdelivr.net/npm/@polkadot/types@10.9.1/interfaces/+esm",
+          "ethers": "https://cdn.jsdelivr.net/npm/ethers@6.15.0/+esm"
+        }
       }
-    }
     </script>
     <style>
         body {
@@ -63,7 +65,7 @@
         // Initialize WASM once on load so FileManager can work
         (async () => {
             try {
-                const initWasm = (await import('/core/wasm/pkg/storagehub_wasm.js')).default;
+                const { initWasm } = await import('/core/dist/index.js');
                 await initWasm();
                 console.log('WASM ready');
             } catch (e) {

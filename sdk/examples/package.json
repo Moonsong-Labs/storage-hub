@@ -1,0 +1,16 @@
+{
+  "name": "@storagehub-sdk/examples",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "core": "node core-demo.mjs",
+    "msp": "node msp-demo.mjs"
+  },
+  "dependencies": {
+    "@storagehub-sdk/core": "^0.0.2",
+    "@storagehub-sdk/msp-client": "^0.0.2"
+  }
+}

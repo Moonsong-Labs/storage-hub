@@ -1,43 +1,43 @@
 {
-    "name": "@storagehub-sdk/root",
-    "private": true,
-    "version": "0.1.0",
-    "description": "Workspace root for StorageHub SDK monorepo",
-    "type": "module",
-    "packageManager": "pnpm@8.12.1",
-    "workspaces": [
-        "core",
-        "msp-client",
-        "e2e"
-    ],
-    "scripts": {
-        "build": "pnpm --filter ./core run build && pnpm --filter ./core run build:types && pnpm --filter ./msp-client run build",
-        "build:wasm": "pnpm --filter ./core run build:wasm",
-        "test": "pnpm run test:core && pnpm run test:msp-client",
-        "test:core": "pnpm --filter ./core run test -- --run",
-        "test:msp-client": "pnpm --filter ./msp-client run test -- --run",
-        "lint": "pnpm --filter ./core run lint && pnpm --filter ./msp-client run lint",
-        "format": "pnpm --filter ./core run format && pnpm --filter ./msp-client run format",
-        "format:check": "pnpm --filter ./core run format:check && pnpm --filter ./msp-client run format:check",
-        "typecheck": "pnpm --filter ./core run typecheck && pnpm --filter ./msp-client run typecheck",
-        "coverage": "pnpm --filter ./core run coverage && pnpm --filter ./msp-client run coverage",
-        "clean": "node scripts/clean.js"
-    },
-    "devDependencies": {
-        "@eslint/eslintrc": "2.1.4",
-        "@typescript-eslint/eslint-plugin": "^8.37.0",
-        "@typescript-eslint/parser": "^8.37.0",
-        "@vitest/coverage-v8": "^3.2.4",
-        "esbuild": "^0.25.6",
-        "eslint": "^9.31.0",
-        "eslint-config-prettier": "^10.1.5",
-        "eslint-plugin-simple-import-sort": "^12.1.1",
-        "lint-staged": "^16.1.2",
-        "prettier": "^3.6.2",
-        "typescript": "~5.5.4",
-        "vitest": "^3.2.4"
-    },
-    "engines": {
-        "node": ">=22"
-    }
+  "name": "@storagehub-sdk/root",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Workspace root for StorageHub SDK monorepo",
+  "type": "module",
+  "workspaces": [
+    "core",
+    "msp-client",
+    "e2e"
+  ],
+  "scripts": {
+    "build": "pnpm --filter ./core run build && pnpm --filter ./core run build:types && pnpm --filter ./msp-client run build",
+    "build:wasm": "pnpm --filter ./core run build:wasm",
+    "test": "pnpm run test:core && pnpm run test:msp-client",
+    "test:core": "pnpm --filter ./core run test -- --run",
+    "test:msp-client": "pnpm --filter ./msp-client run test -- --run",
+    "lint": "pnpm --filter ./core run lint && pnpm --filter ./msp-client run lint",
+    "lint:fix": "pnpm -r --if-present run lint:fix",
+    "format": "pnpm --filter ./core run format && pnpm --filter ./msp-client run format",
+    "format:check": "pnpm --filter ./core run format:check && pnpm --filter ./msp-client run format:check",
+    "typecheck": "pnpm --filter ./core run typecheck && pnpm --filter ./msp-client run typecheck",
+    "coverage": "pnpm --filter ./core run coverage && pnpm --filter ./msp-client run coverage",
+    "clean": "node scripts/clean.js"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "2.1.4",
+    "@typescript-eslint/eslint-plugin": "^8.37.0",
+    "@typescript-eslint/parser": "^8.37.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "esbuild": "^0.25.6",
+    "eslint": "^9.31.0",
+    "eslint-config-prettier": "^10.1.5",
+    "eslint-plugin-simple-import-sort": "^12.1.1",
+    "lint-staged": "^16.1.2",
+    "prettier": "^3.6.2",
+    "typescript": "~5.5.4",
+    "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">=22"
+  }
 }

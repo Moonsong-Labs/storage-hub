@@ -94,7 +94,7 @@ jobs:
           mkdir -p runtimes
           mkdir -p build
           cp target/release/storage-hub-node build/
-          cp target/release/wbuild/storage*/storage*_runtime.compact.compressed.wasm runtimes/
+          cp target/release/wbuild/sh-*/sh*_runtime.compact.compressed.wasm runtimes/
       - uses: actions/upload-artifact@v4
         with:
           name: node

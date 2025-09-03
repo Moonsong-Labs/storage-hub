@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
-use crate::models::buckets::FileTree;
+use crate::models::buckets::FileEntry;
 
 #[derive(Debug, Serialize)]
 pub struct FileInfo {
@@ -31,7 +31,7 @@ pub struct DistributeResponse {
 pub struct FileListResponse {
     #[serde(rename = "bucketId")]
     pub bucket_id: String,
-    pub files: Vec<FileTree>,
+    pub files: Vec<FileEntry>,
 }
 
 #[derive(Debug, Serialize)]

@@ -17,12 +17,10 @@ pub struct Bucket {
 }
 
 #[derive(Debug, Serialize)]
-pub struct FileTree {
+pub struct FileEntry {
     pub name: String,
     #[serde(rename = "type")]
-    pub node_type: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub children: Option<Vec<FileTree>>,
+    pub entry_type: String,
     #[serde(skip_serializing_if = "Option::is_none", rename = "sizeBytes")]
     pub size_bytes: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "fileKey")]

@@ -1,7 +1,7 @@
 use std::io::Cursor;
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -12,6 +12,7 @@ use axum_extra::{
     response::file_stream::FileStream,
     TypedHeader,
 };
+use serde::Deserialize;
 use tokio_util::io::ReaderStream;
 
 use crate::{
@@ -127,17 +128,26 @@ pub async fn get_bucket(
     Ok(Json(response))
 }
 
+#[derive(Debug, Deserialize)]
+pub struct FilesQuery {
+    pub path: Option<String>,
+}
+
 pub async fn get_files(
     State(services): State<Services>,
     TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
     Path(bucket_id): Path<String>,
+    Query(query): Query<FilesQuery>,
 ) -> Result<impl IntoResponse, Error> {
     let _auth = extract_bearer_token(&auth)?;
 
-    let file_tree = services.msp.get_file_tree(&bucket_id).await?;
+    let files = services
+        .msp
+        .get_files(&bucket_id, query.path.as_deref())
+        .await?;
     let response = FileListResponse {
         bucket_id: bucket_id.clone(),
-        files: vec![file_tree],
+        files,
     };
     Ok(Json(response))
 }
