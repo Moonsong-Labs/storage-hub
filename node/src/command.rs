@@ -499,6 +499,7 @@ pub fn run() -> Result<()> {
                                     indexer_options,
                                     fisherman_options.clone(),
                                     hwbench,
+                                    cli.run.sealing,
                                 )
                                 .await
                                 .map_err(Into::into)
@@ -592,6 +593,7 @@ pub fn run() -> Result<()> {
                                     indexer_options,
                                     fisherman_options.clone(),
                                     hwbench,
+                                    cli.run.sealing,
                                 )
                                 .await
                                 .map_err(Into::into)
