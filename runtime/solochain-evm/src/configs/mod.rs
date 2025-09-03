@@ -44,7 +44,7 @@ use shp_treasury_funding::{
 };
 use shp_types::{Hash, Hashing, StorageDataUnit, StorageProofsMerkleTrieLayout};
 use sp_arithmetic::traits::One;
-use sp_core::{ConstU128, Get, Hasher, H160, H256, U256};
+use sp_core::{ecdsa, ConstU128, Get, Hasher, H160, H256, U256};
 use sp_runtime::{
     traits::{
         BlakeTwo256, Convert, ConvertBack, ConvertInto, IdentityLookup, OpaqueKeys,
@@ -65,7 +65,7 @@ use sp_weights::RuntimeDbWeight;
 use crate::{
     currency::WEIGHT_FEE,
     gas::WEIGHT_PER_GAS,
-    genesis_config_presets::{alith, baltathar, charleth},
+    genesis_config_presets::{alith, get_account_id_from_seed},
     weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},
     AccountId, Babe, Balance, Balances, Block, BlockNumber, BucketNfts, EvmChainId, Historical,
     Nfts, Nonce, PalletInfo, PaymentStreams, ProofsDealer, Providers, Runtime, RuntimeCall,
@@ -280,7 +280,8 @@ impl Convert<AccountId, Option<()>> for FullIdentificationOf {
 }
 
 pub fn get_validators() -> Option<Vec<AccountId>> {
-    Some(vec![alith(), baltathar(), charleth()])
+    // Match dev preset initial authorities (Alice only)
+    Some(vec![get_account_id_from_seed::<ecdsa::Public>("Alice")])
 }
 
 pub struct NoChangesSessionManager;
