@@ -1401,7 +1401,7 @@ where
 
     // If we are a provider we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
-    if provider_options.is_some() {
+    if provider_options.is_some() || fisherman_options.is_some() {
         file_transfer_request_protocol =
             Some(configure_file_transfer_network::<_, ParachainRuntime>(
                 client.clone(),
