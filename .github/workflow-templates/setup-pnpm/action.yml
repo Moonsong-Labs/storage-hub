@@ -4,7 +4,7 @@ description: Installs pnpm and caches the pnpm store
 inputs:
   node_version:
     description: "Node.js version"
-    default: "22"
+    default: "23"
     required: false
 
 runs:
