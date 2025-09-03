@@ -209,6 +209,13 @@ impl MspService {
     ///
     /// Verifies ownership of bucket is `user`
     /// Returns only direct children of the given path
+    ///
+    /// ## Business Rules for File Location Handling
+    ///
+    /// The given path is normalized using the following rules:
+    /// * root is implicit
+    /// * duplicated slashes are collapsed
+    /// * trailing slashes are trimmed
     pub async fn get_file_tree(
         &self,
         bucket_id: &str,
@@ -217,9 +224,6 @@ impl MspService {
     ) -> Result<FileTree, Error> {
         // first, get the bucket from the db and determine if user can view the bucket
         let bucket = self.get_db_bucket(bucket_id, user).await?;
-
-        // Normalize path
-        let normalized = path.trim_matches('/');
 
         // TODO: request by page
         // TODO: optimize query by requesting only matching paths

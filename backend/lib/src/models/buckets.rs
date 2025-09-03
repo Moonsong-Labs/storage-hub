@@ -84,6 +84,8 @@ pub struct FileTree {
 
 impl FileTree {
     /// Convert a list of files into a hierarchical file tree structure
+    ///
+    /// Applies the same normalization rules as `from_files_filtered`
     pub fn from_files(files: Vec<DBFile>) -> Self {
         // Use a BTreeMap to maintain consistent ordering
         let mut root_map: BTreeMap<String, FileTreeEntry> = BTreeMap::new();
@@ -92,8 +94,9 @@ impl FileTree {
             // Convert location from Vec<u8> to String
             let location = String::from_utf8_lossy(&file.location);
 
-            // Split the location into segments, removing empty ones
-            let segments: Vec<&str> = location.split('/').filter(|s| !s.is_empty()).collect();
+            // Normalize the path and split into segments
+            let normalized = Self::normalize_path(&location);
+            let segments: Vec<&str> = normalized.split('/').filter(|s| !s.is_empty()).collect();
 
             if segments.is_empty() {
                 continue;
@@ -113,54 +116,58 @@ impl FileTree {
     }
 
     /// Create a file tree containing only direct children of the specified path
+    ///
+    /// ## Business Rules for File Location Handling
+    ///
+    /// - **Root is implicit/optional**: `/folder/file.txt` and `folder/file.txt` both create
+    ///   a `folder` folder with `file.txt` as its child
+    /// - **Duplicate slashes are collapsed**: `//file.txt`, `////file.txt`, and `/file.txt`
+    ///   all become the same entry named `file.txt` under the root folder
+    /// - **Trailing slashes are trimmed**: `file.txt/` and `file.txt` are both displayed
+    ///   as `file.txt` in the name (these would be separate entries in the database)
     pub fn from_files_filtered(files: Vec<DBFile>, filter_path: &str) -> Self {
         let mut children_map: BTreeMap<String, FileTreeEntry> = BTreeMap::new();
 
-        // Normalize the filter path to always have the format we need for strip_prefix:
-        // - "/" for root (we'll strip this from the beginning)
-        // - "/path/to/" for other paths (with trailing slash for clean separation)
-        let prefix_to_strip = if filter_path == "/" || filter_path.is_empty() {
-            "/".to_string()
-        } else {
-            // Ensure it starts with "/" and ends with "/" for clean stripping
-            let path = if filter_path.starts_with('/') {
-                filter_path.to_string()
-            } else {
-                format!("/{}", filter_path)
-            };
-            // Add trailing slash if not present
-            if path.ends_with('/') {
-                path
-            } else {
-                format!("{}/", path)
-            }
-        };
+        let prefix_to_match = Self::normalize_path(filter_path);
 
         for file in files {
-            // Convert location from Vec<u8> to String
             let location = String::from_utf8_lossy(&file.location);
 
-            // Ensure location starts with "/"
-            let location_with_slash = if location.starts_with('/') {
-                location.into_owned()
-            } else {
-                format!("/{}", location)
-            };
+            // Normalize the file location using the same rules
+            // FIXME: in case of files with the same resulting name
+            // they will override each other in the map
+            let normalized_location = Self::normalize_path(&location);
 
-            // Try to strip the prefix - no branching needed now
-            let remaining = match location_with_slash.strip_prefix(&prefix_to_strip) {
-                Some(remaining) => remaining,
-                None => continue, // File is not under this path
+            // Determine if this file is under the filter path
+            let relative_path = if prefix_to_match.is_empty() {
+                // We're at root - everything is relative to root
+                normalized_location.clone()
+            } else if normalized_location == prefix_to_match {
+                // The location exactly matches the filter path - it's a file at this level
+                // Extract just the filename
+                normalized_location
+                    .rsplit('/')
+                    .next()
+                    .unwrap_or(&normalized_location)
+                    .to_string()
+            } else if let Some(remaining) =
+                normalized_location.strip_prefix(&format!("{}/", prefix_to_match))
+            {
+                // The location is under the filter path
+                remaining.to_string()
+            } else {
+                // Not under this path
+                continue;
             };
 
             // Get the first segment - this is the direct child
-            let first_segment = remaining.split('/').next().unwrap_or("");
+            let first_segment = relative_path.split('/').next().unwrap_or("");
             if first_segment.is_empty() {
                 continue; // Skip empty segments
             }
 
             // Check if this is a file or folder by looking for more segments
-            let is_file = !remaining.contains('/');
+            let is_file = !relative_path.contains('/');
 
             if is_file {
                 // This is a direct file under the path
@@ -188,18 +195,31 @@ impl FileTree {
         let children = Self::map_to_children(children_map);
 
         // Use the last segment of the path as the name, or "/" for root
-        let name = prefix_to_strip
-            .trim_end_matches('/')
-            .split('/')
-            .last()
-            .filter(|s| !s.is_empty())
-            .unwrap_or("/")
-            .to_string();
+        let name = if prefix_to_match.is_empty() {
+            "/".to_string()
+        } else {
+            prefix_to_match
+                .rsplit('/')
+                .next()
+                .unwrap_or(&prefix_to_match) // fallback to original
+                .to_string()
+        };
 
         FileTree {
             name,
             entry: FileTreeEntry::Folder(FileTreeFolder { children }),
         }
+    }
+
+    /// Normalize a path according to the business rules:
+    /// - Remove leading slash (root is implicit)
+    /// - Trim trailing slashes
+    /// - Collapse duplicate slashes
+    fn normalize_path(path: &str) -> String {
+        // Collapse duplicate slashes, trim leading/trailing slashes
+        let segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+
+        segments.join("/")
     }
 
     /// Recursively insert a file into the tree structure
@@ -278,6 +298,111 @@ mod tests {
             deletion_status: None,
             created_at: DateTime::from_timestamp(0, 0).unwrap().naive_utc(),
             updated_at: DateTime::from_timestamp(0, 0).unwrap().naive_utc(),
+        }
+    }
+
+    #[test]
+    fn test_normalize_path() {
+        // Test root normalization
+        assert_eq!(FileTree::normalize_path("/"), "");
+        assert_eq!(FileTree::normalize_path(""), "");
+
+        // Test duplicate slashes
+        assert_eq!(FileTree::normalize_path("//file.txt"), "file.txt");
+        assert_eq!(FileTree::normalize_path("////file.txt"), "file.txt");
+        assert_eq!(
+            FileTree::normalize_path("/path//to///file.txt"),
+            "path/to/file.txt"
+        );
+
+        // Test trailing slashes
+        assert_eq!(FileTree::normalize_path("file.txt/"), "file.txt");
+        assert_eq!(FileTree::normalize_path("/folder/"), "folder");
+        assert_eq!(
+            FileTree::normalize_path("folder/subfolder/"),
+            "folder/subfolder"
+        );
+
+        // Test leading slash removal (root is implicit)
+        assert_eq!(
+            FileTree::normalize_path("/folder/file.txt"),
+            "folder/file.txt"
+        );
+        assert_eq!(
+            FileTree::normalize_path("folder/file.txt"),
+            "folder/file.txt"
+        );
+
+        // Test combinations
+        assert_eq!(
+            FileTree::normalize_path("///folder//file.txt///"),
+            "folder/file.txt"
+        );
+    }
+
+    #[test]
+    fn test_business_rules_root_optional() {
+        // Test that /folder/file.txt and folder/file.txt produce the same result
+        let files1 = vec![test_file_with_location_key_and_size(
+            "/folder/file.txt",
+            "key1",
+            100,
+        )];
+        let files2 = vec![test_file_with_location_key_and_size(
+            "folder/file.txt",
+            "key1",
+            100,
+        )];
+
+        let tree1 = FileTree::from_files(files1);
+        let tree2 = FileTree::from_files(files2);
+
+        // Both should have the same structure
+        if let FileTreeEntry::Folder(folder1) = &tree1.entry {
+            if let FileTreeEntry::Folder(folder2) = &tree2.entry {
+                assert_eq!(folder1.children.len(), folder2.children.len());
+                assert_eq!(folder1.children[0].name, folder2.children[0].name);
+            }
+        }
+    }
+
+    #[test]
+    fn test_business_rules_duplicate_slashes() {
+        // Test that multiple slashes are collapsed
+        let files = vec![
+            test_file_with_location_key_and_size("//file1.txt", "key1", 100),
+            test_file_with_location_key_and_size("////file2.txt", "key2", 200),
+            test_file_with_location_key_and_size("/file3.txt", "key3", 300),
+        ];
+
+        let tree = FileTree::from_files_filtered(files, "/");
+
+        if let FileTreeEntry::Folder(folder) = &tree.entry {
+            // All three files should be at root level
+            assert_eq!(folder.children.len(), 3);
+
+            let names: Vec<String> = folder.children.iter().map(|c| c.name.clone()).collect();
+            assert!(names.contains(&"file1.txt".to_string()));
+            assert!(names.contains(&"file2.txt".to_string()));
+            assert!(names.contains(&"file3.txt".to_string()));
+        }
+    }
+
+    #[test]
+    fn test_business_rules_trailing_slashes() {
+        // Test that trailing slashes are trimmed
+        let files = vec![
+            test_file_with_location_key_and_size("file.txt/", "key1", 100),
+            test_file_with_location_key_and_size("file.txt", "key2", 200),
+        ];
+
+        let tree = FileTree::from_files_filtered(files, "/");
+
+        if let FileTreeEntry::Folder(folder) = &tree.entry {
+            // Both should appear as "file.txt" (2 separate entries with the same name)
+            // FIXME: see comment in method about normalized file names overwriting each other
+            assert_eq!(folder.children.len(), 2);
+            assert_eq!(folder.children[0].name, "file.txt");
         }
     }
 
@@ -403,6 +528,14 @@ mod tests {
                 .any(|c| c.name == "root_file.txt" && matches!(c.entry, FileTreeEntry::File(_))));
         } else {
             panic!("Root should be a folder");
+        }
+
+        // Also test with empty string (should be same as "/")
+        let tree2 = FileTree::from_files_filtered(files, "");
+        assert_eq!(tree2.name, "/");
+
+        if let FileTreeEntry::Folder(folder2) = &tree2.entry {
+            assert_eq!(folder2.children.len(), 3);
         }
     }
 
