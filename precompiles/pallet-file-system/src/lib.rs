@@ -186,7 +186,7 @@ where
     Runtime::RuntimeCall: From<FileSystemCall<Runtime>>,
     <Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<Runtime::AccountId>,
     <Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<Runtime::AccountId>>,
-    // Runtime types (we should update this bounds with the correct types once the EVM-compatible SH runtime is ready):
+    // Runtime types:
     ProviderIdFor<Runtime>: From<H256> + Into<H256>,
     ValuePropId<Runtime>: From<H256> + Into<H256>,
     StorageDataUnit<Runtime>: From<u64>,
