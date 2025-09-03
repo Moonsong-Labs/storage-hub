@@ -315,6 +315,7 @@ pub mod tests {
             .get_msp_by_onchain_id(&OnchainMspId::new(Hash::zero()))
             .await;
         assert!(result.is_err());
+
         if let Err(e) = result {
             assert!(matches!(e, RepositoryError::NotFound { entity: _ }));
         }

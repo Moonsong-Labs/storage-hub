@@ -59,10 +59,6 @@ impl<'a> From<&'a [u8]> for BucketId<'a> {
 /// - Optional return types indicate entities that may not exist
 #[async_trait]
 pub trait IndexerOps: Send + Sync {
-    // TODO(SCAFFOLDING): The methods are for demonstration.
-    // Should be replaced with appropriate methods for what needs to be
-    // accessed from the indexer's db
-
     /// List BSPs with pagination.
     ///
     /// # Arguments

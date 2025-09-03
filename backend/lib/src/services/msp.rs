@@ -23,12 +23,17 @@ use crate::{
 };
 
 /// Service for handling MSP-related operations
+//TODO: remove dead_code annotations when we actually use these items
+// storage: anything that the backend will need to store temporarily
+// rpc: anything that the backend needs to request to the underlying MSP node
 #[derive(Clone)]
 pub struct MspService {
     msp_id: OnchainMspId,
 
+    #[allow(dead_code)]
     storage: Arc<dyn BoxedStorage>,
     postgres: Arc<DBClient>,
+    #[allow(dead_code)]
     rpc: Arc<StorageHubRpcClient>,
 }
 
