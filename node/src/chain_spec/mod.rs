@@ -31,16 +31,9 @@ pub trait NetworkType {
 
     /// Returns `true` if this is a configuration for the `Solochain EVM` network.
     fn is_solochain_evm(&self) -> bool;
-
-    /// Returns `true` if this is a configuration for a dev network.
-    fn is_dev(&self) -> bool;
 }
 
 impl NetworkType for Box<dyn sc_service::ChainSpec> {
-    fn is_dev(&self) -> bool {
-        self.chain_type() == sc_service::ChainType::Development
-    }
-
     fn is_parachain(&self) -> bool {
         self.id().starts_with("storage_hub_parachain")
     }

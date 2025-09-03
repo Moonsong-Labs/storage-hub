@@ -25,12 +25,11 @@ use sp_consensus_aura::Slot;
 use sp_core::H256;
 
 // Local Runtime Types
-use sh_parachain_runtime::{apis::RuntimeApi, Runtime};
-use shp_opaque::{Block, Hash};
-use shr_solochain_evm::{
+use sh_parachain_runtime::{apis::RuntimeApi as ParachainRuntimeApi, Runtime as ParachainRuntime};
+use sh_solochain_evm_runtime::{
     apis::RuntimeApi as SolochainEvmRuntimeApi, Runtime as SolochainEvmRuntime,
 };
-use storage_hub_runtime::{apis::RuntimeApi as ParachainRuntimeApi, Runtime as ParachainRuntime};
+use shp_opaque::{Block, Hash};
 
 // Cumulus Imports
 use cumulus_client_collator::service::CollatorService;
@@ -967,7 +966,7 @@ where
         .await?;
     }
 
-    configure_and_spawn_fisherman(
+    configure_and_spawn_fisherman::<ParachainRuntime>(
         &fisherman_options,
         &indexer_options,
         &task_manager,
@@ -1514,7 +1513,7 @@ where
         .await?;
     }
 
-    configure_and_spawn_fisherman(
+    configure_and_spawn_fisherman::<ParachainRuntime>(
         &fisherman_options,
         &indexer_options,
         &task_manager,
@@ -1742,7 +1741,7 @@ where
         .await?;
     }
 
-    configure_and_spawn_fisherman(
+    configure_and_spawn_fisherman::<ParachainRuntime>(
         &fisherman_options,
         &indexer_options,
         &task_manager,
@@ -1998,7 +1997,6 @@ where
                 config,
                 provider_options,
                 indexer_options,
-                fisherman_options,
             )
             .await?;
         return Ok(task_manager);
@@ -2015,7 +2013,7 @@ where
         select_chain,
         transaction_pool,
         other:
-            (block_import, grandpa_link, babe_link, frontier_backend, storage_override, mut telemetry),
+            (block_import, _grandpa_link, babe_link, frontier_backend, storage_override, mut telemetry),
     } = new_partial_solochain_evm(&config)?;
 
     let mut net_config = sc_network::config::FullNetworkConfiguration::<
@@ -2047,7 +2045,7 @@ where
         .expect("Genesis block exists; qed");
     let grandpa_protocol_name =
         sc_consensus_grandpa::protocol_standard_name(&genesis_hash, &config.chain_spec);
-    let (grandpa_protocol_config, grandpa_notification_service) =
+    let (grandpa_protocol_config, _grandpa_notification_service) =
         sc_consensus_grandpa::grandpa_peers_set_config::<_, Network>(
             grandpa_protocol_name.clone(),
             metrics.clone(),
@@ -2194,7 +2192,6 @@ where
     };
 
     let base_path = config.base_path.path().to_path_buf().clone();
-    let node_name = config.network.node_name.clone();
     let prometheus_registry = config.prometheus_registry().cloned();
 
     let rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
@@ -2266,24 +2263,20 @@ where
         finish_sh_builder_and_run_tasks(
             sh_builder.expect("StorageHubBuilder should already be initialised."),
             client.clone(),
-            rpc_handlers,
+            rpc_handlers.clone(),
             keystore_container.keystore(),
-            base_path,
+            base_path.clone(),
             false,
-            indexer_options,
-            fisherman_options,
-            &task_manager,
-            network.clone(),
         )
         .await?;
     }
 
-    configure_and_spawn_fisherman(
+    configure_and_spawn_fisherman::<SolochainEvmRuntime>(
         &fisherman_options,
         &indexer_options,
         &task_manager,
         client.clone(),
-        keystore.clone(),
+        keystore_container.keystore(),
         Arc::new(rpc_handlers.clone()),
         base_path,
         network.clone(),
@@ -2558,7 +2551,6 @@ where
             config,
             provider_options,
             indexer_options,
-            fisherman_options,
         )
         .await;
     }
@@ -2836,24 +2828,20 @@ where
         finish_sh_builder_and_run_tasks(
             sh_builder.expect("StorageHubBuilder should already be initialised."),
             client.clone(),
-            rpc_handlers,
+            rpc_handlers.clone(),
             keystore_container.keystore(),
-            base_path,
+            base_path.clone(),
             false,
-            indexer_options,
-            fisherman_options,
-            &task_manager,
-            network.clone(),
         )
         .await?;
     }
 
-    configure_and_spawn_fisherman(
+    configure_and_spawn_fisherman::<SolochainEvmRuntime>(
         &fisherman_options,
         &indexer_options,
         &task_manager,
         client.clone(),
-        keystore.clone(),
+        keystore_container.keystore(),
         Arc::new(rpc_handlers.clone()),
         base_path,
         network.clone(),
@@ -2868,7 +2856,6 @@ async fn start_solochain_evm_node_in_maintenance_mode<R, S, Network>(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
     indexer_options: Option<IndexerOptions>,
-    fisherman_options: Option<FishermanOptions>,
 ) -> sc_service::error::Result<(TaskManager, Arc<StorageEnableClient<SolochainEvmRuntime>>)>
 where
     R: ShRole,
@@ -3017,10 +3004,6 @@ where
             keystore_container.keystore(),
             base_path,
             true,
-            indexer_options,
-            fisherman_options,
-            &task_manager,
-            network.clone(),
         )
         .await?;
     }

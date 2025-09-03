@@ -1,6 +1,6 @@
 use super::{ChainSpec, Extensions};
 use sc_service::ChainType;
-use storage_hub_runtime::WASM_BINARY;
+use sh_parachain_runtime::WASM_BINARY;
 
 const CHAIN_ID: u64 = 1000; // Parachain ID
 const SS58_FORMAT: u16 = 42;

@@ -34,8 +34,8 @@ tokio = { workspace = true }
 toml = { workspace = true }
 rocksdb = { workspace = true }
 
-shc-actors-framework = { workspace = true }pallet-file-system = { workspace = true }
 # Local
+pallet-file-system = { workspace = true }
 pallet-file-system-runtime-api = { workspace = true }
 pallet-payment-streams = { workspace = true }
 pallet-payment-streams-runtime-api = { workspace = true }
@@ -43,9 +43,10 @@ pallet-proofs-dealer = { workspace = true }
 pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-storage-providers = { workspace = true }
 pallet-storage-providers-runtime-api = { workspace = true }
-shr-solochain-evm = { workspace = true }
 sh-parachain-runtime = { workspace = true }
+sh-solochain-evm-runtime = { workspace = true }
 shc-actors-derive = { workspace = true }
+shc-actors-framework = { workspace = true }
 shc-blockchain-service = { workspace = true }
 shc-file-transfer-service = { workspace = true }
 shc-common = { workspace = true }
@@ -161,11 +162,11 @@ runtime-benchmarks = [
     "sc-service/runtime-benchmarks",
     "sp-runtime/runtime-benchmarks",
     "sh-parachain-runtime/runtime-benchmarks",
-    "shr-solochain-evm/runtime-benchmarks",
+    "sh-solochain-evm-runtime/runtime-benchmarks",
 ]
 try-runtime = [
     "polkadot-cli/try-runtime",
     "sp-runtime/try-runtime",
     "sh-parachain-runtime/try-runtime",
-    "shr-solochain-evm/try-runtime",
+    "sh-solochain-evm-runtime/try-runtime",
 ]

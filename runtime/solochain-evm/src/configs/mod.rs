@@ -65,7 +65,7 @@ use sp_weights::RuntimeDbWeight;
 use crate::{
     currency::WEIGHT_FEE,
     gas::WEIGHT_PER_GAS,
-    genesis_config_presets::{alith, get_account_id_from_seed},
+    genesis_config_presets::get_account_id_from_seed,
     weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},
     AccountId, Babe, Balance, Balances, Block, BlockNumber, BucketNfts, EvmChainId, Historical,
     Nfts, Nonce, PalletInfo, PaymentStreams, ProofsDealer, Providers, Runtime, RuntimeCall,

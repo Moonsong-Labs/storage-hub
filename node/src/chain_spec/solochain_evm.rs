@@ -1,5 +1,5 @@
 use sc_service::ChainType;
-use shr_solochain_evm::WASM_BINARY;
+use sh_solochain_evm_runtime::WASM_BINARY;
 use sp_genesis_builder;
 
 // For solochain, we use a simpler ChainSpec without parachain extensions
