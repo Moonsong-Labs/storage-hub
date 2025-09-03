@@ -37,6 +37,42 @@ export async function waitForDeleteFileExtrinsic(
 }
 
 /**
+ * Helper function to wait for delete_file_for_incomplete_storage_request extrinsic in transaction pool
+ * @param api - The API instance to use
+ * @param expectedCount - Number of expected delete_file_for_incomplete_storage_request extrinsics (default: 1)
+ * @param timeout - Timeout in milliseconds (default: 10000)
+ * @returns Promise<boolean> - True if expected number of extrinsics found, false if timeout
+ */
+export async function waitForDeleteFileForIncompleteStorageRequestExtrinsic(
+  api: EnrichedBspApi,
+  expectedCount = 1,
+  timeout = 10000
+): Promise<boolean> {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeout) {
+    try {
+      const pendingTxs = await api.rpc.author.pendingExtrinsics();
+      const deleteFileTxs = pendingTxs.filter(
+        (tx) =>
+          tx.method.method === "deleteFileForIncompleteStorageRequest" &&
+          tx.method.section === "fileSystem"
+      );
+
+      if (deleteFileTxs.length >= expectedCount) {
+        return true;
+      }
+    } catch (error) {
+      console.warn("Error checking pending extrinsics:", error);
+    }
+
+    await sleep(500);
+  }
+
+  return false;
+}
+
+/**
  * Helper function to wait for fisherman to process an event
  * @param api - The API instance to use
  * @param searchPattern - The log pattern to search for

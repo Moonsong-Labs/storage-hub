@@ -15,10 +15,11 @@ use shc_common::{
 };
 use shc_fisherman_service::{
     commands::FishermanServiceCommandInterface,
-    events::{ProcessFileDeletionRequest, ProcessIncompleteStorageRequest},
+    events::{FileDeletionTarget, ProcessFileDeletionRequest, ProcessIncompleteStorageRequest},
     {FileKeyOperation, FishermanService},
 };
 use shc_forest_manager::{in_memory::InMemoryForestStorage, traits::ForestStorage};
+use shc_indexer_db::models::{BspFile, MspFile};
 use sp_core::H256;
 use sp_runtime::traits::SaturatedConversion;
 use std::time::Duration;
@@ -37,8 +38,8 @@ struct FileDeletionData<Runtime: StorageEnableRuntime> {
     file_metadata: shc_common::types::FileMetadata,
     /// List of BSP IDs that are storing this file
     bsp_ids: Vec<shc_indexer_db::OnchainBspId>,
-    /// Target bucket for file deletion operations
-    bucket_target: shc_fisherman_service::events::FileDeletionTarget<Runtime>,
+    /// Target bucket for file deletion operations (None if no MSP association exists)
+    bucket_target: Option<FileDeletionTarget<Runtime>>,
 }
 
 /// Fetches common file deletion data from the indexer database.
@@ -82,20 +83,31 @@ where
         .map_err(|e| anyhow!("Failed to convert file to metadata: {:?}", e))?;
 
     // Query for BSPs storing this file
-    let bsp_ids =
-        shc_indexer_db::models::bsp::BspFile::get_bsps_for_file_key(&mut conn, file_key.as_ref())
-            .await
-            .map_err(|e| anyhow!("Failed to query BSPs for file: {:?}", e))?;
+    let bsp_ids = BspFile::get_bsps_for_file_key(&mut conn, file_key.as_ref())
+        .await
+        .map_err(|e| anyhow!("Failed to query BSPs for file: {:?}", e))?;
+
+    // Check if MSP file association exists for this file
+    let bucket_target = match MspFile::get_msp_for_file_key(&mut conn, file_key.as_ref()).await {
+        Ok(Some(_msp_id)) => {
+            // MSP association exists, create bucket target
+            let bucket_id_array: [u8; 32] = file
+                .onchain_bucket_id
+                .clone()
+                .try_into()
+                .map_err(|_| anyhow!("Invalid bucket ID length"))?;
+            Some(FileDeletionTarget::BucketId(H256::from(bucket_id_array)))
+        }
+        Ok(None) => {
+            // No MSP association exists for this file
+            None
+        }
+        Err(e) => {
+            return Err(anyhow!("Failed to query MSP association for file: {:?}", e));
+        }
+    };
 
     drop(conn);
-
-    let bucket_id_array: [u8; 32] = file
-        .onchain_bucket_id
-        .clone()
-        .try_into()
-        .map_err(|_| anyhow!("Invalid bucket ID length"))?;
-    let bucket_target =
-        shc_fisherman_service::events::FileDeletionTarget::BucketId(H256::from(bucket_id_array));
 
     Ok(FileDeletionData {
         file_metadata,
@@ -256,26 +268,27 @@ where
         let event_ref = &event;
         let file_metadata_ref = &deletion_data.file_metadata;
 
-        // Clone self before moving into async blocks
-        let self_clone = self.clone();
+        // Process bucket deletion only if MSP association exists
+        if let Some(bucket_target) = deletion_data.bucket_target {
+            let self_clone = self.clone();
 
-        deletion_futures.push(Box::pin(async move {
-            self_clone
-                .process_deletion_for_target(
-                    event_ref,
-                    file_key,
-                    signature,
-                    deletion_data.bucket_target,
-                    file_metadata_ref,
-                )
-                .await
-        }));
+            deletion_futures.push(Box::pin(async move {
+                self_clone
+                    .process_deletion_for_target(
+                        event_ref,
+                        file_key,
+                        signature,
+                        bucket_target,
+                        file_metadata_ref,
+                    )
+                    .await
+            }));
+        }
 
         // Process BSP targets in parallel
         for onchain_bsp_id in deletion_data.bsp_ids {
             // Convert OnchainBspId to H256 for the target
-            let bsp_target =
-                shc_fisherman_service::events::FileDeletionTarget::BspId(onchain_bsp_id.into());
+            let bsp_target = FileDeletionTarget::BspId(onchain_bsp_id.into());
 
             let self_clone = self.clone();
 
@@ -328,24 +341,25 @@ where
 
         let file_metadata_ref = &deletion_data.file_metadata;
 
-        // Clone self before moving into async blocks
-        let self_clone = self.clone();
+        // Process bucket deletion only if MSP association exists
+        if let Some(bucket_target) = deletion_data.bucket_target {
+            let self_clone = self.clone();
 
-        deletion_futures.push(Box::pin(async move {
-            self_clone
-                .process_deletion_for_target_incomplete(
-                    file_key,
-                    deletion_data.bucket_target,
-                    file_metadata_ref,
-                )
-                .await
-        }));
+            deletion_futures.push(Box::pin(async move {
+                self_clone
+                    .process_deletion_for_target_incomplete(
+                        file_key,
+                        bucket_target,
+                        file_metadata_ref,
+                    )
+                    .await
+            }));
+        }
 
         // Process BSP targets in parallel
         for onchain_bsp_id in deletion_data.bsp_ids {
             // Convert OnchainBspId to H256 for the target
-            let bsp_target =
-                shc_fisherman_service::events::FileDeletionTarget::BspId(onchain_bsp_id.into());
+            let bsp_target = FileDeletionTarget::BspId(onchain_bsp_id.into());
 
             let self_clone = self.clone();
 
@@ -391,7 +405,7 @@ where
         event: &ProcessFileDeletionRequest<Runtime>,
         file_key: &shp_types::Hash,
         signature: &OffchainSignature<Runtime>,
-        deletion_target: shc_fisherman_service::events::FileDeletionTarget<Runtime>,
+        deletion_target: FileDeletionTarget<Runtime>,
         file_metadata: &shc_common::types::FileMetadata,
     ) -> anyhow::Result<()> {
         info!(
@@ -487,7 +501,7 @@ where
     async fn process_deletion_for_target_incomplete(
         &self,
         file_key: &shp_types::Hash,
-        deletion_target: shc_fisherman_service::events::FileDeletionTarget<Runtime>,
+        deletion_target: FileDeletionTarget<Runtime>,
         file_metadata: &shc_common::types::FileMetadata,
     ) -> anyhow::Result<()> {
         info!(
@@ -498,7 +512,7 @@ where
         );
 
         // Use the common logic function to get parameters
-        let (_file_owner, _bucket_id, _location, _size, _fingerprint, _provider_id, _forest_proof) =
+        let (_file_owner, _bucket_id, _location, _size, _fingerprint, provider_id, forest_proof) =
             process_deletion_common(
                 &self.storage_hub_handler,
                 &self.fisherman_service,
@@ -508,7 +522,46 @@ where
             )
             .await?;
 
-        // TODO: Submit the extrinsic here without requiring user signature
+        trace!(
+            target: LOG_TARGET_INCOMPLETE,
+            "Submitting delete_file_for_incomplete_storage_request extrinsic"
+        );
+
+        // Build the delete_file_for_incomplete_storage_request extrinsic call
+        let call =
+            pallet_file_system::Call::<Runtime>::delete_file_for_incomplete_storage_request {
+                file_key: (*file_key).into(),
+                provider_id: match provider_id {
+                    StorageProviderId::BackupStorageProvider(id) => id,
+                    StorageProviderId::MainStorageProvider(id) => id,
+                },
+                forest_proof: forest_proof.proof,
+            };
+
+        // Submit the extrinsic
+        self.storage_hub_handler
+            .blockchain
+            .send_extrinsic(
+                call.into(),
+                SendExtrinsicOptions::new(Duration::from_secs(60)),
+            )
+            .await
+            .map_err(|e| {
+                error!(
+                    target: LOG_TARGET_INCOMPLETE,
+                    "Failed to submit delete_file_for_incomplete_storage_request extrinsic: {:?}", e
+                );
+                anyhow!(
+                    "Failed to submit delete_file_for_incomplete_storage_request extrinsic: {:?}",
+                    e
+                )
+            })?;
+
+        info!(
+            target: LOG_TARGET_INCOMPLETE,
+            "Successfully submitted delete_file_for_incomplete_storage_request extrinsic for file key {:?}",
+            file_key
+        );
 
         Ok(())
     }
@@ -547,7 +600,7 @@ async fn process_deletion_common<NT, Runtime>(
     storage_hub_handler: &StorageHubHandler<NT, Runtime>,
     fisherman_service: &ActorHandle<FishermanService<Runtime>>,
     file_key: &shp_types::Hash,
-    deletion_target: shc_fisherman_service::events::FileDeletionTarget<Runtime>,
+    deletion_target: FileDeletionTarget<Runtime>,
     file_metadata: &shc_common::types::FileMetadata,
 ) -> anyhow::Result<(
     <Runtime as frame_system::Config>::AccountId,
@@ -571,10 +624,8 @@ where
 
     // Determine provider ID from deletion target
     let provider_id = match &deletion_target {
-        shc_fisherman_service::events::FileDeletionTarget::BspId(bsp_id) => {
-            StorageProviderId::BackupStorageProvider(*bsp_id)
-        }
-        shc_fisherman_service::events::FileDeletionTarget::BucketId(target_bucket_id) => {
+        FileDeletionTarget::BspId(bsp_id) => StorageProviderId::BackupStorageProvider(*bsp_id),
+        FileDeletionTarget::BucketId(target_bucket_id) => {
             let msp_id = storage_hub_handler
                 .blockchain
                 .query_msp_id_of_bucket_id(*target_bucket_id)
@@ -612,17 +663,14 @@ where
 
         // Fetch all file keys for the deletion target from finalized data
         let all_file_keys = match &deletion_target {
-            shc_fisherman_service::events::FileDeletionTarget::BspId(bsp_id) => {
+            FileDeletionTarget::BspId(bsp_id) => {
                 // Convert H256 to OnchainBspId for database query
                 let onchain_bsp_id = shc_indexer_db::OnchainBspId::from(*bsp_id);
-                shc_indexer_db::models::bsp::BspFile::get_all_file_keys_for_bsp(
-                    &mut conn,
-                    onchain_bsp_id,
-                )
-                .await
-                .map_err(|e| anyhow!("Failed to get all file keys for BSP: {:?}", e))?
+                BspFile::get_all_file_keys_for_bsp(&mut conn, onchain_bsp_id)
+                    .await
+                    .map_err(|e| anyhow!("Failed to get all file keys for BSP: {:?}", e))?
             }
-            shc_fisherman_service::events::FileDeletionTarget::BucketId(bucket_id) => {
+            FileDeletionTarget::BucketId(bucket_id) => {
                 shc_indexer_db::models::file::File::get_all_file_keys_for_bucket(
                     &mut conn,
                     bucket_id.as_ref(),

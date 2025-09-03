@@ -6,7 +6,8 @@ import {
   shUser,
   bspKey,
   waitFor,
-  assertEventPresent
+  assertEventPresent,
+  assertEventMany
 } from "../../../util";
 import { createBucketAndSendNewStorageRequest } from "../../../util/bspNet/fileHelpers";
 import {
@@ -17,6 +18,7 @@ import {
 import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
 import {
   waitForDeleteFileExtrinsic,
+  waitForDeleteFileForIncompleteStorageRequestExtrinsic,
   waitForFishermanProcessing
 } from "../../../util/fisherman/fishermanHelpers";
 
@@ -233,9 +235,33 @@ describeMspNet(
       const source = "res/whatsup.jpg";
       const destination = "test/expired.txt";
 
-      // Pause MSP and BSP containers to prevent them from accepting the storage request
+      // Pause MSP containers to prevent them from accepting the storage request
+      // We don't pause the BSP so that it confirms the storage request so that when we reach
+      // the expired block, the storage request will be moved to incomplete.
       await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
-      await userApi.docker.pauseContainer("storage-hub-sh-bsp-1");
+
+      const tickRangeToMaximumThreshold = (
+        await userApi.query.parameters.parameters({
+          RuntimeConfig: {
+            TickRangeToMaximumThreshold: null
+          }
+        })
+      )
+        .unwrap()
+        .asRuntimeConfig.asTickRangeToMaximumThreshold.toNumber();
+
+      const storageRequestTtlRuntimeParameter = {
+        RuntimeConfig: {
+          StorageRequestTtl: [null, tickRangeToMaximumThreshold]
+        }
+      };
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.parameters.setParameter(storageRequestTtlRuntimeParameter)
+          )
+        ]
+      });
 
       const { fileKey } = await createBucketAndSendNewStorageRequest(
         userApi,
@@ -247,6 +273,22 @@ describeMspNet(
         null,
         1
       );
+
+      // Wait for BSP to volunteer and store
+      await userApi.wait.bspVolunteer();
+      await waitFor({
+        lambda: async () =>
+          (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
+      });
+
+      const bspAddress = userApi.createType("Address", bspKey.address);
+      await userApi.wait.bspStored({
+        expectedExts: 1,
+        sealBlock: true,
+        bspAccount: bspAddress
+      });
+
+      await waitForIndexing(userApi);
 
       // Skip ahead to trigger expiration
       const currentBlock = await userApi.rpc.chain.getBlock();
@@ -260,16 +302,10 @@ describeMspNet(
       )
         .unwrap()
         .asRuntimeConfig.asStorageRequestTtl.toNumber();
-      await userApi.block.skipTo(currentBlockNumber + storageRequestTtl);
+
+      await userApi.block.skipTo(currentBlockNumber + storageRequestTtl - 1);
 
       await waitForIndexing(userApi);
-
-      // Wait for StorageRequestRejected event to be processed by fisherman
-      const rejectedProcessingFound = await waitForFishermanProcessing(
-        userApi,
-        `Found StorageRequestRejected event for file key: 0x${fileKey.startsWith("0x") ? fileKey.slice(2) : fileKey}`
-      );
-      assert(rejectedProcessingFound, "Should find fisherman processing rejected storage request");
 
       const incompleteProcessingFound = await waitForFishermanProcessing(
         userApi,
@@ -277,21 +313,36 @@ describeMspNet(
       );
       assert(incompleteProcessingFound, "Should find fisherman processing incomplete storage");
 
+      // Verify delete_file_for_incomplete_storage_request extrinsic is submitted
+      const deleteIncompleteFileFound = await waitForDeleteFileForIncompleteStorageRequestExtrinsic(
+        userApi,
+        1,
+        30000
+      );
+      assert(
+        deleteIncompleteFileFound,
+        "Should find 1 delete_file_for_incomplete_storage_request extrinsic in transaction pool"
+      );
+
+      // Seal block to process the extrinsic
+      const deletionResult = await userApi.block.seal();
+
+      // Verify FileDeletedFromIncompleteStorageRequest event
+      assertEventPresent(
+        userApi,
+        "fileSystem",
+        "FileDeletedFromIncompleteStorageRequest",
+        deletionResult.events
+      );
+
       // Resume containers for cleanup
       await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-msp-1" });
-      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-bsp-1" });
-
-      // TODO: Verify extrinsic submission once implementation is complete
     });
 
     it("processes StorageRequestRevoked event and prepares deletion", async () => {
       const bucketName = "test-fisherman-revoked";
       const source = "res/smile.jpg";
       const destination = "test/revoked.txt";
-
-      // Pause MSP and BSP to prevent acceptance before revocation
-      await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
-      await userApi.docker.pauseContainer("storage-hub-sh-bsp-1");
 
       const { fileKey } = await createBucketAndSendNewStorageRequest(
         userApi,
@@ -301,8 +352,26 @@ describeMspNet(
         null,
         null,
         null,
-        1
+        2 // Keep the storage request opened to be able to revoke
       );
+
+      await userApi.wait.mspResponseInTxPool();
+
+      // Wait for BSP to volunteer and store
+      await userApi.wait.bspVolunteer();
+      await waitFor({
+        lambda: async () =>
+          (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
+      });
+
+      const bspAddress = userApi.createType("Address", bspKey.address);
+      await userApi.wait.bspStored({
+        expectedExts: 1,
+        sealBlock: true,
+        bspAccount: bspAddress
+      });
+
+      await waitForIndexing(userApi);
 
       // Revoke the storage request
       const revokeStorageRequestResult = await userApi.block.seal({
@@ -317,14 +386,8 @@ describeMspNet(
         revokeStorageRequestResult.events
       );
 
-      await waitForIndexing(userApi);
-
-      // Wait for fisherman to process the revocation
-      const revokedProcessingFound = await waitForFishermanProcessing(
-        userApi,
-        `Found StorageRequestRevoked event for file key: 0x${fileKey.startsWith("0x") ? fileKey.slice(2) : fileKey}`
-      );
-      assert(revokedProcessingFound, "Should find fisherman processing revoked storage request");
+      // Do not seal block
+      await waitForIndexing(userApi, false);
 
       const incompleteProcessingFound = await waitForFishermanProcessing(
         userApi,
@@ -332,11 +395,27 @@ describeMspNet(
       );
       assert(incompleteProcessingFound, "Should find fisherman processing incomplete storage");
 
-      // Resume containers
-      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-msp-1" });
-      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-bsp-1" });
+      // Verify 2 extrsinsics submitted for each MSP and BSP
+      const deleteIncompleteFileFound = await waitForDeleteFileForIncompleteStorageRequestExtrinsic(
+        userApi,
+        2,
+        30000
+      );
+      assert(
+        deleteIncompleteFileFound,
+        "Should find 2 delete_file_for_incomplete_storage_request extrinsic in transaction pool"
+      );
 
-      // TODO: Verify extrinsic submission once implementation is complete
+      // Seal block to process the extrinsic
+      const deletionResult = await userApi.block.seal();
+
+      // Verify FileDeletedFromIncompleteStorageRequest event
+      assertEventMany(
+        userApi,
+        "fileSystem",
+        "FileDeletedFromIncompleteStorageRequest",
+        deletionResult.events
+      );
     });
 
     it("processes multiple providers for same file deletion", async () => {
@@ -521,7 +600,9 @@ describeMspNet(
 
       await waitForIndexing(userApi);
 
-      // TODO: Verify extrinsic submission once implementation is complete
+      // This test is mainly for simulating rejection-like scenarios
+      // In practice, actual rejection events would trigger the fisherman processing
+      // For completeness, we could add logic here if specific rejection events are generated
     });
   }
 );

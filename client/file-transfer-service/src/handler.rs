@@ -37,7 +37,7 @@ use sc_network::{
     IfDisconnected, NetworkPeers, NetworkRequest, ProtocolName, ReputationChange,
 };
 use sc_network_types::PeerId;
-use sc_tracing::tracing::{debug, error, info, warn};
+use sc_tracing::tracing::{debug, error, info, trace, warn};
 
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
@@ -371,17 +371,16 @@ impl<Runtime: StorageEnableRuntime> Actor for FileTransferService<Runtime> {
                     file_key,
                     callback,
                 } => {
-                    let result = match self.peer_file_allow_list.insert((peer_id, file_key)) {
-                        true => Ok(()),
-                        false => Err(RequestError::FileAlreadyRegisteredForPeer),
-                    };
+                    if !self.peer_file_allow_list.insert((peer_id, file_key)) {
+                        trace!(target: LOG_TARGET, "File already registered for peer id {} and file key {:?}", peer_id, file_key);
+                    }
 
                     self.peers_by_file
                         .entry(file_key)
                         .or_insert_with(Vec::new)
                         .push(peer_id);
 
-                    match callback.send(result) {
+                    match callback.send(Ok(())) {
                         Ok(()) => {}
                         Err(_) => error!(
                             target: LOG_TARGET,

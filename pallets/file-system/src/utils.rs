@@ -1033,6 +1033,8 @@ where
                         &file_key,
                         incomplete_storage_request_metadata,
                     );
+
+                    Self::deposit_event(Event::IncompleteStorageRequest { file_key });
                 }
 
                 // We cleanup the storage request
@@ -1370,6 +1372,7 @@ where
             IncompleteStorageRequests::<T>::remove(&file_key);
         } else {
             IncompleteStorageRequests::<T>::insert(&file_key, incomplete_storage_request_metadata);
+            Self::deposit_event(Event::IncompleteStorageRequest { file_key });
         }
 
         Ok(())
@@ -2106,6 +2109,8 @@ where
             let incomplete_storage_request_metadata: IncompleteStorageRequestMetadata<T> =
                 (&storage_request_metadata, &file_key).into();
             <IncompleteStorageRequests<T>>::insert(&file_key, incomplete_storage_request_metadata);
+
+            Self::deposit_event(Event::IncompleteStorageRequest { file_key });
         }
 
         // We cleanup the storage request
@@ -3078,6 +3083,8 @@ mod hooks {
                                 &file_key,
                                 incomplete_storage_request_metadata,
                             );
+
+                            Self::deposit_event(Event::IncompleteStorageRequest { file_key });
                         }
                         // Clean up all storage request related data
                         Self::cleanup_storage_request(&file_key, &storage_request_metadata);

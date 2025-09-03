@@ -1,6 +1,6 @@
 use codec::Decode;
 use futures::stream::{self, StreamExt};
-use log::{debug, error, info, warn};
+use log::{debug, error, info, trace, warn};
 use pallet_file_system_runtime_api::FileSystemApi;
 use sc_client_api::{BlockImportNotification, BlockchainEvents, HeaderBackend};
 use shc_common::types::{FileOperation, OpaqueBlock, StorageEnableEvents};
@@ -107,41 +107,11 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                     self.emit(event);
                 }
                 StorageEnableEvents::FileSystem(
-                    pallet_file_system::Event::StorageRequestExpired { file_key },
+                    pallet_file_system::Event::IncompleteStorageRequest { file_key },
                 ) => {
                     info!(
                         target: LOG_TARGET,
-                        "🎣 Found StorageRequestExpired event for file key: {:?}",
-                        file_key
-                    );
-
-                    let event = crate::events::ProcessIncompleteStorageRequest {
-                        file_key: file_key.into(),
-                    };
-
-                    self.emit(event);
-                }
-                StorageEnableEvents::FileSystem(
-                    pallet_file_system::Event::StorageRequestRevoked { file_key },
-                ) => {
-                    info!(
-                        target: LOG_TARGET,
-                        "🎣 Found StorageRequestRevoked event for file key: {:?}",
-                        file_key
-                    );
-
-                    let event = crate::events::ProcessIncompleteStorageRequest {
-                        file_key: file_key.into(),
-                    };
-
-                    self.emit(event);
-                }
-                StorageEnableEvents::FileSystem(
-                    pallet_file_system::Event::StorageRequestRejected { file_key, .. },
-                ) => {
-                    info!(
-                        target: LOG_TARGET,
-                        "🎣 Found StorageRequestRejected event for file key: {:?}",
+                        "🎣 Found IncompleteStorageRequest event for file key: {:?}",
                         file_key
                     );
 
@@ -261,7 +231,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
             })
             .collect();
 
-        info!(
+        trace!(
             target: LOG_TARGET,
             "🎣 Found {} file key changes for provider {:?} between blocks {} and {}",
             changes.len(),
