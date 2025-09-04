@@ -66,7 +66,7 @@ use crate::{
     currency::WEIGHT_FEE,
     gas::WEIGHT_PER_GAS,
     genesis_config_presets::get_account_id_from_seed,
-    weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},
+    weights::{BlockExecutionWeight, RocksDbWeight},
     AccountId, Babe, Balance, Balances, Block, BlockNumber, BucketNfts, EvmChainId, Historical,
     Nfts, Nonce, PalletInfo, PaymentStreams, ProofsDealer, Providers, Runtime, RuntimeCall,
     RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask, Session,
@@ -148,10 +148,8 @@ parameter_types! {
         BlockLength::max_with_normal_ratio(5 * 1024 * 1024, NORMAL_DISPATCH_RATIO);
     pub RuntimeBlockWeights: BlockWeights = BlockWeights::builder()
         .base_block(BlockExecutionWeight::get())
-        .for_class(DispatchClass::all(), |weights| {
-            weights.base_extrinsic = ExtrinsicBaseWeight::get();
-        })
         .for_class(DispatchClass::Normal, |weights| {
+            weights.base_extrinsic = Weight::from_parts(10000 * WEIGHT_PER_GAS, 0);
             weights.max_total = Some(NORMAL_DISPATCH_RATIO * MAXIMUM_BLOCK_WEIGHT);
         })
         .for_class(DispatchClass::Operational, |weights| {

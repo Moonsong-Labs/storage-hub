@@ -417,10 +417,12 @@ impl fp_self_contained::SelfContainedCall for RuntimeCall {
 
     fn apply_self_contained(
         self,
-        _info: Self::SignedInfo,
+        info: Self::SignedInfo,
     ) -> Option<sp_runtime::DispatchResultWithInfo<PostDispatchInfoOf<Self>>> {
         match self {
-            call @ RuntimeCall::Ethereum(_) => Some(call.dispatch(RuntimeOrigin::none())),
+            call @ RuntimeCall::Ethereum(_) => Some(call.dispatch(RuntimeOrigin::from(
+                pallet_ethereum::RawOrigin::EthereumTransaction(info),
+            ))),
             _ => None,
         }
     }
