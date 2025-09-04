@@ -1,0 +1,13 @@
+{
+  "version": "v1",
+  "packages": {
+    "@storagehub-sdk/core": {
+      "signature": "1da4236c03481ccd8c3c4538ac2cc196",
+      "file": true
+    },
+    "@storagehub-sdk/msp-client": {
+      "signature": "fae5dbc17c8290b8bc2e5a631d2c8585",
+      "file": true
+    }
+  }
+}
