@@ -340,8 +340,9 @@ mod tests {
     #[tokio::test]
     async fn test_get_files_root() {
         let service = create_test_service().await;
+        let bucket = hex::encode([0u8; 32]);
         let tree = service
-            .get_file_tree("bucket123", MOCK_ADDRESS, "/")
+            .get_file_tree(&bucket, MOCK_ADDRESS, "/")
             .await
             .unwrap();
 
