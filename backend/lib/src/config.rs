@@ -1,3 +1,4 @@
+use hex::ToHex;
 use serde::{Deserialize, Serialize};
 
 use shp_types::Hash;
@@ -82,7 +83,7 @@ impl Default for Config {
             },
             storage_hub: StorageHubConfig {
                 rpc_url: DEFAULT_RPC_URL.to_string(),
-                msp_id: Hash::from_slice(&DUMMY_MSP_ID).to_string(),
+                msp_id: Hash::from_slice(&DUMMY_MSP_ID).encode_hex::<String>(),
                 timeout_secs: Some(DEFAULT_TIMEOUT_SECS),
                 max_concurrent_requests: Some(DEFAULT_MAX_CONCURRENT_REQUESTS),
                 verify_tls: true,

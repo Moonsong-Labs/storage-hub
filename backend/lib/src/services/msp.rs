@@ -45,7 +45,7 @@ impl MspService {
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
     ) -> Self {
-        let msp_id = hex::decode(&config.storage_hub.msp_id)
+        let msp_id = hex::decode(config.storage_hub.msp_id.trim_start_matches("0x"))
             .map(|decoded| Hash::from_slice(&decoded))
             .map(OnchainMspId::new)
             .expect("valid MSP ID");
