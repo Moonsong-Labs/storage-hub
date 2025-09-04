@@ -1,0 +1,44 @@
+{
+  "name": "@storagehub-sdk/msp-client",
+  "version": "2.0.0",
+  "description": "High-level façade around @storagehub-sdk/core for easy StorageHub integration",
+  "type": "module",
+  "main": "./dist/index.node.js",
+  "browser": "./dist/index.browser.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "browser": "./dist/index.browser.js",
+      "import": "./dist/index.node.js",
+      "default": "./dist/index.node.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node ./build.js",
+    "build:types": "tsc --emitDeclarationOnly -p tsconfig.json",
+    "coverage": "vitest run --coverage",
+    "dev": "node ./build.js --watch",
+    "format": "prettier --write \"{src/**/*.ts,src/**/*.tsx}\"",
+    "format:check": "prettier --check \"{src/**/*.ts,src/**/*.tsx}\"",
+    "lint": "eslint \"{src/**/*.ts,src/**/*.tsx}\"",
+    "lint:fix": "eslint \"{src/**/*.ts,src/**/*.tsx}\" --fix",
+    "test": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@storagehub-sdk/core": "*"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "yalcSig": "fae5dbc17c8290b8bc2e5a631d2c8585"
+}
