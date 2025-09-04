@@ -3,10 +3,12 @@
 import type { JSX } from 'react';
 import { useSDK } from './useSDK';
 
-type Props = {};
-
-export const Test = ({}: Props): JSX.Element => {
-    useSDK();
-
-    return <h1>Testing SDK!!!!!!!!!!!!!</h1>;
+export const Test = (): JSX.Element => {
+  const status = useSDK();
+  return (
+    <div style={{ padding: 16 }}>
+      <h1>StorageHub SDK Demo</h1>
+      <pre>{status}</pre>
+    </div>
+  );
 };

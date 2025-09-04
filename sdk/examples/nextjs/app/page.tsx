@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { Test } from "../src/Test";
 
 export default function Home() {
   return (
@@ -50,6 +51,8 @@ export default function Home() {
             Read our docs
           </a>
         </div>
+
+        <Test />
       </main>
       <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
         <a
