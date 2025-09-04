@@ -3,3 +3,4 @@ packages:
   - msp-client
   - e2e
   - examples/node
+  - examples/nextjs
