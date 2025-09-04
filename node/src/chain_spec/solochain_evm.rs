@@ -14,6 +14,7 @@ pub fn development_config() -> Result<SolochainChainSpec, String> {
     properties.insert("tokenSymbol".into(), TOKEN_SYMBOL.into());
     properties.insert("tokenDecimals".into(), TOKEN_DECIMALS.into());
     properties.insert("ss58Format".into(), SS58_FORMAT.into());
+    properties.insert("isEthereum".into(), true.into());
 
     Ok(SolochainChainSpec::builder(
         WASM_BINARY.ok_or_else(|| "Development wasm not available".to_string())?,
@@ -32,6 +33,7 @@ pub fn local_testnet_config() -> Result<SolochainChainSpec, String> {
     properties.insert("tokenSymbol".into(), TOKEN_SYMBOL.into());
     properties.insert("tokenDecimals".into(), TOKEN_DECIMALS.into());
     properties.insert("ss58Format".into(), SS58_FORMAT.into());
+    properties.insert("isEthereum".into(), true.into());
 
     Ok(SolochainChainSpec::builder(
         WASM_BINARY.ok_or_else(|| "Development wasm not available".to_string())?,

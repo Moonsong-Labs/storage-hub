@@ -85,7 +85,7 @@ use shp_opaque::{Block, Hash};
 // Local Runtime Types
 use sh_parachain_runtime::{apis::RuntimeApi as ParachainRuntimeApi, Runtime as ParachainRuntime};
 use sh_solochain_evm_runtime::{
-    apis::RuntimeApi as SolochainEvmRuntimeApi, Runtime as SolochainEvmRuntime,
+    Runtime as SolochainEvmRuntime, RuntimeApi as SolochainEvmRuntimeApi,
 };
 
 //╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╗

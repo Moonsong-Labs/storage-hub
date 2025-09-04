@@ -1110,7 +1110,6 @@ impl pallet_proofs_dealer::Config for Runtime {
     type PriorityChallengeOrigin = EnsureRoot<AccountId>;
 }
 
-// TODO: Implement this
 pub struct BlockNumberGetter {}
 impl sp_runtime::traits::BlockNumberProvider for BlockNumberGetter {
     type BlockNumber = BlockNumberFor<Runtime>;
@@ -1120,7 +1119,6 @@ impl sp_runtime::traits::BlockNumberProvider for BlockNumberGetter {
     }
 }
 
-// TODO: Implement this
 pub struct BabeDataGetter;
 impl pallet_randomness::GetBabeData<u64, Hash> for BabeDataGetter {
     fn get_epoch_index() -> u64 {
