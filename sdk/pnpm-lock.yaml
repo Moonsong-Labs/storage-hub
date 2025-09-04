@@ -73,24 +73,30 @@ importers:
         specifier: ^1.54.2
         version: 1.55.0
 
-  examples:
+  examples/node:
     dependencies:
       '@storagehub-sdk/core':
-        specifier: '>=0.0.2'
-        version: 0.0.2
+        specifier: 0.0.3
+        version: 0.0.3
       '@storagehub-sdk/msp-client':
-        specifier: '>=0.0.2'
-        version: 0.0.2
+        specifier: 0.0.3
+        version: 0.0.3
+      ethers:
+        specifier: ^6.15.0
+        version: 6.15.0
     devDependencies:
+      '@polkadot/types':
+        specifier: ^10.13.1
+        version: 10.13.1
       tsx:
-        specifier: 4.19.0
+        specifier: ^4.19.0
         version: 4.19.0
       typescript:
         specifier: ~5.5.4
         version: 5.5.4
 
   msp-client:
-    dependencies:
+    devDependencies:
       '@storagehub-sdk/core':
         specifier: workspace:*
         version: link:../core
@@ -751,12 +757,12 @@ packages:
   '@scure/base@1.2.6':
     resolution: {integrity: sha512-g/nm5FgUa//MCj1gV09zTJTaM6KBAHqLN907YVQqf7zC49+DcO4B1so4ZX07Ef10Twr6nuqYEH9GEggFXA4Fmg==}
 
-  '@storagehub-sdk/core@0.0.2':
-    resolution: {integrity: sha512-rVDeSXExH8IoMX1PITtLkbVQwpc76t2j8lklb55EvaziSHCmedNDdFZCqVS2HTENqGBL3YOKusLAxGr1TH9kWQ==}
+  '@storagehub-sdk/core@0.0.3':
+    resolution: {integrity: sha512-D1Y9cwNvm/oPUYL2hBqU6AAFI7Zzwhvp5FHe05bzcT+ETK8hNQxkqJK6eh7xsu7EX6glMCqjqAbe3njBQ1qqBQ==}
     engines: {node: '>=22'}
 
-  '@storagehub-sdk/msp-client@0.0.2':
-    resolution: {integrity: sha512-RM5cap++6t67ZXY/T36cMcML1/i3RYeTxyRQj8V/FlhytopH0XBftZmKXISOlT9wN5N43SMNLl9/g/aqCIKzSA==}
+  '@storagehub-sdk/msp-client@0.0.3':
+    resolution: {integrity: sha512-F9WHNADRxdd3MlL1OMnvYPk9Wa6ZpFQT1sLRkSC5gIQuz741st1HNTBHmqA4S/jBVdVDUL563vGc/QQA+VRhoA==}
     engines: {node: '>=22'}
 
   '@substrate/ss58-registry@1.51.0':
@@ -2263,7 +2269,7 @@ snapshots:
 
   '@scure/base@1.2.6': {}
 
-  '@storagehub-sdk/core@0.0.2':
+  '@storagehub-sdk/core@0.0.3':
     dependencies:
       '@polkadot/types': 10.13.1
       ethers: 6.15.0
@@ -2271,12 +2277,9 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@storagehub-sdk/msp-client@0.0.2':
+  '@storagehub-sdk/msp-client@0.0.3':
     dependencies:
-      '@storagehub-sdk/core': 0.0.2
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
+      '@storagehub-sdk/core': link:core
 
   '@substrate/ss58-registry@1.51.0': {}
 
@@ -2287,7 +2290,7 @@ snapshots:
 
   '@types/bn.js@5.2.0':
     dependencies:
-      '@types/node': 20.19.11
+      '@types/node': 22.7.5
 
   '@types/chai@5.2.2':
     dependencies:
