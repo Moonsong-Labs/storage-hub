@@ -1,5 +1,30 @@
 let initPromise: Promise<void> | null = null;
 
+function decodeBase64ToBytes(b64: string): Uint8Array {
+  // Prefer Node's Buffer when available (Buffer extends Uint8Array)
+  if (
+    typeof Buffer !== 'undefined' &&
+    typeof (Buffer as unknown as { from?: (s: string, enc: 'base64') => Uint8Array }).from === 'function'
+  ) {
+    const buf = (Buffer as unknown as { from: (s: string, enc: 'base64') => Uint8Array }).from(
+      b64,
+      'base64'
+    );
+    return new Uint8Array(buf);
+  }
+  // Browser fallback using atob
+  const atobFn: ((s: string) => string) | undefined = (globalThis as unknown as {
+    atob?: (s: string) => string;
+  }).atob;
+  if (!atobFn) {
+    throw new Error('Base64 decoder not available');
+  }
+  const binary = atobFn(b64);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+  return out;
+}
+
 export async function initWasm(): Promise<void> {
   if (initPromise) {
     // If initialization is already in progress, wait for the same Promise
@@ -11,34 +36,14 @@ export async function initWasm(): Promise<void> {
     // Import the wasm glue dynamically by URL so bundlers don't inline it
     const wasmInit = (await import('../wasm/pkg/storagehub_wasm.js')).default;
 
-    const wasmUrl = new URL('../wasm/pkg/storagehub_wasm_bg.wasm', import.meta.url);
-    const isNode = typeof process !== 'undefined' && !!process.versions && !!process.versions.node;
-    if (isNode) {
-      // Node.js: read WASM bytes and pass as ArrayBuffer
-      const fsMod = 'node:fs/promises';
-      const { readFile } = await import(fsMod);
-      const buf = await readFile(wasmUrl);
-      await wasmInit(buf);
-    } else {
-      // Browser / Edge runtime: embed fallback so apps need no configuration
-      try {
-        const mod = (await import('./_wasm_embed.js')) as { WASM_BASE64?: unknown };
-        const b64 = typeof mod.WASM_BASE64 === 'string' ? (mod.WASM_BASE64 as string) : undefined;
-        if (b64 && b64.length > 0) {
-          const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-          await wasmInit(bytes);
-          return;
-        }
-        throw new Error('No embedded WASM');
-      } catch {
-        // Fallback to public path if embed not present
-        const overrideVal = (globalThis as Record<string, unknown>)[
-          '__STORAGEHUB_WASM_PUBLIC_PATH__'
-        ];
-        const override = typeof overrideVal === 'string' ? (overrideVal as string) : undefined;
-        await wasmInit(override ?? '/wasm/storagehub_wasm_bg.wasm');
-      }
+    const mod = (await import('./_wasm_embed.js')) as { WASM_BASE64?: unknown };
+    const b64 = typeof mod.WASM_BASE64 === 'string' ? (mod.WASM_BASE64 as string) : undefined;
+    if (!b64 || b64.length === 0) {
+      throw new Error('Embedded WASM is missing or empty. Ensure build generated _wasm_embed.ts.');
     }
+    const bytes = decodeBase64ToBytes(b64);
+    await wasmInit(bytes);
+    return;
   })();
 
   return initPromise;
