@@ -24,9 +24,9 @@
     "README.md"
   ],
   "scripts": {
-    "build": "node ./build.js",
+    "build": "node ./build.js && pnpm run build:types",
     "build:types": "tsc --emitDeclarationOnly -p tsconfig.json",
-    "build:wasm": "wasm-pack build ./wasm --target web --release --out-dir pkg && rm -f ./wasm/pkg/package.json ./wasm/pkg/.gitignore",
+    "clean": "rm -rf dist node_modules wasm/pkg/*",
     "coverage": "vitest run --coverage",
     "dev": "node ./build.js --watch",
     "format": "prettier --write \"{src/**/*.ts,src/**/*.tsx}\"",

@@ -64,6 +64,22 @@ async function runWasmBuildIfNeeded(packageRoot, { withWasm }) {
   } catch (err) {
     console.warn('Failed to generate embedded WASM module:', err);
   }
+
+  // Patch the generated glue to remove URL fallback that triggers bundlers to resolve a .wasm asset
+  try {
+    const gluePath = join(packageRoot, 'wasm', 'pkg', 'storagehub_wasm.js');
+    if (existsSync(gluePath)) {
+      let src = readFileSync(gluePath, 'utf8');
+      // Replace the default URL fallback with a hard error to avoid bundler static resolution of the .wasm file
+      src = src.replace(
+        /if\s*\(\s*typeof\s+module_or_path\s*===\s*['\"]undefined['\"]\s*\)\s*\{\s*module_or_path\s*=\s*new\s+URL\([^)]*\);\s*\}/,
+        "if (typeof module_or_path === 'undefined') { throw new Error('Embedded WASM required: URL fallback disabled'); }",
+      );
+      writeFileSync(gluePath, src, 'utf8');
+    }
+  } catch (err) {
+    console.warn('Failed to patch wasm glue to remove URL fallback:', err);
+  }
 }
 
 export async function runBuild({ withWasm = false, watch = false } = {}) {
