@@ -168,10 +168,6 @@ pub fn frank() -> AccountId {
     AccountId::from(hex!("C0F0f4ab324C46e55D02D0033343B4Be8A55532d"))
 }
 
-pub fn beacon_relayer() -> AccountId {
-    AccountId::from(hex!("c46e141b5083721ad5f5056ba1cded69dce4a65f"))
-}
-
 /// Get pre-funded accounts
 pub fn pre_funded_accounts() -> Vec<AccountId> {
     // These addresses are derived from Substrate's canonical mnemonic:
@@ -189,6 +185,5 @@ pub fn pre_funded_accounts() -> Vec<AccountId> {
         dorothy(),
         ethan(),
         frank(),
-        beacon_relayer(),
     ]
 }

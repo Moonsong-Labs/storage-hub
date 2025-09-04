@@ -17,6 +17,7 @@ use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, 
 
 use polkadot_primitives::{BlakeTwo256, HashT, HeadData};
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
+use sc_consensus_manual_seal::consensus::babe::BabeConsensusDataProvider;
 use shc_actors_framework::actor::TaskSpawner;
 use shc_common::{traits::StorageEnableRuntime, types::*};
 use shc_rpc::StorageHubClientRpcConfig;
@@ -2231,7 +2232,15 @@ where
                 pool: transaction_pool.clone(),
                 commands_stream,
                 select_chain,
-                consensus_data_provider: None,
+                consensus_data_provider: Some(Box::new(
+                    BabeConsensusDataProvider::new(
+                        client.clone(),
+                        keystore_container.keystore(),
+                        babe_link.epoch_changes().clone(),
+                        babe_link.config().authorities.clone(),
+                    )
+                    .expect("failed to create BabeConsensusDataProvider"),
+                )),
                 create_inherent_data_providers: move |_, ()| {
                     let slot_duration = slot_duration;
                     async move {
@@ -2240,7 +2249,7 @@ where
                             *timestamp,
                             slot_duration,
                         );
-                        Ok((slot, timestamp))
+                        Ok((timestamp, slot))
                     }
                 },
             }),
