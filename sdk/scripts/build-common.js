@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { build, context } from 'esbuild';
 import { join } from 'node:path';
-import { existsSync, rmSync, readFileSync } from 'node:fs';
+import { existsSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { exec as _exec } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -46,6 +46,24 @@ async function runWasmBuildIfNeeded(packageRoot, { withWasm }) {
 
   const cmd = 'wasm-pack build ./wasm --target web --release --out-dir pkg && rm -f ./wasm/pkg/package.json ./wasm/pkg/.gitignore';
   await exec(cmd, { cwd: packageRoot });
+
+  // Generate an embedded wasm module for browsers so apps don't need to host the file
+  try {
+    const wasmBinPath = join(packageRoot, 'wasm', 'pkg', 'storagehub_wasm_bg.wasm');
+    const embedPath = join(packageRoot, 'src', '_wasm_embed.ts');
+    if (existsSync(wasmBinPath)) {
+      const buf = readFileSync(wasmBinPath);
+      const b64 = buf.toString('base64');
+      const content = `// Auto-generated at build time\nexport const WASM_BASE64 = ${JSON.stringify(b64)} as const;\n`;
+      writeFileSync(embedPath, content, 'utf8');
+    } else {
+      // Ensure module exists even if wasm pack output is missing
+      const content = `// Auto-generated placeholder\nexport const WASM_BASE64 = '' as const;\n`;
+      writeFileSync(embedPath, content, 'utf8');
+    }
+  } catch (err) {
+    console.warn('Failed to generate embedded WASM module:', err);
+  }
 }
 
 export async function runBuild({ withWasm = false, watch = false } = {}) {
