@@ -154,6 +154,7 @@ impl IndexerOpsMut for Repository {
 }
 
 #[cfg(test)]
+// FIXME: all these tests fail locally due to some testcontainers setup issue
 mod tests {
     use shc_indexer_db::{OnchainBspId, OnchainMspId};
     use shp_types::Hash;
