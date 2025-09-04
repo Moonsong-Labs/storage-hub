@@ -7,7 +7,9 @@
   "workspaces": [
     "core",
     "msp-client",
-    "e2e"
+    "e2e",
+    "examples/node",
+    "examples/nextjs"
   ],
   "scripts": {
     "build": "pnpm --filter ./core run build && pnpm --filter ./msp-client run build",
