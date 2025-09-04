@@ -302,28 +302,33 @@ mod tests {
     }
 
     #[test]
-    fn test_normalize_path() {
-        // Test root normalization
+    fn normalize_path_root() {
         assert_eq!(FileTree::normalize_path("/"), "");
         assert_eq!(FileTree::normalize_path(""), "");
+    }
 
-        // Test duplicate slashes
+    #[test]
+    fn normalize_path_duplicate_slashes() {
         assert_eq!(FileTree::normalize_path("//file.txt"), "file.txt");
         assert_eq!(FileTree::normalize_path("////file.txt"), "file.txt");
         assert_eq!(
             FileTree::normalize_path("/path//to///file.txt"),
             "path/to/file.txt"
         );
+    }
 
-        // Test trailing slashes
+    #[test]
+    fn normalize_path_trailing_slashes() {
         assert_eq!(FileTree::normalize_path("file.txt/"), "file.txt");
         assert_eq!(FileTree::normalize_path("/folder/"), "folder");
         assert_eq!(
             FileTree::normalize_path("folder/subfolder/"),
             "folder/subfolder"
         );
+    }
 
-        // Test leading slash removal (root is implicit)
+    #[test]
+    fn normalize_path_leading_slash() {
         assert_eq!(
             FileTree::normalize_path("/folder/file.txt"),
             "folder/file.txt"
@@ -332,8 +337,10 @@ mod tests {
             FileTree::normalize_path("folder/file.txt"),
             "folder/file.txt"
         );
+    }
 
-        // Test combinations
+    #[test]
+    fn normalize_path_combined() {
         assert_eq!(
             FileTree::normalize_path("///folder//file.txt///"),
             "folder/file.txt"
@@ -341,7 +348,7 @@ mod tests {
     }
 
     #[test]
-    fn test_business_rules_root_optional() {
+    fn business_rules_root_optional() {
         // Test that /folder/file.txt and folder/file.txt produce the same result
         let files1 = vec![test_file_with_location_key_and_size(
             "/folder/file.txt",
@@ -367,8 +374,8 @@ mod tests {
     }
 
     #[test]
-    fn test_business_rules_duplicate_slashes() {
-        // Test that multiple slashes are collapsed
+    fn business_rules_duplicate_slashes_collapsed() {
+        // Test that multiple slashes are collapsed to single path
         let files = vec![
             test_file_with_location_key_and_size("//file1.txt", "key1", 100),
             test_file_with_location_key_and_size("////file2.txt", "key2", 200),
@@ -378,7 +385,7 @@ mod tests {
         let tree = FileTree::from_files_filtered(files, "/");
 
         if let FileTreeEntry::Folder(folder) = &tree.entry {
-            // All three files should be at root level
+            // All three files should be at root level despite different slash counts
             assert_eq!(folder.children.len(), 3);
 
             let names: Vec<String> = folder.children.iter().map(|c| c.name.clone()).collect();
@@ -389,7 +396,7 @@ mod tests {
     }
 
     #[test]
-    fn test_business_rules_trailing_slashes() {
+    fn business_rules_trailing_slashes_trimmed() {
         // Test that trailing slashes are trimmed
         let files = vec![
             test_file_with_location_key_and_size("file.txt/", "key1", 100),
@@ -407,7 +414,7 @@ mod tests {
     }
 
     #[test]
-    fn file_tree_from_files() {
+    fn file_tree_from_files_basic() {
         let files = vec![
             test_file_with_location_key_and_size("/path/to/file/foo.txt", "key1", 100),
             test_file_with_location_key_and_size("/path/to/file/bar.txt", "key2", 200),
@@ -493,7 +500,7 @@ mod tests {
     }
 
     #[test]
-    fn file_tree_from_files_filtered_root() {
+    fn file_tree_filtered_at_root() {
         let files = vec![
             test_file_with_location_key_and_size("/path/to/file/foo.txt", "key1", 100),
             test_file_with_location_key_and_size("/path/to/file/bar.txt", "key2", 200),
@@ -540,7 +547,7 @@ mod tests {
     }
 
     #[test]
-    fn file_tree_from_files_filtered_specific_path() {
+    fn file_tree_filtered_at_specific_path() {
         let files = vec![
             test_file_with_location_key_and_size("/path/to/file/foo.txt", "key1", 100),
             test_file_with_location_key_and_size("/path/to/file/bar.txt", "key2", 200),
@@ -580,7 +587,7 @@ mod tests {
     }
 
     #[test]
-    fn file_tree_from_files_filtered_deeper_path() {
+    fn file_tree_filtered_at_deeper_path() {
         let files = vec![
             test_file_with_location_key_and_size("/path/to/file/foo.txt", "key1", 100),
             test_file_with_location_key_and_size("/path/to/file/bar.txt", "key2", 200),
