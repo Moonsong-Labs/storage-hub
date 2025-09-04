@@ -614,14 +614,14 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_file_by_file_key() {
+    async fn get_file_by_file_key() {
         let repo = MockRepository::new();
         let bucket_id = inject_sample_bucket(&repo, None).await;
         let file_key = "test_file.txt";
         let file_id = inject_sample_file(&repo, bucket_id, Some(file_key)).await;
 
         let file = repo
-            .get_file_by_file_key(FileKey(file_key.as_bytes()))
+            .get_file_by_file_key(file_key.as_bytes().into())
             .await
             .expect("should find file by file key");
 
@@ -631,16 +631,19 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_file_by_file_key_not_found() {
+    async fn get_file_by_file_key_not_found() {
         let repo = MockRepository::new();
         let bucket_id = inject_sample_bucket(&repo, None).await;
         inject_sample_file(&repo, bucket_id, Some("existing_file.txt")).await;
 
         let result = repo
-            .get_file_by_file_key(FileKey(b"nonexistent_file.txt"))
+            .get_file_by_file_key(b"nonexistent_file.txt".as_slice().into())
             .await;
 
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), RepositoryError::NotFound(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            RepositoryError::NotFound { .. }
+        ));
     }
 }

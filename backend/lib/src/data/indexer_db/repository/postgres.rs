@@ -155,226 +155,392 @@ impl IndexerOpsMut for Repository {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use shc_indexer_db::{OnchainBspId, OnchainMspId};
+    use shp_types::Hash;
 
-    use crate::data::indexer_db::test_helpers::setup_test_db;
+    use super::*;
+    use crate::data::indexer_db::{
+        repository::{error::RepositoryError, postgres::Repository},
+        test_helpers::{
+            setup_test_db,
+            snapshot_move_bucket::{
+                BSP_NUM, BSP_ONE_ACCOUNT, BSP_ONE_ONCHAIN_ID, BUCKET_ACCOUNT, BUCKET_FILES,
+                BUCKET_ID, BUCKET_NAME, BUCKET_ONCHAIN_ID, BUCKET_PRIVATE, FILE_ONE_FILE_KEY,
+                FILE_ONE_LOCATION, MSP_ONE_ACCOUNT, MSP_ONE_ID, MSP_ONE_ONCHAIN_ID, MSP_TWO_ID,
+                SNAPSHOT_SQL,
+            },
+        },
+    };
+
+    // TODO: replace with IndexOpsMut methods to use diesel directly
+    const EXTRA_BUCKETS: &str = r#"INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root) \
+            VALUES \
+                (1, '0xuser123', 1, 'user123-bucket1', 'b1', false, '\x0102'), \
+                (2, '0xuser123', 1, 'user123-bucket2', 'b2', true, '\x0304'), \
+                (3, '0xuser123', 2, 'user123-bucket3', 'b3', false, '\x0506'), \
+                (4, '0xuser456', 1, 'user456-bucket1', 'b4', true, '\x0708'), \
+                (5, '0xuser123', 1, 'user123-bucket4', 'b5', false, '\x0910');"#;
 
     #[tokio::test]
-    async fn test_repo_read() {
-        // Initialize container with some test data
-        let init_sql = r#"
-            INSERT INTO bsp (id, account, capacity, stake, onchain_bsp_id, merkle_root)
-            VALUES 
-                (1, '0x1234567890abcdef', 1000, 100, '0x0000000000000000000000000000000000000000000000000000000000000001', '\x0102'),
-                (2, '0xabcdef1234567890', 2000, 200, '0x0000000000000000000000000000000000000000000000000000000000000002', '\x0304');
-        "#;
-
-        let (_container, database_url) = setup_test_db(Some(init_sql)).await;
+    async fn list_bsps() {
+        let (_container, database_url) =
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
 
         let repo = Repository::new(&database_url)
             .await
             .expect("Failed to create repository");
 
-        let bsps = repo.list_bsps(10, 0).await.expect("Failed to fetch BSPs");
-        assert_eq!(bsps.len(), 2, "Should have 2 BSPs");
-        use bigdecimal::BigDecimal;
-        assert_eq!(bsps[0].capacity, BigDecimal::from(1000));
-        assert_eq!(bsps[1].capacity, BigDecimal::from(2000));
+        // Test getting all BSPs
+        let bsps = repo
+            .list_bsps(100, 0)
+            .await
+            .expect("Failed to get all BSPs");
+        assert_eq!(
+            bsps.len(),
+            BSP_NUM,
+            "Should have {BSP_NUM} BSPs without pagination"
+        );
+
+        // Test with limit
+        let limited_bsps = repo
+            .list_bsps(2, 0)
+            .await
+            .expect("Failed to get limited BSPs");
+        assert!(
+            limited_bsps.len() <= 2,
+            "Should return at most 2 BSPs with limit"
+        );
+
+        // Test with offset
+        let offset_bsps = repo
+            .list_bsps(100, 1)
+            .await
+            .expect("Failed to get offset BSPs");
+        assert_ne!(
+            limited_bsps[0].id, offset_bsps[0].id,
+            "First BSP should be skipped with offset 1"
+        );
     }
 
     #[tokio::test]
-    async fn test_repo_write() {
-        // Initialize container with test data
-        let init_sql = r#"
-            INSERT INTO bsp (id, account, capacity, stake, onchain_bsp_id, merkle_root)
-            VALUES 
-                (1, '0x1111111111111111', 1000, 100, '0x0000000000000000000000000000000000000000000000000000000000000001', '\x0102'),
-                (2, '0x2222222222222222', 2000, 200, '0x0000000000000000000000000000000000000000000000000000000000000002', '\x0304');
-        "#;
-
-        let (_container, database_url) = setup_test_db(Some(init_sql)).await;
+    async fn get_msp_by_onchain_id() {
+        let (_container, database_url) =
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
 
         let repo = Repository::new(&database_url)
             .await
             .expect("Failed to create repository");
 
-        let original_bsps = repo.list_bsps(10, 0).await.expect("Failed to fetch BSPs");
-        assert_eq!(original_bsps.len(), 2, "Should start with 2 BSPs");
+        // Test getting MSP by onchain ID
+        let msp_id = OnchainMspId::new(Hash::from(MSP_ONE_ONCHAIN_ID));
+        let msp = repo
+            .get_msp_by_onchain_id(&msp_id)
+            .await
+            .expect("Failed to get MSP");
 
-        let bsp_to_delete = &original_bsps[0];
-        // Use the onchain_bsp_id field directly since that's what OnchainBspId represents
-        let bsp_id = bsp_to_delete.onchain_bsp_id.clone();
+        assert_eq!(msp.account, MSP_ONE_ACCOUNT);
+    }
 
+    #[tokio::test]
+    async fn get_bucket_by_onchain_id() {
+        let (_container, database_url) =
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
+
+        let repo = Repository::new(&database_url)
+            .await
+            .expect("Failed to create repository");
+
+        // Test getting bucket by onchain ID
+        let bucket = repo
+            .get_bucket_by_onchain_id(BUCKET_ONCHAIN_ID.as_slice().into())
+            .await
+            .expect("Failed to get bucket");
+
+        assert_eq!(bucket.name, BUCKET_NAME.as_bytes());
+        assert_eq!(bucket.account, BUCKET_ACCOUNT);
+        assert_eq!(bucket.private, BUCKET_PRIVATE);
+    }
+
+    #[tokio::test]
+    async fn get_bucket_by_onchain_id_not_found() {
+        let (_container, database_url) =
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
+
+        let repo = Repository::new(&database_url)
+            .await
+            .expect("Failed to create repository");
+
+        let result = repo
+            .get_bucket_by_onchain_id(b"nonexistent_bucket_id".as_slice().into())
+            .await;
+
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            RepositoryError::NotFound { .. }
+        ));
+    }
+
+    #[tokio::test]
+    async fn get_files_by_bucket_filters_correctly() {
+        // TODO: add a different bucket (with a file) to check filtering
+        let (_container, database_url) =
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
+
+        let repo = Repository::new(&database_url)
+            .await
+            .expect("Failed to create repository");
+
+        // Test getting all files in bucket
+        let files = repo
+            .get_files_by_bucket(BUCKET_ID, 100, 0)
+            .await
+            .expect("Failed to get bucket files");
+
+        assert_eq!(
+            files.len(),
+            BUCKET_FILES,
+            "Should have {BUCKET_FILES} files in bucket"
+        );
+    }
+
+    #[tokio::test]
+    async fn get_files_by_bucket_pagination() {
+        let (_container, database_url) =
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
+
+        let repo = Repository::new(&database_url)
+            .await
+            .expect("Failed to create repository");
+
+        // Test with limit
+        let limited_files = repo
+            .get_files_by_bucket(BUCKET_ID, 2, 0)
+            .await
+            .expect("Failed to get limited files");
+        assert!(
+            limited_files.len() <= 2,
+            "Should return at most 2 files with limit"
+        );
+
+        // Test with offset
+        let offset_files = repo
+            .get_files_by_bucket(BUCKET_ID, 100, 1)
+            .await
+            .expect("Failed to get offset files");
+        assert_ne!(
+            limited_files[0].id, offset_files[0].id,
+            "First File should be skipped with offset 1"
+        );
+
+        // Test limit and offset combined
+        let paginated_files = repo
+            .get_files_by_bucket(BUCKET_ID, 1, 1)
+            .await
+            .expect("Failed to get offset files");
+        assert!(
+            paginated_files.len() <= 1,
+            "Should return at most 1 file with limit"
+        );
+        assert_ne!(
+            limited_files[0].id, paginated_files[0].id,
+            "First File should be skipped with offset 1"
+        );
+    }
+
+    #[tokio::test]
+    #[ignore = "TODO: setup empty bucket"]
+    async fn get_files_by_bucket_empty_bucket() {
+        let (_container, database_url) =
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
+
+        let repo = Repository::new(&database_url)
+            .await
+            .expect("Failed to create repository");
+
+        let empty_bucket_id = 9999;
+
+        let files = repo
+            .get_files_by_bucket(empty_bucket_id, 100, 0)
+            .await
+            .expect("should handle empty bucket");
+
+        assert!(files.is_empty());
+    }
+
+    #[tokio::test]
+    async fn get_files_by_bucket_nonexistent_bucket() {
+        let (_container, database_url) =
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
+
+        let repo = Repository::new(&database_url)
+            .await
+            .expect("Failed to create repository");
+
+        // Test getting all files in bucket
+        let files = repo
+            .get_files_by_bucket(123456, 100, 0)
+            .await
+            .expect("should handle non-existent bucket");
+
+        assert!(files.is_empty());
+    }
+
+    #[tokio::test]
+    async fn get_buckets_by_user_and_msp() {
+        let (_container, database_url) = setup_test_db(
+            vec![SNAPSHOT_SQL.to_string()],
+            vec![EXTRA_BUCKETS.to_string()],
+        )
+        .await;
+
+        let repo = Repository::new(&database_url)
+            .await
+            .expect("Failed to create repository");
+
+        let buckets = repo
+            .get_buckets_by_user_and_msp(MSP_ONE_ID, "0xuser123", 100, 0)
+            .await
+            .expect("Failed to get user buckets");
+
+        assert_eq!(
+            buckets.len(),
+            3,
+            "Should have 3 buckets for 0xuser123 with MSP #1"
+        );
+    }
+
+    //TODO: add the following tests
+    // * `get_buckets_by_user_and_msp_filters_other_users`: trim down extra buckets for the test above, since otherwise the test above _also_ filters
+    // * `get_buckets_by_user_and_msp_filters_other_msps`: same here
+    // * `get_buckets_by_user_and_msp_filters_no_msp`: for buckets without msp
+
+    #[tokio::test]
+    async fn get_buckets_by_user_and_msp_pagination() {
+        let (_container, database_url) =
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
+
+        let repo = Repository::new(&database_url)
+            .await
+            .expect("Failed to create repository");
+
+        // Test with limit
+        let limited_buckets = repo
+            .get_buckets_by_user_and_msp(MSP_TWO_ID, BUCKET_ACCOUNT, 2, 0)
+            .await
+            .expect("Failed to get limited buckets");
+        assert!(
+            limited_buckets.len() <= 2,
+            "Should return at most 2 buckets with limit"
+        );
+
+        // Test with offset
+        let offset_buckets = repo
+            .get_buckets_by_user_and_msp(MSP_TWO_ID, BUCKET_ACCOUNT, 100, 1)
+            .await
+            .expect("Failed to get offset buckets");
+        assert_ne!(
+            limited_buckets[0].name, offset_buckets[0].name,
+            "Should skip first bucket"
+        );
+
+        // Test limit and offset combined
+        let paginated_buckets = repo
+            .get_buckets_by_user_and_msp(MSP_TWO_ID, BUCKET_ACCOUNT, 2, 1)
+            .await
+            .expect("Failed to get offset buckets");
+        assert!(
+            paginated_buckets.len() <= 2,
+            "Should return at most 2 buckets with limit"
+        );
+        assert_ne!(
+            limited_buckets[0].name, paginated_buckets[0].name,
+            "Should skip first bucket"
+        );
+    }
+
+    #[tokio::test]
+    async fn get_file_by_file_key() {
+        let (_container, database_url) =
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
+
+        let repo = Repository::new(&database_url)
+            .await
+            .expect("Failed to create repository");
+
+        let file = repo
+            .get_file_by_file_key(FILE_ONE_FILE_KEY.as_slice().into())
+            .await
+            .expect("Failed to get file info");
+
+        assert_eq!(file.file_key, FILE_ONE_FILE_KEY);
+        assert_eq!(file.onchain_bucket_id, BUCKET_ONCHAIN_ID);
+        assert_eq!(file.location, FILE_ONE_LOCATION.as_bytes());
+    }
+
+    #[tokio::test]
+    async fn get_file_by_file_key_not_found() {
+        let (_container, database_url) =
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
+
+        let repo = Repository::new(&database_url)
+            .await
+            .expect("Failed to create repository");
+
+        let result = repo
+            .get_file_by_file_key(b"non-existing-file-key".as_slice().into())
+            .await;
+
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            RepositoryError::NotFound { .. }
+        ));
+    }
+
+    #[tokio::test]
+    async fn delete_bsp() {
+        let (_container, database_url) =
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
+
+        let repo = Repository::new(&database_url)
+            .await
+            .expect("Failed to create repository");
+
+        // Verify initial count
+        let initial_bsps = repo
+            .list_bsps(100, 0)
+            .await
+            .expect("Failed to get initial BSPs");
+        assert_eq!(
+            initial_bsps.len(),
+            BSP_NUM,
+            "Should start with {BSP_NUM} BSPs"
+        );
+
+        // Delete a BSP
+        let bsp_id = OnchainBspId::new(Hash::from(BSP_ONE_ONCHAIN_ID));
         repo.delete_bsp(&bsp_id)
             .await
             .expect("Failed to delete BSP");
 
-        let changed_bsps = repo
-            .list_bsps(10, 0)
+        // Verify deletion
+        let remaining_bsps = repo
+            .list_bsps(100, 0)
             .await
-            .expect("Failed to fetch BSPs after delete");
-        assert_eq!(changed_bsps.len(), 1, "Should have 1 BSP after deletion");
-        assert_ne!(
-            changed_bsps[0].id, bsp_to_delete.id,
-            "Remaining BSP should be different"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_get_msp_by_onchain_id() {
-        // Initialize container with MSP test data
-        let init_sql = r#"
-            INSERT INTO msp (id, account, capacity, value_prop, onchain_msp_id)
-            VALUES 
-                (1, '0xmsp1234567890ab', 5000, 'Fast storage', '0x0000000000000000000000000000000000000000000000000000000000000000');
-        "#;
-
-        let (_container, database_url) = setup_test_db(Some(init_sql)).await;
-
-        let repo = Repository::new(&database_url)
-            .await
-            .expect("Failed to create repository");
-
-        // Test MSP retrieval by onchain ID
-        let msp = repo
-            .get_msp_by_onchain_id(&OnchainMspId::new(shp_types::Hash::from([0; 32])))
-            .await
-            .expect("Failed to fetch MSP");
-
-        use bigdecimal::BigDecimal;
-        assert_eq!(msp.capacity, BigDecimal::from(5000));
-        assert_eq!(msp.value_prop, "Fast storage");
-        assert_eq!(msp.account, "0xmsp1234567890ab");
-    }
-
-    #[tokio::test]
-    async fn test_get_bucket_by_onchain_id() {
-        // Initialize container with bucket test data (requires MSP first)
-        let init_sql = r#"
-            -- Insert MSP first (required for foreign key)
-            INSERT INTO msp (id, account, capacity, value_prop, onchain_msp_id)
-            VALUES 
-                (1, '0xmsp1234567890ab', 5000, 'Storage provider', '0x0000000000000000000000000000000000000000000000000000000000000001');
-
-            -- Insert Bucket
-            INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root)
-            VALUES 
-                (1, '0xuser123', 1, 'my-bucket', '0xbucket123', false, '\x0102'),
-                (2, '0xuser456', 1, 'private-bucket', '0xbucket456', true, '\x0304');
-        "#;
-
-        let (_container, database_url) = setup_test_db(Some(init_sql)).await;
-
-        let repo = Repository::new(&database_url)
-            .await
-            .expect("Failed to create repository");
-
-        // Test bucket retrieval by onchain ID
-        let bucket = repo
-            .get_bucket_by_onchain_id(BucketId(b"0xbucket123"))
-            .await
-            .expect("Failed to fetch bucket");
-
-        assert_eq!(bucket.name, b"my-bucket");
-        assert_eq!(bucket.private, false);
-        assert_eq!(bucket.account, "0xuser123");
-    }
-
-    #[tokio::test]
-    async fn test_get_files_by_bucket() {
-        // Initialize container with file test data (requires MSP and bucket first)
-        let init_sql = r#"
-            -- Insert MSP first
-            INSERT INTO msp (id, account, capacity, value_prop, onchain_msp_id)
-            VALUES 
-                (1, '0xmsp1234567890ab', 5000, 'Storage provider', '0x0000000000000000000000000000000000000000000000000000000000000001');
-
-            -- Insert Bucket
-            INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root)
-            VALUES 
-                (1, '0xuser123', 1, 'test-bucket', '0xbucket123', false, '\x0102');
-
-            -- Insert Files (account and onchain_bucket_id are required)
-            INSERT INTO file (id, account, file_key, bucket_id, onchain_bucket_id, location, fingerprint, size, step)
-            VALUES 
-                (1, '0xuser123', 'file1.txt', 1, '0xbucket123', '/data/file1.txt', '\x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20', 1024, 1),
-                (2, '0xuser123', 'file2.txt', 1, '0xbucket123', '/data/file2.txt', '\x2021222324252627282930313233343536373839404142434445464748495051', 2048, 1),
-                (3, '0xuser123', 'file3.txt', 1, '0xbucket123', '/data/file3.txt', '\x5253545556575859606162636465666768697071727374757677787980818283', 512, 0);
-        "#;
-
-        let (_container, database_url) = setup_test_db(Some(init_sql)).await;
-
-        let repo = Repository::new(&database_url)
-            .await
-            .expect("Failed to create repository");
-
-        // Test file retrieval by bucket
-        let files = repo
-            .get_files_by_bucket(1, 10, 0)
-            .await
-            .expect("Failed to fetch files");
-
-        assert_eq!(files.len(), 3, "Should have 3 files in bucket");
-        assert_eq!(files[0].file_key, b"file1.txt");
-        assert_eq!(files[0].size, 1024);
-        assert_eq!(files[1].file_key, b"file2.txt");
-        assert_eq!(files[1].size, 2048);
-        assert_eq!(files[2].file_key, b"file3.txt");
-        assert_eq!(files[2].size, 512);
-    }
-
-    #[tokio::test]
-    async fn test_get_buckets_by_user_and_msp() {
-        // Initialize container with multiple buckets for testing filtering
-        let init_sql = r#"
-            -- Insert MSPs
-            INSERT INTO msp (id, account, capacity, value_prop, onchain_msp_id)
-            VALUES 
-                (1, '0xmsp111', 5000, 'MSP One', '0x0000000000000000000000000000000000000000000000000000000000000001'),
-                (2, '0xmsp222', 8000, 'MSP Two', '0x0000000000000000000000000000000000000000000000000000000000000002');
-
-            -- Insert Buckets for different users and MSPs
-            INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root)
-            VALUES 
-                (1, '0xuser123', 1, 'user123-bucket1', '0xb1', false, '\x0102'),
-                (2, '0xuser123', 1, 'user123-bucket2', '0xb2', true, '\x0304'),
-                (3, '0xuser123', 2, 'user123-bucket3', '0xb3', false, '\x0506'),
-                (4, '0xuser456', 1, 'user456-bucket1', '0xb4', true, '\x0708');
-        "#;
-
-        let (_container, database_url) = setup_test_db(Some(init_sql)).await;
-
-        let repo = Repository::new(&database_url)
-            .await
-            .expect("Failed to create repository");
-
-        // Test getting buckets for user123 and msp_id=1
-        let buckets = repo
-            .get_buckets_by_user_and_msp(1, "0xuser123", 10, 0)
-            .await
-            .expect("Failed to fetch buckets");
-
+            .expect("Failed to get remaining BSPs");
         assert_eq!(
-            buckets.len(),
-            2,
-            "Should have 2 buckets for user123 and MSP 1"
+            remaining_bsps.len(),
+            BSP_NUM - 1,
+            "Should have 1 less BSP after deletion"
         );
-        assert_eq!(buckets[0].name, b"user123-bucket1");
-        assert_eq!(buckets[1].name, b"user123-bucket2");
 
-        // Test pagination
-        let first_bucket = repo
-            .get_buckets_by_user_and_msp(1, "0xuser123", 1, 0)
-            .await
-            .expect("Failed to fetch first bucket");
-        assert_eq!(first_bucket.len(), 1);
-        assert_eq!(first_bucket[0].name, b"user123-bucket1");
-
-        let second_bucket = repo
-            .get_buckets_by_user_and_msp(1, "0xuser123", 1, 1)
-            .await
-            .expect("Failed to fetch second bucket");
-        assert_eq!(second_bucket.len(), 1);
-        assert_eq!(second_bucket[0].name, b"user123-bucket2");
+        // Verify the correct BSP was deleted
+        for bsp in &remaining_bsps {
+            assert_ne!(
+                bsp.account, BSP_ONE_ACCOUNT,
+                "Deleted BSP should not be present"
+            );
+        }
     }
 }
