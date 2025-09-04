@@ -5,6 +5,8 @@ export type {
   FileListResponse,
   HealthStatus,
   NonceResponse,
+  DownloadOptions,
+  DownloadResult,
   UploadOptions,
   UploadReceipt,
   VerifyResponse,

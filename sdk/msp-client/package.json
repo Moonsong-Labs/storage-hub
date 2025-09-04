@@ -35,7 +35,10 @@
     "test": "vitest",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
+  "peerDependencies": {
+    "@storagehub-sdk/core": ">=0.0.3"
+  },
+  "devDependencies": {
     "@storagehub-sdk/core": "workspace:*"
   },
   "engines": {
