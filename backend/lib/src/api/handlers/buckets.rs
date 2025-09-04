@@ -1,12 +1,13 @@
 //! This module contains the handlers for the bucket management endpoints
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     response::IntoResponse,
     Json,
 };
 use axum_extra::TypedHeader;
 use headers::{authorization::Bearer, Authorization};
+use serde::Deserialize;
 
 use crate::{
     api::validation::extract_bearer_token, constants::mocks::MOCK_ADDRESS, error::Error,
@@ -66,7 +67,7 @@ pub async fn get_files(
 
     let file_tree = services
         .msp
-        .get_file_tree(&bucket_id, address, query.path.unwrap_or("/"))
+        .get_file_tree(&bucket_id, address, query.path.as_deref().unwrap_or("/"))
         .await?;
 
     let response = FileListResponse {

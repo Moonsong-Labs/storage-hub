@@ -233,7 +233,7 @@ impl MspService {
             .await?;
 
         // Create hierarchy based on location segments
-        Ok(FileTree::from_files_filtered(files, normalized))
+        Ok(FileTree::from_files_filtered(files, path))
     }
 
     /// Get file information
