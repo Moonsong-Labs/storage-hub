@@ -21,7 +21,7 @@ use shc_indexer_db::{
 
 use crate::data::indexer_db::repository::{
     error::{RepositoryError, RepositoryResult},
-    BucketId, IndexerOps, IndexerOpsMut,
+    BucketId, FileKey, IndexerOps, IndexerOpsMut,
 };
 
 /// Mock repository implementation using in-memory storage
@@ -136,7 +136,8 @@ impl IndexerOps for MockRepository {
         files
             .values()
             .find(|f| f.file_key.as_slice() == key.0)
-            .ok_or_err(|| RepositoryError::not_found("File"))
+            .cloned()
+            .ok_or_else(|| RepositoryError::not_found("File"))
     }
 }
 
