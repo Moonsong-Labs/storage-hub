@@ -166,8 +166,8 @@ impl WeightToFeePolynomial for WeightToFee {
 
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
-    spec_name: alloc::borrow::Cow::Borrowed("sh-solochain-evm-runtime"),
-    impl_name: alloc::borrow::Cow::Borrowed("sh-solochain-evm-runtime"),
+    spec_name: alloc::borrow::Cow::Borrowed("moonbase"),
+    impl_name: alloc::borrow::Cow::Borrowed("moonbase"),
     authoring_version: 1,
     spec_version: 1,
     impl_version: 0,
