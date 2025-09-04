@@ -133,7 +133,10 @@ impl IndexerOps for MockRepository {
     async fn get_file_by_file_key(&self, key: FileKey<'_>) -> RepositoryResult<File> {
         let files = self.files.read().await;
 
-        files.values().find(|f| f.file_key.as_slice() == key.0).ok_or_err(|| RepositoryError::not_found("File"))
+        files
+            .values()
+            .find(|f| f.file_key.as_slice() == key.0)
+            .ok_or_err(|| RepositoryError::not_found("File"))
     }
 }
 
@@ -608,5 +611,36 @@ pub mod tests {
 
         assert_eq!(paginated_buckets.len(), 1);
         assert_eq!(paginated_buckets[0].id, bucket2_id);
+    }
+
+    #[tokio::test]
+    async fn test_get_file_by_file_key() {
+        let repo = MockRepository::new();
+        let bucket_id = inject_sample_bucket(&repo, None).await;
+        let file_key = "test_file.txt";
+        let file_id = inject_sample_file(&repo, bucket_id, Some(file_key)).await;
+
+        let file = repo
+            .get_file_by_file_key(FileKey(file_key.as_bytes()))
+            .await
+            .expect("should find file by file key");
+
+        assert_eq!(file.id, file_id);
+        assert_eq!(file.file_key, file_key.as_bytes());
+        assert_eq!(file.bucket_id, bucket_id);
+    }
+
+    #[tokio::test]
+    async fn test_get_file_by_file_key_not_found() {
+        let repo = MockRepository::new();
+        let bucket_id = inject_sample_bucket(&repo, None).await;
+        inject_sample_file(&repo, bucket_id, Some("existing_file.txt")).await;
+
+        let result = repo
+            .get_file_by_file_key(FileKey(b"nonexistent_file.txt"))
+            .await;
+
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), RepositoryError::NotFound(_)));
     }
 }
