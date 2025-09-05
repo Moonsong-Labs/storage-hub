@@ -131,19 +131,3 @@ pub fn fetch_genesis_hash(client: Arc<impl BlockBackend<OpaqueBlock> + 'static>)
         .flatten()
         .expect("Genesis block exists; qed")
 }
-
-/// Generates a [`ProtocolConfig`] for the provider requests protocol, refusing incoming
-/// requests.
-pub fn generate_protocol_config<Hash: AsRef<[u8]>>(
-    genesis_hash: Hash,
-    fork_id: Option<&str>,
-) -> ProtocolConfig {
-    ProtocolConfig {
-        name: generate_protocol_name(genesis_hash, fork_id).into(),
-        fallback_names: Vec::new(),
-        max_request_size: MAX_REQUEST_PACKET_SIZE_BYTES,
-        max_response_size: MAX_RESPONSE_PACKET_SIZE_BYTES,
-        request_timeout: Duration::from_secs(15),
-        inbound_queue: None,
-    }
-}
