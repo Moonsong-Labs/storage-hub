@@ -47,7 +47,7 @@ jobs:
 
       - name: Install e2e deps (sdk/e2e)
         working-directory: sdk/e2e
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Install Playwright Chromium with system deps (sdk/e2e)
         working-directory: sdk/e2e
