@@ -43,7 +43,7 @@ export async function waitForDeleteFileExtrinsic(
  * @param timeout - Timeout in milliseconds (default: 10000)
  * @returns Promise<boolean> - True if expected number of extrinsics found, false if timeout
  */
-export async function waitForDeleteFileForIncompleteStorageRequestExtrinsic(
+export async function waitForIncompleteStorageRequestExtrinsic(
   api: EnrichedBspApi,
   expectedCount = 1,
   timeout = 10000

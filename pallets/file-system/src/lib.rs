@@ -788,7 +788,7 @@ pub mod pallet {
         /// Notifies that a storage request was marked as incomplete.
         ///
         /// This is important for fisherman nodes to listen and react to, to delete
-        /// the file key from the BSPs and/or MSP storing that file from their forest.
+        /// the file key from the BSPs and/or Bucket storing that file from their forest.
         IncompleteStorageRequest { file_key: MerkleHash<T> },
     }
 

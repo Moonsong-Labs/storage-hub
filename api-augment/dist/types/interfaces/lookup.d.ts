@@ -1689,6 +1689,9 @@ declare const _default: {
         fileKey: string;
         providerId: string;
       };
+      IncompleteStorageRequest: {
+        fileKey: string;
+      };
     };
   };
   /**

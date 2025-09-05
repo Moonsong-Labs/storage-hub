@@ -18,7 +18,7 @@ import {
 import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
 import {
   waitForDeleteFileExtrinsic,
-  waitForDeleteFileForIncompleteStorageRequestExtrinsic,
+  waitForIncompleteStorageRequestExtrinsic,
   waitForFishermanProcessing
 } from "../../../util/fisherman/fishermanHelpers";
 
@@ -314,7 +314,7 @@ describeMspNet(
       assert(incompleteProcessingFound, "Should find fisherman processing incomplete storage");
 
       // Verify delete_file_for_incomplete_storage_request extrinsic is submitted
-      const deleteIncompleteFileFound = await waitForDeleteFileForIncompleteStorageRequestExtrinsic(
+      const deleteIncompleteFileFound = await waitForIncompleteStorageRequestExtrinsic(
         userApi,
         1,
         30000
@@ -396,7 +396,7 @@ describeMspNet(
       assert(incompleteProcessingFound, "Should find fisherman processing incomplete storage");
 
       // Verify 2 extrsinsics submitted for each MSP and BSP
-      const deleteIncompleteFileFound = await waitForDeleteFileForIncompleteStorageRequestExtrinsic(
+      const deleteIncompleteFileFound = await waitForIncompleteStorageRequestExtrinsic(
         userApi,
         2,
         30000
@@ -416,6 +416,54 @@ describeMspNet(
         "FileDeletedFromIncompleteStorageRequest",
         deletionResult.events
       );
+
+      // Extract deletion events to verify root changes
+      const mspDeletionEvent = userApi.assert.fetchEvent(
+        userApi.events.fileSystem.MspFileDeletionCompleted,
+        deletionResult.events
+      );
+      const bspDeletionEvent = userApi.assert.fetchEvent(
+        userApi.events.fileSystem.BspFileDeletionCompleted,
+        deletionResult.events
+      );
+
+      // Verify MSP root changed
+      await waitFor({
+        lambda: async () => {
+          notEqual(
+            mspDeletionEvent.data.oldRoot.toString(),
+            mspDeletionEvent.data.newRoot.toString(),
+            "MSP forest root should have changed after file deletion"
+          );
+          const currentBucketRoot = await msp1Api.rpc.storagehubclient.getForestRoot(
+            mspDeletionEvent.data.bucketId.toString()
+          );
+          strictEqual(
+            currentBucketRoot.toString(),
+            mspDeletionEvent.data.newRoot.toString(),
+            "Current bucket forest root should match the new root from deletion event"
+          );
+          return true;
+        }
+      });
+
+      // Verify BSP root changed
+      await waitFor({
+        lambda: async () => {
+          notEqual(
+            bspDeletionEvent.data.oldRoot.toString(),
+            bspDeletionEvent.data.newRoot.toString(),
+            "BSP forest root should have changed after file deletion"
+          );
+          const currentBspRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
+          strictEqual(
+            currentBspRoot.toString(),
+            bspDeletionEvent.data.newRoot.toString(),
+            "Current BSP forest root should match the new root from deletion event"
+          );
+          return true;
+        }
+      });
     });
 
     it("processes multiple providers for same file deletion", async () => {

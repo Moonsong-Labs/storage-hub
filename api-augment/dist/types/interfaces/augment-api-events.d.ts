@@ -734,6 +734,19 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
+       * Notifies that a storage request was marked as incomplete.
+       *
+       * This is important for fisherman nodes to listen and react to, to delete
+       * the file key from the BSPs and/or Bucket storing that file from their forest.
+       **/
+      IncompleteStorageRequest: AugmentedEvent<
+        ApiType,
+        [fileKey: H256],
+        {
+          fileKey: H256;
+        }
+      >;
+      /**
        * Notifies that a bucket has been moved to a new MSP under a new value proposition.
        **/
       MoveBucketAccepted: AugmentedEvent<
