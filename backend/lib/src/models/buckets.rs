@@ -126,7 +126,7 @@ impl FileTree {
     /// - **Trailing slashes are trimmed**: `file.txt/` and `file.txt` are both displayed
     ///   as `file.txt` in the name (these would be separate entries in the database)
     pub fn from_files_filtered(files: Vec<DBFile>, filter_path: &str) -> Self {
-        let mut children_map: BTreeMap<String, FileTreeEntry> = BTreeMap::new();
+        let mut children_map: BTreeMap<String, Vec<FileTreeEntry>> = BTreeMap::new();
 
         let prefix_to_match = Self::normalize_path(filter_path);
 
@@ -134,8 +134,6 @@ impl FileTree {
             let location = String::from_utf8_lossy(&file.location);
 
             // Normalize the file location using the same rules
-            // FIXME: in case of files with the same resulting name
-            // they will override each other in the map
             let normalized_location = Self::normalize_path(&location);
 
             // Determine if this file is under the filter path
@@ -171,28 +169,34 @@ impl FileTree {
 
             if is_file {
                 // This is a direct file under the path
-                children_map.insert(
-                    first_segment.to_string(),
-                    FileTreeEntry::File(FileTreeFile {
+                children_map
+                    .entry(first_segment.to_string())
+                    .or_insert_with(Vec::new)
+                    .push(FileTreeEntry::File(FileTreeFile {
                         size_bytes: file.size as u64,
                         file_key: hex::encode(&file.file_key),
-                    }),
-                );
+                    }));
             } else {
                 // This is a folder (has more segments after the first)
                 // We only want to create the folder entry once, not recurse into it
-                children_map
+                let entries = children_map
                     .entry(first_segment.to_string())
-                    .or_insert_with(|| {
-                        FileTreeEntry::Folder(FileTreeFolder {
-                            children: Vec::new(), // Empty children since we don't recurse
-                        })
-                    });
+                    .or_insert_with(Vec::new);
+
+                // Only add folder entry if we don't already have one
+                if !entries
+                    .iter()
+                    .any(|e| matches!(e, FileTreeEntry::Folder(_)))
+                {
+                    entries.push(FileTreeEntry::Folder(FileTreeFolder {
+                        children: Vec::new(), // Empty children since we don't recurse
+                    }));
+                }
             }
         }
 
         // Convert the map to a FileTree structure
-        let children = Self::map_to_children(children_map);
+        let children = Self::map_vec_to_children(children_map);
 
         // Use the last segment of the path as the name, or "/" for root
         let name = if prefix_to_match.is_empty() {
@@ -274,6 +278,19 @@ impl FileTree {
     fn map_to_children(map: BTreeMap<String, FileTreeEntry>) -> Vec<FileTree> {
         map.into_iter()
             .map(|(name, entry)| FileTree { name, entry })
+            .collect()
+    }
+
+    /// Convert a map of vectors back to children vector
+    /// Each name can have multiple entries (files with same normalized name)
+    fn map_vec_to_children(map: BTreeMap<String, Vec<FileTreeEntry>>) -> Vec<FileTree> {
+        map.into_iter()
+            .flat_map(|(name, entries)| {
+                entries.into_iter().map(move |entry| FileTree {
+                    name: name.clone(),
+                    entry,
+                })
+            })
             .collect()
     }
 }
@@ -396,7 +413,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic] // FIXME: remove once fixme below is... fixed
     fn business_rules_trailing_slashes_trimmed() {
         // Test that trailing slashes are trimmed
         let files = vec![
@@ -408,9 +424,19 @@ mod tests {
 
         if let FileTreeEntry::Folder(folder) = &tree.entry {
             // Both should appear as "file.txt" (2 separate entries with the same name)
-            // FIXME: see comment in method about normalized file names overwriting each other
             assert_eq!(folder.children.len(), 2);
             assert_eq!(folder.children[0].name, "file.txt");
+            assert_eq!(folder.children[1].name, "file.txt");
+
+            // Verify they are different files
+            if let FileTreeEntry::File(file1) = &folder.children[0].entry {
+                assert_eq!(file1.file_key, hex::encode(b"key1"));
+                assert_eq!(file1.size_bytes, 100);
+            }
+            if let FileTreeEntry::File(file2) = &folder.children[1].entry {
+                assert_eq!(file2.file_key, hex::encode(b"key2"));
+                assert_eq!(file2.size_bytes, 200);
+            }
         }
     }
 
