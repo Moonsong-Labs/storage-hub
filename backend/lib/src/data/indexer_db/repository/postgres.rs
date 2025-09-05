@@ -276,25 +276,64 @@ mod tests {
 
     #[tokio::test]
     async fn get_files_by_bucket_filters_correctly() {
-        // TODO: add a different bucket (with a file) to check filtering
+        // TODO: replace with IndexerOpsMut methods to use diesel directly
+        // Add a second bucket with one file to verify filtering
+        let additional_bucket_id = 123;
+        let additional_data = format!(r#"
+            -- Add a second bucket
+            INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root)
+            VALUES ({bucket_id}, '5CombC1j5ZmdNMEpWYpeEWcKPPYcKsC1WgMPgzGLU72SLa4o', 2, 'other-bucket', {onchain_bucket_id}', false, '\x0102');
+
+            -- Add a file to the second bucket
+            INSERT INTO file (id, account, file_key, bucket_id, onchain_bucket_id, location, fingerprint, size, step, deletion_status)
+            VALUES (4, '\x20d81e86ed5b986d1d6ddbe416627f96f740252c4a80ab8ed91db58f7ecf9657',
+                    '\xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890', {bucket_id},
+                    '{onchain_bucket_id}', 'file.txt',
+                    '\x0000000000000000000000000000000000000000000000000000000000000002', 12345, 1, NULL);
+        "#, bucket_id = additional_bucket_id, onchain_bucket_id = "additional-bucket");
+
         let (_container, database_url) =
-            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![additional_data]).await;
 
         let repo = Repository::new(&database_url)
             .await
             .expect("Failed to create repository");
 
-        // Test getting all files in bucket
-        let files = repo
+        // Test getting all files in bucket #1
+        let bucket1_files = repo
             .get_files_by_bucket(BUCKET_ID, 100, 0)
             .await
-            .expect("Failed to get bucket files");
+            .expect("Failed to get bucket #1 files");
 
         assert_eq!(
-            files.len(),
+            bucket1_files.len(),
             BUCKET_FILES,
-            "Should have {BUCKET_FILES} files in bucket"
+            "Should have {BUCKET_FILES} files in bucket #1"
         );
+
+        // Verify all files belong to bucket #1
+        for file in &bucket1_files {
+            assert_eq!(
+                file.bucket_id, BUCKET_ID,
+                "All files should belong to bucket #1"
+            );
+        }
+
+        // Test getting files in other bucket
+        let bucket2_files = repo
+            .get_files_by_bucket(additional_bucket_id, 100, 0)
+            .await
+            .expect("Failed to get other bucket files");
+
+        assert_eq!(bucket2_files.len(), 1, "Should have 1 file in other bucket");
+
+        // Verify the file belongs to bucket #2
+        for file in &bucket2_files {
+            assert_eq!(
+                file.bucket_id, additional_bucket_id,
+                "File should belong to other bucket"
+            );
+        }
     }
 
     #[tokio::test]
@@ -351,11 +390,11 @@ mod tests {
         let setup_sql = format!(
             r#"
             INSERT INTO msp (id, account, onchain_msp_id)
-            VALUES 
+            VALUES
                 ({msp_id}, '5CMDKyadzWu6MUwCzBB93u32Z1PPPsV8A1qAy4ydyVWuRzWR', '\x0000000000000000000000000000000000000000000000000000000000000301');
-            
-            INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root) 
-            VALUES 
+
+            INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root)
+            VALUES
                 ({bucket_id}, '0xemptybucketuser', {msp_id}, 'empty-bucket', 'empty-bucket-id', false, '\x0000');
         "#,
             msp_id = 123,
@@ -373,7 +412,19 @@ mod tests {
             .await
             .expect("should handle empty bucket");
 
-        assert!(files.is_empty());
+        assert!(files.is_empty(), "Empty bucket should return no files");
+
+        // Verify that other buckets still have files
+        let bucket1_files = repo
+            .get_files_by_bucket(BUCKET_ID, 100, 0)
+            .await
+            .expect("Failed to get bucket 1 files");
+
+        assert_eq!(
+            bucket1_files.len(),
+            BUCKET_FILES,
+            "Bucket #1 should still have its files"
+        );
     }
 
     #[tokio::test]
@@ -399,8 +450,8 @@ mod tests {
         // TODO: replace with IndexerOpsMut methods to use diesel directly
         // Add 2 more buckets for BUCKET_ACCOUNT with MSP #2
         let extra_buckets = format!(
-            r#"INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root) 
-            VALUES 
+            r#"INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root)
+            VALUES
                 (2, '{account}', {msp_id}, 'user-bucket2', 'b2', true, '\x0304'),
                 (3, '{account}', {msp_id}, 'user-bucket3', 'b3', false, '\x0506');"#,
             account = BUCKET_ACCOUNT,
@@ -477,8 +528,8 @@ mod tests {
         // TODO: replace with IndexerOpsMut methods to use diesel directly
         // Add one bucket for a different user with MSP #2 to test filtering
         let user_filter_test_data = format!(
-            r#"INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root) 
-            VALUES 
+            r#"INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root)
+            VALUES
                 (2, '0xotheruser', {msp_id}, 'other-user-bucket', 'oub1', false, '\x0506');"#,
             msp_id = MSP_TWO_ID
         );
@@ -535,8 +586,8 @@ mod tests {
         // TODO: replace with IndexerOpsMut methods to use diesel directly
         // Add bucket for BUCKET_ACCOUNT with MSP #1 to test MSP filtering
         let msp_filter_test_data = format!(
-            r#"INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root) 
-            VALUES 
+            r#"INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root)
+            VALUES
                 (2, '{account}', {msp_id}, 'user-msp1-bucket', 'mb1', false, '\x0102');"#,
             account = BUCKET_ACCOUNT,
             msp_id = MSP_ONE_ID
@@ -602,8 +653,8 @@ mod tests {
         // TODO: replace with IndexerOpsMut methods to use diesel directly
         // Add bucket with NULL MSP to test filtering
         let null_msp_test_data = format!(
-            r#"INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root) 
-            VALUES 
+            r#"INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root)
+            VALUES
                 (2, '{account}', NULL, 'no-msp-bucket', 'nmb1', false, '\x0506');"#,
             account = BUCKET_ACCOUNT
         );
