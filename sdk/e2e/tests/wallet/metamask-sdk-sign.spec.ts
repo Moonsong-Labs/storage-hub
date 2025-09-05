@@ -8,91 +8,90 @@ const EXPECTED_FINGERPRINT_HEX = "0x34eb5f637e05fc18f857ccb013250076534192189894
 let sharedBrowserContext: BrowserContext;
 
 export const test = baseTest.extend<{
-    context: BrowserContext;
-    wallet: Dappwright;
-    page: Page;
+  context: BrowserContext;
+  wallet: Dappwright;
+  page: Page;
 }>({
-    context: async ({ }, use) => {
-        if (!sharedBrowserContext) {
-            console.log('🚀 Launching browser with MetaMask...');
-            const { browserContext } = await dappwright.launch("", {
-                wallet: "metamask",
-                version: MetaMaskWallet.recommendedVersion,
-                headless: false,
-            });
+  context: async ({ }, use) => {
+    if (!sharedBrowserContext) {
+      console.log('🚀 Launching browser with MetaMask...');
+      const { browserContext } = await dappwright.launch("", {
+        wallet: "metamask",
+        version: MetaMaskWallet.recommendedVersion,
+        headless: false,
+      });
 
-            const wallet = await dappwright.getWallet("metamask", browserContext);
-            console.log('✅ MetaMask wallet obtained');
+      const wallet = await dappwright.getWallet("metamask", browserContext);
+      console.log('✅ MetaMask wallet obtained');
 
-            // Setup wallet with seed phrase
-            await wallet.setup({
-                seed: "test test test test test test test test test test test junk",
-                password: "password123",
-            });
-            console.log('✅ Wallet setup with seed phrase');
+      // Setup wallet with seed phrase
+      await wallet.setup({
+        seed: "test test test test test test test test test test test junk",
+        password: "password123",
+      });
+      console.log('✅ Wallet setup with seed phrase');
 
-            // Cache context
-            sharedBrowserContext = browserContext;
-        }
+      // Cache context
+      sharedBrowserContext = browserContext;
+    }
 
-        await use(sharedBrowserContext);
-    },
+    await use(sharedBrowserContext);
+  },
 
-    page: async ({ context }, use) => {
-        // Create a fresh page and go to our local basic dApp (served from sdk root)
-        const page = await context.newPage();
-        await page.goto("http://localhost:3000/e2e/page/index.html");
-        await use(page);
-    },
+  page: async ({ context }, use) => {
+    const page = await context.newPage();
+    await page.goto("http://localhost:3000/e2e/page/index.html", { waitUntil: 'domcontentloaded' });
+    await use(page);
+  },
 
-    wallet: async ({ context }, use) => {
-        const metamask = await dappwright.getWallet("metamask", context);
-        await use(metamask);
-    },
+  wallet: async ({ context }, use) => {
+    const metamask = await dappwright.getWallet("metamask", context);
+    await use(metamask);
+  },
 });
 
 test("MetaMask + SDK", async ({ page, wallet, context }) => {
-    console.log('🎯 Starting test...');
+  console.log('🎯 Starting test...');
 
-    // Ensure provider is injected
-    await page.waitForLoadState();
-    await page.waitForFunction(() => (window as any).ethereum !== undefined, { timeout: 15000 });
-    console.log('✅ Provider injected');
+  // Ensure provider is injected
+  await page.waitForLoadState();
+  await page.waitForFunction(() => (window as any).ethereum !== undefined, { timeout: 15000 });
+  console.log('✅ Provider injected');
 
-    // Click Connect on the basic dApp and approve in MetaMask
-    await page.waitForSelector('#connect', { timeout: 60000 });
-    await page.click('#connect');
-    await wallet.approve();
-    console.log('✅ Connection approved');
+  // Click Connect on the basic dApp and approve in MetaMask
+  await page.waitForSelector('#connect', { timeout: 60000 });
+  await page.click('#connect');
+  await wallet.approve();
+  console.log('✅ Connection approved');
 
-    // Trigger signing via the dApp's SDK handler by clicking the button
-    await page.waitForSelector('#sign:not([disabled])', { timeout: 60000 });
-    await page.click('#sign');
+  // Trigger signing via the dApp's SDK handler by clicking the button
+  await page.waitForSelector('#sign:not([disabled])', { timeout: 60000 });
+  await page.click('#sign');
 
-    // Approve signature in MetaMask
-    await wallet.sign();
+  // Approve signature in MetaMask
+  await wallet.sign();
 
-    // Wait until the dApp exposes the signature and log it
-    const signature = await page.waitForFunction(() => (window as any).__lastSignature, { timeout: 15000 });
-    const value = await signature.jsonValue();
-    console.log(`✅ Message signed: ${value}`);
+  // Wait until the dApp exposes the signature and log it
+  const signature = await page.waitForFunction(() => (window as any).__lastSignature, { timeout: 15000 });
+  const value = await signature.jsonValue();
+  console.log(`✅ Message signed: ${value}`);
 
-    // --- Transaction signing via dApp button (may fail due to insufficient balance) ---
-    await page.waitForSelector('#sign-tx:not([disabled])', { timeout: 15000 });
-    await page.click('#sign-tx');
+  // --- Transaction signing via dApp button (may fail due to insufficient balance) ---
+  await page.waitForSelector('#sign-tx:not([disabled])', { timeout: 15000 });
+  await page.click('#sign-tx');
 
-    // Reject the transaction in MetaMask (simplified flow)
-    await wallet.reject();
-    console.log('ℹ️ Transaction rejected (expected without funds)');
+  // Reject the transaction in MetaMask (simplified flow)
+  await wallet.reject();
+  console.log('ℹ️ Transaction rejected (expected without funds)');
 
-    // --- File fingerprint computation ---
-    await page.waitForSelector('#fingerprint-btn', { timeout: 60000 });
-    await page.click('#fingerprint-btn');
-    // Wait for the fingerprint result
-    const fpHandle = await page.waitForFunction(() => (window as any).__lastFingerprint, { timeout: 15000 });
-    const fp = await fpHandle.jsonValue();
-    console.log(`✅ Fingerprint computed: ${fp}`);
-    expect(fp).toBe(EXPECTED_FINGERPRINT_HEX);
+  // --- File fingerprint computation ---
+  await page.waitForSelector('#fingerprint-btn', { timeout: 60000 });
+  await page.click('#fingerprint-btn');
+  // Wait for the fingerprint result
+  const fpHandle = await page.waitForFunction(() => (window as any).__lastFingerprint, { timeout: 15000 });
+  const fp = await fpHandle.jsonValue();
+  console.log(`✅ Fingerprint computed: ${fp}`);
+  expect(fp).toBe(EXPECTED_FINGERPRINT_HEX);
 });
 
 

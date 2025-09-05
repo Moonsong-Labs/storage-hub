@@ -2,166 +2,165 @@
 <html>
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MetaMask + SDK Test</title>
-    <script type="importmap">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MetaMask + SDK Test</title>
+  <script type="importmap">
       {
         "imports": {
-          "@storagehub-sdk/core": "http://localhost:3001/core/dist/index.js",
-          "@storagehub/wasm": "http://localhost:3001/core/wasm/pkg/storagehub_wasm.js",
+          "@storagehub-sdk/core": "/core/dist/index.browser.js",
           "@polkadot/types": "https://cdn.jsdelivr.net/npm/@polkadot/types@10.9.1/+esm",
           "@polkadot/types/interfaces": "https://cdn.jsdelivr.net/npm/@polkadot/types@10.9.1/interfaces/+esm",
           "ethers": "https://cdn.jsdelivr.net/npm/ethers@6.15.0/+esm"
         }
       }
     </script>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            margin: 50px;
-        }
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin: 50px;
+    }
 
-        button {
-            background: #0066cc;
-            color: white;
-            border: none;
-            padding: 15px 30px;
-            margin: 10px;
-            border-radius: 5px;
-            font-size: 16px;
-            cursor: pointer;
-        }
+    button {
+      background: #0066cc;
+      color: white;
+      border: none;
+      padding: 15px 30px;
+      margin: 10px;
+      border-radius: 5px;
+      font-size: 16px;
+      cursor: pointer;
+    }
 
-        button:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
 
-        #status {
-            margin: 20px 0;
-            font-weight: bold;
-        }
-    </style>
+    #status {
+      margin: 20px 0;
+      font-weight: bold;
+    }
+  </style>
 </head>
 
 <body>
-    <h1>MetaMask + SDK Test</h1>
+  <h1>MetaMask + SDK Test</h1>
 
-    <button id="connect">Connect Wallet</button>
-    <button id="sign" disabled>Sign Message</button>
-    <button id="sign-tx" disabled>Sign Transaction</button>
-    <button id="fingerprint-btn">Compute Fingerprint</button>
+  <button id="connect">Connect Wallet</button>
+  <button id="sign" disabled>Sign Message</button>
+  <button id="sign-tx" disabled>Sign Transaction</button>
+  <button id="fingerprint-btn">Compute Fingerprint</button>
 
-    <div id="status">Ready</div>
-    <div id="account"></div>
-    <div id="signature"></div>
-    <div id="fingerprint"></div>
+  <div id="status">Ready</div>
+  <div id="account"></div>
+  <div id="signature"></div>
+  <div id="fingerprint"></div>
 
-    <script>
-        let connectedAccount = null;
-        const statusEl = document.getElementById('status');
-        // Initialize WASM once on load so FileManager can work
-        (async () => {
-            try {
-                const { initWasm } = await import('/core/dist/index.js');
-                await initWasm();
-                console.log('WASM ready');
-            } catch (e) {
-                console.error('WASM init failed', e);
-            }
-        })();
+  <script>
+    let connectedAccount = null;
+    const statusEl = document.getElementById('status');
+    // Initialize WASM once on load so FileManager can work
+    (async () => {
+      try {
+        const { initWasm } = await import('/core/dist/index.browser.js');
+        await initWasm();
+        console.log('WASM ready');
+      } catch (e) {
+        console.error('WASM init failed', e);
+      }
+    })();
 
-        document.getElementById('connect').onclick = async () => {
-            try {
-                document.getElementById('status').textContent = 'Connecting...';
-                const mod = await import('/core/dist/index.js');
-                const wallet = await mod.Eip1193Wallet.connect();
-                const address = await wallet.getAddress();
-                connectedAccount = address;
-                document.getElementById('status').textContent = 'Connected';
-                document.getElementById('account').textContent = `Account: ${address}`;
-                document.getElementById('sign').disabled = false;
-                document.getElementById('sign-tx').disabled = false;
-            } catch (error) {
-                document.getElementById('status').textContent = 'Connection failed';
-                console.error(error);
-            }
+    document.getElementById('connect').onclick = async () => {
+      try {
+        document.getElementById('status').textContent = 'Connecting...';
+        const mod = await import('/core/dist/index.browser.js');
+        const wallet = await mod.Eip1193Wallet.connect();
+        const address = await wallet.getAddress();
+        connectedAccount = address;
+        document.getElementById('status').textContent = 'Connected';
+        document.getElementById('account').textContent = `Account: ${address}`;
+        document.getElementById('sign').disabled = false;
+        document.getElementById('sign-tx').disabled = false;
+      } catch (error) {
+        document.getElementById('status').textContent = 'Connection failed';
+        console.error(error);
+      }
+    };
+
+    document.getElementById('sign').onclick = async () => {
+      try {
+        const message = "StorageHub rocks!";
+        document.getElementById('status').textContent = 'Signing...';
+
+        // Use SDK Eip1193Wallet instead of direct window.ethereum
+        const mod = await import('/core/dist/index.browser.js');
+        const wallet = await mod.Eip1193Wallet.connect();
+        const signature = await wallet.signMessage(message);
+
+        document.getElementById('status').textContent = 'Signed';
+        // Expose signature for Playwright to read
+        window.__lastSignature = signature;
+        const sigEl = document.getElementById('signature');
+        if (sigEl) sigEl.textContent = `Signature: ${signature}`;
+      } catch (error) {
+        document.getElementById('status').textContent = '❌ Signing failed';
+        console.error(error);
+      }
+    };
+
+    document.getElementById('sign-tx').onclick = async () => {
+      try {
+        statusEl.textContent = 'Sending transaction...';
+        const [mod, ethers] = await Promise.all([
+          import('/core/dist/index.browser.js'),
+          import('ethers'),
+        ]);
+        const wallet = await mod.Eip1193Wallet.connect();
+        const from = await wallet.getAddress();
+        const txRequest = {
+          to: from,
+          value: ethers.parseEther('0.001').toString(),
+          gasLimit: 21000,
         };
+        window.__lastTxHash = undefined;
+        window.__lastTxErr = undefined;
+        wallet.sendTransaction(txRequest)
+          .then((hash) => { window.__lastTxHash = hash; statusEl.textContent = 'Tx sent'; })
+          .catch((e) => { window.__lastTxErr = e?.message || String(e); statusEl.textContent = 'Tx failed'; });
+      } catch (error) {
+        statusEl.textContent = 'Tx failed';
+        console.error(error);
+      }
+    };
 
-        document.getElementById('sign').onclick = async () => {
-            try {
-                const message = "StorageHub rocks!";
-                document.getElementById('status').textContent = 'Signing...';
-
-                // Use SDK Eip1193Wallet instead of direct window.ethereum
-                const mod = await import('/core/dist/index.js');
-                const wallet = await mod.Eip1193Wallet.connect();
-                const signature = await wallet.signMessage(message);
-
-                document.getElementById('status').textContent = 'Signed';
-                // Expose signature for Playwright to read
-                window.__lastSignature = signature;
-                const sigEl = document.getElementById('signature');
-                if (sigEl) sigEl.textContent = `Signature: ${signature}`;
-            } catch (error) {
-                document.getElementById('status').textContent = '❌ Signing failed';
-                console.error(error);
-            }
-        };
-
-        document.getElementById('sign-tx').onclick = async () => {
-            try {
-                statusEl.textContent = 'Sending transaction...';
-                const [mod, ethers] = await Promise.all([
-                    import('/core/dist/index.js'),
-                    import('ethers'),
-                ]);
-                const wallet = await mod.Eip1193Wallet.connect();
-                const from = await wallet.getAddress();
-                const txRequest = {
-                    to: from,
-                    value: ethers.parseEther('0.001').toString(),
-                    gasLimit: 21000,
-                };
-                window.__lastTxHash = undefined;
-                window.__lastTxErr = undefined;
-                wallet.sendTransaction(txRequest)
-                    .then((hash) => { window.__lastTxHash = hash; statusEl.textContent = 'Tx sent'; })
-                    .catch((e) => { window.__lastTxErr = e?.message || String(e); statusEl.textContent = 'Tx failed'; });
-            } catch (error) {
-                statusEl.textContent = 'Tx failed';
-                console.error(error);
-            }
-        };
-
-        // Compute fingerprint for adolphus.jpg using SDK FileManager
-        document.getElementById('fingerprint-btn').onclick = async () => {
-            const fpEl = document.getElementById('fingerprint');
-            try {
-                statusEl.textContent = 'Computing fingerprint...';
-                const mod = await import('/core/dist/index.js');
-                const url = '/e2e/page/adolphus.jpg';
-                const res = await fetch(url);
-                if (!res.ok) throw new Error('Failed to fetch adolphus.jpg');
-                const blob = await res.blob();
-                const fm = new mod.FileManager({
-                    size: blob.size,
-                    stream: () => blob.stream(),
-                });
-                const fp = await fm.getFingerprint();
-                const hex = typeof fp?.toHex === 'function' ? fp.toHex() : String(fp);
-                window.__lastFingerprint = hex;
-                fpEl.textContent = `Fingerprint: ${hex}`;
-                statusEl.textContent = 'Fingerprint ready';
-            } catch (e) {
-                statusEl.textContent = 'Fingerprint failed';
-                fpEl.textContent = '';
-                console.error(e);
-            }
-        };
-    </script>
+    // Compute fingerprint for adolphus.jpg using SDK FileManager
+    document.getElementById('fingerprint-btn').onclick = async () => {
+      const fpEl = document.getElementById('fingerprint');
+      try {
+        statusEl.textContent = 'Computing fingerprint...';
+        const mod = await import('/core/dist/index.browser.js');
+        const url = '/e2e/page/adolphus.jpg';
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Failed to fetch adolphus.jpg');
+        const blob = await res.blob();
+        const fm = new mod.FileManager({
+          size: blob.size,
+          stream: () => blob.stream(),
+        });
+        const fp = await fm.getFingerprint();
+        const hex = typeof fp?.toHex === 'function' ? fp.toHex() : String(fp);
+        window.__lastFingerprint = hex;
+        fpEl.textContent = `Fingerprint: ${hex}`;
+        statusEl.textContent = 'Fingerprint ready';
+      } catch (e) {
+        statusEl.textContent = 'Fingerprint failed';
+        fpEl.textContent = '';
+        console.error(e);
+      }
+    };
+  </script>
 </body>
 
 </html>

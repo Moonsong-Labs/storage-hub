@@ -1,4 +1,5 @@
 import { CHUNK_SIZE } from './constants';
+import { initWasm } from './init.js';
 import { FileMetadata, FileTrie } from './wasm.js';
 import { TypeRegistry } from '@polkadot/types';
 import type { AccountId, H256 } from '@polkadot/types/interfaces';
@@ -17,6 +18,8 @@ export class FileManager {
     if (this.fingerprint) {
       return this.fingerprint;
     }
+
+    await initWasm();
 
     const registry = new TypeRegistry();
     const trie = new FileTrie();
