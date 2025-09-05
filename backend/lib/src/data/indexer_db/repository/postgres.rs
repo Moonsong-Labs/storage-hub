@@ -173,15 +173,6 @@ mod tests {
         },
     };
 
-    // TODO: replace with IndexOpsMut methods to use diesel directly
-    const EXTRA_BUCKETS: &str = r#"INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root) \
-            VALUES \
-                (1, '0xuser123', 1, 'user123-bucket1', 'b1', false, '\x0102'), \
-                (2, '0xuser123', 1, 'user123-bucket2', 'b2', true, '\x0304'), \
-                (3, '0xuser123', 2, 'user123-bucket3', 'b3', false, '\x0506'), \
-                (4, '0xuser456', 1, 'user456-bucket1', 'b4', true, '\x0708'), \
-                (5, '0xuser123', 1, 'user123-bucket4', 'b5', false, '\x0910');"#;
-
     #[tokio::test]
     async fn list_bsps() {
         let (_container, database_url) =
@@ -389,32 +380,37 @@ mod tests {
 
     #[tokio::test]
     async fn get_buckets_by_user_and_msp() {
-        let (_container, database_url) = setup_test_db(
-            vec![SNAPSHOT_SQL.to_string()],
-            vec![EXTRA_BUCKETS.to_string()],
-        )
-        .await;
+        // TODO: replace with IndexerOpsMut methods to use diesel directly
+        // Add 2 more buckets for BUCKET_ACCOUNT with MSP #2
+        let extra_buckets = format!(
+            r#"INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root) 
+            VALUES 
+                (2, '{account}', {msp_id}, 'user-bucket2', 'b2', true, '\x0304'),
+                (3, '{account}', {msp_id}, 'user-bucket3', 'b3', false, '\x0506');"#,
+            account = BUCKET_ACCOUNT,
+            msp_id = MSP_TWO_ID
+        );
+
+        let (_container, database_url) =
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![extra_buckets]).await;
 
         let repo = Repository::new(&database_url)
             .await
             .expect("Failed to create repository");
 
+        // SNAPSHOT_SQL already has 1 bucket for BUCKET_ACCOUNT with MSP #2
+        // We added 2 more, so should have 3 total
         let buckets = repo
-            .get_buckets_by_user_and_msp(MSP_ONE_ID, "0xuser123", 100, 0)
+            .get_buckets_by_user_and_msp(MSP_TWO_ID, BUCKET_ACCOUNT, 100, 0)
             .await
             .expect("Failed to get user buckets");
 
         assert_eq!(
             buckets.len(),
             3,
-            "Should have 3 buckets for 0xuser123 with MSP #1"
+            "Should have 3 buckets for BUCKET_ACCOUNT with MSP #2"
         );
     }
-
-    //TODO: add the following tests
-    // * `get_buckets_by_user_and_msp_filters_other_users`: trim down extra buckets for the test above, since otherwise the test above _also_ filters
-    // * `get_buckets_by_user_and_msp_filters_other_msps`: same here
-    // * `get_buckets_by_user_and_msp_filters_no_msp`: for buckets without msp
 
     #[tokio::test]
     async fn get_buckets_by_user_and_msp_pagination() {
@@ -457,6 +453,180 @@ mod tests {
         assert_ne!(
             limited_buckets[0].name, paginated_buckets[0].name,
             "Should skip first bucket"
+        );
+    }
+
+    #[tokio::test]
+    async fn get_buckets_by_user_and_msp_filters_other_users() {
+        // TODO: replace with IndexerOpsMut methods to use diesel directly
+        // Add one bucket for a different user with MSP #2 to test filtering
+        let user_filter_test_data = format!(
+            r#"INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root) 
+            VALUES 
+                (2, '0xotheruser', {msp_id}, 'other-user-bucket', 'oub1', false, '\x0506');"#,
+            msp_id = MSP_TWO_ID
+        );
+
+        let (_container, database_url) =
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![user_filter_test_data]).await;
+
+        let repo = Repository::new(&database_url)
+            .await
+            .expect("Failed to create repository");
+
+        // Should only return BUCKET_ACCOUNT's bucket (from snapshot), not other user's bucket
+        let target_buckets = repo
+            .get_buckets_by_user_and_msp(MSP_TWO_ID, BUCKET_ACCOUNT, 100, 0)
+            .await
+            .expect("Failed to get target user buckets");
+
+        assert_eq!(
+            target_buckets.len(),
+            1,
+            "Should return exactly 1 bucket for BUCKET_ACCOUNT (from snapshot)"
+        );
+
+        // Verify the returned bucket belongs to BUCKET_ACCOUNT
+        assert_eq!(
+            target_buckets[0].account, BUCKET_ACCOUNT,
+            "Bucket should belong to BUCKET_ACCOUNT"
+        );
+        assert_eq!(
+            target_buckets[0].msp_id,
+            Some(MSP_TWO_ID),
+            "Bucket should have MSP #2"
+        );
+
+        // Verify other user's bucket is not included
+        let other_user_buckets = repo
+            .get_buckets_by_user_and_msp(MSP_TWO_ID, "0xotheruser", 100, 0)
+            .await
+            .expect("Failed to get other user buckets");
+
+        assert_eq!(
+            other_user_buckets.len(),
+            1,
+            "Other user should have their own bucket"
+        );
+        assert_ne!(
+            other_user_buckets[0].id, target_buckets[0].id,
+            "Should be different buckets"
+        );
+    }
+
+    #[tokio::test]
+    async fn get_buckets_by_user_and_msp_filters_other_msps() {
+        // TODO: replace with IndexerOpsMut methods to use diesel directly
+        // Add bucket for BUCKET_ACCOUNT with MSP #1 to test MSP filtering
+        let msp_filter_test_data = format!(
+            r#"INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root) 
+            VALUES 
+                (2, '{account}', {msp_id}, 'user-msp1-bucket', 'mb1', false, '\x0102');"#,
+            account = BUCKET_ACCOUNT,
+            msp_id = MSP_ONE_ID
+        );
+
+        let (_container, database_url) =
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![msp_filter_test_data]).await;
+
+        let repo = Repository::new(&database_url)
+            .await
+            .expect("Failed to create repository");
+
+        // Should only return buckets for MSP #1
+        let msp1_buckets = repo
+            .get_buckets_by_user_and_msp(MSP_ONE_ID, BUCKET_ACCOUNT, 100, 0)
+            .await
+            .expect("Failed to get MSP #1 buckets");
+
+        assert_eq!(
+            msp1_buckets.len(),
+            1,
+            "Should return exactly 1 bucket for MSP #1 (from our insert)"
+        );
+
+        // Verify the returned bucket has MSP #1
+        assert_eq!(
+            msp1_buckets[0].msp_id,
+            Some(MSP_ONE_ID),
+            "Bucket should have MSP #1"
+        );
+        assert_eq!(
+            msp1_buckets[0].name, b"user-msp1-bucket",
+            "Should be our MSP1 bucket"
+        );
+
+        // Should only return buckets for MSP #2
+        let msp2_buckets = repo
+            .get_buckets_by_user_and_msp(MSP_TWO_ID, BUCKET_ACCOUNT, 100, 0)
+            .await
+            .expect("Failed to get MSP #2 buckets");
+
+        assert_eq!(
+            msp2_buckets.len(),
+            1,
+            "Should return exactly 1 bucket for MSP #2 (from snapshot)"
+        );
+
+        // Verify the returned bucket has MSP #2
+        assert_eq!(
+            msp2_buckets[0].msp_id,
+            Some(MSP_TWO_ID),
+            "Bucket should have MSP #2"
+        );
+        assert_eq!(
+            msp2_buckets[0].name,
+            BUCKET_NAME.as_bytes(),
+            "Should be the snapshot bucket"
+        );
+    }
+
+    #[tokio::test]
+    async fn get_buckets_by_user_and_msp_filters_no_msp() {
+        // TODO: replace with IndexerOpsMut methods to use diesel directly
+        // Add bucket with NULL MSP to test filtering
+        let null_msp_test_data = format!(
+            r#"INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root) 
+            VALUES 
+                (2, '{account}', NULL, 'no-msp-bucket', 'nmb1', false, '\x0506');"#,
+            account = BUCKET_ACCOUNT
+        );
+
+        let (_container, database_url) =
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![null_msp_test_data]).await;
+
+        let repo = Repository::new(&database_url)
+            .await
+            .expect("Failed to create repository");
+
+        // Should only return buckets with the specified MSP, not those with NULL MSP
+        let msp_buckets = repo
+            .get_buckets_by_user_and_msp(MSP_TWO_ID, BUCKET_ACCOUNT, 100, 0)
+            .await
+            .expect("Failed to get MSP #2 buckets");
+
+        assert_eq!(
+            msp_buckets.len(),
+            1,
+            "Should return exactly 1 bucket with MSP #2 (excluding NULL MSP bucket)"
+        );
+
+        // Verify the returned bucket has MSP #2, not NULL
+        assert_eq!(
+            msp_buckets[0].msp_id,
+            Some(MSP_TWO_ID),
+            "Bucket should have MSP #2"
+        );
+        assert_eq!(
+            msp_buckets[0].name,
+            BUCKET_NAME.as_bytes(),
+            "Should be the snapshot bucket with MSP"
+        );
+
+        // Verify NULL MSP bucket is not included
+        assert_ne!(
+            msp_buckets[0].name, b"no-msp-bucket",
+            "Should not include the NULL MSP bucket"
         );
     }
 
