@@ -1,6 +1,6 @@
 use diesel::prelude::*;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
-use testcontainers::{runners::AsyncRunner, ContainerAsync};
+use testcontainers::{runners::AsyncRunner, ContainerAsync, ImageExt};
 use testcontainers_modules::postgres::Postgres;
 
 // Embed the migrations from the indexer-db crate
@@ -11,12 +11,15 @@ pub mod snapshot_move_bucket {
 
     use crate::constants::rpc::DUMMY_MSP_ID;
 
-    /// This is a snapshot of the move-bucket-test resulting db
+    /// This is a snapshot of the move-bucket-test's resulting db
     /// Contains:
     /// * 3 BSPs
     /// * 3 files duplicated in 2 BSPs each
     /// * 1 bucket containing 3 files
     /// * 2 MSPs
+    ///
+    /// The snapshot contains the required information to re-create it
+    /// This snapshot has been taken at commit b78b5648a38849cee1a462a1b938d63d27e68547
     pub const SNAPSHOT_SQL: &str = include_str!("./indexer-db-snapshot.sql");
 
     /// The ID value of MSP #1
@@ -93,6 +96,7 @@ pub async fn setup_test_db(
 
     // Start the container
     let container = postgres
+        .with_tag("15") // use the same as integration tests
         .start()
         .await
         .expect("Failed to start postgres container");
