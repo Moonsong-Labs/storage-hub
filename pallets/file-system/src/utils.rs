@@ -1029,8 +1029,9 @@ where
                     // We create the incomplete storage request metadata and insert it into the incomplete storage requests
                     let incomplete_storage_request_metadata: IncompleteStorageRequestMetadata<T> =
                         (&storage_request_metadata, &file_key).into();
-                    <IncompleteStorageRequests<T>>::insert(
-                        &file_key,
+
+                    Self::add_incomplete_storage_request(
+                        file_key,
                         incomplete_storage_request_metadata,
                     );
                 }
@@ -1369,7 +1370,7 @@ where
         if incomplete_storage_request_metadata.is_fully_cleaned() {
             IncompleteStorageRequests::<T>::remove(&file_key);
         } else {
-            IncompleteStorageRequests::<T>::insert(&file_key, incomplete_storage_request_metadata);
+            Self::add_incomplete_storage_request(file_key, incomplete_storage_request_metadata);
         }
 
         Ok(())
@@ -2105,7 +2106,7 @@ where
             // We create the incomplete storage request metadata and insert it into the incomplete storage requests
             let incomplete_storage_request_metadata: IncompleteStorageRequestMetadata<T> =
                 (&storage_request_metadata, &file_key).into();
-            <IncompleteStorageRequests<T>>::insert(&file_key, incomplete_storage_request_metadata);
+            Self::add_incomplete_storage_request(file_key, incomplete_storage_request_metadata);
         }
 
         // We cleanup the storage request
@@ -2859,6 +2860,15 @@ where
 
         Ok(())
     }
+
+    /// Add storage request to [`IncompleteStorageRequests`] storage and emit `IncompleteStorageRequest` event
+    fn add_incomplete_storage_request(
+        file_key: MerkleHash<T>,
+        metadata: IncompleteStorageRequestMetadata<T>,
+    ) {
+        IncompleteStorageRequests::<T>::insert(&file_key, metadata);
+        Self::deposit_event(Event::IncompleteStorageRequest { file_key });
+    }
 }
 
 mod hooks {
@@ -2869,9 +2879,8 @@ mod hooks {
         },
         utils::BucketIdFor,
         weights::WeightInfo,
-        Event, IncompleteStorageRequests, MoveBucketRequestExpirations, NextStartingTickToCleanUp,
-        Pallet, PendingMoveBucketRequests, StorageRequestBsps, StorageRequestExpirations,
-        StorageRequests,
+        Event, MoveBucketRequestExpirations, NextStartingTickToCleanUp, Pallet,
+        PendingMoveBucketRequests, StorageRequestBsps, StorageRequestExpirations, StorageRequests,
     };
     use sp_runtime::{
         traits::{Get, One, Zero},
@@ -3073,9 +3082,9 @@ mod hooks {
                             // This will allow the fisherman node to delete the file from the confirmed BSPs.
                             let incomplete_storage_request_metadata: IncompleteStorageRequestMetadata<T> =
                                 (&storage_request_metadata, &file_key).into();
-                            // Add to storage mapping
-                            IncompleteStorageRequests::<T>::insert(
-                                &file_key,
+
+                            Self::add_incomplete_storage_request(
+                                file_key,
                                 incomplete_storage_request_metadata,
                             );
                         }

@@ -526,6 +526,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 )
                 .await?;
             }
+            pallet_file_system::Event::IncompleteStorageRequest { .. } => {}
             pallet_file_system::Event::__Ignore(_, _) => {}
         }
         Ok(())

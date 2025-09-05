@@ -1719,6 +1719,9 @@ export default {
       FileDeletedFromIncompleteStorageRequest: {
         fileKey: "H256",
         providerId: "H256"
+      },
+      IncompleteStorageRequest: {
+        fileKey: "H256"
       }
     }
   },
