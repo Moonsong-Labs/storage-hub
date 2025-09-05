@@ -21,10 +21,5 @@
   },
   "engines": {
     "node": ">=22"
-  },
-  "pnpm": {
-    "overrides": {
-      "@storagehub-sdk/msp-client@0.0.3>@storagehub-sdk/core": "0.0.3"
-    }
   }
 }
