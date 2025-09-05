@@ -92,6 +92,10 @@ sp-trie = { workspace = true }
 sp-version = { workspace = true, features = ["serde"] }
 sp-weights = { workspace = true }
 
+# Frontier precompile utils and File System precompile
+precompile-utils = { workspace = true }
+pallet-evm-precompile-file-system = { workspace = true }
+
 # Polkadot
 polkadot-parachain-primitives = { workspace = true }
 polkadot-primitives = { workspace = true }
@@ -203,6 +207,8 @@ std = [
 	"sp-staking/std",
 	"sp-transaction-pool/std",
 	"sp-version/std",
+	"precompile-utils/std",
+	"pallet-evm-precompile-file-system/std",
 	"substrate-wasm-builder",
 ]
 
