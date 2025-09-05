@@ -55,7 +55,11 @@ use cumulus_relay_chain_interface::{OverseerHandle, RelayChainInterface};
 // Frontier / EVM imports (solochain)
 use fc_consensus::FrontierBlockImport;
 use fc_db::{self, DatabaseSource};
+use fc_mapping_sync::{kv::MappingSyncWorker, SyncStrategy};
+use fc_rpc::EthTask;
+use fc_rpc_core::types::{FeeHistoryCache, FeeHistoryCacheLimit, FilterPool};
 use fc_storage::{self, StorageOverride, StorageOverrideHandler};
+use sc_client_api::BlockchainEvents;
 use sc_consensus_babe::ImportQueueParams as BabeImportQueueParams;
 
 use crate::{
@@ -2150,6 +2154,11 @@ where
         };
 
     // RPC builder including Frontier and manual seal RPC when applicable
+    // Shared Frontier caches (used both by RPC and background tasks)
+    let filter_pool: Option<FilterPool> = Some(Default::default());
+    let fee_history_cache: FeeHistoryCache = Default::default();
+    let fee_history_limit: FeeHistoryCacheLimit = 2048;
+
     let rpc_builder = {
         let client = client.clone();
         let transaction_pool = transaction_pool.clone();
@@ -2166,6 +2175,9 @@ where
             100,
             prometheus_registry.clone(),
         ));
+        let filter_pool = filter_pool.clone();
+        let fee_history_cache = fee_history_cache.clone();
+        let fee_history_limit_captured = fee_history_limit;
         let command_sink = command_sink.clone();
         Box::new(move |_| {
             crate::rpc::create_full_solochain_evm::<_, _, _, SolochainEvmRuntime, _>(
@@ -2182,9 +2194,9 @@ where
                     },
                     graph: transaction_pool.pool().clone(),
                     block_data_cache: block_data_cache.clone(),
-                    filter_pool: Some(Default::default()),
-                    fee_history_cache: Default::default(),
-                    fee_history_limit: 2048,
+                    filter_pool: filter_pool.clone(),
+                    fee_history_cache: fee_history_cache.clone(),
+                    fee_history_limit: fee_history_limit_captured,
                     max_past_logs: 10_000,
                     forced_parent_hashes: None,
                     is_authority: is_authority_role,
@@ -2211,6 +2223,62 @@ where
         tx_handler_controller,
         telemetry: telemetry.as_mut(),
     })?;
+
+    // Spawn Frontier background tasks: mapping sync, filter maintenance, fee history
+    {
+        let frontier_kv = match &*frontier_backend {
+            fc_db::Backend::KeyValue(b) => b.clone(),
+        };
+        // Use StorageOverrideHandler (implements StorageOverride) for MappingSyncWorker
+        let overrides_handle: Arc<dyn StorageOverride<Block>> = storage_override.clone();
+
+        // Pubsub sinks for notifications
+        let pubsub_notification_sinks: fc_mapping_sync::EthereumBlockNotificationSinks<
+            fc_mapping_sync::EthereumBlockNotification<Block>,
+        > = Default::default();
+        let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
+
+        // Mapping Sync Worker
+        task_manager.spawn_essential_handle().spawn(
+            "frontier-mapping-sync-worker",
+            Some("frontier"),
+            MappingSyncWorker::new(
+                client.import_notification_stream(),
+                Duration::from_secs(6),
+                client.clone(),
+                backend.clone(),
+                overrides_handle.clone(),
+                frontier_kv.clone(),
+                3,
+                0u32.into(),
+                SyncStrategy::Normal,
+                sync_service.clone(),
+                pubsub_notification_sinks,
+            )
+            .for_each(|()| futures::future::ready(())),
+        );
+
+        // EthFilter maintenance (keep in sync with RPC filter_pool)
+        if let Some(filter_pool) = filter_pool.clone() {
+            task_manager.spawn_essential_handle().spawn(
+                "frontier-filter-pool",
+                Some("frontier"),
+                EthTask::filter_pool_task(client.clone(), filter_pool, 100),
+            );
+        }
+
+        // FeeHistory maintenance (keep in sync with RPC fee cache)
+        task_manager.spawn_essential_handle().spawn(
+            "frontier-fee-history",
+            Some("frontier"),
+            EthTask::fee_history_task(
+                client.clone(),
+                storage_override.clone(),
+                fee_history_cache.clone(),
+                fee_history_limit,
+            ),
+        );
+    }
 
     // Start manual sealing authorship
     if is_authority_role {
@@ -2688,6 +2756,13 @@ where
             100, // statuses cache
             prometheus_registry.clone(),
         ));
+        // Shared Frontier caches
+        let filter_pool: Option<FilterPool> = Some(Default::default());
+        let fee_history_cache: FeeHistoryCache = Default::default();
+        let fee_history_limit: FeeHistoryCacheLimit = 2048;
+        let filter_pool_captured = filter_pool.clone();
+        let fee_history_cache_captured = fee_history_cache.clone();
+        let fee_history_limit_captured = fee_history_limit;
         Box::new(move |_| {
             crate::rpc::create_full_solochain_evm::<_, _, _, SolochainEvmRuntime, _>(
                 crate::rpc::SolochainEvmDeps {
@@ -2703,9 +2778,9 @@ where
                     },
                     graph: transaction_pool.pool().clone(),
                     block_data_cache: block_data_cache.clone(),
-                    filter_pool: Some(Default::default()),
-                    fee_history_cache: Default::default(),
-                    fee_history_limit: 2048,
+                    filter_pool: filter_pool_captured.clone(),
+                    fee_history_cache: fee_history_cache_captured.clone(),
+                    fee_history_limit: fee_history_limit_captured,
                     max_past_logs: 10_000,
                     forced_parent_hashes: None,
                     is_authority: is_authority_role,
@@ -2736,6 +2811,64 @@ where
         tx_handler_controller,
         telemetry: telemetry.as_mut(),
     })?;
+
+    // Spawn Frontier background tasks (mapping sync, filter maintenance, fee history)
+    {
+        let frontier_kv = match &*frontier_backend {
+            fc_db::Backend::KeyValue(b) => b.clone(),
+        };
+        let overrides_handle: Arc<dyn StorageOverride<Block>> = storage_override.clone();
+
+        // Pubsub sinks for notifications
+        let pubsub_notification_sinks: fc_mapping_sync::EthereumBlockNotificationSinks<
+            fc_mapping_sync::EthereumBlockNotification<Block>,
+        > = Default::default();
+        let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
+
+        // Mapping Sync Worker
+        task_manager.spawn_essential_handle().spawn(
+            "frontier-mapping-sync-worker",
+            Some("frontier"),
+            MappingSyncWorker::new(
+                client.import_notification_stream(),
+                Duration::from_secs(6),
+                client.clone(),
+                backend.clone(),
+                overrides_handle.clone(),
+                frontier_kv.clone(),
+                3,
+                0u32.into(),
+                SyncStrategy::Normal,
+                sync_service.clone(),
+                pubsub_notification_sinks,
+            )
+            .for_each(|()| futures::future::ready(())),
+        );
+
+        // EthFilter maintenance (keep in sync with RPC filter_pool)
+        let filter_pool: Option<FilterPool> = Some(Default::default());
+        if let Some(filter_pool) = filter_pool.clone() {
+            task_manager.spawn_essential_handle().spawn(
+                "frontier-filter-pool",
+                Some("frontier"),
+                EthTask::filter_pool_task(client.clone(), filter_pool, 100),
+            );
+        }
+
+        // FeeHistory maintenance (keep in sync with RPC fee cache)
+        let fee_history_cache: FeeHistoryCache = Default::default();
+        let fee_history_limit: FeeHistoryCacheLimit = 2048;
+        task_manager.spawn_essential_handle().spawn(
+            "frontier-fee-history",
+            Some("frontier"),
+            EthTask::fee_history_task(
+                client.clone(),
+                storage_override.clone(),
+                fee_history_cache,
+                fee_history_limit,
+            ),
+        );
+    }
 
     // Start BABE (block production)
     if is_authority_role {
