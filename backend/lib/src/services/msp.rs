@@ -285,22 +285,71 @@ impl MspService {
 #[cfg(all(test, feature = "mocks"))]
 mod tests {
     use super::*;
-    use crate::{constants::mocks::MOCK_ADDRESS, services::Services};
+    use crate::{
+        constants::mocks::MOCK_ADDRESS,
+        data::{
+            indexer_db::{
+                client::DBClient,
+                mock_repository::{
+                    tests::{inject_bucket_with_account, inject_sample_msp},
+                    MockRepository,
+                },
+            },
+            rpc::{AnyRpcConnection, MockConnection, StorageHubRpcClient},
+            storage::{BoxedStorageWrapper, InMemoryStorage},
+        },
+    };
+    use std::sync::Arc;
 
-    async fn create_test_service() -> MspService {
-        let services = Services::mocks();
+    /// Builder for creating MspService instances with mock dependencies for testing
+    struct MockMspServiceBuilder {
+        storage: Arc<BoxedStorageWrapper<InMemoryStorage>>,
+        repo: Arc<MockRepository>,
+        rpc: Arc<StorageHubRpcClient>,
+        config: Config,
+    }
 
-        MspService::new(
-            &Config::default(),
-            services.storage.clone(),
-            services.postgres.clone(),
-            services.rpc.clone(),
-        )
+    impl MockMspServiceBuilder {
+        /// Create a new builder with default empty mocks
+        fn new() -> Self {
+            let memory_storage = InMemoryStorage::new();
+            let storage = Arc::new(BoxedStorageWrapper::new(memory_storage));
+
+            let repo = Arc::new(MockRepository::new());
+
+            let mock_conn = MockConnection::new();
+            let rpc_conn = Arc::new(AnyRpcConnection::Mock(mock_conn));
+            let rpc = Arc::new(StorageHubRpcClient::new(rpc_conn));
+
+            Self {
+                storage,
+                repo,
+                rpc,
+                config: Config::default(),
+            }
+        }
+
+        /// Initialize repository with custom test data
+        async fn init_repository_with<F>(self, init: F) -> Self
+        where
+            F: FnOnce(
+                &MockRepository,
+            ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + '_>>,
+        {
+            init(&self.repo).await;
+            self
+        }
+
+        /// Build the final MspService
+        fn build(self) -> MspService {
+            let postgres = Arc::new(DBClient::new(self.repo));
+            MspService::new(&self.config, self.storage, postgres, self.rpc)
+        }
     }
 
     #[tokio::test]
     async fn test_get_info() {
-        let service = create_test_service().await;
+        let service = MockMspServiceBuilder::new().build();
         let info = service.get_info().await.unwrap();
 
         assert_eq!(info.status, "active");
@@ -309,7 +358,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_stats() {
-        let service = create_test_service().await;
+        let service = MockMspServiceBuilder::new().build();
         let stats = service.get_stats().await.unwrap();
 
         assert!(stats.capacity.total_bytes > 0);
@@ -318,7 +367,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_value_props() {
-        let service = create_test_service().await;
+        let service = MockMspServiceBuilder::new().build();
         let props = service.get_value_props().await.unwrap();
 
         assert!(!props.is_empty());
@@ -326,9 +375,25 @@ mod tests {
     }
 
     #[tokio::test]
-    #[should_panic] // FIXME: no MSP in test service
     async fn test_list_user_buckets() {
-        let service = create_test_service().await;
+        let service = MockMspServiceBuilder::new()
+            .init_repository_with(|repo| {
+                Box::pin(async move {
+                    // Inject MSP with the ID that matches the default config
+                    let msp_id = inject_sample_msp(repo).await;
+                    // Inject a test bucket for the mock user
+                    inject_bucket_with_account(
+                        repo,
+                        Some(msp_id),
+                        MOCK_ADDRESS,
+                        Some("test-bucket"),
+                    )
+                    .await;
+                })
+            })
+            .await
+            .build();
+
         let buckets = service
             .list_user_buckets(MOCK_ADDRESS)
             .await
@@ -339,12 +404,29 @@ mod tests {
     }
 
     #[tokio::test]
-    #[should_panic] // FIXME: no Bucket in test service
     async fn test_get_files_root() {
-        let service = create_test_service().await;
-        let bucket = hex::encode([0u8; 32]);
+        use crate::constants::test::bucket::DEFAULT_BUCKET_ID;
+
+        let service = MockMspServiceBuilder::new()
+            .init_repository_with(|repo| {
+                Box::pin(async move {
+                    // Inject MSP with the ID that matches the default config
+                    let msp_id = inject_sample_msp(repo).await;
+                    // Inject a test bucket for the mock user
+                    inject_bucket_with_account(
+                        repo,
+                        Some(msp_id),
+                        MOCK_ADDRESS,
+                        Some("test-bucket"),
+                    )
+                    .await;
+                })
+            })
+            .await
+            .build();
+
         let tree = service
-            .get_file_tree(&bucket, MOCK_ADDRESS, "/")
+            .get_file_tree(DEFAULT_BUCKET_ID, MOCK_ADDRESS, "/")
             .await
             .unwrap();
 
