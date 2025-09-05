@@ -1,12 +1,12 @@
 export { MspClient } from './MspClient.js';
 export type {
   Bucket,
+  DownloadOptions,
+  DownloadResult,
   FileEntry,
   FileListResponse,
   HealthStatus,
   NonceResponse,
-  DownloadOptions,
-  DownloadResult,
   UploadOptions,
   UploadReceipt,
   VerifyResponse,

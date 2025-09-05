@@ -4,18 +4,21 @@ function decodeBase64ToBytes(b64: string): Uint8Array {
   // Prefer Node's Buffer when available (Buffer extends Uint8Array)
   if (
     typeof Buffer !== 'undefined' &&
-    typeof (Buffer as unknown as { from?: (s: string, enc: 'base64') => Uint8Array }).from === 'function'
+    typeof (Buffer as unknown as { from?: (s: string, enc: 'base64') => Uint8Array }).from ===
+      'function'
   ) {
     const buf = (Buffer as unknown as { from: (s: string, enc: 'base64') => Uint8Array }).from(
       b64,
-      'base64'
+      'base64',
     );
     return new Uint8Array(buf);
   }
   // Browser fallback using atob
-  const atobFn: ((s: string) => string) | undefined = (globalThis as unknown as {
-    atob?: (s: string) => string;
-  }).atob;
+  const atobFn: ((s: string) => string) | undefined = (
+    globalThis as unknown as {
+      atob?: (s: string) => string;
+    }
+  ).atob;
   if (!atobFn) {
     throw new Error('Base64 decoder not available');
   }

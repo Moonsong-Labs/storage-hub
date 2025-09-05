@@ -39,13 +39,9 @@ jobs:
 
       - name: Install dependencies (sdk)
         working-directory: sdk
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
-      - name: Build WASM
-        working-directory: sdk
-        run: pnpm build:wasm
-
-      - name: Build SDK (core dist)
+      - name: Build SDK
         working-directory: sdk
         run: pnpm build
 
@@ -102,11 +98,7 @@ jobs:
 
       - name: Install dependencies (sdk workspace, no scripts)
         working-directory: sdk
-        run: pnpm install
-
-      - name: Build WASM
-        working-directory: sdk
-        run: pnpm build:wasm
+        run: pnpm install --frozen-lockfile
 
       - name: Build SDK (core dist + types + msp-client)
         working-directory: sdk
@@ -122,7 +114,7 @@ jobs:
 
       - name: Install e2e deps (sdk/e2e)
         working-directory: sdk/e2e
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Install Playwright Chromium with system deps (sdk/e2e)
         working-directory: sdk/e2e
