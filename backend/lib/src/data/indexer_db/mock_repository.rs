@@ -230,6 +230,7 @@ pub mod tests {
         let id = repo.next_id();
         let now = Utc::now().naive_utc();
         let bucket_name = name.unwrap_or(bucket::DEFAULT_BUCKET_NAME);
+        let onchain_bucket_id = bucket::DEFAULT_BUCKET_ID.to_vec();
 
         repo.buckets.write().await.insert(
             id,
@@ -237,7 +238,7 @@ pub mod tests {
                 id,
                 msp_id,
                 account: account.to_string(),
-                onchain_bucket_id: bucket::DEFAULT_BUCKET_ID.as_bytes().to_vec(),
+                onchain_bucket_id,
                 name: bucket_name.as_bytes().to_vec(),
                 collection_id: None,
                 private: !bucket::DEFAULT_IS_PUBLIC,
@@ -266,7 +267,7 @@ pub mod tests {
                 account: TEST_BSP_ACCOUNT_STR.as_bytes().to_vec(),
                 file_key: key.as_bytes().to_vec(),
                 bucket_id,
-                onchain_bucket_id: bucket::DEFAULT_BUCKET_ID.as_bytes().to_vec(),
+                onchain_bucket_id: bucket::DEFAULT_BUCKET_ID.as_slice().to_vec(),
                 location: file::DEFAULT_LOCATION.as_bytes().to_vec(),
                 fingerprint: file::DEFAULT_FINGERPRINT.to_vec(),
                 size: file::DEFAULT_SIZE,
@@ -338,14 +339,14 @@ pub mod tests {
         let bucket_id = inject_sample_bucket(&repo, Some(1)).await;
 
         let bucket = repo
-            .get_bucket_by_onchain_id(BucketId(bucket::DEFAULT_BUCKET_ID.as_bytes()))
+            .get_bucket_by_onchain_id(BucketId(bucket::DEFAULT_BUCKET_ID.as_slice()))
             .await
             .expect("should find bucket by onchain ID");
 
         assert_eq!(bucket.id, bucket_id);
         assert_eq!(
             bucket.onchain_bucket_id,
-            bucket::DEFAULT_BUCKET_ID.as_bytes()
+            bucket::DEFAULT_BUCKET_ID.as_slice()
         );
     }
 

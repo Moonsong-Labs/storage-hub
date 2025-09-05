@@ -426,7 +426,7 @@ mod tests {
             .build();
 
         let tree = service
-            .get_file_tree(DEFAULT_BUCKET_ID, MOCK_ADDRESS, "/")
+            .get_file_tree(hex::encode(DEFAULT_BUCKET_ID).as_ref(), MOCK_ADDRESS, "/")
             .await
             .unwrap();
 

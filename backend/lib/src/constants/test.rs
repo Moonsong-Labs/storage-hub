@@ -51,12 +51,14 @@ pub mod merkle {
 
 /// Test bucket data
 pub mod bucket {
+    use hex_literal::hex;
+
     /// Default bucket name
     pub const DEFAULT_BUCKET_NAME: &str = "test_bucket";
 
     /// Default bucket onchain ID (valid 32-byte hex string = 64 hex chars)
-    pub const DEFAULT_BUCKET_ID: &str =
-        "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
+    pub const DEFAULT_BUCKET_ID: [u8; 32] =
+        hex!("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef");
 
     /// Default bucket is public
     pub const DEFAULT_IS_PUBLIC: bool = true;
