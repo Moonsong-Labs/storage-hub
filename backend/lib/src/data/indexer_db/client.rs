@@ -6,10 +6,16 @@
 
 use std::sync::Arc;
 
-use shc_indexer_db::models::Bsp;
+#[cfg(test)]
+use shc_indexer_db::OnchainBspId;
+use shc_indexer_db::{
+    models::{Bsp, Bucket, File, Msp},
+    OnchainMspId,
+};
 
 use crate::{
     constants::database::DEFAULT_PAGE_LIMIT, data::indexer_db::repository::StorageOperations,
+    error::Result,
 };
 
 /// Database client that delegates to a repository implementation
@@ -47,7 +53,7 @@ impl DBClient {
     }
 
     /// Test the database connection
-    pub async fn test_connection(&self) -> crate::error::Result<()> {
+    pub async fn test_connection(&self) -> Result<()> {
         // Try to list BSPs with a limit of 1 to test the connection
         self.repository
             .list_bsps(1, 0)
@@ -56,17 +62,75 @@ impl DBClient {
         Ok(())
     }
 
-    /// Get all BSPs with optional pagination
-    pub async fn get_all_bsps(
-        &self,
-        limit: Option<i64>,
-        offset: Option<i64>,
-    ) -> crate::error::Result<Vec<Bsp>> {
+    /// Get all BSPs with pagination
+    pub async fn get_all_bsps(&self, limit: Option<i64>, offset: Option<i64>) -> Result<Vec<Bsp>> {
         let limit = limit.unwrap_or(DEFAULT_PAGE_LIMIT);
         let offset = offset.unwrap_or(0);
 
         self.repository
             .list_bsps(limit, offset)
+            .await
+            .map_err(|e| crate::error::Error::Database(e.to_string()))
+    }
+
+    /// Retrieve a given MSP's entry by its onchain ID
+    pub async fn get_msp(&self, msp_onchain_id: &OnchainMspId) -> Result<Msp> {
+        // TODO: should we cache this?
+        // since we always reference the same msp
+        self.repository
+            .get_msp_by_onchain_id(msp_onchain_id)
+            .await
+            .map_err(|e| crate::error::Error::Database(e.to_string()))
+    }
+
+    /// Retrieve info on a specific bucket given its onchain ID
+    pub async fn get_bucket(&self, bucket_onchain_id: &[u8]) -> Result<Bucket> {
+        self.repository
+            .get_bucket_by_onchain_id(bucket_onchain_id.into())
+            .await
+            .map_err(|e| crate::error::Error::Database(e.to_string()))
+    }
+
+    /// Get the files of the given bucket with pagination
+    pub async fn get_bucket_files(
+        &self,
+        bucket: i64,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<Vec<File>> {
+        let limit = limit.unwrap_or(DEFAULT_PAGE_LIMIT);
+        let offset = offset.unwrap_or(0);
+
+        self.repository
+            .get_files_by_bucket(bucket, limit, offset)
+            .await
+            .map_err(|e| crate::error::Error::Database(e.to_string()))
+    }
+
+    /// Get all the `user`'s buckets with the given MSP
+    pub async fn get_user_buckets(
+        &self,
+        msp: &OnchainMspId,
+        user: &str,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<Vec<Bucket>> {
+        let msp = self.get_msp(msp).await?;
+
+        self.repository
+            .get_buckets_by_user_and_msp(
+                msp.id,
+                user,
+                limit.unwrap_or(DEFAULT_PAGE_LIMIT),
+                offset.unwrap_or(0),
+            )
+            .await
+            .map_err(|e| crate::error::Error::Database(e.to_string()))
+    }
+
+    pub async fn get_file_info(&self, file_key: &[u8]) -> Result<File> {
+        self.repository
+            .get_file_by_file_key(file_key.into())
             .await
             .map_err(|e| crate::error::Error::Database(e.to_string()))
     }
@@ -76,11 +140,9 @@ impl DBClient {
 #[cfg(test)]
 impl DBClient {
     /// Delete a BSP
-    pub async fn delete_bsp(&self, account: &shp_types::Hash) -> crate::error::Result<()> {
-        use shc_indexer_db::OnchainBspId;
-
+    pub async fn delete_bsp(&self, account: &OnchainBspId) -> crate::error::Result<()> {
         self.repository
-            .delete_bsp(&OnchainBspId::new(*account))
+            .delete_bsp(account)
             .await
             .map_err(|e| crate::error::Error::Database(e.to_string()))
     }
@@ -99,7 +161,7 @@ mod tests {
         },
     };
 
-    async fn delete_bsp(client: DBClient, id: shp_types::Hash) {
+    async fn delete_bsp(client: DBClient, id: OnchainBspId) {
         let bsps = client
             // ensure we get as many as possible
             .get_all_bsps(Some(i64::MAX), Some(0))
@@ -143,4 +205,7 @@ mod tests {
         let client = DBClient::new(Arc::new(repo));
         delete_bsp(client, DEFAULT_BSP_ID).await;
     }
+
+    //TODO: reuse tests from repository/postgres.rs
+    // and setup mock repository the same way
 }

@@ -8,3 +8,6 @@ pub mod client;
 #[cfg(feature = "mocks")]
 pub mod mock_repository;
 pub mod repository;
+
+#[cfg(test)]
+pub mod test_helpers;

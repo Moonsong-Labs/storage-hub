@@ -25,13 +25,36 @@
 //! ```
 
 use async_trait::async_trait;
-use shc_indexer_db::{models::Bsp, OnchainBspId};
+use shc_indexer_db::{
+    models::{Bsp, Bucket, File, Msp},
+    OnchainBspId, OnchainMspId,
+};
 
 pub mod error;
 pub mod pool;
 pub mod postgres;
 
 use error::RepositoryResult;
+
+/// Represents an onchain Bucket ID
+///
+/// This is used to differentiate between the database id and the onchain id
+// TODO: replace with appropriate type from runtime
+pub struct BucketId<'a>(pub &'a [u8]);
+impl<'a> From<&'a [u8]> for BucketId<'a> {
+    fn from(value: &'a [u8]) -> Self {
+        Self(value)
+    }
+}
+
+/// Represents an onchain File Key
+// TODO: replace with appropriate type from runtime
+pub struct FileKey<'a>(pub &'a [u8]);
+impl<'a> From<&'a [u8]> for FileKey<'a> {
+    fn from(value: &'a [u8]) -> Self {
+        Self(value)
+    }
+}
 
 /// Read-only operations for indexer data access.
 ///
@@ -45,10 +68,6 @@ use error::RepositoryResult;
 /// - Optional return types indicate entities that may not exist
 #[async_trait]
 pub trait IndexerOps: Send + Sync {
-    // TODO(SCAFFOLDING): The methods are for demonstration.
-    // Should be replaced with appropriate methods for what needs to be
-    // accessed from the indexer's db
-
     /// List BSPs with pagination.
     ///
     /// # Arguments
@@ -58,6 +77,45 @@ pub trait IndexerOps: Send + Sync {
     /// # Returns
     /// * Vector of BSPs
     async fn list_bsps(&self, limit: i64, offset: i64) -> RepositoryResult<Vec<Bsp>>;
+
+    /// Retrieve the specified MSP's information given its onchain id
+    async fn get_msp_by_onchain_id(&self, msp: &OnchainMspId) -> RepositoryResult<Msp>;
+
+    /// Retrieve the information of the given bucket
+    ///
+    /// # Arguments
+    /// * `bucket` - the Bucket ID (onchain)
+    async fn get_bucket_by_onchain_id(&self, bucket: BucketId<'_>) -> RepositoryResult<Bucket>;
+
+    /// List the account's buckets with the given MSP
+    ///
+    /// # Arguments
+    /// * `msp` - the MSP (database) ID where the bucket is held
+    /// * `account` - the User account that owns the bucket
+    async fn get_buckets_by_user_and_msp(
+        &self,
+        msp: i64,
+        account: &str,
+        limit: i64,
+        offset: i64,
+    ) -> RepositoryResult<Vec<Bucket>>;
+
+    /// Retrieve all the files belonging to the given bucket
+    ///
+    /// # Arguments
+    /// * `bucket` - the Bucket (database) ID to search
+    async fn get_files_by_bucket(
+        &self,
+        bucket: i64,
+        limit: i64,
+        offset: i64,
+    ) -> RepositoryResult<Vec<File>>;
+
+    /// Retrieve the file identified with the given File Key
+    ///
+    /// # Arguments
+    /// * `key` - the File Key to search
+    async fn get_file_by_file_key(&self, key: FileKey<'_>) -> RepositoryResult<File>;
 }
 
 /// Mutable operations for test environments.

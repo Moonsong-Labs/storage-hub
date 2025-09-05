@@ -58,22 +58,23 @@ async fn main() -> Result<()> {
 
     // Initialize services
     let config = load_config()?;
-    info!("Server will run on {}:{}", config.host, config.port);
+    let (host, port) = (config.host.clone(), config.port);
+    info!("Server will run on {}:{}", host, port);
 
     let memory_storage = InMemoryStorage::new();
     let storage = Arc::new(BoxedStorageWrapper::new(memory_storage));
 
     let postgres_client = create_postgres_client(&config).await?;
     let rpc_client = create_rpc_client(&config).await?;
-    let services = Services::new(storage, postgres_client, rpc_client);
+    let services = Services::new(config, storage, postgres_client, rpc_client);
 
     // Start server
     let app = create_app(services);
-    let listener = tokio::net::TcpListener::bind((config.host.as_str(), config.port))
+    let listener = tokio::net::TcpListener::bind((host.as_str(), port))
         .await
         .context("Failed to bind TCP listener")?;
 
-    info!("Server listening on http://{}:{}", config.host, config.port);
+    info!("Server listening on http://{}:{}", host, port);
 
     axum::serve(listener, app).await.context("Server error")?;
 

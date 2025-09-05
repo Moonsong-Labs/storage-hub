@@ -1,9 +1,12 @@
+use hex::ToHex;
 use serde::{Deserialize, Serialize};
+
+use shp_types::Hash;
 
 use crate::constants::{
     api::{DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE},
     database::DEFAULT_DATABASE_URL,
-    rpc::{DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_RPC_URL, DEFAULT_TIMEOUT_SECS},
+    rpc::{DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_RPC_URL, DEFAULT_TIMEOUT_SECS, DUMMY_MSP_ID},
     server::{DEFAULT_HOST, DEFAULT_PORT},
 };
 
@@ -41,6 +44,9 @@ pub struct StorageHubConfig {
     /// WebSocket URL for the StorageHub RPC endpoint
     /// (e.g., `ws://localhost:9944`)
     pub rpc_url: String,
+    /// MSP ID (as a hex-encoded string) that this backend instance represents
+    /// (e.g., `0x0000000000000000000000000000000000000000000000000000000000000300`)
+    pub msp_id: String,
     /// Request timeout in seconds for RPC calls
     pub timeout_secs: Option<u64>,
     /// Maximum number of concurrent RPC requests allowed
@@ -77,6 +83,7 @@ impl Default for Config {
             },
             storage_hub: StorageHubConfig {
                 rpc_url: DEFAULT_RPC_URL.to_string(),
+                msp_id: Hash::from_slice(&DUMMY_MSP_ID).encode_hex::<String>(),
                 timeout_secs: Some(DEFAULT_TIMEOUT_SECS),
                 max_concurrent_requests: Some(DEFAULT_MAX_CONCURRENT_REQUESTS),
                 verify_tls: true,
