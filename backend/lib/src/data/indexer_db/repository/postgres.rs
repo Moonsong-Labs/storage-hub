@@ -156,6 +156,7 @@ impl IndexerOpsMut for Repository {
 #[cfg(test)]
 // FIXME: all these tests fail locally due to some testcontainers setup issue
 mod tests {
+    use hex::ToHex;
     use shc_indexer_db::{OnchainBspId, OnchainMspId};
     use shp_types::Hash;
 
@@ -341,16 +342,31 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "TODO: setup empty bucket"]
     async fn get_files_by_bucket_empty_bucket() {
-        let (_container, database_url) =
-            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
+        let empty_bucket_id = 9999;
+
+        // TODO: replace with IndexerOpsMut methods to use diesel directly
+        // Create an empty bucket (no files associated with it)
+        // Also need to create the MSP that the bucket references
+        let setup_sql = format!(
+            r#"
+            INSERT INTO msp (id, account, onchain_msp_id)
+            VALUES 
+                ({msp_id}, '5CMDKyadzWu6MUwCzBB93u32Z1PPPsV8A1qAy4ydyVWuRzWR', '\x0000000000000000000000000000000000000000000000000000000000000301');
+            
+            INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root) 
+            VALUES 
+                ({bucket_id}, '0xemptybucketuser', {msp_id}, 'empty-bucket', 'empty-bucket-id', false, '\x0000');
+        "#,
+            msp_id = 123,
+            bucket_id = empty_bucket_id,
+        );
+
+        let (_container, database_url) = setup_test_db(vec![], vec![setup_sql.to_string()]).await;
 
         let repo = Repository::new(&database_url)
             .await
             .expect("Failed to create repository");
-
-        let empty_bucket_id = 9999;
 
         let files = repo
             .get_files_by_bucket(empty_bucket_id, 100, 0)
