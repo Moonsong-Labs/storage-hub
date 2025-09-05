@@ -1,6 +1,6 @@
 {
   "name": "@storagehub-sdk/msp-client",
-  "version": "0.1.0",
+  "version": "0.0.5",
   "description": "High-level TypeScript client for StorageHub MSP: simple file upload/download, SIWE-style auth, health checks, and bucket browsing built on top of @storagehub-sdk/core.",
   "type": "module",
   "main": "./dist/index.node.js",
@@ -36,7 +36,7 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "@storagehub-sdk/core": ">=0.0.3"
+    "@storagehub-sdk/core": ">=0.0.5"
   },
   "devDependencies": {
     "@storagehub-sdk/core": "workspace:*"

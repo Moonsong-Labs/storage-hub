@@ -104,13 +104,13 @@ jobs:
       - name: Pack and publish core
         working-directory: sdk/core
         run: |
-          npm pack --dry-run
-          npm publish --access public
+          pnpm pack --dry-run
+          pnpm publish --access public --no-git-checks
 
       # Pack and publish msp-client
       - name: Pack and publish msp-client
         working-directory: sdk/msp-client
         run: |
-          npm pack --dry-run
-          npm publish --access public
+          pnpm pack --dry-run
+          pnpm publish --access public --no-git-checks
 
