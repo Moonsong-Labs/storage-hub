@@ -19,7 +19,7 @@ use shc_fisherman_service::{
     {FileKeyOperation, FishermanService},
 };
 use shc_forest_manager::{in_memory::InMemoryForestStorage, traits::ForestStorage};
-use shc_indexer_db::models::{BspFile, MspFile};
+use shc_indexer_db::models::BspFile;
 use sp_core::H256;
 use sp_runtime::traits::SaturatedConversion;
 use std::time::Duration;
@@ -38,8 +38,8 @@ struct FileDeletionData<Runtime: StorageEnableRuntime> {
     file_metadata: shc_common::types::FileMetadata,
     /// List of BSP IDs that are storing this file
     bsp_ids: Vec<shc_indexer_db::OnchainBspId>,
-    /// Target bucket for file deletion operations (None if no MSP association exists)
-    bucket_target: Option<FileDeletionTarget<Runtime>>,
+    /// Target bucket for file deletion operations
+    bucket_target: FileDeletionTarget<Runtime>,
 }
 
 /// Fetches common file deletion data from the indexer database.
@@ -87,32 +87,18 @@ where
         .await
         .map_err(|e| anyhow!("Failed to query BSPs for file: {:?}", e))?;
 
-    // Check if MSP file association exists for this file
-    let bucket_target = match MspFile::get_msp_for_file_key(&mut conn, file_key.as_ref()).await {
-        Ok(Some(_msp_id)) => {
-            // MSP association exists, create bucket target
-            let bucket_id_array: [u8; 32] = file
-                .onchain_bucket_id
-                .clone()
-                .try_into()
-                .map_err(|_| anyhow!("Invalid bucket ID length"))?;
-            Some(FileDeletionTarget::BucketId(H256::from(bucket_id_array)))
-        }
-        Ok(None) => {
-            // No MSP association exists for this file
-            None
-        }
-        Err(e) => {
-            return Err(anyhow!("Failed to query MSP association for file: {:?}", e));
-        }
-    };
-
     drop(conn);
+
+    let bucket_id_array: [u8; 32] = file
+        .onchain_bucket_id
+        .clone()
+        .try_into()
+        .map_err(|_| anyhow!("Invalid bucket ID length"))?;
 
     Ok(FileDeletionData {
         file_metadata,
         bsp_ids,
-        bucket_target,
+        bucket_target: FileDeletionTarget::BucketId(H256::from(bucket_id_array)),
     })
 }
 
@@ -269,21 +255,19 @@ where
         let file_metadata_ref = &deletion_data.file_metadata;
 
         // Process bucket deletion only if MSP association exists
-        if let Some(bucket_target) = deletion_data.bucket_target {
-            let self_clone = self.clone();
+        let self_clone = self.clone();
 
-            deletion_futures.push(Box::pin(async move {
-                self_clone
-                    .process_deletion_for_target(
-                        event_ref,
-                        file_key,
-                        signature,
-                        bucket_target,
-                        file_metadata_ref,
-                    )
-                    .await
-            }));
-        }
+        deletion_futures.push(Box::pin(async move {
+            self_clone
+                .process_deletion_for_target(
+                    event_ref,
+                    file_key,
+                    signature,
+                    deletion_data.bucket_target,
+                    file_metadata_ref,
+                )
+                .await
+        }));
 
         // Process BSP targets in parallel
         for onchain_bsp_id in deletion_data.bsp_ids {
@@ -342,19 +326,17 @@ where
         let file_metadata_ref = &deletion_data.file_metadata;
 
         // Process bucket deletion only if MSP association exists
-        if let Some(bucket_target) = deletion_data.bucket_target {
-            let self_clone = self.clone();
+        let self_clone = self.clone();
 
-            deletion_futures.push(Box::pin(async move {
-                self_clone
-                    .process_deletion_for_target_incomplete(
-                        file_key,
-                        bucket_target,
-                        file_metadata_ref,
-                    )
-                    .await
-            }));
-        }
+        deletion_futures.push(Box::pin(async move {
+            self_clone
+                .process_deletion_for_target_incomplete(
+                    file_key,
+                    deletion_data.bucket_target,
+                    file_metadata_ref,
+                )
+                .await
+        }));
 
         // Process BSP targets in parallel
         for onchain_bsp_id in deletion_data.bsp_ids {
