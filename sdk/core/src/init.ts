@@ -1,11 +1,25 @@
 let initPromise: Promise<void> | null = null;
 
+/**
+ * Decode a base64 string into bytes in both Node.js and browsers without relying
+ * on bundler-specific polyfills.
+ *
+ * Rationale:
+ * - In Node.js, `Buffer.from(b64, 'base64')` is the most reliable and efficient
+ *   way to get bytes. `Buffer` is not available in some browser runtimes, so we
+ *   feature-detect it first.
+ * - In browsers, prefer `atob` and manually construct a `Uint8Array` to avoid
+ *   importing additional helpers or shims. This keeps the bundle small and
+ *   compatible with environments where Node globals are not present.
+ * - If neither mechanism is available (very restricted runtimes), we throw a
+ *   descriptive error so the caller can surface a clear message to users.
+ */
 function decodeBase64ToBytes(b64: string): Uint8Array {
   // Prefer Node's Buffer when available (Buffer extends Uint8Array)
   if (
     typeof Buffer !== 'undefined' &&
     typeof (Buffer as unknown as { from?: (s: string, enc: 'base64') => Uint8Array }).from ===
-      'function'
+    'function'
   ) {
     const buf = (Buffer as unknown as { from: (s: string, enc: 'base64') => Uint8Array }).from(
       b64,
