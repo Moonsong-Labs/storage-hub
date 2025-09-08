@@ -164,19 +164,3 @@ export async function runBuild({ withWasm = false, watch = false } = {}) {
     await Promise.all([nodeBuild, browserBuild]);
   }
 }
-
-// If invoked directly from CLI
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const watch = process.argv.includes('--watch');
-  const withWasm = process.argv.includes('--with-wasm');
-  runBuild({ withWasm, watch })
-    .then(() => {
-      if (!watch) console.log('Build completed');
-    })
-    .catch((err) => {
-      console.error(err);
-      process.exit(1);
-    });
-}
-
-
