@@ -8,6 +8,7 @@ import type {
   InfoResponse,
   StatsResponse,
   ValueProp,
+  FileInfo,
   NonceResponse,
   UploadOptions,
   UploadReceipt,
@@ -135,6 +136,23 @@ export class MspClient {
       ...(options?.signal ? { signal: options.signal } : {}),
       ...(options?.path ? { query: { path: options.path.replace(/^\/+/, '') } } : {}),
     });
+  }
+
+  /** Get metadata for a file in a bucket by fileKey */
+  getFileInfo(
+    bucketId: string,
+    fileKey: string,
+    options?: { signal?: AbortSignal },
+  ): Promise<FileInfo> {
+    const headers = this.withAuth();
+    const path = `/buckets/${encodeURIComponent(bucketId)}/info/${encodeURIComponent(fileKey)}`;
+    type FileInfoWire = Omit<FileInfo, 'uploadedAt'> & { uploadedAt: string };
+    return this.http
+      .get<FileInfoWire>(path, {
+        ...(headers ? { headers } : {}),
+        ...(options?.signal ? { signal: options.signal } : {}),
+      })
+      .then((wire): FileInfo => ({ ...wire, uploadedAt: new Date(wire.uploadedAt) }));
   }
 
   // File endpoints:

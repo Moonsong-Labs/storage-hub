@@ -161,3 +161,14 @@ export interface ValueProp {
   dataLimitPerBucketBytes: number;
   isAvailable: boolean;
 }
+
+export interface FileInfo {
+  fileKey: string;
+  fingerprint: string;
+  bucketId: string;
+  name: string;
+  location: string;
+  size: number;
+  isPublic: boolean;
+  uploadedAt: Date;
+}

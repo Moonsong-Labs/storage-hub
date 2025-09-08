@@ -10,6 +10,7 @@ export type {
   StatsResponse,
   Capacity,
   ValueProp,
+  FileInfo,
   NonceResponse,
   UploadOptions,
   UploadReceipt,
