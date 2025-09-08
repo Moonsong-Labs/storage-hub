@@ -25,6 +25,8 @@
 //! ```
 
 use async_trait::async_trait;
+#[cfg(test)]
+use num_bigdecimal::BigDecimal;
 use shc_indexer_db::{
     models::{Bsp, Bucket, File, Msp},
     OnchainBspId, OnchainMspId,
@@ -125,19 +127,85 @@ pub trait IndexerOps: Send + Sync {
 ///
 /// ## Implementation Notes
 /// - All methods are async and return `RepositoryResult<T>`
-/// - Methods follow consistent naming: `create_*`, `update_*`, `delete_*`
+/// - Methods follow consistent naming: `create_*`, `delete_*`
 /// - This trait always exists but implementations are conditional
 #[async_trait]
 pub trait IndexerOpsMut: IndexerOps {
-    // TODO(SCAFFOLDING): The methods are for demonstration.
-    // Should be replaced with appropriate methods for what needs to be
-    // accessed from the indexer's db
-
-    /// Delete a BSP by account.
+    /// Create a new MSP.
     ///
     /// # Arguments
-    /// * `account` - Account of the BSP to delete
-    async fn delete_bsp(&self, account: &OnchainBspId) -> RepositoryResult<()>;
+    /// * `account` - Account address of the MSP
+    /// * `onchain_msp_id` - Onchain identifier for the MSP
+    async fn create_msp(
+        &self,
+        account: &str,
+        onchain_msp_id: OnchainMspId,
+    ) -> RepositoryResult<Msp>;
+
+    /// Delete an MSP by its onchain ID.
+    async fn delete_msp(&self, onchain_msp_id: &OnchainMspId) -> RepositoryResult<()>;
+
+    /// Create a new BSP.
+    ///
+    /// # Arguments
+    /// * `account` - Account address of the BSP
+    /// * `onchain_bsp_id` - Onchain identifier for the BSP
+    /// * `capacity` - Storage capacity
+    /// * `stake` - Staked amount
+    async fn create_bsp(
+        &self,
+        account: &str,
+        onchain_bsp_id: OnchainBspId,
+        capacity: BigDecimal,
+        stake: BigDecimal,
+    ) -> RepositoryResult<Bsp>;
+
+    /// Delete a BSP by its onchain ID.
+    async fn delete_bsp(&self, onchain_bsp_id: &OnchainBspId) -> RepositoryResult<()>;
+
+    /// Create a new bucket.
+    ///
+    /// # Arguments
+    /// * `account` - Owner account address
+    /// * `msp_id` - Optional MSP database ID
+    /// * `name` - Bucket name
+    /// * `onchain_bucket_id` - Onchain bucket identifier
+    /// * `private` - Privacy flag
+    async fn create_bucket(
+        &self,
+        account: &str,
+        msp_id: Option<i64>,
+        name: &[u8],
+        onchain_bucket_id: &[u8],
+        private: bool,
+    ) -> RepositoryResult<Bucket>;
+
+    /// Delete a bucket by its onchain ID.
+    async fn delete_bucket(&self, onchain_bucket_id: &[u8]) -> RepositoryResult<()>;
+
+    /// Create a new file.
+    ///
+    /// # Arguments
+    /// * `account` - Owner account
+    /// * `file_key` - Unique file key
+    /// * `bucket_id` - Database ID of the bucket
+    /// * `onchain_bucket_id` - Onchain bucket identifier
+    /// * `location` - File location/path
+    /// * `fingerprint` - File fingerprint
+    /// * `size` - File size in bytes
+    async fn create_file(
+        &self,
+        account: &[u8],
+        file_key: &[u8],
+        bucket_id: i64,
+        onchain_bucket_id: &[u8],
+        location: &[u8],
+        fingerprint: &[u8],
+        size: i64,
+    ) -> RepositoryResult<File>;
+
+    /// Delete a file by its file key.
+    async fn delete_file(&self, file_key: &[u8]) -> RepositoryResult<()>;
 }
 
 // The following trait aliases are so when compiling for unit tests we get access to write operations

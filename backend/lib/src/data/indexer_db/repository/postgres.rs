@@ -17,7 +17,9 @@ use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
 #[cfg(test)]
-use shc_indexer_db::OnchainBspId;
+use num_bigdecimal::BigDecimal;
+#[cfg(test)]
+use shc_indexer_db::{models::FileStorageRequestStep, OnchainBspId};
 use shc_indexer_db::{
     models::{Bsp, Bucket, File, Msp},
     schema::{bsp, bucket, file},
@@ -141,11 +143,133 @@ impl IndexerOps for Repository {
 #[cfg(test)]
 #[async_trait]
 impl IndexerOpsMut for Repository {
-    // ============ BSP Write Operations ============
-    async fn delete_bsp(&self, onchain_bsp_id: &OnchainBspId) -> RepositoryResult<()> {
+    async fn create_msp(
+        &self,
+        account: &str,
+        onchain_msp_id: OnchainMspId,
+    ) -> RepositoryResult<Msp> {
         let mut conn = self.pool.get().await?;
 
-        diesel::delete(bsp::table.filter(bsp::onchain_bsp_id.eq(onchain_bsp_id)))
+        // TODO: move defaults in constants module (like capacity, value_prop)
+        let msp = Msp::create(
+            &mut *conn,
+            account.to_string(),
+            BigDecimal::from(0), // Default capacity
+            String::new(),       // Default value_prop
+            vec![],              // No multiaddresses for test data
+            onchain_msp_id,
+        )
+        .await?;
+
+        Ok(msp)
+    }
+
+    async fn delete_msp(&self, onchain_msp_id: &OnchainMspId) -> RepositoryResult<()> {
+        let mut conn = self.pool.get().await?;
+        Msp::delete(&mut *conn, onchain_msp_id.clone()).await?;
+        Ok(())
+    }
+
+    async fn create_bsp(
+        &self,
+        account: &str,
+        onchain_bsp_id: OnchainBspId,
+        capacity: BigDecimal,
+        stake: BigDecimal,
+    ) -> RepositoryResult<Bsp> {
+        let mut conn = self.pool.get().await?;
+
+        // TODO: move defaults in constants module
+        let bsp = Bsp::create(
+            &mut *conn,
+            account.to_string(),
+            capacity,
+            vec![0u8], // Default merkle root
+            vec![],    // No multiaddresses for test data
+            onchain_bsp_id,
+            stake,
+        )
+        .await?;
+
+        Ok(bsp)
+    }
+
+    async fn delete_bsp(&self, onchain_bsp_id: &OnchainBspId) -> RepositoryResult<()> {
+        let mut conn = self.pool.get().await?;
+        Bsp::delete(&mut *conn, onchain_bsp_id.clone()).await?;
+        Ok(())
+    }
+
+    async fn create_bucket(
+        &self,
+        account: &str,
+        msp_id: Option<i64>,
+        name: &[u8],
+        onchain_bucket_id: &[u8],
+        private: bool,
+    ) -> RepositoryResult<Bucket> {
+        let mut conn = self.pool.get().await?;
+
+        // TODO: move defaults in constants module (like merklet root)
+        let bucket = Bucket::create(
+            &mut *conn,
+            msp_id,
+            account.to_string(),
+            onchain_bucket_id.to_vec(),
+            name.to_vec(),
+            None, // No collection_id
+            private,
+            vec![0u8], // Default merkle root
+        )
+        .await?;
+
+        Ok(bucket)
+    }
+
+    async fn delete_bucket(&self, onchain_bucket_id: &[u8]) -> RepositoryResult<()> {
+        let mut conn = self.pool.get().await?;
+
+        diesel::delete(bucket::table.filter(bucket::onchain_bucket_id.eq(onchain_bucket_id)))
+            .execute(&mut *conn)
+            .await?;
+
+        Ok(())
+    }
+
+    async fn create_file(
+        &self,
+        account: &[u8],
+        file_key: &[u8],
+        bucket_id: i64,
+        onchain_bucket_id: &[u8],
+        location: &[u8],
+        fingerprint: &[u8],
+        size: i64,
+    ) -> RepositoryResult<File> {
+        let mut conn = self.pool.get().await?;
+
+        // TODO: move defaults in constants module (like peer_ids)
+        let file = File::create(
+            &mut *conn,
+            account.to_vec(),
+            file_key.to_vec(),
+            bucket_id,
+            onchain_bucket_id.to_vec(),
+            location.to_vec(),
+            fingerprint.to_vec(),
+            size,
+            FileStorageRequestStep::Requested,
+            vec![], // No peer_ids for simple test data
+        )
+        .await?;
+
+        Ok(file)
+    }
+
+    async fn delete_file(&self, file_key: &[u8]) -> RepositoryResult<()> {
+        let mut conn = self.pool.get().await?;
+
+        diesel::delete(file::table.filter(file::file_key.eq(file_key)))
             .execute(&mut *conn)
             .await?;
 
@@ -154,7 +278,6 @@ impl IndexerOpsMut for Repository {
 }
 
 #[cfg(test)]
-// FIXME: all these tests fail locally due to some testcontainers setup issue
 mod tests {
     use hex::ToHex;
     use shc_indexer_db::{OnchainBspId, OnchainMspId};
@@ -279,7 +402,8 @@ mod tests {
         // TODO: replace with IndexerOpsMut methods to use diesel directly
         // Add a second bucket with one file to verify filtering
         let additional_bucket_id = 123;
-        let additional_data = format!(r#"
+        let additional_data = format!(
+            r#"
             -- Add a second bucket
             INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root)
             VALUES ({bucket_id}, '5CombC1j5ZmdNMEpWYpeEWcKPPYcKsC1WgMPgzGLU72SLa4o', 2, 'other-bucket', {onchain_bucket_id}', false, '\x0102');
@@ -290,7 +414,10 @@ mod tests {
                     '\xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890', {bucket_id},
                     '{onchain_bucket_id}', 'file.txt',
                     '\x0000000000000000000000000000000000000000000000000000000000000002', 12345, 1, NULL);
-        "#, bucket_id = additional_bucket_id, onchain_bucket_id = "additional-bucket");
+        "#,
+            bucket_id = additional_bucket_id,
+            onchain_bucket_id = "additional-bucket"
+        );
 
         let (_container, database_url) =
             setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![additional_data]).await;
