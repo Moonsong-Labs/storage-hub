@@ -26,7 +26,7 @@
 
 use async_trait::async_trait;
 #[cfg(test)]
-use num_bigdecimal::BigDecimal;
+use bigdecimal::BigDecimal;
 use shc_indexer_db::{
     models::{Bsp, Bucket, File, Msp},
     OnchainBspId, OnchainMspId,

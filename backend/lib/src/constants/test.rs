@@ -100,3 +100,61 @@ pub mod mock_rpc {
     pub const TEST_TRANSPORT_ERROR_MSG: &str = "Test transport error";
     pub const TEST_RPC_ERROR_MSG: &str = "Test RPC error";
 }
+
+/// Repository test constants for database tests
+pub mod repository {
+    use hex_literal::hex;
+
+    /// Additional test bucket for filtering tests
+    pub const ADDITIONAL_BUCKET_ID: &[u8] = b"additional-bucket";
+    pub const ADDITIONAL_FILE_KEY: [u8; 32] =
+        hex!("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
+    pub const ADDITIONAL_FILE_ACCOUNT: [u8; 32] =
+        hex!("20d81e86ed5b986d1d6ddbe416627f96f740252c4a80ab8ed91db58f7ecf9657");
+    pub const ADDITIONAL_FILE_FINGERPRINT: [u8; 32] =
+        hex!("0000000000000000000000000000000000000000000000000000000000000002");
+    pub const ADDITIONAL_FILE_LOCATION: &[u8] = b"file.txt";
+    pub const ADDITIONAL_FILE_SIZE: i64 = 12345;
+
+    /// Empty bucket test MSP
+    pub const EMPTY_BUCKET_MSP_ID: [u8; 32] =
+        hex!("0000000000000000000000000000000000000000000000000000000000000999");
+    pub const EMPTY_BUCKET_MSP_ACCOUNT: &str = "5EmptyMspAccountAddressForTestingPurpose";
+    pub const EMPTY_BUCKET_NAME: &[u8] = b"empty-bucket";
+    pub const EMPTY_BUCKET_ID: &[u8] = b"empty-bucket-id";
+    pub const EMPTY_BUCKET_USER: &str = "0xemptybucketuser";
+
+    /// Pagination test buckets
+    pub const PAGINATION_BUCKET_2_NAME: &[u8] = b"pagination-bucket-2";
+    pub const PAGINATION_BUCKET_2_ID: &[u8] = b"pb2";
+    pub const PAGINATION_BUCKET_3_NAME: &[u8] = b"pagination-bucket-3";
+    pub const PAGINATION_BUCKET_3_ID: &[u8] = b"pb3";
+
+    /// User filtering test buckets
+    pub const USER_BUCKET_2_NAME: &[u8] = b"user-bucket2";
+    pub const USER_BUCKET_2_ID: &[u8] = b"b2";
+    pub const USER_BUCKET_3_NAME: &[u8] = b"user-bucket3";
+    pub const USER_BUCKET_3_ID: &[u8] = b"b3";
+    pub const OTHER_USER_ACCOUNT: &str = "0xotheruser";
+    pub const OTHER_USER_BUCKET_NAME: &[u8] = b"other-user-bucket";
+    pub const OTHER_USER_BUCKET_ID: &[u8] = b"oub1";
+
+    /// MSP filtering test
+    pub const MSP1_BUCKET_NAME: &[u8] = b"user-msp1-bucket";
+    pub const MSP1_BUCKET_ID: &[u8] = b"mb1";
+
+    /// No MSP test
+    pub const NO_MSP_BUCKET_NAME: &[u8] = b"no-msp-bucket";
+    pub const NO_MSP_BUCKET_ID: &[u8] = b"nmb1";
+
+    /// BSP deletion test
+    pub const TEST_BSP_ID: [u8; 32] =
+        hex!("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef");
+    pub const TEST_BSP_ACCOUNT: &str = "5TestBspAccountAddressForDeletionTesting";
+    pub const TEST_BSP_CAPACITY: i64 = 1000000;
+    pub const TEST_BSP_STAKE: i64 = 50000;
+
+    /// Not found test keys
+    pub const NONEXISTENT_BUCKET_ID: &[u8] = b"nonexistent_bucket_id";
+    pub const NONEXISTENT_FILE_KEY: &[u8] = b"non-existing-file-key";
+}

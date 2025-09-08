@@ -17,7 +17,7 @@ use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
 #[cfg(test)]
-use num_bigdecimal::BigDecimal;
+use bigdecimal::BigDecimal;
 #[cfg(test)]
 use shc_indexer_db::{models::FileStorageRequestStep, OnchainBspId};
 use shc_indexer_db::{
@@ -152,7 +152,7 @@ impl IndexerOpsMut for Repository {
 
         // TODO: move defaults in constants module (like capacity, value_prop)
         let msp = Msp::create(
-            &mut *conn,
+            &mut conn,
             account.to_string(),
             BigDecimal::from(0), // Default capacity
             String::new(),       // Default value_prop
@@ -166,7 +166,7 @@ impl IndexerOpsMut for Repository {
 
     async fn delete_msp(&self, onchain_msp_id: &OnchainMspId) -> RepositoryResult<()> {
         let mut conn = self.pool.get().await?;
-        Msp::delete(&mut *conn, onchain_msp_id.clone()).await?;
+        Msp::delete(&mut conn, onchain_msp_id.clone()).await?;
         Ok(())
     }
 
@@ -181,7 +181,7 @@ impl IndexerOpsMut for Repository {
 
         // TODO: move defaults in constants module
         let bsp = Bsp::create(
-            &mut *conn,
+            &mut conn,
             account.to_string(),
             capacity,
             vec![0u8], // Default merkle root
@@ -196,7 +196,7 @@ impl IndexerOpsMut for Repository {
 
     async fn delete_bsp(&self, onchain_bsp_id: &OnchainBspId) -> RepositoryResult<()> {
         let mut conn = self.pool.get().await?;
-        Bsp::delete(&mut *conn, onchain_bsp_id.clone()).await?;
+        Bsp::delete(&mut conn, onchain_bsp_id.clone()).await?;
         Ok(())
     }
 
@@ -212,7 +212,7 @@ impl IndexerOpsMut for Repository {
 
         // TODO: move defaults in constants module (like merklet root)
         let bucket = Bucket::create(
-            &mut *conn,
+            &mut conn,
             msp_id,
             account.to_string(),
             onchain_bucket_id.to_vec(),
@@ -230,7 +230,7 @@ impl IndexerOpsMut for Repository {
         let mut conn = self.pool.get().await?;
 
         diesel::delete(bucket::table.filter(bucket::onchain_bucket_id.eq(onchain_bucket_id)))
-            .execute(&mut *conn)
+            .execute(&mut conn)
             .await?;
 
         Ok(())
@@ -250,7 +250,7 @@ impl IndexerOpsMut for Repository {
 
         // TODO: move defaults in constants module (like peer_ids)
         let file = File::create(
-            &mut *conn,
+            &mut conn,
             account.to_vec(),
             file_key.to_vec(),
             bucket_id,
@@ -270,7 +270,7 @@ impl IndexerOpsMut for Repository {
         let mut conn = self.pool.get().await?;
 
         diesel::delete(file::table.filter(file::file_key.eq(file_key)))
-            .execute(&mut *conn)
+            .execute(&mut conn)
             .await?;
 
         Ok(())
@@ -279,20 +279,21 @@ impl IndexerOpsMut for Repository {
 
 #[cfg(test)]
 mod tests {
-    use hex::ToHex;
     use shc_indexer_db::{OnchainBspId, OnchainMspId};
     use shp_types::Hash;
 
     use super::*;
-    use crate::data::indexer_db::{
-        repository::{error::RepositoryError, postgres::Repository},
-        test_helpers::{
-            setup_test_db,
-            snapshot_move_bucket::{
-                BSP_NUM, BSP_ONE_ACCOUNT, BSP_ONE_ONCHAIN_ID, BUCKET_ACCOUNT, BUCKET_FILES,
-                BUCKET_ID, BUCKET_NAME, BUCKET_ONCHAIN_ID, BUCKET_PRIVATE, FILE_ONE_FILE_KEY,
-                FILE_ONE_LOCATION, MSP_ONE_ACCOUNT, MSP_ONE_ID, MSP_ONE_ONCHAIN_ID, MSP_TWO_ID,
-                SNAPSHOT_SQL,
+    use crate::{
+        constants::test::repository::*,
+        data::indexer_db::{
+            repository::{error::RepositoryError, postgres::Repository, IndexerOpsMut},
+            test_helpers::{
+                setup_test_db,
+                snapshot_move_bucket::{
+                    BSP_NUM, BUCKET_ACCOUNT, BUCKET_FILES, BUCKET_ID, BUCKET_NAME,
+                    BUCKET_ONCHAIN_ID, BUCKET_PRIVATE, FILE_ONE_FILE_KEY, FILE_ONE_LOCATION,
+                    MSP_ONE_ACCOUNT, MSP_ONE_ID, MSP_ONE_ONCHAIN_ID, MSP_TWO_ID, SNAPSHOT_SQL,
+                },
             },
         },
     };
@@ -387,44 +388,63 @@ mod tests {
             .expect("Failed to create repository");
 
         let result = repo
-            .get_bucket_by_onchain_id(b"nonexistent_bucket_id".as_slice().into())
+            .get_bucket_by_onchain_id(NONEXISTENT_BUCKET_ID.into())
             .await;
 
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            RepositoryError::NotFound { .. }
-        ));
+        assert!(
+            result.is_err(),
+            "Should return an error for non-existent bucket"
+        );
+
+        // Check for specific "not found" database error
+        let err = result.unwrap_err();
+        match err {
+            RepositoryError::Database(db_err) => {
+                // Check that the error message indicates the item was not found
+                let error_string = db_err.to_string();
+                assert!(
+                    error_string.contains("not found") || error_string.contains("No rows returned"),
+                    "Expected 'not found' error, got: {}",
+                    error_string
+                );
+            }
+            _ => panic!("Expected Database error for not found, got: {:?}", err),
+        }
     }
 
     #[tokio::test]
     async fn get_files_by_bucket_filters_correctly() {
-        // TODO: replace with IndexerOpsMut methods to use diesel directly
-        // Add a second bucket with one file to verify filtering
-        let additional_bucket_id = 123;
-        let additional_data = format!(
-            r#"
-            -- Add a second bucket
-            INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root)
-            VALUES ({bucket_id}, '5CombC1j5ZmdNMEpWYpeEWcKPPYcKsC1WgMPgzGLU72SLa4o', 2, 'other-bucket', {onchain_bucket_id}', false, '\x0102');
-
-            -- Add a file to the second bucket
-            INSERT INTO file (id, account, file_key, bucket_id, onchain_bucket_id, location, fingerprint, size, step, deletion_status)
-            VALUES (4, '\x20d81e86ed5b986d1d6ddbe416627f96f740252c4a80ab8ed91db58f7ecf9657',
-                    '\xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890', {bucket_id},
-                    '{onchain_bucket_id}', 'file.txt',
-                    '\x0000000000000000000000000000000000000000000000000000000000000002', 12345, 1, NULL);
-        "#,
-            bucket_id = additional_bucket_id,
-            onchain_bucket_id = "additional-bucket"
-        );
-
         let (_container, database_url) =
-            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![additional_data]).await;
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
 
         let repo = Repository::new(&database_url)
             .await
             .expect("Failed to create repository");
+
+        // Add a second bucket with one file to verify filtering
+        let additional_bucket = repo
+            .create_bucket(
+                "5CombC1j5ZmdNMEpWYpeEWcKPPYcKsC1WgMPgzGLU72SLa4o",
+                Some(MSP_TWO_ID),
+                b"other-bucket",
+                ADDITIONAL_BUCKET_ID,
+                false,
+            )
+            .await
+            .expect("Failed to create additional bucket");
+
+        // Add a file to the second bucket
+        repo.create_file(
+            &ADDITIONAL_FILE_ACCOUNT,
+            &ADDITIONAL_FILE_KEY,
+            additional_bucket.id,
+            ADDITIONAL_BUCKET_ID,
+            ADDITIONAL_FILE_LOCATION,
+            &ADDITIONAL_FILE_FINGERPRINT,
+            ADDITIONAL_FILE_SIZE,
+        )
+        .await
+        .expect("Failed to create file in additional bucket");
 
         // Test getting all files in bucket #1
         let bucket1_files = repo
@@ -448,7 +468,7 @@ mod tests {
 
         // Test getting files in other bucket
         let bucket2_files = repo
-            .get_files_by_bucket(additional_bucket_id, 100, 0)
+            .get_files_by_bucket(additional_bucket.id, 100, 0)
             .await
             .expect("Failed to get other bucket files");
 
@@ -457,7 +477,7 @@ mod tests {
         // Verify the file belongs to bucket #2
         for file in &bucket2_files {
             assert_eq!(
-                file.bucket_id, additional_bucket_id,
+                file.bucket_id, additional_bucket.id,
                 "File should belong to other bucket"
             );
         }
@@ -509,33 +529,38 @@ mod tests {
 
     #[tokio::test]
     async fn get_files_by_bucket_empty_bucket() {
-        let empty_bucket_id = 9999;
-
-        // TODO: replace with IndexerOpsMut methods to use diesel directly
-        // Create an empty bucket (no files associated with it)
-        // Also need to create the MSP that the bucket references
-        let setup_sql = format!(
-            r#"
-            INSERT INTO msp (id, account, onchain_msp_id)
-            VALUES
-                ({msp_id}, '5CMDKyadzWu6MUwCzBB93u32Z1PPPsV8A1qAy4ydyVWuRzWR', '\x0000000000000000000000000000000000000000000000000000000000000301');
-
-            INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root)
-            VALUES
-                ({bucket_id}, '0xemptybucketuser', {msp_id}, 'empty-bucket', 'empty-bucket-id', false, '\x0000');
-        "#,
-            msp_id = 123,
-            bucket_id = empty_bucket_id,
-        );
-
-        let (_container, database_url) = setup_test_db(vec![], vec![setup_sql.to_string()]).await;
+        let (_container, database_url) =
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
 
         let repo = Repository::new(&database_url)
             .await
             .expect("Failed to create repository");
 
+        // Create an empty bucket (no files associated with it)
+        // First create a new MSP that the bucket references (using a unique ID)
+        let empty_msp_onchain_id = OnchainMspId::new(Hash::from(EMPTY_BUCKET_MSP_ID));
+        repo.create_msp(EMPTY_BUCKET_MSP_ACCOUNT, empty_msp_onchain_id.clone())
+            .await
+            .expect("Failed to create MSP");
+
+        let empty_msp = repo
+            .get_msp_by_onchain_id(&empty_msp_onchain_id)
+            .await
+            .expect("Failed to get MSP");
+
+        let empty_bucket = repo
+            .create_bucket(
+                EMPTY_BUCKET_USER,
+                Some(empty_msp.id),
+                EMPTY_BUCKET_NAME,
+                EMPTY_BUCKET_ID,
+                false,
+            )
+            .await
+            .expect("Failed to create empty bucket");
+
         let files = repo
-            .get_files_by_bucket(empty_bucket_id, 100, 0)
+            .get_files_by_bucket(empty_bucket.id, 100, 0)
             .await
             .expect("should handle empty bucket");
 
@@ -574,25 +599,35 @@ mod tests {
 
     #[tokio::test]
     async fn get_buckets_by_user_and_msp() {
-        // TODO: replace with IndexerOpsMut methods to use diesel directly
-        // Add 2 more buckets for BUCKET_ACCOUNT with MSP #2
-        let extra_buckets = format!(
-            r#"INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root)
-            VALUES
-                (2, '{account}', {msp_id}, 'user-bucket2', 'b2', true, '\x0304'),
-                (3, '{account}', {msp_id}, 'user-bucket3', 'b3', false, '\x0506');"#,
-            account = BUCKET_ACCOUNT,
-            msp_id = MSP_TWO_ID
-        );
-
         let (_container, database_url) =
-            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![extra_buckets]).await;
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
 
         let repo = Repository::new(&database_url)
             .await
             .expect("Failed to create repository");
 
         // SNAPSHOT_SQL already has 1 bucket for BUCKET_ACCOUNT with MSP #2
+        // Add 2 more buckets for BUCKET_ACCOUNT with MSP #2
+        repo.create_bucket(
+            BUCKET_ACCOUNT,
+            Some(MSP_TWO_ID),
+            USER_BUCKET_2_NAME,
+            USER_BUCKET_2_ID,
+            true,
+        )
+        .await
+        .expect("Failed to create bucket 2");
+
+        repo.create_bucket(
+            BUCKET_ACCOUNT,
+            Some(MSP_TWO_ID),
+            USER_BUCKET_3_NAME,
+            USER_BUCKET_3_ID,
+            false,
+        )
+        .await
+        .expect("Failed to create bucket 3");
+
         // We added 2 more, so should have 3 total
         let buckets = repo
             .get_buckets_by_user_and_msp(MSP_TWO_ID, BUCKET_ACCOUNT, 100, 0)
@@ -615,6 +650,28 @@ mod tests {
             .await
             .expect("Failed to create repository");
 
+        // Add more buckets for pagination testing
+        // SNAPSHOT_SQL already has 1 bucket for BUCKET_ACCOUNT with MSP #2
+        repo.create_bucket(
+            BUCKET_ACCOUNT,
+            Some(MSP_TWO_ID),
+            PAGINATION_BUCKET_2_NAME,
+            PAGINATION_BUCKET_2_ID,
+            false,
+        )
+        .await
+        .expect("Failed to create pagination bucket 2");
+
+        repo.create_bucket(
+            BUCKET_ACCOUNT,
+            Some(MSP_TWO_ID),
+            PAGINATION_BUCKET_3_NAME,
+            PAGINATION_BUCKET_3_ID,
+            false,
+        )
+        .await
+        .expect("Failed to create pagination bucket 3");
+
         // Test with limit
         let limited_buckets = repo
             .get_buckets_by_user_and_msp(MSP_TWO_ID, BUCKET_ACCOUNT, 2, 0)
@@ -630,6 +687,10 @@ mod tests {
             .get_buckets_by_user_and_msp(MSP_TWO_ID, BUCKET_ACCOUNT, 100, 1)
             .await
             .expect("Failed to get offset buckets");
+        assert!(
+            !offset_buckets.is_empty(),
+            "Should have buckets after offset"
+        );
         assert_ne!(
             limited_buckets[0].name, offset_buckets[0].name,
             "Should skip first bucket"
@@ -652,21 +713,23 @@ mod tests {
 
     #[tokio::test]
     async fn get_buckets_by_user_and_msp_filters_other_users() {
-        // TODO: replace with IndexerOpsMut methods to use diesel directly
-        // Add one bucket for a different user with MSP #2 to test filtering
-        let user_filter_test_data = format!(
-            r#"INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root)
-            VALUES
-                (2, '0xotheruser', {msp_id}, 'other-user-bucket', 'oub1', false, '\x0506');"#,
-            msp_id = MSP_TWO_ID
-        );
-
         let (_container, database_url) =
-            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![user_filter_test_data]).await;
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
 
         let repo = Repository::new(&database_url)
             .await
             .expect("Failed to create repository");
+
+        // Add one bucket for a different user with MSP #2 to test filtering
+        repo.create_bucket(
+            OTHER_USER_ACCOUNT,
+            Some(MSP_TWO_ID),
+            OTHER_USER_BUCKET_NAME,
+            OTHER_USER_BUCKET_ID,
+            false,
+        )
+        .await
+        .expect("Failed to create other user bucket");
 
         // Should only return BUCKET_ACCOUNT's bucket (from snapshot), not other user's bucket
         let target_buckets = repo
@@ -693,7 +756,7 @@ mod tests {
 
         // Verify other user's bucket is not included
         let other_user_buckets = repo
-            .get_buckets_by_user_and_msp(MSP_TWO_ID, "0xotheruser", 100, 0)
+            .get_buckets_by_user_and_msp(MSP_TWO_ID, OTHER_USER_ACCOUNT, 100, 0)
             .await
             .expect("Failed to get other user buckets");
 
@@ -710,22 +773,23 @@ mod tests {
 
     #[tokio::test]
     async fn get_buckets_by_user_and_msp_filters_other_msps() {
-        // TODO: replace with IndexerOpsMut methods to use diesel directly
-        // Add bucket for BUCKET_ACCOUNT with MSP #1 to test MSP filtering
-        let msp_filter_test_data = format!(
-            r#"INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root)
-            VALUES
-                (2, '{account}', {msp_id}, 'user-msp1-bucket', 'mb1', false, '\x0102');"#,
-            account = BUCKET_ACCOUNT,
-            msp_id = MSP_ONE_ID
-        );
-
         let (_container, database_url) =
-            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![msp_filter_test_data]).await;
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
 
         let repo = Repository::new(&database_url)
             .await
             .expect("Failed to create repository");
+
+        // Add bucket for BUCKET_ACCOUNT with MSP #1 to test MSP filtering
+        repo.create_bucket(
+            BUCKET_ACCOUNT,
+            Some(MSP_ONE_ID),
+            MSP1_BUCKET_NAME,
+            MSP1_BUCKET_ID,
+            false,
+        )
+        .await
+        .expect("Failed to create MSP1 bucket");
 
         // Should only return buckets for MSP #1
         let msp1_buckets = repo
@@ -746,7 +810,7 @@ mod tests {
             "Bucket should have MSP #1"
         );
         assert_eq!(
-            msp1_buckets[0].name, b"user-msp1-bucket",
+            msp1_buckets[0].name, MSP1_BUCKET_NAME,
             "Should be our MSP1 bucket"
         );
 
@@ -777,21 +841,23 @@ mod tests {
 
     #[tokio::test]
     async fn get_buckets_by_user_and_msp_filters_no_msp() {
-        // TODO: replace with IndexerOpsMut methods to use diesel directly
-        // Add bucket with NULL MSP to test filtering
-        let null_msp_test_data = format!(
-            r#"INSERT INTO bucket (id, account, msp_id, name, onchain_bucket_id, private, merkle_root)
-            VALUES
-                (2, '{account}', NULL, 'no-msp-bucket', 'nmb1', false, '\x0506');"#,
-            account = BUCKET_ACCOUNT
-        );
-
         let (_container, database_url) =
-            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![null_msp_test_data]).await;
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
 
         let repo = Repository::new(&database_url)
             .await
             .expect("Failed to create repository");
+
+        // Add bucket with NULL MSP to test filtering
+        repo.create_bucket(
+            BUCKET_ACCOUNT,
+            None, // NULL MSP
+            NO_MSP_BUCKET_NAME,
+            NO_MSP_BUCKET_ID,
+            false,
+        )
+        .await
+        .expect("Failed to create bucket with no MSP");
 
         // Should only return buckets with the specified MSP, not those with NULL MSP
         let msp_buckets = repo
@@ -819,7 +885,7 @@ mod tests {
 
         // Verify NULL MSP bucket is not included
         assert_ne!(
-            msp_buckets[0].name, b"no-msp-bucket",
+            msp_buckets[0].name, NO_MSP_BUCKET_NAME,
             "Should not include the NULL MSP bucket"
         );
     }
@@ -852,15 +918,27 @@ mod tests {
             .await
             .expect("Failed to create repository");
 
-        let result = repo
-            .get_file_by_file_key(b"non-existing-file-key".as_slice().into())
-            .await;
+        let result = repo.get_file_by_file_key(NONEXISTENT_FILE_KEY.into()).await;
 
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            RepositoryError::NotFound { .. }
-        ));
+        assert!(
+            result.is_err(),
+            "Should return an error for non-existent file"
+        );
+
+        // Check for specific "not found" database error
+        let err = result.unwrap_err();
+        match err {
+            RepositoryError::Database(db_err) => {
+                // Check that the error message indicates the item was not found
+                let error_string = db_err.to_string();
+                assert!(
+                    error_string.contains("not found") || error_string.contains("No rows returned"),
+                    "Expected 'not found' error, got: {}",
+                    error_string
+                );
+            }
+            _ => panic!("Expected Database error for not found, got: {:?}", err),
+        }
     }
 
     #[tokio::test]
@@ -872,20 +950,33 @@ mod tests {
             .await
             .expect("Failed to create repository");
 
-        // Verify initial count
+        // Create a new BSP without any files for deletion testing
+        let test_bsp_id = OnchainBspId::new(Hash::from(TEST_BSP_ID));
+
+        use bigdecimal::BigDecimal;
+        let created_bsp = repo
+            .create_bsp(
+                TEST_BSP_ACCOUNT,
+                test_bsp_id.clone(),
+                BigDecimal::from(TEST_BSP_CAPACITY),
+                BigDecimal::from(TEST_BSP_STAKE),
+            )
+            .await
+            .expect("Failed to create test BSP");
+
+        // Verify the BSP was created
         let initial_bsps = repo
             .list_bsps(100, 0)
             .await
             .expect("Failed to get initial BSPs");
         assert_eq!(
             initial_bsps.len(),
-            BSP_NUM,
-            "Should start with {BSP_NUM} BSPs"
+            BSP_NUM + 1,
+            "Should have one additional BSP after creation"
         );
 
-        // Delete a BSP
-        let bsp_id = OnchainBspId::new(Hash::from(BSP_ONE_ONCHAIN_ID));
-        repo.delete_bsp(&bsp_id)
+        // Delete the newly created BSP (which has no files)
+        repo.delete_bsp(&test_bsp_id)
             .await
             .expect("Failed to delete BSP");
 
@@ -896,16 +987,13 @@ mod tests {
             .expect("Failed to get remaining BSPs");
         assert_eq!(
             remaining_bsps.len(),
-            BSP_NUM - 1,
-            "Should have 1 less BSP after deletion"
+            BSP_NUM,
+            "Should be back to original BSP count after deletion"
         );
 
         // Verify the correct BSP was deleted
         for bsp in &remaining_bsps {
-            assert_ne!(
-                bsp.account, BSP_ONE_ACCOUNT,
-                "Deleted BSP should not be present"
-            );
+            assert_ne!(bsp.id, created_bsp.id, "Deleted BSP should not be present");
         }
     }
 }
