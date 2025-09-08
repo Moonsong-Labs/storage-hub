@@ -12,7 +12,7 @@
     "examples/nextjs"
   ],
   "scripts": {
-    "build": "pnpm --filter ./core run build && pnpm --filter ./msp-client run build",
+    "build": "pnpm run build:core && pnpm run build:msp-client",
     "build:core": "pnpm --filter ./core run build",
     "build:msp-client": "pnpm --filter ./msp-client run build",
     "clean": "node scripts/clean.js",
