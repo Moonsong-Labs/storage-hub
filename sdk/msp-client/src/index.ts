@@ -9,6 +9,7 @@ export type {
   InfoResponse,
   StatsResponse,
   Capacity,
+  ValueProp,
   NonceResponse,
   UploadOptions,
   UploadReceipt,

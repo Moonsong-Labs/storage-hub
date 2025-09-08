@@ -7,6 +7,7 @@ import type {
   HealthStatus,
   InfoResponse,
   StatsResponse,
+  ValueProp,
   NonceResponse,
   UploadOptions,
   UploadReceipt,
@@ -54,6 +55,13 @@ export class MspClient {
   /** Get MSP statistics */
   getStats(options?: { signal?: AbortSignal }): Promise<StatsResponse> {
     return this.http.get<StatsResponse>('/stats', {
+      ...(options?.signal !== undefined && { signal: options.signal }),
+    });
+  }
+
+  /** Get available value propositions */
+  getValueProps(options?: { signal?: AbortSignal }): Promise<ValueProp[]> {
+    return this.http.get<ValueProp[]>('/value-props', {
       ...(options?.signal !== undefined && { signal: options.signal }),
     });
   }

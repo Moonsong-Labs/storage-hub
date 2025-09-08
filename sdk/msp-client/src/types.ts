@@ -154,3 +154,10 @@ export interface StatsResponse {
   valuePropsAmount: number;
   bucketsAmount: number;
 }
+
+export interface ValueProp {
+  id: string;
+  pricePerGbBlock: number;
+  dataLimitPerBucketBytes: number;
+  isAvailable: boolean;
+}
