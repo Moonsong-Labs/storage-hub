@@ -3,29 +3,23 @@
 
 // import type lookup before we augment - in some environments
 // this is required to allow for ambient/previous definitions
-import "@polkadot/api-base/types/consts";
+import '@polkadot/api-base/types/consts';
 
-import type { ApiTypes, AugmentedConst } from "@polkadot/api-base/types";
-import type { Option, u128, u16, u32, u64, u8 } from "@polkadot/types-codec";
-import type { Codec } from "@polkadot/types-codec/types";
-import type { AccountId32, H256, Perbill } from "@polkadot/types/interfaces/runtime";
-import type {
-  FrameSystemLimitsBlockLength,
-  FrameSystemLimitsBlockWeights,
-  SpVersionRuntimeVersion,
-  SpWeightsRuntimeDbWeight,
-  SpWeightsWeightV2Weight
-} from "@polkadot/types/lookup";
+import type { ApiTypes, AugmentedConst } from '@polkadot/api-base/types';
+import type { Option, u128, u16, u32, u64, u8 } from '@polkadot/types-codec';
+import type { Codec } from '@polkadot/types-codec/types';
+import type { AccountId32, H256, Perbill } from '@polkadot/types/interfaces/runtime';
+import type { FrameSystemLimitsBlockLength, FrameSystemLimitsBlockWeights, SpVersionRuntimeVersion, SpWeightsRuntimeDbWeight, SpWeightsWeightV2Weight } from '@polkadot/types/lookup';
 
 export type __AugmentedConst<ApiType extends ApiTypes> = AugmentedConst<ApiType>;
 
-declare module "@polkadot/api-base/types/consts" {
+declare module '@polkadot/api-base/types/consts' {
   interface AugmentedConsts<ApiType extends ApiTypes> {
     aura: {
       /**
        * The slot duration Aura should run with, expressed in milliseconds.
        * The effective value of this type should not change while the chain is running.
-       *
+       * 
        * For backwards compatibility either use [`MinimumPeriodTimesTwo`] or a const.
        **/
       slotDuration: u64 & AugmentedConst<ApiType>;
@@ -37,12 +31,12 @@ declare module "@polkadot/api-base/types/consts" {
     balances: {
       /**
        * The minimum amount required to keep an account open. MUST BE GREATER THAN ZERO!
-       *
+       * 
        * If you *really* need it to be zero, you can enable the feature `insecure_zero_ed` for
        * this pallet. However, you do so at your own risk: this will open up a major DoS vector.
        * In case you have multiple sources of provider references, you may also get unexpected
        * behaviour if you set this to zero.
-       *
+       * 
        * Bottom line: Do yourself a favour and make it at least one!
        **/
       existentialDeposit: u128 & AugmentedConst<ApiType>;
@@ -53,13 +47,13 @@ declare module "@polkadot/api-base/types/consts" {
       /**
        * The maximum number of locks that should exist on an account.
        * Not strictly enforced, but used for weight estimation.
-       *
+       * 
        * Use of locks is deprecated in favour of freezes. See `https://github.com/paritytech/substrate/pull/12951/`
        **/
       maxLocks: u32 & AugmentedConst<ApiType>;
       /**
        * The maximum number of named reserves that can exist on an account.
-       *
+       * 
        * Use of reserves is deprecated in favour of holds. See `https://github.com/paritytech/substrate/pull/12951/`
        **/
       maxReserves: u32 & AugmentedConst<ApiType>;
@@ -76,10 +70,10 @@ declare module "@polkadot/api-base/types/consts" {
       baseStorageRequestCreationDeposit: u128 & AugmentedConst<ApiType>;
       /**
        * Basic security replication target for a new storage request.
-       *
+       * 
        * This should be high enough so that it gives users a ~1% chance of their file
        * being controlled by a single malicious entity under certain network conditions.
-       *
+       * 
        * For more details, see [crate::types::ReplicationTarget].
        **/
       basicReplicationTarget: u32 & AugmentedConst<ApiType>;
@@ -89,7 +83,7 @@ declare module "@polkadot/api-base/types/consts" {
       bspStopStoringFilePenalty: u128 & AugmentedConst<ApiType>;
       /**
        * The deposit paid by a user to create a new file deletion request.
-       *
+       * 
        * This deposit gets returned to the user when the MSP submits an inclusion proof of the file to
        * confirm its deletion, but gets sent to the MSP if the MSP did not actually had the file and
        * sends a non-inclusion proof instead. This is done to prevent users being able to spam MSPs
@@ -98,10 +92,10 @@ declare module "@polkadot/api-base/types/consts" {
       fileDeletionRequestDeposit: u128 & AugmentedConst<ApiType>;
       /**
        * High security replication target for a new storage request.
-       *
+       * 
        * This should be high enough so that it gives users a ~0.01% chance of their file
        * being controlled by a single malicious entity under certain network conditions.
-       *
+       * 
        * For more details, see [crate::types::ReplicationTarget].
        **/
       highSecurityReplicationTarget: u32 & AugmentedConst<ApiType>;
@@ -151,10 +145,10 @@ declare module "@polkadot/api-base/types/consts" {
       moveBucketRequestTtl: u32 & AugmentedConst<ApiType>;
       /**
        * Standard security replication target for a new storage request.
-       *
+       * 
        * This should be high enough so that it gives users a ~0.1% chance of their file
        * being controlled by a single malicious entity under certain network conditions.
-       *
+       * 
        * For more details, see [crate::types::ReplicationTarget].
        **/
       standardReplicationTarget: u32 & AugmentedConst<ApiType>;
@@ -164,10 +158,10 @@ declare module "@polkadot/api-base/types/consts" {
       storageRequestTtl: u32 & AugmentedConst<ApiType>;
       /**
        * Super high security replication target for a new storage request.
-       *
+       * 
        * This should be high enough so that it gives users a ~0.001% chance of their file
        * being controlled by a single malicious entity under certain network conditions.
-       *
+       * 
        * For more details, see [crate::types::ReplicationTarget].
        **/
       superHighSecurityReplicationTarget: u32 & AugmentedConst<ApiType>;
@@ -182,24 +176,24 @@ declare module "@polkadot/api-base/types/consts" {
       treasuryAccount: AccountId32 & AugmentedConst<ApiType>;
       /**
        * Ultra high security replication target for a new storage request.
-       *
+       * 
        * This should be high enough so that it gives users a ~0.0001% chance of their file
        * being controlled by a single malicious entity under certain network conditions.
-       *
+       * 
        * For more details, see [crate::types::ReplicationTarget].
        **/
       ultraHighSecurityReplicationTarget: u32 & AugmentedConst<ApiType>;
       /**
        * The amount of ticks that the user has to pay upfront when issuing a storage request.
-       *
+       * 
        * This is to compensate the system load that the process of file retrieval will have on the network.
        * If this did not exist, a malicious user could spam the network with huge files, making BSPs change
        * their capacity and download a lot of data while the user might not even have the balance to
        * store and pay those BSPs in the long term.
-       *
+       * 
        * It initially exists as a deterrent, since these funds will be transferred to the treasury and not to the BSPs
        * of the network. Governance can then decide what to do with these funds.
-       *
+       * 
        * The amount that the user is going to have to pay is calculated as follows:
        * `Replication Target Chosen * PricePerGigaUnitPerTick * File Size in Gigabytes * UpfrontTicksToPay`
        **/
@@ -212,7 +206,7 @@ declare module "@polkadot/api-base/types/consts" {
     messageQueue: {
       /**
        * The size of the page; this implies the maximum message size which can be sent.
-       *
+       * 
        * A good value depends on the expected message sizes, their weights, the weight that is
        * available for processing them and the maximal needed message size. The maximal message
        * size is slightly lower than this as defined by [`MaxMessageLenOf`].
@@ -222,7 +216,7 @@ declare module "@polkadot/api-base/types/consts" {
        * The maximum amount of weight (if any) to be used from remaining weight `on_idle` which
        * should be provided to the message queue for servicing enqueued items `on_idle`.
        * Useful for parachains to process messages at the same block they are received.
-       *
+       * 
        * If `None`, it will not call `ServiceQueues::service_queues` in `on_idle`.
        **/
       idleMaxServiceWeight: Option<SpWeightsWeightV2Weight> & AugmentedConst<ApiType>;
@@ -235,7 +229,7 @@ declare module "@polkadot/api-base/types/consts" {
       /**
        * The amount of weight (if any) which should be provided to the message queue for
        * servicing enqueued items `on_initialize`.
-       *
+       * 
        * This may be legitimately `None` in the case that you will call
        * `ServiceQueues::service_queues` manually or set [`Self::IdleMaxServiceWeight`] to have
        * it run in `on_idle`.
@@ -354,7 +348,7 @@ declare module "@polkadot/api-base/types/consts" {
     proofsDealer: {
       /**
        * The minimum unused weight that a block must have to be considered _not_ full.
-       *
+       * 
        * This is used as part of the criteria for checking if the network is presumably under a spam attack.
        * For example, this can be set to the benchmarked weight of a `submit_proof` extrinsic, which would
        * mean that a block is not considered full if a `submit_proof` extrinsic could have still fit in it.
@@ -362,11 +356,11 @@ declare module "@polkadot/api-base/types/consts" {
       blockFullnessHeadroom: SpWeightsWeightV2Weight & AugmentedConst<ApiType>;
       /**
        * The period of blocks for which the block fullness is checked.
-       *
+       * 
        * This is the amount of blocks from the past, for which the block fullness has been checked
        * and is stored. Blocks older than `current_block` - [`Config::BlockFullnessPeriod`] are
        * cleared from storage.
-       *
+       * 
        * This constant should be equal or smaller than the [`Config::ChallengeTicksTolerance`] constant,
        * if the goal is to prevent spamming attacks that would prevent honest Providers from submitting
        * their proofs in time.
@@ -394,7 +388,7 @@ declare module "@polkadot/api-base/types/consts" {
        * The tolerance in number of ticks (almost equivalent to blocks, but skipping MBM) that
        * a Provider has to submit a proof, counting from the tick the challenge is emitted for
        * that Provider.
-       *
+       * 
        * For example, if a Provider is supposed to submit a proof for tick `n`, and the tolerance
        * is set to `t`, then the Provider has to submit a proof for challenges in tick `n`, before
        * `n + t`.
@@ -406,7 +400,7 @@ declare module "@polkadot/api-base/types/consts" {
        * `PriorityChallengesQueue` in the `BlockToChallenges` StorageMap. These checkpoint challenge
        * rounds have to be answered by ALL Providers, and this is enforced by the `submit_proof`
        * extrinsic.
-       *
+       * 
        * WARNING: This period needs to be equal or larger than the challenge period of the smallest
        * Provider in the network. If the smallest Provider has a challenge period of 10 ticks (blocks),
        * then the checkpoint challenge period needs to be at least 10 ticks.
@@ -418,7 +412,7 @@ declare module "@polkadot/api-base/types/consts" {
       maxCustomChallengesPerBlock: u32 & AugmentedConst<ApiType>;
       /**
        * The maximum number of Providers that can be slashed per tick.
-       *
+       * 
        * Providers are marked as slashable if they are found in the [`TickToProvidersDeadlines`] StorageMap
        * for the current challenges tick. It is expected that most of the times, there will be little to
        * no Providers in the [`TickToProvidersDeadlines`] StorageMap for the current challenges tick. That
@@ -441,7 +435,7 @@ declare module "@polkadot/api-base/types/consts" {
       /**
        * The minimum ratio (or percentage if you will) of blocks that must be considered _not_ full,
        * from the total number of [`Config::BlockFullnessPeriod`] blocks taken into account.
-       *
+       * 
        * If less than this percentage of blocks are not full, the networks is considered to be presumably
        * under a spam attack.
        * This can also be thought of as the maximum ratio of misbehaving collators tolerated. For example,
@@ -487,7 +481,7 @@ declare module "@polkadot/api-base/types/consts" {
     providers: {
       /**
        * The amount of blocks that a BSP must wait before being able to sign off, after being signed up.
-       *
+       * 
        * This is to prevent BSPs from signing up and off too quickly, thus making it harder for an attacker
        * to suddenly have a large portion of the total number of BSPs. The reason for this, is that the
        * attacker would have to lock up a large amount of funds for this period of time.
@@ -520,7 +514,7 @@ declare module "@polkadot/api-base/types/consts" {
       maxExpiredItemsInBlock: u32 & AugmentedConst<ApiType>;
       /**
        * The estimated maximum size of an unknown file.
-       *
+       * 
        * Used primarily to slash a Storage Provider when it fails to provide a chunk of data for an unknown file size.
        **/
       maxFileSize: u64 & AugmentedConst<ApiType>;
@@ -542,7 +536,7 @@ declare module "@polkadot/api-base/types/consts" {
       minBlocksBetweenCapacityChanges: u32 & AugmentedConst<ApiType>;
       /**
        * Time-to-live for a provider to top up their deposit to cover a capacity deficit.
-       *
+       * 
        * This TTL is used to determine at what point to insert the expiration item in the
        * [`ProviderTopUpExpirations`] storage which is processed in the `on_idle` hook at
        * the time when the tick has been reached.
@@ -600,7 +594,7 @@ declare module "@polkadot/api-base/types/consts" {
       dbWeight: SpWeightsRuntimeDbWeight & AugmentedConst<ApiType>;
       /**
        * The designated SS58 prefix of this chain.
-       *
+       * 
        * This replaces the "ss58Format" property declared in the chain spec. Reason is
        * that the runtime should know about the prefix in order to make use of it as
        * an identifier of the chain.
@@ -618,7 +612,7 @@ declare module "@polkadot/api-base/types/consts" {
     timestamp: {
       /**
        * The minimum period between blocks.
-       *
+       * 
        * Be aware that this is different to the *expected* period that the block production
        * apparatus provides. Your chosen consensus system will generally work with this to
        * determine a sensible block time. For example, in the Aura pallet it will be double this
@@ -634,21 +628,21 @@ declare module "@polkadot/api-base/types/consts" {
       /**
        * A fee multiplier for `Operational` extrinsics to compute "virtual tip" to boost their
        * `priority`
-       *
+       * 
        * This value is multiplied by the `final_fee` to obtain a "virtual tip" that is later
        * added to a tip component in regular `priority` calculations.
        * It means that a `Normal` transaction can front-run a similarly-sized `Operational`
        * extrinsic (with no tip), by including a tip value greater than the virtual tip.
-       *
+       * 
        * ```rust,ignore
        * // For `Normal`
        * let priority = priority_calc(tip);
-       *
+       * 
        * // For `Operational`
        * let virtual_tip = (inclusion_fee + tip) * OperationalFeeMultiplier;
        * let priority = priority_calc(tip + virtual_tip);
        * ```
-       *
+       * 
        * Note that since we use `final_fee` the multiplier applies also to the regular `tip`
        * sent with the transaction. So, not only does the transaction get a priority bump based
        * on the `inclusion_fee`, but we also amplify the impact of tips applied to `Operational`
@@ -663,7 +657,7 @@ declare module "@polkadot/api-base/types/consts" {
     xcmpQueue: {
       /**
        * Maximal number of outbound XCMP channels that can have messages queued at the same time.
-       *
+       * 
        * If this is reached, then no further messages can be sent to channels that do not yet
        * have a message queued. This should be set to the expected maximum of outbound channels
        * which is determined by [`Self::ChannelInfo`]. It is important to set this large enough,
@@ -674,7 +668,7 @@ declare module "@polkadot/api-base/types/consts" {
       maxActiveOutboundChannels: u32 & AugmentedConst<ApiType>;
       /**
        * The maximum number of inbound XCMP channels that can be suspended simultaneously.
-       *
+       * 
        * Any further channel suspensions will fail and messages may get dropped without further
        * notice. Choosing a high value (1000) is okay; the trade-off that is described in
        * [`InboundXcmpSuspended`] still applies at that scale.
@@ -682,7 +676,7 @@ declare module "@polkadot/api-base/types/consts" {
       maxInboundSuspended: u32 & AugmentedConst<ApiType>;
       /**
        * The maximal page size for HRMP message pages.
-       *
+       * 
        * A lower limit can be set dynamically, but this is the hard-limit for the PoV worst case
        * benchmarking. The limit for the size of a message is slightly below this, since some
        * overhead is incurred for encoding the format.

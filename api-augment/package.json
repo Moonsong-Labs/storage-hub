@@ -9,8 +9,12 @@
     "tsc": "tsc --noEmit --pretty",
     "build": "tsc -b --verbose",
     "generate:all": "pnpm generate:defs && pnpm generate:meta",
-    "generate:defs": "pnpm tsx node_modules/@polkadot/typegen/scripts/polkadot-types-from-defs.mjs --package @storagehub/api-augment/parachain/interfaces  --input ./src/parachain/interfaces --endpoint ./metadata-sh-parachain.json",
-    "generate:meta": "pnpm tsx node_modules/@polkadot/typegen/scripts/polkadot-types-from-chain.mjs --package @storagehub/api-augment/parachain/interfaces --endpoint ./metadata-sh-parachain.json --output ./src/parachain/interfaces"
+    "generate:defs": "pnpm generate:defs:parachain && pnpm generate:defs:solochain-evm",
+    "generate:meta": "pnpm generate:meta:parachain && pnpm generate:meta:solochain-evm",
+    "generate:defs:parachain": "pnpm tsx node_modules/@polkadot/typegen/scripts/polkadot-types-from-defs.mjs --package @storagehub/api-augment/parachain/interfaces  --input ./src/parachain/interfaces --endpoint ./metadata-sh-parachain.json",
+    "generate:meta:parachain": "pnpm tsx node_modules/@polkadot/typegen/scripts/polkadot-types-from-chain.mjs --package @storagehub/api-augment/parachain/interfaces --endpoint ./metadata-sh-parachain.json --output ./src/parachain/interfaces",
+    "generate:defs:solochain-evm": "pnpm tsx node_modules/@polkadot/typegen/scripts/polkadot-types-from-defs.mjs --package @storagehub/api-augment/solochain-evm/interfaces  --input ./src/solochain-evm/interfaces --endpoint ./metadata-sh-solochain-evm.json",
+    "generate:meta:solochain-evm": "pnpm tsx node_modules/@polkadot/typegen/scripts/polkadot-types-from-chain.mjs --package @storagehub/api-augment/solochain-evm/interfaces --endpoint ./metadata-sh-solochain-evm.json --output ./src/solochain-evm/interfaces"
   },
   "keywords": [],
   "author": "",
