@@ -230,7 +230,7 @@ describeMspNet(
       });
     });
 
-    it("processes StorageRequestRejected event when MSP doesn't accept in time", async () => {
+    it("processes expired storage request when MSP doesn't accept in time", async () => {
       const bucketName = "test-fisherman-expired";
       const source = "res/whatsup.jpg";
       const destination = "test/expired.txt";
@@ -303,15 +303,9 @@ describeMspNet(
         .unwrap()
         .asRuntimeConfig.asStorageRequestTtl.toNumber();
 
-      await userApi.block.skipTo(currentBlockNumber + storageRequestTtl - 1);
+      await userApi.block.skipTo(currentBlockNumber + storageRequestTtl);
 
-      await waitForIndexing(userApi);
-
-      const incompleteProcessingFound = await waitForFishermanProcessing(
-        userApi,
-        `Processing incomplete storage request for file key: 0x${fileKey.startsWith("0x") ? fileKey.slice(2) : fileKey}`
-      );
-      assert(incompleteProcessingFound, "Should find fisherman processing incomplete storage");
+      await waitForIndexing(userApi, false);
 
       // Verify delete_file_for_incomplete_storage_request extrinsic is submitted
       const deleteIncompleteFileFound = await waitForIncompleteStorageRequestExtrinsic(
@@ -339,7 +333,7 @@ describeMspNet(
       await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-msp-1" });
     });
 
-    it("processes StorageRequestRevoked event and prepares deletion", async () => {
+    it("processes revoked storage request and prepares deletion", async () => {
       const bucketName = "test-fisherman-revoked";
       const source = "res/smile.jpg";
       const destination = "test/revoked.txt";

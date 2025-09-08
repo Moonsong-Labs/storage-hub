@@ -2243,7 +2243,7 @@ declare module "@polkadot/types/lookup" {
     readonly isFileDeletedFromIncompleteStorageRequest: boolean;
     readonly asFileDeletedFromIncompleteStorageRequest: {
       readonly fileKey: H256;
-      readonly providerId: H256;
+      readonly providerId: Option<H256>;
     } & Struct;
     readonly isIncompleteStorageRequest: boolean;
     readonly asIncompleteStorageRequest: {
@@ -4870,7 +4870,7 @@ declare module "@polkadot/types/lookup" {
     readonly isDeleteFileForIncompleteStorageRequest: boolean;
     readonly asDeleteFileForIncompleteStorageRequest: {
       readonly fileKey: H256;
-      readonly providerId: H256;
+      readonly providerId: Option<H256>;
       readonly forestProof: SpTrieStorageProofCompactProof;
     } & Struct;
     readonly type:
@@ -6167,10 +6167,10 @@ declare module "@polkadot/types/lookup" {
     readonly owner: AccountId32;
     readonly bucketId: H256;
     readonly location: Bytes;
-    readonly size_: u64;
+    readonly fileSize: u64;
     readonly fingerprint: H256;
     readonly pendingBspRemovals: Vec<H256>;
-    readonly pendingMspRemoval: Option<H256>;
+    readonly pendingBucketRemoval: bool;
   }
 
   /** @name PalletFileSystemError (492) */

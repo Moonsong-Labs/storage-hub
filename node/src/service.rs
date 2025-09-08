@@ -4,7 +4,7 @@
 use futures::{Stream, StreamExt};
 use log::{error, info};
 use shc_blockchain_service::capacity_manager::CapacityConfig;
-use shc_client::builder::{FishermanOptions, IndexerOptions};
+use shc_client::builder::{BlockchainServiceOptions, FishermanOptions, IndexerOptions};
 use shc_indexer_db::DbPool;
 use shc_indexer_service::spawn_indexer_service;
 use std::{cell::RefCell, path::PathBuf, sync::Arc, time::Duration};
@@ -249,6 +249,7 @@ async fn configure_and_spawn_indexer(
 async fn configure_and_spawn_fisherman(
     fisherman_options: &Option<FishermanOptions>,
     indexer_config: &Option<IndexerOptions>,
+    blockchain_service_config: &Option<BlockchainServiceOptions>,
     task_manager: &TaskManager,
     client: Arc<ParachainClient>,
     keystore: KeystorePtr,
@@ -302,6 +303,9 @@ async fn configure_and_spawn_fisherman(
             false, // Not in maintenance mode
         )
         .await;
+    if let Some(c) = blockchain_service_config {
+        fisherman_builder.with_blockchain_service_config(c.clone());
+    }
 
     fisherman_builder.with_peer_manager(rocksdb_path);
     let (_sender, receiver) = async_channel::bounded(1);
@@ -694,6 +698,9 @@ where
     configure_and_spawn_fisherman(
         &fisherman_options,
         &indexer_options,
+        &provider_options
+            .as_ref()
+            .and_then(|opts| opts.blockchain_service.clone()),
         &task_manager,
         client.clone(),
         keystore.clone(),
@@ -1235,6 +1242,9 @@ where
     configure_and_spawn_fisherman(
         &fisherman_options,
         &indexer_options,
+        &provider_options
+            .as_ref()
+            .and_then(|opts| opts.blockchain_service.clone()),
         &task_manager,
         client.clone(),
         keystore.clone(),
@@ -1460,6 +1470,9 @@ where
     configure_and_spawn_fisherman(
         &fisherman_options,
         &indexer_options,
+        &provider_options
+            .as_ref()
+            .and_then(|opts| opts.blockchain_service.clone()),
         &task_manager,
         client.clone(),
         keystore.clone(),

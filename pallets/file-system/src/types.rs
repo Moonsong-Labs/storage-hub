@@ -451,31 +451,33 @@ pub struct IncompleteStorageRequestMetadata<T: Config> {
     /// File location/path
     pub location: FileLocation<T>,
     /// File size
-    pub size: StorageDataUnit<T>,
+    pub file_size: StorageDataUnit<T>,
     /// File fingerprint
     pub fingerprint: Fingerprint<T>,
     /// BSPs that still need to remove the file (bounded by max number of BSPs that can have confirmed)
     pub pending_bsp_removals: BoundedVec<ProviderIdFor<T>, MaxReplicationTarget<T>>,
-    /// MSP that still needs to remove the file (if any)
-    pub pending_msp_removal: Option<ProviderIdFor<T>>,
+    /// Whether the file still needs to be removed from the bucket
+    pub pending_bucket_removal: bool,
 }
 
 impl<T: Config> IncompleteStorageRequestMetadata<T> {
     /// Check if all providers have removed their files
     pub fn is_fully_cleaned(&self) -> bool {
-        self.pending_bsp_removals.is_empty() && self.pending_msp_removal.is_none()
+        self.pending_bsp_removals.is_empty() && !self.pending_bucket_removal
     }
 
     /// Remove a provider from pending lists
-    pub fn remove_provider(&mut self, provider_id: ProviderIdFor<T>) {
-        // Check MSP first
-        if let Some(msp_id) = self.pending_msp_removal {
-            if msp_id == provider_id {
-                self.pending_msp_removal = None;
+    pub fn remove_provider(&mut self, provider_id: Option<ProviderIdFor<T>>) {
+        match provider_id {
+            None => {
+                // Bucket removal complete
+                self.pending_bucket_removal = false;
+            }
+            Some(id) => {
+                // Remove BSP from the pending list
+                self.pending_bsp_removals.retain(|&bsp_id| bsp_id != id);
             }
         }
-        // Check BSPs
-        self.pending_bsp_removals.retain(|&id| id != provider_id);
     }
 }
 
@@ -491,10 +493,9 @@ impl<T: Config> From<(&StorageRequestMetadata<T>, &MerkleHash<T>)>
             }
         }
 
-        let accepted_msp = match storage_request.msp {
-            Some((msp_id, true)) => Some(msp_id),
-            _ => None,
-        };
+        // Check if MSP has accepted the storage request since this would require a fisherman to delete the file from the bucket
+        // to update its forest root back
+        let pending_bucket_removal = matches!(storage_request.msp, Some((_, true)));
 
         let bounded_bsps = BoundedVec::truncate_from(confirmed_bsps);
 
@@ -502,10 +503,10 @@ impl<T: Config> From<(&StorageRequestMetadata<T>, &MerkleHash<T>)>
             owner: storage_request.owner.clone(),
             bucket_id: storage_request.bucket_id,
             location: storage_request.location.clone(),
-            size: storage_request.size,
+            file_size: storage_request.size,
             fingerprint: storage_request.fingerprint,
             pending_bsp_removals: bounded_bsps,
-            pending_msp_removal: accepted_msp,
+            pending_bucket_removal,
         }
     }
 }

@@ -675,7 +675,7 @@ declare module "@polkadot/api-base/types/submittable" {
       deleteFileForIncompleteStorageRequest: AugmentedSubmittable<
         (
           fileKey: H256 | string | Uint8Array,
-          providerId: H256 | string | Uint8Array,
+          providerId: Option<H256> | null | Uint8Array | H256 | string,
           forestProof:
             | SpTrieStorageProofCompactProof
             | {
@@ -684,7 +684,7 @@ declare module "@polkadot/api-base/types/submittable" {
             | string
             | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, H256, SpTrieStorageProofCompactProof]
+        [H256, Option<H256>, SpTrieStorageProofCompactProof]
       >;
       /**
        * Issue a new storage request for a file

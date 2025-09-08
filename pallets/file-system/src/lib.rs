@@ -783,7 +783,7 @@ pub mod pallet {
         /// Notifies that a file has been deleted from a rejected storage request.
         FileDeletedFromIncompleteStorageRequest {
             file_key: MerkleHash<T>,
-            provider_id: ProviderIdFor<T>,
+            provider_id: Option<ProviderIdFor<T>>,
         },
         /// Notifies that a storage request was marked as incomplete.
         ///
@@ -1540,7 +1540,7 @@ pub mod pallet {
         pub fn delete_file_for_incomplete_storage_request(
             origin: OriginFor<T>,
             file_key: MerkleHash<T>,
-            provider_id: ProviderIdFor<T>,
+            provider_id: Option<ProviderIdFor<T>>,
             forest_proof: ForestProof<T>,
         ) -> DispatchResult {
             // TODO: We need to reward the caller of delete_file_for_incomplete_storage_request

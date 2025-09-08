@@ -11762,14 +11762,14 @@ mod delete_file_tests {
                 let expected_initial_payment_stream_rate = (initial_bucket_size_in_giga_units as u128) * price_per_giga_unit_of_data_per_block + zero_sized_bucket_rate;
 
                 assert_eq!(initial_payment_stream_value, Some(expected_initial_payment_stream_rate));
-                // Create signature 
+                // Create signature
                 let (signed_delete_intention, signature) =
                     create_file_deletion_signature(&Keyring::Alice, file_key);
 
                 // Get the current bucket root before deletion
                 let old_bucket_root = <<Test as crate::Config>::Providers as ReadBucketsInterface>::get_root_bucket(&bucket_id).unwrap();
 
-                // Create forest proof 
+                // Create forest proof
                 let forest_proof = CompactProof {
                     encoded_nodes: vec![file_key.as_ref().to_vec()],
                 };
@@ -11782,7 +11782,7 @@ mod delete_file_tests {
                     Some(bucket_id.encode()),
                 ).unwrap();
 
-                // This is incorrect behaviour given that apply_delta returns the mutation provided (in our case, the value we pass as `file_key` 
+                // This is incorrect behaviour given that apply_delta returns the mutation provided (in our case, the value we pass as `file_key`
                 // to `delete_file_for_incomplete_storage_request`) instead of the new root calculated after the mutation.
                 // TODO: Consider using the real `apply_delta` from the `file_system` pallet to enable correct testing.
                 assert_eq!(expected_new_root, file_key);
@@ -11889,7 +11889,7 @@ mod delete_file_tests {
                     Some(bsp_id.encode()),
                 ).unwrap();
 
-                // This is incorrect behaviour given that apply_delta returns the mutation provided (in our case, the value we pass as `file_key` 
+                // This is incorrect behaviour given that apply_delta returns the mutation provided (in our case, the value we pass as `file_key`
                 // to `delete_file_for_incomplete_storage_request`) instead of the new root calculated after the mutation.
                 // TODO: Consider using the real `apply_delta` from the `file_system` pallet to enable correct testing.
                 assert_eq!(expected_new_root, file_key);
@@ -12007,7 +12007,7 @@ mod delete_file_tests {
                     Some(bsp_id.encode()),
                 ).unwrap();
 
-                // This is incorrect behaivour given that apply_delta returns the mutation provided (in our case, the value we pass as `file_key` 
+                // This is incorrect behaivour given that apply_delta returns the mutation provided (in our case, the value we pass as `file_key`
                 // to `delete_file_for_incomplete_storage_request`) instead of the new root calculated after the mutation.
                 // TODO: Consider using the real `apply_delta` from the `file_system` pallet to enable correct testing.
                 assert_eq!(expected_new_root, file_key);
@@ -12102,7 +12102,7 @@ mod delete_file_tests {
                     Some(bucket_id.encode()),
                 ).unwrap();
 
-                // This is incorrect behaviour given that apply_delta returns the mutation provided (in our case, the value we pass as `file_key` 
+                // This is incorrect behaviour given that apply_delta returns the mutation provided (in our case, the value we pass as `file_key`
                 // to `delete_file_for_incomplete_storage_request`) instead of the new root calculated after the mutation.
                 // TODO: Consider using the real `apply_delta` from the `file_system` pallet to enable correct testing.
                 assert_eq!(expected_new_root, file_key);
@@ -12547,7 +12547,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 // Verify the incomplete storage request has the correct BSPs
                 let incomplete_storage_request = IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
                 assert_eq!(incomplete_storage_request.pending_bsp_removals, vec![bsp_id]);
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
 
                 // Create forest proof showing BSP stores the file
                 let forest_proof = CompactProof {
@@ -12563,9 +12563,9 @@ mod delete_file_for_incomplete_storage_request_tests {
                 ));
 
                 // Warning
-                // We can't perform this check that after deleting the only file that a BSP is storing, the root 
-                // should revert to the default root, because the `apply_delta` function defined in the mock runtime 
-                // returns the mutation provided (in our case, the value we pass as `file_key` to 
+                // We can't perform this check that after deleting the only file that a BSP is storing, the root
+                // should revert to the default root, because the `apply_delta` function defined in the mock runtime
+                // returns the mutation provided (in our case, the value we pass as `file_key` to
                 // `delete_file_for_incomplete_storage_request`) instead of the new root calculated after the mutation.
                 // Reference: https://github.com/Moonsong-Labs/storage-hub/blob/main/pallets/file-system/src/mock.rs#L568C5-L586
                 //
@@ -12573,8 +12573,8 @@ mod delete_file_for_incomplete_storage_request_tests {
                 // let bsp_root_after_deleting = <<Test as crate::Config>::Providers as ReadProvidersInterface>::get_root(bsp_id).unwrap();
                 // assert_eq!(bsp_root_after_deleting, default_root);
                 //
-                // A similar issue exists in the `bsp_confirm_stop_storing` test. There, the `default_root` is passed 
-                // to the extrinsic (and a custom `PendingStopStoringRequests` is injected). We can’t do that here, 
+                // A similar issue exists in the `bsp_confirm_stop_storing` test. There, the `default_root` is passed
+                // to the extrinsic (and a custom `PendingStopStoringRequests` is injected). We can’t do that here,
                 // since we check the integrity of the `file_key` against the `StorageRequest`.
                 //
                 // This limitation means we can’t test whether the challenge cycles stop.
@@ -12794,7 +12794,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
 
                 assert!(
                     IncompleteStorageRequests::<Test>::get(&file_key2).is_some(),
@@ -12806,7 +12806,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
 
                 // Verify second storage request was marked as rejected
                 System::assert_has_event(
@@ -13022,7 +13022,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp2_id, bsp1_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
 
                 // Storage request was marked as rejected
                 System::assert_has_event(
@@ -13075,7 +13075,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp2_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
 
                 // Second BSP deletion - this should trigger full cleanup
                 let forest_proof_delete2 = CompactProof {
@@ -13199,7 +13199,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
 
                 // Verify can successfully cleanup with delete_file_for_incomplete_storage_request
                 let forest_proof_delete = CompactProof {
@@ -13304,7 +13304,10 @@ mod delete_file_for_incomplete_storage_request_tests {
                 let incomplete_storage_request =
                     IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
                 assert!(incomplete_storage_request.pending_bsp_removals.is_empty());
-                assert_eq!(incomplete_storage_request.pending_msp_removal, Some(msp_id));
+                assert_eq!(
+                    incomplete_storage_request.pending_bucket_removal,
+                    Some(msp_id)
+                );
 
                 // Verify can successfully cleanup with delete_file_for_incomplete_storage_request
                 let forest_proof_delete = CompactProof {
@@ -13436,7 +13439,10 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp_id]
                 );
-                assert_eq!(incomplete_storage_request.pending_msp_removal, Some(msp_id));
+                assert_eq!(
+                    incomplete_storage_request.pending_bucket_removal,
+                    Some(msp_id)
+                );
 
                 // Delete file from MSP first
                 let msp_forest_proof_delete = CompactProof {
@@ -13461,7 +13467,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
 
                 // Delete file from BSP (last provider)
                 let bsp_forest_proof_delete = CompactProof {
@@ -13601,7 +13607,10 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp_id]
                 );
-                assert_eq!(incomplete_storage_request.pending_msp_removal, Some(msp_id));
+                assert_eq!(
+                    incomplete_storage_request.pending_bucket_removal,
+                    Some(msp_id)
+                );
 
                 // Delete file from BSP first
                 let bsp_forest_proof_delete = CompactProof {
@@ -13623,7 +13632,10 @@ mod delete_file_for_incomplete_storage_request_tests {
                 let incomplete_storage_request =
                     IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
                 assert!(incomplete_storage_request.pending_bsp_removals.is_empty());
-                assert_eq!(incomplete_storage_request.pending_msp_removal, Some(msp_id));
+                assert_eq!(
+                    incomplete_storage_request.pending_bucket_removal,
+                    Some(msp_id)
+                );
 
                 // Delete file from MSP (last provider)
                 let msp_forest_proof_delete = CompactProof {
@@ -13748,7 +13760,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
 
                 // Verify can successfully cleanup with delete_file_for_incomplete_storage_request
                 let forest_proof_delete = CompactProof {
@@ -14268,7 +14280,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp1_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
 
                 // Try to delete from BSP2
                 let forest_proof_delete = CompactProof {
@@ -14296,7 +14308,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp1_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
             });
         }
 
@@ -14375,7 +14387,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
             });
         }
 
@@ -14456,7 +14468,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp2_id, bsp_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
 
                 // First deletion succeeds
                 let forest_proof_delete = CompactProof {
@@ -14481,7 +14493,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp2_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
 
                 // Try to delete again - should fail because this BSP no longer stores the file
                 assert_noop!(
@@ -14555,7 +14567,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
 
                 // Try to delete with invalid forest proof
                 let invalid_forest_proof = CompactProof {
@@ -14583,7 +14595,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
             });
         }
 
@@ -14622,7 +14634,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                         fingerprint,
                         size,
                         pending_bsp_removals: BoundedVec::try_from(vec![bsp_id]).unwrap(),
-                        pending_msp_removal: None,
+                        pending_bucket_removal: false,
                     },
                 );
 

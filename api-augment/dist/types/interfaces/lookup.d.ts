@@ -4536,16 +4536,13 @@ declare const _default: {
    * Lookup490: pallet_file_system::types::IncompleteStorageRequestMetadata<T>
    **/
   PalletFileSystemIncompleteStorageRequestMetadata: {
-    _alias: {
-      size_: string;
-    };
     owner: string;
     bucketId: string;
     location: string;
-    size_: string;
+    fileSize: string;
     fingerprint: string;
     pendingBspRemovals: string;
-    pendingMspRemoval: string;
+    pendingBucketRemoval: string;
   };
   /**
    * Lookup492: pallet_file_system::pallet::Error<T>

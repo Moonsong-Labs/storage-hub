@@ -23,7 +23,8 @@ use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 use pallet_file_system_runtime_api::{
     GenericApplyDeltaEventInfoError, IsStorageRequestOpenToVolunteersError,
     QueryBspConfirmChunksToProveForFileError, QueryConfirmChunksToProveForFileError,
-    QueryFileEarliestVolunteerTickError, QueryMspConfirmChunksToProveForFileError,
+    QueryFileEarliestVolunteerTickError, QueryIncompleteStorageRequestMetadataError,
+    QueryMspConfirmChunksToProveForFileError,
 };
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
 use shp_constants::GIGAUNIT;
@@ -348,6 +349,38 @@ where
     ) -> Result<BucketIdFor<T>, GenericApplyDeltaEventInfoError> {
         Self::do_decode_generic_apply_delta_event_info(encoded_event_info.as_ref())
             .map_err(|_| GenericApplyDeltaEventInfoError::DecodeError)
+    }
+
+    pub fn query_incomplete_storage_request_metadata(
+        file_key: MerkleHash<T>,
+    ) -> Result<
+        pallet_file_system_runtime_api::IncompleteStorageRequestMetadataResponse<
+            T::AccountId,
+            BucketIdFor<T>,
+            StorageDataUnit<T>,
+            Fingerprint<T>,
+            ProviderIdFor<T>,
+        >,
+        QueryIncompleteStorageRequestMetadataError,
+    > {
+        let metadata = IncompleteStorageRequests::<T>::get(&file_key)
+            .ok_or(QueryIncompleteStorageRequestMetadataError::StorageNotFound)?;
+
+        // Convert to response type
+        let pending_bsp_removals: Vec<ProviderIdFor<T>> =
+            metadata.pending_bsp_removals.into_iter().collect();
+
+        Ok(
+            pallet_file_system_runtime_api::IncompleteStorageRequestMetadataResponse {
+                owner: metadata.owner,
+                bucket_id: metadata.bucket_id,
+                location: metadata.location.to_vec(),
+                file_size: metadata.file_size,
+                fingerprint: metadata.fingerprint,
+                pending_bsp_removals,
+                pending_bucket_removal: metadata.pending_bucket_removal,
+            },
+        )
     }
 
     fn query_confirm_chunks_to_prove_for_file(
@@ -1306,7 +1339,7 @@ where
 
     pub(crate) fn do_delete_file_for_incomplete_storage_request(
         file_key: MerkleHash<T>,
-        provider_id: ProviderIdFor<T>,
+        provider_id: Option<ProviderIdFor<T>>,
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
         // Fetch incomplete storage request metadata
@@ -1320,47 +1353,54 @@ where
             incomplete_storage_request_metadata.owner.clone(),
             incomplete_storage_request_metadata.bucket_id,
             incomplete_storage_request_metadata.location.clone(),
-            incomplete_storage_request_metadata.size,
+            incomplete_storage_request_metadata.file_size,
             incomplete_storage_request_metadata.fingerprint,
         )
         .map_err(|_| Error::<T>::FailedToComputeFileKey)?;
 
         ensure!(computed_file_key == file_key, Error::<T>::FileKeyMismatch);
 
-        // Perform deletion based on provider type
-        if <T::Providers as ReadStorageProvidersInterface>::is_msp(&provider_id) {
-            // Check that the provider_id is the msp that is storing the file in the incomplete storage request metadata
-            ensure!(
-                incomplete_storage_request_metadata.pending_msp_removal == Some(provider_id),
-                Error::<T>::ProviderNotStoringFile
-            );
+        // Perform deletion based on whether provider_id is provided
+        match provider_id {
+            None => {
+                // Bucket deletion - no specific provider
+                ensure!(
+                    incomplete_storage_request_metadata.pending_bucket_removal,
+                    Error::<T>::ProviderNotStoringFile
+                );
 
-            Self::delete_file_from_msp(
-                incomplete_storage_request_metadata.owner.clone(),
-                file_key,
-                incomplete_storage_request_metadata.size,
-                incomplete_storage_request_metadata.bucket_id,
-                provider_id,
-                forest_proof,
-            )?;
-        } else if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&provider_id) {
-            // Check that the provider_id is in the pending removal lists
-            ensure!(
-                incomplete_storage_request_metadata
-                    .pending_bsp_removals
-                    .contains(&provider_id),
-                Error::<T>::ProviderNotStoringFile
-            );
+                // Get the MSP storing the bucket
+                let msp_id = <T::Providers as ReadBucketsInterface>::get_msp_of_bucket(
+                    &incomplete_storage_request_metadata.bucket_id,
+                )?
+                .ok_or(Error::<T>::MspNotStoringBucket)?;
 
-            Self::delete_file_from_bsp(
-                incomplete_storage_request_metadata.owner.clone(),
-                file_key,
-                incomplete_storage_request_metadata.size,
-                provider_id,
-                forest_proof,
-            )?;
-        } else {
-            return Err(Error::<T>::InvalidProviderID.into());
+                Self::delete_file_from_msp(
+                    incomplete_storage_request_metadata.owner.clone(),
+                    file_key,
+                    incomplete_storage_request_metadata.file_size,
+                    incomplete_storage_request_metadata.bucket_id,
+                    msp_id,
+                    forest_proof,
+                )?;
+            }
+            Some(provider_id) => {
+                // BSP deletion - specific provider
+                ensure!(
+                    incomplete_storage_request_metadata
+                        .pending_bsp_removals
+                        .contains(&provider_id),
+                    Error::<T>::ProviderNotStoringFile
+                );
+
+                Self::delete_file_from_bsp(
+                    incomplete_storage_request_metadata.owner.clone(),
+                    file_key,
+                    incomplete_storage_request_metadata.file_size,
+                    provider_id,
+                    forest_proof,
+                )?;
+            }
         }
 
         // Remove provider from pending lists

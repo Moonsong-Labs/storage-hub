@@ -103,7 +103,6 @@ where
 }
 
 const LOG_TARGET: &str = "fisherman-process-file-deletion-task";
-const LOG_TARGET_INCOMPLETE: &str = "fisherman-process-incomplete-storage-task";
 
 /// Task handler for processing signed file deletion requests from fisherman service.
 ///
@@ -310,7 +309,7 @@ where
 {
     async fn handle_event(&mut self, event: ProcessIncompleteStorageRequest) -> anyhow::Result<()> {
         info!(
-            target: LOG_TARGET_INCOMPLETE,
+            target: LOG_TARGET,
             "Processing incomplete storage request for file key: {:?}",
             event.file_key
         );
@@ -320,36 +319,54 @@ where
         // Fetch common file deletion data
         let deletion_data = fetch_file_deletion_data(&self.storage_hub_handler, file_key).await?;
 
+        // Query the incomplete storage request metadata to check if bucket deletion is needed
+        let incomplete_metadata = self
+            .fisherman_service
+            .query_incomplete_storage_request(*file_key)
+            .await
+            .map_err(|e| anyhow!("Failed to query incomplete storage request: {:?}", e))?;
+
         // Create a vector of futures for parallel processing
         let mut deletion_futures: Vec<BoxFuture<'_, anyhow::Result<()>>> = Vec::new();
 
         let file_metadata_ref = &deletion_data.file_metadata;
 
-        // Process bucket deletion only if MSP association exists
-        let self_clone = self.clone();
-
-        deletion_futures.push(Box::pin(async move {
-            self_clone
-                .process_deletion_for_target_incomplete(
-                    file_key,
-                    deletion_data.bucket_target,
-                    file_metadata_ref,
-                )
-                .await
-        }));
-
-        // Process BSP targets in parallel
-        for onchain_bsp_id in deletion_data.bsp_ids {
-            // Convert OnchainBspId to H256 for the target
-            let bsp_target = FileDeletionTarget::BspId(onchain_bsp_id.into());
-
+        // Process bucket deletion only if pending_bucket_removal is true
+        if incomplete_metadata.pending_bucket_removal {
             let self_clone = self.clone();
 
             deletion_futures.push(Box::pin(async move {
                 self_clone
-                    .process_deletion_for_target_incomplete(file_key, bsp_target, file_metadata_ref)
+                    .process_deletion_for_target_incomplete(
+                        file_key,
+                        deletion_data.bucket_target,
+                        file_metadata_ref,
+                    )
                     .await
             }));
+        }
+
+        // Process BSP targets in parallel - only those that are in pending_bsp_removals
+        for onchain_bsp_id in deletion_data.bsp_ids {
+            let bsp_id = onchain_bsp_id.into();
+
+            // Check if this BSP is in the pending removals list
+            if incomplete_metadata.pending_bsp_removals.contains(&bsp_id) {
+                // Convert OnchainBspId to H256 for the target
+                let bsp_target = FileDeletionTarget::BspId(bsp_id);
+
+                let self_clone = self.clone();
+
+                deletion_futures.push(Box::pin(async move {
+                    self_clone
+                        .process_deletion_for_target_incomplete(
+                            file_key,
+                            bsp_target,
+                            file_metadata_ref,
+                        )
+                        .await
+                }));
+            }
         }
 
         // Execute all deletions in parallel and collect results
@@ -359,6 +376,8 @@ where
         for result in results {
             result?;
         }
+
+        trace!("Completed processing incomplete storage requests");
 
         Ok(())
     }
@@ -487,7 +506,7 @@ where
         file_metadata: &shc_common::types::FileMetadata,
     ) -> anyhow::Result<()> {
         info!(
-            target: LOG_TARGET_INCOMPLETE,
+            target: LOG_TARGET,
             "Processing deletion for file key {:?} and target {:?} (incomplete storage)",
             file_key,
             deletion_target
@@ -505,18 +524,21 @@ where
             .await?;
 
         trace!(
-            target: LOG_TARGET_INCOMPLETE,
+            target: LOG_TARGET,
             "Submitting delete_file_for_incomplete_storage_request extrinsic"
         );
 
         // Build the delete_file_for_incomplete_storage_request extrinsic call
+        // Pass None for bucket deletion (MSP), Some(id) for BSP deletion
+        let provider_id_param = match provider_id {
+            StorageProviderId::BackupStorageProvider(id) => Some(id),
+            StorageProviderId::MainStorageProvider(_) => None, // Bucket deletion
+        };
+
         let call =
             pallet_file_system::Call::<Runtime>::delete_file_for_incomplete_storage_request {
                 file_key: (*file_key).into(),
-                provider_id: match provider_id {
-                    StorageProviderId::BackupStorageProvider(id) => id,
-                    StorageProviderId::MainStorageProvider(id) => id,
-                },
+                provider_id: provider_id_param,
                 forest_proof: forest_proof.proof,
             };
 
@@ -530,7 +552,7 @@ where
             .await
             .map_err(|e| {
                 error!(
-                    target: LOG_TARGET_INCOMPLETE,
+                    target: LOG_TARGET,
                     "Failed to submit delete_file_for_incomplete_storage_request extrinsic: {:?}", e
                 );
                 anyhow!(
@@ -540,7 +562,7 @@ where
             })?;
 
         info!(
-            target: LOG_TARGET_INCOMPLETE,
+            target: LOG_TARGET,
             "Successfully submitted delete_file_for_incomplete_storage_request extrinsic for file key {:?}",
             file_key
         );
