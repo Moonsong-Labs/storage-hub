@@ -14,7 +14,11 @@ import type {
   u64
 } from "@polkadot/types-codec";
 import type { ITuple } from "@polkadot/types-codec/types";
-import type { AccountId, BalanceOf, BlockNumber, H256 } from "@polkadot/types/interfaces/runtime";
+import type { EthereumAccountId } from "@polkadot/types/interfaces/eth";
+import type { BalanceOf, BlockNumber, H256 } from "@polkadot/types/interfaces/runtime";
+
+/** @name AccountId */
+export interface AccountId extends EthereumAccountId {}
 
 /** @name AddFilesToForestStorageResult */
 export interface AddFilesToForestStorageResult extends Enum {
@@ -22,6 +26,9 @@ export interface AddFilesToForestStorageResult extends Enum {
   readonly isForestNotFound: boolean;
   readonly type: "Success" | "ForestNotFound";
 }
+
+/** @name Address */
+export interface Address extends AccountId {}
 
 /** @name BackupStorageProvider */
 export interface BackupStorageProvider extends Struct {
@@ -178,6 +185,9 @@ export interface LoadFileInStorageResult extends Struct {
   readonly file_key: H256;
   readonly file_metadata: FileMetadata;
 }
+
+/** @name LookupSource */
+export interface LookupSource extends AccountId {}
 
 /** @name MainStorageProviderId */
 export interface MainStorageProviderId extends H256 {}

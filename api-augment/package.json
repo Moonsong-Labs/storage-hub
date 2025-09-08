@@ -7,7 +7,7 @@
     "fmt": "biome format .",
     "fmt:fix": "biome format . --write",
     "tsc": "tsc --noEmit --pretty",
-    "build": "tsc -b --verbose",
+    "build": "tsc -p tsconfig.parachain.json && tsc -p tsconfig.solochain-evm.json",
     "generate:all": "pnpm generate:defs && pnpm generate:meta",
     "generate:defs": "pnpm generate:defs:parachain && pnpm generate:defs:solochain-evm",
     "generate:meta": "pnpm generate:meta:parachain && pnpm generate:meta:solochain-evm",

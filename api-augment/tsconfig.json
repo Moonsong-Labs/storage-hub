@@ -6,10 +6,7 @@
     "outDir": "dist",
     "baseUrl": "./",
     "paths": {
-      "@storagehub/api-augment/*": ["src/*"],
-      "@polkadot/api/augment": ["src/parachain/interfaces/augment-api.ts"],
-      "@polkadot/types/augment": ["src/parachain/interfaces/augment-types.ts"],
-      "@polkadot/types/lookup": ["src/parachain/interfaces/types-lookup.ts"]
+      "@storagehub/api-augment/*": ["src/*"]
     },
     "noEmit": false,
     "declaration": true,
