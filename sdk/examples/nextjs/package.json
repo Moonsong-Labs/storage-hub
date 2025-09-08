@@ -9,8 +9,8 @@
   },
   "dependencies": {
     "@polkadot/types": "^10.13.1",
-    "@storagehub-sdk/core": "0.0.3",
-    "@storagehub-sdk/msp-client": "0.0.3",
+    "@storagehub-sdk/core": ">=0.0.5",
+    "@storagehub-sdk/msp-client": ">=0.0.5",
     "ethers": "^6.15.0",
     "next": "15.5.2",
     "react": "18.3.1",

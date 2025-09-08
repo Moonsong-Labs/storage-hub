@@ -10,8 +10,8 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@storagehub-sdk/core": "0.0.3",
-    "@storagehub-sdk/msp-client": "0.0.3",
+    "@storagehub-sdk/core": ">=0.0.5",
+    "@storagehub-sdk/msp-client": ">=0.0.5",
     "ethers": "^6.15.0"
   },
   "devDependencies": {
