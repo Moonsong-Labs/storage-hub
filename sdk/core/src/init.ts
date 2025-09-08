@@ -19,7 +19,7 @@ function decodeBase64ToBytes(b64: string): Uint8Array {
   if (
     typeof Buffer !== 'undefined' &&
     typeof (Buffer as unknown as { from?: (s: string, enc: 'base64') => Uint8Array }).from ===
-    'function'
+      'function'
   ) {
     const buf = (Buffer as unknown as { from: (s: string, enc: 'base64') => Uint8Array }).from(
       b64,
