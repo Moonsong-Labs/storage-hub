@@ -1,0 +1,18 @@
+host = "0.0.0.0"
+port = 8081
+
+[api]
+# Random values just to make it run
+default_page_size = 25
+max_page_size = 100
+
+[database]
+url = "postgres://ignored"
+mock_mode = true
+
+[storage_hub]
+rpc_url = "ws://127.0.0.1:9777"
+timeout_secs = 30
+max_concurrent_requests = 64
+verify_tls = false
+mock_mode = false

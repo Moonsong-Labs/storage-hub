@@ -1,7 +1,7 @@
 //! StorageHub RPC client module
 
 use async_trait::async_trait;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::de::DeserializeOwned;
 
 pub mod client;
 pub mod connection;
@@ -25,7 +25,7 @@ pub trait RpcConnection: Send + Sync {
     /// Execute a JSON-RPC method call
     async fn call<P, R>(&self, method: &str, params: P) -> RpcResult<R>
     where
-        P: Serialize + Send + Sync,
+        P: jsonrpsee::core::traits::ToRpcParams + Send + Sync,
         R: DeserializeOwned;
 
     /// Execute a JSON-RPC method call without parameters
@@ -33,8 +33,8 @@ pub trait RpcConnection: Send + Sync {
     where
         R: DeserializeOwned,
     {
-        // Default implementation using empty tuple as params
-        self.call::<_, R>(method, ()).await
+        // Default implementation using empty params
+        self.call::<_, R>(method, jsonrpsee::rpc_params![]).await
     }
 
     /// Check if the connection is currently active

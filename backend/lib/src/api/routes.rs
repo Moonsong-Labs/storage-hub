@@ -45,14 +45,7 @@ pub fn routes(services: Services) -> Router {
             "/buckets/{bucket_id}/distribute/{file_key}",
             post(handlers::distribute_file),
         )
-        .route(
-            "/buckets/{bucket_id}/download/{file_key}",
-            get(handlers::download_by_key),
-        )
-        .route(
-            "/buckets/{bucket_id}/download/path/{*file_location}",
-            get(handlers::download_by_location),
-        )
+        .route("/files/{file_key}", get(handlers::download_by_key))
         // Payment streams routes
         .route("/payment_stream", get(handlers::payment_stream))
         // Add state to all routes

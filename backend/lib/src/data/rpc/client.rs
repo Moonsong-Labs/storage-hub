@@ -3,6 +3,8 @@
 use std::sync::Arc;
 
 use crate::data::rpc::{AnyRpcConnection, RpcConnection};
+use jsonrpsee::core::traits::ToRpcParams;
+use serde::de::DeserializeOwned;
 
 /// StorageHub RPC client that uses an RpcConnection
 pub struct StorageHubRpcClient {
@@ -17,6 +19,19 @@ impl StorageHubRpcClient {
 
     pub async fn is_connected(&self) -> bool {
         self.connection.is_connected().await
+    }
+
+    /// Forward a JSON-RPC call to the underlying connection
+    pub async fn call<P, R>(
+        &self,
+        method: &str,
+        params: P,
+    ) -> crate::data::rpc::connection::error::RpcResult<R>
+    where
+        P: ToRpcParams + Send + Sync,
+        R: DeserializeOwned,
+    {
+        self.connection.call(method, params).await
     }
 }
 

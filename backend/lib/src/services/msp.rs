@@ -4,8 +4,6 @@
 
 use std::sync::Arc;
 
-use chrono::Utc;
-
 use crate::{
     data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage},
     error::Error,
@@ -16,6 +14,33 @@ use crate::{
         payment::PaymentStream,
     },
 };
+use chrono::Utc;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct RpcFileResponse {
+    pub owner: [u8; 32],
+    pub bucket_id: [u8; 32],
+    pub location: Vec<u8>,
+    pub file_size: u64,
+    pub fingerprint: [u8; 32],
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct RpcResponse {
+    #[serde(rename = "Success")]
+    pub success: RpcFileResponse,
+}
+
+/// Placeholder  
+#[derive(Debug, Deserialize, Serialize)]
+pub struct FileDownloadResult {
+    pub file_bytes: Vec<u8>,
+    pub file_size: u64,
+    pub location: String,
+    pub fingerprint: String,
+}
 
 /// Service for handling MSP-related operations
 #[derive(Clone)]
@@ -306,6 +331,50 @@ impl MspService {
             last_charged_tick: 1234567,
             user_deposit: 100000,
             out_of_funds_tick: None,
+        })
+    }
+
+    pub async fn get_file_from_key(&self, file_key: &str) -> Result<FileDownloadResult, Error> {
+        // Create temp file path for download
+        let temp_path = format!("http://host.docker.internal:8080/uploads/whatsup-http.jpg");
+
+        println!("file_key: {:?}", file_key);
+
+        // Create params
+        let params = jsonrpsee::rpc_params![file_key, &temp_path];
+
+        // Make the RPC call to download file and get metadata via injected client
+        let res: Value = self
+            .rpc
+            .call("storagehubclient_saveFileToDisk", params)
+            .await
+            .map_err(|e| Error::BadRequest(e.to_string()))?;
+
+        let rpc_response: RpcResponse = serde_json::from_value(res)
+            .map_err(|e| Error::BadRequest(format!("Failed to parse RPC response: {}", e)))?;
+
+        // Read the downloaded file
+        //let file_bytes = fs::read(&temp_path).map_err(|_| Error::Internal)?;
+
+        // Clean up temp file
+        // let _ = fs::remove_file(&temp_path);
+
+        // Convert location bytes to string
+        let location = String::from_utf8_lossy(&rpc_response.success.location).to_string();
+
+        // Convert fingerprint to hex string
+        let fingerprint = rpc_response
+            .success
+            .fingerprint
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<String>();
+
+        Ok(FileDownloadResult {
+            file_bytes: Vec::new(),
+            file_size: rpc_response.success.file_size,
+            location,
+            fingerprint,
         })
     }
 }

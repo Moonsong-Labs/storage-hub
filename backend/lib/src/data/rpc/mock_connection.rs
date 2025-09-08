@@ -146,7 +146,7 @@ impl Default for MockConnection {
 impl RpcConnection for MockConnection {
     async fn call<P, R>(&self, method: &str, _params: P) -> RpcResult<R>
     where
-        P: Serialize + Send + Sync,
+        P: jsonrpsee::core::traits::ToRpcParams + Send + Sync,
         R: DeserializeOwned,
     {
         // Check if connected

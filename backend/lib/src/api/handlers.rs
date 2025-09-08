@@ -170,16 +170,26 @@ pub async fn download_by_location(
 }
 
 pub async fn download_by_key(
-    State(_services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
-    Path((_bucket_id, _file_key)): Path<(String, String)>,
+    State(services): State<Services>,
+    Path(file_key): Path<String>,
 ) -> Result<impl IntoResponse, Error> {
-    let _auth = extract_bearer_token(&auth)?;
+    // TODO: re-add auth
+    // let _auth = extract_bearer_token(&auth)?;
 
-    // TODO(MOCK): return proper data
-    let file_data = b"Mock file content for download".to_vec();
-    let stream = ReaderStream::new(Cursor::new(file_data));
-    let file_stream_resp = FileStream::new(stream).file_name("by_key.txt");
+    let download_result = services.msp.get_file_from_key(&file_key).await?;
+
+    // Create file stream from the downloaded bytes
+    let stream = ReaderStream::new(Cursor::new(download_result.file_bytes));
+
+    // Extract filename from location or use file_key as fallback
+    let filename = download_result
+        .location
+        .split('/')
+        .last()
+        .unwrap_or(&file_key)
+        .to_string();
+
+    let file_stream_resp = FileStream::new(stream).file_name(&filename);
 
     Ok(file_stream_resp.into_response())
 }

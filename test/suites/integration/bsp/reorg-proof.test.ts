@@ -14,7 +14,7 @@ import {
 
 describeBspNet(
   "BSP proofs resubmitted on chain re-org ♻️",
-  { initialised: true, networkConfig: "standard" },
+  { initialised: true, networkConfig: "standard", keepAlive: true, only: true },
   ({ before, createUserApi, createBspApi, it }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
@@ -309,6 +309,13 @@ describeBspNet(
           return isFileInForest.isTrue;
         }
       });
+
+      // Log the file key and the Forest root.
+      console.log("HERMAN: File key:", firstFileMetadata.fileKey);
+
+      // Assert file key is 0x0000000000000000000000000000000000000000000000000000000000000000
+      strictEqual(firstFileMetadata.fileKey, "0x0000000000000000000000000000000000000000000000000000000000000000");
+      assert(false);
 
       strictEqual(
         rootAfterFirstConfirm,
