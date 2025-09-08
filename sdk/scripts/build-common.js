@@ -42,12 +42,14 @@ async function runWasmBuildIfNeeded(packageRoot, { withWasm }) {
   if (!withWasm) return;
   const wasmDir = join(packageRoot, 'wasm');
   const cargoToml = join(wasmDir, 'Cargo.toml');
+  // If the package has no embedded wasm crate, nothing to do
   if (!existsSync(cargoToml)) return;
 
+  // Compile the wasm crate to web-target using wasm-pack (produces glue + .wasm)
   const cmd = 'wasm-pack build ./wasm --target web --release --out-dir pkg && rm -f ./wasm/pkg/package.json ./wasm/pkg/.gitignore';
   await exec(cmd, { cwd: packageRoot });
 
-  // Generate an embedded wasm module for browsers so apps don't need to host the file
+  // Embed the produced .wasm as base64 into TypeScript so apps don’t host a file
   try {
     const wasmBinPath = join(packageRoot, 'wasm', 'pkg', 'storagehub_wasm_bg.wasm');
     const embedPath = join(packageRoot, 'src', '_wasm_embed.ts');
@@ -65,20 +67,33 @@ async function runWasmBuildIfNeeded(packageRoot, { withWasm }) {
     console.warn('Failed to generate embedded WASM module:', err);
   }
 
-  // Patch the generated glue to remove URL fallback that triggers bundlers to resolve a .wasm asset
+  /*
+   * Remove the URL fallback from the wasm-bindgen JS glue.
+   * - Glue may set: module_or_path = new URL('storagehub_wasm_bg.wasm', import.meta.url)
+   * - We always pass embedded bytes, so this URL must never be used.
+   * - Leaving it causes bundlers to try to resolve/emit a .wasm file.
+   * - Runs after wasm-pack; fail if the pattern isn’t found to avoid shipping unpatched glue.
+   */
   try {
     const gluePath = join(packageRoot, 'wasm', 'pkg', 'storagehub_wasm.js');
-    if (existsSync(gluePath)) {
-      let src = readFileSync(gluePath, 'utf8');
-      // Replace the default URL fallback with a hard error to avoid bundler static resolution of the .wasm file
-      src = src.replace(
-        /if\s*\(\s*typeof\s+module_or_path\s*===\s*['\"]undefined['\"]\s*\)\s*\{\s*module_or_path\s*=\s*new\s+URL\([^)]*\);\s*\}/,
-        "if (typeof module_or_path === 'undefined') { throw new Error('Embedded WASM required: URL fallback disabled'); }",
-      );
-      writeFileSync(gluePath, src, 'utf8');
+    // The glue must exist after wasm-pack; enforce it strictly
+    if (!existsSync(gluePath)) {
+      throw new Error('WASM glue not found at wasm/pkg/storagehub_wasm.js');
     }
+    // Read current glue and apply a targeted replacement of the URL fallback
+    const before = readFileSync(gluePath, 'utf8');
+    const after = before.replace(
+      /if\s*\(\s*typeof\s+module_or_path\s*===\s*['\"]undefined['\"]\s*\)\s*\{\s*module_or_path\s*=\s*new\s+URL\([^)]*\);\s*\}/,
+      "if (typeof module_or_path === 'undefined') { throw new Error('Embedded WASM required: URL fallback disabled'); }",
+    );
+    // Strict: if nothing changed, fail to avoid shipping an unpatched glue
+    if (after === before) {
+      throw new Error('WASM glue patch: no URL fallback pattern matched');
+    }
+    // Persist the patched glue
+    writeFileSync(gluePath, after, 'utf8');
   } catch (err) {
-    console.warn('Failed to patch wasm glue to remove URL fallback:', err);
+    throw new Error(`Failed to patch wasm glue to remove URL fallback: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
