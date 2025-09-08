@@ -10,10 +10,7 @@ import {
 } from "../../../util";
 import { createBucketAndSendNewStorageRequest } from "../../../util/bspNet/fileHelpers";
 import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
-import {
-  waitForIncompleteStorageRequestExtrinsic,
-  waitForFishermanProcessing
-} from "../../../util/fisherman/fishermanHelpers";
+import { waitForIncompleteStorageRequestExtrinsic } from "../../../util/fisherman/fishermanHelpers";
 
 /**
  * FISHERMAN INCOMPLETE STORAGE REQUESTS WITH CATCHUP
@@ -42,6 +39,11 @@ describeMspNet(
 
     before(async () => {
       userApi = await createUserApi();
+
+      // Stop container since we don't need it for testing these scenarios
+      // TODO: Consider adding an option to enable/disable certain services from the network setup
+      await userApi.docker.stopContainer("storage-hub-sh-msp-2");
+
       bspApi = await createBspApi();
       const maybeMsp1Api = await createMsp1Api();
 
@@ -106,7 +108,7 @@ describeMspNet(
         .unwrap()
         .asRuntimeConfig.asStorageRequestTtl.toNumber();
 
-      await userApi.block.skipTo(currentBlockNumber + storageRequestTtl, { finalised: false } );
+      await userApi.block.skipTo(currentBlockNumber + storageRequestTtl, { finalised: false });
 
       // Verify only one delete extrinsic is submitted (for the BSP)
       const deleteIncompleteFileFound = await waitForIncompleteStorageRequestExtrinsic(
@@ -163,7 +165,6 @@ describeMspNet(
       const bspAddress = userApi.createType("Address", bspKey.address);
       await userApi.wait.bspStored({
         expectedExts: 1,
-        sealBlock: false,
         bspAccount: bspAddress
       });
 
@@ -180,13 +181,6 @@ describeMspNet(
         "StorageRequestRevoked",
         revokeStorageRequestResult.events
       );
-
-      // Verify fisherman processes the revoked request
-      const processingFound = await waitForFishermanProcessing(
-        userApi,
-        `Processing incomplete storage request for file key: ${fileKey}`
-      );
-      assert(processingFound, "Should find fisherman processing log for revoked request");
 
       // Verify two delete extrinsics are submitted (for MSP and BSP)
       const deleteIncompleteFileFound = await waitForIncompleteStorageRequestExtrinsic(

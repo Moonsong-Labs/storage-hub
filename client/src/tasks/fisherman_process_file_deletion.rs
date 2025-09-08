@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use codec::Encode;
 use futures::future::{join_all, BoxFuture};
 use hex;
 use sc_tracing::tracing::*;
@@ -316,57 +317,60 @@ where
 
         let file_key = &event.file_key;
 
-        // Fetch common file deletion data
-        let deletion_data = fetch_file_deletion_data(&self.storage_hub_handler, file_key).await?;
-
-        // Query the incomplete storage request metadata to check if bucket deletion is needed
+        // Query the incomplete storage request metadata
         let incomplete_metadata = self
             .fisherman_service
             .query_incomplete_storage_request(*file_key)
             .await
             .map_err(|e| anyhow!("Failed to query incomplete storage request: {:?}", e))?;
 
+        // Create FileMetadata directly from the runtime API response
+        let file_metadata = shc_common::types::FileMetadata::new(
+            incomplete_metadata.owner.encode(),
+            incomplete_metadata.bucket_id.as_ref().to_vec(),
+            incomplete_metadata.location.clone(),
+            incomplete_metadata.file_size.saturated_into::<u64>(),
+            shc_common::types::Fingerprint::from(incomplete_metadata.fingerprint.to_fixed_bytes()),
+        )
+        .map_err(|e| anyhow!("Failed to create file metadata: {:?}", e))?;
+
         // Create a vector of futures for parallel processing
         let mut deletion_futures: Vec<BoxFuture<'_, anyhow::Result<()>>> = Vec::new();
 
-        let file_metadata_ref = &deletion_data.file_metadata;
+        let file_metadata_ref = &file_metadata;
 
         // Process bucket deletion only if pending_bucket_removal is true
         if incomplete_metadata.pending_bucket_removal {
+            let bucket_id_array: [u8; 32] = incomplete_metadata
+                .bucket_id
+                .as_ref()
+                .try_into()
+                .map_err(|_| anyhow!("Invalid bucket ID length"))?;
+
+            let bucket_target = FileDeletionTarget::BucketId(H256::from(bucket_id_array));
             let self_clone = self.clone();
 
             deletion_futures.push(Box::pin(async move {
                 self_clone
                     .process_deletion_for_target_incomplete(
                         file_key,
-                        deletion_data.bucket_target,
+                        bucket_target,
                         file_metadata_ref,
                     )
                     .await
             }));
         }
 
-        // Process BSP targets in parallel - only those that are in pending_bsp_removals
-        for onchain_bsp_id in deletion_data.bsp_ids {
-            let bsp_id = onchain_bsp_id.into();
+        // Process BSP targets in parallel - use pending_bsp_removals directly as source of truth
+        for bsp_id in incomplete_metadata.pending_bsp_removals {
+            let bsp_target = FileDeletionTarget::BspId(bsp_id);
+            let self_clone = self.clone();
 
-            // Check if this BSP is in the pending removals list
-            if incomplete_metadata.pending_bsp_removals.contains(&bsp_id) {
-                // Convert OnchainBspId to H256 for the target
-                let bsp_target = FileDeletionTarget::BspId(bsp_id);
-
-                let self_clone = self.clone();
-
-                deletion_futures.push(Box::pin(async move {
-                    self_clone
-                        .process_deletion_for_target_incomplete(
-                            file_key,
-                            bsp_target,
-                            file_metadata_ref,
-                        )
-                        .await
-                }));
-            }
+            deletion_futures.push(Box::pin(async move {
+                self_clone
+                    .process_deletion_for_target_incomplete(file_key, bsp_target, file_metadata_ref)
+                    .await
+            }));
         }
 
         // Execute all deletions in parallel and collect results
