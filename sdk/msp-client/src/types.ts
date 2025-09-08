@@ -140,3 +140,17 @@ export interface InfoResponse {
   activeSince: number;
   uptime: string;
 }
+
+export interface Capacity {
+  totalBytes: number;
+  availableBytes: number;
+  usedBytes: number;
+}
+
+export interface StatsResponse {
+  capacity: Capacity;
+  activeUsers: number;
+  lastCapacityChange: number;
+  valuePropsAmount: number;
+  bucketsAmount: number;
+}

@@ -7,6 +7,8 @@ export type {
   FileListResponse,
   HealthStatus,
   InfoResponse,
+  StatsResponse,
+  Capacity,
   NonceResponse,
   UploadOptions,
   UploadReceipt,

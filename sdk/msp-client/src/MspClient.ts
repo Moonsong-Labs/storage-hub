@@ -6,6 +6,7 @@ import type {
   GetFilesOptions,
   HealthStatus,
   InfoResponse,
+  StatsResponse,
   NonceResponse,
   UploadOptions,
   UploadReceipt,
@@ -46,6 +47,13 @@ export class MspClient {
   /** Get general MSP information */
   getInfo(options?: { signal?: AbortSignal }): Promise<InfoResponse> {
     return this.http.get<InfoResponse>('/info', {
+      ...(options?.signal !== undefined && { signal: options.signal }),
+    });
+  }
+
+  /** Get MSP statistics */
+  getStats(options?: { signal?: AbortSignal }): Promise<StatsResponse> {
+    return this.http.get<StatsResponse>('/stats', {
       ...(options?.signal !== undefined && { signal: options.signal }),
     });
   }
@@ -148,16 +156,16 @@ export class MspClient {
         path,
         authHeaders
           ? {
-              body: file,
-              headers: {
-                ...authHeaders,
-                'Content-Type': 'application/octet-stream',
-              },
-            }
-          : {
-              body: file,
-              headers: { 'Content-Type': 'application/octet-stream' },
+            body: file,
+            headers: {
+              ...authHeaders,
+              'Content-Type': 'application/octet-stream',
             },
+          }
+          : {
+            body: file,
+            headers: { 'Content-Type': 'application/octet-stream' },
+          },
       );
       return res;
     }
