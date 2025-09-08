@@ -127,3 +127,16 @@ export interface GetFilesOptions {
   path?: string;
   signal?: AbortSignal;
 }
+
+// MSP info
+export interface InfoResponse {
+  client: string;
+  version: string;
+  mspId: string;
+  multiaddresses: string[];
+  ownerAccount: string;
+  paymentAccount: string;
+  status: string;
+  activeSince: number;
+  uptime: string;
+}

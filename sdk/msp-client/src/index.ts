@@ -6,6 +6,7 @@ export type {
   FileEntry,
   FileListResponse,
   HealthStatus,
+  InfoResponse,
   NonceResponse,
   UploadOptions,
   UploadReceipt,

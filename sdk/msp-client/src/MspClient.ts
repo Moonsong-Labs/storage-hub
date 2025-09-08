@@ -5,6 +5,7 @@ import type {
   FileListResponse,
   GetFilesOptions,
   HealthStatus,
+  InfoResponse,
   NonceResponse,
   UploadOptions,
   UploadReceipt,
@@ -38,6 +39,13 @@ export class MspClient {
 
   getHealth(options?: { signal?: AbortSignal }): Promise<HealthStatus> {
     return this.http.get<HealthStatus>('/health', {
+      ...(options?.signal !== undefined && { signal: options.signal }),
+    });
+  }
+
+  /** Get general MSP information */
+  getInfo(options?: { signal?: AbortSignal }): Promise<InfoResponse> {
+    return this.http.get<InfoResponse>('/info', {
       ...(options?.signal !== undefined && { signal: options.signal }),
     });
   }
