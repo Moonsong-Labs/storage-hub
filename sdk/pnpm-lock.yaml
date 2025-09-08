@@ -79,11 +79,11 @@ importers:
         specifier: ^10.13.1
         version: 10.13.1
       '@storagehub-sdk/core':
-        specifier: 0.0.3
-        version: 0.0.3
+        specifier: '>=0.0.5'
+        version: 0.0.5
       '@storagehub-sdk/msp-client':
-        specifier: 0.0.3
-        version: 0.0.3
+        specifier: '>=0.0.5'
+        version: 0.0.5(@storagehub-sdk/core@0.0.5)
       ethers:
         specifier: ^6.15.0
         version: 6.15.0
@@ -119,11 +119,11 @@ importers:
   examples/node:
     dependencies:
       '@storagehub-sdk/core':
-        specifier: 0.0.3
-        version: 0.0.3
+        specifier: '>=0.0.5'
+        version: 0.0.5
       '@storagehub-sdk/msp-client':
-        specifier: 0.0.3
-        version: 0.0.3
+        specifier: '>=0.0.5'
+        version: 0.0.5(@storagehub-sdk/core@0.0.5)
       ethers:
         specifier: ^6.15.0
         version: 6.15.0
@@ -987,13 +987,15 @@ packages:
   '@scure/base@1.2.6':
     resolution: {integrity: sha512-g/nm5FgUa//MCj1gV09zTJTaM6KBAHqLN907YVQqf7zC49+DcO4B1so4ZX07Ef10Twr6nuqYEH9GEggFXA4Fmg==}
 
-  '@storagehub-sdk/core@0.0.3':
-    resolution: {integrity: sha512-D1Y9cwNvm/oPUYL2hBqU6AAFI7Zzwhvp5FHe05bzcT+ETK8hNQxkqJK6eh7xsu7EX6glMCqjqAbe3njBQ1qqBQ==}
+  '@storagehub-sdk/core@0.0.5':
+    resolution: {integrity: sha512-8YNFNuWv7K3tlRf//Bw2Puri/eEmZV5hiQQaAuFhW/J83icbZ3YUzoTtiKoXclE78YVarNx4X+2wafzwPVYv9g==}
     engines: {node: '>=22'}
 
-  '@storagehub-sdk/msp-client@0.0.3':
-    resolution: {integrity: sha512-F9WHNADRxdd3MlL1OMnvYPk9Wa6ZpFQT1sLRkSC5gIQuz741st1HNTBHmqA4S/jBVdVDUL563vGc/QQA+VRhoA==}
+  '@storagehub-sdk/msp-client@0.0.5':
+    resolution: {integrity: sha512-ZAXgu7SMB3GIGBwf4QKwU1qw0yVPq/ajPYjz8gtY9hO2RKA36T6J4C199eDWnsZz7vAfAJIkn0Kg63bXLlhl9A==}
     engines: {node: '>=22'}
+    peerDependencies:
+      '@storagehub-sdk/core': '>=0.0.4'
 
   '@substrate/ss58-registry@1.51.0':
     resolution: {integrity: sha512-TWDurLiPxndFgKjVavCniytBIw+t4ViOi7TYp9h/D0NMmkEc9klFTo+827eyEJ0lELpqO207Ey7uGxUa+BS1jQ==}
@@ -2916,7 +2918,7 @@ snapshots:
 
   '@scure/base@1.2.6': {}
 
-  '@storagehub-sdk/core@0.0.3':
+  '@storagehub-sdk/core@0.0.5':
     dependencies:
       '@polkadot/types': 10.13.1
       ethers: 6.15.0
@@ -2924,9 +2926,9 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@storagehub-sdk/msp-client@0.0.3':
+  '@storagehub-sdk/msp-client@0.0.5(@storagehub-sdk/core@0.0.5)':
     dependencies:
-      '@storagehub-sdk/core': link:core
+      '@storagehub-sdk/core': 0.0.5
 
   '@substrate/ss58-registry@1.51.0': {}
 
