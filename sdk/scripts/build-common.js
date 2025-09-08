@@ -12,30 +12,31 @@ function getPackageJson(packageRoot) {
   return JSON.parse(readFileSync(pkgPath, 'utf-8'));
 }
 
-function computeExternalDeps(pkgJson, { isCorePackage }) {
-  const deps = new Set([
-    'ethers',
-    '@polkadot/*',
-    'bn.js',
-  ]);
-
+function computeExternalDeps(pkgJson, { withWasm }) {
+  // Compute esbuild "external" entries from package.json so our library
+  // never bundles third‑party code. Consumers resolve these at runtime.
+  const names = new Set();
+  // Gather runtime package names (devDependencies intentionally ignored)
   for (const key of ['dependencies', 'peerDependencies', 'optionalDependencies']) {
     const section = pkgJson[key];
     if (section && typeof section === 'object') {
-      for (const name of Object.keys(section)) {
-        deps.add(name);
-      }
+      for (const name of Object.keys(section)) names.add(name);
     }
   }
 
-  if (isCorePackage) {
-    // Ensure runtime WASM loader stays external and on-disk
-    deps.add('../wasm/pkg/*');
-    deps.add('./wasm/pkg/*');
-    deps.add('wasm/pkg/*');
+  const externals = [];
+  // Externalize each package and its subpaths (e.g., name/interfaces)
+  for (const name of names) {
+    externals.push(name);      // package root
+    externals.push(`${name}/*`); // deep imports
   }
 
-  return Array.from(deps);
+  if (withWasm) {
+    // Keep local wasm outputs external; we embed bytes separately
+    externals.push('../wasm/pkg/*', './wasm/pkg/*', 'wasm/pkg/*');
+  }
+
+  return externals;
 }
 
 async function runWasmBuildIfNeeded(packageRoot, { withWasm }) {
@@ -100,7 +101,6 @@ async function runWasmBuildIfNeeded(packageRoot, { withWasm }) {
 export async function runBuild({ withWasm = false, watch = false } = {}) {
   const packageRoot = process.cwd();
   const pkgJson = getPackageJson(packageRoot);
-  const isCorePackage = pkgJson.name === '@storagehub-sdk/core';
 
   await runWasmBuildIfNeeded(packageRoot, { withWasm });
 
@@ -118,7 +118,7 @@ export async function runBuild({ withWasm = false, watch = false } = {}) {
     ? join(packageRoot, 'src', 'entry.node.ts')
     : defaultEntry;
 
-  const external = computeExternalDeps(pkgJson, { isCorePackage });
+  const external = computeExternalDeps(pkgJson, { withWasm });
 
   const common = {
     bundle: true,
