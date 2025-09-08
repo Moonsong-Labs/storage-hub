@@ -104,7 +104,7 @@ import type {
   LoadFileInStorageResult,
   RemoveFilesFromForestStorageResult,
   SaveFileToDisk
-} from "@storagehub/api-augment/interfaces/storagehubclient";
+} from "@storagehub/api-augment/parachain/interfaces/storagehubclient";
 
 export type __AugmentedRpc = AugmentedRpc<() => unknown>;
 

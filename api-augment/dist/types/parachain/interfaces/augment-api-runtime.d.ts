@@ -1,10 +1,4 @@
-// Auto-generated via `yarn polkadot-types-from-chain`, do not edit
-/* eslint-disable */
-
-// import type lookup before we augment - in some environments
-// this is required to allow for ambient/previous definitions
 import "@polkadot/api-base/types/calls";
-
 import type { ApiTypes, AugmentedCall, DecoratedCallBase } from "@polkadot/api-base/types";
 import type { Bytes, Null, Option, Result, Vec, bool, u128, u32 } from "@polkadot/types-codec";
 import type { AnyNumber, IMethod, ITuple } from "@polkadot/types-codec/types";
@@ -84,11 +78,9 @@ import type {
   StorageProviderId,
   TrieRemoveMutation,
   ValuePropositionWithId
-} from "@storagehub/api-augment/interfaces/storagehubclient";
-
+} from "@storagehub/api-augment/parachain/interfaces/storagehubclient";
 export type __AugmentedCall<ApiType extends ApiTypes> = AugmentedCall<ApiType>;
 export type __DecoratedCallBase<ApiType extends ApiTypes> = DecoratedCallBase<ApiType>;
-
 declare module "@polkadot/api-base/types/calls" {
   interface AugmentedCalls<ApiType extends ApiTypes> {
     /** 0xbc9d89904f5b923f/1 */
@@ -154,8 +146,21 @@ declare module "@polkadot/api-base/types/calls" {
       checkInherents: AugmentedCall<
         ApiType,
         (
-          block: Block | { header?: any; extrinsics?: any } | string | Uint8Array,
-          data: InherentData | { data?: any } | string | Uint8Array
+          block:
+            | Block
+            | {
+                header?: any;
+                extrinsics?: any;
+              }
+            | string
+            | Uint8Array,
+          data:
+            | InherentData
+            | {
+                data?: any;
+              }
+            | string
+            | Uint8Array
         ) => Observable<CheckInherentsResult>
       >;
       /**
@@ -168,7 +173,13 @@ declare module "@polkadot/api-base/types/calls" {
       inherentExtrinsics: AugmentedCall<
         ApiType,
         (
-          inherent: InherentData | { data?: any } | string | Uint8Array
+          inherent:
+            | InherentData
+            | {
+                data?: any;
+              }
+            | string
+            | Uint8Array
         ) => Observable<Vec<Extrinsic>>
       >;
       /**
@@ -210,7 +221,14 @@ declare module "@polkadot/api-base/types/calls" {
       executeBlock: AugmentedCall<
         ApiType,
         (
-          block: Block | { header?: any; extrinsics?: any } | string | Uint8Array
+          block:
+            | Block
+            | {
+                header?: any;
+                extrinsics?: any;
+              }
+            | string
+            | Uint8Array
         ) => Observable<Null>
       >;
       /**
@@ -249,7 +267,13 @@ declare module "@polkadot/api-base/types/calls" {
       dryRunCall: AugmentedCall<
         ApiType,
         (
-          origin: OriginCaller | { System: any } | string | Uint8Array,
+          origin:
+            | OriginCaller
+            | {
+                System: any;
+              }
+            | string
+            | Uint8Array,
           call: RuntimeCall | IMethod | string | Uint8Array,
           resultXcmsVersion: u32 | AnyNumber | Uint8Array
         ) => Observable<Result<CallDryRunEffects, XcmDryRunApiError>>
@@ -262,22 +286,46 @@ declare module "@polkadot/api-base/types/calls" {
         (
           originLocation:
             | VersionedMultiLocation
-            | { V0: any }
-            | { V1: any }
-            | { V2: any }
-            | { V3: any }
-            | { V4: any }
-            | { v5: any }
+            | {
+                V0: any;
+              }
+            | {
+                V1: any;
+              }
+            | {
+                V2: any;
+              }
+            | {
+                V3: any;
+              }
+            | {
+                V4: any;
+              }
+            | {
+                v5: any;
+              }
             | string
             | Uint8Array,
           xcm:
             | VersionedXcm
-            | { V0: any }
-            | { V1: any }
-            | { V2: any }
-            | { V3: any }
-            | { V4: any }
-            | { V5: any }
+            | {
+                V0: any;
+              }
+            | {
+                V1: any;
+              }
+            | {
+                V2: any;
+              }
+            | {
+                V3: any;
+              }
+            | {
+                V4: any;
+              }
+            | {
+                V5: any;
+              }
             | string
             | Uint8Array
         ) => Observable<Result<XcmDryRunEffects, XcmDryRunApiError>>
@@ -370,9 +418,15 @@ declare module "@polkadot/api-base/types/calls" {
         (
           location:
             | XcmVersionedLocation
-            | { V3: any }
-            | { V4: any }
-            | { V5: any }
+            | {
+                V3: any;
+              }
+            | {
+                V4: any;
+              }
+            | {
+                V5: any;
+              }
             | string
             | Uint8Array
         ) => Observable<Result<AccountId, Error>>
@@ -756,7 +810,14 @@ declare module "@polkadot/api-base/types/calls" {
       queryWeightToFee: AugmentedCall<
         ApiType,
         (
-          weight: Weight | { refTime?: any; proofSize?: any } | string | Uint8Array
+          weight:
+            | Weight
+            | {
+                refTime?: any;
+                proofSize?: any;
+              }
+            | string
+            | Uint8Array
         ) => Observable<Balance>
       >;
       /**
@@ -799,7 +860,14 @@ declare module "@polkadot/api-base/types/calls" {
       queryWeightToFee: AugmentedCall<
         ApiType,
         (
-          weight: Weight | { refTime?: any; proofSize?: any } | string | Uint8Array
+          weight:
+            | Weight
+            | {
+                refTime?: any;
+                proofSize?: any;
+              }
+            | string
+            | Uint8Array
         ) => Observable<Balance>
       >;
       /**
@@ -824,8 +892,27 @@ declare module "@polkadot/api-base/types/calls" {
       queryWeightToAssetFee: AugmentedCall<
         ApiType,
         (
-          weight: WeightV2 | { refTime?: any; proofSize?: any } | string | Uint8Array,
-          asset: XcmVersionedAssetId | { V3: any } | { V4: any } | { V5: any } | string | Uint8Array
+          weight:
+            | WeightV2
+            | {
+                refTime?: any;
+                proofSize?: any;
+              }
+            | string
+            | Uint8Array,
+          asset:
+            | XcmVersionedAssetId
+            | {
+                V3: any;
+              }
+            | {
+                V4: any;
+              }
+            | {
+                V5: any;
+              }
+            | string
+            | Uint8Array
         ) => Observable<Result<u128, XcmPaymentApiError>>
       >;
       /**
@@ -834,7 +921,19 @@ declare module "@polkadot/api-base/types/calls" {
       queryXcmWeight: AugmentedCall<
         ApiType,
         (
-          message: XcmVersionedXcm | { V3: any } | { V4: any } | { V5: any } | string | Uint8Array
+          message:
+            | XcmVersionedXcm
+            | {
+                V3: any;
+              }
+            | {
+                V4: any;
+              }
+            | {
+                V5: any;
+              }
+            | string
+            | Uint8Array
         ) => Observable<Result<WeightV2, XcmPaymentApiError>>
       >;
       /**
@@ -842,5 +941,5 @@ declare module "@polkadot/api-base/types/calls" {
        **/
       [key: string]: DecoratedCallBase<ApiType>;
     };
-  } // AugmentedCalls
-} // declare module
+  }
+}

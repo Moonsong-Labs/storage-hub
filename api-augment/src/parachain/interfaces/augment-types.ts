@@ -1424,7 +1424,7 @@ import type {
   ValuePropId,
   ValueProposition,
   ValuePropositionWithId
-} from "@storagehub/api-augment/interfaces/storagehubclient";
+} from "@storagehub/api-augment/parachain/interfaces/storagehubclient";
 
 declare module "@polkadot/types/types/registry" {
   interface InterfaceTypes {

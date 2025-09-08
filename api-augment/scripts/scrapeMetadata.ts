@@ -1,5 +1,5 @@
-import fs from "node:fs";
 import { execSync, spawn } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 
 const fetchMetadata = async () => {
@@ -39,7 +39,7 @@ const fetchMetadata = async () => {
 
 async function main() {
   const nodePath = path.join(process.cwd(), "..", "target", "release", "storage-hub-node");
-  const metadataPath = path.join(process.cwd(), "storagehub.json");
+  const metadataPath = path.join(process.cwd(), "metadata-sh-parachain.json");
 
   if (!fs.existsSync(nodePath)) {
     console.error("Storage Hub Node not found at path: ", nodePath);

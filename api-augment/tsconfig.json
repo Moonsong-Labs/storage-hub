@@ -1,22 +1,22 @@
 {
-	"extends": "../tsconfig.json",
-	"compilerOptions": {
-		"incremental": false,
-		"rootDir": "src",
-		"outDir": "dist",
-		"baseUrl": "./",
-		"paths": {
-			"@storagehub/api-augment/*": ["src/*"],
-			"@polkadot/api/augment": ["src/interfaces/augment-api.ts"],
-			"@polkadot/types/augment": ["src/interfaces/augment-types.ts"],
-			"@polkadot/types/lookup": ["src/interfaces/types-lookup.ts"]
-		},
-		"noEmit": false,
-		"declaration": true,
-		"declarationDir": "dist/types",
-		"allowImportingTsExtensions": false,
-		// TODO: This should not be needed but for some reason in `augment-api-query.ts` it is importing the `StagingXcmV4Xcm` type which is never used in that file
-		"noUnusedLocals": false
-	},
-	"exclude": ["node_modules", "dist", "scripts"]
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "rootDir": "src",
+    "outDir": "dist",
+    "baseUrl": "./",
+    "paths": {
+      "@storagehub/api-augment/*": ["src/*"],
+      "@polkadot/api/augment": ["src/parachain/interfaces/augment-api.ts"],
+      "@polkadot/types/augment": ["src/parachain/interfaces/augment-types.ts"],
+      "@polkadot/types/lookup": ["src/parachain/interfaces/types-lookup.ts"]
+    },
+    "noEmit": false,
+    "declaration": true,
+    "declarationDir": "dist/types",
+    "allowImportingTsExtensions": false,
+    // TODO: This should not be needed but for some reason in `augment-api-query.ts` it is importing the `StagingXcmV4Xcm` type which is never used in that file
+    "noUnusedLocals": false
+  },
+  "exclude": ["node_modules", "dist", "scripts"]
 }
