@@ -51,7 +51,7 @@ async function main() {
     "docker",
     [
       "compose",
-      "-f=../docker/local-node-compose.yml",
+      "-f=../docker/local-parachain-compose.yml",
       "up",
       "--remove-orphans",
       "--renew-anon-volumes"
@@ -76,5 +76,7 @@ main()
     process.exitCode = 1;
   })
   .finally(() => {
-    execSync("docker compose -f=../docker/local-node-compose.yml down --remove-orphans --volumes");
+    execSync(
+      "docker compose -f=../docker/local-parachain-compose.yml down --remove-orphans --volumes"
+    );
   });
