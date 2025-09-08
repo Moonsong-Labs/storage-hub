@@ -9,19 +9,29 @@
     "tsc": "tsc --noEmit --pretty",
     "build": "tsc -b --verbose",
     "generate:all": "pnpm generate:defs && pnpm generate:meta",
-    "generate:defs": "pnpm tsx node_modules/@polkadot/typegen/scripts/polkadot-types-from-defs.mjs --package @storagehub/api-augment/interfaces  --input ./src/interfaces --endpoint ./storagehub.json",
-    "generate:meta": "pnpm tsx node_modules/@polkadot/typegen/scripts/polkadot-types-from-chain.mjs --package @storagehub/api-augment/interfaces --endpoint ./storagehub.json --output ./src/interfaces"
+    "generate:defs": "pnpm tsx node_modules/@polkadot/typegen/scripts/polkadot-types-from-defs.mjs --package @storagehub/api-augment/parachain/interfaces  --input ./src/parachain/interfaces --endpoint ./metadata-sh-parachain.json",
+    "generate:meta": "pnpm tsx node_modules/@polkadot/typegen/scripts/polkadot-types-from-chain.mjs --package @storagehub/api-augment/parachain/interfaces --endpoint ./metadata-sh-parachain.json --output ./src/parachain/interfaces"
   },
   "keywords": [],
   "author": "",
-  "module": "./dist/index.js",
+  "module": "./dist/parachain/index.js",
   "type": "module",
-  "types": "./dist/types/index.d.ts",
+  "types": "./dist/types/parachain/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/types/index.d.ts",
-      "module": "./dist/index.js",
-      "default": "./dist/index.js"
+      "types": "./dist/types/parachain/index.d.ts",
+      "module": "./dist/parachain/index.js",
+      "default": "./dist/parachain/index.js"
+    },
+    "./parachain": {
+      "types": "./dist/types/parachain/index.d.ts",
+      "module": "./dist/parachain/index.js",
+      "default": "./dist/parachain/index.js"
+    },
+    "./solochain-evm": {
+      "types": "./dist/types/solochain-evm/index.d.ts",
+      "module": "./dist/solochain-evm/index.js",
+      "default": "./dist/solochain-evm/index.js"
     }
   },
   "license": "ISC",

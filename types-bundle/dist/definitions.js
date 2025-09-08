@@ -24,6 +24,7 @@ export const shSolochainEvmDefinitions = {
 export const types = {
   spec: {
     "sh-parachain-runtime": shParachainDefinitions,
+    shParachainDefinitions,
     "datahaven-stagenet": shSolochainEvmDefinitions
   }
 };

@@ -66,6 +66,8 @@ async function main() {
   fs.writeFileSync(metadataPath, JSON.stringify(jsonResponse, null, 2));
 
   console.log("✅ Metadata file written to:", metadataPath);
+
+  // TODO: Scrape metadata for solochain-evm
 }
 
 main()

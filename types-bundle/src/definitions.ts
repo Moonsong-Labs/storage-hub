@@ -28,6 +28,7 @@ export const shSolochainEvmDefinitions: OverrideBundleDefinition = {
 export const types: OverrideBundleType = {
   spec: {
     "sh-parachain-runtime": shParachainDefinitions,
+    shParachainDefinitions,
     "datahaven-stagenet": shSolochainEvmDefinitions
   }
 };
