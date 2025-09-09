@@ -1,4 +1,5 @@
 import assert, { strictEqual, notEqual } from "node:assert";
+import type { Option } from "@polkadot/types";
 import {
   describeMspNet,
   type EnrichedBspApi,
@@ -738,7 +739,7 @@ describeMspNet(
       );
 
       // Check that the bucket no longer has an MSP
-      const bucketMsp = await userApi.query.providers.bucketMsp(bucketId);
+      const bucketMsp = (await userApi.query.providers.bucketMsp(bucketId)) as Option<any>;
       assert(bucketMsp.isNone, "Bucket should have no MSP after stop storing");
 
       await waitForIndexing(userApi, false);

@@ -37,7 +37,6 @@ describeMspNet(
   ({ before, it, createUserApi, createBspApi, createMsp1Api }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
-    let msp1Api: EnrichedBspApi;
 
     before(async () => {
       userApi = await createUserApi();
@@ -46,7 +45,6 @@ describeMspNet(
       const maybeMsp1Api = await createMsp1Api();
 
       assert(maybeMsp1Api, "MSP API not available");
-      msp1Api = maybeMsp1Api;
 
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",
