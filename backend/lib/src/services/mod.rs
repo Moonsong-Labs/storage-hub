@@ -35,6 +35,7 @@ impl Services {
         storage: Arc<dyn BoxedStorage>,
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
+        callback_base_url: String,
     ) -> Self {
         let auth = Arc::new(AuthService::default());
         let health = Arc::new(HealthService::new(
@@ -46,6 +47,7 @@ impl Services {
             storage.clone(),
             postgres.clone(),
             rpc.clone(),
+            callback_base_url.clone(),
         ));
         Self {
             auth,
@@ -65,6 +67,7 @@ impl Services {
         // Create in-memory storage
         let memory_storage = InMemoryStorage::new();
         let storage = Arc::new(BoxedStorageWrapper::new(memory_storage));
+        let callback_base_url = String::from("http://localhost:8080");
 
         // Create mock database client
         let repo = MockRepository::new();
@@ -75,6 +78,6 @@ impl Services {
         let rpc_conn = Arc::new(AnyRpcConnection::Mock(mock_conn));
         let rpc = Arc::new(StorageHubRpcClient::new(rpc_conn));
 
-        Self::new(storage, postgres, rpc)
+        Self::new(storage, postgres, rpc, callback_base_url)
     }
 }

@@ -12,6 +12,7 @@ mock_mode = true
 
 [storage_hub]
 rpc_url = "ws://127.0.0.1:9777"
+msp_callback_url = "http://host.docker.internal:8080"
 timeout_secs = 30
 max_concurrent_requests = 64
 verify_tls = false

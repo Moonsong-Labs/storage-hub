@@ -51,6 +51,7 @@ pub struct MspService {
     postgres: Arc<DBClient>,
     #[allow(dead_code)]
     rpc: Arc<StorageHubRpcClient>,
+    msp_callback_url: String,
 }
 
 impl MspService {
@@ -59,11 +60,13 @@ impl MspService {
         storage: Arc<dyn BoxedStorage>,
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
+        msp_callback_url: String,
     ) -> Self {
         Self {
             storage,
             postgres,
             rpc,
+            msp_callback_url,
         }
     }
 
@@ -335,8 +338,9 @@ impl MspService {
     }
 
     pub async fn get_file_from_key(&self, file_key: &str) -> Result<FileDownloadResult, Error> {
+        println!("msp_callback_url: {:?}", self.msp_callback_url);
         // Create temp file path for download
-        let temp_path = format!("http://host.docker.internal:8080/uploads/whatsup-http.jpg");
+        let temp_path = format!("{}/uploads/whatsup-http.jpg", self.msp_callback_url);
 
         println!("file_key: {:?}", file_key);
 
