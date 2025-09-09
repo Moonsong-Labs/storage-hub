@@ -110,6 +110,8 @@ describeMspNet(
 
       await userApi.block.skipTo(currentBlockNumber + storageRequestTtl, { finalised: false });
 
+      await waitForIndexing(userApi, false);
+
       // Verify only one delete extrinsic is submitted (for the BSP)
       const deleteIncompleteFileFound = await waitForIncompleteStorageRequestExtrinsic(
         userApi,
@@ -188,6 +190,8 @@ describeMspNet(
         revokeStorageRequestResult.events
       );
 
+      await waitForIndexing(userApi, false);
+
       // Verify two delete extrinsics are submitted (for MSP and BSP)
       const deleteIncompleteFileFound = await waitForIncompleteStorageRequestExtrinsic(
         userApi,
@@ -234,7 +238,7 @@ describeMspNet(
       );
 
       // Wait for MSP to accept storage request
-      await userApi.wait.mspResponseInTxPool();
+      await userApi.wait.mspResponseInTxPool(1);
 
       // Wait for BSP to volunteer and store
       await userApi.wait.bspVolunteer(undefined, false);
@@ -274,6 +278,8 @@ describeMspNet(
 
       assertEventPresent(userApi, "fileSystem", "StorageRequestRevoked", revokeResult.events);
       assertEventPresent(userApi, "fileSystem", "IncompleteStorageRequest", revokeResult.events);
+
+      await waitForIndexing(userApi, false);
 
       // Verify two delete extrinsics are submitted:
       // 1. For the bucket (no MSP present)
