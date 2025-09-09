@@ -5,11 +5,10 @@ use sc_network::{
     config::FullNetworkConfiguration, request_responses::IncomingRequest,
     request_responses::ProtocolConfig, service::traits::NetworkService, ProtocolName,
 };
-use sc_service::Configuration;
 use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 use shc_common::{
     traits::StorageEnableRuntime,
-    types::{BlockHash, OpaqueBlock, ParachainClient, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE},
+    types::{BlockHash, OpaqueBlock, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE},
 };
 
 pub use self::handler::FileTransferService;
@@ -56,20 +55,21 @@ pub fn configure_file_transfer_network<
     Network: sc_network::NetworkBackend<OpaqueBlock, BlockHash>,
     Runtime: StorageEnableRuntime,
 >(
-    client: Arc<ParachainClient<Runtime::RuntimeApi>>,
-    parachain_config: &Configuration,
+    genesis_hash: Runtime::Hash,
+    fork_id: Option<&str>,
     net_config: &mut FullNetworkConfiguration<OpaqueBlock, BlockHash, Network>,
 ) -> (ProtocolName, async_channel::Receiver<IncomingRequest>) {
-    let genesis_hash = client
-        .block_hash(0u32.into())
-        .ok()
-        .flatten()
-        .expect("Genesis block exists; qed");
-
     let (tx, request_receiver) = async_channel::bounded(MAX_FILE_TRANSFER_REQUESTS_QUEUE);
 
-    let mut protocol_config =
-        generate_protocol_config(genesis_hash, parachain_config.chain_spec.fork_id());
+    let mut protocol_config = ProtocolConfig {
+        name: generate_protocol_name(genesis_hash, fork_id).into(),
+        fallback_names: Vec::new(),
+        max_request_size: MAX_REQUEST_PACKET_SIZE_BYTES,
+        max_response_size: MAX_RESPONSE_PACKET_SIZE_BYTES,
+        request_timeout: Duration::from_secs(15),
+        inbound_queue: None,
+    };
+
     protocol_config.inbound_queue = Some(tx);
 
     let request_response_config = Network::request_response_config(
@@ -121,18 +121,13 @@ fn generate_protocol_name<Hash: AsRef<[u8]>>(genesis_hash: Hash, fork_id: Option
     }
 }
 
-/// Generates a [`ProtocolConfig`] for the provider requests protocol, refusing incoming
-/// requests.
-pub fn generate_protocol_config<Hash: AsRef<[u8]>>(
-    genesis_hash: Hash,
-    fork_id: Option<&str>,
-) -> ProtocolConfig {
-    ProtocolConfig {
-        name: generate_protocol_name(genesis_hash, fork_id).into(),
-        fallback_names: Vec::new(),
-        max_request_size: MAX_REQUEST_PACKET_SIZE_BYTES,
-        max_response_size: MAX_RESPONSE_PACKET_SIZE_BYTES,
-        request_timeout: Duration::from_secs(15),
-        inbound_queue: None,
-    }
+/// Fetch the genesis hash.
+///
+/// Will panic if there is no genesis block found.
+pub fn fetch_genesis_hash(client: Arc<impl BlockBackend<OpaqueBlock> + 'static>) -> BlockHash {
+    client
+        .block_hash(0u32.into())
+        .ok()
+        .flatten()
+        .expect("Genesis block exists; qed")
 }
