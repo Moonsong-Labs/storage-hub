@@ -667,7 +667,7 @@ describeMspNet(
         valuePropId,
         mspId,
         null,
-        1 // Single BSP required
+        2 // Keep the storage request opened to be able to revoke
       );
 
       // Wait for MSP to store the file
@@ -703,6 +703,19 @@ describeMspNet(
       );
       assert(initialBucketRoot.isSome, "Initial bucket root should exist");
 
+      // MSP stops storing the bucket (while incomplete request exists)
+      const stopStoringResult = await userApi.block.seal({
+        calls: [userApi.tx.fileSystem.mspStopStoringBucket(bucketId)],
+        signer: mspKey
+      });
+
+      assertEventPresent(
+        userApi,
+        "fileSystem",
+        "MspStoppedStoringBucket",
+        stopStoringResult.events
+      );
+
       // Revoke the storage request to create incomplete state
       const revokeStorageRequestResult = await userApi.block.seal({
         calls: [userApi.tx.fileSystem.revokeStorageRequest(fileKey)],
@@ -723,23 +736,8 @@ describeMspNet(
         revokeStorageRequestResult.events
       );
 
-      await waitForIndexing(userApi);
-
-      // MSP stops storing the bucket (while incomplete request exists)
-      const stopStoringResult = await userApi.block.seal({
-        calls: [userApi.tx.fileSystem.mspStopStoringBucket(bucketId)],
-        signer: mspKey
-      });
-
-      assertEventPresent(
-        userApi,
-        "fileSystem",
-        "MspStoppedStoringBucket",
-        stopStoringResult.events
-      );
-
       // Check that the bucket no longer has an MSP
-      const bucketMsp = (await userApi.query.providers.bucketMsp(bucketId)) as Option<any>;
+      const bucketMsp = (await userApi.query.providers.buckets(bucketId)).unwrap().mspId;
       assert(bucketMsp.isNone, "Bucket should have no MSP after stop storing");
 
       await waitForIndexing(userApi, false);
