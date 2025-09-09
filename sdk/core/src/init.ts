@@ -42,6 +42,10 @@ function decodeBase64ToBytes(b64: string): Uint8Array {
   return out;
 }
 
+// Initialize the embedded WASM.
+// Safe to call many times (uses a cached Promise).
+// Call once before using any WASM‑dependent APIs.
+// TODO: Add global initialization to ensure this runs automatically when any core module is first used.
 export async function initWasm(): Promise<void> {
   if (initPromise) {
     // If initialization is already in progress, wait for the same Promise
