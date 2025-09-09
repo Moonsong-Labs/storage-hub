@@ -42,21 +42,11 @@ pub mod bsp {
 
 /// Test MSP (Main Storage Provider) data
 pub mod msp {
-    use bigdecimal::BigDecimal;
-
     /// Default MSP capacity
     pub const DEFAULT_CAPACITY: i64 = 5000;
 
     /// Default MSP value proposition
     pub const DEFAULT_VALUE_PROP: &str = "Test MSP Value Proposition";
-
-    /// Default MSP capacity for repository (zero)
-    pub fn default_repository_capacity() -> BigDecimal {
-        BigDecimal::from(0)
-    }
-
-    /// Default MSP value proposition for repository (empty string)
-    pub const DEFAULT_REPOSITORY_VALUE_PROP: &str = "";
 }
 
 /// Test merkle tree data
@@ -102,9 +92,6 @@ pub mod file {
 
     /// Default file step (0 = requested, 1 = fulfilled)
     pub const DEFAULT_STEP: i32 = 1;
-
-    /// Default file step for repository (0 = Requested)
-    pub const DEFAULT_REPOSITORY_STEP: i32 = 0;
 }
 
 /// Mock connection test data

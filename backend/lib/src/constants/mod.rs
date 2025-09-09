@@ -1,7 +1,7 @@
 //! Configuration constants for the StorageHub backend
 
 /// Test constants for use across all backend tests
-#[cfg(test)]
+#[cfg(any(feature = "mocks", test))]
 pub mod test;
 
 /// Default server configuration

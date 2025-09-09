@@ -153,8 +153,8 @@ impl IndexerOpsMut for Repository {
         let msp = Msp::create(
             &mut conn,
             account.to_string(),
-            test::msp::default_repository_capacity(),
-            test::msp::DEFAULT_REPOSITORY_VALUE_PROP.to_string(),
+            BigDecimal::from(test::msp::DEFAULT_CAPACITY),
+            test::msp::DEFAULT_VALUE_PROP.to_string(),
             vec![], // No multiaddresses for test data
             onchain_msp_id,
         )
