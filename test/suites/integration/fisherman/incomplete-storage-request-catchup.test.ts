@@ -11,7 +11,6 @@ import {
   sleep
 } from "../../../util";
 import { createBucketAndSendNewStorageRequest } from "../../../util/bspNet/fileHelpers";
-import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
 import { waitForIncompleteStorageRequestExtrinsic } from "../../../util/fisherman/fishermanHelpers";
 
 /**

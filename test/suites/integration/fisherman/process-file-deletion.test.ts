@@ -1,5 +1,4 @@
 import assert, { strictEqual, notEqual } from "node:assert";
-import type { Option } from "@polkadot/types";
 import {
   describeMspNet,
   type EnrichedBspApi,
