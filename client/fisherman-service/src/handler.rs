@@ -536,7 +536,7 @@ impl<Runtime: StorageEnableRuntime> ActorEventLoop<FishermanService<Runtime>>
 
                             // Only process new best blocks
                             if !notification.is_new_best {
-                                return;
+                                continue;
                             }
 
                             if let Err(e) = self

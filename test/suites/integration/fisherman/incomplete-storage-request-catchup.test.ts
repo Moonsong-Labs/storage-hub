@@ -53,8 +53,6 @@ describeMspNet(
       });
 
       await userApi.rpc.engine.createBlock(true, true);
-
-      await waitForIndexing(userApi);
     });
 
     it("processes expired request (BSP only) in unfinalized block", async () => {
@@ -109,8 +107,6 @@ describeMspNet(
         .asRuntimeConfig.asStorageRequestTtl.toNumber();
 
       await userApi.block.skipTo(currentBlockNumber + storageRequestTtl, { finalised: false });
-
-      await waitForIndexing(userApi, false);
 
       // Verify only one delete extrinsic is submitted (for the BSP)
       const deleteIncompleteFileFound = await waitForIncompleteStorageRequestExtrinsic(
@@ -189,8 +185,6 @@ describeMspNet(
         "StorageRequestRevoked",
         revokeStorageRequestResult.events
       );
-
-      await waitForIndexing(userApi, false);
 
       // Verify two delete extrinsics are submitted (for MSP and BSP)
       const deleteIncompleteFileFound = await waitForIncompleteStorageRequestExtrinsic(
@@ -278,8 +272,6 @@ describeMspNet(
 
       assertEventPresent(userApi, "fileSystem", "StorageRequestRevoked", revokeResult.events);
       assertEventPresent(userApi, "fileSystem", "IncompleteStorageRequest", revokeResult.events);
-
-      await waitForIndexing(userApi, false);
 
       // Verify two delete extrinsics are submitted:
       // 1. For the bucket (no MSP present)
