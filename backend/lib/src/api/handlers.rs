@@ -370,22 +370,11 @@ pub async fn upload_file(
             .to_file_key_proof(file_metadata.clone())
             .map_err(|e| Error::BadRequest(format!("Failed to convert proof: {:?}", e)))?;
 
-        let msp_result = services
+        services
             .msp
             .upload_to_msp(&bucket_id, &file_key, &chunks, &file_key_proof)
-            .await;
-
-        // Ensure the upload was successful.
-        match msp_result {
-            Ok(result) => {
-                if !result.success {
-                    return Err(Error::BadRequest(result.message));
-                }
-            }
-            Err(e) => {
-                return Err(Error::BadRequest(e.to_string()));
-            }
-        }
+            .await
+            .map_err(|e| Error::BadRequest(e.to_string()))?;
 
         // Update the last chunk index.
         last_chunk_index = (last_chunk_index + CHUNKS_PER_BATCH).min(total_chunks);
