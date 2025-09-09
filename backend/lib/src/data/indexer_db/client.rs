@@ -178,6 +178,7 @@ impl DBClient {
 
     /// Delete a BSP
     pub async fn delete_bsp(&self, onchain_bsp_id: &OnchainBspId) -> crate::error::Result<()> {
+        // TODO: also clear related associations, like bsp_file
         self.repository
             .delete_bsp(onchain_bsp_id)
             .await
@@ -201,6 +202,7 @@ impl DBClient {
 
     /// Delete a bucket
     pub async fn delete_bucket(&self, onchain_bucket_id: &[u8]) -> crate::error::Result<()> {
+        // TODO: also clear related associations
         self.repository
             .delete_bucket(onchain_bucket_id)
             .await
@@ -234,6 +236,7 @@ impl DBClient {
 
     /// Delete a file
     pub async fn delete_file(&self, file_key: &[u8]) -> crate::error::Result<()> {
+        // TODO: also clear related associations, like bsp_file
         self.repository
             .delete_file(file_key)
             .await
@@ -246,6 +249,7 @@ mod tests {
     use std::sync::Arc;
 
     use bigdecimal::FromPrimitive;
+    use hex_literal::hex;
 
     use shp_types::Hash;
 
@@ -303,19 +307,32 @@ mod tests {
 
     #[tokio::test]
     async fn delete_bsp_with_repo() {
-        let (_container, database_url) =
-            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
+        let (_container, database_url) = setup_test_db(vec![], vec![]).await;
 
         let repo = Repository::new(&database_url)
             .await
             .expect("able to connect to db");
-
         let client = DBClient::new(Arc::new(repo));
-        delete_bsp(
-            client,
-            OnchainBspId::new(Hash::from_slice(&BSP_ONE_ONCHAIN_ID)),
-        )
-        .await;
+
+        // Create a new BSP without any files for deletion testing
+        // to avoid violating constraint on bsp_file table
+
+        // All these values are arbitrary placeholders for test data
+        let test_bsp_id = OnchainBspId::new(Hash::from(hex!(
+            "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+        )));
+
+        let _ = client
+            .create_bsp(
+                "5TestBspAccountAddressForDeletionTesting",
+                test_bsp_id.clone(),
+                BigDecimal::from(1000000_i64),
+                BigDecimal::from(50000_i64),
+            )
+            .await
+            .expect("Failed to create test BSP");
+
+        delete_bsp(client, test_bsp_id).await;
     }
 
     //TODO: reuse tests from repository/postgres.rs
