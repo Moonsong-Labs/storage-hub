@@ -1,0 +1,25 @@
+{
+  "name": "@storagehub-sdk/example-node",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "core": "tsx src/core-demo.ts",
+    "msp": "tsx src/msp-demo.ts",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@storagehub-sdk/core": ">=0.0.5",
+    "@storagehub-sdk/msp-client": ">=0.0.5",
+    "ethers": "^6.15.0"
+  },
+  "devDependencies": {
+    "typescript": "~5.5.4",
+    "@polkadot/types": "^10.13.1",
+    "tsx": "^4.19.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
