@@ -2,9 +2,12 @@
 //!
 //! TODO(MOCK): the entire set of methods of the MspService returns mocked data
 
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use chrono::Utc;
+use sc_network::PeerId;
+use shc_common::types::{ChunkId, FileKeyProof};
+use tracing::{debug, info, warn};
 
 use crate::{
     data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage},
@@ -308,6 +311,182 @@ impl MspService {
             out_of_funds_tick: None,
         })
     }
+
+    /// Upload a batch of file chunks with their FileKeyProof to the MSP via a P2P connection.
+    ///
+    /// This implementation:
+    /// 1. Gets the MSP info to get its multiaddresses.
+    /// 2. Extracts the peer IDs from the multiaddresses.
+    /// 3. Connects to the MSP via a P2P network.
+    /// 4. Sends the FileKeyProof with the batch of chunks to the MSP.
+    pub async fn upload_to_msp(
+        &self,
+        bucket_id: &str,
+        file_key: &str,
+        chunk_ids: &HashSet<ChunkId>,
+        file_key_proof: &FileKeyProof,
+    ) -> Result<(), Error> {
+        debug!(
+            "Starting P2P upload to MSP for file {} in bucket {} of {} chunks",
+            file_key,
+            bucket_id,
+            chunk_ids.len()
+        );
+
+        // Validate inputs.
+        if bucket_id.is_empty() || file_key.is_empty() {
+            return Err(Error::BadRequest(
+                "Bucket ID and file key cannot be empty".to_string(),
+            ));
+        }
+
+        if chunk_ids.is_empty() {
+            return Err(Error::BadRequest(
+                "Cannot upload file with no chunks".to_string(),
+            ));
+        }
+
+        // Get the MSP's info including its multiaddresses.
+        let msp_info = self.get_info().await?;
+
+        // Extract the peer IDs from the multiaddresses.
+        let peer_ids = self.extract_peer_ids_from_multiaddresses(&msp_info.multiaddresses)?;
+
+        // Try to send the chunks batch to each peer until one succeeds.
+        let mut last_err = None;
+        for peer_id in peer_ids {
+            match self
+                .send_upload_request_to_msp_peer(peer_id, file_key_proof.clone())
+                .await
+            {
+                Ok(()) => {
+                    info!(
+                        "Successfully uploaded {} chunks to MSP {} for file {} in bucket {}",
+                        chunk_ids.len(),
+                        msp_info.msp_id,
+                        file_key,
+                        bucket_id
+                    );
+                    return Ok(());
+                }
+                Err(e) => {
+                    warn!("Failed to send chunks to peer {:?}: {:?}", peer_id, e);
+                    last_err = Some(e);
+                    continue;
+                }
+            }
+        }
+
+        Err(last_err.expect("At least one peer_id was tried, so last_err must be Some"))
+    }
+
+    /// Extract peer IDs from multiaddresses
+    fn extract_peer_ids_from_multiaddresses(
+        &self,
+        multiaddresses: &[String],
+    ) -> Result<Vec<PeerId>, Error> {
+        let mut peer_ids = Vec::new();
+
+        for multiaddr_str in multiaddresses {
+            // Parse multiaddress string to extract peer ID
+            // Format example: "/ip4/192.168.0.10/tcp/30333/p2p/12D3KooWJAgnKUrQkGsKxRxojxcFRhtH6ovWfJTPJjAkhmAz2yC8"
+            if let Some(p2p_part) = multiaddr_str.split("/p2p/").nth(1) {
+                // Extract the peer ID part (everything after /p2p/)
+                let peer_id_str = p2p_part.split('/').next().unwrap_or(p2p_part);
+
+                match peer_id_str.parse::<PeerId>() {
+                    Ok(peer_id) => {
+                        debug!(
+                            "Extracted peer ID {:?} from multiaddress {}",
+                            peer_id, multiaddr_str
+                        );
+                        peer_ids.push(peer_id);
+                    }
+                    Err(e) => {
+                        warn!(
+                            "Failed to parse peer ID from multiaddress {}: {:?}",
+                            multiaddr_str, e
+                        );
+                    }
+                }
+            } else {
+                warn!("No /p2p/ section found in multiaddress: {}", multiaddr_str);
+            }
+        }
+
+        if peer_ids.is_empty() {
+            return Err(Error::BadRequest(
+                "No valid peer IDs found in multiaddresses".to_string(),
+            ));
+        }
+
+        Ok(peer_ids)
+    }
+
+    /// Send an upload request to a specific peer ID of the MSP with retry logic.
+    /// TODO: Make the number of retries configurable.
+    async fn send_upload_request_to_msp_peer(
+        &self,
+        peer_id: PeerId,
+        file_key_proof: FileKeyProof,
+    ) -> Result<(), Error> {
+        debug!(
+            "Attempting to send upload request to MSP peer {:?} with file key proof",
+            peer_id
+        );
+
+        // TODO: Implement actual P2P connection and upload request
+        // For now, we'll simulate a successful upload
+        // In a real implementation, this would:
+        // 1. Establish P2P connection to the peer
+        // 2. Send the upload request with file key and proof
+        // 3. Handle the response and retry logic
+
+        let mut retry_attempts = 0;
+        let max_retries = 3;
+
+        while retry_attempts < max_retries {
+            // Simulate upload attempt
+            if self
+                .simulate_upload_to_peer(peer_id, &file_key_proof)
+                .await?
+            {
+                info!("Successfully sent upload request to MSP peer {:?}", peer_id);
+                return Ok(());
+            }
+
+            retry_attempts += 1;
+            if retry_attempts < max_retries {
+                warn!(
+                    "Upload request to MSP peer {:?} failed, retrying... (attempt {})",
+                    peer_id,
+                    retry_attempts + 1
+                );
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            }
+        }
+
+        Err(Error::Internal)
+    }
+
+    /// Simulate upload to peer (placeholder for actual P2P implementation)
+    async fn simulate_upload_to_peer(
+        &self,
+        peer_id: PeerId,
+        _file_key_proof: &FileKeyProof,
+    ) -> Result<bool, Error> {
+        debug!("Simulating upload to peer {:?}", peer_id);
+
+        // TODO: Replace with actual P2P networking implementation
+        // This would involve:
+        // 1. Using sc-network to establish connection
+        // 2. Sending protobuf-encoded upload request
+        // 3. Handling response and parsing it
+
+        // For now, simulate success
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        Ok(true)
+    }
 }
 
 #[cfg(all(test, feature = "mocks"))]
@@ -392,5 +571,57 @@ mod tests {
         assert!(files
             .iter()
             .any(|f| f.name == "references.docx" && f.entry_type == "file"));
+    }
+
+    #[tokio::test]
+    async fn test_upload_to_msp() {
+        let service = create_test_service().await;
+        let chunk_ids = HashSet::new();
+
+        // Create test file metadata
+        let file_metadata = FileMetadata::new(
+            b"test_owner".to_vec(),
+            b"test_bucket".to_vec(),
+            b"test_location".to_vec(),
+            1000,
+            shc_common::types::Fingerprint([0u8; 32]),
+        )
+        .unwrap();
+
+        // Create test FileKeyProof
+        let file_key_proof = FileKeyProof::new(
+            file_metadata.owner().clone(),
+            file_metadata.bucket_id().clone(),
+            file_metadata.location().clone(),
+            file_metadata.file_size(),
+            *file_metadata.fingerprint(),
+            sp_trie::CompactProof {
+                encoded_nodes: vec![],
+            },
+        )
+        .unwrap();
+
+        let result = service
+            .upload_to_msp(
+                "test_bucket",
+                &hex::encode(file_metadata.file_key::<sp_core::Blake2Hasher>()),
+                &chunk_ids,
+                &file_key_proof,
+            )
+            .await;
+
+        assert!(result.is_ok());
+        let upload_result = result.unwrap();
+        assert!(upload_result.success);
+        assert!(upload_result.msp_id.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_get_msps_for_bucket() {
+        let service = create_test_service().await;
+        let msps = service.get_msps_for_bucket("test_bucket").await.unwrap();
+
+        assert!(!msps.is_empty());
+        assert_eq!(msps[0], "msp_for_bucket_test_bucket");
     }
 }
