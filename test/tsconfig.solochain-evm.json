@@ -1,0 +1,13 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": "./",
+    "paths": {
+      "@storagehub/api-augment/solochain-evm": ["../api-augment/src/solochain-evm/index.ts"],
+      "@storagehub/types-bundle": ["../types-bundle/src/index.ts"],
+      "@storagehub/types-bundle/*": ["../types-bundle/src/*"]
+    }
+  },
+  "include": ["suites/solo-node/**/*.ts", "util/**/*.ts"],
+  "exclude": ["suites/integration/**"]
+}
