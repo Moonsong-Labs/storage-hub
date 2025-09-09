@@ -8,8 +8,28 @@
 
 name: Rust Tests
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 on:
   pull_request:
+    paths:
+      - 'client/**'
+      - 'node/**'
+      - 'pallets/**'
+      - 'runtime/**'
+      - 'primitives/**'
+      - 'precompiles/**'
+      - 'backend/**'
+      - 'xcm-simulator/**'
+      - 'sdk/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/**'
+      - 'rust-toolchain.toml'
+      - 'deny.toml'
+      - 'clippy.toml'
   push:
     branches: [main]
   workflow_dispatch:
@@ -57,9 +77,21 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
         with:
-          cache: false
+          cache: true
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.9
+      - name: Cache cargo registry, git index, target dir and sccache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cache/sccache
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-
+            ${{ runner.os }}-cargo-
       - uses: rui314/setup-mold@v1
       - name: Install nextest
         uses: taiki-e/install-action@nextest
@@ -77,6 +109,23 @@ jobs:
         with:
           name: nextest-archive
           path: nextest-archive.tar.zst
+
+  security-audit:
+    needs: [setup]
+    if: needs.setup.outputs.node_changed == 'true'
+    name: Security audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions-rust-lang/setup-rust-toolchain@v1.8
+        with:
+          cache: true
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+      - name: Run cargo audit
+        run: cargo audit
 
   all-rust-tests:
     needs: [setup, prepare]
