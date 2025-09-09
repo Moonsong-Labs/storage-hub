@@ -323,14 +323,12 @@ impl IndexerOpsMut for MockRepository {
 
 #[cfg(test)]
 pub mod tests {
-    use bigdecimal::FromPrimitive;
-
     use shp_types::Hash;
 
     use super::*;
     use crate::constants::{
         rpc::DUMMY_MSP_ID,
-        test::{accounts::*, bsp, bucket, file, merkle::*, msp},
+        test::{accounts::*, bucket, file},
     };
 
     #[tokio::test]

@@ -16,7 +16,8 @@ use shc_indexer_db::{
 };
 
 use crate::{
-    constants::database::DEFAULT_PAGE_LIMIT, data::indexer_db::repository::StorageOperations,
+    constants::database::DEFAULT_PAGE_LIMIT,
+    data::indexer_db::repository::StorageOperations,
     error::{Error, Result},
 };
 
@@ -246,10 +247,19 @@ mod tests {
 
     use bigdecimal::FromPrimitive;
 
+    use shp_types::Hash;
+
     use super::*;
     use crate::{
-        constants::{database::DEFAULT_DATABASE_URL, test::bsp::DEFAULT_BSP_ID},
-        data::indexer_db::{mock_repository::MockRepository, repository::postgres::Repository},
+        constants::test::bsp::DEFAULT_BSP_ID,
+        data::indexer_db::{
+            mock_repository::MockRepository,
+            repository::postgres::Repository,
+            test_helpers::{
+                setup_test_db,
+                snapshot_move_bucket::{BSP_ONE_ONCHAIN_ID, SNAPSHOT_SQL},
+            },
+        },
     };
 
     async fn delete_bsp(client: DBClient, id: OnchainBspId) {
@@ -292,17 +302,19 @@ mod tests {
     }
 
     #[tokio::test]
-    // TODO: should NOT panic when we add testcontainers
-    #[should_panic]
     async fn delete_bsp_with_repo() {
-        // TODO: seed db with bsp
+        let (_, database_url) = setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
 
-        let repo = Repository::new(DEFAULT_DATABASE_URL)
+        let repo = Repository::new(&database_url)
             .await
             .expect("able to connect to db");
 
         let client = DBClient::new(Arc::new(repo));
-        delete_bsp(client, DEFAULT_BSP_ID).await;
+        delete_bsp(
+            client,
+            OnchainBspId::new(Hash::from_slice(&BSP_ONE_ONCHAIN_ID)),
+        )
+        .await;
     }
 
     //TODO: reuse tests from repository/postgres.rs
