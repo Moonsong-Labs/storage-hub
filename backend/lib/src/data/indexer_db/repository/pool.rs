@@ -128,7 +128,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_and_get_connection() {
-        let (_, url) = setup_test_db(vec![], vec![]).await;
+        let (_container, url) = setup_test_db(vec![], vec![]).await;
 
         let pool = SmartPool::new(&url).await.expect("able to create pool");
 

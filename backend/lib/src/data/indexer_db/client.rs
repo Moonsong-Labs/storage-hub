@@ -303,7 +303,8 @@ mod tests {
 
     #[tokio::test]
     async fn delete_bsp_with_repo() {
-        let (_, database_url) = setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
+        let (_container, database_url) =
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
 
         let repo = Repository::new(&database_url)
             .await
