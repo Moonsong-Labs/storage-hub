@@ -7,6 +7,8 @@
 use std::sync::Arc;
 
 #[cfg(test)]
+use bigdecimal::BigDecimal;
+#[cfg(test)]
 use shc_indexer_db::OnchainBspId;
 use shc_indexer_db::{
     models::{Bsp, Bucket, File, Msp},
@@ -15,7 +17,7 @@ use shc_indexer_db::{
 
 use crate::{
     constants::database::DEFAULT_PAGE_LIMIT, data::indexer_db::repository::StorageOperations,
-    error::Result,
+    error::{Error, Result},
 };
 
 /// Database client that delegates to a repository implementation
@@ -58,7 +60,7 @@ impl DBClient {
         self.repository
             .list_bsps(1, 0)
             .await
-            .map_err(|e| crate::error::Error::Database(e.to_string()))?;
+            .map_err(|e| Error::Database(e.to_string()))?;
         Ok(())
     }
 
@@ -70,7 +72,7 @@ impl DBClient {
         self.repository
             .list_bsps(limit, offset)
             .await
-            .map_err(|e| crate::error::Error::Database(e.to_string()))
+            .map_err(|e| Error::Database(e.to_string()))
     }
 
     /// Retrieve a given MSP's entry by its onchain ID
@@ -80,7 +82,7 @@ impl DBClient {
         self.repository
             .get_msp_by_onchain_id(msp_onchain_id)
             .await
-            .map_err(|e| crate::error::Error::Database(e.to_string()))
+            .map_err(|e| Error::Database(e.to_string()))
     }
 
     /// Retrieve info on a specific bucket given its onchain ID
@@ -88,7 +90,7 @@ impl DBClient {
         self.repository
             .get_bucket_by_onchain_id(bucket_onchain_id.into())
             .await
-            .map_err(|e| crate::error::Error::Database(e.to_string()))
+            .map_err(|e| Error::Database(e.to_string()))
     }
 
     /// Get the files of the given bucket with pagination
@@ -104,7 +106,7 @@ impl DBClient {
         self.repository
             .get_files_by_bucket(bucket, limit, offset)
             .await
-            .map_err(|e| crate::error::Error::Database(e.to_string()))
+            .map_err(|e| Error::Database(e.to_string()))
     }
 
     /// Get all the `user`'s buckets with the given MSP
@@ -125,26 +127,116 @@ impl DBClient {
                 offset.unwrap_or(0),
             )
             .await
-            .map_err(|e| crate::error::Error::Database(e.to_string()))
+            .map_err(|e| Error::Database(e.to_string()))
     }
 
     pub async fn get_file_info(&self, file_key: &[u8]) -> Result<File> {
         self.repository
             .get_file_by_file_key(file_key.into())
             .await
-            .map_err(|e| crate::error::Error::Database(e.to_string()))
+            .map_err(|e| Error::Database(e.to_string()))
     }
 }
 
 // Test-only mutable operations
 #[cfg(test)]
 impl DBClient {
-    /// Delete a BSP
-    pub async fn delete_bsp(&self, account: &OnchainBspId) -> crate::error::Result<()> {
+    /// Create a new MSP
+    pub async fn create_msp(
+        &self,
+        account: &str,
+        onchain_msp_id: OnchainMspId,
+    ) -> crate::error::Result<Msp> {
         self.repository
-            .delete_bsp(account)
+            .create_msp(account, onchain_msp_id)
             .await
-            .map_err(|e| crate::error::Error::Database(e.to_string()))
+            .map_err(|e| Error::Database(e.to_string()))
+    }
+
+    /// Delete an MSP
+    pub async fn delete_msp(&self, onchain_msp_id: &OnchainMspId) -> crate::error::Result<()> {
+        self.repository
+            .delete_msp(onchain_msp_id)
+            .await
+            .map_err(|e| Error::Database(e.to_string()))
+    }
+
+    /// Create a new BSP
+    pub async fn create_bsp(
+        &self,
+        account: &str,
+        onchain_bsp_id: OnchainBspId,
+        capacity: BigDecimal,
+        stake: BigDecimal,
+    ) -> crate::error::Result<Bsp> {
+        self.repository
+            .create_bsp(account, onchain_bsp_id, capacity, stake)
+            .await
+            .map_err(|e| Error::Database(e.to_string()))
+    }
+
+    /// Delete a BSP
+    pub async fn delete_bsp(&self, onchain_bsp_id: &OnchainBspId) -> crate::error::Result<()> {
+        self.repository
+            .delete_bsp(onchain_bsp_id)
+            .await
+            .map_err(|e| Error::Database(e.to_string()))
+    }
+
+    /// Create a new bucket
+    pub async fn create_bucket(
+        &self,
+        account: &str,
+        msp_id: Option<i64>,
+        name: &[u8],
+        onchain_bucket_id: &[u8],
+        private: bool,
+    ) -> crate::error::Result<Bucket> {
+        self.repository
+            .create_bucket(account, msp_id, name, onchain_bucket_id, private)
+            .await
+            .map_err(|e| Error::Database(e.to_string()))
+    }
+
+    /// Delete a bucket
+    pub async fn delete_bucket(&self, onchain_bucket_id: &[u8]) -> crate::error::Result<()> {
+        self.repository
+            .delete_bucket(onchain_bucket_id)
+            .await
+            .map_err(|e| Error::Database(e.to_string()))
+    }
+
+    /// Create a new file
+    pub async fn create_file(
+        &self,
+        account: &[u8],
+        file_key: &[u8],
+        bucket_id: i64,
+        onchain_bucket_id: &[u8],
+        location: &[u8],
+        fingerprint: &[u8],
+        size: i64,
+    ) -> crate::error::Result<File> {
+        self.repository
+            .create_file(
+                account,
+                file_key,
+                bucket_id,
+                onchain_bucket_id,
+                location,
+                fingerprint,
+                size,
+            )
+            .await
+            .map_err(|e| Error::Database(e.to_string()))
+    }
+
+    /// Delete a file
+    pub async fn delete_file(&self, file_key: &[u8]) -> crate::error::Result<()> {
+        self.repository
+            .delete_file(file_key)
+            .await
+            .map_err(|e| Error::Database(e.to_string()))
     }
 }
 
@@ -152,13 +244,12 @@ impl DBClient {
 mod tests {
     use std::sync::Arc;
 
+    use bigdecimal::FromPrimitive;
+
     use super::*;
     use crate::{
         constants::{database::DEFAULT_DATABASE_URL, test::bsp::DEFAULT_BSP_ID},
-        data::indexer_db::{
-            mock_repository::{tests::inject_sample_bsp, MockRepository},
-            repository::postgres::Repository,
-        },
+        data::indexer_db::{mock_repository::MockRepository, repository::postgres::Repository},
     };
 
     async fn delete_bsp(client: DBClient, id: OnchainBspId) {
@@ -184,11 +275,19 @@ mod tests {
     #[tokio::test]
     async fn delete_bsp_with_mock_repo() {
         // Create mock repository and add test data
-        let repo = MockRepository::new();
-        let _id = inject_sample_bsp(&repo).await;
+        let repo = Arc::new(MockRepository::new());
+        let client = DBClient::new(repo);
 
-        // initialize client
-        let client = DBClient::new(Arc::new(repo));
+        client
+            .create_bsp(
+                "test_bsp_account",
+                DEFAULT_BSP_ID,
+                BigDecimal::from_i64(1000).unwrap(),
+                BigDecimal::from_i64(100).unwrap(),
+            )
+            .await
+            .expect("should create BSP");
+
         delete_bsp(client, DEFAULT_BSP_ID).await;
     }
 
