@@ -67,8 +67,8 @@ export const sendNewStorageRequest = async (
     bucketId: bucketId.toString(),
     location: newStorageRequestEventDataBlob.location.toString(),
     owner: accountId.toString(),
-    fingerprint: fileMetadata.fingerprint,
-    fileSize: fileMetadata.file_size
+    fingerprint: fileMetadata.fingerprint.toHex(),
+    fileSize: fileMetadata.file_size.toNumber()
   };
 };
 
@@ -90,7 +90,7 @@ export const createBucketAndSendNewStorageRequest = async (
     const valueProps = await api.call.storageProvidersApi.queryValuePropositionsForMsp(
       mspId ?? ShConsts.DUMMY_MSP_ID
     );
-    localValuePropId = valueProps[0].id;
+    localValuePropId = valueProps[0].id.toHex() as HexString;
 
     if (!localValuePropId) {
       throw new Error("No value proposition found");
@@ -165,8 +165,8 @@ export const createBucketAndSendNewStorageRequest = async (
     bucketId: newBucketEventDataBlob.bucketId.toString(),
     location: newStorageRequestEventDataBlob.location.toString(),
     owner: newBucketEventDataBlob.who.toString(),
-    fingerprint: fileMetadata.fingerprint,
-    fileSize: fileMetadata.file_size
+    fingerprint: fileMetadata.fingerprint.toHex(),
+    fileSize: fileMetadata.file_size.toNumber()
   };
 };
 
@@ -184,7 +184,7 @@ export const createBucket = async (
       mspId ?? ShConsts.DUMMY_MSP_ID
     );
 
-    localValuePropId = valueProps[0].id;
+    localValuePropId = valueProps[0].id.toHex() as HexString;
   }
 
   if (localValuePropId === undefined || localValuePropId === null) {
