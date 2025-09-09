@@ -18,6 +18,13 @@ pub fn routes(services: Services) -> Router {
             put(handlers::upload_file),
         )
         .route_layer(DefaultBodyLimit::disable());
+    
+    let internal_file_upload = Router::new()
+        .route(
+            "/uploads/{file_key}",
+            put(handlers::internal_upload_by_key),
+        )
+        .route_layer(DefaultBodyLimit::disable());
 
     Router::new()
         // Auth routes
@@ -41,6 +48,7 @@ pub fn routes(services: Services) -> Router {
             get(handlers::get_file_info),
         )
         .merge(file_upload)
+        .merge(internal_file_upload)
         .route(
             "/buckets/{bucket_id}/distribute/{file_key}",
             post(handlers::distribute_file),

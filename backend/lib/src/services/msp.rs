@@ -339,13 +339,12 @@ impl MspService {
 
     pub async fn get_file_from_key(&self, file_key: &str) -> Result<FileDownloadResult, Error> {
         println!("msp_callback_url: {:?}", self.msp_callback_url);
-        // Create temp file path for download
-        let temp_path = format!("{}/uploads/whatsup-http.jpg", self.msp_callback_url);
-
-        println!("file_key: {:?}", file_key);
+        // Create temp url for download
+        let temp_path = format!("uploads/{}", file_key);
+        let upload_url = format!("{}/{}", self.msp_callback_url, temp_path);
 
         // Create params
-        let params = jsonrpsee::rpc_params![file_key, &temp_path];
+        let params = jsonrpsee::rpc_params![file_key, &upload_url];
 
         // Make the RPC call to download file and get metadata via injected client
         let res: Value = self
@@ -365,6 +364,7 @@ impl MspService {
 
         // Convert location bytes to string
         let location = String::from_utf8_lossy(&rpc_response.success.location).to_string();
+        println!("location: {:?}", location);
 
         // Convert fingerprint to hex string
         let fingerprint = rpc_response

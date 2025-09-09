@@ -1,10 +1,7 @@
 use std::io::Cursor;
 
 use axum::{
-    extract::{Path, Query, State},
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
+    body::Bytes, extract::{Path, Query, State}, http::StatusCode, response::IntoResponse, Json
 };
 use axum_extra::{
     extract::Multipart,
@@ -167,6 +164,22 @@ pub async fn download_by_location(
     let file_stream_resp = FileStream::new(stream).file_name("by_location.txt");
 
     Ok(file_stream_resp.into_response())
+}
+
+pub async fn internal_upload_by_key(
+    State(_services): State<Services>,
+    Path(file_key): Path<String>,
+    body: Bytes, 
+) -> (StatusCode, impl IntoResponse) {
+    // let _auth = extract_bearer_token(&auth)?;
+    println!("HELLO THERE");
+    if let Err(e) = tokio::fs::create_dir_all("uploads").await {
+        return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
+    }
+    match tokio::fs::write(format!("uploads/{}", file_key), body).await {
+        Ok(_) => (StatusCode::OK, "Upload successful".to_string()),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
 }
 
 pub async fn download_by_key(
