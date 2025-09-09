@@ -21,6 +21,8 @@
   ],
   "scripts": {
     "build": "node ../scripts/build.js",
+    "prebuild": "pnpm run build:abi",
+    "build:abi": "node scripts/compile-abi.js",
     "build:types": "tsc --emitDeclarationOnly -p tsconfig.json",
     "dev": "node ../scripts/build.js --watch",
     "lint": "eslint \"{src/**/*.ts,src/**/*.tsx}\"",
@@ -34,11 +36,14 @@
   },
   "dependencies": {
     "@polkadot/types": "^10.10.3",
-    "ethers": "^6.15.0"
+    "ethers": "^6.15.0",
+    "viem": "^2.9.20",
+    "abitype": "^1.0.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "2.1.4",
-    "@types/node": "^20.11.19"
+    "@types/node": "^20.11.19",
+    "solc": "^0.8.26"
   },
   "engines": {
     "node": ">=22"
