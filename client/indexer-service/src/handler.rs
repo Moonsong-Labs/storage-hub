@@ -477,12 +477,14 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 file_key,
                 file_size: _,
                 bucket_id,
-                msp_id,
+                msp_id: maybe_msp_id,
                 old_root: _,
                 new_root,
             } => {
                 // Delete MSP-file association
-                MspFile::delete(conn, file_key.as_ref(), OnchainMspId::from(*msp_id)).await?;
+                if let Some(msp_id) = maybe_msp_id {
+                    MspFile::delete(conn, file_key.as_ref(), OnchainMspId::from(*msp_id)).await?;
+                }
 
                 // Check if file should be deleted (no more associations)
                 let deleted = File::delete_if_orphaned(conn, file_key.as_ref()).await?;

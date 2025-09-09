@@ -431,6 +431,12 @@ where
             )
             .await?;
 
+        let provider_id = match provider_id {
+            Some(StorageProviderId::BackupStorageProvider(id)) => id,
+            Some(StorageProviderId::MainStorageProvider(id)) => id, // TODO: support not requiring an MSP here since there could be a scenario where the bucket is not stored by the MSP
+            None => return Err(anyhow!("No provider ID provided")),
+        };
+
         // Log the signed intention file key for signed deletions
         trace!(
             target: LOG_TARGET,
@@ -454,10 +460,7 @@ where
                 .map_err(|_| anyhow!("Location too long"))?,
             size,
             fingerprint: H256::from_slice(fingerprint.as_ref()),
-            provider_id: match provider_id {
-                StorageProviderId::BackupStorageProvider(id) => id,
-                StorageProviderId::MainStorageProvider(id) => id,
-            },
+            provider_id,
             forest_proof: forest_proof.proof,
         };
 
@@ -535,8 +538,8 @@ where
         // Build the delete_file_for_incomplete_storage_request extrinsic call
         // Pass None for bucket deletion (MSP), Some(id) for BSP deletion
         let provider_id_param = match provider_id {
-            StorageProviderId::BackupStorageProvider(id) => Some(id),
-            StorageProviderId::MainStorageProvider(_) => None, // Bucket deletion
+            Some(StorageProviderId::BackupStorageProvider(id)) => Some(id),
+            Some(StorageProviderId::MainStorageProvider(_)) | None => None,
         };
 
         let call =
@@ -616,7 +619,7 @@ async fn process_deletion_common<NT, Runtime>(
     Vec<u8>,
     <Runtime as pallet_storage_providers::Config>::StorageDataUnit,
     Fingerprint,
-    StorageProviderId<Runtime>,
+    Option<StorageProviderId<Runtime>>,
     CommonForestProof<StorageProofsMerkleTrieLayout>,
 )>
 where
@@ -632,15 +635,20 @@ where
 
     // Determine provider ID from deletion target
     let provider_id = match &deletion_target {
-        FileDeletionTarget::BspId(bsp_id) => StorageProviderId::BackupStorageProvider(*bsp_id),
+        FileDeletionTarget::BspId(bsp_id) => {
+            Some(StorageProviderId::BackupStorageProvider(*bsp_id))
+        }
         FileDeletionTarget::BucketId(target_bucket_id) => {
-            let msp_id = storage_hub_handler
+            let maybe_msp_id = storage_hub_handler
                 .blockchain
                 .query_msp_id_of_bucket_id(*target_bucket_id)
                 .await
-                .map_err(|e| anyhow!("Failed to query MSP ID for bucket: {:?}", e))?
-                .ok_or_else(|| anyhow!("No MSP found for bucket {:?}", target_bucket_id))?;
-            StorageProviderId::MainStorageProvider(msp_id)
+                .map_err(|e| anyhow!("Failed to query MSP ID for bucket: {:?}", e))?;
+            if let Some(msp_id) = maybe_msp_id {
+                Some(StorageProviderId::MainStorageProvider(msp_id))
+            } else {
+                None
+            }
         }
     };
 

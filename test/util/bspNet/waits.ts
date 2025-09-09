@@ -19,6 +19,7 @@ export const waitForTxInPool = async (api: ApiPromise, options: WaitForTxOptions
     checkQuantity,
     strictQuantity = false,
     shouldSeal = false,
+    finalizeBlock = true,
     expectedEvent,
     timeout = 10000,
     verbose = false
@@ -56,7 +57,14 @@ export const waitForTxInPool = async (api: ApiPromise, options: WaitForTxOptions
     }
 
     if (shouldSeal) {
-      const { events } = await sealBlock(api);
+      const { events } = await sealBlock(
+        api,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        finalizeBlock
+      );
       if (expectedEvent) {
         assertEventPresent(api, module, expectedEvent, events);
       }
@@ -80,14 +88,19 @@ export const waitForTxInPool = async (api: ApiPromise, options: WaitForTxOptions
  *
  * @throws Will throw an error if the expected extrinsic or event is not found.
  */
-export const waitForBspVolunteer = async (api: ApiPromise, checkQuantity?: number) => {
+export const waitForBspVolunteer = async (
+  api: ApiPromise,
+  checkQuantity?: number,
+  finalizeBlock = true
+) => {
   await waitForTxInPool(api, {
     module: "fileSystem",
     method: "bspVolunteer",
     checkQuantity,
     strictQuantity: (checkQuantity ?? 0) > 0,
     shouldSeal: true,
-    expectedEvent: "AcceptedBspVolunteer"
+    expectedEvent: "AcceptedBspVolunteer",
+    finalizeBlock
   });
 };
 
@@ -127,6 +140,7 @@ export const waitForBspVolunteerWithoutSealing = async (
  * @param checkQuantity - Optional param to specify the number of expected extrinsics.
  * @param bspAccount - Optional param to specify the BSP Account ID that may be sending submit proof extrinsics.
  * @param shouldSealBlock - Optional param to specify if the block should be sealed with the confirmation extrinsic. Defaults to true.
+ * @param shouldFinalizeBlock - Optional param to specify if the block should be finalized after sealing. Defaults to true.
  * @returns A Promise that resolves when a BSP has confirmed storing a file.
  *
  * @throws Will throw an error if the expected extrinsic or event is not found.
@@ -136,7 +150,8 @@ export const waitForBspStored = async (
   checkQuantity?: number,
   bspAccount?: Address,
   timeoutMs?: number,
-  shouldSealBlock = true
+  shouldSealBlock = true,
+  shouldFinalizeBlock = true
 ) => {
   // To allow time for local file transfer to complete.
   // Default is 10s, with iterations of 100ms delay.
@@ -164,7 +179,7 @@ export const waitForBspStored = async (
         // If there's a submit proof extrinsic pending, advance one block to allow the BSP to submit
         // the proof and be able to confirm storing the file and continue waiting.
         if (match.length === 1) {
-          await sealBlock(api);
+          await sealBlock(api, undefined, undefined, undefined, undefined, shouldFinalizeBlock);
           continue;
         }
       }
@@ -181,7 +196,14 @@ export const waitForBspStored = async (
 
       // If there are exactly checkQuantity extrinsics (or at least one if checkQuantity is not defined), seal the block and check for the event.
       if (shouldSealBlock) {
-        const { events } = await sealBlock(api);
+        const { events } = await sealBlock(
+          api,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          shouldFinalizeBlock
+        );
         assertEventPresent(api, "fileSystem", "BspConfirmedStoring", events);
       }
       break;
@@ -404,16 +426,21 @@ export const waitForBlockImported = async (api: ApiPromise, blockHash: string) =
  *
  * @param api - The ApiPromise instance to interact with the blockchain.
  * @param checkQuantity - Optional param to specify the number of expected extrinsics.
+ * @param timeoutMs - Optional param to specify the timeout in milliseconds.
  * @returns A Promise that resolves when a MSP has sent a response to storage requests.
  *
  * @throws Will throw an error if the expected extrinsic or event is not found.
  */
-export const waitForMspResponseWithoutSealing = async (api: ApiPromise, checkQuantity?: number) => {
+export const waitForMspResponseWithoutSealing = async (
+  api: ApiPromise,
+  checkQuantity?: number,
+  timeoutMs: number = 10000
+) => {
   await waitForTxInPool(api, {
     module: "fileSystem",
     method: "mspRespondStorageRequestsMultipleBuckets",
     checkQuantity,
-    timeout: 10000
+    timeout: timeoutMs
   });
 };
 

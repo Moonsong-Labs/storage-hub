@@ -184,6 +184,11 @@ pub trait ReadBucketsInterface {
         bucket_id: &Self::BucketId,
     ) -> Result<Option<Self::ProviderId>, DispatchError>;
 
+    /// Get the MSP ID of the MSP that's storing a bucket.
+    fn get_bucket_msp(
+        bucket_id: &Self::BucketId,
+    ) -> Result<Option<Self::ProviderId>, DispatchError>;
+
     /// Check if an account is the owner of a bucket.
     fn is_bucket_owner(
         who: &Self::AccountId,
@@ -350,6 +355,18 @@ pub trait MutateBucketsInterface {
     fn decrease_bucket_size(
         bucket_id: &Self::BucketId,
         delta: Self::StorageDataUnit,
+    ) -> DispatchResult;
+
+    /// Decrease the size of a bucket that does not have an MSP.
+    fn decrease_bucket_size_without_msp(
+        bucket_id: &Self::BucketId,
+        delta: Self::StorageDataUnit,
+    ) -> DispatchResult;
+
+    /// Change the root of a bucket that does not have an MSP.
+    fn change_root_bucket_without_msp(
+        bucket_id: Self::BucketId,
+        new_root: Self::MerkleHash,
     ) -> DispatchResult;
 }
 

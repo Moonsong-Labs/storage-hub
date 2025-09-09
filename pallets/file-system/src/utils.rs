@@ -1312,12 +1312,19 @@ where
 
         // Forest proof verification and file deletion
         if <T::Providers as ReadStorageProvidersInterface>::is_msp(&provider_id) {
-            Self::delete_file_from_msp(
+            // Verify that the provided MSP is the one storing the bucket
+            // TODO: This check is necessary for now until tasks/runtime code is changed to support deleting files without an MSP
+            let maybe_bucket_msp =
+                <T::Providers as ReadBucketsInterface>::get_bucket_msp(&bucket_id)?;
+            if let Some(bucket_msp) = maybe_bucket_msp {
+                ensure!(provider_id == bucket_msp, Error::<T>::MspNotStoringBucket);
+            }
+
+            Self::delete_file_from_bucket(
                 file_owner,
                 computed_file_key,
                 size,
                 bucket_id,
-                provider_id,
                 forest_proof,
             )?;
         } else if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&provider_id) {
@@ -1337,13 +1344,14 @@ where
         Ok(())
     }
 
+    /// Delete a file associated to an incomplete storage request from a Bucket or BSP.
+    ///
+    /// Passing `None` for `bsp_id` will treat this as a Bucket Forest deletion and a BSP Forest deletion otherwise.
     pub(crate) fn do_delete_file_for_incomplete_storage_request(
         file_key: MerkleHash<T>,
-        provider_id: Option<ProviderIdFor<T>>,
+        bsp_id: Option<ProviderIdFor<T>>,
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
-        // Fetch incomplete storage request metadata
-        // If there is no entry for the file key, return an error.
         let mut incomplete_storage_request_metadata =
             IncompleteStorageRequests::<T>::get(&file_key)
                 .ok_or(Error::<T>::IncompleteStorageRequestNotFound)?;
@@ -1360,54 +1368,46 @@ where
 
         ensure!(computed_file_key == file_key, Error::<T>::FileKeyMismatch);
 
-        // Perform deletion based on whether provider_id is provided
-        match provider_id {
-            None => {
-                // Bucket deletion - no specific provider
-                ensure!(
-                    incomplete_storage_request_metadata.pending_bucket_removal,
-                    Error::<T>::ProviderNotStoringFile
-                );
+        if let Some(bsp_id) = bsp_id {
+            let is_bsp = incomplete_storage_request_metadata
+                .pending_bsp_removals
+                .contains(&bsp_id);
 
-                // Get the MSP storing the bucket
-                let msp_id = <T::Providers as ReadBucketsInterface>::get_msp_of_bucket(
-                    &incomplete_storage_request_metadata.bucket_id,
-                )?
-                .ok_or(Error::<T>::MspNotStoringBucket)?;
+            // Ensure the BSP is actually in the pending removals list
+            ensure!(is_bsp, Error::<T>::ProviderNotStoringFile);
 
-                Self::delete_file_from_msp(
-                    incomplete_storage_request_metadata.owner.clone(),
-                    file_key,
-                    incomplete_storage_request_metadata.file_size,
-                    incomplete_storage_request_metadata.bucket_id,
-                    msp_id,
-                    forest_proof,
-                )?;
-            }
-            Some(provider_id) => {
-                // BSP deletion - specific provider
-                ensure!(
-                    incomplete_storage_request_metadata
-                        .pending_bsp_removals
-                        .contains(&provider_id),
-                    Error::<T>::ProviderNotStoringFile
-                );
+            Self::delete_file_from_bsp(
+                incomplete_storage_request_metadata.owner.clone(),
+                file_key,
+                incomplete_storage_request_metadata.file_size,
+                bsp_id,
+                forest_proof,
+            )?;
+            incomplete_storage_request_metadata
+                .pending_bsp_removals
+                .retain(|&id| id != bsp_id);
+        } else {
+            ensure!(
+                incomplete_storage_request_metadata.pending_bucket_removal,
+                Error::<T>::ProviderNotStoringFile
+            );
 
-                Self::delete_file_from_bsp(
-                    incomplete_storage_request_metadata.owner.clone(),
-                    file_key,
-                    incomplete_storage_request_metadata.file_size,
-                    provider_id,
-                    forest_proof,
-                )?;
-            }
+            Self::delete_file_from_bucket(
+                incomplete_storage_request_metadata.owner.clone(),
+                file_key,
+                incomplete_storage_request_metadata.file_size,
+                incomplete_storage_request_metadata.bucket_id,
+                forest_proof,
+            )?;
+            incomplete_storage_request_metadata.pending_bucket_removal = false;
         }
 
-        // Remove provider from pending lists
-        incomplete_storage_request_metadata.remove_provider(provider_id);
-
         // Check if all providers have removed their files
-        if incomplete_storage_request_metadata.is_fully_cleaned() {
+        if incomplete_storage_request_metadata
+            .pending_bsp_removals
+            .is_empty()
+            && !incomplete_storage_request_metadata.pending_bucket_removal
+        {
             IncompleteStorageRequests::<T>::remove(&file_key);
         } else {
             Self::add_incomplete_storage_request(file_key, incomplete_storage_request_metadata);
@@ -2724,23 +2724,19 @@ where
     }
 
     /// Removes file key from the bucket's forest, updating the bucket's root.
-    pub(crate) fn delete_file_from_msp(
+    ///
+    /// Does not enforce the presense of an MSP storing the bucket. If no MSP is found to be
+    /// storing the bucket, no payment stream is updated.
+    ///
+    /// This is to support the case where an MSP stops storing a bucket while there still exists
+    /// incomplete storage requests for that bucket.
+    pub(crate) fn delete_file_from_bucket(
         file_owner: T::AccountId,
         file_key: MerkleHash<T>,
         size: StorageDataUnit<T>,
         bucket_id: BucketIdFor<T>,
-        provider_id: ProviderIdFor<T>,
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
-        // Ensure that the provider_id is the owner of the bucket
-        ensure!(
-            <T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(
-                &provider_id,
-                &bucket_id
-            ),
-            Error::<T>::MspNotStoringBucket
-        );
-
         // Get current bucket root
         let old_bucket_root = <T::Providers as ReadBucketsInterface>::get_root_bucket(&bucket_id)
             .ok_or(Error::<T>::BucketNotFound)?;
@@ -2766,19 +2762,29 @@ where
             Some(bucket_id.encode()),
         )?;
 
-        // Update root of the bucket
-        <T::Providers as MutateBucketsInterface>::change_root_bucket(bucket_id, new_root)?;
+        // Check if there's an MSP storing the bucket
+        let maybe_msp_id = <T::Providers as ReadBucketsInterface>::get_bucket_msp(&bucket_id)?;
 
-        // Decrease capacity used of the MSP
-        <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
-            &provider_id,
-            size,
-        )?;
+        if let Some(msp_id) = maybe_msp_id {
+            <T::Providers as MutateBucketsInterface>::change_root_bucket(bucket_id, new_root)?;
+            // Decrease capacity used of the MSP
+            <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
+                &msp_id, size,
+            )?;
 
-        // Decrease bucket size of the MSP
-        // This function also updates the fixed rate payment stream between the user and the MSP.
-        // via apply_delta_fixed_rate_payment_stream function in providers pallet.
-        <T::Providers as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, size)?;
+            // Decrease bucket size
+            // This function also updates the fixed rate payment stream between the user and the MSP.
+            // via apply_delta_fixed_rate_payment_stream function in providers pallet.
+            <T::Providers as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, size)?;
+        } else {
+            <T::Providers as MutateBucketsInterface>::change_root_bucket_without_msp(
+                bucket_id, new_root,
+            )?;
+            // Decrease bucket size
+            <T::Providers as MutateBucketsInterface>::decrease_bucket_size_without_msp(
+                &bucket_id, size,
+            )?;
+        }
 
         // Emit the MSP file deletion completed event
         Self::deposit_event(Event::MspFileDeletionCompleted {
@@ -2786,7 +2792,7 @@ where
             file_key,
             file_size: size,
             bucket_id,
-            msp_id: provider_id,
+            msp_id: maybe_msp_id,
             old_root: old_bucket_root,
             new_root,
         });

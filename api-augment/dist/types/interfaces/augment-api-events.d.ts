@@ -823,7 +823,7 @@ declare module "@polkadot/api-base/types/events" {
           fileKey: H256,
           fileSize: u64,
           bucketId: H256,
-          mspId: H256,
+          mspId: Option<H256>,
           oldRoot: H256,
           newRoot: H256
         ],
@@ -832,7 +832,7 @@ declare module "@polkadot/api-base/types/events" {
           fileKey: H256;
           fileSize: u64;
           bucketId: H256;
-          mspId: H256;
+          mspId: Option<H256>;
           oldRoot: H256;
           newRoot: H256;
         }

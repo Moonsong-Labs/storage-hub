@@ -458,4 +458,10 @@ export type BspStoredOptions = {
    * Defaults to true if not specified.
    */
   sealBlock?: boolean;
+
+  /**
+   * Whether to finalize the block after sealing.
+   * Defaults to true if not specified.
+   */
+  finalizeBlock?: boolean;
 };

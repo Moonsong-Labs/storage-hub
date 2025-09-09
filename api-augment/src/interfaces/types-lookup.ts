@@ -2227,7 +2227,7 @@ declare module "@polkadot/types/lookup" {
       readonly fileKey: H256;
       readonly fileSize: u64;
       readonly bucketId: H256;
-      readonly mspId: H256;
+      readonly mspId: Option<H256>;
       readonly oldRoot: H256;
       readonly newRoot: H256;
     } & Struct;

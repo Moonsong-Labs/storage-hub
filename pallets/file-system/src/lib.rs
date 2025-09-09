@@ -767,7 +767,7 @@ pub mod pallet {
             file_key: MerkleHash<T>,
             file_size: StorageDataUnit<T>,
             bucket_id: BucketIdFor<T>,
-            msp_id: ProviderIdFor<T>,
+            msp_id: Option<ProviderIdFor<T>>,
             old_root: MerkleHash<T>,
             new_root: MerkleHash<T>,
         },
