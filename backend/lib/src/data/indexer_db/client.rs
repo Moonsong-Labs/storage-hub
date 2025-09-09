@@ -257,12 +257,8 @@ mod tests {
     use crate::{
         constants::test::bsp::DEFAULT_BSP_ID,
         data::indexer_db::{
-            mock_repository::MockRepository,
-            repository::postgres::Repository,
-            test_helpers::{
-                setup_test_db,
-                snapshot_move_bucket::{BSP_ONE_ONCHAIN_ID, SNAPSHOT_SQL},
-            },
+            mock_repository::MockRepository, repository::postgres::Repository,
+            test_helpers::setup_test_db,
         },
     };
 
