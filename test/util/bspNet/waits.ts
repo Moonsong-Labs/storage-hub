@@ -434,7 +434,7 @@ export const waitForBlockImported = async (api: ApiPromise, blockHash: string) =
 export const waitForMspResponseWithoutSealing = async (
   api: ApiPromise,
   checkQuantity?: number,
-  timeoutMs: number = 10000
+  timeoutMs = 10000
 ) => {
   await waitForTxInPool(api, {
     module: "fileSystem",
