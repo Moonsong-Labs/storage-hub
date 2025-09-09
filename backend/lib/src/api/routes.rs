@@ -18,12 +18,9 @@ pub fn routes(services: Services) -> Router {
             put(handlers::upload_file),
         )
         .route_layer(DefaultBodyLimit::disable());
-    
+
     let internal_file_upload = Router::new()
-        .route(
-            "/uploads/{file_key}",
-            put(handlers::internal_upload_by_key),
-        )
+        .route("/uploads/{file_key}", put(handlers::internal_upload_by_key))
         .route_layer(DefaultBodyLimit::disable());
 
     Router::new()

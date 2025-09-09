@@ -1,7 +1,12 @@
 use std::io::Cursor;
+use tokio::fs::File;
 
 use axum::{
-    body::Bytes, extract::{Path, Query, State}, http::StatusCode, response::IntoResponse, Json
+    body::Bytes,
+    extract::{Path, Query, State},
+    http::StatusCode,
+    response::IntoResponse,
+    Json,
 };
 use axum_extra::{
     extract::Multipart,
@@ -169,10 +174,9 @@ pub async fn download_by_location(
 pub async fn internal_upload_by_key(
     State(_services): State<Services>,
     Path(file_key): Path<String>,
-    body: Bytes, 
+    body: Bytes,
 ) -> (StatusCode, impl IntoResponse) {
     // let _auth = extract_bearer_token(&auth)?;
-    println!("HELLO THERE");
     if let Err(e) = tokio::fs::create_dir_all("uploads").await {
         return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
     }
@@ -191,9 +195,6 @@ pub async fn download_by_key(
 
     let download_result = services.msp.get_file_from_key(&file_key).await?;
 
-    // Create file stream from the downloaded bytes
-    let stream = ReaderStream::new(Cursor::new(download_result.file_bytes));
-
     // Extract filename from location or use file_key as fallback
     let filename = download_result
         .location
@@ -202,9 +203,20 @@ pub async fn download_by_key(
         .unwrap_or(&file_key)
         .to_string();
 
-    let file_stream_resp = FileStream::new(stream).file_name(&filename);
+    // Open file for streaming
+    let file = File::open(&download_result.temp_path)
+        .await
+        .map_err(|e| Error::BadRequest(format!("Failed to open downloaded file: {}", e)))?;
 
-    Ok(file_stream_resp.into_response())
+    let stream = ReaderStream::new(file);
+    let file_stream_resp = FileStream::new(stream).file_name(&filename).into_response();
+
+    // Schedule cleanup of temp file after response
+    tokio::spawn(async move {
+        let _ = tokio::fs::remove_file(&download_result.temp_path).await;
+    });
+
+    Ok(file_stream_resp)
 }
 
 pub async fn get_file_info(

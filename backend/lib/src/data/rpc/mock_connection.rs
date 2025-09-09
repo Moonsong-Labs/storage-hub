@@ -6,7 +6,7 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::de::DeserializeOwned;
 use serde_json::Value;
 use tokio::{
     sync::{Mutex, RwLock},
