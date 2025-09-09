@@ -32,15 +32,31 @@ pub mod bsp {
 
     /// Default BSP ID
     pub const DEFAULT_BSP_ID: OnchainBspId = OnchainBspId::new(Hash::zero());
+
+    /// Default merkle root for repository (single zero byte)
+    pub const DEFAULT_MERKLE_ROOT: &[u8] = &[0u8];
+
+    /// Default last tick proven value for repository
+    pub const DEFAULT_LAST_TICK_PROVEN: i64 = 0;
 }
 
 /// Test MSP (Main Storage Provider) data
 pub mod msp {
+    use bigdecimal::BigDecimal;
+
     /// Default MSP capacity
     pub const DEFAULT_CAPACITY: i64 = 5000;
 
     /// Default MSP value proposition
     pub const DEFAULT_VALUE_PROP: &str = "Test MSP Value Proposition";
+
+    /// Default MSP capacity for repository (zero)
+    pub fn default_repository_capacity() -> BigDecimal {
+        BigDecimal::from(0)
+    }
+
+    /// Default MSP value proposition for repository (empty string)
+    pub const DEFAULT_REPOSITORY_VALUE_PROP: &str = "";
 }
 
 /// Test merkle tree data
@@ -62,6 +78,9 @@ pub mod bucket {
 
     /// Default bucket is public
     pub const DEFAULT_IS_PUBLIC: bool = true;
+
+    /// Default merkle root for repository (single zero byte)
+    pub const DEFAULT_MERKLE_ROOT: &[u8] = &[0u8];
 }
 
 /// Test file data
@@ -83,6 +102,9 @@ pub mod file {
 
     /// Default file step (0 = requested, 1 = fulfilled)
     pub const DEFAULT_STEP: i32 = 1;
+
+    /// Default file step for repository (0 = Requested)
+    pub const DEFAULT_REPOSITORY_STEP: i32 = 0;
 }
 
 /// Mock connection test data
@@ -99,12 +121,4 @@ pub mod mock_rpc {
     /// Transport error messages
     pub const TEST_TRANSPORT_ERROR_MSG: &str = "Test transport error";
     pub const TEST_RPC_ERROR_MSG: &str = "Test RPC error";
-}
-
-/// Repository test constants for database tests
-pub mod repository {
-    // This module is intentionally left mostly empty as test-specific constants
-    // have been moved to local test scope for better readability and maintainability.
-    // If you need to add shared constants that are used across multiple tests,
-    // add them here with clear documentation about their usage.
 }

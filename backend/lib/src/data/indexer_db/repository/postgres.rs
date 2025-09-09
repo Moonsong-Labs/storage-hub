@@ -26,11 +26,11 @@ use shc_indexer_db::{
     OnchainMspId,
 };
 
-#[cfg(test)]
-use crate::data::indexer_db::repository::IndexerOpsMut;
 use crate::data::indexer_db::repository::{
     error::RepositoryResult, pool::SmartPool, BucketId, FileKey, IndexerOps,
 };
+#[cfg(test)]
+use crate::{constants::test, data::indexer_db::repository::IndexerOpsMut};
 
 /// PostgreSQL repository implementation.
 ///
@@ -150,13 +150,12 @@ impl IndexerOpsMut for Repository {
     ) -> RepositoryResult<Msp> {
         let mut conn = self.pool.get().await?;
 
-        // TODO: move defaults in constants module (like capacity, value_prop)
         let msp = Msp::create(
             &mut conn,
             account.to_string(),
-            BigDecimal::from(0), // Default capacity
-            String::new(),       // Default value_prop
-            vec![],              // No multiaddresses for test data
+            test::msp::default_repository_capacity(),
+            test::msp::DEFAULT_REPOSITORY_VALUE_PROP.to_string(),
+            vec![], // No multiaddresses for test data
             onchain_msp_id,
         )
         .await?;
@@ -180,13 +179,12 @@ impl IndexerOpsMut for Repository {
     ) -> RepositoryResult<Bsp> {
         let mut conn = self.pool.get().await?;
 
-        // TODO: move defaults in constants module
         let bsp = Bsp::create(
             &mut conn,
             account.to_string(),
             capacity,
-            vec![0u8], // Default merkle root
-            vec![],    // No multiaddresses for test data
+            test::bsp::DEFAULT_MERKLE_ROOT.to_vec(),
+            vec![], // No multiaddresses for test data
             onchain_bsp_id,
             stake,
         )
@@ -212,7 +210,6 @@ impl IndexerOpsMut for Repository {
     ) -> RepositoryResult<Bucket> {
         let mut conn = self.pool.get().await?;
 
-        // TODO: move defaults in constants module (like merklet root)
         let bucket = Bucket::create(
             &mut conn,
             msp_id,
@@ -221,7 +218,7 @@ impl IndexerOpsMut for Repository {
             name.to_vec(),
             None, // No collection_id
             private,
-            vec![0u8], // Default merkle root
+            test::bucket::DEFAULT_MERKLE_ROOT.to_vec(),
         )
         .await?;
 
@@ -231,7 +228,7 @@ impl IndexerOpsMut for Repository {
     async fn delete_bucket(&self, onchain_bucket_id: &[u8]) -> RepositoryResult<()> {
         let mut conn = self.pool.get().await?;
 
-        Bucket::delete(&mut coon, onchain_bucket_id.to_vec()).await?;
+        Bucket::delete(&mut conn, onchain_bucket_id.to_vec()).await?;
         Ok(())
     }
 
@@ -247,7 +244,6 @@ impl IndexerOpsMut for Repository {
     ) -> RepositoryResult<File> {
         let mut conn = self.pool.get().await?;
 
-        // TODO: move defaults in constants module (like peer_ids)
         let file = File::create(
             &mut conn,
             account.to_vec(),
@@ -268,7 +264,7 @@ impl IndexerOpsMut for Repository {
     async fn delete_file(&self, file_key: &[u8]) -> RepositoryResult<()> {
         let mut conn = self.pool.get().await?;
 
-        File::delete(&mut coon, file_key).await?;
+        File::delete(&mut conn, file_key).await?;
         Ok(())
     }
 }

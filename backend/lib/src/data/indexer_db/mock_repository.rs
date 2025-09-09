@@ -21,9 +21,12 @@ use shc_indexer_db::{
     OnchainBspId, OnchainMspId,
 };
 
-use crate::data::indexer_db::repository::{
-    error::{RepositoryError, RepositoryResult},
-    BucketId, FileKey, IndexerOps, IndexerOpsMut,
+use crate::{
+    constants::test,
+    data::indexer_db::repository::{
+        error::{RepositoryError, RepositoryResult},
+        BucketId, FileKey, IndexerOps, IndexerOpsMut,
+    },
 };
 
 /// Mock repository implementation using in-memory storage
@@ -154,12 +157,11 @@ impl IndexerOpsMut for MockRepository {
         let id = self.next_id();
         let now = Utc::now().naive_utc();
 
-        // TODO: use/move defaults in constants module (like capacity)
         let msp = Msp {
             id,
             account: account.to_string(),
-            capacity: BigDecimal::from(0), // Default capacity
-            value_prop: String::new(),     // Default value prop
+            capacity: test::msp::default_repository_capacity(),
+            value_prop: test::msp::DEFAULT_REPOSITORY_VALUE_PROP.to_string(),
             created_at: now,
             updated_at: now,
             onchain_msp_id,
@@ -195,17 +197,16 @@ impl IndexerOpsMut for MockRepository {
         let id = self.next_id();
         let now = Utc::now().naive_utc();
 
-        // TODO: use/move defaults in constants module (like merkle root)
         let bsp = Bsp {
             id,
             account: account.to_string(),
             capacity,
             stake,
-            last_tick_proven: 0,
+            last_tick_proven: test::bsp::DEFAULT_LAST_TICK_PROVEN,
             created_at: now,
             updated_at: now,
             onchain_bsp_id,
-            merkle_root: vec![],
+            merkle_root: test::bsp::DEFAULT_MERKLE_ROOT.to_vec(),
         };
 
         self.bsps.write().await.insert(id, bsp.clone());
@@ -239,7 +240,6 @@ impl IndexerOpsMut for MockRepository {
         let id = self.next_id();
         let now = Utc::now().naive_utc();
 
-        // TODO: use/move defaults in constants module (like merkle root)
         let bucket = Bucket {
             id,
             msp_id,
@@ -248,7 +248,7 @@ impl IndexerOpsMut for MockRepository {
             name: name.to_vec(),
             collection_id: None,
             private,
-            merkle_root: vec![],
+            merkle_root: test::bucket::DEFAULT_MERKLE_ROOT.to_vec(),
             created_at: now,
             updated_at: now,
         };
@@ -295,7 +295,7 @@ impl IndexerOpsMut for MockRepository {
             location: location.to_vec(),
             fingerprint: fingerprint.to_vec(),
             size,
-            step: 0, // Default step
+            step: test::file::DEFAULT_REPOSITORY_STEP,
             deletion_status: None,
             created_at: now,
             updated_at: now,
