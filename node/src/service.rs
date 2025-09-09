@@ -65,7 +65,7 @@ use shc_client::{
         RocksDbStorageLayer, ShNodeType, ShRole, ShStorageLayer, UserRole,
     },
 };
-use shc_file_transfer_service::configure_file_transfer_network;
+use shc_file_transfer_service::{configure_file_transfer_network, fetch_genesis_hash};
 use sp_api::ProvideRuntimeApi;
 use sp_keystore::{Keystore, KeystorePtr};
 use substrate_prometheus_endpoint::Registry;
@@ -544,8 +544,8 @@ where
     let mut file_transfer_request_protocol = None;
     if provider_options.is_some() || fisherman_options.is_some() {
         file_transfer_request_protocol = Some(configure_file_transfer_network::<_, Runtime>(
-            client.clone(),
-            &config,
+            fetch_genesis_hash(client.clone()),
+            config.chain_spec.fork_id(),
             &mut net_config,
         ));
     }
@@ -941,8 +941,8 @@ where
     let mut file_transfer_request_protocol = None;
     if provider_options.is_some() || fisherman_options.is_some() {
         file_transfer_request_protocol = Some(configure_file_transfer_network::<_, Runtime>(
-            client.clone(),
-            &config,
+            fetch_genesis_hash(client.clone()),
+            config.chain_spec.fork_id(),
             &mut net_config,
         ));
     }
@@ -1118,8 +1118,8 @@ where
     let mut file_transfer_request_protocol = None;
     if provider_options.is_some() {
         file_transfer_request_protocol = Some(configure_file_transfer_network::<_, Runtime>(
-            client.clone(),
-            &parachain_config,
+            fetch_genesis_hash(client.clone()),
+            parachain_config.chain_spec.fork_id(),
             &mut net_config,
         ));
     }
@@ -1369,8 +1369,8 @@ where
     let mut file_transfer_request_protocol = None;
     if provider_options.is_some() {
         file_transfer_request_protocol = Some(configure_file_transfer_network::<_, Runtime>(
-            client.clone(),
-            &parachain_config,
+            fetch_genesis_hash(client.clone()),
+            parachain_config.chain_spec.fork_id(),
             &mut net_config,
         ));
     }
