@@ -1,6 +1,6 @@
-import { assertDockerLog, describeBspNet, waitFor, type EnrichedBspApi } from "../../../util";
+import { assertDockerLog, describeBspNet, type EnrichedBspApi, waitFor } from "../../../util";
 
-describeBspNet(
+await describeBspNet(
   "BSP Automatic Tipping",
   { extrinsicRetryTimeout: 2 },
   ({ before, it, createUserApi }) => {

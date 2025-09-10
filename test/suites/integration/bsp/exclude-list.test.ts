@@ -1,9 +1,9 @@
 import assert from "node:assert";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
-import { type EnrichedBspApi, describeBspNet, shUser } from "../../../util";
+import { describeBspNet, type EnrichedBspApi, shUser } from "../../../util";
 
-describeBspNet("BSP Exclude list tests", ({ before, createUserApi, it, createBspApi }) => {
+await describeBspNet("BSP Exclude list tests", ({ before, createUserApi, it, createBspApi }) => {
   let userApi: EnrichedBspApi;
   let bspApi: EnrichedBspApi;
 

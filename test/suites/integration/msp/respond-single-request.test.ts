@@ -1,9 +1,9 @@
 import assert, { strictEqual } from "node:assert";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
-import { type EnrichedBspApi, describeMspNet, shUser, waitFor } from "../../../util";
+import { describeMspNet, type EnrichedBspApi, shUser, waitFor } from "../../../util";
 
-describeMspNet(
+await await describeMspNet(
   "Single MSP accepting storage request",
   { networkConfig: "standard" },
   ({ before, createMsp1Api, it, createUserApi }) => {
@@ -104,8 +104,8 @@ describeMspNet(
       await userApi.wait.mspResponseInTxPool();
       await userApi.block.seal();
 
-      let mspAcceptedStorageRequestDataBlob: any = undefined;
-      let storageRequestFulfilledDataBlob: any = undefined;
+      let mspAcceptedStorageRequestDataBlob: any;
+      let storageRequestFulfilledDataBlob: any;
 
       try {
         const { event: mspAcceptedStorageRequestEvent } = await userApi.assert.eventPresent(

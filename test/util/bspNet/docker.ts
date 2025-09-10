@@ -19,14 +19,14 @@ export const addCopypartyContainer = async (options?: { name?: string }) => {
   try {
     const oldContainer = docker.getContainer(containerName);
     await oldContainer.remove({ force: true });
-  } catch (e) {
+  } catch (_e) {
     // Container doesn't exist, that's fine
   }
 
   // Check if image exists, pull if it doesn't
   try {
     await docker.getImage(imageName).inspect();
-  } catch (e) {
+  } catch (_e) {
     // Image doesn't exist, pull it
     console.log(`Pulling ${imageName}...`);
     const stream = await docker.pull(imageName);
@@ -98,7 +98,7 @@ export const addCopypartyContainer = async (options?: { name?: string }) => {
           console.log(`Copyparty HTTP server ready on http://localhost:${httpHostPort}`);
           return true;
         }
-      } catch (e) {
+      } catch (_e) {
         // HTTP not ready yet
       }
       return false;
@@ -262,8 +262,8 @@ export const addCopypartyContainer = async (options?: { name?: string }) => {
     containerIp,
     httpPort: 3923,
     ftpPort: 3921,
-    httpHostPort: Number.parseInt(httpHostPort),
-    ftpHostPort: Number.parseInt(ftpHostPort)
+    httpHostPort: Number.parseInt(httpHostPort, 10),
+    ftpHostPort: Number.parseInt(ftpHostPort, 10)
   };
 };
 
