@@ -1,10 +1,10 @@
+import assert from "node:assert";
 import type { ApiPromise } from "@polkadot/api";
+import type { Address, EventRecord, H256 } from "@polkadot/types/interfaces";
+import * as Assertions from "../asserts";
 import { assertEventPresent, assertExtrinsicPresent } from "../asserts";
 import { sleep } from "../timer";
 import { sealBlock } from "./block";
-import assert from "node:assert";
-import type { Address, EventRecord, H256 } from "@polkadot/types/interfaces";
-import * as Assertions from "../asserts";
 import type { WaitForTxOptions } from "./test-api";
 
 /**
@@ -610,7 +610,7 @@ export const waitForStorageRequestFulfilled = async (api: ApiPromise, fileKey: H
           storageRequestFulfilledEventData,
           "Event doesn't match type but eventMany should have filtered it out"
         );
-        storageRequestFulfilledEventData.fileKey.toString() === fileKey.toString();
+        return storageRequestFulfilledEventData.fileKey.toString() === fileKey.toString();
       });
 
       // If the event was found, check to make sure the storage request is not on-chain and return.

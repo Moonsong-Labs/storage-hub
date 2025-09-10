@@ -1,14 +1,14 @@
-import { runCoreDemo } from './core-demo.js';
-import { runMspDemo } from './msp-demo.js';
+import { runCoreDemo } from "./core-demo.js";
+import { runMspDemo } from "./msp-demo.js";
 
 async function main() {
-  console.log('--- Running core demo ---');
+  console.log("--- Running core demo ---");
   await runCoreDemo();
-  console.log('--- Running msp demo ---');
+  console.log("--- Running msp demo ---");
   await runMspDemo();
 }
 
-main().catch((err) => {
-  console.error('Example failed:', err);
+await main().catch((err) => {
+  console.error("Example failed:", err);
   process.exit(1);
 });

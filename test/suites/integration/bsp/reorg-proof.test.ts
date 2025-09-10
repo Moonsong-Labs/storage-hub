@@ -1,18 +1,18 @@
 import assert, { rejects, strictEqual } from "node:assert";
 import {
-  ShConsts,
   bspKey,
   describeBspNet,
-  shUser,
-  waitFor,
   type EnrichedBspApi,
-  type FileMetadata
+  type FileMetadata,
+  ShConsts,
+  shUser,
+  waitFor
 } from "../../../util";
 
 //! IMPORTANT!
 //! In order to understand better this test, we suggest following this [diagram](https://github.com/Moonsong-Labs/storage-hub/blob/main/resources/reorgsTestFlow.png).
 
-describeBspNet(
+await describeBspNet(
   "BSP proofs resubmitted on chain re-org ♻️",
   { initialised: true, networkConfig: "standard" },
   ({ before, createUserApi, createBspApi, it }) => {

@@ -1,11 +1,8 @@
-import { strictEqual } from "node:assert";
-import assert from "node:assert";
+import assert, { strictEqual } from "node:assert";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
 import Docker from "dockerode";
 import {
-  type EnrichedBspApi,
-  ShConsts,
   assertEventPresent,
   bspThreeKey,
   bspThreeSeed,
@@ -13,12 +10,14 @@ import {
   bspTwoSeed,
   createSqlClient,
   describeMspNet,
+  type EnrichedBspApi,
+  ShConsts,
   shUser,
   sleep,
   waitFor
 } from "../../../util";
 
-describeMspNet(
+await describeMspNet(
   "MSP rejects bucket move requests",
   { initialised: false, indexer: true },
   ({ before, createMsp1Api, createMsp2Api, it, createUserApi }) => {

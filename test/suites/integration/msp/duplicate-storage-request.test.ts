@@ -1,7 +1,7 @@
 import assert, { strictEqual } from "node:assert";
-import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
+import { describeMspNet, type EnrichedBspApi, shUser, sleep } from "../../../util";
 
-describeMspNet(
+await describeMspNet(
   "Single MSP accepting subsequent storage request for same file key",
   { initialised: true },
   ({ before, createMsp1Api, it, createUserApi, getLaunchResponse }) => {

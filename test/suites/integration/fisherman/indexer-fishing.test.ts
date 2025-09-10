@@ -12,24 +12,24 @@ import {
   ShConsts
 } from "../../../util";
 import { createBucketAndSendNewStorageRequest } from "../../../util/bspNet/fileHelpers";
+import { waitForDeleteFileExtrinsic } from "../../../util/fisherman/fishermanHelpers";
+import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
 import {
+  chargeUserUntilInsolvent,
   hexToBuffer,
-  waitForFileIndexed,
-  waitForBucketIndexed,
-  waitForBucketByIdIndexed,
-  waitForMspFileAssociation,
-  waitForBspFileAssociation,
-  waitForFileDeleted,
-  waitForBlockIndexed,
   verifyNoBspFileAssociation,
   verifyNoOrphanedBspAssociations,
-  verifyNoOrphanedMspAssociations
+  verifyNoOrphanedMspAssociations,
+  waitForBlockIndexed,
+  waitForBspFileAssociation,
+  waitForBucketByIdIndexed,
+  waitForBucketIndexed,
+  waitForFileDeleted,
+  waitForFileIndexed,
+  waitForMspFileAssociation
 } from "../../../util/indexerHelpers";
-import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
-import { waitForDeleteFileExtrinsic } from "../../../util/fisherman/fishermanHelpers";
-import { chargeUserUntilInsolvent } from "../../../util/indexerHelpers";
 
-describeMspNet(
+await describeMspNet(
   "Fisherman Indexer - Fishing Mode",
   {
     initialised: false,

@@ -1,7 +1,7 @@
 import assert, { equal, strictEqual } from "node:assert";
 import { describeMspNet, type EnrichedBspApi, type SqlClient } from "../../../util";
 
-describeMspNet(
+await describeMspNet(
   "Indexer Sanity Checks",
   { initialised: false, indexer: true },
   ({ before, it, createUserApi, createSqlClient }) => {

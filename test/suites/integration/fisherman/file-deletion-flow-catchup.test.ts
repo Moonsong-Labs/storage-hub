@@ -11,15 +11,15 @@ import {
 } from "../../../util";
 import { createBucketAndSendNewStorageRequest } from "../../../util/bspNet/fileHelpers";
 import {
-  waitForFileIndexed,
-  waitForMspFileAssociation,
-  waitForBspFileAssociation
-} from "../../../util/indexerHelpers";
-import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
-import {
   waitForDeleteFileExtrinsic,
   waitForFishermanProcessing
 } from "../../../util/fisherman/fishermanHelpers";
+import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
+import {
+  waitForBspFileAssociation,
+  waitForFileIndexed,
+  waitForMspFileAssociation
+} from "../../../util/indexerHelpers";
 
 /**
  * FISHERMAN FILE DELETION FLOW WITH CATCHUP
@@ -39,7 +39,7 @@ import {
  * 3. Sends file deletion request in an unfinalized block
  * 4. Verifies fisherman can index and process events from unfinalized blocks
  */
-describeMspNet(
+await describeMspNet(
   "Fisherman File Deletion Flow with Catchup",
   {
     initialised: false,
