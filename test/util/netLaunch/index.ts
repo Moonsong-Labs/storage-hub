@@ -1,20 +1,23 @@
-import path from "node:path";
-import fs from "node:fs";
-import tmp from "tmp";
-import * as compose from "docker-compose";
-import yaml from "yaml";
 import assert from "node:assert";
+import { spawn, spawnSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import * as compose from "docker-compose";
+import tmp from "tmp";
+import yaml from "yaml";
 import {
   addBsp,
   BspNetTestApi,
+  type EnrichedBspApi,
+  type FileMetadata,
   forceSignupBsp,
   getContainerIp,
   getContainerPeerId,
   ShConsts,
-  type EnrichedBspApi,
-  type FileMetadata,
   type ToxicInfo
 } from "../bspNet";
+import { DUMMY_MSP_ID } from "../bspNet/consts";
+import { MILLIUNIT, UNIT } from "../constants";
 import {
   alice,
   bspDownKey,
@@ -29,10 +32,7 @@ import {
   mspTwoKey,
   shUser
 } from "../pjsKeyring";
-import { MILLIUNIT, UNIT } from "../constants";
 import { sleep } from "../timer";
-import { spawn, spawnSync } from "node:child_process";
-import { DUMMY_MSP_ID } from "../bspNet/consts";
 
 export type ShEntity = {
   port: number;
@@ -910,7 +910,7 @@ export type NetLaunchConfig = {
    */
   indexerMode?: "full" | "lite" | "fishing";
 
-  /** 
+  /**
    * Runtime type to use.
    * 'parachain' - Polkadot parachain runtime (default)
    * 'solochain' - Solochain EVM runtime
