@@ -190,6 +190,14 @@ pub async fn download_by_key(
     State(services): State<Services>,
     Path(file_key): Path<String>,
 ) -> Result<impl IntoResponse, Error> {
+    #[cfg(feature = "mocks")]
+    {
+        let file_data = b"Mock file content for download".to_vec();
+        let stream = ReaderStream::new(Cursor::new(file_data));
+        let file_stream_resp = FileStream::new(stream).file_name("by_key.txt");
+        return Ok(file_stream_resp.into_response());
+    }
+
     // TODO: re-add auth
     // let _auth = extract_bearer_token(&auth)?;
 
