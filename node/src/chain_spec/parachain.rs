@@ -41,7 +41,6 @@ pub fn local_testnet_config() -> ChainSpec {
         WASM_BINARY.expect("WASM binary was not built, please build it!"),
         Extensions {
             relay_chain: "rococo-local".into(),
-            // You MUST set this to the correct network!
             para_id: CHAIN_ID as u32,
         },
     )

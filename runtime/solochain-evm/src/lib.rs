@@ -201,10 +201,6 @@ impl WeightToFeePolynomial for WeightToFee {
 
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
-    // If you're interacting with this runtime through PolkadotJS,
-    // change this name to `datahaven-stagenet` so that PolkadotJS
-    // recognises it as an Ethereum-compatible chain.
-    // For more information see this PR: https://github.com/datahaven-xyz/datahaven/pull/51)
     spec_name: alloc::borrow::Cow::Borrowed("sh-solochain-evm"),
     impl_name: alloc::borrow::Cow::Borrowed("sh-solochain-evm"),
     authoring_version: 1,

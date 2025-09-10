@@ -10,6 +10,15 @@ const TOKEN_DECIMALS: u8 = 18; // Different decimals for EVM compatibility
 const TOKEN_SYMBOL: &str = "SHUB";
 
 pub fn development_config() -> Result<SolochainChainSpec, String> {
+    // In the properties attribute, the following settings are used by various
+    // front-end libraries, including the Polkadot.js API:
+    // - tokenSymbol: a name for your EVM network's own token symbol.
+    // - tokenDecimals: the number of decimals for your EVM network's own token.
+    // - ss58Format: an integer that uniquely identifies the accounts in your network.
+    //               SS58 encoding transforms the underlying 32-byte account to a
+    //               network-specific representation. This attribute doesn't apply nor
+    //               interfere with the ECDSA Ethereum accounts on EVM-compatible networks.
+    // - isEthereum: a boolean identifying the network as EVM compatible or not.
     let mut properties = sc_service::Properties::new();
     properties.insert("tokenSymbol".into(), TOKEN_SYMBOL.into());
     properties.insert("tokenDecimals".into(), TOKEN_DECIMALS.into());
