@@ -10,13 +10,13 @@ import {
   assertEventPresent
 } from "../../../util";
 import { createBucketAndSendNewStorageRequest } from "../../../util/bspNet/fileHelpers";
-import {
-  waitForFileIndexed,
-  waitForMspFileAssociation,
-  waitForBspFileAssociation
-} from "../../../util/indexerHelpers";
-import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
 import { waitForFishermanProcessing } from "../../../util/fisherman/fishermanHelpers";
+import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
+import {
+  waitForBspFileAssociation,
+  waitForFileIndexed,
+  waitForMspFileAssociation
+} from "../../../util/indexerHelpers";
 
 /**
  * FISHERMAN FILE DELETION FLOW WITH CATCHUP
