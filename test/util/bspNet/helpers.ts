@@ -1,20 +1,20 @@
-import type { ApiPromise } from "@polkadot/api";
-import type { KeyringPair } from "@polkadot/keyring/types";
+import assert from "node:assert";
 import * as child_process from "node:child_process";
 import { execSync } from "node:child_process";
 import crypto from "node:crypto";
-import Docker from "dockerode";
 import * as util from "node:util";
-import assert from "node:assert";
+import type { ApiPromise } from "@polkadot/api";
+import type { KeyringPair } from "@polkadot/keyring/types";
+import Docker from "dockerode";
+import { assertDockerLog } from "../asserts.ts";
+import { DOCKER_IMAGE } from "../constants.ts";
+import { cleanupEnvironment, printDockerStatus } from "../helpers.ts";
 import { sleep } from "../timer.ts";
 import { sealBlock } from "./block.ts";
 import { CAPACITY, MAX_STORAGE_CAPACITY } from "./consts";
 import * as ShConsts from "./consts.ts";
 import { addBspContainer, showContainers } from "./docker";
 import type { EnrichedBspApi } from "./test-api.ts";
-import { cleanupEnvironment, printDockerStatus } from "../helpers.ts";
-import { DOCKER_IMAGE } from "../constants.ts";
-import { assertDockerLog } from "../asserts.ts";
 
 const exec = util.promisify(child_process.exec);
 
