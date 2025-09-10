@@ -33,10 +33,10 @@ sp-arithmetic = { workspace = true }
 default = ["std"]
 runtime-benchmarks = ["shp-traits/runtime-benchmarks"]
 std = [
-    "codec/std",
-    "scale-info/std",
-    "shp-traits/std",
-    "sp-core/std",
-    "sp-std/std",
+	"codec/std",
+	"scale-info/std",
+	"shp-traits/std",
+	"sp-core/std",
+	"sp-std/std",
 ]
 try-runtime = ["shp-traits/try-runtime"]

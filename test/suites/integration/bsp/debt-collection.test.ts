@@ -1,9 +1,9 @@
 import assert, { strictEqual } from "node:assert";
 import { after } from "node:test";
-import { bob, describeBspNet, fetchEvent, ShConsts, type EnrichedBspApi } from "../../../util";
 import { BN } from "@polkadot/util";
+import { bob, describeBspNet, type EnrichedBspApi, fetchEvent, ShConsts } from "../../../util";
 
-describeBspNet(
+await describeBspNet(
   "BSPNet: Collect users debt",
   { initialised: "multi", networkConfig: "standard" },
   ({ before, it, createUserApi, createBspApi, getLaunchResponse, createApi }) => {

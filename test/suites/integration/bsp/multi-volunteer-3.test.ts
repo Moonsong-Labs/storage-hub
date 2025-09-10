@@ -4,8 +4,6 @@ import type { ISubmittableResult } from "@polkadot/types/types";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
 import {
-  type EnrichedBspApi,
-  ShConsts,
   alice,
   bob,
   bspThreeKey,
@@ -13,10 +11,12 @@ import {
   bspTwoKey,
   bspTwoSeed,
   charlie,
-  describeBspNet
+  describeBspNet,
+  type EnrichedBspApi,
+  ShConsts
 } from "../../../util";
 
-describeBspNet("BSPNet: Mulitple BSP Volunteering - 3", ({ before, it, createUserApi }) => {
+await describeBspNet("BSPNet: Mulitple BSP Volunteering - 3", ({ before, it, createUserApi }) => {
   let api: EnrichedBspApi;
 
   before(async () => {

@@ -30,11 +30,13 @@ use pallet_evm::{
     FrameSystemAccountProvider, IdentityAddressMapping,
     OnChargeEVMTransaction as OnChargeEVMTransactionT,
 };
+use pallet_evm_precompile_file_system as fs_precompile;
 use pallet_grandpa::AuthorityId as GrandpaId;
 use pallet_nfts::PalletFeatures;
 use pallet_transaction_payment::{ConstFeeMultiplier, FungibleAdapter, Multiplier};
 use polkadot_primitives::Moment;
 use polkadot_runtime_common::{prod_or_fast, BlockHashCount};
+use precompile_utils::precompile_set::*;
 use shp_data_price_updater::{MostlyStablePriceIndexUpdater, MostlyStablePriceIndexUpdaterConfig};
 use shp_file_key_verifier::FileKeyVerifier;
 use shp_file_metadata::{ChunkId, FileMetadata};
@@ -607,7 +609,7 @@ where
 parameter_types! {
     pub BlockGasLimit: U256
         = U256::from(NORMAL_DISPATCH_RATIO * MAXIMUM_BLOCK_WEIGHT.ref_time() / WEIGHT_PER_GAS);
-    // pub PrecompilesValue: TemplatePrecompiles<Runtime> = TemplatePrecompiles::<_>::new();
+    pub PrecompilesValue: Precompiles<Runtime> = Precompiles::<_>::new();
     pub WeightPerGas: Weight = Weight::from_parts(WEIGHT_PER_GAS, 0);
     pub SuicideQuickClearLimit: u32 = 0;
     /// The amount of gas per pov. A ratio of 16 if we convert ref_time to gas and we compare
@@ -622,6 +624,20 @@ parameter_types! {
     pub GasLimitStorageGrowthRatio: u64 = 366;
 }
 
+// Define File System precompile address (0x64)
+pub const FILE_SYSTEM_PRECOMPILE_ADDRESS: u64 = 100;
+
+// Precompile set: add the file system precompile at 0x64
+pub type Precompiles<R> = PrecompileSetBuilder<
+    R,
+    (
+        PrecompileAt<
+            AddressU64<FILE_SYSTEM_PRECOMPILE_ADDRESS>,
+            fs_precompile::FileSystemPrecompile<R>,
+        >,
+    ),
+>;
+
 impl pallet_evm::Config for Runtime {
     type AccountProvider = FrameSystemAccountProvider<Runtime>;
     type FeeCalculator = TransactionPaymentAsGasPrice;
@@ -633,8 +649,8 @@ impl pallet_evm::Config for Runtime {
     type AddressMapping = IdentityAddressMapping;
     type Currency = Balances;
     type RuntimeEvent = RuntimeEvent;
-    type PrecompilesType = ();
-    type PrecompilesValue = ();
+    type PrecompilesType = Precompiles<Runtime>;
+    type PrecompilesValue = PrecompilesValue;
     type ChainId = EvmChainId;
     type BlockGasLimit = BlockGasLimit;
     type Runner = pallet_evm::runner::stack::Runner<Self>;

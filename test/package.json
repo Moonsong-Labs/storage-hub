@@ -86,7 +86,7 @@
     "yaml": "2.8.1"
   },
   "devDependencies": {
-    "@biomejs/biome": "1.8.3",
+    "@biomejs/biome": "2.2.4",
     "@types/dockerode": "3.3.43",
     "@types/inquirer": "9.0.9",
     "@types/json-bigint": "1.0.4",

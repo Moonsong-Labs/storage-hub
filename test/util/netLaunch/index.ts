@@ -1,20 +1,23 @@
-import path from "node:path";
-import fs from "node:fs";
-import tmp from "tmp";
-import * as compose from "docker-compose";
-import yaml from "yaml";
 import assert from "node:assert";
+import { spawn, spawnSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import * as compose from "docker-compose";
+import tmp from "tmp";
+import yaml from "yaml";
 import {
   addBsp,
   BspNetTestApi,
+  type EnrichedBspApi,
+  type FileMetadata,
   forceSignupBsp,
   getContainerIp,
   getContainerPeerId,
   ShConsts,
-  type EnrichedBspApi,
-  type FileMetadata,
   type ToxicInfo
 } from "../bspNet";
+import { DUMMY_MSP_ID } from "../bspNet/consts";
+import { MILLIUNIT, UNIT } from "../constants";
 import {
   alice,
   bspDownKey,
@@ -29,10 +32,7 @@ import {
   mspTwoKey,
   shUser
 } from "../pjsKeyring";
-import { MILLIUNIT, UNIT } from "../constants";
 import { sleep } from "../timer";
-import { spawn, spawnSync } from "node:child_process";
-import { DUMMY_MSP_ID } from "../bspNet/consts";
 
 export type ShEntity = {
   port: number;
@@ -120,7 +120,6 @@ export class NetworkLauncher {
         };
       }
     } else {
-      // biome-ignore lint/performance/noDelete: to ensure compose file is valid
       delete composeYaml.services.toxiproxy;
     }
 
@@ -145,7 +144,6 @@ export class NetworkLauncher {
 
     // Remove fisherman service if not enabled
     if (!this.config.fisherman || this.type !== "fullnet") {
-      // biome-ignore lint/performance/noDelete: to ensure compose file is valid
       delete composeYaml.services["sh-fisherman"];
     }
 
@@ -166,10 +164,12 @@ export class NetworkLauncher {
     if (this.config.rocksdb) {
       composeYaml.services["sh-bsp"].command.push("--storage-layer=rocks-db");
       composeYaml.services["sh-bsp"].command.push(
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: It's for the yaml file that takes this syntax
         "--storage-path=/tmp/bsp/${BSP_IP:-default_bsp_ip}"
       );
       composeYaml.services["sh-user"].command.push("--storage-layer=rocks-db");
       composeYaml.services["sh-user"].command.push(
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: It's for the yaml file that takes this syntax
         "--storage-path=/tmp/bsp/${BSP_IP:-default_bsp_ip}"
       );
     }

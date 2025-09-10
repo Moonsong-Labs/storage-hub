@@ -86,7 +86,11 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+await main()
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  })
+  .finally(() => {
+    execSync("docker compose -f=../docker/local-node-compose.yml down --remove-orphans --volumes");
+  });

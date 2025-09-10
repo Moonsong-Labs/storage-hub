@@ -1,8 +1,8 @@
 import assert, { strictEqual } from "node:assert";
-import { describeMspNet, mspKey, waitFor, type EnrichedBspApi } from "../../../util";
 import type { H256 } from "@polkadot/types/interfaces";
+import { describeMspNet, type EnrichedBspApi, mspKey, waitFor } from "../../../util";
 
-describeMspNet(
+await describeMspNet(
   "MSP deleting bucket when stop storing bucket is called",
   ({ before, createMsp1Api, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
@@ -37,8 +37,8 @@ describeMspNet(
       await userApi.wait.mspResponseInTxPool();
       await userApi.block.seal();
 
-      let mspAcceptedStorageRequestDataBlob: any = undefined;
-      let storageRequestFulfilledDataBlob: any = undefined;
+      let mspAcceptedStorageRequestDataBlob: any;
+      let storageRequestFulfilledDataBlob: any;
 
       try {
         const { event: mspAcceptedStorageRequestEvent } = await userApi.assert.eventPresent(

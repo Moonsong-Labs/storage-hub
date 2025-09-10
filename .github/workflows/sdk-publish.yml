@@ -81,13 +81,18 @@ jobs:
       - name: Install wasm-pack
         run: curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
 
-      # Install dependencies
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      # Build packages separately
+      - name: Build core
+        working-directory: sdk/core
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
 
-      # Build WASM
-      - name: Build WASM
-        run: pnpm build:wasm
+      - name: Build msp-client
+        working-directory: sdk/msp-client
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
 
       # Set both package versions from input (no commit)
       - name: Set versions (no commit)
@@ -95,15 +100,17 @@ jobs:
           jq --arg v "$VERSION" '.version=$v' core/package.json > core/package.json.tmp && mv core/package.json.tmp core/package.json
           jq --arg v "$VERSION" '.version=$v' msp-client/package.json > msp-client/package.json.tmp && mv msp-client/package.json.tmp msp-client/package.json
 
-      # Build packages
-      - name: Build
-        run: pnpm build
+      # Pack and publish core
+      - name: Pack and publish core
+        working-directory: sdk/core
+        run: |
+          pnpm pack
+          pnpm publish --access public --no-git-checks
 
-      # Preflight publish (dry-run)
-      - name: Preflight dry-run publish
-        run: pnpm publish -r --filter ./core --filter ./msp-client --dry-run --no-git-checks
-
-      # Publish packages
-      - name: Publish packages
-        run: pnpm publish -r --filter ./core --filter ./msp-client --access public --no-git-checks
+      # Pack and publish msp-client
+      - name: Pack and publish msp-client
+        working-directory: sdk/msp-client
+        run: |
+          pnpm pack
+          pnpm publish --access public --no-git-checks
 
