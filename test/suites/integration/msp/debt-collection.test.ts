@@ -6,7 +6,7 @@ import { decodeAddress } from "@polkadot/util-crypto";
 import { describeMspNet, type EnrichedBspApi, shUser, waitFor } from "../../../util";
 import { DUMMY_MSP_ID, MSP_CHARGING_PERIOD } from "../../../util/bspNet/consts";
 
-await await describeMspNet(
+await describeMspNet(
   "Single MSP collecting debt",
   ({ before, createMsp1Api, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
