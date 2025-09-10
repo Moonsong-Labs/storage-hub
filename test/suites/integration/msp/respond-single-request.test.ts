@@ -3,7 +3,7 @@ import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
 import { describeMspNet, type EnrichedBspApi, shUser, waitFor } from "../../../util";
 
-await await describeMspNet(
+await describeMspNet(
   "Single MSP accepting storage request",
   { networkConfig: "standard" },
   ({ before, createMsp1Api, it, createUserApi }) => {

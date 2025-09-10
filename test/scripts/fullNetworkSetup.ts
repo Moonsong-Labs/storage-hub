@@ -113,4 +113,4 @@ async function main() {
   }
 }
 
-await await main();
+await main();

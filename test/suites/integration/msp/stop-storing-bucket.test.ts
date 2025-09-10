@@ -2,7 +2,7 @@ import assert, { strictEqual } from "node:assert";
 import type { H256 } from "@polkadot/types/interfaces";
 import { describeMspNet, type EnrichedBspApi, mspKey, waitFor } from "../../../util";
 
-await await describeMspNet(
+await describeMspNet(
   "MSP deleting bucket when stop storing bucket is called",
   ({ before, createMsp1Api, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
