@@ -1,9 +1,9 @@
 import assert, { strictEqual } from "node:assert";
 import {
   addBsp,
+  BspNetTestApi,
   bspDownKey,
   bspDownSeed,
-  BspNetTestApi,
   bspThreeKey,
   bspThreeSeed,
   bspTwoKey,
@@ -13,7 +13,7 @@ import {
   ShConsts
 } from "../../../util";
 
-describeBspNet(
+await describeBspNet(
   "BSPNet: BSP Volunteering Thresholds",
   { initialised: false, bspStartingWeight: 100n, networkConfig: "standard" },
   ({ before, it, createUserApi, createBspApi }) => {

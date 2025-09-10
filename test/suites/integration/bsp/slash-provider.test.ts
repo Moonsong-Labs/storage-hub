@@ -1,7 +1,7 @@
 import { strictEqual } from "node:assert";
 import { describeBspNet, type EnrichedBspApi } from "../../../util";
 
-describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, createBspApi, it }) => {
+await describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, createBspApi, it }) => {
   let userApi: EnrichedBspApi;
   let bspApi: EnrichedBspApi;
 

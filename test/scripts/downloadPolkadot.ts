@@ -1,6 +1,6 @@
+import assert from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
-import assert from "node:assert";
 
 async function main() {
   const binaries = ["polkadot", "polkadot-prepare-worker", "polkadot-execute-worker"];
@@ -53,4 +53,4 @@ function getVersionArg() {
   return args[0];
 }
 
-main();
+await main();

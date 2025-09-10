@@ -2,7 +2,7 @@
 // import { describeMspNet, shUser, waitFor, type EnrichedBspApi } from "../../../util";
 
 // TODO: Skipping this test suite until new file deletion flow is implemented.
-// describeMspNet(
+// await describeMspNet(
 //   "Single MSP deleting multiple files",
 //   ({ before, createMsp1Api, it, createUserApi }) => {
 //     let userApi: EnrichedBspApi;
