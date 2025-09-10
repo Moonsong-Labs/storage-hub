@@ -395,16 +395,19 @@ pub fn run() -> Result<()> {
                 }
                 #[cfg(feature = "runtime-benchmarks")]
                 BenchmarkCmd::Storage(cmd) => runner.sync_run(|config| {
-                    let partials = if config.chain_spec.is_parachain() {
-                        new_partial_parachain(&config, dev_service)?
+                    if config.chain_spec.is_parachain() {
+                        let partials = new_partial_parachain(&config, dev_service)?;
+                        let db = partials.backend.expose_db();
+                        let storage = partials.backend.expose_storage();
+                        cmd.run(config, partials.client.clone(), db, storage)
                     } else if config.chain_spec.is_solochain_evm() {
-                        new_partial_solochain_evm(&config, dev_service)?
+                        let partials = new_partial_solochain_evm(&config)?;
+                        let db = partials.backend.expose_db();
+                        let storage = partials.backend.expose_storage();
+                        cmd.run(config, partials.client.clone(), db, storage)
                     } else {
                         unreachable!("Invalid chain spec")
-                    };
-                    let db = partials.backend.expose_db();
-                    let storage = partials.backend.expose_storage();
-                    cmd.run(config, partials.client.clone(), db, storage)
+                    }
                 }),
                 BenchmarkCmd::Machine(cmd) => {
                     runner.sync_run(|config| cmd.run(&config, SUBSTRATE_REFERENCE_HARDWARE.clone()))
