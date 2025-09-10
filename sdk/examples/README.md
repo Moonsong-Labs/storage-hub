@@ -1,38 +1,41 @@
 # StorageHub SDK – Examples
 
-## Overview
-These examples are a “hello world” for the StorageHub SDK. They show how to:
-- Use backend‑agnostic primitives in `@storagehub-sdk/core` (wallet, WASM file utilities).
-- Call an MSP backend with `@storagehub-sdk/msp-client` for authenticated operations like upload/download.
+Both consume published `@storagehub-sdk/core` and `@storagehub-sdk/msp-client`.
 
 ## Why is a backend needed for some operations?
 Some operations (e.g., getting a nonce, verifying a signature, uploading/downloading files) must go through an MSP REST service. You can target any running MSP, or run a local mocked backend for development.
 
-### Start a mocked backend locally
-From repo root:
+### Run the MSP backend (local sources or Docker)
+
+Local (from sources):
 ```bash
+# From repo root
 RUST_LOG=info cargo run --bin sh-msp-backend --features mocks -- --host 127.0.0.1 --port 8080
 ```
-Backend listens on `http://127.0.0.1:8080` by default.
 
-## Run the examples
-From the repository root:
+Docker (build then run):
 ```bash
-cd sdk/examples
+# Build image from repo root
+docker build -t sh-msp-backend -f backend/Dockerfile .
+
+# Run attached (Ctrl+C to stop)
+docker run --rm -it --init -p 8080:8080 sh-msp-backend
+
+# (Optional) Verify
+curl http://127.0.0.1:8080/health
+```
+Backend defaults to `http://127.0.0.1:8080`.
+
+## Quick start
+```bash
+# Node example
+cd sdk/examples/node
 pnpm install
+pnpm start
 
-# Core demo: health + wallet + fingerprint
-pnpm run core
-
-# MSP client demo: auth + upload + download
-pnpm run msp
+# Next.js example
+cd sdk/examples/nextjs
+pnpm install
+pnpm dev
 ```
 
-## Files
-- `core-demo.mjs` – HttpClient (raw query), LocalWallet, FileManager getFingerprint
-- `msp-demo.mjs` – MspClient connect, auth (nonce/verify), upload/download
-- `data/hello.txt` – sample file for demos
-
-## Troubleshooting
-- Ensure `BASE_URL` points to your MSP (default: `http://127.0.0.1:8080`).
-- If uploads return 401, verify `client.setToken(token)` was called after verify.
