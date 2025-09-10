@@ -66,7 +66,8 @@ export async function describeBspNet<
         const launchResponse = await NetworkLauncher.create("fullnet", {
           ...bspNetConfig,
           toxics: options?.toxics,
-          initialised: options?.initialised
+          initialised: options?.initialised,
+          runtimeType: options?.runtimeType
         });
         launchEventEmitter.emit("networkLaunched", launchResponse);
 
@@ -154,7 +155,8 @@ export async function describeMspNet<
         const launchResponse = await NetworkLauncher.create("fullnet", {
           ...fullNetConfig,
           toxics: options?.toxics,
-          initialised: options?.initialised
+          initialised: options?.initialised,
+          runtimeType: options?.runtimeType
         });
         launchEventEmitter.emit("networkLaunched", launchResponse);
 

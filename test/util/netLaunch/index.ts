@@ -124,6 +124,25 @@ export class NetworkLauncher {
       delete composeYaml.services.toxiproxy;
     }
 
+    // If runtime is "parachain" there is no need to specify the runtime type, it's the default
+    if (this.config.runtimeType === "solochain") {
+      // Add the runtime type to the command for user and BSP nodes
+      composeYaml.services["sh-bsp"].command.push("--chain=solochain-evm-dev");
+      composeYaml.services["sh-user"].command.push("--chain=solochain-evm-dev");
+
+      // Add the runtime type to the command for MSP nodes if we're running fullnet
+      if (this.type === "fullnet") {
+        composeYaml.services["sh-msp-1"].command.push("--chain=solochain-evm-dev");
+        composeYaml.services["sh-msp-2"].command.push("--chain=solochain-evm-dev");
+      }
+
+      // Add the runtime type to the command for fisherman if we're running fullnet
+      // or simply fisherman is enabled
+      if (this.config.fisherman && this.type === "fullnet") {
+        composeYaml.services["sh-fisherman"].command.push("--chain=solochain-evm-dev");
+      }
+    }
+
     // Remove fisherman service if not enabled
     if (!this.config.fisherman || this.type !== "fullnet") {
       // biome-ignore lint/performance/noDelete: to ensure compose file is valid
@@ -890,4 +909,11 @@ export type NetLaunchConfig = {
    * 'fishing' - indexes only events related to fishing (fisherman service)
    */
   indexerMode?: "full" | "lite" | "fishing";
+
+  /** 
+   * Runtime type to use.
+   * 'parachain' - Polkadot parachain runtime (default)
+   * 'solochain' - Solochain EVM runtime
+   */
+  runtimeType?: "parachain" | "solochain";
 };

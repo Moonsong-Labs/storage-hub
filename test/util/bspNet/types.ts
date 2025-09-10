@@ -365,6 +365,12 @@ export type TestOptions = {
   indexerMode?: "full" | "lite" | "fishing";
   /** If true, runs fisherman service */
   fisherman?: boolean;
+  /** 
+   * Set the runtime type to use
+   * 'parachain' - Polkadot parachain runtime (default)
+   * 'solochain' - Solochain EVM runtime
+   */
+  runtimeType?: "parachain" | "solochain";
 };
 
 /**
