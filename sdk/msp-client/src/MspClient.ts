@@ -2,16 +2,16 @@ import type {
   Bucket,
   DownloadOptions,
   DownloadResult,
+  FileInfo,
   FileListResponse,
   GetFilesOptions,
   HealthStatus,
   InfoResponse,
-  StatsResponse,
-  ValueProp,
-  FileInfo,
   NonceResponse,
+  StatsResponse,
   UploadOptions,
   UploadReceipt,
+  ValueProp,
   VerifyResponse,
 } from './types.js';
 import type { HttpClientConfig } from '@storagehub-sdk/core';
@@ -182,16 +182,16 @@ export class MspClient {
         path,
         authHeaders
           ? {
-            body: file,
-            headers: {
-              ...authHeaders,
-              'Content-Type': 'application/octet-stream',
-            },
-          }
+              body: file,
+              headers: {
+                ...authHeaders,
+                'Content-Type': 'application/octet-stream',
+              },
+            }
           : {
-            body: file,
-            headers: { 'Content-Type': 'application/octet-stream' },
-          },
+              body: file,
+              headers: { 'Content-Type': 'application/octet-stream' },
+            },
       );
       return res;
     }
