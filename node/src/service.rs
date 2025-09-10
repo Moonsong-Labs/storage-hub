@@ -80,15 +80,11 @@ use shc_client::{
     },
 };
 use shc_common::{traits::StorageEnableRuntime, types::*};
-use shc_file_transfer_service::configure_file_transfer_network;
 use shc_file_transfer_service::{configure_file_transfer_network, fetch_genesis_hash};
 use shc_indexer_db::DbPool;
 use shc_indexer_service::spawn_indexer_service;
 use shc_rpc::StorageHubClientRpcConfig;
 use shp_opaque::{Block, Hash};
-use sp_api::ProvideRuntimeApi;
-use sp_keystore::{Keystore, KeystorePtr};
-use substrate_prometheus_endpoint::Registry;
 
 // Local Runtime Types
 use sh_parachain_runtime::{apis::RuntimeApi as ParachainRuntimeApi, Runtime as ParachainRuntime};
@@ -823,11 +819,12 @@ where
     // If we are a provider or fisherman we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
     if provider_options.is_some() || fisherman_options.is_some() {
-        file_transfer_request_protocol = Some(configure_file_transfer_network::<_, Runtime>(
-            fetch_genesis_hash(client.clone()),
-            config.chain_spec.fork_id(),
-            &mut net_config,
-        ));
+        file_transfer_request_protocol =
+            Some(configure_file_transfer_network::<_, ParachainRuntime>(
+                fetch_genesis_hash(client.clone()),
+                config.chain_spec.fork_id(),
+                &mut net_config,
+            ));
     }
 
     let metrics = Network::register_notification_metrics(
@@ -1219,11 +1216,12 @@ where
     // If we are a provider or fisherman we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
     if provider_options.is_some() || fisherman_options.is_some() {
-        file_transfer_request_protocol = Some(configure_file_transfer_network::<_, Runtime>(
-            fetch_genesis_hash(client.clone()),
-            config.chain_spec.fork_id(),
-            &mut net_config,
-        ));
+        file_transfer_request_protocol =
+            Some(configure_file_transfer_network::<_, ParachainRuntime>(
+                fetch_genesis_hash(client.clone()),
+                config.chain_spec.fork_id(),
+                &mut net_config,
+            ));
     }
 
     let metrics = Network::register_notification_metrics(
@@ -1398,11 +1396,12 @@ where
     // If we are a provider we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
     if provider_options.is_some() {
-        file_transfer_request_protocol = Some(configure_file_transfer_network::<_, Runtime>(
-            fetch_genesis_hash(client.clone()),
-            parachain_config.chain_spec.fork_id(),
-            &mut net_config,
-        ));
+        file_transfer_request_protocol =
+            Some(configure_file_transfer_network::<_, ParachainRuntime>(
+                fetch_genesis_hash(client.clone()),
+                parachain_config.chain_spec.fork_id(),
+                &mut net_config,
+            ));
     }
 
     let (relay_chain_interface, collator_key) = build_relay_chain_interface(
@@ -1648,11 +1647,12 @@ where
     // If we are a provider we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
     if provider_options.is_some() {
-        file_transfer_request_protocol = Some(configure_file_transfer_network::<_, Runtime>(
-            fetch_genesis_hash(client.clone()),
-            parachain_config.chain_spec.fork_id(),
-            &mut net_config,
-        ));
+        file_transfer_request_protocol =
+            Some(configure_file_transfer_network::<_, ParachainRuntime>(
+                fetch_genesis_hash(client.clone()),
+                parachain_config.chain_spec.fork_id(),
+                &mut net_config,
+            ));
     }
 
     // Create relay chain interface
@@ -2034,8 +2034,8 @@ where
     if provider_options.is_some() {
         file_transfer_request_protocol = Some(
             shc_file_transfer_service::configure_file_transfer_network::<_, SolochainEvmRuntime>(
-                client.clone(),
-                &config,
+                fetch_genesis_hash(client.clone()),
+                config.chain_spec.fork_id(),
                 &mut net_config,
             ),
         );
@@ -2658,8 +2658,8 @@ where
     if provider_options.is_some() {
         file_transfer_request_protocol = Some(
             shc_file_transfer_service::configure_file_transfer_network::<_, SolochainEvmRuntime>(
-                client.clone(),
-                &config,
+                fetch_genesis_hash(client.clone()),
+                config.chain_spec.fork_id(),
                 &mut net_config,
             ),
         );
@@ -3045,8 +3045,8 @@ where
     if provider_options.is_some() {
         file_transfer_request_protocol = Some(
             shc_file_transfer_service::configure_file_transfer_network::<_, SolochainEvmRuntime>(
-                client.clone(),
-                &config,
+                fetch_genesis_hash(client.clone()),
+                config.chain_spec.fork_id(),
                 &mut net_config,
             ),
         );
