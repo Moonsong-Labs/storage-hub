@@ -80,7 +80,7 @@ use shc_client::{
     },
 };
 use shc_common::{traits::StorageEnableRuntime, types::*};
-use shc_file_transfer_service::configure_file_transfer_network;
+use shc_file_transfer_service::{configure_file_transfer_network, fetch_genesis_hash};
 use shc_indexer_db::DbPool;
 use shc_indexer_service::spawn_indexer_service;
 use shc_rpc::StorageHubClientRpcConfig;
@@ -821,8 +821,8 @@ where
     if provider_options.is_some() || fisherman_options.is_some() {
         file_transfer_request_protocol =
             Some(configure_file_transfer_network::<_, ParachainRuntime>(
-                client.clone(),
-                &config,
+                fetch_genesis_hash(client.clone()),
+                config.chain_spec.fork_id(),
                 &mut net_config,
             ));
     }
@@ -1218,8 +1218,8 @@ where
     if provider_options.is_some() || fisherman_options.is_some() {
         file_transfer_request_protocol =
             Some(configure_file_transfer_network::<_, ParachainRuntime>(
-                client.clone(),
-                &config,
+                fetch_genesis_hash(client.clone()),
+                config.chain_spec.fork_id(),
                 &mut net_config,
             ));
     }
@@ -1398,8 +1398,8 @@ where
     if provider_options.is_some() || fisherman_options.is_some() {
         file_transfer_request_protocol =
             Some(configure_file_transfer_network::<_, ParachainRuntime>(
-                client.clone(),
-                &parachain_config,
+                fetch_genesis_hash(client.clone()),
+                parachain_config.chain_spec.fork_id(),
                 &mut net_config,
             ));
     }
@@ -1649,8 +1649,8 @@ where
     if provider_options.is_some() {
         file_transfer_request_protocol =
             Some(configure_file_transfer_network::<_, ParachainRuntime>(
-                client.clone(),
-                &parachain_config,
+                fetch_genesis_hash(client.clone()),
+                parachain_config.chain_spec.fork_id(),
                 &mut net_config,
             ));
     }
@@ -2034,8 +2034,8 @@ where
     if provider_options.is_some() {
         file_transfer_request_protocol = Some(
             shc_file_transfer_service::configure_file_transfer_network::<_, SolochainEvmRuntime>(
-                client.clone(),
-                &config,
+                fetch_genesis_hash(client.clone()),
+                config.chain_spec.fork_id(),
                 &mut net_config,
             ),
         );
@@ -2658,8 +2658,8 @@ where
     if provider_options.is_some() {
         file_transfer_request_protocol = Some(
             shc_file_transfer_service::configure_file_transfer_network::<_, SolochainEvmRuntime>(
-                client.clone(),
-                &config,
+                fetch_genesis_hash(client.clone()),
+                config.chain_spec.fork_id(),
                 &mut net_config,
             ),
         );
@@ -3045,8 +3045,8 @@ where
     if provider_options.is_some() {
         file_transfer_request_protocol = Some(
             shc_file_transfer_service::configure_file_transfer_network::<_, SolochainEvmRuntime>(
-                client.clone(),
-                &config,
+                fetch_genesis_hash(client.clone()),
+                config.chain_spec.fork_id(),
                 &mut net_config,
             ),
         );
