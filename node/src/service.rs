@@ -1994,6 +1994,33 @@ where
     use async_io::Timer;
     use sc_consensus_manual_seal::{run_manual_seal, EngineCommand, ManualSealParams};
 
+    // Provide a mock duration starting at Utc::now() in milliseconds for timestamp inherent.
+    // Each call will increment timestamp by slot_duration making BABE think time has passed.
+    thread_local!(static SOLO_EVM_TIMESTAMP: RefCell<u64> = RefCell::new(Utc::now().timestamp_millis().try_into().unwrap()));
+
+    struct SoloEvmMockTimestampInherentDataProvider;
+
+    #[async_trait::async_trait]
+    impl sp_inherents::InherentDataProvider for SoloEvmMockTimestampInherentDataProvider {
+        async fn provide_inherent_data(
+            &self,
+            inherent_data: &mut sp_inherents::InherentData,
+        ) -> Result<(), sp_inherents::Error> {
+            SOLO_EVM_TIMESTAMP.with(|x| {
+                *x.borrow_mut() += sh_solochain_evm_runtime::SLOT_DURATION;
+                inherent_data.put_data(sp_timestamp::INHERENT_IDENTIFIER, &*x.borrow())
+            })
+        }
+
+        async fn try_handle_error(
+            &self,
+            _identifier: &sp_inherents::InherentIdentifier,
+            _error: &[u8],
+        ) -> Option<Result<(), sp_inherents::Error>> {
+            None
+        }
+    }
+
     // Maintenance mode: reuse non-dev maintenance path but drop client result
     let maintenance_mode = provider_options
         .as_ref()
@@ -2326,11 +2353,19 @@ where
                 create_inherent_data_providers: move |_, ()| {
                     let slot_duration = slot_duration;
                     async move {
-                        let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
+                        // Compute the next mocked timestamp (advance by one slot) for BABE's slot provider
+                        let mut ts: u64 = 0;
+                        SOLO_EVM_TIMESTAMP.with(|x| {
+                            ts = x.clone().take();
+                        });
+                        ts += sh_solochain_evm_runtime::SLOT_DURATION;
+
                         let slot = sp_consensus_babe::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
-                            *timestamp,
+                            ts.into(),
                             slot_duration,
                         );
+
+                        let timestamp = SoloEvmMockTimestampInherentDataProvider;
                         Ok((timestamp, slot))
                     }
                 },
