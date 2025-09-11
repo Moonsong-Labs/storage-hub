@@ -1,9 +1,9 @@
 import assert, { strictEqual } from "node:assert";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
-import { type EnrichedBspApi, addCopypartyContainer, describeBspNet } from "../../../util";
+import { addCopypartyContainer, describeBspNet, type EnrichedBspApi } from "../../../util";
 
-describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) => {
+await describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) => {
   let userApi: EnrichedBspApi;
   let remoteServerInfo:
     | {

@@ -1,3 +1,7 @@
+import assert, { strictEqual } from "node:assert";
+import type { ApiPromise } from "@polkadot/api";
+import type { SubmittableExtrinsic } from "@polkadot/api/types";
+import type { KeyringPair } from "@polkadot/keyring/types";
 import type {
   CreatedBlock,
   EventRecord,
@@ -5,16 +9,12 @@ import type {
   Hash,
   SignedBlock
 } from "@polkadot/types/interfaces";
-import type { ApiPromise } from "@polkadot/api";
-import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { ISubmittableResult } from "@polkadot/types/types";
-import type { KeyringPair } from "@polkadot/keyring/types";
-import { alice, bob } from "../pjsKeyring";
+import * as Assertions from "../asserts";
 import { isExtSuccess } from "../extrinsics";
+import { alice, bob } from "../pjsKeyring";
 import { sleep } from "../timer";
 import * as ShConsts from "./consts";
-import assert, { strictEqual } from "node:assert";
-import * as Assertions from "../asserts";
 import { waitForLog } from "./docker";
 import { waitForTxInPool } from "./waits";
 
@@ -594,7 +594,7 @@ export async function reOrgWithLongerChain(
   }
 
   const parentHash = blockHash;
-  extendFork(api, {
+  await extendFork(api, {
     parentBlockHash: parentHash.toString(),
     amountToExtend: currentBlockNumber - startingBlockNumber + 1,
     verbose: false

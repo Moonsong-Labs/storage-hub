@@ -1,17 +1,17 @@
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
 import {
-  type EnrichedBspApi,
   addMspContainer,
   createBucket,
   describeMspNet,
+  type EnrichedBspApi,
   getContainerIp,
   mspThreeKey,
   shUser
 } from "../../../util";
 import { CAPACITY, MAX_STORAGE_CAPACITY } from "../../../util/bspNet/consts.ts";
 
-describeMspNet("User: Send file to provider", ({ before, createUserApi, it }) => {
+await describeMspNet("User: Send file to provider", ({ before, createUserApi, it }) => {
   let userApi: EnrichedBspApi;
 
   before(async () => {
