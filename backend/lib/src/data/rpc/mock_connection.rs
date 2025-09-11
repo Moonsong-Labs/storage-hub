@@ -8,6 +8,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
+use tokio::fs;
 use tokio::{
     sync::{Mutex, RwLock},
     time::sleep,
@@ -149,36 +150,77 @@ impl RpcConnection for MockConnection {
         P: jsonrpsee::core::traits::ToRpcParams + Send + Sync,
         R: DeserializeOwned,
     {
-        // Check if connected
-        {
-            let connected = self.connected.read().await;
-            if !*connected {
-                return Err(RpcConnectionError::ConnectionClosed);
+        // match arms for implementing RPC calls
+        match method {
+            "storagehubclient_saveFileToDisk" => {
+                // We assume params are [file_key, upload_url]
+                let raw = _params.to_rpc_params().unwrap().unwrap();
+                let (file_key, upload_url): (String, String) =
+                    serde_json::from_str(raw.get()).unwrap();
+
+                // We derive filename from upload_url
+                let file_name = upload_url
+                    .rsplit('/')
+                    .next()
+                    .unwrap_or_else(|| file_key.as_str())
+                    .to_string();
+                let local_path = format!("uploads/{}", file_name);
+
+                // Mock file content
+                let _ = fs::create_dir_all("uploads").await;
+                let content = b"GoodFla mock file content for download";
+                let _ = fs::write(&local_path, content).await;
+
+                // Mock response
+                let response = serde_json::json!({
+                    "Success": {
+                        "owner": vec![0u8; 32],
+                        "bucket_id": vec![0u8; 32],
+                        "location": file_name.as_bytes().to_vec(),
+                        "file_size": content.len() as u64,
+                        "fingerprint": vec![0u8; 32]
+                    }
+                });
+                let typed: R = serde_json::from_value(response).unwrap();
+                Ok(typed)
+            }
+            _ => {
+                // Default behavior
+                // Check if connected
+                {
+                    let connected = self.connected.read().await;
+                    if !*connected {
+                        return Err(RpcConnectionError::ConnectionClosed);
+                    }
+                }
+
+                // Simulate network latency if configured
+                let latency = *self.latency_ms.read().await;
+                if let Some(latency_ms) = latency {
+                    sleep(Duration::from_millis(latency_ms)).await;
+                }
+
+                // Check for simulated errors
+                self.check_error().await?;
+
+                // Get response for method
+                let response = {
+                    let responses = self.responses.read().await;
+                    responses
+                        .get(method)
+                        .cloned()
+                        .unwrap_or(serde_json::json!(null))
+                };
+
+                // Deserialize the response
+                serde_json::from_value(response).map_err(|e| {
+                    RpcConnectionError::Serialization(format!(
+                        "Failed to deserialize response: {}",
+                        e
+                    ))
+                })
             }
         }
-
-        // Simulate network latency if configured
-        let latency = *self.latency_ms.read().await;
-        if let Some(latency_ms) = latency {
-            sleep(Duration::from_millis(latency_ms)).await;
-        }
-
-        // Check for simulated errors
-        self.check_error().await?;
-
-        // Get response for method
-        let response = {
-            let responses = self.responses.read().await;
-            responses
-                .get(method)
-                .cloned()
-                .unwrap_or(serde_json::json!(null))
-        };
-
-        // Deserialize the response
-        serde_json::from_value(response).map_err(|e| {
-            RpcConnectionError::Serialization(format!("Failed to deserialize response: {}", e))
-        })
     }
 
     async fn is_connected(&self) -> bool {
