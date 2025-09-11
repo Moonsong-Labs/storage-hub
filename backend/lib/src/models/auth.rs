@@ -25,7 +25,7 @@ pub struct VerifyResponse {
     pub user: User,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct User {
     pub address: String,
 }
