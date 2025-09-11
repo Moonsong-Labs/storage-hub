@@ -2,12 +2,15 @@
 
 use std::sync::Arc;
 
-use crate::data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage};
 #[cfg(all(test, feature = "mocks"))]
 use crate::data::{
     indexer_db::mock_repository::MockRepository,
     rpc::{AnyRpcConnection, MockConnection},
     storage::{BoxedStorageWrapper, InMemoryStorage},
+};
+use crate::{
+    config::Config,
+    data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage},
 };
 
 pub mod auth;
@@ -32,11 +35,12 @@ pub struct Services {
 impl Services {
     /// Create a new services struct
     pub fn new(
+        config: Config,
         storage: Arc<dyn BoxedStorage>,
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
     ) -> Self {
-        let auth = Arc::new(AuthService::default());
+        let auth = Arc::new(AuthService::new(config.auth.jwt_secret.as_bytes()));
         let health = Arc::new(HealthService::new(
             storage.clone(),
             postgres.clone(),
@@ -75,6 +79,9 @@ impl Services {
         let rpc_conn = Arc::new(AnyRpcConnection::Mock(mock_conn));
         let rpc = Arc::new(StorageHubRpcClient::new(rpc_conn));
 
-        Self::new(storage, postgres, rpc)
+        // Use default config for mocks
+        let config = Config::default();
+
+        Self::new(config, storage, postgres, rpc)
     }
 }
