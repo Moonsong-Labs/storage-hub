@@ -87,6 +87,27 @@ fn load_spec(id: &str) -> std::result::Result<Box<dyn ChainSpec>, String> {
     })
 }
 
+// DRY helper to branch on chain spec and run an async runner with the proper partials
+macro_rules! run_async_cmd_for_chain {
+    ($runner:expr, $chain:expr, $dev_service:expr, |$config:ident, $components:ident| $body:expr) => {{
+        if load_spec($chain)?.is_parachain() {
+            $runner.async_run(|$config| {
+                let $components = new_partial_parachain(&$config, $dev_service)?;
+                let task_manager = $components.task_manager;
+                Ok(($body, task_manager))
+            })
+        } else if load_spec($chain)?.is_solochain_evm() {
+            $runner.async_run(|$config| {
+                let $components = new_partial_solochain_evm(&$config)?;
+                let task_manager = $components.task_manager;
+                Ok(($body, task_manager))
+            })
+        } else {
+            unreachable!("Invalid chain spec")
+        }
+    }};
+}
+
 impl SubstrateCli for Cli {
     fn impl_name() -> String {
         "Parachain Collator Template".into()
@@ -180,27 +201,8 @@ pub fn run() -> Result<()> {
                 .chain
                 .clone()
                 .unwrap_or_default();
-            if load_spec(&chain)?.is_parachain() {
-                runner.async_run(|config| {
-                    let components = new_partial_parachain(&config, dev_service)?;
-                    let task_manager = components.task_manager;
-                    Ok((
-                        cmd.run(components.client, components.import_queue),
-                        task_manager,
-                    ))
-                })
-            } else if load_spec(&chain)?.is_solochain_evm() {
-                runner.async_run(|config| {
-                    let components = new_partial_solochain_evm(&config)?;
-                    let task_manager = components.task_manager;
-                    Ok((
-                        cmd.run(components.client, components.import_queue),
-                        task_manager,
-                    ))
-                })
-            } else {
-                unreachable!("Invalid chain spec")
-            }
+            run_async_cmd_for_chain!(runner, &chain, dev_service, |config, components| cmd
+                .run(components.client, components.import_queue))
         }
         Some(Subcommand::ExportBlocks(cmd)) => {
             let runner = cli.create_runner(cmd)?;
@@ -212,21 +214,8 @@ pub fn run() -> Result<()> {
                 .chain
                 .clone()
                 .unwrap_or_default();
-            if load_spec(&chain)?.is_parachain() {
-                runner.async_run(|config| {
-                    let components = new_partial_parachain(&config, dev_service)?;
-                    let task_manager = components.task_manager;
-                    Ok((cmd.run(components.client, config.database), task_manager))
-                })
-            } else if load_spec(&chain)?.is_solochain_evm() {
-                runner.async_run(|config| {
-                    let components = new_partial_solochain_evm(&config)?;
-                    let task_manager = components.task_manager;
-                    Ok((cmd.run(components.client, config.database), task_manager))
-                })
-            } else {
-                unreachable!("Invalid chain spec")
-            }
+            run_async_cmd_for_chain!(runner, &chain, dev_service, |config, components| cmd
+                .run(components.client, config.database))
         }
         Some(Subcommand::ExportState(cmd)) => {
             let runner = cli.create_runner(cmd)?;
@@ -238,21 +227,8 @@ pub fn run() -> Result<()> {
                 .chain
                 .clone()
                 .unwrap_or_default();
-            if load_spec(&chain)?.is_parachain() {
-                runner.async_run(|config| {
-                    let components = new_partial_parachain(&config, dev_service)?;
-                    let task_manager = components.task_manager;
-                    Ok((cmd.run(components.client, config.chain_spec), task_manager))
-                })
-            } else if load_spec(&chain)?.is_solochain_evm() {
-                runner.async_run(|config| {
-                    let components = new_partial_solochain_evm(&config)?;
-                    let task_manager = components.task_manager;
-                    Ok((cmd.run(components.client, config.chain_spec), task_manager))
-                })
-            } else {
-                unreachable!("Invalid chain spec")
-            }
+            run_async_cmd_for_chain!(runner, &chain, dev_service, |config, components| cmd
+                .run(components.client, config.chain_spec))
         }
         Some(Subcommand::ImportBlocks(cmd)) => {
             let runner = cli.create_runner(cmd)?;
@@ -264,27 +240,8 @@ pub fn run() -> Result<()> {
                 .chain
                 .clone()
                 .unwrap_or_default();
-            if load_spec(&chain)?.is_parachain() {
-                runner.async_run(|config| {
-                    let components = new_partial_parachain(&config, dev_service)?;
-                    let task_manager = components.task_manager;
-                    Ok((
-                        cmd.run(components.client, components.import_queue),
-                        task_manager,
-                    ))
-                })
-            } else if load_spec(&chain)?.is_solochain_evm() {
-                runner.async_run(|config| {
-                    let components = new_partial_solochain_evm(&config)?;
-                    let task_manager = components.task_manager;
-                    Ok((
-                        cmd.run(components.client, components.import_queue),
-                        task_manager,
-                    ))
-                })
-            } else {
-                unreachable!("Invalid chain spec")
-            }
+            run_async_cmd_for_chain!(runner, &chain, dev_service, |config, components| cmd
+                .run(components.client, components.import_queue))
         }
         Some(Subcommand::Revert(cmd)) => {
             let runner = cli.create_runner(cmd)?;
@@ -296,27 +253,11 @@ pub fn run() -> Result<()> {
                 .chain
                 .clone()
                 .unwrap_or_default();
-            if load_spec(&chain)?.is_parachain() {
-                runner.async_run(|config| {
-                    let components = new_partial_parachain(&config, dev_service)?;
-                    let task_manager = components.task_manager;
-                    Ok((
-                        cmd.run(components.client, components.backend, None),
-                        task_manager,
-                    ))
-                })
-            } else if load_spec(&chain)?.is_solochain_evm() {
-                runner.async_run(|config| {
-                    let components = new_partial_solochain_evm(&config)?;
-                    let task_manager = components.task_manager;
-                    Ok((
-                        cmd.run(components.client, components.backend, None),
-                        task_manager,
-                    ))
-                })
-            } else {
-                unreachable!("Invalid chain spec")
-            }
+            run_async_cmd_for_chain!(runner, &chain, dev_service, |config, components| cmd.run(
+                components.client,
+                components.backend,
+                None
+            ))
         }
         Some(Subcommand::PurgeChain(cmd)) => {
             let runner = cli.create_runner(cmd)?;
