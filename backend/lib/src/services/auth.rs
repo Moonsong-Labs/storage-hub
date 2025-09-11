@@ -3,7 +3,7 @@ use std::str::FromStr;
 use alloy_core::primitives::{eip191_hash_message, PrimitiveSignature};
 use alloy_signer::utils::public_key_to_address;
 use axum_jwt::{
-    jsonwebtoken::{self, Header, DecodingKey, EncodingKey, TokenData},
+    jsonwebtoken::{self, DecodingKey, EncodingKey, Header, TokenData},
     Decoder,
 };
 use chrono::{Duration, Utc};
@@ -101,10 +101,7 @@ impl AuthService {
         // - value: { address, expiration_time }
         // The address stored here is guaranteed to be valid due to prior validation
 
-        Ok(NonceResponse {
-            message,
-            nonce: nonce.to_string(),
-        })
+        Ok(NonceResponse { message })
     }
 
     pub async fn verify_eth_signature(

@@ -10,7 +10,6 @@ pub struct NonceRequest {
 #[derive(Debug, Serialize)]
 pub struct NonceResponse {
     pub message: String,
-    pub nonce: String,
 }
 
 #[derive(Debug, Deserialize)]
