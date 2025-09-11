@@ -79,17 +79,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn download_by_key_streams_and_cleans_temp() {
+    async fn test_download_by_key_streams_and_cleans_temp() {
         let app = crate::api::mock_app();
         let server = TestServer::new(app).unwrap();
 
         let file_key = "web-file";
         let temp_path = format!("uploads/{}", file_key);
 
-        // Act: request download
         let response = server.get(&format!("/download/{}", file_key)).await;
 
-        // Assert: status OK
         assert_eq!(response.status_code(), StatusCode::OK);
 
         // Assert: body bytes match the mocked content written by RPC mock

@@ -21,6 +21,9 @@ max_page_size = 100
 # WebSocket RPC endpoint for the StorageHub node
 # Use ws:// for unencrypted or wss:// for TLS-encrypted connections
 rpc_url = "ws://localhost:9944"
+# URL for node to comunicate with the backend (e.g for uploading a file)
+# e.g: if running an msp in a container: http://host.docker.internal:8080
+msp_callback_url = "http://localhost:8080"
 # Request timeout in seconds (optional, default: 30)
 # Increase this value for slower networks or heavy operations
 timeout_secs = 30

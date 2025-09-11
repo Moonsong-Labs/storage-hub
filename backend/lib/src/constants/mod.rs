@@ -25,7 +25,7 @@ pub mod rpc {
     pub const DEFAULT_RPC_URL: &str = "ws://localhost:9944";
 
     /// Default MSP callback URL
-    pub const DEFAULT_MSP_CALLBACK_URL: &str = "http://host.docker.internal:8080";
+    pub const DEFAULT_MSP_CALLBACK_URL: &str = "http://localhost:8080";
 
     /// Timeout multiplier for simulating network delays in mocks
     pub const TIMEOUT_MULTIPLIER: u64 = 10;

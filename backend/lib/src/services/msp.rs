@@ -362,7 +362,7 @@ impl MspService {
             file_size: rpc_response.success.file_size,
             location,
             fingerprint: rpc_response.success.fingerprint,
-            temp_path: temp_path,
+            temp_path,
         })
     }
 }

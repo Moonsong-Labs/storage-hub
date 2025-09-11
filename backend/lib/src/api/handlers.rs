@@ -176,10 +176,17 @@ pub async fn internal_upload_by_key(
     Path(file_key): Path<String>,
     body: Bytes,
 ) -> (StatusCode, impl IntoResponse) {
+    // TODO: re-add auth
+    // Consider making this only callable by the backend itself
     // let _auth = extract_bearer_token(&auth)?;
     if let Err(e) = tokio::fs::create_dir_all("uploads").await {
         return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
     }
+    // Handle path traversal attacks
+    if file_key.contains("..") || file_key.contains('/') || file_key.contains('\\') {
+        return (StatusCode::BAD_REQUEST, "Invalid file key".to_string());
+    }
+
     match tokio::fs::write(format!("uploads/{}", file_key), body).await {
         Ok(_) => (StatusCode::OK, "Upload successful".to_string()),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
@@ -192,6 +199,11 @@ pub async fn download_by_key(
 ) -> Result<impl IntoResponse, Error> {
     // TODO: re-add auth
     // let _auth = extract_bearer_token(&auth)?;
+
+    // Handle path traversal attacks
+    if file_key.contains("..") || file_key.contains('/') || file_key.contains('\\') {
+        return Err(Error::BadRequest("Invalid file key".to_string()));
+    }
 
     let download_result = services.msp.get_file_from_key(&file_key).await?;
 
@@ -208,13 +220,16 @@ pub async fn download_by_key(
         .await
         .map_err(|e| Error::BadRequest(format!("Failed to open downloaded file: {}", e)))?;
 
+    // On Unix, unlink the path immediately; the open fd remains valid for streaming
+    // TODO: we should implement proper cleanup after the stream is closed
+    // But as we will probably change implementation to just redirect the RPC stream to user, leaving it as is for now (not a problem if we run on unix).
+    #[cfg(unix)]
+    {
+        let _ = tokio::fs::remove_file(&download_result.temp_path).await;
+    }
+
     let stream = ReaderStream::new(file);
     let file_stream_resp = FileStream::new(stream).file_name(&filename).into_response();
-
-    // Schedule cleanup of temp file after response
-    tokio::spawn(async move {
-        let _ = tokio::fs::remove_file(&download_result.temp_path).await;
-    });
 
     Ok(file_stream_resp)
 }
