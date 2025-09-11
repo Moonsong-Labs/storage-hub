@@ -253,7 +253,10 @@ mod tests {
         .await;
 
         // Test system health call
-        let health: Value = conn.call(SAMPLE_METHOD, ()).await.unwrap();
+        let health: Value = conn
+            .call(SAMPLE_METHOD, jsonrpsee::rpc_params![])
+            .await
+            .unwrap();
         assert_eq!(health[SAMPLE_FIELD], SAMPLE_VALUE);
 
         // Test connection status
@@ -275,7 +278,10 @@ mod tests {
         )
         .await;
 
-        let response: Value = conn.call(SAMPLE_METHOD, ()).await.unwrap();
+        let response: Value = conn
+            .call(SAMPLE_METHOD, jsonrpsee::rpc_params![])
+            .await
+            .unwrap();
         assert_eq!(response[SAMPLE_FIELD], SAMPLE_VALUE);
     }
 
@@ -284,7 +290,7 @@ mod tests {
         let conn = MockConnection::new();
         conn.set_error_mode(ErrorMode::Timeout).await;
 
-        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, ()).await;
+        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, jsonrpsee::rpc_params![]).await;
         assert!(matches!(result, Err(RpcConnectionError::Timeout)));
     }
 
@@ -293,7 +299,7 @@ mod tests {
         let conn = MockConnection::new();
         conn.set_error_mode(ErrorMode::ConnectionClosed).await;
 
-        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, ()).await;
+        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, jsonrpsee::rpc_params![]).await;
         assert!(matches!(result, Err(RpcConnectionError::ConnectionClosed)));
     }
 
@@ -305,7 +311,7 @@ mod tests {
         ))
         .await;
 
-        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, ()).await;
+        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, jsonrpsee::rpc_params![]).await;
         match result {
             Err(RpcConnectionError::Transport(msg)) => {
                 assert_eq!(msg, TEST_TRANSPORT_ERROR_MSG);
@@ -320,7 +326,7 @@ mod tests {
         conn.set_error_mode(ErrorMode::RpcError(TEST_RPC_ERROR_MSG.to_string()))
             .await;
 
-        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, ()).await;
+        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, jsonrpsee::rpc_params![]).await;
         match result {
             Err(RpcConnectionError::Rpc(msg)) => {
                 assert_eq!(msg, TEST_RPC_ERROR_MSG);
@@ -344,12 +350,15 @@ mod tests {
 
         // First N calls should succeed
         for _ in 0..FAIL_AFTER_N_CALLS_THRESHOLD {
-            let result: Value = conn.call(SAMPLE_METHOD, ()).await.unwrap();
+            let result: Value = conn
+                .call(SAMPLE_METHOD, jsonrpsee::rpc_params![])
+                .await
+                .unwrap();
             assert_eq!(result[SAMPLE_FIELD], SAMPLE_VALUE);
         }
 
         // Next call should fail
-        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, ()).await;
+        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, jsonrpsee::rpc_params![]).await;
         match result {
             Err(RpcConnectionError::Rpc(msg)) => {
                 assert!(msg.contains(ERROR_MESSAGE_FAIL_AFTER_N));
@@ -370,7 +379,7 @@ mod tests {
         assert!(!conn.is_connected().await);
 
         // Try to call - should fail
-        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, ()).await;
+        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, jsonrpsee::rpc_params![]).await;
         assert!(matches!(result, Err(RpcConnectionError::ConnectionClosed)));
 
         // Reconnect
@@ -385,7 +394,10 @@ mod tests {
             }),
         )
         .await;
-        let response: Value = conn.call(SAMPLE_METHOD, ()).await.unwrap();
+        let response: Value = conn
+            .call(SAMPLE_METHOD, jsonrpsee::rpc_params![])
+            .await
+            .unwrap();
         assert_eq!(response[SAMPLE_FIELD], SAMPLE_VALUE);
     }
 }

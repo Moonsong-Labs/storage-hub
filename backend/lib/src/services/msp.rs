@@ -379,6 +379,7 @@ mod tests {
             services.storage.clone(),
             services.postgres.clone(),
             services.rpc.clone(),
+            "http://localhost:8080".to_string(),
         )
     }
 
