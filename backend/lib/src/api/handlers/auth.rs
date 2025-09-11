@@ -1,5 +1,10 @@
-use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
-use axum_jwt::Claims;
+use axum::{
+    extract::{FromRef, FromRequestParts, State},
+    http::{request::Parts, StatusCode},
+    response::IntoResponse,
+    Json,
+};
+use axum_jwt::{Claims, Decoder};
 
 use crate::{
     error::Error,
@@ -51,4 +56,32 @@ pub async fn profile(
 ) -> Result<impl IntoResponse, Error> {
     let response = services.auth.get_profile(user).await?;
     Ok(Json(response))
+}
+
+/// Axum extractor to verify the authenticated user.
+///
+/// Will error if the token is expired or it is otherwise invalid
+pub struct AuthenticatedUser {
+    pub address: String,
+}
+
+impl<S> FromRequestParts<S> for AuthenticatedUser
+where
+    Services: FromRef<S>,
+    Decoder: FromRef<S>,
+    S: Sync,
+{
+    type Rejection = Error;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let services = Services::from_ref(state);
+        let claims = Claims::<JwtClaims>::from_request_parts(parts, state)
+            .await
+            .map_err(|e| Error::Unauthorized(format!("Invalid JWT: {e:?}")))?;
+
+        let profile = services.auth.get_profile(claims.0).await?;
+        Ok(Self {
+            address: profile.address,
+        })
+    }
 }
