@@ -177,13 +177,17 @@ pub async fn internal_upload_by_key(
     body: Bytes,
 ) -> (StatusCode, impl IntoResponse) {
     // TODO: re-add auth
-    // Consider making this only callable by the backend itself
+    // FIXME: make this only callable by the rpc itself
     // let _auth = extract_bearer_token(&auth)?;
     if let Err(e) = tokio::fs::create_dir_all("uploads").await {
         return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
     }
-    // Handle path traversal attacks
-    if file_key.contains("..") || file_key.contains('/') || file_key.contains('\\') {
+    // Validate file_key is a hex string (allow optional 0x prefix)
+    let key = file_key
+        .strip_prefix("0x")
+        .or_else(|| file_key.strip_prefix("0X"))
+        .unwrap_or(&file_key);
+    if hex::decode(key).is_err() {
         return (StatusCode::BAD_REQUEST, "Invalid file key".to_string());
     }
 
@@ -200,8 +204,12 @@ pub async fn download_by_key(
     // TODO: re-add auth
     // let _auth = extract_bearer_token(&auth)?;
 
-    // Handle path traversal attacks
-    if file_key.contains("..") || file_key.contains('/') || file_key.contains('\\') {
+    // Validate file_key is a hex string (allow optional 0x prefix)
+    let key = file_key
+        .strip_prefix("0x")
+        .or_else(|| file_key.strip_prefix("0X"))
+        .unwrap_or(&file_key);
+    if hex::decode(key).is_err() {
         return Err(Error::BadRequest("Invalid file key".to_string()));
     }
 

@@ -409,7 +409,7 @@
       try {
         if (!client) throw new Error('Connect MSP first');
         setStatus('Downloading by key...');
-        const fileKey = 'web-file';
+        const fileKey = '0xde4a17999bc1482ba71737367e5d858a133ed1e13327a29c495ab976004a138f';
         if (!window.__msp.token) {
           const jwt = generateMockJwt();
           client.setToken(jwt);

@@ -2,12 +2,15 @@
 
 use std::sync::Arc;
 
-use crate::data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage};
 #[cfg(all(test, feature = "mocks"))]
 use crate::data::{
     indexer_db::mock_repository::MockRepository,
     rpc::{AnyRpcConnection, MockConnection},
     storage::{BoxedStorageWrapper, InMemoryStorage},
+};
+use crate::{
+    config::Config,
+    data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage},
 };
 
 pub mod auth;
@@ -35,7 +38,7 @@ impl Services {
         storage: Arc<dyn BoxedStorage>,
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
-        callback_base_url: String,
+        config: Config,
     ) -> Self {
         let auth = Arc::new(AuthService::default());
         let health = Arc::new(HealthService::new(
@@ -47,7 +50,7 @@ impl Services {
             storage.clone(),
             postgres.clone(),
             rpc.clone(),
-            callback_base_url.clone(),
+            config.storage_hub.msp_callback_url.clone(),
         ));
         Self {
             auth,
@@ -67,7 +70,8 @@ impl Services {
         // Create in-memory storage
         let memory_storage = InMemoryStorage::new();
         let storage = Arc::new(BoxedStorageWrapper::new(memory_storage));
-        let callback_base_url = String::from("http://localhost:8080");
+        let mut cfg = crate::config::Config::default();
+        cfg.storage_hub.msp_callback_url = String::from("http://localhost:8080");
 
         // Create mock database client
         let repo = MockRepository::new();
@@ -78,6 +82,6 @@ impl Services {
         let rpc_conn = Arc::new(AnyRpcConnection::Mock(mock_conn));
         let rpc = Arc::new(StorageHubRpcClient::new(rpc_conn));
 
-        Self::new(storage, postgres, rpc, callback_base_url)
+        Self::new(storage, postgres, rpc, cfg)
     }
 }
