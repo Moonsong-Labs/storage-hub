@@ -41,6 +41,7 @@ pub struct ApiConfig {
 pub struct AuthConfig {
     /// JWT secret key for signing and verifying tokens
     /// Must be at least 32 bytes for HS256 algorithm
+    // TODO: allow loading from env instead of being in config file
     pub jwt_secret: String,
 }
 
@@ -92,6 +93,7 @@ pub struct DatabaseConfig {
     pub mock_mode: bool,
 }
 
+// TODO: only provide during tests or similar
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -102,10 +104,7 @@ impl Default for Config {
                 max_page_size: MAX_PAGE_SIZE,
             },
             auth: AuthConfig {
-                // Load JWT secret from environment variable
-                // This ensures secrets are never hardcoded in the source
                 jwt_secret: std::env::var("JWT_SECRET").unwrap_or_else(|_| {
-                    // For development/testing only - generate a random secret if not set
                     eprintln!("Warning: JWT_SECRET not set, using random secret for development");
                     AuthConfig::generate_random_secret()
                 }),
