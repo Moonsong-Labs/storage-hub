@@ -35,7 +35,6 @@ use sp_core::H256;
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::traits::SaturatedConversion;
 use substrate_prometheus_endpoint::Registry;
-
 // Cumulus Imports
 use cumulus_client_cli::CollatorOptions;
 use cumulus_client_collator::service::CollatorService;
@@ -97,7 +96,6 @@ use sh_solochain_evm_runtime::{
 //╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
 //║                                        Generic Types over Runtime                                             ║
 //╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
-
 // Generic client type over Runtime
 pub(crate) type StorageEnableClient<Runtime> =
     shc_common::types::ParachainClient<<Runtime as StorageEnableRuntime>::RuntimeApi>;
@@ -705,15 +703,6 @@ pub fn new_partial_parachain(
             .spawn("telemetry", None, worker.run());
         telemetry
     });
-
-    // FIXME: The `config.transaction_pool.options` field is private, so for now use its default value
-    // let transaction_pool = Arc::from(BasicPool::new_full(
-    //     Default::default(),
-    //     config.role.is_authority().into(),
-    //     config.prometheus_registry(),
-    //     task_manager.spawn_essential_handle(),
-    //     client.clone(),
-    // ));
 
     let transaction_pool = Arc::from(
         sc_transaction_pool::Builder::new(
