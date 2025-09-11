@@ -25,7 +25,7 @@ export const types = {
   spec: {
     "sh-parachain-runtime": shParachainDefinitions,
     shParachainDefinitions,
-    "datahaven-stagenet": shSolochainEvmDefinitions
+    "sh-solochain-evm": shSolochainEvmDefinitions
   }
 };
 //# sourceMappingURL=definitions.js.map

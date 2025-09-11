@@ -236,8 +236,8 @@ pub const MICROUNIT: Balance = 1_000_000;
 pub const NANOUNIT: Balance = 1_000;
 pub const PICOUNIT: Balance = 1;
 
-/// The existential deposit. Set to 1/10 of the Connected Relay Chain.
-pub const EXISTENTIAL_DEPOSIT: Balance = 0;
+/// The existential deposit.
+pub const EXISTENTIAL_DEPOSIT: Balance = 100;
 
 /// We assume that ~5% of the block weight is consumed by `on_initialize` handlers. This is
 /// used to limit the maximal weight of a single extrinsic.
