@@ -1,17 +1,17 @@
 import assert, { strictEqual } from "node:assert";
+import type { H256 } from "@polkadot/types/interfaces";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
 import {
-  type EnrichedBspApi,
   addCopypartyContainer,
   describeBspNet,
+  type EnrichedBspApi,
   shUser,
   sleep,
   waitFor
 } from "../../../util";
-import type { H256 } from "@polkadot/types/interfaces";
 
-describeBspNet("BSP: Save File To Disk", ({ before, createBspApi, createUserApi, it }) => {
+await describeBspNet("BSP: Save File To Disk", ({ before, createBspApi, createUserApi, it }) => {
   let bspApi: EnrichedBspApi;
   let userApi: EnrichedBspApi;
   let fileKey: H256;

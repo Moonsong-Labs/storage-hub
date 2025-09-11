@@ -40,11 +40,11 @@ async function main() {
       stdio: "inherit"
     });
     console.log("Docker image built successfully.");
-  } catch (error) {
+  } catch (_error) {
     console.error("Docker build failed.");
     process.exitCode = 1;
     return;
   }
 }
 
-main();
+await main();
