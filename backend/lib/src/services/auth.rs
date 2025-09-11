@@ -33,7 +33,8 @@ impl AuthService {
     pub async fn generate_nonce(&self, address: &str) -> Result<NonceResponse, Error> {
         validate_eth_address(address)?;
 
-        // TODO: Generate a random nonce and store it with expiration
+        // TODO: generate randomly
+        // TODO: store with expiration
         let nonce = "aBcDeF12345";
         let message = Self::construct_auth_message(nonce);
 
@@ -119,11 +120,14 @@ impl AuthService {
 
 #[cfg(test)]
 mod tests {
+    use crate::config::Config;
+
     use super::*;
 
     #[tokio::test]
     async fn test_verify_eth_signature() {
-        let auth_service = AuthService::default();
+        let cfg = Config::default();
+        let auth_service = AuthService::new(cfg.auth.jwt_secret.as_bytes());
 
         // Test with invalid nonce
         let result = auth_service

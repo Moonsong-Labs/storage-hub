@@ -1,3 +1,4 @@
+use rand::{Rng, RngCore};
 use serde::{Deserialize, Serialize};
 
 use crate::constants::{
@@ -47,13 +48,13 @@ pub struct AuthConfig {
 
 impl AuthConfig {
     /// Generate a random JWT secret for development/testing
-    /// This is safer than using a hardcoded value
     fn generate_random_secret() -> String {
-        use rand::Rng;
+        let mut data = [0u8; 32];
+
         let mut rng = rand::thread_rng();
-        (0..32)
-            .map(|_| rng.sample(rand::distributions::Alphanumeric) as char)
-            .collect()
+        rng.fill_bytes(&mut data);
+
+        hex::encode(data)
     }
 }
 
