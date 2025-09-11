@@ -6,9 +6,15 @@ port = 8080
 default_page_size = 25
 max_page_size = 100
 
+# Database configuration
 [database]
-url = "postgres://ignored"
-mock_mode = true
+# PostgreSQL connection URL
+# Format: postgresql://[user[:password]@][host][:port][/database]
+# Example for Docker environment: postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub
+url = "postgresql://postgres:postgres@localhost:5432/storage_hub"
+# Enable mock mode for testing (requires 'mocks' feature to be enabled at compile time)
+# When true, uses in-memory mock database instead of real PostgreSQL connection
+mock_mode = false
 
 [storage_hub]
 rpc_url = "ws://127.0.0.1:9777"

@@ -85,7 +85,7 @@ const receipt = await client.uploadFile(bucketId, fileKey, createReadStream(file
 console.log('File uploaded successfully:', receipt);
 
 // 5. Download the file
-const download = await client.downloadByKey(bucketId, fileKey);
+const download = await client.downloadByKey(fileKey);
 const outputPath = './downloaded-file.txt';
 
 // Stream the download to a file
@@ -139,7 +139,7 @@ console.log('Folder files:', files);
   - `bucketId: string` - Storage bucket identifier
   - `fileKey: string` - Unique file key/identifier
   - `file: ReadStream | Blob | File` - File data to upload
-- **`downloadByKey(bucketId, fileKey)`** - Download file by bucket and key
+- **`downloadByKey(fileKey)`** - Download file by key
   - Returns: `{ stream: ReadableStream, status: string }`
 - **`downloadByLocation(bucketId, filePath)`** - Download file by bucket and path
   - Returns: `{ stream: ReadableStream, status: string }`
