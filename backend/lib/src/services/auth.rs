@@ -34,17 +34,55 @@ impl AuthService {
     }
 
     /// Construct the message that should be signed for authentication
-    fn construct_auth_message(nonce: &str) -> String {
-        format!("Sign this message to authenticate: {}", nonce)
+    /// Construct a Sign-In with Ethereum (SIWE) compliant message for authentication
+    ///
+    /// This follows the EIP-4361 standard for Sign-In with Ethereum messages.
+    /// The message format ensures compatibility with wallet signing interfaces
+    /// and provides a standardized authentication flow.
+    fn construct_auth_message(address: &str, domain: &str, nonce: &str, chain_id: u64) -> String {
+        // SIWE message format as per EIP-4361
+        let scheme = "https";
+        let uri = format!("https://{}/auth/nonce", domain);
+        let statement = "I authenticate with this MSP Backend with my address";
+        let version = 1;
+        let issued_at = chrono::Utc::now().to_rfc3339();
+
+        format!(
+            "{}://{} wants you to sign in with your Ethereum account:\n\
+            {}\n\
+            \n\
+            {}\n\
+            \n\
+            URI: {}\n\
+            Version: {}\n\
+            Chain ID: {}\n\
+            Nonce: {}\n\
+            Issued At: {}",
+            scheme, domain, address, statement, uri, version, chain_id, nonce, issued_at
+        )
     }
 
-    pub async fn generate_nonce(&self, address: &str) -> Result<NonceResponse, Error> {
+    pub async fn generate_nonce(
+        &self,
+        address: &str,
+        chain_id: u64,
+    ) -> Result<NonceResponse, Error> {
+        // Validate address BEFORE generating message or storing in cache
+        // This ensures only valid addresses are stored
         validate_eth_address(address)?;
 
         // TODO: generate randomly
-        // TODO: store with expiration
         let nonce = "aBcDeF12345";
-        let message = Self::construct_auth_message(nonce);
+        // TODO: Make domain configurable
+        let domain = "localhost";
+        let message = Self::construct_auth_message(address, domain, nonce, chain_id);
+
+        // TODO: Store message paired with validated address in storage
+        // For now, we're using a fixed nonce and message
+        // In production, this should be stored in a cache/database with:
+        // - key: message
+        // - value: { address, expiration_time }
+        // The address stored here is guaranteed to be valid due to prior validation
 
         Ok(NonceResponse {
             message,
@@ -54,21 +92,26 @@ impl AuthService {
 
     pub async fn verify_eth_signature(
         &self,
-        address: &str,
-        nonce: &str,
+        message: &str,
         signature: &str,
     ) -> Result<VerifyResponse, Error> {
-        // Validate the provided address format
-        validate_eth_address(address)?;
+        // TODO: Retrieve the stored address for this message from storage
+        // For now, we'll extract it from the message (this is temporary)
+        // In production, this should:
+        // 1. Look up the message in storage
+        // 2. Get the associated address
+        // 3. Check if the message hasn't expired
+        // 4. Remove the message from storage after successful verification
 
-        // TODO: Check if nonce exists in storage and hasn't expired
-        // For now, we only accept the fixed nonce
-        if nonce != "aBcDeF12345" {
-            return Err(Error::Unauthorized("Invalid or expired nonce".to_string()));
-        }
+        // Extract address from message (temporary solution)
+        let address_line = message
+            .lines()
+            .nth(1)
+            .ok_or_else(|| Error::Unauthorized("Invalid message format".to_string()))?;
+        let stored_address = address_line.trim();
 
-        // Reconstruct the message that should have been signed
-        let message = Self::construct_auth_message(nonce);
+        // Validate the stored address format
+        validate_eth_address(stored_address)?;
 
         // Parse the signature
         let sig = PrimitiveSignature::from_str(signature)
@@ -88,12 +131,14 @@ impl AuthService {
         // Convert recovered address to string format
         let recovered_address_str = format!("{:#x}", recovered_address);
 
-        // Verify that the recovered address matches the claimed address
-        if recovered_address_str.to_lowercase() != address.to_lowercase() {
+        // Verify that the recovered address matches the stored address
+        if recovered_address_str.to_lowercase() != stored_address.to_lowercase() {
             return Err(Error::Unauthorized(
                 "Signature doesn't match the provided address".to_string(),
             ));
         }
+
+        // TODO: Remove the message from storage after successful verification
 
         // TODO: Store the session token in database
         // Generate JWT token and return response
@@ -137,11 +182,15 @@ mod tests {
         let cfg = Config::default();
         let auth_service = AuthService::new(cfg.auth.jwt_secret.as_bytes());
 
-        // Test with invalid nonce
+        // Generate a test message
+        let test_address = "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb9";
+        let test_message =
+            AuthService::construct_auth_message(test_address, "localhost", "aBcDeF12345", 1);
+
+        // Test with invalid message format
         let result = auth_service
             .verify_eth_signature(
-                "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb9",
-                "invalid_nonce",
+                "Invalid message",
                 "0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
             )
             .await;
@@ -149,18 +198,14 @@ mod tests {
         assert!(result.is_err());
         match result {
             Err(Error::Unauthorized(msg)) => {
-                assert_eq!(msg, "Invalid or expired nonce");
+                assert!(msg.contains("Invalid message format"));
             }
-            _ => panic!("Expected unauthorized error for invalid nonce"),
+            _ => panic!("Expected unauthorized error for invalid message format"),
         }
 
-        // Test with valid nonce but invalid signature format
+        // Test with valid message but invalid signature format
         let result = auth_service
-            .verify_eth_signature(
-                "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb9",
-                "aBcDeF12345",
-                "invalid_signature",
-            )
+            .verify_eth_signature(&test_message, "invalid_signature")
             .await;
 
         assert!(result.is_err());
