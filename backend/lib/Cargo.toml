@@ -14,6 +14,8 @@ bigdecimal = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
 diesel = { workspace = true }
 diesel-async = { workspace = true }
+alloy-core = "0.8"
+alloy-signer = "0.8"
 headers = { workspace = true }
 hex = { workspace = true }
 jsonrpsee = { workspace = true, features = ["client", "ws-client"] }

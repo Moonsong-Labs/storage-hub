@@ -3,8 +3,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Deserialize)]
 pub struct NonceRequest {
     pub address: String,
-    #[serde(rename = "chainId")]
-    pub chain_id: u64,
 }
 
 #[derive(Debug, Serialize)]
@@ -15,7 +13,8 @@ pub struct NonceResponse {
 
 #[derive(Debug, Deserialize)]
 pub struct VerifyRequest {
-    pub message: String,
+    pub address: String,
+    pub nonce: String,
     pub signature: String,
 }
 
