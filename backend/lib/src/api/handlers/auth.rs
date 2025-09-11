@@ -12,10 +12,7 @@ pub async fn nonce(
     State(services): State<Services>,
     Json(payload): Json<NonceRequest>,
 ) -> Result<impl IntoResponse, Error> {
-    let response = services
-        .auth
-        .generate_nonce(&payload.address, payload.chain_id)
-        .await?;
+    let response = services.auth.generate_nonce(&payload.address).await?;
     Ok(Json(response))
 }
 
@@ -25,7 +22,7 @@ pub async fn verify(
 ) -> Result<impl IntoResponse, Error> {
     let response = services
         .auth
-        .verify_eth_signature(&payload.message, &payload.signature)
+        .verify_eth_signature(&payload.address, &payload.nonce, &payload.signature)
         .await?;
     Ok(Json(response))
 }
