@@ -165,25 +165,22 @@ impl AuthService {
         })
     }
 
-    pub async fn refresh_token(
-        &self,
-        token_data: &TokenData<JwtClaims>,
-    ) -> Result<TokenResponse, Error> {
+    pub async fn refresh_token(&self, claims: JwtClaims) -> Result<TokenResponse, Error> {
         // Generate new token with refreshed expiry using the address from the validated token
-        let new_token = self.generate_jwt(&token_data.claims.address)?;
+        let new_token = self.generate_jwt(&claims.address)?;
 
         Ok(TokenResponse { token: new_token })
     }
 
-    pub async fn get_profile(&self, _token: &str) -> Result<ProfileResponse, Error> {
-        // TODO(MOCK): retrieve profile from token
+    pub async fn get_profile(&self, claims: JwtClaims) -> Result<ProfileResponse, Error> {
         Ok(ProfileResponse {
-            address: MOCK_ADDRESS.to_string(),
+            address: claims.address,
+            // TODO(MOCK): retrieve ens from token
             ens: "user.eth".to_string(),
         })
     }
 
-    pub async fn logout(&self, _token: &str) -> Result<(), Error> {
+    pub async fn logout(&self, _claims: JwtClaims) -> Result<(), Error> {
         // TODO(MOCK): invalidate the token
         Ok(())
     }

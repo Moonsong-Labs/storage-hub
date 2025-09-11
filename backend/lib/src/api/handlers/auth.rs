@@ -1,14 +1,13 @@
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
-use axum_extra::TypedHeader;
-use headers::{authorization::Bearer, Authorization};
+use axum_jwt::Claims;
 
 use crate::{
     error::Error,
-    models::auth::{NonceRequest, VerifyRequest},
+    models::auth::{JwtClaims, NonceRequest, VerifyRequest},
     services::Services,
 };
 
-pub async fn nonce(
+pub async fn message(
     State(services): State<Services>,
     Json(payload): Json<NonceRequest>,
 ) -> Result<impl IntoResponse, Error> {
@@ -19,7 +18,7 @@ pub async fn nonce(
     Ok(Json(response))
 }
 
-pub async fn verify(
+pub async fn login(
     State(services): State<Services>,
     Json(payload): Json<VerifyRequest>,
 ) -> Result<impl IntoResponse, Error> {
@@ -32,29 +31,24 @@ pub async fn verify(
 
 pub async fn refresh(
     State(services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    Claims(user): Claims<JwtClaims>,
 ) -> Result<impl IntoResponse, Error> {
-    let _token = auth.token();
-    // TODO: Wire up token decoding to JwtClaims
-    let token_data = todo!("Wire up token decoding from handler");
-    let response = services.auth.refresh_token(&token_data).await?;
+    let response = services.auth.refresh_token(user).await?;
     Ok(Json(response))
 }
 
 pub async fn logout(
     State(services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    Claims(user): Claims<JwtClaims>,
 ) -> Result<impl IntoResponse, Error> {
-    let token = auth.token();
-    services.auth.logout(token).await?;
+    services.auth.logout(user).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn profile(
     State(services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    Claims(user): Claims<JwtClaims>,
 ) -> Result<impl IntoResponse, Error> {
-    let token = auth.token();
-    let response = services.auth.get_profile(token).await?;
+    let response = services.auth.get_profile(user).await?;
     Ok(Json(response))
 }
