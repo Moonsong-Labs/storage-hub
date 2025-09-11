@@ -1106,7 +1106,7 @@ where
                         let mut timestamp = 0u64;
                         // This allows us to create multiple blocks without considering the actual slot duration wait time. We increment the timestamp by slot_duration in inherent data.
                         TIMESTAMP.with(|x| {
-                            timestamp = x.clone().take();
+                            timestamp = *x.borrow();
                         });
 
                         // If we don't increment the timestamp, we will hit a para slot and relay slot mismatch.
@@ -2262,6 +2262,23 @@ where
         tx_handler_controller,
         telemetry: telemetry.as_mut(),
     })?;
+
+    // Announce imported blocks to peers to ensure propagation in dev/manual seal mode
+    {
+        let import_stream = client.import_notification_stream();
+        let sync = sync_service.clone();
+        task_manager.spawn_essential_handle().spawn(
+            "announce-imported-blocks",
+            Some("network"),
+            async move {
+                use futures::StreamExt;
+                let mut stream = import_stream;
+                while let Some(notif) = stream.next().await {
+                    sync.announce_block(notif.hash, None);
+                }
+            },
+        );
+    }
 
     // Spawn Frontier background tasks: mapping sync, filter maintenance, fee history
     {
