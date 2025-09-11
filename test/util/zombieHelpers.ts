@@ -1,6 +1,6 @@
 import "@storagehub/api-augment";
-import { ApiPromise, WsProvider } from "@polkadot/api";
 import assert from "node:assert";
+import { ApiPromise, WsProvider } from "@polkadot/api";
 import { sleep } from "./timer";
 
 export type ZombieClients = Promise<{
@@ -52,7 +52,7 @@ export const waitForChain = async (
         break;
       }
       await sleep(1000);
-    } catch (e) {
+    } catch (_e) {
       await sleep(1000);
     }
 

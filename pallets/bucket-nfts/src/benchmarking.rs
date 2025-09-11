@@ -4,16 +4,27 @@
 
 use frame_benchmarking::v2::*;
 #[benchmarks(where
-	T: crate::Config<ItemId = u32>
-    + pallet_nfts::Config
-    + pallet_storage_providers::Config<
-        ProviderId = <T as frame_system::Config>::Hash,
-        MerklePatriciaRoot = <T as frame_system::Config>::Hash,
-        StorageDataUnit = u64,
-        ReadAccessGroupId = <T as pallet_nfts::Config>::CollectionId>
-    + pallet_balances::Config
-    + pallet_file_system::Config<Fingerprint = <T as frame_system::Config>::Hash, Providers = pallet_storage_providers::Pallet<T>>,
-    <T as crate::Config>::Buckets: shp_traits::ReadBucketsInterface<BucketId = <T as pallet_storage_providers::Config>::ProviderId, AccountId = <T as frame_system::Config>::AccountId, ProviderId = <T as pallet_storage_providers::Config>::ProviderId, ReadAccessGroupId = <T as pallet_nfts::Config>::CollectionId, BucketNameLimit = <T as pallet_storage_providers::Config>::BucketNameLimit>,
+    T: crate::Config
+        + pallet_nfts::Config
+        + pallet_storage_providers::Config<
+            ProviderId = <T as frame_system::Config>::Hash,
+            MerklePatriciaRoot = <T as frame_system::Config>::Hash,
+            StorageDataUnit = u64,
+            ReadAccessGroupId = <T as pallet_nfts::Config>::CollectionId,
+        >
+        + pallet_balances::Config
+        + pallet_file_system::Config<
+            Fingerprint = <T as frame_system::Config>::Hash,
+            Providers = pallet_storage_providers::Pallet<T>,
+        >,
+    <T as crate::Config>::Buckets: shp_traits::ReadBucketsInterface<
+        BucketId = <T as pallet_storage_providers::Config>::ProviderId,
+        AccountId = <T as frame_system::Config>::AccountId,
+        ProviderId = <T as pallet_storage_providers::Config>::ProviderId,
+        ReadAccessGroupId = <T as pallet_nfts::Config>::CollectionId,
+        BucketNameLimit = <T as pallet_storage_providers::Config>::BucketNameLimit,
+    >,
+    <T as pallet_nfts::Config>::ItemId: From<u32>,
 )]
 mod benchmarks {
     use super::*;
@@ -259,8 +270,8 @@ mod benchmarks {
     }
 
     impl_benchmark_test_suite! {
-            Pallet,
-            crate::mock::ExtBuilder::build(),
-            crate::mock::Test,
+        Pallet,
+        crate::mock::new_test_ext(),
+        crate::mock::Test,
     }
 }

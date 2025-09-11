@@ -10,7 +10,7 @@ import {
   ShConsts
 } from "../../../util";
 
-describeBspNet("BSPNet: Mulitple BSP Volunteering - 2", ({ before, it, createUserApi }) => {
+await describeBspNet("BSPNet: Mulitple BSP Volunteering - 2", ({ before, it, createUserApi }) => {
   let api: EnrichedBspApi;
 
   before(async () => {
