@@ -40,7 +40,10 @@ impl Services {
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
     ) -> Self {
-        let auth = Arc::new(AuthService::new(config.auth.jwt_secret.as_bytes()));
+        let jwt_secret = hex::decode(config.auth.jwt_secret.trim_start_matches("0x"))
+            .expect("valid JWT secret hex string");
+
+        let auth = Arc::new(AuthService::new(jwt_secret.as_bytes()));
         let health = Arc::new(HealthService::new(
             storage.clone(),
             postgres.clone(),
