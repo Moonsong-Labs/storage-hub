@@ -3,15 +3,18 @@ use std::str::FromStr;
 use alloy_core::primitives::{eip191_hash_message, PrimitiveSignature};
 use alloy_signer::utils::public_key_to_address;
 use axum_jwt::{
-    jsonwebtoken::{DecodingKey, EncodingKey},
+    jsonwebtoken::{self, Header, DecodingKey, EncodingKey, TokenData},
     Decoder,
 };
+use chrono::{Duration, Utc};
 
 use crate::{
-    api::validation::{generate_mock_jwt, validate_eth_address},
+    api::validation::validate_eth_address,
     constants::mocks::MOCK_ADDRESS,
     error::Error,
-    models::auth::{NonceResponse, ProfileResponse, TokenResponse, User, VerifyResponse},
+    models::auth::{
+        JwtClaims, NonceResponse, ProfileResponse, TokenResponse, User, VerifyResponse,
+    },
 };
 
 #[derive(Clone)]
@@ -62,13 +65,27 @@ impl AuthService {
         )
     }
 
+    /// Generate a JWT token for the given address
+    fn generate_jwt(&self, address: &str) -> Result<String, Error> {
+        let now = Utc::now();
+        let exp = now + Duration::minutes(10); // TODO: Make this configurable
+
+        let claims = JwtClaims {
+            address: address.to_string(),
+            exp: exp.timestamp(),
+            iat: now.timestamp(),
+        };
+
+        jsonwebtoken::encode(&Header::default(), &claims, &self.encoding_key)
+            .map_err(|_| Error::Internal)
+    }
+
     pub async fn generate_nonce(
         &self,
         address: &str,
         chain_id: u64,
     ) -> Result<NonceResponse, Error> {
         // Validate address BEFORE generating message or storing in cache
-        // This ensures only valid addresses are stored
         validate_eth_address(address)?;
 
         // TODO: generate randomly
@@ -138,23 +155,27 @@ impl AuthService {
             ));
         }
 
-        // TODO: Remove the message from storage after successful verification
+        // Generate JWT token
+        let token = self.generate_jwt(&recovered_address_str)?;
 
         // TODO: Store the session token in database
-        // Generate JWT token and return response
+        // Return response with the generated JWT
         Ok(VerifyResponse {
-            token: generate_mock_jwt(),
+            token,
             user: User {
                 address: recovered_address_str,
             },
         })
     }
 
-    pub async fn refresh_token(&self, _old_token: &str) -> Result<TokenResponse, Error> {
-        // TODO(MOCK): refresh token
-        Ok(TokenResponse {
-            token: generate_mock_jwt(),
-        })
+    pub async fn refresh_token(
+        &self,
+        token_data: &TokenData<JwtClaims>,
+    ) -> Result<TokenResponse, Error> {
+        // Generate new token with refreshed expiry using the address from the validated token
+        let new_token = self.generate_jwt(&token_data.claims.address)?;
+
+        Ok(TokenResponse { token: new_token })
     }
 
     pub async fn get_profile(&self, _token: &str) -> Result<ProfileResponse, Error> {
