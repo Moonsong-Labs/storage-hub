@@ -2,6 +2,10 @@
 
 use std::sync::Arc;
 
+use auth::AuthService;
+use axum::extract::FromRef;
+use axum_jwt::Decoder;
+
 #[cfg(all(test, feature = "mocks"))]
 use crate::data::{
     indexer_db::mock_repository::MockRepository,
@@ -17,9 +21,6 @@ pub mod auth;
 pub mod health;
 pub mod msp;
 
-use auth::AuthService;
-use axum::extract::FromRef;
-use axum_jwt::Decoder;
 use health::HealthService;
 use msp::MspService;
 
