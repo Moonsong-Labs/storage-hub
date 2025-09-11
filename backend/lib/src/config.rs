@@ -18,6 +18,7 @@ pub struct Config {
     /// The backend will serve requests at this port
     pub port: u16,
     pub api: ApiConfig,
+    pub auth: AuthConfig,
     pub storage_hub: StorageHubConfig,
     pub database: DatabaseConfig,
 }
@@ -33,6 +34,26 @@ pub struct ApiConfig {
     pub default_page_size: usize,
     /// Maximum allowed page size for paginated responses
     pub max_page_size: usize,
+}
+
+/// Authentication configuration for JWT tokens
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthConfig {
+    /// JWT secret key for signing and verifying tokens
+    /// Must be at least 32 bytes for HS256 algorithm
+    pub jwt_secret: String,
+}
+
+impl AuthConfig {
+    /// Generate a random JWT secret for development/testing
+    /// This is safer than using a hardcoded value
+    fn generate_random_secret() -> String {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        (0..32)
+            .map(|_| rng.sample(rand::distributions::Alphanumeric) as char)
+            .collect()
+    }
 }
 
 /// StorageHub RPC configuration for blockchain interaction
@@ -79,6 +100,15 @@ impl Default for Config {
             api: ApiConfig {
                 default_page_size: DEFAULT_PAGE_SIZE,
                 max_page_size: MAX_PAGE_SIZE,
+            },
+            auth: AuthConfig {
+                // Load JWT secret from environment variable
+                // This ensures secrets are never hardcoded in the source
+                jwt_secret: std::env::var("JWT_SECRET").unwrap_or_else(|_| {
+                    // For development/testing only - generate a random secret if not set
+                    eprintln!("Warning: JWT_SECRET not set, using random secret for development");
+                    AuthConfig::generate_random_secret()
+                }),
             },
             storage_hub: StorageHubConfig {
                 rpc_url: DEFAULT_RPC_URL.to_string(),

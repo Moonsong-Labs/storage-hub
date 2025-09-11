@@ -40,7 +40,7 @@ impl Services {
         rpc: Arc<StorageHubRpcClient>,
         config: Config,
     ) -> Self {
-        let auth = Arc::new(AuthService::default());
+        let auth = Arc::new(AuthService::new(config.auth.jwt_secret.as_bytes()));
         let health = Arc::new(HealthService::new(
             storage.clone(),
             postgres.clone(),
@@ -82,6 +82,9 @@ impl Services {
         let rpc_conn = Arc::new(AnyRpcConnection::Mock(mock_conn));
         let rpc = Arc::new(StorageHubRpcClient::new(rpc_conn));
 
-        Self::new(storage, postgres, rpc, cfg)
+        // Use default config for mocks
+        let config = Config::default();
+
+        Self::new(storage, postgres, rpc, config)
     }
 }

@@ -1,3 +1,5 @@
+use axum_jwt::jsonwebtoken::{DecodingKey, EncodingKey};
+
 use crate::{
     api::validation::{generate_mock_jwt, validate_eth_address},
     constants::mocks::MOCK_ADDRESS,
@@ -5,12 +7,21 @@ use crate::{
     models::auth::{NonceResponse, ProfileResponse, TokenResponse, User, VerifyResponse},
 };
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct AuthService {
+    encoding_key: EncodingKey,
+    decoding_key: DecodingKey,
     // TODO(MOCK): store nonces and sessions
 }
 
 impl AuthService {
+    pub fn new(secret: &[u8]) -> Self {
+        Self {
+            encoding_key: EncodingKey::from_secret(secret),
+            decoding_key: DecodingKey::from_secret(secret),
+        }
+    }
+
     pub async fn generate_nonce(
         &self,
         address: &str,
