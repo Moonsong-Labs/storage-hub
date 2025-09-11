@@ -12,7 +12,7 @@ await describeBspNet(
     });
 
     it("Can send ETH to the BSP", async () => {
-      const tx = await userApi.tx.ethereum.transact(
+      const tx = userApi.tx.ethereum.transact(
         "0x0101010101010101010101010101010101010101010101010101010101010101"
       );
       await tx.signAndSend(alith);
