@@ -129,6 +129,40 @@ impl MockConnection {
             }
         }
     }
+
+    /// Build mock JSON response for `storagehubclient_saveFileToDisk` and write mock file
+    async fn mock_save_file_to_disk<P>(&self, params: P) -> Value
+    where
+        P: jsonrpsee::core::traits::ToRpcParams + Send + Sync,
+    {
+        // We assume params are [file_key, upload_url]
+        let raw = params.to_rpc_params().unwrap().unwrap();
+        let (file_key, upload_url): (String, String) = serde_json::from_str(raw.get()).unwrap();
+
+        // Derive filename from upload_url
+        let file_name = upload_url
+            .rsplit('/')
+            .next()
+            .unwrap_or_else(|| file_key.as_str())
+            .to_string();
+        let local_path = format!("uploads/{}", file_name);
+
+        // Create mock file content
+        let _ = fs::create_dir_all("uploads").await;
+        let content = b"GoodFla mock file content for download";
+        let _ = fs::write(&local_path, content).await;
+
+        // Return expected response shape
+        serde_json::json!({
+            "Success": {
+                "owner": vec![0u8; 32],
+                "bucket_id": vec![0u8; 32],
+                "location": file_name.as_bytes().to_vec(),
+                "file_size": content.len() as u64,
+                "fingerprint": vec![0u8; 32]
+            }
+        })
+    }
 }
 
 impl Default for MockConnection {
@@ -145,82 +179,42 @@ impl Default for MockConnection {
 
 #[async_trait]
 impl RpcConnection for MockConnection {
-    async fn call<P, R>(&self, method: &str, _params: P) -> RpcResult<R>
+    async fn call<P, R>(&self, method: &str, params: P) -> RpcResult<R>
     where
         P: jsonrpsee::core::traits::ToRpcParams + Send + Sync,
         R: DeserializeOwned,
     {
-        // match arms for implementing RPC calls
-        match method {
-            "storagehubclient_saveFileToDisk" => {
-                // We assume params are [file_key, upload_url]
-                let raw = _params.to_rpc_params().unwrap().unwrap();
-                let (file_key, upload_url): (String, String) =
-                    serde_json::from_str(raw.get()).unwrap();
-
-                // We derive filename from upload_url
-                let file_name = upload_url
-                    .rsplit('/')
-                    .next()
-                    .unwrap_or_else(|| file_key.as_str())
-                    .to_string();
-                let local_path = format!("uploads/{}", file_name);
-
-                // Mock file content
-                let _ = fs::create_dir_all("uploads").await;
-                let content = b"GoodFla mock file content for download";
-                let _ = fs::write(&local_path, content).await;
-
-                // Mock response
-                let response = serde_json::json!({
-                    "Success": {
-                        "owner": vec![0u8; 32],
-                        "bucket_id": vec![0u8; 32],
-                        "location": file_name.as_bytes().to_vec(),
-                        "file_size": content.len() as u64,
-                        "fingerprint": vec![0u8; 32]
-                    }
-                });
-                let typed: R = serde_json::from_value(response).unwrap();
-                Ok(typed)
-            }
-            _ => {
-                // Default behavior
-                // Check if connected
-                {
-                    let connected = self.connected.read().await;
-                    if !*connected {
-                        return Err(RpcConnectionError::ConnectionClosed);
-                    }
-                }
-
-                // Simulate network latency if configured
-                let latency = *self.latency_ms.read().await;
-                if let Some(latency_ms) = latency {
-                    sleep(Duration::from_millis(latency_ms)).await;
-                }
-
-                // Check for simulated errors
-                self.check_error().await?;
-
-                // Get response for method
-                let response = {
-                    let responses = self.responses.read().await;
-                    responses
-                        .get(method)
-                        .cloned()
-                        .unwrap_or(serde_json::json!(null))
-                };
-
-                // Deserialize the response
-                serde_json::from_value(response).map_err(|e| {
-                    RpcConnectionError::Serialization(format!(
-                        "Failed to deserialize response: {}",
-                        e
-                    ))
-                })
+        // Global checks
+        {
+            let connected = self.connected.read().await;
+            if !*connected {
+                return Err(RpcConnectionError::ConnectionClosed);
             }
         }
+
+        let latency = *self.latency_ms.read().await;
+        if let Some(latency_ms) = latency {
+            sleep(Duration::from_millis(latency_ms)).await;
+        }
+
+        self.check_error().await?;
+
+        // Build JSON response by method
+        let response: Value = match method {
+            "storagehubclient_saveFileToDisk" => self.mock_save_file_to_disk(params).await,
+            _ => {
+                let responses = self.responses.read().await;
+                responses
+                    .get(method)
+                    .cloned()
+                    .unwrap_or(serde_json::json!(null))
+            }
+        };
+
+        // Deserialize to expected type
+        serde_json::from_value(response).map_err(|e| {
+            RpcConnectionError::Serialization(format!("Failed to deserialize response: {}", e))
+        })
     }
 
     async fn is_connected(&self) -> bool {
