@@ -173,6 +173,8 @@ impl AuthService {
     }
 
     pub async fn get_profile(&self, claims: JwtClaims) -> Result<ProfileResponse, Error> {
+        // TODO: verify claims expiry
+
         Ok(ProfileResponse {
             address: claims.address,
             // TODO(MOCK): retrieve ens from token

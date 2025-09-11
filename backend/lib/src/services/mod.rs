@@ -18,6 +18,7 @@ pub mod health;
 pub mod msp;
 
 use auth::AuthService;
+use axum::extract::FromRef;
 use axum_jwt::Decoder;
 use health::HealthService;
 use msp::MspService;
@@ -95,8 +96,8 @@ impl Services {
 
 // axum_jwt extractors require the app state to implement this
 // to be able to extract the token/claims in the request
-impl AsRef<Decoder> for Services {
-    fn as_ref(&self) -> &Decoder {
-        self.auth.jwt_decoder()
+impl FromRef<Services> for Decoder {
+    fn from_ref(services: &Services) -> Decoder {
+        services.auth.jwt_decoder().clone()
     }
 }
