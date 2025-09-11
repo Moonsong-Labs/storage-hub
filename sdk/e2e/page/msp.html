@@ -315,8 +315,8 @@
           if (addrInput) addrInput.value = address;
         }
         const res = await client.getNonce(address, chainId);
-        const { message, nonce } = res;
-        window.__msp.message = message; window.__msp.nonce = nonce; window.__msp.nonceResponse = res;
+        const { message } = res;
+        window.__msp.message = message; window.__msp.nonceResponse = res;
         console.log('[NONCE]', res);
         setStatus('Nonce ready');
       } catch (e) {
