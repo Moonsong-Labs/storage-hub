@@ -25,9 +25,16 @@ pub struct VerifyResponse {
     pub user: User,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct User {
     pub address: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct JwtClaims {
+    pub address: String,
+    pub exp: i64, // JWT expiration timestamp
+    pub iat: i64, // JWT issued at timestamp
 }
 
 #[derive(Debug, Serialize)]

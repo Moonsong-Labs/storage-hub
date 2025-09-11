@@ -34,8 +34,10 @@ pub async fn refresh(
     State(services): State<Services>,
     TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
 ) -> Result<impl IntoResponse, Error> {
-    let token = auth.token();
-    let response = services.auth.refresh_token(token).await?;
+    let _token = auth.token();
+    // TODO: Wire up token decoding to JwtClaims
+    let token_data = todo!("Wire up token decoding from handler");
+    let response = services.auth.refresh_token(&token_data).await?;
     Ok(Json(response))
 }
 
