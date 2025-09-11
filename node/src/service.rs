@@ -2023,6 +2023,18 @@ where
             (block_import, _grandpa_link, babe_link, frontier_backend, storage_override, mut telemetry),
     } = new_partial_solochain_evm(&config)?;
 
+    let signing_dev_key = config
+        .dev_key_seed
+        .clone()
+        .expect("Dev key seed must be present in dev mode.");
+    let keystore = keystore_container.keystore();
+
+    // Initialise seed for signing transactions using blockchain service.
+    // In dev mode we use a well known dev account.
+    keystore
+        .ecdsa_generate_new(BCSV_KEY_TYPE, Some(signing_dev_key.as_ref()))
+        .expect("Invalid dev signing key provided.");
+
     let mut net_config = sc_network::config::FullNetworkConfiguration::<
         Block,
         <Block as sp_runtime::traits::Block>::Hash,
