@@ -61,6 +61,8 @@ pub fn routes(services: Services) -> Router {
 mod tests {
     use axum::http::StatusCode;
     use axum_test::TestServer;
+    use std::path::Path;
+    use tokio::time::{sleep, Duration};
 
     use crate::services::health::HealthService;
 
@@ -74,5 +76,30 @@ mod tests {
 
         let json: serde_json::Value = response.json();
         assert_eq!(json["status"], HealthService::HEALTHY);
+    }
+
+    #[tokio::test]
+    async fn download_by_key_streams_and_cleans_temp() {
+        let app = crate::api::mock_app();
+        let server = TestServer::new(app).unwrap();
+
+        let file_key = "web-file";
+        let temp_path = format!("uploads/{}", file_key);
+
+        // Act: request download
+        let response = server.get(&format!("/download/{}", file_key)).await;
+
+        // Assert: status OK
+        assert_eq!(response.status_code(), StatusCode::OK);
+
+        // Assert: body bytes match the mocked content written by RPC mock
+        let body = response.as_bytes();
+        assert_eq!(body.as_ref(), b"GoodFla mock file content for download");
+
+        // Give spawned cleanup task a moment to run
+        sleep(Duration::from_millis(50)).await;
+
+        // Assert: temp file was removed
+        assert!(!Path::new(&temp_path).exists());
     }
 }
