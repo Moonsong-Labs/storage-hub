@@ -18,6 +18,7 @@ pub mod health;
 pub mod msp;
 
 use auth::AuthService;
+use axum_jwt::Decoder;
 use health::HealthService;
 use msp::MspService;
 
@@ -43,7 +44,7 @@ impl Services {
         let jwt_secret = hex::decode(config.auth.jwt_secret.trim_start_matches("0x"))
             .expect("valid JWT secret hex string");
 
-        let auth = Arc::new(AuthService::new(jwt_secret.as_bytes()));
+        let auth = Arc::new(AuthService::new(jwt_secret.as_slice()));
         let health = Arc::new(HealthService::new(
             storage.clone(),
             postgres.clone(),
@@ -86,5 +87,13 @@ impl Services {
         let config = Config::default();
 
         Self::new(config, storage, postgres, rpc)
+    }
+}
+
+// axum_jwt extractors require the app state to implement this
+// to be able to extract the token/claims in the request
+impl AsRef<Decoder> for Services {
+    fn as_ref(&self) -> &Decoder {
+        self.auth.jwt_decoder()
     }
 }
