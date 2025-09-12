@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{str::FromStr, sync::Arc};
 
 use alloy_core::primitives::{eip191_hash_message, PrimitiveSignature};
 use alloy_signer::utils::public_key_to_address;
@@ -7,9 +7,11 @@ use axum_jwt::{
     Decoder,
 };
 use chrono::{Duration, Utc};
+use rand::{distributions::Alphanumeric, Rng};
 
 use crate::{
     api::validation::validate_eth_address,
+    data::storage::BoxedStorage,
     error::Error,
     models::auth::{
         JwtClaims, NonceResponse, ProfileResponse, TokenResponse, User, VerifyResponse,
@@ -20,8 +22,8 @@ use crate::{
 pub struct AuthService {
     encoding_key: EncodingKey,
     decoder: Decoder,
-    // TODO(MOCK): store nonces and sessions
     validate_signature: bool,
+    storage: Arc<dyn BoxedStorage>,
 }
 
 impl AuthService {
@@ -30,7 +32,8 @@ impl AuthService {
     /// Arguments:
     /// * `secret`: secret to use to initialize the JWT encoding and decoding keys
     /// * `validate_signature`: used to enable Eth and JWT signature validation. Recommended set to true.
-    pub fn new(secret: &[u8], validate_signature: bool) -> Self {
+    /// * `storage`: reference to the storage service to use to store nonce information
+    pub fn new(secret: &[u8], validate_signature: bool, storage: Arc<dyn BoxedStorage>) -> Self {
         let mut validation = jsonwebtoken::Validation::default();
         if !validate_signature {
             validation.insecure_disable_signature_validation();
@@ -39,12 +42,22 @@ impl AuthService {
         Self {
             encoding_key: EncodingKey::from_secret(secret),
             decoder: Decoder::new(DecodingKey::from_secret(secret), validation),
+            storage,
             validate_signature,
         }
     }
 
     pub fn jwt_decoder(&self) -> &Decoder {
         &self.decoder
+    }
+
+    /// Generate a random SIWE-compliant nonce (at least 8 alphanumeric characters)
+    fn generate_random_nonce() -> String {
+        rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(16) // 16 characters for better security
+            .map(char::from)
+            .collect()
     }
 
     /// Construct the message that should be signed for authentication
@@ -99,18 +112,24 @@ impl AuthService {
         // Validate address BEFORE generating message or storing in cache
         validate_eth_address(address)?;
 
-        // TODO: generate randomly
-        let nonce = "aBcDeF12345";
+        // Generate a random SIWE-compliant nonce
+        let nonce = Self::generate_random_nonce();
         // TODO: Make domain configurable
         let domain = "localhost";
-        let message = Self::construct_auth_message(address, domain, nonce, chain_id);
+        let message = Self::construct_auth_message(address, domain, &nonce, chain_id);
 
-        // TODO: Store message paired with validated address in storage
-        // For now, we're using a fixed nonce and message
-        // In production, this should be stored in a cache/database with:
-        // - key: message
-        // - value: { address, expiration_time }
-        // The address stored here is guaranteed to be valid due to prior validation
+        // Store message paired with validated address in storage
+        // Using message as key and address as value with 5 minute expiration
+        const NONCE_EXPIRATION_SECONDS: u64 = 300; // 5 minutes
+
+        self.storage
+            .store_nonce(
+                message.clone(),
+                address.to_string(),
+                NONCE_EXPIRATION_SECONDS,
+            )
+            .await
+            .map_err(|_| Error::Internal)?;
 
         Ok(NonceResponse { message })
     }
@@ -120,22 +139,16 @@ impl AuthService {
         message: &str,
         signature: &str,
     ) -> Result<VerifyResponse, Error> {
-        // TODO: Retrieve the stored address for this message from storage
-        // For now, we'll extract it from the message (this is temporary)
-        // In production, this should:
-        // 1. Look up the message in storage
-        // 2. Get the associated address
-        // 3. Check if the message hasn't expired
-        // 4. Remove the message from storage after successful verification
+        // Retrieve the stored address for this message from storage
+        let address = self
+            .storage
+            .get_nonce(message)
+            .await
+            .map(|addr| addr.to_lowercase())
+            .map_err(|_| Error::Internal)?
+            .ok_or_else(|| Error::Unauthorized("Invalid or expired nonce".to_string()))?;
 
-        // Extract address from message (temporary solution)
-        let address_line = message
-            .lines()
-            .nth(1)
-            .ok_or_else(|| Error::Unauthorized("Invalid message format".to_string()))?;
-        let address = address_line.trim().to_lowercase();
-
-        // Validate the stored address format
+        // Validate the stored address format (defensive check)
         validate_eth_address(&address)?;
 
         if self.validate_signature {
@@ -161,6 +174,12 @@ impl AuthService {
                 ));
             }
         }
+
+        // Remove the nonce from storage after successful verification (one-time use)
+        self.storage
+            .remove_nonce(message)
+            .await
+            .map_err(|_| Error::Internal)?;
 
         // Generate JWT token
         let token = self.generate_jwt(&address)?;
@@ -189,29 +208,35 @@ impl AuthService {
         })
     }
 
-    pub async fn logout(&self, _claims: JwtClaims) -> Result<(), Error> {
-        // TODO(MOCK): invalidate the token
+    pub async fn logout(&self, _token: &str) -> Result<(), Error> {
+        // TODO: Invalidate the token in session storage
+        // For now, the nonce cleanup happens automatically on expiration
+        // or during verification (one-time use)
         Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::config::Config;
+    use crate::{
+        config::Config,
+        data::storage::{BoxedStorageWrapper, InMemoryStorage},
+    };
 
     use super::*;
 
     #[tokio::test]
     async fn test_verify_eth_signature() {
         let cfg = Config::default();
-        let auth_service = AuthService::new(cfg.auth.jwt_secret.as_bytes(), false);
+        let storage = Arc::new(BoxedStorageWrapper::new(InMemoryStorage::new()));
+        let auth_service = AuthService::new(cfg.auth.jwt_secret.as_bytes(), false, storage.clone());
 
         // Generate a test message
         let test_address = "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb9";
         let test_message =
             AuthService::construct_auth_message(test_address, "localhost", "aBcDeF12345", 1);
 
-        // Test with invalid message format
+        // Test with message not in storage (nonce not found)
         let result = auth_service
             .verify_eth_signature(
                 "Invalid message",
@@ -222,10 +247,16 @@ mod tests {
         assert!(result.is_err());
         match result {
             Err(Error::Unauthorized(msg)) => {
-                assert!(msg.contains("Invalid message format"));
+                assert!(msg.contains("Invalid or expired nonce"));
             }
-            _ => panic!("Expected unauthorized error for invalid message format"),
+            _ => panic!("Expected unauthorized error for invalid nonce"),
         }
+
+        // Store the test message with address in storage
+        storage
+            .store_nonce(test_message.clone(), test_address.to_string(), 300)
+            .await
+            .unwrap();
 
         // Test with valid message but invalid signature format
         let result = auth_service

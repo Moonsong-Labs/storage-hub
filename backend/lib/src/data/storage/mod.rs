@@ -21,4 +21,20 @@ pub trait Storage: Send + Sync {
     // in the backend's memory
 
     async fn health_check(&self) -> Result<bool, Self::Error>;
+
+    /// Store a nonce with associated data (message as key, address and expiration as value)
+    /// Returns the raw result from the storage operation
+    async fn store_nonce(
+        &self,
+        message: String,
+        address: String,
+        expiration_seconds: u64,
+    ) -> Result<(), Self::Error>;
+
+    /// Retrieve nonce data by message
+    /// Returns None if not found or expired
+    async fn get_nonce(&self, message: &str) -> Result<Option<String>, Self::Error>;
+
+    /// Remove a nonce entry
+    async fn remove_nonce(&self, message: &str) -> Result<(), Self::Error>;
 }

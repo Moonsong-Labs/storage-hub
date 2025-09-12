@@ -51,7 +51,7 @@ impl Services {
         #[cfg(not(feature = "mocks"))]
         let jwt_validate = true;
 
-        let auth = Arc::new(AuthService::new(jwt_secret.as_slice(), jwt_validate));
+        let auth = Arc::new(AuthService::new(jwt_secret.as_slice(), jwt_validate, storage.clone()));
         let health = Arc::new(HealthService::new(
             storage.clone(),
             postgres.clone(),

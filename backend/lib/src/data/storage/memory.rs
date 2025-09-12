@@ -6,7 +6,11 @@
 //! This module provides a thread-safe in-memory implementation of the Storage trait,
 //! suitable for development and testing environments.
 
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use async_trait::async_trait;
 use parking_lot::RwLock;
@@ -21,16 +25,20 @@ pub enum InMemoryStorageError {
     // This enum is kept for future extensibility
 }
 
-/// In-memory storage implementation using Arc<RwLock<HashMap>>
-///
-/// TODO(SCAFFOLDING): Example storage implementation for demonstration.
-/// Replace with actual persistent storage in production.
+/// Nonce entry with address and expiration timestamp
+#[derive(Clone, Debug)]
+struct NonceEntry {
+    address: String,
+    expiration_timestamp: u64,
+}
+
+/// In-memory storage implementation
 ///
 /// This implementation is thread-safe and suitable for development environments.
 /// All data is lost when the process terminates.
 #[derive(Default, Clone)]
 pub struct InMemoryStorage {
-    map: Arc<RwLock<HashMap<String, String>>>,
+    nonces: Arc<RwLock<HashMap<String, NonceEntry>>>,
 }
 
 impl InMemoryStorage {
@@ -44,11 +52,52 @@ impl Storage for InMemoryStorage {
     type Error = InMemoryStorageError;
 
     async fn health_check(&self) -> Result<bool, Self::Error> {
-        // just to "use" `map`
-        // TODO(SCAFFOLDING): implement a proper check for the storage once we defined what it needs to contain
-        #[allow(unused_comparisons)]
-        #[allow(clippy::absurd_extreme_comparisons)]
-        Ok(self.map.read().capacity() >= 0)
+        Ok(true)
+    }
+
+    async fn store_nonce(
+        &self,
+        message: String,
+        address: String,
+        // TODO: use duration
+        expiration_seconds: u64,
+    ) -> Result<(), Self::Error> {
+        let current_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        // TODO: spawn task to cleanup storage after expiration
+        let expiration_timestamp = current_time + expiration_seconds;
+
+        let entry = NonceEntry {
+            address,
+            expiration_timestamp,
+        };
+
+        self.nonces.write().insert(message, entry);
+        Ok(())
+    }
+
+    async fn get_nonce(&self, message: &str) -> Result<Option<String>, Self::Error> {
+        let nonces = self.nonces.read();
+
+        if let Some(entry) = nonces.get(message) {
+            let current_time = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+
+            if current_time < entry.expiration_timestamp {
+                return Ok(Some(entry.address.clone()));
+            }
+        }
+
+        Ok(None)
+    }
+
+    async fn remove_nonce(&self, message: &str) -> Result<(), Self::Error> {
+        self.nonces.write().remove(message);
+        Ok(())
     }
 }
 
@@ -62,4 +111,8 @@ mod tests {
 
         assert!(storage.health_check().await.unwrap())
     }
+
+    // TODO: add tests for nonces
+    // * can store/retrieve
+    // * can't retrieve expired
 }
