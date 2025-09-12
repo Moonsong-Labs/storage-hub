@@ -18,21 +18,6 @@ import {
 } from "../bspNet";
 import { DUMMY_MSP_ID } from "../bspNet/consts";
 import { MILLIUNIT, UNIT } from "../constants";
-import { alith, ethBspKey, ethMspKey, ethShUser } from "../evmNet/keyring";
-import {
-  alice,
-  bspDownKey,
-  bspDownSeed,
-  bspKey,
-  bspThreeKey,
-  bspThreeSeed,
-  bspTwoKey,
-  bspTwoSeed,
-  mspDownKey,
-  mspKey,
-  mspTwoKey,
-  shUser
-} from "../pjsKeyring";
 import { sleep } from "../timer";
 
 export type ShEntity = {
@@ -410,7 +395,10 @@ export class NetworkLauncher {
   }
 
   public async getApi(serviceName = "sh-user") {
-    return BspNetTestApi.create(`ws://127.0.0.1:${this.getPort(serviceName)}`);
+    return BspNetTestApi.create(
+      `ws://127.0.0.1:${this.getPort(serviceName)}`,
+      this.config.runtimeType ?? "parachain"
+    );
   }
 
   public async setupBsp(api: EnrichedBspApi, who: string, multiaddress: string, bspId?: string) {
@@ -425,6 +413,7 @@ export class NetworkLauncher {
     return this;
   }
 
+  // TODO: Rename to preFundAccounts
   public async setupGlobal(api: EnrichedBspApi) {
     const amount = 10000n * 10n ** 12n;
     const maxReplicationTargetRuntimeParameter = {
@@ -438,28 +427,30 @@ export class NetworkLauncher {
       }
     };
 
+    const sudo = api.accounts.sudo;
     const signedCalls = [
       api.tx.sudo
-        .sudo(api.tx.balances.forceSetBalance(ethBspKey.address, amount))
-        .signAsync(alith, { nonce: 0 }),
+        .sudo(api.tx.balances.forceSetBalance(api.accounts.bspKey.address, amount))
+        .signAsync(sudo, { nonce: 0 }),
       api.tx.sudo
-        .sudo(api.tx.balances.forceSetBalance(ethShUser.address, amount))
-        .signAsync(alith, { nonce: 1 }),
+        .sudo(api.tx.balances.forceSetBalance(api.accounts.shUser.address, amount))
+        .signAsync(sudo, { nonce: 1 }),
       api.tx.sudo
-        .sudo(api.tx.balances.forceSetBalance(ethMspKey.address, amount))
-        .signAsync(alith, { nonce: 2 }),
+        .sudo(api.tx.balances.forceSetBalance(api.accounts.mspKey.address, amount))
+        .signAsync(sudo, { nonce: 2 }),
       api.tx.sudo
-        .sudo(api.tx.balances.forceSetBalance(mspTwoKey.address, amount))
-        .signAsync(alith, { nonce: 3 }),
+        .sudo(api.tx.balances.forceSetBalance(api.accounts.mspTwoKey.address, amount))
+        .signAsync(sudo, { nonce: 3 }),
       api.tx.sudo
-        .sudo(api.tx.balances.forceSetBalance(mspDownKey.address, amount))
-        .signAsync(alith, { nonce: 4 }),
+        .sudo(api.tx.balances.forceSetBalance(api.accounts.mspDownKey.address, amount))
+        .signAsync(sudo, { nonce: 4 }),
+      // TODO: Move these to the setParameters function
       api.tx.sudo
         .sudo(api.tx.parameters.setParameter(maxReplicationTargetRuntimeParameter))
-        .signAsync(alith, { nonce: 5 }),
+        .signAsync(sudo, { nonce: 5 }),
       api.tx.sudo
         .sudo(api.tx.parameters.setParameter(tickRangeToMaximumThresholdRuntimeParameter))
-        .signAsync(alith, { nonce: 6 })
+        .signAsync(sudo, { nonce: 6 })
     ];
 
     const sudoTxns = await Promise.all(signedCalls);
@@ -615,6 +606,7 @@ export class NetworkLauncher {
     });
   }
 
+  // TODO: Rename to execDemoStorageRequest
   public async execDemoTransfer() {
     await using api = await this.getApi("sh-user");
 
@@ -627,7 +619,7 @@ export class NetworkLauncher {
       bucketName,
       null,
       DUMMY_MSP_ID,
-      ethShUser,
+      api.accounts.shUser,
       1
     );
 
@@ -675,28 +667,25 @@ export class NetworkLauncher {
 
     // Add more BSPs to the network.
     // One BSP will be down, two more will be up.
-    const { containerName: bspDownContainerName } = await addBsp(api, bspDownKey, {
+    const { containerName: bspDownContainerName } = await addBsp(api, api.accounts.bspDownKey, {
       name: "sh-bsp-down",
       rocksdb: this.config.rocksdb,
-      bspKeySeed: bspDownSeed,
       bspId: ShConsts.BSP_DOWN_ID,
       bspStartingWeight: this.config.capacity,
       extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
       additionalArgs: ["--keystore-path=/keystore/bsp-down"]
     });
-    const { rpcPort: bspTwoRpcPort } = await addBsp(api, bspTwoKey, {
+    const { rpcPort: bspTwoRpcPort } = await addBsp(api, api.accounts.bspTwoKey, {
       name: "sh-bsp-two",
       rocksdb: this.config.rocksdb,
-      bspKeySeed: bspTwoSeed,
       bspId: ShConsts.BSP_TWO_ID,
       bspStartingWeight: this.config.capacity,
       extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
       additionalArgs: ["--keystore-path=/keystore/bsp-two"]
     });
-    const { rpcPort: bspThreeRpcPort } = await addBsp(api, bspThreeKey, {
+    const { rpcPort: bspThreeRpcPort } = await addBsp(api, api.accounts.bspThreeKey, {
       name: "sh-bsp-three",
       rocksdb: this.config.rocksdb,
-      bspKeySeed: bspThreeSeed,
       bspId: ShConsts.BSP_THREE_ID,
       bspStartingWeight: this.config.capacity,
       extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
@@ -785,7 +774,7 @@ export class NetworkLauncher {
     });
 
     await launchedNetwork.setupGlobal(userApi);
-    await launchedNetwork.setupBsp(userApi, ethBspKey.address, multiAddressBsp);
+    await launchedNetwork.setupBsp(userApi, userApi.accounts.bspKey.address, multiAddressBsp);
     await launchedNetwork.setupRuntimeParams(userApi);
     await userApi.block.seal();
 
@@ -803,9 +792,9 @@ export class NetworkLauncher {
         // TODO: As we add more MSPs make this more dynamic
         const mspAddress =
           service === "sh-msp-1"
-            ? ethMspKey.address
+            ? userApi.accounts.mspKey.address
             : service === "sh-msp-2"
-              ? mspTwoKey.address
+              ? userApi.accounts.mspTwoKey.address
               : undefined;
         assert(
           mspAddress,
@@ -829,7 +818,7 @@ export class NetworkLauncher {
 
     if (launchedNetwork.type === "bspnet") {
       const mockMspMultiAddress = `/ip4/${bspIp}/tcp/30350/p2p/${ShConsts.DUMMY_MSP_PEER_ID}`;
-      await launchedNetwork.setupMsp(userApi, mspKey.address, mockMspMultiAddress);
+      await launchedNetwork.setupMsp(userApi, userApi.accounts.mspKey.address, mockMspMultiAddress);
     }
 
     if (launchedNetwork.config.initialised === "multi") {

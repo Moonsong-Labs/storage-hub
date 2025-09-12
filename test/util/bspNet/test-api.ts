@@ -7,7 +7,30 @@ import type { HexString } from "@polkadot/util/types";
 import { types as BundledTypes } from "@storagehub/types-bundle";
 import type { AssertExtrinsicOptions } from "../asserts";
 import * as Assertions from "../asserts";
-import { alith } from "../evmNet/keyring.ts";
+import {
+  alith,
+  ethBspDownKey,
+  ethBspKey,
+  ethBspThreeKey,
+  ethBspTwoKey,
+  ethMspDownKey,
+  ethMspKey,
+  ethMspThreeKey,
+  ethMspTwoKey,
+  ethShUser
+} from "../evmNet/keyring";
+import {
+  alice,
+  bspDownKey,
+  bspKey,
+  bspThreeKey,
+  bspTwoKey,
+  mspDownKey,
+  mspKey,
+  mspThreeKey,
+  mspTwoKey,
+  shUser
+} from "../pjsKeyring";
 import * as BspNetBlock from "./block";
 import * as ShConsts from "./consts";
 import * as DockerBspNet from "./docker";
@@ -45,10 +68,16 @@ export interface WaitForTxOptions {
 export class BspNetTestApi implements AsyncDisposable {
   private _api: ApiPromise;
   private _endpoint: `ws://${string}` | `wss://${string}`;
+  private _runtimeType: "parachain" | "solochain";
 
-  private constructor(api: ApiPromise, endpoint: `ws://${string}` | `wss://${string}`) {
+  private constructor(
+    api: ApiPromise,
+    endpoint: `ws://${string}` | `wss://${string}`,
+    runtimeType: "parachain" | "solochain"
+  ) {
     this._api = api;
     this._endpoint = endpoint;
+    this._runtimeType = runtimeType;
   }
 
   /**
@@ -57,11 +86,14 @@ export class BspNetTestApi implements AsyncDisposable {
    * @param endpoint - The WebSocket endpoint to connect to.
    * @returns A promise that resolves to an enriched BspNetApi.
    */
-  public static async create(endpoint: `ws://${string}` | `wss://${string}`) {
+  public static async create(
+    endpoint: `ws://${string}` | `wss://${string}`,
+    runtimeType?: "parachain" | "solochain"
+  ) {
     const api = await BspNetTestApi.connect(endpoint);
     await api.isReady;
 
-    const ctx = new BspNetTestApi(api, endpoint);
+    const ctx = new BspNetTestApi(api, endpoint, runtimeType ?? "parachain");
 
     return ctx.enrichApi();
   }
@@ -133,6 +165,20 @@ export class BspNetTestApi implements AsyncDisposable {
   }
 
   private enrichApi() {
+    const runtimeType = this._runtimeType;
+    const remappedAccountsNs = {
+      sudo: runtimeType === "solochain" ? alith : alice,
+      bspKey: runtimeType === "solochain" ? ethBspKey : bspKey,
+      bspDownKey: runtimeType === "solochain" ? ethBspDownKey : bspDownKey,
+      bspTwoKey: runtimeType === "solochain" ? ethBspTwoKey : bspTwoKey,
+      bspThreeKey: runtimeType === "solochain" ? ethBspThreeKey : bspThreeKey,
+      mspKey: runtimeType === "solochain" ? ethMspKey : mspKey,
+      mspDownKey: runtimeType === "solochain" ? ethMspDownKey : mspDownKey,
+      mspTwoKey: runtimeType === "solochain" ? ethMspTwoKey : mspTwoKey,
+      mspThreeKey: runtimeType === "solochain" ? ethMspThreeKey : mspThreeKey,
+      shUser: runtimeType === "solochain" ? ethShUser : shUser
+    } as const;
+
     const remappedAssertNs = {
       fetchEvent: Assertions.fetchEvent,
 
@@ -461,7 +507,7 @@ export class BspNetTestApi implements AsyncDisposable {
         BspNetBlock.sealBlock(
           this._api,
           options?.calls,
-          options?.signer ?? alith,
+          options?.signer ?? (this._runtimeType === "solochain" ? alith : alice),
           options?.nonce,
           options?.parentHash,
           options?.finaliseBlock,
@@ -652,6 +698,12 @@ export class BspNetTestApi implements AsyncDisposable {
        * Offers methods for interacting with Docker containers in the BSP network test environment.
        */
       docker: remappedDockerNs,
+      /**
+       * Accounts namespace
+       * Provides runtime-dependent test accounts for convenience.
+       * Access as: api.accounts.sudo, api.accounts.bspKey, etc.
+       */
+      accounts: remappedAccountsNs,
       [Symbol.asyncDispose]: this.disconnect.bind(this)
     }) satisfies BspNetApi;
   }

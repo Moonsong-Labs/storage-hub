@@ -169,7 +169,6 @@ export const addBsp = async (
   options?: {
     name?: string;
     rocksdb?: boolean;
-    bspKeySeed?: string;
     bspId?: string;
     bspStartingWeight?: bigint;
     maxStorageCapacity?: number;
