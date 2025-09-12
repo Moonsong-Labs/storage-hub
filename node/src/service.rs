@@ -2048,7 +2048,7 @@ where
         transaction_pool,
         other:
             (block_import, _grandpa_link, babe_link, frontier_backend, storage_override, mut telemetry),
-    } = new_partial_solochain_evm(&config)?;
+    } = new_partial_solochain_evm(&config, true)?;
 
     let signing_dev_key = config
         .dev_key_seed
@@ -2373,7 +2373,7 @@ where
                         // Compute the next mocked timestamp (advance by one slot) for BABE's slot provider
                         let mut ts: u64 = 0;
                         SOLO_EVM_TIMESTAMP.with(|x| {
-                            ts = x.clone().take();
+                            ts = *x.borrow();
                         });
                         ts += sh_solochain_evm_runtime::SLOT_DURATION;
 
@@ -2514,6 +2514,7 @@ pub async fn start_solochain_evm_node<Network: NetworkBackend<OpaqueBlock, Block
 /// StorageHub Solochain EVM node.
 pub fn new_partial_solochain_evm(
     config: &Configuration,
+    dev_service: bool,
 ) -> Result<SolochainService, sc_service::Error> {
     // Telemetry
     let telemetry = config
@@ -2624,32 +2625,44 @@ pub fn new_partial_solochain_evm(
         )?)))
     };
 
-    // Import queue (BABE)
-    let slot_duration = babe_link.config().slot_duration();
-    let (import_queue, babe_worker_handle) = sc_consensus_babe::import_queue(
-        BabeImportQueueParams {
-            link: babe_link.clone(),
-            block_import: block_import.clone(),
-            justification_import: Some(Box::new(grandpa_block_import.clone())),
-            client: client.clone(),
-            select_chain: select_chain.clone(),
-            create_inherent_data_providers: move |_, ()| async move {
-                let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
-                let slot = sp_consensus_babe::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
-                *timestamp,
-                slot_duration,
-            );
-                Ok((slot, timestamp))
+    // Import queue
+    let import_queue = if dev_service {
+        // Manual-seal import queue for dev nodes
+        sc_consensus_manual_seal::import_queue(
+            Box::new(client.clone()),
+            &task_manager.spawn_essential_handle(),
+            config.prometheus_registry(),
+        )
+    } else {
+        // BABE import queue for normal nodes
+        let slot_duration = babe_link.config().slot_duration();
+        let (import_queue, babe_worker_handle) = sc_consensus_babe::import_queue(
+            BabeImportQueueParams {
+                link: babe_link.clone(),
+                block_import: block_import.clone(),
+                justification_import: Some(Box::new(grandpa_block_import.clone())),
+                client: client.clone(),
+                select_chain: select_chain.clone(),
+                create_inherent_data_providers: move |_, ()| async move {
+                    let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
+                    let slot = sp_consensus_babe::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
+                    *timestamp,
+                    slot_duration,
+                );
+                    Ok((slot, timestamp))
+                },
+                spawner: &task_manager.spawn_essential_handle(),
+                registry: config.prometheus_registry(),
+                telemetry: telemetry.as_ref().map(|x| x.handle()),
+                offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(
+                    transaction_pool.clone(),
+                ),
             },
-            spawner: &task_manager.spawn_essential_handle(),
-            registry: config.prometheus_registry(),
-            telemetry: telemetry.as_ref().map(|x| x.handle()),
-            offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(transaction_pool.clone()),
-        },
-    )?;
-
-    // TODO: Wire up to RPC
-    std::mem::forget(babe_worker_handle);
+        )?;
+        // TODO: Wire up to RPC
+        std::mem::forget(babe_worker_handle);
+        import_queue
+    };
 
     Ok(sc_service::PartialComponents {
         client,
@@ -2710,7 +2723,7 @@ where
         transaction_pool,
         other:
             (block_import, grandpa_link, babe_link, frontier_backend, storage_override, mut telemetry),
-    } = new_partial_solochain_evm(&config)?;
+    } = new_partial_solochain_evm(&config, false)?;
 
     let mut net_config = sc_network::config::FullNetworkConfiguration::<
         Block,
@@ -3097,7 +3110,7 @@ where
                 storage_override,
                 mut telemetry,
             ),
-    } = new_partial_solochain_evm(&config)?;
+    } = new_partial_solochain_evm(&config, false)?;
 
     let mut net_config = sc_network::config::FullNetworkConfiguration::<
         Block,
