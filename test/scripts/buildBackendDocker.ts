@@ -41,10 +41,10 @@ async function main() {
     });
     console.log("Docker image built successfully.");
   } catch (error) {
-    console.error("Docker build failed.");
+    console.error("Docker build failed.", error);
     process.exitCode = 1;
     return;
   }
 }
 
-main();
+await main();

@@ -54,7 +54,7 @@ async function main() {
 const execCommand = (command: string): string => {
   try {
     return execSync(command, { stdio: "pipe" }).toString().trim();
-  } catch (error) {
+  } catch {
     return "";
   }
 };
@@ -117,4 +117,4 @@ const buildAndCopyLibpq = async (target: string): Promise<void> => {
   console.log(`RUSTFLAGS set to: ${process.env.RUSTFLAGS}`);
 };
 
-main();
+await main();

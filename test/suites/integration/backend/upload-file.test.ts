@@ -51,7 +51,7 @@ interface HealthResponse {
   components: HealthComponents;
 }
 
-describeMspNet(
+await describeMspNet(
   "Backend file upload integration",
   {
     initialised: false,
@@ -234,7 +234,7 @@ describeMspNet(
       );
 
       // Get its file key
-      let mspAcceptedStorageRequestDataBlob: any = undefined;
+      let mspAcceptedStorageRequestDataBlob: any;
       if (mspAcceptedStorageRequestEvent) {
         mspAcceptedStorageRequestDataBlob =
           userApi.events.fileSystem.MspAcceptedStorageRequest.is(
