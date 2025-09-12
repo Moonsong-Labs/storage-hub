@@ -71,3 +71,7 @@ pub mod auth {
     // TODO(MOCK): retrieve ens from token?
     pub const MOCK_ENS: &str = "user.eth";
 }
+
+pub mod mocks {
+    pub const MOCK_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+}

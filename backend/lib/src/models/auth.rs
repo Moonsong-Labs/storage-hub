@@ -30,7 +30,7 @@ pub struct User {
     pub ens: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct JwtClaims {
     pub address: String,
     pub exp: i64, // JWT expiration timestamp

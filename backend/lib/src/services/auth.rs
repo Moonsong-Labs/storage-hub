@@ -270,55 +270,301 @@ where
 
 #[cfg(test)]
 mod tests {
+    use alloy_signer::k256::ecdsa::SigningKey;
+    use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+
     use crate::{
         config::Config,
+        constants::{auth::MOCK_ENS, mocks::MOCK_ADDRESS},
         data::storage::{BoxedStorageWrapper, InMemoryStorage},
     };
 
     use super::*;
 
-    #[tokio::test]
-    async fn test_verify_eth_signature() {
+    #[test]
+    fn construct_auth_message_contains_address() {
+        let address = MOCK_ADDRESS;
+        let domain = "localhost";
+        let nonce = "testNonce123";
+        let chain_id = 1;
+
+        let message = AuthService::construct_auth_message(address, domain, nonce, chain_id);
+
+        // Check that message contains the address
+        assert!(
+            message.contains(address),
+            "Message should contain the target address"
+        );
+        assert!(
+            message.contains(domain),
+            "Message should contain the domain"
+        );
+        assert!(message.contains(nonce), "Message should contain the nonce");
+        assert!(
+            message.contains(&chain_id.to_string()),
+            "Message should contain the chain ID"
+        );
+    }
+
+    #[test]
+    fn generate_jwt_creates_valid_token() {
         let cfg = Config::default();
         let storage = Arc::new(BoxedStorageWrapper::new(InMemoryStorage::new()));
-        let auth_service = AuthService::new(cfg.auth.jwt_secret.as_bytes(), false, storage.clone());
+        let auth_service = AuthService::new(cfg.auth.jwt_secret.as_bytes(), true, storage);
 
-        // Generate a test message
-        let test_address = "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb9";
-        let test_message =
-            AuthService::construct_auth_message(test_address, "localhost", "aBcDeF12345", 1);
+        let address = MOCK_ADDRESS;
+        let token = auth_service.generate_jwt(address).unwrap();
 
-        // Test with message not in storage (nonce not found)
-        let result = auth_service
-            .login(
-                "Invalid message",
-                "0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
-            )
-            .await;
+        // Try to decode the token
+        let decoding_key = DecodingKey::from_secret(cfg.auth.jwt_secret.as_bytes());
+        let validation = Validation::new(Algorithm::HS256);
 
-        assert!(result.is_err());
-        match result {
-            Err(Error::Unauthorized(msg)) => {
-                assert!(msg.contains("Invalid or expired nonce"));
-            }
-            _ => panic!("Expected unauthorized error for invalid nonce"),
-        }
+        let decoded = decode::<JwtClaims>(&token, &decoding_key, &validation).unwrap();
 
-        // Store the test message with address in storage
-        storage
-            .store_nonce(test_message.clone(), test_address.to_string(), 300)
-            .await
+        assert_eq!(decoded.claims.address, address);
+        assert!(decoded.claims.exp > decoded.claims.iat);
+    }
+
+    #[tokio::test]
+    async fn challenge_rejects_invalid_address() {
+        let cfg = Config::default();
+        let storage = Arc::new(BoxedStorageWrapper::new(InMemoryStorage::new()));
+        let auth_service = AuthService::new(cfg.auth.jwt_secret.as_bytes(), true, storage);
+
+        let invalid_address = "not_an_eth_address";
+        let result = auth_service.challenge(invalid_address, 1).await;
+        assert!(result.is_err(), "Should reject invalid eth address");
+    }
+
+    #[tokio::test]
+    async fn challenge_stores_nonce_for_valid_address() {
+        let cfg = Config::default();
+        let storage = Arc::new(BoxedStorageWrapper::new(InMemoryStorage::new()));
+        let auth_service = AuthService::new(cfg.auth.jwt_secret.as_bytes(), true, storage.clone());
+
+        let result = auth_service.challenge(MOCK_ADDRESS, 1).await.unwrap();
+
+        // Check that message was stored in storage
+        let stored_address = storage.get_nonce(&result.message).await.unwrap();
+        assert_eq!(stored_address, Some(MOCK_ADDRESS.to_string()));
+    }
+
+    fn wallet() -> (String, SigningKey) {
+        let signing_key = SigningKey::random(&mut rand::thread_rng());
+        let verifying_key = signing_key.verifying_key();
+        let address = public_key_to_address(verifying_key);
+
+        (address.to_checksum(None), signing_key)
+    }
+
+    fn sign_message(signing_key: &SigningKey, message: &str) -> String {
+        let message_hash = eip191_hash_message(message.as_bytes());
+        let (sig, recovery_id) = signing_key
+            .sign_prehash_recoverable(&message_hash.0)
             .unwrap();
 
-        // Test with valid message but invalid signature format
-        let result = auth_service.login(&test_message, "invalid_signature").await;
+        let mut sig_bytes = [0u8; 65];
+        sig_bytes[..64].copy_from_slice(&sig.to_bytes());
+        sig_bytes[64] = recovery_id.to_byte();
 
-        assert!(result.is_err());
+        format!("0x{}", hex::encode(sig_bytes))
+    }
+
+    #[test]
+    fn verify_eth_signature_recovers_correct_address() {
+        // Create a test signing key
+        let (address, sk) = wallet();
+
+        let message = "Test message for signature verification";
+        let sig_str = sign_message(&sk, message);
+
+        // Test with correct signature
+        let recovered = AuthService::verify_eth_signature(message, &sig_str).unwrap();
+        assert_eq!(recovered, address.to_string().to_lowercase());
+    }
+
+    #[test]
+    fn verify_eth_signature_rejects_invalid_format() {
+        let result = AuthService::verify_eth_signature("test message", "invalid_signature");
+        assert!(result.is_err(), "Should reject invalid signature format");
+    }
+
+    #[test]
+    fn verify_eth_signature_wrong_message_recovers_different_address() {
+        let (address, sk) = wallet();
+        let sig_str = sign_message(&sk, "original message");
+
+        // Test with wrong message for the signature
+        let result = AuthService::verify_eth_signature("different message", &sig_str);
+        assert!(
+            result.is_ok(),
+            "Should recover an address, but it won't match"
+        );
+        assert_ne!(
+            result.unwrap(),
+            address.to_string().to_lowercase(),
+            "Recovered address should not match"
+        );
+    }
+
+    #[tokio::test]
+    async fn login_fails_without_challenge() {
+        let cfg = Config::default();
+        let storage = Arc::new(BoxedStorageWrapper::new(InMemoryStorage::new()));
+        let auth_service = AuthService::new(cfg.auth.jwt_secret.as_bytes(), true, storage);
+
+        let message = "random message";
+        let (_, sk) = wallet();
+        let sig_str = sign_message(&sk, message);
+
+        let result = auth_service.login(message, &sig_str).await;
+        assert!(result.is_err(), "Should fail if challenge wasn't called");
         match result {
-            Err(Error::Unauthorized(msg)) => {
-                assert!(msg.contains("Invalid signature format"));
-            }
-            _ => panic!("Expected unauthorized error for invalid signature"),
+            Err(Error::Unauthorized(msg)) => assert!(msg.contains("Invalid or expired nonce")),
+            _ => panic!("Expected unauthorized error for missing nonce"),
         }
+    }
+
+    #[tokio::test]
+    async fn login_rejects_invalid_signature_when_validation_enabled() {
+        let cfg = Config::default();
+        let storage = Arc::new(BoxedStorageWrapper::new(InMemoryStorage::new()));
+        let auth_service = AuthService::new(cfg.auth.jwt_secret.as_bytes(), true, storage);
+
+        // Get challenge for test address
+        let challenge = auth_service.challenge(MOCK_ADDRESS, 1).await.unwrap();
+
+        // Give signature from different address
+        let (_, sk) = wallet();
+        let wrong_sig_str = sign_message(&sk, &challenge.message);
+
+        let result = auth_service.login(&challenge.message, &wrong_sig_str).await;
+        assert!(
+            result.is_err(),
+            "Should reject with wrong signature when validate_signature is true"
+        );
+    }
+
+    #[tokio::test]
+    async fn login_accepts_invalid_signature_when_validation_disabled() {
+        let cfg = Config::default();
+        let storage = Arc::new(BoxedStorageWrapper::new(InMemoryStorage::new()));
+        let auth_service = AuthService::new(cfg.auth.jwt_secret.as_bytes(), false, storage);
+
+        let challenge_result = auth_service.challenge(MOCK_ADDRESS, 1).await.unwrap();
+        let invalid_sig = format!("0x{}", hex::encode(&[0u8; 32]));
+
+        let result = auth_service
+            .login(&challenge_result.message, &invalid_sig)
+            .await;
+        assert!(
+            result.is_ok(),
+            "Should generate token even with invalid signature when validate_signature is false"
+        );
+    }
+
+    #[tokio::test]
+    async fn login_prevents_replay_attacks() {
+        let cfg = Config::default();
+        let storage = Arc::new(BoxedStorageWrapper::new(InMemoryStorage::new()));
+        let auth_service = AuthService::new(cfg.auth.jwt_secret.as_bytes(), true, storage);
+
+        // Create a test signing key
+        let (address, sk) = wallet();
+
+        // Get challenge and sign it
+        let challenge = auth_service.challenge(&address, 1).await.unwrap();
+        let sig_str = sign_message(&sk, &challenge.message);
+
+        // First login should succeed
+        let first_login = auth_service.login(&challenge.message, &sig_str).await;
+        assert!(first_login.is_ok(), "First login should succeed");
+
+        // Second login with same message should fail
+        let second_login = auth_service.login(&challenge.message, &sig_str).await;
+        assert!(
+            second_login.is_err(),
+            "Second login with same message should fail"
+        );
+    }
+
+    #[tokio::test]
+    async fn refresh_rejects_expired_claims() {
+        let cfg = Config::default();
+        let storage = Arc::new(BoxedStorageWrapper::new(InMemoryStorage::new()));
+        let auth_service = AuthService::new(cfg.auth.jwt_secret.as_bytes(), true, storage);
+
+        let expired_claims = JwtClaims {
+            address: MOCK_ADDRESS.to_string(),
+            exp: Utc::now().timestamp() - 3600, // 1 hour ago
+            iat: Utc::now().timestamp() - 7200, // 2 hours ago
+        };
+
+        let result = auth_service.refresh(expired_claims).await;
+        assert!(result.is_err(), "Should reject expired claims");
+    }
+
+    #[tokio::test]
+    async fn refresh_generates_new_token_with_updated_timestamps() {
+        let cfg = Config::default();
+        let storage = Arc::new(BoxedStorageWrapper::new(InMemoryStorage::new()));
+        let auth_service = AuthService::new(cfg.auth.jwt_secret.as_bytes(), true, storage);
+
+        let valid_claims = JwtClaims {
+            address: MOCK_ADDRESS.to_string(),
+            exp: Utc::now().timestamp() + 3600, // 1 hour from now
+            iat: Utc::now().timestamp(),
+        };
+
+        let result = auth_service.refresh(valid_claims.clone()).await.unwrap();
+
+        // Decode and verify the new token
+        let decoding_key = DecodingKey::from_secret(cfg.auth.jwt_secret.as_bytes());
+        let validation = Validation::new(Algorithm::HS256);
+        let decoded = decode::<JwtClaims>(&result.token, &decoding_key, &validation).unwrap();
+
+        assert_eq!(decoded.claims.address, valid_claims.address);
+        assert!(
+            decoded.claims.iat >= valid_claims.iat,
+            "New token should have newer or equal iat"
+        );
+        assert!(
+            decoded.claims.exp > valid_claims.iat,
+            "New token should have exp after original iat"
+        );
+    }
+
+    #[tokio::test]
+    async fn profile_rejects_expired_claims() {
+        let cfg = Config::default();
+        let storage = Arc::new(BoxedStorageWrapper::new(InMemoryStorage::new()));
+        let auth_service = AuthService::new(cfg.auth.jwt_secret.as_bytes(), true, storage);
+
+        let expired_claims = JwtClaims {
+            address: MOCK_ADDRESS.to_string(),
+            exp: Utc::now().timestamp() - 3600, // 1 hour ago
+            iat: Utc::now().timestamp() - 7200, // 2 hours ago
+        };
+
+        let result = auth_service.profile(expired_claims).await;
+        assert!(result.is_err(), "Should reject expired claims");
+    }
+
+    #[tokio::test]
+    async fn profile_returns_user_data_for_valid_claims() {
+        let cfg = Config::default();
+        let storage = Arc::new(BoxedStorageWrapper::new(InMemoryStorage::new()));
+        let auth_service = AuthService::new(cfg.auth.jwt_secret.as_bytes(), true, storage);
+
+        let address = MOCK_ADDRESS;
+        let valid_claims = JwtClaims {
+            address: address.to_string(),
+            exp: Utc::now().timestamp() + 3600, // 1 hour from now
+            iat: Utc::now().timestamp(),
+        };
+
+        let result = auth_service.profile(valid_claims).await.unwrap();
+        assert_eq!(result.address, address, "Should return address from claims");
+        assert_eq!(result.ens, MOCK_ENS, "Should return mock ENS");
     }
 }
