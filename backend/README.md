@@ -40,10 +40,10 @@ Auth
 
 MSP Info
 
-- GET `/msp/info` -> node client/version, msp_id, multiaddresses, etc.
-- GET `/msp/stats` -> capacity and basic counters
-- GET `/msp/value-props` -> mocked value proposition list
-- GET `/msp/health` -> composite health status (storage, RPC, DB, etc.)
+- GET `/info` -> node client/version, msp_id, multiaddresses, etc.
+- GET `/stats` -> capacity and basic counters
+- GET `/value-props` -> value proposition list
+- GET `/health` -> composite health status (storage, RPC, DB, etc.)
 
 Buckets
 
@@ -53,10 +53,10 @@ Buckets
 
 Files
 
-- GET `/buckets/:bucketId/files/:fileKey/info` (auth) -> file info
-- GET `/buckets/:bucketId/files/location/:location/download` (auth) -> download by logical location
-- GET `/buckets/:bucketId/files/:fileKey/download` (auth) -> download by file key
-- POST `/buckets/:bucketId/files/:fileKey/upload` (auth, multipart)
+- GET `/buckets/:bucketId/info/:fileKey` (auth) -> file info
+- GET `/buckets/:bucketId/download/path/:file_location` (auth) -> download by logical location
+- GET `/buckets/:bucketId/download/:fileKey` (auth) -> download by file key
+- PUT `/buckets/:bucketId/upload/:fileKey` (auth, multipart)
   - Fields: `file_metadata` (SCALE-encoded), `file` (binary stream)
   - Streams, validates, batches, and forwards via client RPC
 
@@ -66,7 +66,7 @@ Distribution
 
 Payments
 
-- GET `/payments/stream` (auth) -> returns payment stream status for the current user
+- GET `/payment_stream` (auth) -> returns payment stream status for the current user
 
 Notes
 
@@ -95,10 +95,10 @@ curl -s "$BACKEND_URL/auth/profile"       -H "Authorization: Bearer $TOKEN"
 MSP info & health
 
 ```bash
-curl -s "$BACKEND_URL/msp/info"
-curl -s "$BACKEND_URL/msp/stats"
-curl -s "$BACKEND_URL/msp/value-props"
-curl -s "$BACKEND_URL/msp/health"
+curl -s "$BACKEND_URL/info"
+curl -s "$BACKEND_URL/stats"
+curl -s "$BACKEND_URL/value-props"
+curl -s "$BACKEND_URL/health"
 ```
 
 Buckets
@@ -112,16 +112,16 @@ curl -s "$BACKEND_URL/buckets/<bucketId>/files?path=sub/dir" -H "Authorization: 
 Files (metadata & download)
 
 ```bash
-curl -s "$BACKEND_URL/buckets/<bucketId>/files/<fileKey>/info" -H "Authorization: Bearer $TOKEN"
-curl -s "$BACKEND_URL/buckets/<bucketId>/files/location/<location>/download" -H "Authorization: Bearer $TOKEN" -o out.bin
-curl -s "$BACKEND_URL/buckets/<bucketId>/files/<fileKey>/download" -H "Authorization: Bearer $TOKEN" -o out.bin
+curl -s "$BACKEND_URL/buckets/<bucketId>/info/<fileKey>" -H "Authorization: Bearer $TOKEN"
+curl -s "$BACKEND_URL/buckets/<bucketId>/download/path/<location>" -H "Authorization: Bearer $TOKEN" -o out.bin
+curl -s "$BACKEND_URL/buckets/<bucketId>/download/<fileKey>" -H "Authorization: Bearer $TOKEN" -o out.bin
 ```
 
 File upload (multipart)
 
 ```bash
 # file_metadata.bin is SCALE-encoded FileMetadata bytes
-curl -sX POST "$BACKEND_URL/buckets/<bucketId>/files/<fileKey>/upload" \
+curl -sX PUT "$BACKEND_URL/buckets/<bucketId>/upload/<fileKey>" \
   -H "Authorization: Bearer $TOKEN" \
   -F file=@/path/to/file.bin \
   -F file_metadata=@/path/to/file_metadata.bin;type=application/octet-stream
@@ -137,7 +137,7 @@ curl -sX POST "$BACKEND_URL/buckets/<bucketId>/files/<fileKey>/distribute" \
 Payments
 
 ```bash
-curl -s "$BACKEND_URL/payments/stream" -H "Authorization: Bearer $TOKEN"
+curl -s "$BACKEND_URL/payment_stream" -H "Authorization: Bearer $TOKEN"
 ```
 
 ## Under the hood
