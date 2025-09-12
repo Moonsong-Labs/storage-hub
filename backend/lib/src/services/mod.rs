@@ -46,7 +46,12 @@ impl Services {
         let jwt_secret = hex::decode(config.auth.jwt_secret.trim_start_matches("0x"))
             .expect("valid JWT secret hex string");
 
-        let auth = Arc::new(AuthService::new(jwt_secret.as_slice()));
+        #[cfg(feature = "mocks")]
+        let jwt_validate = !config.auth.mock_mode;
+        #[cfg(not(feature = "mocks"))]
+        let jwt_validate = true;
+
+        let auth = Arc::new(AuthService::new(jwt_secret.as_slice(), jwt_validate));
         let health = Arc::new(HealthService::new(
             storage.clone(),
             postgres.clone(),

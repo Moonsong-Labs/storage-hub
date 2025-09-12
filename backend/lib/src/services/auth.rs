@@ -21,13 +21,25 @@ pub struct AuthService {
     encoding_key: EncodingKey,
     decoder: Decoder,
     // TODO(MOCK): store nonces and sessions
+    validate_signature: bool,
 }
 
 impl AuthService {
-    pub fn new(secret: &[u8]) -> Self {
+    /// Crete a new instance of `AuthService` with the configured secret.
+    ///
+    /// Arguments:
+    /// * `secret`: secret to use to initialize the JWT encoding and decoding keys
+    /// * `validate_signature`: used to enable Eth and JWT signature validation. Recommended set to true.
+    pub fn new(secret: &[u8], validate_signature: bool) -> Self {
+        let mut validation = jsonwebtoken::Validation::default();
+        if !validate_signature {
+            validation.insecure_disable_signature_validation();
+        }
+
         Self {
             encoding_key: EncodingKey::from_secret(secret),
-            decoder: Decoder::from_key(DecodingKey::from_secret(secret)),
+            decoder: Decoder::new(DecodingKey::from_secret(secret), validation),
+            validate_signature,
         }
     }
 
@@ -121,46 +133,42 @@ impl AuthService {
             .lines()
             .nth(1)
             .ok_or_else(|| Error::Unauthorized("Invalid message format".to_string()))?;
-        let stored_address = address_line.trim();
+        let address = address_line.trim().to_lowercase();
 
         // Validate the stored address format
-        validate_eth_address(stored_address)?;
+        validate_eth_address(&address)?;
 
-        // Parse the signature
-        let sig = PrimitiveSignature::from_str(signature)
-            .map_err(|_| Error::Unauthorized("Invalid signature format".to_string()))?;
+        if self.validate_signature {
+            let sig = PrimitiveSignature::from_str(signature)
+                .map_err(|_| Error::Unauthorized("Invalid signature format".to_string()))?;
 
-        // Hash the message with EIP-191 prefix (this adds "\x19Ethereum Signed Message:\n" + length + message)
-        let message_hash = eip191_hash_message(message.as_bytes());
+            // Hash the message with EIP-191 prefix
+            let message_hash = eip191_hash_message(message.as_bytes());
 
-        // Recover the public key from the signature
-        let recovered_pubkey = sig.recover_from_prehash(&message_hash).map_err(|_| {
-            Error::Unauthorized("Failed to recover public key from signature".to_string())
-        })?;
+            // Recover the public key from the signature
+            let recovered_pubkey = sig.recover_from_prehash(&message_hash).map_err(|_| {
+                Error::Unauthorized("Failed to recover public key from signature".to_string())
+            })?;
 
-        // Convert the public key to an address
-        let recovered_address = public_key_to_address(&recovered_pubkey);
+            let recovered_address = public_key_to_address(&recovered_pubkey)
+                .to_string()
+                .to_lowercase();
 
-        // Convert recovered address to string format
-        let recovered_address_str = format!("{:#x}", recovered_address);
-
-        // Verify that the recovered address matches the stored address
-        if recovered_address_str.to_lowercase() != stored_address.to_lowercase() {
-            return Err(Error::Unauthorized(
-                "Signature doesn't match the provided address".to_string(),
-            ));
+            // Verify that the recovered address matches the stored address
+            if recovered_address.as_str() != address.as_str() {
+                return Err(Error::Unauthorized(
+                    "Signature doesn't match the provided address".to_string(),
+                ));
+            }
         }
 
         // Generate JWT token
-        let token = self.generate_jwt(&recovered_address_str)?;
+        let token = self.generate_jwt(&address)?;
 
         // TODO: Store the session token in database
-        // Return response with the generated JWT
         Ok(VerifyResponse {
             token,
-            user: User {
-                address: recovered_address_str,
-            },
+            user: User { address },
         })
     }
 
@@ -196,7 +204,7 @@ mod tests {
     #[tokio::test]
     async fn test_verify_eth_signature() {
         let cfg = Config::default();
-        let auth_service = AuthService::new(cfg.auth.jwt_secret.as_bytes());
+        let auth_service = AuthService::new(cfg.auth.jwt_secret.as_bytes(), false);
 
         // Generate a test message
         let test_address = "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb9";

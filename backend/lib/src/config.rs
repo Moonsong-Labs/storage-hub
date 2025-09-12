@@ -41,6 +41,11 @@ pub struct AuthConfig {
     /// Must be at least 32 bytes for HS256 algorithm
     // TODO: allow loading from env instead of being in config file
     pub jwt_secret: String,
+
+    /// When enabled, do not verify JWT signature
+    // TODO; wire it in to the service
+    #[cfg(feature = "mocks")]
+    pub mock_mode: bool,
 }
 
 impl AuthConfig {
@@ -104,6 +109,8 @@ impl Default for Config {
                     eprintln!("Warning: JWT_SECRET not set, using random secret for development");
                     AuthConfig::generate_random_secret()
                 }),
+                #[cfg(feature = "mocks")]
+                mock_mode: true,
             },
             storage_hub: StorageHubConfig {
                 rpc_url: DEFAULT_RPC_URL.to_string(),
