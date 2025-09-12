@@ -1,6 +1,5 @@
 use std::io::Cursor;
 
-use auth::AuthenticatedUser;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -14,7 +13,7 @@ use tokio_util::io::ReaderStream;
 use crate::{
     error::Error,
     models::files::{FileListResponse, FileUploadResponse},
-    services::Services,
+    services::{auth::AuthenticatedUser, Services},
 };
 
 pub mod auth;

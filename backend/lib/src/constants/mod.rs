@@ -52,6 +52,22 @@ pub mod api {
     pub const MAX_PAGE_SIZE: usize = 100;
 }
 
-pub mod mocks {
-    pub const MOCK_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+/// Auth configuration constants
+pub mod auth {
+    use chrono::Duration;
+
+    /// The 'domain' to use for the SIWE message
+    // TODO: make configurable
+    pub const AUTH_SIWE_DOMAIN: &str = "localhost";
+
+    /// Authentication nonce expiration, in seconds
+    // TODO: make configurable
+    pub const AUTH_NONCE_EXPIRATION_SECONDS: u64 = 300; // 5 minutes
+
+    /// Authentication JWT token expiration
+    // TODO: make configurable
+    pub const JWT_EXPIRY_OFFSET: Duration = Duration::minutes(5);
+
+    // TODO(MOCK): retrieve ens from token?
+    pub const MOCK_ENS: &str = "user.eth";
 }

@@ -21,7 +21,7 @@ pub fn routes(services: Services) -> Router {
 
     Router::new()
         // Auth routes
-        .route("/auth/nonce", post(handlers::auth::message))
+        .route("/auth/nonce", post(handlers::auth::nonce))
         .route("/auth/verify", post(handlers::auth::login))
         .route("/auth/refresh", post(handlers::auth::refresh))
         .route("/auth/logout", post(handlers::auth::logout))
