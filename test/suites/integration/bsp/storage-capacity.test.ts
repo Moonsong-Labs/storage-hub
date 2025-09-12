@@ -4,7 +4,6 @@ import {
   BspNetTestApi,
   bspKey,
   bspTwoKey,
-  bspTwoSeed,
   describeBspNet,
   type EnrichedBspApi,
   ferdie,
