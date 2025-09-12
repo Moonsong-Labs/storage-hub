@@ -48,19 +48,19 @@ export const ETH_BSP_PRIVATE_KEY: `0x${string}` =
   "0x02d7f4878c6451940547b8fe3b23c7e836f1fa165bf5d7731bfa2421d945b6d0";
 
 // TODO
-export const ETH_BSP_DOWN_ADDRESS: `0x${string}` = "0xeC64B758C12cd44Ea7903D7c98BfDf461eaeFd92";
-export const ETH_BSP_DOWN_PRIVATE_KEY: `0x${string}` =
-  "0x6a6d413e804b39b6f5995b2e98a2b9a274e78c6b0408410b3cf8d7b00744c445";
+// export const ETH_BSP_DOWN_ADDRESS: `0x${string}` = "0xeC64B758C12cd44Ea7903D7c98BfDf461eaeFd92";
+// export const ETH_BSP_DOWN_PRIVATE_KEY: `0x${string}` =
+//   "0x6a6d413e804b39b6f5995b2e98a2b9a274e78c6b0408410b3cf8d7b00744c445";
 
 // TODO
-export const ETH_BSP_TWO_ADDRESS: `0x${string}` = "0x13993159c4140Bf257639c540e043Cdfa4911C13";
-export const ETH_BSP_TWO_PRIVATE_KEY: `0x${string}` =
-  "0xf9038c4d3036e9dd6701d1bd03e07ef5b851733d3f767ab0f40a0969d927b160";
+// export const ETH_BSP_TWO_ADDRESS: `0x${string}` = "0x13993159c4140Bf257639c540e043Cdfa4911C13";
+// export const ETH_BSP_TWO_PRIVATE_KEY: `0x${string}` =
+//   "0xf9038c4d3036e9dd6701d1bd03e07ef5b851733d3f767ab0f40a0969d927b160";
 
 // TODO
-export const ETH_BSP_THREE_ADDRESS: `0x${string}` = "0xbdb90Dcf5887F32A2139Fa16C154582c3993B330";
-export const ETH_BSP_THREE_PRIVATE_KEY: `0x${string}` =
-  "0x34e2f9c0dbd3b24bc4a0106e991a6fca9e3560f0249e9ec83ad0040548dd2b3b";
+// export const ETH_BSP_THREE_ADDRESS: `0x${string}` = "0xbdb90Dcf5887F32A2139Fa16C154582c3993B330";
+// export const ETH_BSP_THREE_PRIVATE_KEY: `0x${string}` =
+//   "0x34e2f9c0dbd3b24bc4a0106e991a6fca9e3560f0249e9ec83ad0040548dd2b3b";
 
 export const ETH_MSP_SURI = "fish fat knife siren learn copper aspect process mad silly judge dawn";
 export const ETH_MSP_ADDRESS: `0x${string}` = "0x4C31b93792AB99E2553bfF747199B7A4951185B2";
@@ -68,42 +68,44 @@ export const ETH_MSP_PRIVATE_KEY: `0x${string}` =
   "0x5eea060cbd4e447e0adf486fcb45c68b59bd5e4c32b53c7b3af936fa3b44ab62";
 
 // TODO
-export const ETH_MSP_DOWN_ADDRESS: `0x${string}` = "0x494c909696a6BF440468835771B283eDCf23D703";
-export const ETH_MSP_DOWN_PRIVATE_KEY: `0x${string}` =
-  "0x8cd3c8d0c2eb3c88bb83ceeb3077e48e66219673c33abeee65bd3c08d6c9ca45";
+// export const ETH_MSP_DOWN_ADDRESS: `0x${string}` = "0x494c909696a6BF440468835771B283eDCf23D703";
+// export const ETH_MSP_DOWN_PRIVATE_KEY: `0x${string}` =
+//   "0x8cd3c8d0c2eb3c88bb83ceeb3077e48e66219673c33abeee65bd3c08d6c9ca45";
 
-// TODO
-export const ETH_MSP_TWO_ADDRESS: `0x${string}` = "0x77928a85b791767389645d381781785848883545";
+export const ETH_MSP_TWO_SURI =
+  "embark stock dog abstract caught drama inherit where assume tattoo issue metal";
+export const ETH_MSP_TWO_ADDRESS: `0x${string}` = "0xe41DA1011F8F60b4Af9A152FD8081D4d9C48BeA7";
 export const ETH_MSP_TWO_PRIVATE_KEY: `0x${string}` =
-  "0x17757925447316846320910170348639369268526441838623640550256243754695006626462";
+  "0x1ef15965036fbc70d0bf4e00ef0e6c9f303b29e50d6f915fd690f0140e582f37";
 
 // TODO
-export const ETH_MSP_THREE_ADDRESS: `0x${string}` = "0x77928a85b791767389645d381781785848883545";
-export const ETH_MSP_THREE_PRIVATE_KEY: `0x${string}` =
-  "0x17757925447316846320910170348639369268526441838623640550256243754695006626462";
+// export const ETH_MSP_THREE_ADDRESS: `0x${string}` = "0x77928a85b791767389645d381781785848883545";
+// export const ETH_MSP_THREE_PRIVATE_KEY: `0x${string}` =
+//   "0x17757925447316846320910170348639369268526441838623640550256243754695006626462";
 
 // TODO
-export const ETH_SH_USER_ADDRESS: `0x${string}` = "0x7916264654948414718434506472024364276523";
+export const ETH_SH_USER_SURI =
+  "lens vital off hurry accuse addict fashion wine grunt pool include bright";
+export const ETH_SH_USER_ADDRESS: `0x${string}` = "0x0B17ca3A1454cD058B231090C6fd635dD348659A";
 export const ETH_SH_USER_PRIVATE_KEY: `0x${string}` =
-  "0x676a10155369b3b341b5075b2795b5690d33b66e49f339c27b669b6268055882";
+  "0x7b0ea7019f6644a02ff36d8135a55db4db8c4d4727e349c2f2a7463e6aff963c";
 
 export const ethBspKey = keyringEth.addFromUri(ETH_BSP_PRIVATE_KEY, { name: "Sh-BSP" });
-export const ethBspDownKey = keyringEth.addFromUri(ETH_BSP_DOWN_PRIVATE_KEY, {
-  name: "Sh-BSP-Down"
-});
-export const ethBspTwoKey = keyringEth.addFromUri(ETH_BSP_TWO_PRIVATE_KEY, { name: "Sh-BSP-Two" });
-export const ethBspThreeKey = keyringEth.addFromUri(ETH_BSP_THREE_PRIVATE_KEY, {
-  name: "Sh-BSP-Three"
-});
-
+// export const ethBspDownKey = keyringEth.addFromUri(ETH_BSP_DOWN_PRIVATE_KEY, {
+//   name: "Sh-BSP-Down"
+// });
+// export const ethBspTwoKey = keyringEth.addFromUri(ETH_BSP_TWO_PRIVATE_KEY, { name: "Sh-BSP-Two" });
+// export const ethBspThreeKey = keyringEth.addFromUri(ETH_BSP_THREE_PRIVATE_KEY, {
+//   name: "Sh-BSP-Three"
+// });
 export const ethMspKey = keyringEth.addFromUri(ETH_MSP_PRIVATE_KEY, { name: "Sh-MSP" });
-export const ethMspDownKey = keyringEth.addFromUri(ETH_MSP_DOWN_PRIVATE_KEY, {
-  name: "Sh-MSP-Down"
-});
-export const ethMspTwoKey = keyringEth.addFromUri(ETH_MSP_TWO_PRIVATE_KEY, { name: "Sh-MSP-Two" });
-export const ethMspThreeKey = keyringEth.addFromUri(ETH_MSP_THREE_PRIVATE_KEY, {
-  name: "Sh-MSP-Three"
-});
+// export const ethMspDownKey = keyringEth.addFromUri(ETH_MSP_DOWN_PRIVATE_KEY, {
+//   name: "Sh-MSP-Down"
+// });
+// export const ethMspTwoKey = keyringEth.addFromUri(ETH_MSP_TWO_PRIVATE_KEY, { name: "Sh-MSP-Two" });
+// export const ethMspThreeKey = keyringEth.addFromUri(ETH_MSP_THREE_PRIVATE_KEY, {
+//   name: "Sh-MSP-Three"
+// });
 export const ethShUser = keyringEth.addFromUri(ETH_SH_USER_PRIVATE_KEY, {
   name: "Sh-User"
 });
