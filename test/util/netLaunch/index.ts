@@ -18,6 +18,7 @@ import {
 } from "../bspNet";
 import { DUMMY_MSP_ID } from "../bspNet/consts";
 import { MILLIUNIT, UNIT } from "../constants";
+import { alith, ethBspKey, ethMspKey, ethShUser } from "../evmNet/keyring";
 import {
   alice,
   bspDownKey,
@@ -439,26 +440,26 @@ export class NetworkLauncher {
 
     const signedCalls = [
       api.tx.sudo
-        .sudo(api.tx.balances.forceSetBalance(bspKey.address, amount))
-        .signAsync(alice, { nonce: 0 }),
+        .sudo(api.tx.balances.forceSetBalance(ethBspKey.address, amount))
+        .signAsync(alith, { nonce: 0 }),
       api.tx.sudo
-        .sudo(api.tx.balances.forceSetBalance(shUser.address, amount))
-        .signAsync(alice, { nonce: 1 }),
+        .sudo(api.tx.balances.forceSetBalance(ethShUser.address, amount))
+        .signAsync(alith, { nonce: 1 }),
       api.tx.sudo
-        .sudo(api.tx.balances.forceSetBalance(mspKey.address, amount))
-        .signAsync(alice, { nonce: 2 }),
+        .sudo(api.tx.balances.forceSetBalance(ethMspKey.address, amount))
+        .signAsync(alith, { nonce: 2 }),
       api.tx.sudo
         .sudo(api.tx.balances.forceSetBalance(mspTwoKey.address, amount))
-        .signAsync(alice, { nonce: 3 }),
+        .signAsync(alith, { nonce: 3 }),
       api.tx.sudo
         .sudo(api.tx.balances.forceSetBalance(mspDownKey.address, amount))
-        .signAsync(alice, { nonce: 4 }),
+        .signAsync(alith, { nonce: 4 }),
       api.tx.sudo
         .sudo(api.tx.parameters.setParameter(maxReplicationTargetRuntimeParameter))
-        .signAsync(alice, { nonce: 5 }),
+        .signAsync(alith, { nonce: 5 }),
       api.tx.sudo
         .sudo(api.tx.parameters.setParameter(tickRangeToMaximumThresholdRuntimeParameter))
-        .signAsync(alice, { nonce: 6 })
+        .signAsync(alith, { nonce: 6 })
     ];
 
     const sudoTxns = await Promise.all(signedCalls);
@@ -626,7 +627,7 @@ export class NetworkLauncher {
       bucketName,
       null,
       DUMMY_MSP_ID,
-      shUser,
+      ethShUser,
       1
     );
 
@@ -784,7 +785,7 @@ export class NetworkLauncher {
     });
 
     await launchedNetwork.setupGlobal(userApi);
-    await launchedNetwork.setupBsp(userApi, bspKey.address, multiAddressBsp);
+    await launchedNetwork.setupBsp(userApi, ethBspKey.address, multiAddressBsp);
     await launchedNetwork.setupRuntimeParams(userApi);
     await userApi.block.seal();
 
@@ -802,7 +803,7 @@ export class NetworkLauncher {
         // TODO: As we add more MSPs make this more dynamic
         const mspAddress =
           service === "sh-msp-1"
-            ? mspKey.address
+            ? ethMspKey.address
             : service === "sh-msp-2"
               ? mspTwoKey.address
               : undefined;
@@ -910,7 +911,7 @@ export type NetLaunchConfig = {
    */
   indexerMode?: "full" | "lite" | "fishing";
 
-  /** 
+  /**
    * Runtime type to use.
    * 'parachain' - Polkadot parachain runtime (default)
    * 'solochain' - Solochain EVM runtime

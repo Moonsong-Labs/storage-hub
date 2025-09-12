@@ -114,7 +114,7 @@ export const createBucketAndSendNewStorageRequest = async (
 
   assert(newBucketEventDataBlob, "Event doesn't match Type");
 
-  const ownerHexString = u8aToHex(decodeAddress(ShConsts.NODE_INFOS.user.AddressId));
+  const ownerHexString = u8aToHex(decodeAddress(ethShUser.address));
   const { file_metadata: fileMetadata } = await api.rpc.storagehubclient.loadFileInStorage(
     source,
     location,
@@ -176,7 +176,7 @@ export const createBucket = async (
   bucketName: string,
   valuePropId?: HexString | null,
   mspId: HexString | null = ShConsts.DUMMY_MSP_ID,
-  owner: KeyringPair | null = shUser
+  owner: KeyringPair | null = ethShUser
 ) => {
   let localValuePropId = valuePropId;
 

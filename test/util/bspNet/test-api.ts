@@ -7,6 +7,7 @@ import type { HexString } from "@polkadot/util/types";
 import { types as BundledTypes } from "@storagehub/types-bundle";
 import type { AssertExtrinsicOptions } from "../asserts";
 import * as Assertions from "../asserts";
+import { alith } from "../evmNet/keyring.ts";
 import * as BspNetBlock from "./block";
 import * as ShConsts from "./consts";
 import * as DockerBspNet from "./docker";
@@ -460,7 +461,7 @@ export class BspNetTestApi implements AsyncDisposable {
         BspNetBlock.sealBlock(
           this._api,
           options?.calls,
-          options?.signer,
+          options?.signer ?? alith,
           options?.nonce,
           options?.parentHash,
           options?.finaliseBlock,
