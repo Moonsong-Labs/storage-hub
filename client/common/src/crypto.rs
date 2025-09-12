@@ -35,6 +35,16 @@ impl KeyTypeOperations for MultiSignature {
         public: &Self::Public,
         msg: &[u8],
     ) -> Option<Self> {
+        // If the data is longer than 256 bytes, Substrate chains will hash it and sign the hash,
+        // using BLAKE2b-256.
+        let hashed_msg: H256;
+        let msg = if msg.len() > 256 {
+            hashed_msg = H256::from(blake2_256(msg));
+            hashed_msg.as_ref()
+        } else {
+            msg
+        };
+
         keystore
             .sr25519_sign(key_type, public, msg)
             .ok()
@@ -74,6 +84,8 @@ impl KeyTypeOperations for EthereumSignature {
         public: &Self::Public,
         msg: &[u8],
     ) -> Option<Self> {
+        // If the data is longer than 256 bytes, Substrate chains will hash it and sign the hash,
+        // using BLAKE2b-256.
         let hashed_msg: H256;
         let msg = if msg.len() > 256 {
             hashed_msg = H256::from(blake2_256(msg));
@@ -82,6 +94,8 @@ impl KeyTypeOperations for EthereumSignature {
             msg
         };
 
+        // The data needs to always be hashed with Keccak256, mirroring Frontier's verify logic.
+        // See: https://github.com/polkadot-evm/frontier/blob/c59a6c1aa2e60d835d81aa5db3eb1d54fac9cd60/primitives/account/src/lib.rs#L195
         let hashed_msg = H256::from(keccak_256(msg));
 
         keystore
