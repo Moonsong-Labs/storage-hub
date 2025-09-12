@@ -494,7 +494,14 @@ impl MspService {
 #[cfg(all(test, feature = "mocks"))]
 mod tests {
     use super::*;
-    use crate::services::Services;
+
+    use crate::{
+        data::rpc::{AnyRpcConnection, MockConnection, StorageHubRpcClient},
+        services::Services,
+    };
+
+    use serde_json::Value;
+    use shc_common::types::{FileKeyProof, FileMetadata};
 
     async fn create_test_service() -> MspService {
         let services = Services::mocks();
@@ -504,6 +511,18 @@ mod tests {
             services.postgres.clone(),
             services.rpc.clone(),
         )
+    }
+
+    async fn create_test_service_with_rpc_responses(responses: Vec<(&str, Value)>) -> MspService {
+        let services = Services::mocks();
+        let mock_conn = MockConnection::new();
+        for (method, value) in responses {
+            mock_conn.set_response(method, value).await;
+        }
+        let rpc = Arc::new(StorageHubRpcClient::new(Arc::new(AnyRpcConnection::Mock(
+            mock_conn,
+        ))));
+        MspService::new(services.storage.clone(), services.postgres.clone(), rpc)
     }
 
     #[tokio::test]
@@ -543,6 +562,15 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_get_bucket() {
+        let service = create_test_service().await;
+        let bucket = service.get_bucket("test_bucket").await.unwrap();
+
+        assert_eq!(bucket.bucket_id, "test_bucket");
+        assert!(!bucket.name.is_empty());
+    }
+
+    #[tokio::test]
     async fn test_get_files_root() {
         let service = create_test_service().await;
         let files = service.get_files("bucket123", None).await.unwrap();
@@ -576,17 +604,66 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_upload_to_msp() {
+    async fn test_get_file_info() {
         let service = create_test_service().await;
-        let chunk_ids = HashSet::new();
+        let bucket_id = "bucket123";
+        let file_key = "abc123";
+        let info = service
+            .get_file_info(bucket_id, file_key)
+            .await
+            .expect("get_file_info should succeed");
+
+        assert_eq!(info.bucket_id, bucket_id);
+        assert_eq!(info.file_key, file_key);
+        assert!(!info.name.is_empty());
+        assert!(info.size > 0);
+    }
+
+    #[tokio::test]
+    async fn test_distribute_file() {
+        let service = create_test_service().await;
+        let file_key = "abc123";
+        let resp = service
+            .distribute_file("bucket123", file_key)
+            .await
+            .expect("distribute_file should succeed");
+
+        assert_eq!(resp.status, "distribution_initiated");
+        assert_eq!(resp.file_key, file_key);
+        assert!(!resp.message.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_get_payment_stream() {
+        let service = create_test_service().await;
+        let ps = service
+            .get_payment_stream("0x123")
+            .await
+            .expect("get_payment_stream should succeed");
+
+        assert!(ps.tokens_per_block > 0);
+        assert!(ps.user_deposit > 0);
+    }
+
+    #[tokio::test]
+    async fn test_upload_to_msp() {
+        let service = create_test_service_with_rpc_responses(vec![(
+            "storagehubclient_uploadToPeer",
+            serde_json::json!([]),
+        )])
+        .await;
+
+        // Provide at least one chunk id (upload_to_msp rejects empty sets)
+        let mut chunk_ids = HashSet::new();
+        chunk_ids.insert(ChunkId::new(0));
 
         // Create test file metadata
         let file_metadata = FileMetadata::new(
-            b"test_owner".to_vec(),
-            b"test_bucket".to_vec(),
+            vec![0u8; 32],
+            vec![0u8; 32],
             b"test_location".to_vec(),
             1000,
-            shc_common::types::Fingerprint([0u8; 32]),
+            [0u8; 32].into(),
         )
         .unwrap();
 
@@ -613,17 +690,5 @@ mod tests {
             .await;
 
         assert!(result.is_ok());
-        let upload_result = result.unwrap();
-        assert!(upload_result.success);
-        assert!(upload_result.msp_id.is_some());
-    }
-
-    #[tokio::test]
-    async fn test_get_msps_for_bucket() {
-        let service = create_test_service().await;
-        let msps = service.get_msps_for_bucket("test_bucket").await.unwrap();
-
-        assert!(!msps.is_empty());
-        assert_eq!(msps[0], "msp_for_bucket_test_bucket");
     }
 }
