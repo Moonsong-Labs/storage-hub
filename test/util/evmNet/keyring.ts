@@ -41,54 +41,38 @@ export const ethan: KeyringPair = keyringEth.addFromUri(ETHAN_PRIVATE_KEY);
 export const faith: KeyringPair = keyringEth.addFromUri(FAITH_PRIVATE_KEY);
 export const goliath: KeyringPair = keyringEth.addFromUri(GOLIATH_PRIVATE_KEY);
 
-export const ETH_BSP_SURI =
-  "twelve blame high motor print novel romance trumpet noodle roast poverty labor";
 export const ETH_BSP_ADDRESS: `0x${string}` = "0xaDA5B4d99902df61756551df1504bc000685cf17";
 export const ETH_BSP_PRIVATE_KEY: `0x${string}` =
   "0x02d7f4878c6451940547b8fe3b23c7e836f1fa165bf5d7731bfa2421d945b6d0";
 
-export const ETH_BSP_DOWN_SURI =
-  "current grief winter solid estate elephant giant alien sister laundry price camera";
 export const ETH_BSP_DOWN_ADDRESS: `0x${string}` = "0xAbAc9Eb0BF6535253cF6cCBeBefbBf8eD366D033";
 export const ETH_BSP_DOWN_PRIVATE_KEY: `0x${string}` =
   "0x6f5cc50588a4282ab5db2ba46c6b3b0a4b21bda9f056a36ff27a3fe9c7cd1e12";
 
-export const ETH_BSP_TWO_SURI = "best size motor raw atom ankle decrease race face donkey rug atom";
 export const ETH_BSP_TWO_ADDRESS: `0x${string}` = "0x00ccE3AA8D15FAae2398Bb14DeE443c0415FE724";
 export const ETH_BSP_TWO_PRIVATE_KEY: `0x${string}` =
   "0x51dda30a0107d7e533a367afe852bea5570dc701e249eefca6ff261809e67da2";
 
-export const ETH_BSP_THREE_SURI =
-  "engage section mask dinner pink humble pupil plate vehicle holiday random brave";
 export const ETH_BSP_THREE_ADDRESS: `0x${string}` = "0x1583FF86ab9c94941533224E67CAf9db52609576";
 export const ETH_BSP_THREE_PRIVATE_KEY: `0x${string}` =
   "0x7b5c4455651396c78da9c5f6eedb1dcb4175b66a68ab3596b83d4417cd0d2866";
 
-export const ETH_MSP_SURI = "fish fat knife siren learn copper aspect process mad silly judge dawn";
 export const ETH_MSP_ADDRESS: `0x${string}` = "0x4C31b93792AB99E2553bfF747199B7A4951185B2";
 export const ETH_MSP_PRIVATE_KEY: `0x${string}` =
   "0x5eea060cbd4e447e0adf486fcb45c68b59bd5e4c32b53c7b3af936fa3b44ab62";
 
-export const ETH_MSP_DOWN_SURI =
-  "sunny struggle symptom core speed cook cave spoil agree struggle math muffin";
 export const ETH_MSP_DOWN_ADDRESS: `0x${string}` = "0xAD32cb16E648535D4935D343341131bf02C2AdD2";
 export const ETH_MSP_DOWN_PRIVATE_KEY: `0x${string}` =
   "0xaf4def510d0dea37ace14f5a26acd619f0da7a86d65900be683706cefc4fc269";
 
-export const ETH_MSP_TWO_SURI =
-  "embark stock dog abstract caught drama inherit where assume tattoo issue metal";
 export const ETH_MSP_TWO_ADDRESS: `0x${string}` = "0xe41DA1011F8F60b4Af9A152FD8081D4d9C48BeA7";
 export const ETH_MSP_TWO_PRIVATE_KEY: `0x${string}` =
   "0x1ef15965036fbc70d0bf4e00ef0e6c9f303b29e50d6f915fd690f0140e582f37";
 
-export const ETH_MSP_THREE_SURI =
-  "lawn subject snack inch vintage pilot olympic exotic paper radio clever wall";
 export const ETH_MSP_THREE_ADDRESS: `0x${string}` = "0x84953F1745c147b06649AE875a70Dd2864210011";
 export const ETH_MSP_THREE_PRIVATE_KEY: `0x${string}` =
   "0xe32eda6c988cde1a3b37a62a41e34e59bfda6531aedf26d285d1480c0283cbd2";
 
-export const ETH_SH_USER_SURI =
-  "lens vital off hurry accuse addict fashion wine grunt pool include bright";
 export const ETH_SH_USER_ADDRESS: `0x${string}` = "0x0B17ca3A1454cD058B231090C6fd635dD348659A";
 export const ETH_SH_USER_PRIVATE_KEY: `0x${string}` =
   "0x7b0ea7019f6644a02ff36d8135a55db4db8c4d4727e349c2f2a7463e6aff963c";
