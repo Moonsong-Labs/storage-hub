@@ -165,6 +165,12 @@ export type BspNetConfig = {
    * If true, runs fisherman service.
    */
   fisherman?: boolean;
+
+  /**
+   * Optional parameter to run the backend service.
+   * Requires indexer to be enabled.
+   */
+  backend?: boolean;
 };
 
 /**
@@ -365,6 +371,8 @@ export type TestOptions = {
   indexerMode?: "full" | "lite" | "fishing";
   /** If true, runs fisherman service */
   fisherman?: boolean;
+  /** If true, runs backend service */
+  backend?: boolean;
 };
 
 /**
