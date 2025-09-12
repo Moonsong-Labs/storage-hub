@@ -364,6 +364,7 @@ pub async fn upload_file(
             ..(batch_start_chunk_index + CHUNKS_PER_BATCH).min(total_chunks))
             .map(|chunk_index| ChunkId::new(chunk_index as u64))
             .collect::<HashSet<_>>();
+        let chunks_in_batch = chunks.len() as u64;
 
         // Generate the proof for the batch.
         let file_proof = trie
@@ -382,7 +383,7 @@ pub async fn upload_file(
             .map_err(|e| Error::BadRequest(e.to_string()))?;
 
         // Update the initial chunk index for the next batch.
-        batch_start_chunk_index = batch_start_chunk_index + CHUNKS_PER_BATCH;
+        batch_start_chunk_index += chunks_in_batch;
     }
 
     // If the complete file was uploaded to the MSP successfully, we can return the response.
