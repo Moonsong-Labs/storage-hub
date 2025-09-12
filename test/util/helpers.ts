@@ -48,7 +48,7 @@ export const verifyContainerFreshness = async () => {
 
   const existingContainers = containers.filter(
     (container) =>
-      container.Image === DOCKER_IMAGE || 
+      container.Image === DOCKER_IMAGE ||
       container.Names.some((name) => name.includes("toxiproxy")) ||
       container.Names.some((name) => name.includes("storage-hub-sh-backend"))
   );

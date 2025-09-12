@@ -1,14 +1,10 @@
-import assert,{ strictEqual } from "node:assert";
+import assert, { strictEqual } from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
 import * as $ from "scale-codec";
-import {
-  type EnrichedBspApi,
-  describeMspNet,
-  shUser,
-} from "../../../util";
+import { type EnrichedBspApi, describeMspNet, shUser } from "../../../util";
 
 /**
  * Mock JWT generator that matches the backend's generate_mock_jwt function
@@ -22,15 +18,15 @@ function generateMockJWT(): string {
     // Standard JWT claims
     sub: "0x1234567890123456789012345678901234567890", // Subject: user's ETH address
     exp: 9999999999, // Expiration: far into the future for mock
-    iat: 1704067200, // Issued at: 2024-01-01
+    iat: 1704067200 // Issued at: 2024-01-01
   };
 
   // Encode payload using base64url (no padding)
   const payloadJson = JSON.stringify(payload);
-  const payloadB64 = Buffer.from(payloadJson).toString('base64url');
+  const payloadB64 = Buffer.from(payloadJson).toString("base64url");
 
   // Mock signature (base64url encoded)
-  const signature = Buffer.from("mock_signature").toString('base64url');
+  const signature = Buffer.from("mock_signature").toString("base64url");
 
   return `${header}.${payloadB64}.${signature}`;
 }
@@ -57,10 +53,10 @@ interface HealthResponse {
 
 describeMspNet(
   "Backend file upload integration",
-  { 
-    initialised: false, 
-    indexer: true, 
-    backend: true,
+  {
+    initialised: false,
+    indexer: true,
+    backend: true
   },
   ({ before, createMsp1Api, createUserApi, it }) => {
     let userApi: EnrichedBspApi;
@@ -103,36 +99,38 @@ describeMspNet(
     it("Backend health endpoint reports healthy status", async () => {
       const response = await fetch("http://localhost:8080/health");
       strictEqual(response.status, 200, "Health endpoint should return 200 OK");
-      
-      const healthData: HealthResponse = await response.json() as HealthResponse;
-      
+
+      const healthData: HealthResponse = (await response.json()) as HealthResponse;
+
       // Verify overall health structure
       assert(healthData.status, "Health response should have status field");
       assert(healthData.components, "Health response should have components field");
-      
+
       // Verify storage health
       assert(healthData.components.storage, "Should have storage component");
       strictEqual(healthData.components.storage.status, "healthy", "Storage should be healthy");
-      
+
       // Verify Postgres health
       assert(healthData.components.postgres, "Should have postgres component");
       strictEqual(healthData.components.postgres.status, "healthy", "Postgres should be healthy");
-      
+
       // Verify RPC health (this is the key test - ensures RPC is actually working)
       assert(healthData.components.rpc, "Should have RPC component");
       strictEqual(healthData.components.rpc.status, "healthy", "RPC should be healthy");
-      
+
       // If RPC is healthy, it means getForestRoot call succeeded
-      assert(!healthData.components.rpc.message || !healthData.components.rpc.message.includes("failed"), 
-             "RPC should not have error messages");
+      assert(
+        !healthData.components.rpc.message || !healthData.components.rpc.message.includes("failed"),
+        "RPC should not have error messages"
+      );
     });
 
     it("Should successfully upload a file via the backend API", async () => {
       const source = "res/whatsup.jpg";
-			const localSource = "docker/resource/whatsup.jpg";
+      const localSource = "docker/resource/whatsup.jpg";
       const destination = "test/whatsup.jpg";
       const bucketName = "backend-test-bucket";
-      
+
       // Create a new bucket with the MSP
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
         userApi.shConsts.DUMMY_MSP_ID
@@ -150,16 +148,13 @@ describeMspNet(
 
       // Load a file into storage to get its metadata, then remove it from the user's node storage so it doesn't get sent to the MSP automatically.
       const ownerHex = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
-      const {
-				file_key,
-        file_metadata,
-      } = await userApi.rpc.storagehubclient.loadFileInStorage(
+      const { file_key, file_metadata } = await userApi.rpc.storagehubclient.loadFileInStorage(
         source,
         destination,
         ownerHex,
         bucketId
       );
-			await userApi.rpc.storagehubclient.removeFilesFromFileStorage([file_key]);
+      await userApi.rpc.storagehubclient.removeFilesFromFileStorage([file_key]);
 
       // Issue the storage request
       await userApi.block.seal({
@@ -180,27 +175,29 @@ describeMspNet(
       // Prepare a multipart HTTP request to send to the backend's upload endpoint
       const fileBuffer = fs.readFileSync(path.join("..", localSource));
       const form = new FormData();
-      
-			// SCALE-encode the file metadata and add it to the multipart form
-			const FileMetadataCodec = $.object(
-				$.field("owner", $.uint8Array),
-				$.field("bucket_id", $.uint8Array),
-				$.field("location", $.uint8Array),
-				$.field("file_size", $.compact($.u64)),
-				$.field("fingerprint", $.sizedArray($.u8, 32))
-			);
-			const encoded_file_metadata = FileMetadataCodec.encode(file_metadata);
-			const fileMetadataBlob = new Blob([Buffer.from(encoded_file_metadata)], { type: "application/octet-stream" });
-			form.append("file_metadata", fileMetadataBlob, "file_metadata");
+
+      // SCALE-encode the file metadata and add it to the multipart form
+      const FileMetadataCodec = $.object(
+        $.field("owner", $.uint8Array),
+        $.field("bucket_id", $.uint8Array),
+        $.field("location", $.uint8Array),
+        $.field("file_size", $.compact($.u64)),
+        $.field("fingerprint", $.sizedArray($.u8, 32))
+      );
+      const encoded_file_metadata = FileMetadataCodec.encode(file_metadata);
+      const fileMetadataBlob = new Blob([Buffer.from(encoded_file_metadata)], {
+        type: "application/octet-stream"
+      });
+      form.append("file_metadata", fileMetadataBlob, "file_metadata");
 
       // Add the file data stream to the multipart form
-			const fileBlob = new Blob([fileBuffer], { type: "image/jpeg" });
+      const fileBlob = new Blob([fileBuffer], { type: "image/jpeg" });
       form.append("file", fileBlob, path.basename(source));
 
       // Generate a mock JWT token that matches the backend's mock
-			// TODO: Once the backend has proper auth, we will have to update this (if the mock is removed)
+      // TODO: Once the backend has proper auth, we will have to update this (if the mock is removed)
       const mockJWT = generateMockJWT();
-      
+
       // Send the HTTP request to backend upload endpoint
       const uploadResponse = await fetch(
         `http://localhost:8080/buckets/${bucketId}/upload/${file_key}`,
@@ -208,50 +205,50 @@ describeMspNet(
           method: "PUT",
           body: form,
           headers: {
-            Authorization: `Bearer ${mockJWT}`,
+            Authorization: `Bearer ${mockJWT}`
           }
         }
       );
-			
+
       // Verify that the backend upload was successful
       strictEqual(uploadResponse.status, 201, "Upload should return CREATED status");
-			const responseBody = await uploadResponse.text();
+      const responseBody = await uploadResponse.text();
       const uploadResult = JSON.parse(responseBody);
-			const hexFileKey = u8aToHex(file_key);
+      const hexFileKey = u8aToHex(file_key);
       strictEqual(uploadResult.fileKey, hexFileKey, "Response should contain correct file key");
       strictEqual(uploadResult.bucketId, bucketId, "Response should contain correct bucket ID");
 
       // Wait until the MSP has received and stored the file
-			await msp1Api.wait.fileStorageComplete(file_key);
+      await msp1Api.wait.fileStorageComplete(file_key);
 
-			// Make sure the accept transaction from the MSP is in the tx pool
-			await userApi.wait.mspResponseInTxPool(1);
+      // Make sure the accept transaction from the MSP is in the tx pool
+      await userApi.wait.mspResponseInTxPool(1);
 
-			// Seal the block containing the MSP's acceptance
-			await userApi.block.seal();
+      // Seal the block containing the MSP's acceptance
+      await userApi.block.seal();
 
-			// Check that there's a `MspAcceptedStorageRequest` event
-			let mspAcceptedStorageRequestEvent = await userApi.assert.eventPresent(
-				"fileSystem",
-				"MspAcceptedStorageRequest"
-			);
-	
-			// Get its file key
-			let mspAcceptedStorageRequestDataBlob: any = undefined;
-			if (mspAcceptedStorageRequestEvent) {
-				mspAcceptedStorageRequestDataBlob =
-					userApi.events.fileSystem.MspAcceptedStorageRequest.is(
-						mspAcceptedStorageRequestEvent.event
-					) && mspAcceptedStorageRequestEvent.event.data;
-			}
-			const acceptedFileKey = mspAcceptedStorageRequestDataBlob.fileKey.toString();
-			assert(acceptedFileKey, "MspAcceptedStorageRequest event were found");
-	
-			// The file key accepted by the MSP should be the same as the one uploaded
-			assert(
-				hexFileKey === acceptedFileKey,
-				"File key accepted by the MSP should be the same as the one uploaded"
-			);
+      // Check that there's a `MspAcceptedStorageRequest` event
+      const mspAcceptedStorageRequestEvent = await userApi.assert.eventPresent(
+        "fileSystem",
+        "MspAcceptedStorageRequest"
+      );
+
+      // Get its file key
+      let mspAcceptedStorageRequestDataBlob: any = undefined;
+      if (mspAcceptedStorageRequestEvent) {
+        mspAcceptedStorageRequestDataBlob =
+          userApi.events.fileSystem.MspAcceptedStorageRequest.is(
+            mspAcceptedStorageRequestEvent.event
+          ) && mspAcceptedStorageRequestEvent.event.data;
+      }
+      const acceptedFileKey = mspAcceptedStorageRequestDataBlob.fileKey.toString();
+      assert(acceptedFileKey, "MspAcceptedStorageRequest event were found");
+
+      // The file key accepted by the MSP should be the same as the one uploaded
+      assert(
+        hexFileKey === acceptedFileKey,
+        "File key accepted by the MSP should be the same as the one uploaded"
+      );
     });
   }
 );

@@ -46,7 +46,9 @@ async function main() {
   console.log(
     `Running build command: cargo zigbuild --target ${target} --release -p sh-msp-backend ${additionalArgs}`
   );
-  execSync(`cargo zigbuild --target ${target} --release -p sh-msp-backend ${additionalArgs}`, { stdio: "inherit" });
+  execSync(`cargo zigbuild --target ${target} --release -p sh-msp-backend ${additionalArgs}`, {
+    stdio: "inherit"
+  });
 }
 
 const execCommand = (command: string): string => {
