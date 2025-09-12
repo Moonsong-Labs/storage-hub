@@ -39,8 +39,9 @@ pub struct ApiConfig {
 pub struct AuthConfig {
     /// JWT secret key for signing and verifying tokens
     /// Must be at least 32 bytes for HS256 algorithm
-    // TODO: allow loading from env instead of being in config file
-    pub jwt_secret: String,
+    /// Can be set in config or loaded from JWT_SECRET environment variable
+    /// Environment variable takes precedence over config value
+    pub jwt_secret: Option<String>,
 
     /// When enabled, do not verify JWT signature
     #[cfg(feature = "mocks")]
@@ -49,7 +50,7 @@ pub struct AuthConfig {
 
 impl AuthConfig {
     /// Generate a random JWT secret for development/testing
-    fn generate_random_secret() -> String {
+    pub(crate) fn generate_random_secret() -> String {
         let mut data = [0u8; 32];
 
         let mut rng = rand::thread_rng();
@@ -104,9 +105,9 @@ impl Default for Config {
                 max_page_size: MAX_PAGE_SIZE,
             },
             auth: AuthConfig {
-                jwt_secret: std::env::var("JWT_SECRET").unwrap_or_else(|_| {
-                    eprintln!("Warning: JWT_SECRET not set, using random secret for development");
-                    AuthConfig::generate_random_secret()
+                jwt_secret: std::env::var("JWT_SECRET").ok().or_else(|| {
+                    tracing::warn!("JWT_SECRET not set, using random secret for development");
+                    Some(AuthConfig::generate_random_secret())
                 }),
                 #[cfg(feature = "mocks")]
                 mock_mode: true,
@@ -131,7 +132,14 @@ impl Default for Config {
 impl Config {
     pub fn from_file(path: &str) -> std::io::Result<Self> {
         let contents = std::fs::read_to_string(path)?;
-        toml::from_str(&contents)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+        let mut config: Self = toml::from_str(&contents)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+
+        // Override JWT secret with environment variable if present
+        if let Ok(jwt_secret) = std::env::var("JWT_SECRET") {
+            config.auth.jwt_secret = Some(jwt_secret);
+        }
+
+        Ok(config)
     }
 }

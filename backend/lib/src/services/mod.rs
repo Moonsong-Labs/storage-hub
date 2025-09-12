@@ -43,8 +43,22 @@ impl Services {
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
     ) -> Self {
-        let jwt_secret = hex::decode(config.auth.jwt_secret.trim_start_matches("0x"))
-            .expect("valid JWT secret hex string");
+        let jwt_secret = config
+            .auth
+            .jwt_secret
+            .as_ref()
+            .ok_or_else(|| {
+                tracing::error!("JWT_SECRET is not set. Please set it in the config file or as an environment variable.");
+                "JWT_SECRET is not configured"
+            })
+            .and_then(|secret| {
+                hex::decode(secret.trim_start_matches("0x"))
+                    .map_err(|e| {
+                        tracing::error!("Invalid JWT_SECRET format. Must be a valid hex string: {}", e);
+                        "Invalid JWT_SECRET format"
+                    })
+            })
+            .expect("valid JWT secret configuration");
 
         #[cfg(feature = "mocks")]
         let jwt_validate = !config.auth.mock_mode;

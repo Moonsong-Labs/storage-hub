@@ -104,7 +104,12 @@ mod tests {
 
         // Decode and verify the JWT
         let cfg = Config::default();
-        let decoding_key = DecodingKey::from_secret(cfg.auth.jwt_secret.as_bytes());
+        let jwt_secret = cfg
+            .auth
+            .jwt_secret
+            .as_ref()
+            .expect("JWT secret should be set in tests");
+        let decoding_key = DecodingKey::from_secret(jwt_secret.as_bytes());
         let validation = Validation::new(Algorithm::HS256);
         let decoded = decode::<JwtClaims>(&verify_response.token, &decoding_key, &validation)
             .expect("Failed to decode JWT");
