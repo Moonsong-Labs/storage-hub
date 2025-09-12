@@ -141,6 +141,30 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=${{ github.event.repository.license.spdx_id }}
 
+  build_backend:
+    needs: [setup]
+    if: always()
+    name: 'Build backend binary'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1.8
+      - name: Install libpq-dev
+        run: sudo apt-get update && sudo apt-get install -y libpq-dev
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build backend
+        run: |
+          cargo build -p sh-msp-backend --release
+      - name: Upload backend binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-bin
+          path: target/release/sh-msp-backend
+          if-no-files-found: error
+
   # zombie_test_k8:
   #   needs: [build_image, setup]
   #   if: always()
@@ -479,7 +503,7 @@ jobs:
           if-no-files-found: warn
 
   backend_test:
-    needs: [build_image, setup]
+    needs: [build_image, build_backend, setup]
     if: always()
     name: 'Run Backend Integration Tests'
     runs-on: ubuntu-latest
@@ -501,6 +525,11 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - run: mkdir -p target/release/
+      - name: Download backend binary
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-bin
+          path: target/release/
       - name: Get Node Binary if changed
         if: needs.setup.outputs.node_changed == 'true'
         uses: actions/download-artifact@v4
