@@ -12,14 +12,13 @@ use axum_extra::{
     response::file_stream::FileStream,
     TypedHeader,
 };
-use codec::{Decode, Encode};
+use codec::Decode;
 use serde::Deserialize;
 use shc_common::types::{
     ChunkId, FileMetadata, StorageProofsMerkleTrieLayout, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
     FILE_CHUNK_SIZE,
 };
 use shc_file_manager::{in_memory::InMemoryFileDataTrie, traits::FileDataTrie};
-use shp_file_metadata::ChunkWithId;
 use sp_runtime::traits::BlakeTwo256;
 use tokio_util::io::ReaderStream;
 
@@ -233,13 +232,12 @@ pub async fn upload_file(
     while let Some(field) = multipart
         .next_field()
         .await
-        .map_err(|e| Error::BadRequest(e.to_string()))?
+        .map_err(|e| Error::BadRequest(format!("Failed to parse multipart field: {}", e)))?
     {
         match field.name() {
-            Some("file") => {
-                // From the 'file' field of the multipart, we get the file data stream.
-                file_data_stream = Some(field);
-            }
+            // NOTE: This is CRUCIAL. Only ONE field from a given Multipart instance may be live at once, and since
+            // we want to stream and process the file data stream afterwards, the file metadata field must ALWAYS be sent first
+            // by the requestor. For more details, see: https://github.com/tokio-rs/axum/blob/main/axum-extra/src/extract/multipart.rs#L55
             Some("file_metadata") => {
                 // From the 'file_metadata' field we extract and decode the file metadata.
                 let metadata_bytes = field.bytes().await.map_err(|e| {
@@ -250,7 +248,16 @@ pub async fn upload_file(
                     |e| Error::BadRequest(format!("Failed to decode file_metadata: {:?}", e)),
                 )?);
             }
-            _ => continue,
+            Some("file") => {
+                // From the 'file' field of the multipart, we get the file data stream.
+                file_data_stream = Some(field);
+
+                // Since after this we can't process any more fields, we break out of the loop.
+                break;
+            }
+            _ => {
+                continue;
+            }
         }
     }
 
@@ -263,14 +270,15 @@ pub async fn upload_file(
     })?;
 
     // Validate that the bucket ID received in the URL matches the bucket ID in the file metadata.
-    if bucket_id.as_bytes() != file_metadata.bucket_id() {
+    let expected_bucket_id = format!("0x{}", hex::encode(file_metadata.bucket_id()));
+    if bucket_id != expected_bucket_id {
         return Err(Error::BadRequest(
             "Bucket ID in URL does not match file metadata".to_string(),
         ));
     }
 
     // Generate the file key from the obtained file metadata and ensure it matches the file key received in the URL.
-    let expected_file_key = hex::encode(file_metadata.file_key::<BlakeTwo256>());
+    let expected_file_key = format!("0x{}", hex::encode(file_metadata.file_key::<BlakeTwo256>()));
     if file_key != expected_file_key {
         return Err(Error::BadRequest(
             "File key in URL does not match file metadata".to_string(),
@@ -297,14 +305,10 @@ pub async fn upload_file(
 
         // While the overflow buffer is larger than FILE_CHUNK_SIZE, process a chunk.
         while overflow_buffer.len() >= FILE_CHUNK_SIZE as usize {
-            let chunk = &overflow_buffer[..FILE_CHUNK_SIZE as usize];
-
-            // Format the chunk appropiately by adding the chunk index.
-            let formatted_chunk =
-                ChunkWithId::new(ChunkId::new(chunk_index as u64), chunk.to_vec());
+            let chunk = overflow_buffer[..FILE_CHUNK_SIZE as usize].to_vec();
 
             // Insert the chunk into the trie.
-            trie.write_chunk(&formatted_chunk.chunk_id, &formatted_chunk.encode())
+            trie.write_chunk(&ChunkId::new(chunk_index as u64), &chunk)
                 .map_err(|e| Error::BadRequest(e.to_string()))?;
 
             // Increment the chunk index.
@@ -317,12 +321,12 @@ pub async fn upload_file(
 
     // Check the overflow buffer to see if the file didn't fit exactly in an integer number of chunks.
     if !overflow_buffer.is_empty() {
-        // Format the chunk appropiately by adding the chunk index.
-        let formatted_chunk = ChunkWithId::new(ChunkId::new(chunk_index as u64), overflow_buffer);
-
         // Insert the chunk into the trie.
-        trie.write_chunk(&formatted_chunk.chunk_id, &formatted_chunk.encode())
+        trie.write_chunk(&ChunkId::new(chunk_index as u64), &overflow_buffer)
             .map_err(|e| Error::BadRequest(e.to_string()))?;
+
+        // Increment the chunk index to get the total amount of chunks.
+        chunk_index += 1;
     }
 
     // Validate that the file fingerprint matches the trie root.
