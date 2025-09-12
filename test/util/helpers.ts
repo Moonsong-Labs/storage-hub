@@ -48,7 +48,9 @@ export const verifyContainerFreshness = async () => {
 
   const existingContainers = containers.filter(
     (container) =>
-      container.Image === DOCKER_IMAGE || container.Names.some((name) => name.includes("toxiproxy"))
+      container.Image === DOCKER_IMAGE || 
+      container.Names.some((name) => name.includes("toxiproxy")) ||
+      container.Names.some((name) => name.includes("storage-hub-sh-backend"))
   );
 
   if (existingContainers.length > 0) {
@@ -105,6 +107,10 @@ export const cleanupEnvironment = async (verbose = false) => {
     container.Names.some((name) => name.includes("storage-hub-sh-copyparty"))
   );
 
+  const backendContainer = allContainers.find((container) =>
+    container.Names.some((name) => name.includes("storage-hub-sh-backend"))
+  );
+
   const tmpDir = tmp.dirSync({ prefix: "bsp-logs-", unsafeCleanup: true });
 
   const logPromises = existingNodes.map(async (node) => {
@@ -155,6 +161,13 @@ export const cleanupEnvironment = async (verbose = false) => {
     }
   } else {
     verbose && console.log("No copyparty containers found, skipping");
+  }
+
+  if (backendContainer) {
+    console.log("Stopping backend container");
+    promises.push(docker.getContainer(backendContainer.Id).remove({ force: true }));
+  } else {
+    verbose && console.log("No backend container found, skipping");
   }
 
   await Promise.all(promises);
