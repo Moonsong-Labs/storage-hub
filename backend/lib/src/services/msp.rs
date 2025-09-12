@@ -487,39 +487,52 @@ impl MspService {
 mod tests {
     use super::*;
 
-    use crate::{
-        data::rpc::{AnyRpcConnection, MockConnection, StorageHubRpcClient},
-        services::Services,
+    use crate::data::{
+        indexer_db::mock_repository::MockRepository,
+        rpc::{AnyRpcConnection, MockConnection, StorageHubRpcClient},
+        storage::{BoxedStorageWrapper, InMemoryStorage},
     };
 
     use serde_json::Value;
     use shc_common::types::{FileKeyProof, FileMetadata};
 
-    async fn create_test_service() -> MspService {
-        let services = Services::mocks();
-
-        MspService::new(
-            services.storage.clone(),
-            services.postgres.clone(),
-            services.rpc.clone(),
-        )
+    // Builder pattern for creating an MspService mocked instance.
+    struct MockMspServiceBuilder {
+        storage: Arc<BoxedStorageWrapper<InMemoryStorage>>,
+        postgres: Arc<DBClient>,
+        rpc: Arc<StorageHubRpcClient>,
     }
 
-    async fn create_test_service_with_rpc_responses(responses: Vec<(&str, Value)>) -> MspService {
-        let services = Services::mocks();
-        let mock_conn = MockConnection::new();
-        for (method, value) in responses {
-            mock_conn.set_response(method, value).await;
+    impl MockMspServiceBuilder {
+        pub fn new() -> Self {
+            Self {
+                storage: Arc::new(BoxedStorageWrapper::new(InMemoryStorage::new())),
+                postgres: Arc::new(DBClient::new(Arc::new(MockRepository::new()))),
+                rpc: Arc::new(StorageHubRpcClient::new(Arc::new(AnyRpcConnection::Mock(
+                    MockConnection::new(),
+                )))),
+            }
         }
-        let rpc = Arc::new(StorageHubRpcClient::new(Arc::new(AnyRpcConnection::Mock(
-            mock_conn,
-        ))));
-        MspService::new(services.storage.clone(), services.postgres.clone(), rpc)
+
+        pub async fn with_rpc_responses(mut self, responses: Vec<(&str, Value)>) -> Self {
+            let mock_conn = MockConnection::new();
+            for (method, value) in responses {
+                mock_conn.set_response(method, value).await;
+            }
+            self.rpc = Arc::new(StorageHubRpcClient::new(Arc::new(AnyRpcConnection::Mock(
+                mock_conn,
+            ))));
+            self
+        }
+
+        pub fn build(self) -> MspService {
+            MspService::new(self.storage, self.postgres, self.rpc)
+        }
     }
 
     #[tokio::test]
     async fn test_get_info() {
-        let service = create_test_service().await;
+        let service = MockMspServiceBuilder::new().build();
         let info = service.get_info().await.unwrap();
 
         assert_eq!(info.status, "active");
@@ -528,7 +541,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_stats() {
-        let service = create_test_service().await;
+        let service = MockMspServiceBuilder::new().build();
         let stats = service.get_stats().await.unwrap();
 
         assert!(stats.capacity.total_bytes > 0);
@@ -537,7 +550,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_value_props() {
-        let service = create_test_service().await;
+        let service = MockMspServiceBuilder::new().build();
         let props = service.get_value_props().await.unwrap();
 
         assert!(!props.is_empty());
@@ -546,7 +559,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_user_buckets() {
-        let service = create_test_service().await;
+        let service = MockMspServiceBuilder::new().build();
         let buckets = service.list_user_buckets("0x123").await.unwrap();
 
         assert!(!buckets.is_empty());
@@ -555,7 +568,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_bucket() {
-        let service = create_test_service().await;
+        let service = MockMspServiceBuilder::new().build();
         let bucket = service.get_bucket("test_bucket").await.unwrap();
 
         assert_eq!(bucket.bucket_id, "test_bucket");
@@ -564,7 +577,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_files_root() {
-        let service = create_test_service().await;
+        let service = MockMspServiceBuilder::new().build();
         let files = service.get_files("bucket123", None).await.unwrap();
         assert!(files
             .iter()
@@ -579,7 +592,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_files_thesis() {
-        let service = create_test_service().await;
+        let service = MockMspServiceBuilder::new().build();
         let files = service
             .get_files("bucket123", Some("thesis"))
             .await
@@ -597,7 +610,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_file_info() {
-        let service = create_test_service().await;
+        let service = MockMspServiceBuilder::new().build();
         let bucket_id = "bucket123";
         let file_key = "abc123";
         let info = service
@@ -613,7 +626,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_distribute_file() {
-        let service = create_test_service().await;
+        let service = MockMspServiceBuilder::new().build();
         let file_key = "abc123";
         let resp = service
             .distribute_file("bucket123", file_key)
@@ -627,7 +640,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_payment_stream() {
-        let service = create_test_service().await;
+        let service = MockMspServiceBuilder::new().build();
         let ps = service
             .get_payment_stream("0x123")
             .await
@@ -639,11 +652,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_to_msp() {
-        let service = create_test_service_with_rpc_responses(vec![(
-            "storagehubclient_uploadToPeer",
-            serde_json::json!([]),
-        )])
-        .await;
+        let service = MockMspServiceBuilder::new()
+            .with_rpc_responses(vec![(
+                "storagehubclient_uploadToPeer",
+                serde_json::json!([]),
+            )])
+            .await
+            .build();
 
         // Provide at least one chunk id (upload_to_msp rejects empty sets)
         let mut chunk_ids = HashSet::new();
@@ -672,14 +687,7 @@ mod tests {
         )
         .unwrap();
 
-        let result = service
-            .upload_to_msp(
-                "test_bucket",
-                &hex::encode(file_metadata.file_key::<sp_core::Blake2Hasher>()),
-                &chunk_ids,
-                &file_key_proof,
-            )
-            .await;
+        let result = service.upload_to_msp(&chunk_ids, &file_key_proof).await;
 
         assert!(result.is_ok());
     }
