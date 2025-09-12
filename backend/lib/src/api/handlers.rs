@@ -340,27 +340,28 @@ pub async fn upload_file(
     }
 
     // Validate that the received amount of chunks matches the amount of chunks corresponding to the file size in the metadata.
-    if chunk_index != file_metadata.chunks_count() {
+    let total_chunks = file_metadata.chunks_count();
+    if chunk_index != total_chunks {
         return Err(Error::BadRequest(format!(
             "Received amount of chunks {} does not match the amount of chunks {} corresponding to the file size in the metadata",
-            chunk_index, file_metadata.chunks_count()
+            chunk_index, total_chunks
         )));
     }
 
     // At this point, the trie contains the entire file data and we can start generating the proofs for the chunk batches
     // and sending them to the MSP.
 
-    // Get how many chunks fit in a batch of BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE, rounding down, and the total amount of chunks.
-    const CHUNKS_PER_BATCH: usize = BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE / FILE_CHUNK_SIZE as usize;
-    let total_chunks: usize = chunk_index as usize;
+    // Get how many chunks fit in a batch of BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE, rounding down.
+    const CHUNKS_PER_BATCH: u64 = BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE as u64 / FILE_CHUNK_SIZE;
 
-    // Initialize the index of the last chunk processed in the batch.
-    let mut last_chunk_index = 0;
+    // Initialize the index of the initial chunk to process in this batch.
+    let mut batch_start_chunk_index = 0;
 
-    // Start processing batches.
-    while last_chunk_index < total_chunks {
+    // Start processing batches, until all chunks have been processed.
+    while batch_start_chunk_index < total_chunks {
         // Get the chunks to send in this batch, capping at the total amount of chunks of the file.
-        let chunks = (last_chunk_index..(last_chunk_index + CHUNKS_PER_BATCH).min(total_chunks))
+        let chunks = (batch_start_chunk_index
+            ..(batch_start_chunk_index + CHUNKS_PER_BATCH).min(total_chunks))
             .map(|chunk_index| ChunkId::new(chunk_index as u64))
             .collect::<HashSet<_>>();
 
@@ -380,8 +381,8 @@ pub async fn upload_file(
             .await
             .map_err(|e| Error::BadRequest(e.to_string()))?;
 
-        // Update the last chunk index.
-        last_chunk_index = (last_chunk_index + CHUNKS_PER_BATCH).min(total_chunks);
+        // Update the initial chunk index for the next batch.
+        batch_start_chunk_index = batch_start_chunk_index + CHUNKS_PER_BATCH;
     }
 
     // If the complete file was uploaded to the MSP successfully, we can return the response.
