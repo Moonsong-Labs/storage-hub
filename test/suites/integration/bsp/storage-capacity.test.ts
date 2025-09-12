@@ -335,7 +335,6 @@ await describeBspNet("BSPNet: Change capacity tests.", ({ before, it, createUser
     // Add a second BSP with the configured maximum storage capacity limit.
     const { rpcPort } = await addBsp(userApi, bspTwoKey, {
       name: "sh-bsp-two",
-      bspKeySeed: bspTwoSeed,
       bspId: ShConsts.BSP_TWO_ID,
       maxStorageCapacity: MAX_STORAGE_CAPACITY,
       initialCapacity: BigInt(MAX_STORAGE_CAPACITY),

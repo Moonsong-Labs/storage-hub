@@ -152,12 +152,18 @@ export class BspNetTestApi implements AsyncDisposable {
       source,
       location,
       bucketName,
+      this._runtimeType === "solochain" ? ethShUser : shUser,
       valuePropId
     );
   }
 
   private async createBucket(bucketName: string, valuePropId?: HexString | null) {
-    return Files.createBucket(this._api, bucketName, valuePropId);
+    return Files.createBucket(
+      this._api,
+      bucketName,
+      this._runtimeType === "solochain" ? ethShUser : shUser,
+      valuePropId
+    );
   }
 
   private assertEvent(module: string, method: string, events?: EventRecord[]) {
@@ -406,7 +412,14 @@ export class BspNetTestApi implements AsyncDisposable {
         owner?: KeyringPair,
         valuePropId?: HexString | null,
         mspId?: HexString | null
-      ) => Files.createBucket(this._api, bucketName, valuePropId, mspId, owner),
+      ) =>
+        Files.createBucket(
+          this._api,
+          bucketName,
+          owner ?? (this._runtimeType === "solochain" ? ethShUser : shUser),
+          valuePropId,
+          mspId
+        ),
 
       /**
        * Issue a new storage request.
@@ -451,9 +464,9 @@ export class BspNetTestApi implements AsyncDisposable {
           source,
           location,
           bucketName,
+          owner ?? (this._runtimeType === "solochain" ? ethShUser : shUser),
           valuePropId,
           msp_id,
-          owner,
           replicationTarget
         )
     };

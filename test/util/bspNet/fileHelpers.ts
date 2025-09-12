@@ -7,7 +7,6 @@ import { u8aToHex } from "@polkadot/util";
 import type { HexString } from "@polkadot/util/types";
 import { decodeAddress } from "@polkadot/util-crypto";
 import { assertEventPresent } from "../asserts";
-import { ethShUser } from "../evmNet/keyring";
 import { shUser } from "../pjsKeyring";
 import { sealBlock } from "./block";
 import * as ShConsts from "./consts";
@@ -78,14 +77,14 @@ export const createBucketAndSendNewStorageRequest = async (
   source: string,
   location: string,
   bucketName: string,
+  owner: KeyringPair,
   valuePropId?: HexString | null,
   mspId?: HexString | null,
-  owner?: KeyringPair | null,
   replicationTarget?: number | null,
   finalizeBlock = true
 ): Promise<FileMetadata> => {
   let localValuePropId = valuePropId;
-  let localOwner = owner;
+  const localOwner = owner;
 
   if (!localValuePropId) {
     const valueProps = await api.call.storageProvidersApi.queryValuePropositionsForMsp(
@@ -98,23 +97,19 @@ export const createBucketAndSendNewStorageRequest = async (
     }
   }
 
-  if (!localOwner) {
-    localOwner = shUser;
-  }
-
   const newBucketEventEvent = await createBucket(
     api,
     bucketName,
+    localOwner,
     localValuePropId,
-    mspId ?? ShConsts.DUMMY_MSP_ID,
-    localOwner
+    mspId ?? ShConsts.DUMMY_MSP_ID
   );
   const newBucketEventDataBlob =
     api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
   assert(newBucketEventDataBlob, "Event doesn't match Type");
 
-  const ownerHexString = u8aToHex(decodeAddress(ethShUser.address));
+  const ownerHexString = u8aToHex(decodeAddress(localOwner.address));
   const { file_metadata: fileMetadata } = await api.rpc.storagehubclient.loadFileInStorage(
     source,
     location,
@@ -174,9 +169,9 @@ export const createBucketAndSendNewStorageRequest = async (
 export const createBucket = async (
   api: ApiPromise,
   bucketName: string,
+  owner: KeyringPair,
   valuePropId?: HexString | null,
-  mspId: HexString | null = ShConsts.DUMMY_MSP_ID,
-  owner: KeyringPair | null = ethShUser
+  mspId: HexString | null = ShConsts.DUMMY_MSP_ID
 ) => {
   let localValuePropId = valuePropId;
 
@@ -200,7 +195,7 @@ export const createBucket = async (
       false,
       localValuePropId
     ),
-    owner ?? undefined
+    owner
   );
   const { event } = assertEventPresent(api, "fileSystem", "NewBucket", createBucketResult.events);
 
