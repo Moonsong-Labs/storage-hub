@@ -270,13 +270,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use alloy_signer::k256::ecdsa::SigningKey;
     use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 
     use crate::{
         config::Config,
         constants::{auth::MOCK_ENS, mocks::MOCK_ADDRESS},
         data::storage::{BoxedStorageWrapper, InMemoryStorage},
+        test_utils::auth::{eth_wallet, sign_message},
     };
 
     use super::*;
@@ -349,31 +349,10 @@ mod tests {
         assert_eq!(stored_address, Some(MOCK_ADDRESS.to_string()));
     }
 
-    fn wallet() -> (String, SigningKey) {
-        let signing_key = SigningKey::random(&mut rand::thread_rng());
-        let verifying_key = signing_key.verifying_key();
-        let address = public_key_to_address(verifying_key);
-
-        (address.to_checksum(None), signing_key)
-    }
-
-    fn sign_message(signing_key: &SigningKey, message: &str) -> String {
-        let message_hash = eip191_hash_message(message.as_bytes());
-        let (sig, recovery_id) = signing_key
-            .sign_prehash_recoverable(&message_hash.0)
-            .unwrap();
-
-        let mut sig_bytes = [0u8; 65];
-        sig_bytes[..64].copy_from_slice(&sig.to_bytes());
-        sig_bytes[64] = recovery_id.to_byte();
-
-        format!("0x{}", hex::encode(sig_bytes))
-    }
-
     #[test]
     fn verify_eth_signature_recovers_correct_address() {
         // Create a test signing key
-        let (address, sk) = wallet();
+        let (address, sk) = eth_wallet();
 
         let message = "Test message for signature verification";
         let sig_str = sign_message(&sk, message);
@@ -391,7 +370,7 @@ mod tests {
 
     #[test]
     fn verify_eth_signature_wrong_message_recovers_different_address() {
-        let (address, sk) = wallet();
+        let (address, sk) = eth_wallet();
         let sig_str = sign_message(&sk, "original message");
 
         // Test with wrong message for the signature
@@ -414,7 +393,7 @@ mod tests {
         let auth_service = AuthService::new(cfg.auth.jwt_secret.as_bytes(), true, storage);
 
         let message = "random message";
-        let (_, sk) = wallet();
+        let (_, sk) = eth_wallet();
         let sig_str = sign_message(&sk, message);
 
         let result = auth_service.login(message, &sig_str).await;
@@ -435,7 +414,7 @@ mod tests {
         let challenge = auth_service.challenge(MOCK_ADDRESS, 1).await.unwrap();
 
         // Give signature from different address
-        let (_, sk) = wallet();
+        let (_, sk) = eth_wallet();
         let wrong_sig_str = sign_message(&sk, &challenge.message);
 
         let result = auth_service.login(&challenge.message, &wrong_sig_str).await;
@@ -470,7 +449,7 @@ mod tests {
         let auth_service = AuthService::new(cfg.auth.jwt_secret.as_bytes(), true, storage);
 
         // Create a test signing key
-        let (address, sk) = wallet();
+        let (address, sk) = eth_wallet();
 
         // Get challenge and sign it
         let challenge = auth_service.challenge(&address, 1).await.unwrap();
