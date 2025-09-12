@@ -7,10 +7,10 @@ use std::{sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use jsonrpsee::{
-    core::client::ClientT,
+    core::{client::ClientT, traits::ToRpcParams},
     ws_client::{WsClient, WsClientBuilder},
 };
-use serde::{de::DeserializeOwned, Serialize};
+use serde::de::DeserializeOwned;
 use tokio::sync::RwLock;
 
 use crate::data::rpc::{
@@ -99,13 +99,13 @@ impl WsConnection {
 impl RpcConnection for WsConnection {
     async fn call<P, R>(&self, method: &str, params: P) -> RpcResult<R>
     where
-        P: Serialize + Send + Sync,
+        P: ToRpcParams + Send,
         R: DeserializeOwned,
     {
         let client = self.get_client().await?;
 
         let result = client
-            .request(method, jsonrpsee::rpc_params![params])
+            .request(method, params)
             .await
             .map_err(|e| e.into_rpc_error())?;
 

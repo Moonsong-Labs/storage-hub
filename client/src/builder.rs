@@ -268,6 +268,10 @@ where
                 .expect("Forest Storage Handler not initialized. Use `setup_storage_layer` before calling `create_rpc_config`."),
             keystore,
             config,
+            self.file_transfer
+                .as_ref()
+                .expect("File Transfer not set.")
+                .clone(),
         )
     }
 
