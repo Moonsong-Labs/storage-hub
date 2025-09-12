@@ -141,8 +141,6 @@ console.log('Folder files:', files);
   - `file: ReadStream | Blob | File` - File data to upload
 - **`downloadByKey(fileKey)`** - Download file by key
   - Returns: `{ stream: ReadableStream, status: string }`
-- **`downloadByLocation(bucketId, filePath)`** - Download file by bucket and path
-  - Returns: `{ stream: ReadableStream, status: string }`
 - **`listBuckets()`** - List all buckets of the currently authenticated user
 - **`getBucket(bucketId)`** - Get the metadata of a specific bucket
 - **`getFiles(bucketId, options?)`** - Get the files of a specific bucket

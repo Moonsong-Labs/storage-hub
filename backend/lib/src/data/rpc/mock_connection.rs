@@ -6,6 +6,7 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
+use jsonrpsee::core::traits::ToRpcParams;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use tokio::fs;
@@ -15,7 +16,7 @@ use tokio::{
 };
 
 use crate::{
-    constants::rpc::TIMEOUT_MULTIPLIER,
+    constants::{mocks::DOWNLOAD_FILE_CONTENT, rpc::TIMEOUT_MULTIPLIER},
     data::rpc::{
         connection::error::{RpcConnectionError, RpcResult},
         RpcConnection,
@@ -133,7 +134,7 @@ impl MockConnection {
     /// Build mock JSON response for `storagehubclient_saveFileToDisk` and write mock file
     async fn mock_save_file_to_disk<P>(&self, params: P) -> Value
     where
-        P: jsonrpsee::core::traits::ToRpcParams + Send + Sync,
+        P: ToRpcParams + Send + Sync,
     {
         // We assume params are [file_key, upload_url]
         let raw = params.to_rpc_params().unwrap().unwrap();
@@ -149,7 +150,7 @@ impl MockConnection {
 
         // Create mock file content
         let _ = fs::create_dir_all("uploads").await;
-        let content = b"GoodFla mock file content for download";
+        let content = DOWNLOAD_FILE_CONTENT.as_bytes();
         let _ = fs::write(&local_path, content).await;
 
         // Return expected response shape
@@ -181,7 +182,7 @@ impl Default for MockConnection {
 impl RpcConnection for MockConnection {
     async fn call<P, R>(&self, method: &str, params: P) -> RpcResult<R>
     where
-        P: jsonrpsee::core::traits::ToRpcParams + Send + Sync,
+        P: ToRpcParams + Send + Sync,
         R: DeserializeOwned,
     {
         // Global checks

@@ -64,6 +64,7 @@ mod tests {
     use std::path::Path;
     use tokio::time::{sleep, Duration};
 
+    use crate::constants::mocks::DOWNLOAD_FILE_CONTENT;
     use crate::services::health::HealthService;
 
     #[tokio::test]
@@ -83,7 +84,7 @@ mod tests {
         let app = crate::api::mock_app();
         let server = TestServer::new(app).unwrap();
 
-        let file_key = "web-file";
+        let file_key = "0xde4a17999bc1482ba71737367e5d858a133ed1e13327a29c495ab976004a138f";
         let temp_path = format!("uploads/{}", file_key);
 
         let response = server.get(&format!("/download/{}", file_key)).await;
@@ -92,7 +93,7 @@ mod tests {
 
         // Assert: body bytes match the mocked content written by RPC mock
         let body = response.as_bytes();
-        assert_eq!(body.as_ref(), b"GoodFla mock file content for download");
+        assert_eq!(body.as_ref(), DOWNLOAD_FILE_CONTENT.as_bytes());
 
         // Give spawned cleanup task a moment to run
         sleep(Duration::from_millis(50)).await;

@@ -171,6 +171,8 @@ pub async fn download_by_location(
     Ok(file_stream_resp.into_response())
 }
 
+// Used by the MSP RPC to upload a file to the backend
+// The file is only temporary and will be deleted after the stream is closed
 pub async fn internal_upload_by_key(
     State(_services): State<Services>,
     Path(file_key): Path<String>,
@@ -182,11 +184,8 @@ pub async fn internal_upload_by_key(
     if let Err(e) = tokio::fs::create_dir_all("uploads").await {
         return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
     }
-    // Validate file_key is a hex string (allow optional 0x prefix)
-    let key = file_key
-        .strip_prefix("0x")
-        .or_else(|| file_key.strip_prefix("0X"))
-        .unwrap_or(&file_key);
+    // Validate file_key is a hex string
+    let key = file_key.trim_start_matches("0x");
     if hex::decode(key).is_err() {
         return (StatusCode::BAD_REQUEST, "Invalid file key".to_string());
     }
@@ -204,11 +203,8 @@ pub async fn download_by_key(
     // TODO: re-add auth
     // let _auth = extract_bearer_token(&auth)?;
 
-    // Validate file_key is a hex string (allow optional 0x prefix)
-    let key = file_key
-        .strip_prefix("0x")
-        .or_else(|| file_key.strip_prefix("0X"))
-        .unwrap_or(&file_key);
+    // Validate file_key is a hex string
+    let key = file_key.trim_start_matches("0x");
     if hex::decode(key).is_err() {
         return Err(Error::BadRequest("Invalid file key".to_string()));
     }

@@ -337,6 +337,12 @@ impl MspService {
         })
     }
 
+    /// Download a file by `file_key` via the MSP RPC into `uploads/<file_key>` and
+    /// return its size, UTF-8 location, fingerprint, and temp path.
+    /// Returns BadRequest on RPC/parse errors.
+    ///
+    /// We provide an URL as saveFileToDisk RPC requires it to stream the file.
+    /// We also implemented the internal_upload_by_key handler to handle this temporary file upload.
     pub async fn get_file_from_key(&self, file_key: &str) -> Result<FileDownloadResult, Error> {
         // Create temp url for download
         let temp_path = format!("uploads/{}", file_key);

@@ -1,6 +1,7 @@
 //! StorageHub RPC client module
 
 use async_trait::async_trait;
+use jsonrpsee::core::traits::ToRpcParams;
 use serde::de::DeserializeOwned;
 
 pub mod client;
@@ -25,7 +26,7 @@ pub trait RpcConnection: Send + Sync {
     /// Execute a JSON-RPC method call
     async fn call<P, R>(&self, method: &str, params: P) -> RpcResult<R>
     where
-        P: jsonrpsee::core::traits::ToRpcParams + Send + Sync,
+        P: ToRpcParams + Send + Sync,
         R: DeserializeOwned;
 
     /// Execute a JSON-RPC method call without parameters

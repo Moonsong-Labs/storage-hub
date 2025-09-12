@@ -3,6 +3,7 @@
 use std::fmt::Debug;
 
 use async_trait::async_trait;
+use jsonrpsee::core::traits::ToRpcParams;
 use serde::de::DeserializeOwned;
 
 #[cfg(feature = "mocks")]
@@ -41,7 +42,7 @@ impl Debug for AnyRpcConnection {
 impl RpcConnection for AnyRpcConnection {
     async fn call<P, R>(&self, method: &str, params: P) -> RpcResult<R>
     where
-        P: jsonrpsee::core::traits::ToRpcParams + Send + Sync,
+        P: ToRpcParams + Send + Sync,
         R: DeserializeOwned,
     {
         match self {
