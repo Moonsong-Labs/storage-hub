@@ -66,7 +66,7 @@ async fn main() -> Result<()> {
 
     let postgres_client = create_postgres_client(&config).await?;
     let rpc_client = create_rpc_client(&config).await?;
-    let services = Services::new(config, storage, postgres_client, rpc_client);
+    let services = Services::new(config, storage, postgres_client, rpc_client)?;
 
     // Start server
     let app = create_app(services);

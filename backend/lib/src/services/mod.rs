@@ -40,7 +40,7 @@ impl Services {
         storage: Arc<dyn BoxedStorage>,
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
-    ) -> Self {
+    ) -> Result<Self, crate::error::Error> {
         let auth = Arc::new(AuthService::default());
         let health = Arc::new(HealthService::new(
             storage.clone(),
@@ -53,9 +53,9 @@ impl Services {
             Arc::clone(&storage),
             Arc::clone(&postgres),
             Arc::clone(&rpc),
-        ));
+        )?);
 
-        Self {
+        Ok(Self {
             config,
             auth,
             health,
@@ -63,7 +63,7 @@ impl Services {
             storage,
             postgres,
             rpc,
-        }
+        })
     }
 }
 
@@ -85,5 +85,6 @@ impl Services {
         let rpc = Arc::new(StorageHubRpcClient::new(rpc_conn));
 
         Self::new(Config::default(), storage, postgres, rpc)
+            .expect("Failed to create mock services")
     }
 }

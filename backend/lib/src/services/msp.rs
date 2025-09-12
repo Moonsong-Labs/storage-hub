@@ -44,18 +44,27 @@ impl MspService {
         storage: Arc<dyn BoxedStorage>,
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
-    ) -> Self {
-        let msp_id = hex::decode(config.storage_hub.msp_id.trim_start_matches("0x"))
-            .map(|decoded| Hash::from_slice(&decoded))
-            .map(OnchainMspId::new)
-            .expect("valid MSP ID");
+    ) -> Result<Self, Error> {
+        let msp_id_hex = config.storage_hub.msp_id.trim_start_matches("0x");
 
-        Self {
+        let decoded = hex::decode(msp_id_hex)
+            .map_err(|e| Error::BadRequest(format!("Invalid MSP ID hex encoding: {}", e)))?;
+
+        if decoded.len() != 32 {
+            return Err(Error::BadRequest(format!(
+                "Invalid MSP ID length. Expected 32 bytes, got {}",
+                decoded.len()
+            )));
+        }
+
+        let msp_id = OnchainMspId::new(Hash::from_slice(&decoded));
+
+        Ok(Self {
             msp_id,
             storage,
             postgres,
             rpc,
-        }
+        })
     }
 
     /// Get MSP information
@@ -182,9 +191,17 @@ impl MspService {
         bucket_id: &str,
         user: &str,
     ) -> Result<shc_indexer_db::models::Bucket, Error> {
-        let bucket_id = hex::decode(bucket_id.trim_start_matches("0x")).map_err(|_| {
-            Error::BadRequest(format!("Invalid Bucket ID. Expected a valid hex string"))
-        })?;
+        let bucket_id_hex = bucket_id.trim_start_matches("0x");
+
+        let bucket_id = hex::decode(bucket_id_hex)
+            .map_err(|e| Error::BadRequest(format!("Invalid Bucket ID hex encoding: {}", e)))?;
+
+        if bucket_id.len() != 32 {
+            return Err(Error::BadRequest(format!(
+                "Invalid Bucket ID length. Expected 32 bytes, got {}",
+                bucket_id.len()
+            )));
+        }
 
         self.postgres
             .get_bucket(&bucket_id)
@@ -243,9 +260,17 @@ impl MspService {
         user: &str,
         file_key: &str,
     ) -> Result<FileInfo, Error> {
-        let file_key = hex::decode(file_key.trim_start_matches("0x")).map_err(|_| {
-            Error::BadRequest(format!("Invalid File Key. Expected a valid hex string"))
-        })?;
+        let file_key_hex = file_key.trim_start_matches("0x");
+
+        let file_key = hex::decode(file_key_hex)
+            .map_err(|e| Error::BadRequest(format!("Invalid File Key hex encoding: {}", e)))?;
+
+        if file_key.len() != 32 {
+            return Err(Error::BadRequest(format!(
+                "Invalid File Key length. Expected 32 bytes, got {}",
+                file_key.len()
+            )));
+        }
 
         // get bucket determine if user can view it
         let bucket = self.get_bucket(bucket_id, user).await?;
@@ -337,6 +362,7 @@ mod tests {
         /// Build the final MspService
         fn build(self) -> MspService {
             MspService::new(&self.config, self.storage, self.postgres, self.rpc)
+                .expect("Failed to create MspService with valid test config")
         }
     }
 
