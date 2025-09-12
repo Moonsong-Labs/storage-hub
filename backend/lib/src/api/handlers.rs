@@ -315,7 +315,7 @@ pub async fn upload_file(
             chunk_index += 1;
 
             // Remove the chunk from the overflow buffer.
-            overflow_buffer = overflow_buffer[FILE_CHUNK_SIZE as usize..].to_vec();
+            overflow_buffer.drain(..FILE_CHUNK_SIZE as usize);
         }
     }
 
