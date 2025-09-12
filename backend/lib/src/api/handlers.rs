@@ -378,7 +378,7 @@ pub async fn upload_file(
 
         services
             .msp
-            .upload_to_msp(&bucket_id, &file_key, &chunks, &file_key_proof)
+            .upload_to_msp(&chunks, &file_key_proof)
             .await
             .map_err(|e| Error::BadRequest(e.to_string()))?;
 

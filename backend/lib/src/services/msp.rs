@@ -327,18 +327,10 @@ impl MspService {
     /// will send the file to. If it's different than its local one, it will probably fail.
     pub async fn upload_to_msp(
         &self,
-        bucket_id: &str,
-        file_key: &str,
         chunk_ids: &HashSet<ChunkId>,
         file_key_proof: &FileKeyProof,
     ) -> Result<(), Error> {
-        // Validate inputs.
-        if bucket_id.is_empty() || file_key.is_empty() {
-            return Err(Error::BadRequest(
-                "Bucket ID and file key cannot be empty".to_string(),
-            ));
-        }
-
+        // Ensure we are not incorrectly trying to upload an empty file.
         if chunk_ids.is_empty() {
             return Err(Error::BadRequest(
                 "Cannot upload file with no chunks".to_string(),
@@ -363,8 +355,8 @@ impl MspService {
                         "Successfully uploaded {} chunks to MSP {} for file {} in bucket {}",
                         chunk_ids.len(),
                         msp_info.msp_id,
-                        file_key,
-                        bucket_id
+                        hex::encode(file_key_proof.file_metadata.file_key::<Blake2Hasher>()),
+                        hex::encode(file_key_proof.file_metadata.bucket_id())
                     );
                     return Ok(());
                 }
