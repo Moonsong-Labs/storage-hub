@@ -8,11 +8,11 @@ import {
   describeBspNet,
   type EnrichedBspApi,
   ferdie,
-  sleep,
-  ShConsts
+  ShConsts,
+  sleep
 } from "../../../util";
 
-describeBspNet("BSPNet: Change capacity tests.", ({ before, it, createUserApi }) => {
+await describeBspNet("BSPNet: Change capacity tests.", ({ before, it, createUserApi }) => {
   let userApi: EnrichedBspApi;
 
   before(async () => {

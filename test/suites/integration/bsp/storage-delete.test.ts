@@ -1,7 +1,7 @@
 import assert, { strictEqual } from "node:assert";
-import { bspKey, describeBspNet, shUser, waitFor, type EnrichedBspApi } from "../../../util";
+import { bspKey, describeBspNet, type EnrichedBspApi, shUser, waitFor } from "../../../util";
 
-describeBspNet(
+await describeBspNet(
   "BSPNet: Stop storing file and other BSPs taking the relay",
   { initialised: "multi", networkConfig: "standard" },
   ({ before, createUserApi, after, it, createApi, createBspApi, getLaunchResponse }) => {

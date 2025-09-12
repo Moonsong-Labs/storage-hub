@@ -1,9 +1,9 @@
 import assert, { strictEqual } from "node:assert";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
-import { type EnrichedBspApi, describeMspNet, shUser, sleep, waitFor } from "../../../util";
+import { describeMspNet, type EnrichedBspApi, shUser, sleep, waitFor } from "../../../util";
 
-describeMspNet(
+await describeMspNet(
   "MSP catching up with chain and volunteering for storage request",
   { initialised: false },
   ({ before, createMsp1Api, it, createUserApi, createApi }) => {

@@ -10,15 +10,15 @@ import {
 } from "../../../util";
 import { createBucketAndSendNewStorageRequest } from "../../../util/bspNet/fileHelpers";
 import {
-  waitForFileIndexed,
-  waitForMspFileAssociation,
-  waitForBspFileAssociation
-} from "../../../util/indexerHelpers";
-import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
-import {
   waitForDeleteFileExtrinsic,
   waitForFishermanProcessing
 } from "../../../util/fisherman/fishermanHelpers";
+import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
+import {
+  waitForBspFileAssociation,
+  waitForFileIndexed,
+  waitForMspFileAssociation
+} from "../../../util/indexerHelpers";
 
 /**
  * FISHERMAN PROCESS FILE DELETION - COMPREHENSIVE EVENT PROCESSING
@@ -44,7 +44,7 @@ import {
  * 4. Multiple providers: File stored by both BSP and MSP, deletion affects both
  * 5. StorageRequestRejected: Provider rejection scenarios (placeholder for future)
  */
-describeMspNet(
+await describeMspNet(
   "Fisherman Process File Deletion",
   {
     initialised: false,

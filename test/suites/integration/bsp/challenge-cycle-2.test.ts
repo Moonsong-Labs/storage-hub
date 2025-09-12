@@ -1,7 +1,7 @@
 import assert, { strictEqual } from "node:assert";
 import { bspKey, describeBspNet, type EnrichedBspApi } from "../../../util";
 
-describeBspNet(
+await describeBspNet(
   "BSPNet: BSP Challenge Cycle and Proof Submission with changed capacity",
   { initialised: true },
   ({ it, before, createBspApi, createUserApi }) => {
