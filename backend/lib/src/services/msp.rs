@@ -672,14 +672,7 @@ mod tests {
         )
         .unwrap();
 
-        let result = service
-            .upload_to_msp(
-                "test_bucket",
-                &hex::encode(file_metadata.file_key::<sp_core::Blake2Hasher>()),
-                &chunk_ids,
-                &file_key_proof,
-            )
-            .await;
+        let result = service.upload_to_msp(&chunk_ids, &file_key_proof).await;
 
         assert!(result.is_ok());
     }
