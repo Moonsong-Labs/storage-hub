@@ -1,5 +1,5 @@
-import fs from "node:fs";
 import { execSync, spawn } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 
 const fetchMetadata = async () => {
@@ -68,7 +68,7 @@ async function main() {
   console.log("✅ Metadata file written to:", metadataPath);
 }
 
-main()
+await main()
   .catch((error) => {
     console.error(error);
     process.exitCode = 1;

@@ -12,7 +12,7 @@ impl StorageEnableRuntime for crate::Runtime {
     type Call = crate::RuntimeCall;
     type Signature = crate::Signature;
     type Extension = crate::TxExtension;
-    type RuntimeApi = crate::apis::RuntimeApi;
+    type RuntimeApi = crate::RuntimeApi;
 }
 
 // Implement the transaction extension helpers for the concrete runtime's TxExtension.

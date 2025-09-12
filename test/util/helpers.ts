@@ -1,10 +1,10 @@
-import Docker from "dockerode";
-import { DOCKER_IMAGE } from ".";
-import postgres from "postgres";
-import stripAnsi from "strip-ansi";
 import assert from "node:assert";
 import fs from "node:fs/promises";
+import Docker from "dockerode";
+import postgres from "postgres";
+import stripAnsi from "strip-ansi";
 import tmp from "tmp";
+import { DOCKER_IMAGE } from ".";
 
 export const printDockerStatus = async (verbose = false) => {
   const docker = new Docker();
@@ -33,7 +33,7 @@ export const printDockerStatus = async (verbose = false) => {
             usage: `${Math.round(stats.memory_stats.usage / 1024 / 1024)}MB`,
             limit: `${Math.round(stats.memory_stats.limit / 1024 / 1024)}MB`
           });
-        } catch (e) {
+        } catch (_e) {
           console.log("Could not fetch container stats");
         }
       }
