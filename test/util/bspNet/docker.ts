@@ -1,18 +1,16 @@
-import Docker from "dockerode";
+import assert from "node:assert";
 import { execSync } from "node:child_process";
-import path from "node:path";
 import net from "node:net";
+import path from "node:path";
+import { PassThrough, type Readable } from "node:stream";
+import Docker from "dockerode";
 import { DOCKER_IMAGE } from "../constants";
 import { sendCustomRpc } from "../rpc";
+import { sleep } from "../timer";
 import * as NodeBspNet from "./node";
 import { BspNetTestApi } from "./test-api";
-import assert from "node:assert";
-import { PassThrough, type Readable } from "node:stream";
-import { sleep } from "../timer";
 
-export const addCopypartyContainer = async (options?: {
-  name?: string;
-}) => {
+export const addCopypartyContainer = async (options?: { name?: string }) => {
   const docker = new Docker();
   const containerName = options?.name || "storage-hub-sh-copyparty";
   const imageName = "copyparty/min:latest";
@@ -21,14 +19,14 @@ export const addCopypartyContainer = async (options?: {
   try {
     const oldContainer = docker.getContainer(containerName);
     await oldContainer.remove({ force: true });
-  } catch (e) {
+  } catch (_e) {
     // Container doesn't exist, that's fine
   }
 
   // Check if image exists, pull if it doesn't
   try {
     await docker.getImage(imageName).inspect();
-  } catch (e) {
+  } catch (_e) {
     // Image doesn't exist, pull it
     console.log(`Pulling ${imageName}...`);
     const stream = await docker.pull(imageName);
@@ -100,7 +98,7 @@ export const addCopypartyContainer = async (options?: {
           console.log(`Copyparty HTTP server ready on http://localhost:${httpHostPort}`);
           return true;
         }
-      } catch (e) {
+      } catch (_e) {
         // HTTP not ready yet
       }
       return false;
@@ -264,8 +262,8 @@ export const addCopypartyContainer = async (options?: {
     containerIp,
     httpPort: 3923,
     ftpPort: 3921,
-    httpHostPort: Number.parseInt(httpHostPort),
-    ftpHostPort: Number.parseInt(ftpHostPort)
+    httpHostPort: Number.parseInt(httpHostPort, 10),
+    ftpHostPort: Number.parseInt(ftpHostPort, 10)
   };
 };
 
@@ -302,15 +300,11 @@ export const showContainers = () => {
   }
 };
 
-export const addBspContainer = async (options?: {
-  name?: string;
-  additionalArgs?: string[];
-}) => addContainer("bsp", options);
+export const addBspContainer = async (options?: { name?: string; additionalArgs?: string[] }) =>
+  addContainer("bsp", options);
 
-export const addMspContainer = async (options?: {
-  name?: string;
-  additionalArgs?: string[];
-}) => addContainer("msp", options);
+export const addMspContainer = async (options?: { name?: string; additionalArgs?: string[] }) =>
+  addContainer("msp", options);
 
 const addContainer = async (
   providerType: "bsp" | "msp",
@@ -439,25 +433,19 @@ export const stopContainer = async (containerName: string) => {
   await docker.getContainer(containersToStop[0].Id).remove({ force: true });
 };
 
-export const startContainer = async (options: {
-  containerName: string;
-}) => {
+export const startContainer = async (options: { containerName: string }) => {
   const docker = new Docker();
   const container = docker.getContainer(options.containerName);
   await container.start();
 };
 
-export const restartContainer = async (options: {
-  containerName: string;
-}) => {
+export const restartContainer = async (options: { containerName: string }) => {
   const docker = new Docker();
   const container = docker.getContainer(options.containerName);
   await container.restart();
 };
 
-export const clearLogs = async (options: {
-  containerName: string;
-}) => {
+export const clearLogs = async (options: { containerName: string }) => {
   const docker = new Docker();
   const container = docker.getContainer(options.containerName);
   const exec = await container.exec({
@@ -470,9 +458,7 @@ export const clearLogs = async (options: {
   console.log(`Logs cleared for container ${options.containerName}`);
 };
 
-export const resumeContainer = async (options: {
-  containerName: string;
-}) => {
+export const resumeContainer = async (options: { containerName: string }) => {
   const docker = new Docker();
   const container = docker.getContainer(options.containerName);
   await container.unpause();
