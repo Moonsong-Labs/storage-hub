@@ -51,6 +51,10 @@ sp-runtime = { workspace = true, default-features = true }
 sp-rpc = { workspace = true }
 sp-std = { workspace = true }
 substrate-frame-rpc-system = { workspace = true }
+k256 = { workspace = true, default-features = false, features = [
+	"ecdsa",
+	"arithmetic",
+] }
 
 # Polkadot
 polkadot-primitives = { workspace = true }
