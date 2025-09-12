@@ -5,9 +5,9 @@
 use std::sync::Arc;
 
 use serde::Serialize;
+use sp_core::H256;
 
 use crate::data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage};
-use sp_core::H256;
 
 #[derive(Serialize)]
 pub struct DetailedHealthStatus {
@@ -109,7 +109,7 @@ impl HealthService {
     }
 
     async fn check_rpc(&self) -> ComponentHealth {
-        // First check if connection is established
+        // First check if the connection to the RPC is established
         if !self.rpc.is_connected().await {
             return ComponentHealth {
                 status: Self::UNHEALTHY.to_string(),
@@ -117,7 +117,7 @@ impl HealthService {
             };
         }
 
-        // Test actual RPC functionality by calling getForestRoot
+        // Then to make sure everything works test actual RPC functionality by calling the getForestRoot method
         let (status, message) = match self
             .rpc
             .call::<_, Option<H256>>("storagehubclient_getForestRoot", (None::<H256>,))

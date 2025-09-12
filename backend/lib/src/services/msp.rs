@@ -316,13 +316,15 @@ impl MspService {
         })
     }
 
-    /// Upload a batch of file chunks with their FileKeyProof to the MSP via a P2P connection.
+    /// Upload a batch of file chunks with their FileKeyProof to the MSP via its RPC.
     ///
     /// This implementation:
     /// 1. Gets the MSP info to get its multiaddresses.
     /// 2. Extracts the peer IDs from the multiaddresses.
-    /// 3. Connects to the MSP via a P2P network.
-    /// 4. Sends the FileKeyProof with the batch of chunks to the MSP.
+    /// 3. Sends the FileKeyProof with the batch of chunks to the MSP through the `uploadToPeer` RPC method.
+    ///
+    /// Note: obtaining the peer ID previous to sending the request is needed as this is the peer ID that the MSP
+    /// will send the file to. If it's different than its local one, it will probably fail.
     pub async fn upload_to_msp(
         &self,
         bucket_id: &str,
@@ -330,13 +332,6 @@ impl MspService {
         chunk_ids: &HashSet<ChunkId>,
         file_key_proof: &FileKeyProof,
     ) -> Result<(), Error> {
-        debug!(
-            "Starting P2P upload to MSP for file {} in bucket {} of {} chunks",
-            file_key,
-            bucket_id,
-            chunk_ids.len()
-        );
-
         // Validate inputs.
         if bucket_id.is_empty() || file_key.is_empty() {
             return Err(Error::BadRequest(
