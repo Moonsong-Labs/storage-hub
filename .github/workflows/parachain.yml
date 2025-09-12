@@ -550,13 +550,13 @@ jobs:
           cd test
           pnpm install
           pnpm docker:build
-      - name: Build Backend Binary
-        run: |
-          cargo build -p sh-msp-backend --release
       - name: Build Backend Docker Image
         run: |
           cd test
           pnpm docker:build:backend
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: diesel_cli
       - name: Run Backend Tests
         id: run_tests
         run: |
