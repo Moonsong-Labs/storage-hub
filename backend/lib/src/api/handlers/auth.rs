@@ -18,7 +18,7 @@ pub async fn nonce(
     Ok(Json(response))
 }
 
-pub async fn login(
+pub async fn verify(
     State(services): State<Services>,
     Json(payload): Json<VerifyRequest>,
 ) -> Result<impl IntoResponse, Error> {

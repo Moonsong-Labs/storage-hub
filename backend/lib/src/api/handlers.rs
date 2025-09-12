@@ -18,8 +18,6 @@ use crate::{
 
 pub mod auth;
 
-// TODO: we could move from `TypedHeader` to axum-jwt (needs rust 1.88)
-
 // ==================== MSP Info Handlers ====================
 
 pub async fn info(State(services): State<Services>) -> Result<impl IntoResponse, Error> {

@@ -43,7 +43,6 @@ pub struct AuthConfig {
     pub jwt_secret: String,
 
     /// When enabled, do not verify JWT signature
-    // TODO; wire it in to the service
     #[cfg(feature = "mocks")]
     pub mock_mode: bool,
 }
