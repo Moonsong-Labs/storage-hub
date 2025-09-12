@@ -85,7 +85,7 @@ impl KeyTypeOperations for EthereumSignature {
         let hashed_msg = H256::from(keccak_256(msg));
 
         keystore
-            .ecdsa_sign(key_type, public, hashed_msg.as_ref())
+            .ecdsa_sign_prehashed(key_type, public, hashed_msg.as_fixed_bytes())
             .ok()
             .flatten()
             .map(|ecdsa_sig| EthereumSignature::new(ecdsa_sig))
