@@ -5,8 +5,10 @@
 use std::{collections::HashSet, sync::Arc};
 
 use chrono::Utc;
+use codec::Encode;
 use sc_network::PeerId;
 use shc_common::types::{ChunkId, FileKeyProof};
+use sp_core::{Blake2Hasher, H256};
 use tracing::{debug, info, warn};
 
 use crate::{
@@ -51,8 +53,10 @@ impl MspService {
             client: "storagehub-node v1.0.0".to_string(),
             version: "StorageHub MSP v0.1.0".to_string(),
             msp_id: "4c310f61f81475048e8ce5eadf4ee718c42ba285579bb37ac6da55a92c638f42".to_string(),
+						// TODO: Until we have actual MSP info, we should at least get the multiaddress from an RPC.
+						// This way the backend can actually upload files to the MSP without having to change this code.
             multiaddresses: vec![
-                "/ip4/192.168.0.10/tcp/30333/p2p/12D3KooWJAgnKUrQkGsKxRxojxcFRhtH6ovWfJTPJjAkhmAz2yC8".to_string()
+                "/ip4/192.168.0.10/tcp/30333/p2p/12D3KooWSUvz8QM5X4tfAaSLErAZjR2puojo16pULBHyqTMGKtNV".to_string()
             ],
             owner_account: "0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac".to_string(),
             payment_account: "0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac".to_string(),
@@ -435,57 +439,60 @@ impl MspService {
             peer_id
         );
 
-        // TODO: Implement actual P2P connection and upload request
-        // For now, we'll simulate a successful upload
-        // In a real implementation, this would:
-        // 1. Establish P2P connection to the peer
-        // 2. Send the upload request with file key and proof
-        // 3. Handle the response and retry logic
+        // Encode the peer ID to a base-58 string to make it serializable, the RPC method then decodes it back to a PeerId.
+        let peer_id_str = peer_id.to_base58();
+
+        // Get fhe file metadata from the received FileKeyProof.
+        let file_metadata = file_key_proof.clone().file_metadata;
+
+        // Get the bucket ID and file key from the file metadata.
+        let bucket_id = file_metadata.bucket_id();
+        let bucket_id_hash = H256::from_slice(bucket_id.as_slice());
+        let file_key: H256 = file_metadata.file_key::<Blake2Hasher>();
+
+        // Encode the FileKeyProof as SCALE for transport
+        let encoded_proof = file_key_proof.encode();
 
         let mut retry_attempts = 0;
         let max_retries = 3;
 
         while retry_attempts < max_retries {
-            // Simulate upload attempt
-            if self
-                .simulate_upload_to_peer(peer_id, &file_key_proof)
-                .await?
-            {
-                info!("Successfully sent upload request to MSP peer {:?}", peer_id);
-                return Ok(());
-            }
+            let result: Result<Vec<u8>, _> = self
+                .rpc
+                .call(
+                    "storagehubclient_uploadToPeer",
+                    (
+                        peer_id_str.clone(),
+                        file_key,
+                        encoded_proof.clone(),
+                        Some(bucket_id_hash),
+                    ),
+                )
+                .await;
 
-            retry_attempts += 1;
-            if retry_attempts < max_retries {
-                warn!(
-                    "Upload request to MSP peer {:?} failed, retrying... (attempt {})",
-                    peer_id,
-                    retry_attempts + 1
-                );
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            match result {
+                Ok(_raw) => {
+                    info!("Successfully sent upload request to MSP peer {:?}", peer_id);
+                    return Ok(());
+                }
+                Err(e) => {
+                    retry_attempts += 1;
+                    if retry_attempts < max_retries {
+                        warn!(
+                            "Upload request to MSP peer {:?} failed via RPC, retrying... (attempt {}): {:?}",
+                            peer_id,
+                            retry_attempts,
+                            e
+                        );
+                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    } else {
+                        return Err(Error::Internal);
+                    }
+                }
             }
         }
 
         Err(Error::Internal)
-    }
-
-    /// Simulate upload to peer (placeholder for actual P2P implementation)
-    async fn simulate_upload_to_peer(
-        &self,
-        peer_id: PeerId,
-        _file_key_proof: &FileKeyProof,
-    ) -> Result<bool, Error> {
-        debug!("Simulating upload to peer {:?}", peer_id);
-
-        // TODO: Replace with actual P2P networking implementation
-        // This would involve:
-        // 1. Using sc-network to establish connection
-        // 2. Sending protobuf-encoded upload request
-        // 3. Handling response and parsing it
-
-        // For now, simulate success
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        Ok(true)
     }
 }
 
