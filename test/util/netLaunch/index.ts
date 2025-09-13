@@ -413,19 +413,8 @@ export class NetworkLauncher {
     return this;
   }
 
-  // TODO: Rename to preFundAccounts
-  public async setupGlobal(api: EnrichedBspApi) {
+  public async preFundAccounts(api: EnrichedBspApi) {
     const amount = 10000n * 10n ** 12n;
-    const maxReplicationTargetRuntimeParameter = {
-      RuntimeConfig: {
-        MaxReplicationTarget: [null, 10]
-      }
-    };
-    const tickRangeToMaximumThresholdRuntimeParameter = {
-      RuntimeConfig: {
-        TickRangeToMaximumThreshold: [null, 1]
-      }
-    };
 
     const sudo = api.accounts.sudo;
     const signedCalls = [
@@ -443,14 +432,7 @@ export class NetworkLauncher {
         .signAsync(sudo, { nonce: 3 }),
       api.tx.sudo
         .sudo(api.tx.balances.forceSetBalance(api.accounts.mspDownKey.address, amount))
-        .signAsync(sudo, { nonce: 4 }),
-      // TODO: Move these to the setParameters function
-      api.tx.sudo
-        .sudo(api.tx.parameters.setParameter(maxReplicationTargetRuntimeParameter))
-        .signAsync(sudo, { nonce: 5 }),
-      api.tx.sudo
-        .sudo(api.tx.parameters.setParameter(tickRangeToMaximumThresholdRuntimeParameter))
-        .signAsync(sudo, { nonce: 6 })
+        .signAsync(sudo, { nonce: 4 })
     ];
 
     const sudoTxns = await Promise.all(signedCalls);
@@ -606,8 +588,7 @@ export class NetworkLauncher {
     });
   }
 
-  // TODO: Rename to execDemoStorageRequest
-  public async execDemoTransfer() {
+  public async execDemoStorageRequest() {
     await using api = await this.getApi("sh-user");
 
     const source = "res/whatsup.jpg";
@@ -778,7 +759,7 @@ export class NetworkLauncher {
       timeout: 15000
     });
 
-    await launchedNetwork.setupGlobal(userApi);
+    await launchedNetwork.preFundAccounts(userApi);
     await launchedNetwork.setupBsp(userApi, userApi.accounts.bspKey.address, multiAddressBsp);
     await launchedNetwork.setupRuntimeParams(userApi);
     await userApi.block.seal();
@@ -831,7 +812,7 @@ export class NetworkLauncher {
     }
 
     if (launchedNetwork.config.initialised === true) {
-      return await launchedNetwork.execDemoTransfer();
+      return await launchedNetwork.execDemoStorageRequest();
     }
 
     // Attempt to debounce and stabilise
