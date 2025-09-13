@@ -401,9 +401,10 @@ const addContainer = async (
 
   const api = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
   const chainName = api.consts.system.version.specName.toString();
+  const supportedChains = ["sh-parachain-runtime", "sh-solochain-evm"];
 
   assert(
-    chainName === "sh-parachain-runtime",
+    supportedChains.includes(chainName),
     `Error connecting to ${providerType.toUpperCase()} via api ${containerName}`
   );
 

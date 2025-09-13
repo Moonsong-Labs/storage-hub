@@ -176,6 +176,7 @@ export const addBsp = async (
     additionalArgs?: string[];
     waitForIdle?: boolean;
     initialCapacity?: bigint;
+    signer?: KeyringPair;
   }
 ) => {
   // Launch a BSP node.
@@ -202,7 +203,11 @@ export const addBsp = async (
 
   //Give it some balance.
   const amount = 10000n * 10n ** 12n;
-  await sealBlock(api, api.tx.sudo.sudo(api.tx.balances.forceSetBalance(bspKey.address, amount)));
+  await sealBlock(
+    api,
+    api.tx.sudo.sudo(api.tx.balances.forceSetBalance(bspKey.address, amount)),
+    options?.signer
+  );
 
   const bspIp = await getContainerIp(containerName);
   const multiAddressBsp = `/ip4/${bspIp}/tcp/${p2pPort}/p2p/${peerId}`;
@@ -219,7 +224,8 @@ export const addBsp = async (
         bspKey.address,
         options?.bspStartingWeight ?? null
       )
-    )
+    ),
+    options?.signer
   );
 
   return { containerName, rpcPort, p2pPort, peerId };
