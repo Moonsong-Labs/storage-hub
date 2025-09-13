@@ -667,13 +667,15 @@ export class NetworkLauncher {
 
     // Add more BSPs to the network.
     // One BSP will be down, two more will be up.
+    const runtimeTypeArgs =
+      this.config.runtimeType === "solochain" ? ["--chain=solochain-evm-dev"] : [];
     const { containerName: bspDownContainerName } = await addBsp(api, api.accounts.bspDownKey, {
       name: "sh-bsp-down",
       rocksdb: this.config.rocksdb,
       bspId: ShConsts.BSP_DOWN_ID,
       bspStartingWeight: this.config.capacity,
       extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
-      additionalArgs: ["--keystore-path=/keystore/bsp-down"]
+      additionalArgs: ["--keystore-path=/keystore/bsp-down", ...runtimeTypeArgs]
     });
     const { rpcPort: bspTwoRpcPort } = await addBsp(api, api.accounts.bspTwoKey, {
       name: "sh-bsp-two",
@@ -681,7 +683,7 @@ export class NetworkLauncher {
       bspId: ShConsts.BSP_TWO_ID,
       bspStartingWeight: this.config.capacity,
       extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
-      additionalArgs: ["--keystore-path=/keystore/bsp-two"]
+      additionalArgs: ["--keystore-path=/keystore/bsp-two", ...runtimeTypeArgs]
     });
     const { rpcPort: bspThreeRpcPort } = await addBsp(api, api.accounts.bspThreeKey, {
       name: "sh-bsp-three",
@@ -689,7 +691,7 @@ export class NetworkLauncher {
       bspId: ShConsts.BSP_THREE_ID,
       bspStartingWeight: this.config.capacity,
       extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
-      additionalArgs: ["--keystore-path=/keystore/bsp-three"]
+      additionalArgs: ["--keystore-path=/keystore/bsp-three", ...runtimeTypeArgs]
     });
 
     const source = "res/whatsup.jpg";
