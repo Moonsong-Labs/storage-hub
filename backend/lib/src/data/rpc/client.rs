@@ -2,9 +2,10 @@
 
 use std::sync::Arc;
 
-use crate::data::rpc::{connection::error::RpcResult, AnyRpcConnection, RpcConnection};
 use jsonrpsee::core::traits::ToRpcParams;
 use serde::de::DeserializeOwned;
+
+use crate::data::rpc::{connection::error::RpcResult, AnyRpcConnection, RpcConnection};
 
 /// StorageHub RPC client that uses an RpcConnection
 pub struct StorageHubRpcClient {

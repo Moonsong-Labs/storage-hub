@@ -9,8 +9,8 @@ use async_trait::async_trait;
 use jsonrpsee::core::traits::ToRpcParams;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
-use tokio::fs;
 use tokio::{
+    fs,
     sync::{Mutex, RwLock},
     time::sleep,
 };

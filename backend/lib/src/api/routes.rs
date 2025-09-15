@@ -59,13 +59,14 @@ pub fn routes(services: Services) -> Router {
 
 #[cfg(all(test, feature = "mocks"))]
 mod tests {
-    use axum::http::StatusCode;
-    use axum_test::TestServer;
-    use std::path::Path;
-    use tokio::time::{sleep, Duration};
-
     use crate::constants::mocks::DOWNLOAD_FILE_CONTENT;
     use crate::services::health::HealthService;
+
+    use std::path::Path;
+
+    use axum::http::StatusCode;
+    use axum_test::TestServer;
+    use tokio::time::{sleep, Duration};
 
     #[tokio::test]
     async fn test_health_route() {
