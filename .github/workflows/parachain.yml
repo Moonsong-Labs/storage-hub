@@ -25,22 +25,6 @@ concurrency:
 
 on:
   pull_request:
-    paths:
-      - 'client/**'
-      - 'node/**'
-      - 'pallets/**'
-      - 'runtime/**'
-      - 'primitives/**'
-      - 'precompiles/**'
-      - 'backend/**'
-      - 'xcm-simulator/**'
-      - 'sdk/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - '.github/workflows/**'
-      - 'rust-toolchain.toml'
-      - 'deny.toml'
-      - 'clippy.toml'
   push:
     branches: [main]
   workflow_dispatch:

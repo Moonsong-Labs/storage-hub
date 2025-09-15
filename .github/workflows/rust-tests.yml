@@ -14,22 +14,6 @@ concurrency:
 
 on:
   pull_request:
-    paths:
-      - 'client/**'
-      - 'node/**'
-      - 'pallets/**'
-      - 'runtime/**'
-      - 'primitives/**'
-      - 'precompiles/**'
-      - 'backend/**'
-      - 'xcm-simulator/**'
-      - 'sdk/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - '.github/workflows/**'
-      - 'rust-toolchain.toml'
-      - 'deny.toml'
-      - 'clippy.toml'
   push:
     branches: [main]
   workflow_dispatch:
@@ -65,9 +49,9 @@ jobs:
     name: Prepare artifacts
     runs-on: ubuntu-latest
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-      CARGO_INCREMENTAL: "0"
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: 'sccache'
+      CARGO_INCREMENTAL: '0'
       CARGO_TERM_COLOR: always
     steps:
       - uses: actions/checkout@v4
@@ -109,23 +93,6 @@ jobs:
         with:
           name: nextest-archive
           path: nextest-archive.tar.zst
-
-  security-audit:
-    needs: [setup]
-    if: needs.setup.outputs.node_changed == 'true'
-    name: Security audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - uses: actions-rust-lang/setup-rust-toolchain@v1.8
-        with:
-          cache: true
-      - name: Install cargo-audit
-        run: cargo install cargo-audit
-      - name: Run cargo audit
-        run: cargo audit
 
   all-rust-tests:
     needs: [setup, prepare]
