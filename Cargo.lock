@@ -15353,6 +15353,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shc-indexer-db",
+ "shc-rpc",
  "shp-types",
  "thiserror 1.0.69",
  "tokio",

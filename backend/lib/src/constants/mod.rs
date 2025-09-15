@@ -24,6 +24,9 @@ pub mod rpc {
     /// Default RPC WebSocket URL
     pub const DEFAULT_RPC_URL: &str = "ws://localhost:9944";
 
+    /// Default MSP callback URL
+    pub const DEFAULT_MSP_CALLBACK_URL: &str = "http://localhost:8080";
+
     /// Timeout multiplier for simulating network delays in mocks
     pub const TIMEOUT_MULTIPLIER: u64 = 10;
 }
@@ -54,4 +57,6 @@ pub mod api {
 
 pub mod mocks {
     pub const MOCK_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+    /// Shared mock file content used by tests and RPC mocks
+    pub const DOWNLOAD_FILE_CONTENT: &str = "GoodFla mock file content for download";
 }

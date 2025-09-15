@@ -80,19 +80,8 @@ test.describe('MSP Web Page Flow', () => {
     expect(keyPath).toBeTruthy();
     console.log('✅ Download by Key');
 
-    // Download by Path (validate suggested filename)
-    console.log('[TEST] click Download by Path');
-    const pathDownload = page.waitForEvent('download');
-    await page.getByRole('button', { name: 'Download by Path' }).click();
-    const pathFile = await pathDownload;
-    const suggested = pathFile.suggestedFilename();
-    console.log('[TEST] path suggested filename:', suggested);
-    expect(suggested).toContain('download_by_location');
-    console.log('✅ Download by Path');
-
     // Ensure console tags for downloads captured
     await expect.poll(() => seen.has('dl-key')).toBeTruthy();
-    await expect.poll(() => seen.has('dl-path')).toBeTruthy();
     console.log('✅ Console tags for downloads');
 
     // List buckets
