@@ -4,6 +4,10 @@
 
 use std::sync::Arc;
 
+use chrono::Utc;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
 use crate::{
     data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage},
     error::Error,
@@ -14,9 +18,6 @@ use crate::{
         payment::PaymentStream,
     },
 };
-use chrono::Utc;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct RpcFileResponse {
