@@ -11,6 +11,7 @@ use axum_jwt::{
     Claims, Decoder,
 };
 use chrono::{DateTime, Utc};
+use jsonwebtoken::Validation;
 use rand::{distributions::Alphanumeric, Rng};
 
 use crate::{
@@ -26,7 +27,8 @@ use crate::{
 #[derive(Clone)]
 pub struct AuthService {
     encoding_key: EncodingKey,
-    decoder: Decoder,
+    decoding_key: DecodingKey,
+    validation: Validation,
     validate_signature: bool,
     storage: Arc<dyn BoxedStorage>,
 }
@@ -46,14 +48,21 @@ impl AuthService {
 
         Self {
             encoding_key: EncodingKey::from_secret(secret),
-            decoder: Decoder::new(DecodingKey::from_secret(secret), validation),
+            decoding_key: DecodingKey::from_secret(secret),
+            validation,
             storage,
             validate_signature,
         }
     }
 
-    pub fn jwt_decoder(&self) -> &Decoder {
-        &self.decoder
+    /// Returns the configured JWT decoding key
+    pub fn jwt_decoding_key(&self) -> &DecodingKey {
+        &self.decoding_key
+    }
+
+    /// Returns the configured JWT validation paramter
+    pub fn jwt_validation(&self) -> &Validation {
+        &self.validation
     }
 
     /// Generate a random SIWE-compliant nonce (at least 8 alphanumeric characters)

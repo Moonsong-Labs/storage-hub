@@ -132,6 +132,9 @@ impl Services {
 // to be able to extract the token/claims in the request
 impl FromRef<Services> for Decoder {
     fn from_ref(services: &Services) -> Decoder {
-        services.auth.jwt_decoder().clone()
+        Decoder::new(
+            services.auth.jwt_decoding_key().clone(),
+            services.auth.jwt_validation().clone(),
+        )
     }
 }

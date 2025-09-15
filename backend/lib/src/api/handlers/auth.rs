@@ -57,7 +57,7 @@ pub async fn profile(
 mod tests {
     use axum::http::StatusCode;
     use axum_test::TestServer;
-    use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+    use jsonwebtoken::decode;
 
     use crate::{
         api::{create_app, mock_app},
@@ -73,8 +73,13 @@ mod tests {
 
     #[tokio::test]
     async fn auth_flow_complete() {
-        let app = mock_app();
+        let mut cfg = Config::default();
+        cfg.auth.mock_mode = false;
+
+        let services = Services::mocks_with_config(cfg);
+        let app = create_app(services.clone());
         let server = TestServer::new(app).unwrap();
+
         let (address, signing_key) = eth_wallet();
 
         // Step 1: Get nonce challenge
@@ -104,17 +109,15 @@ mod tests {
         assert!(!verify_response.token.is_empty());
 
         // Decode and verify the JWT
-        let cfg = Config::default();
-        let jwt_secret = cfg
-            .auth
-            .jwt_secret
-            .as_ref()
-            .expect("JWT secret should be set in tests");
-        let decoding_key = DecodingKey::from_secret(jwt_secret.as_bytes());
-        let validation = Validation::new(Algorithm::HS256);
-        let decoded = decode::<JwtClaims>(&verify_response.token, &decoding_key, &validation)
+        let jwt_key = services.auth.jwt_decoding_key();
+        let jwt_validation = services.auth.jwt_validation();
+
+        let decoded = decode::<JwtClaims>(&verify_response.token, jwt_key, jwt_validation)
             .expect("Failed to decode JWT");
         assert_eq!(decoded.claims.address, address.to_lowercase());
+
+        // inject delay to receive different timestamp
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
         // Step 3: Use the JWT to refresh and get a new token
         let response = server
@@ -128,8 +131,9 @@ mod tests {
 
         // Verify new token is different but valid
         assert_ne!(token_response.token, verify_response.token);
-        let decoded_new = decode::<JwtClaims>(&token_response.token, &decoding_key, &validation)
-            .expect("Failed to decode new JWT");
+
+        let decoded_new = decode::<JwtClaims>(&verify_response.token, jwt_key, jwt_validation)
+            .expect("Failed to decode JWT");
         assert_eq!(decoded_new.claims.address, address.to_lowercase());
         assert!(decoded_new.claims.iat >= decoded.claims.iat);
 
