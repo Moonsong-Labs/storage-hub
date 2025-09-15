@@ -58,6 +58,14 @@ impl Services {
                         "Invalid JWT_SECRET format"
                     })
             })
+            .and_then(|decoded| {
+                if decoded.len() < 32 {
+                    tracing::error!("JWT_SECRET is too short. Must be at least 32 bytes (64 hex characters), got {} bytes", decoded.len());
+                    Err("JWT_SECRET must be at least 32 bytes")
+                } else {
+                    Ok(decoded)
+                }
+            })
             .expect("valid JWT secret configuration");
 
         #[cfg(feature = "mocks")]
