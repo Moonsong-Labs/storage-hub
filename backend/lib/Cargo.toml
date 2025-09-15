@@ -39,6 +39,7 @@ shp-types = { workspace = true }
 alloy-signer = "0.8"
 axum-test = { workspace = true }
 futures = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
 
 [features]
 default = []

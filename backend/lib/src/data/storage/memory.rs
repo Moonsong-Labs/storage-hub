@@ -160,7 +160,7 @@ impl Storage for InMemoryStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::time::{self, advance};
+    use tokio::time::advance;
 
     #[tokio::test]
     async fn test_health_check() {

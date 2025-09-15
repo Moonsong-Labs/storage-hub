@@ -1,24 +1,24 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct NonceRequest {
     pub address: String,
     #[serde(rename = "chainId")]
     pub chain_id: u64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct NonceResponse {
     pub message: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct VerifyRequest {
     pub message: String,
     pub signature: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct VerifyResponse {
     pub token: String,
     pub user: User,
@@ -37,7 +37,7 @@ pub struct JwtClaims {
     pub iat: i64, // JWT issued at timestamp
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TokenResponse {
     pub token: String,
 }

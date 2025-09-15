@@ -55,7 +55,7 @@ pub async fn profile(
 
 #[cfg(all(test, feature = "mocks"))]
 mod tests {
-    use axum::http::{HeaderMap, HeaderValue, StatusCode};
+    use axum::http::StatusCode;
     use axum_test::TestServer;
     use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 
@@ -116,15 +116,9 @@ mod tests {
         assert_eq!(decoded.claims.address, address.to_lowercase());
 
         // Step 3: Use the JWT to refresh and get a new token
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            "Authorization",
-            HeaderValue::from_str(&format!("Bearer {}", verify_response.token)).unwrap(),
-        );
-
         let response = server
             .post("/auth/refresh")
-            .add_headers(headers.clone())
+            .add_header("Authorization", format!("Bearer {}", verify_response.token))
             .await;
 
         assert_eq!(response.status_code(), StatusCode::OK);
@@ -139,7 +133,10 @@ mod tests {
         assert!(decoded_new.claims.iat >= decoded.claims.iat);
 
         // Step 4: Get profile with JWT
-        let response = server.get("/auth/profile").add_headers(headers).await;
+        let response = server
+            .get("/auth/profile")
+            .add_header("Authorization", format!("Bearer {}", verify_response.token))
+            .await;
 
         assert_eq!(response.status_code(), StatusCode::OK);
         let user: User = response.json();
@@ -253,13 +250,10 @@ mod tests {
         assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
 
         // Try refresh with invalid token
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            "Authorization",
-            HeaderValue::from_str("Bearer invalid_token").unwrap(),
-        );
-
-        let response = server.post("/auth/refresh").add_headers(headers).await;
+        let response = server
+            .post("/auth/refresh")
+            .add_header("Authorization", "Bearer invalid_token")
+            .await;
 
         assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
     }
@@ -274,13 +268,10 @@ mod tests {
         assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
 
         // Try profile with invalid token
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            "Authorization",
-            HeaderValue::from_str("Bearer invalid_token").unwrap(),
-        );
-
-        let response = server.get("/auth/profile").add_headers(headers).await;
+        let response = server
+            .get("/auth/profile")
+            .add_header("Authorization", "Bearer invalid_token")
+            .await;
 
         assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
     }
@@ -311,23 +302,19 @@ mod tests {
 
         let verify_response: VerifyResponse = response.json();
 
-        // Now logout with the token
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            "Authorization",
-            HeaderValue::from_str(&format!("Bearer {}", verify_response.token)).unwrap(),
-        );
-
         let response = server
             .post("/auth/logout")
-            .add_headers(headers.clone())
+            .add_header("Authorization", format!("Bearer {}", verify_response.token))
             .await;
 
         assert_eq!(response.status_code(), StatusCode::NO_CONTENT);
 
         // Token should still work for now (logout doesn't invalidate in current implementation)
         // This is a known limitation mentioned in the service code
-        let response = server.get("/auth/profile").add_headers(headers).await;
+        let response = server
+            .get("/auth/profile")
+            .add_header("Authorization", format!("Bearer {}", verify_response.token))
+            .await;
 
         assert_eq!(response.status_code(), StatusCode::OK);
     }
@@ -382,24 +369,24 @@ mod tests {
         let verify_response2: VerifyResponse = response.json();
 
         // Verify both tokens work independently
-        let mut headers1 = HeaderMap::new();
-        headers1.insert(
-            "Authorization",
-            HeaderValue::from_str(&format!("Bearer {}", verify_response1.token)).unwrap(),
-        );
-
-        let mut headers2 = HeaderMap::new();
-        headers2.insert(
-            "Authorization",
-            HeaderValue::from_str(&format!("Bearer {}", verify_response2.token)).unwrap(),
-        );
-
-        let response = server.get("/auth/profile").add_headers(headers1).await;
+        let response = server
+            .get("/auth/profile")
+            .add_header(
+                "Authorization",
+                format!("Bearer {}", verify_response1.token),
+            )
+            .await;
 
         let user1: User = response.json();
         assert_eq!(user1.address, address1.to_lowercase());
 
-        let response = server.get("/auth/profile").add_headers(headers2).await;
+        let response = server
+            .get("/auth/profile")
+            .add_header(
+                "Authorization",
+                format!("Bearer {}", verify_response2.token),
+            )
+            .await;
 
         let user2: User = response.json();
         assert_eq!(user2.address, address2.to_lowercase());
