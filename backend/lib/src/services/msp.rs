@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use shc_rpc::SaveFileToDisk;
 
 use crate::{
     data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage},
@@ -18,21 +18,6 @@ use crate::{
         payment::PaymentStream,
     },
 };
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct RpcFileResponse {
-    pub owner: [u8; 32],
-    pub bucket_id: [u8; 32],
-    pub location: Vec<u8>,
-    pub file_size: u64,
-    pub fingerprint: [u8; 32],
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct RpcResponse {
-    #[serde(rename = "Success")]
-    pub success: RpcFileResponse,
-}
 
 /// Placeholder  
 #[derive(Debug, Deserialize, Serialize)]
@@ -353,24 +338,31 @@ impl MspService {
         let params = jsonrpsee::rpc_params![file_key, &upload_url];
 
         // Make the RPC call to download file and get metadata
-        let res: Value = self
+        let rpc_response: SaveFileToDisk = self
             .rpc
             .call("storagehubclient_saveFileToDisk", params)
             .await
             .map_err(|e| Error::BadRequest(e.to_string()))?;
 
-        let rpc_response: RpcResponse = serde_json::from_value(res)
-            .map_err(|e| Error::BadRequest(format!("Failed to parse RPC response: {}", e)))?;
+        match rpc_response {
+            SaveFileToDisk::FileNotFound => Err(Error::NotFound("File not found".to_string())),
+            SaveFileToDisk::IncompleteFile(_status) => {
+                Err(Error::BadRequest("File is incomplete".to_string()))
+            }
+            SaveFileToDisk::Success(file_metadata) => {
+                // Convert location bytes to string
+                let location = String::from_utf8_lossy(file_metadata.location()).to_string();
+                let fingerprint: [u8; 32] = file_metadata.fingerprint().as_hash();
+                let file_size = file_metadata.file_size();
 
-        // Convert location bytes to string
-        let location = String::from_utf8_lossy(&rpc_response.success.location).to_string();
-
-        Ok(FileDownloadResult {
-            file_size: rpc_response.success.file_size,
-            location,
-            fingerprint: rpc_response.success.fingerprint,
-            temp_path,
-        })
+                Ok(FileDownloadResult {
+                    file_size,
+                    location,
+                    fingerprint,
+                    temp_path,
+                })
+            }
+        }
     }
 }
 
