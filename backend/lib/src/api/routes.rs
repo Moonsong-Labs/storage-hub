@@ -65,7 +65,6 @@ mod tests {
 
     use axum::http::StatusCode;
     use axum_test::TestServer;
-    use tokio::time::{sleep, Duration};
 
     #[tokio::test]
     async fn test_health_route() {
@@ -94,9 +93,6 @@ mod tests {
         // Assert: body bytes match the mocked content written by RPC mock
         let body = response.as_bytes();
         assert_eq!(body.as_ref(), DOWNLOAD_FILE_CONTENT.as_bytes());
-
-        // Give spawned cleanup task a moment to run
-        sleep(Duration::from_millis(50)).await;
 
         // Assert: temp file was removed
         assert!(!Path::new(&temp_path).exists());
