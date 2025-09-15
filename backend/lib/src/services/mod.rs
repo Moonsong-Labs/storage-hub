@@ -103,6 +103,14 @@ impl Services {
 impl Services {
     /// Create a test services struct with in-memory storage and mocks
     pub fn mocks() -> Self {
+        // Use default config for mocks
+        let config = Config::default();
+
+        Self::mocks_with_config(config)
+    }
+
+    /// Create a test services struct with in-memory storage and mocks and custom config
+    pub fn mocks_with_config(config: Config) -> Self {
         // Create in-memory storage
         let memory_storage = InMemoryStorage::new();
         let storage = Arc::new(BoxedStorageWrapper::new(memory_storage));
@@ -115,9 +123,6 @@ impl Services {
         let mock_conn = MockConnection::new();
         let rpc_conn = Arc::new(AnyRpcConnection::Mock(mock_conn));
         let rpc = Arc::new(StorageHubRpcClient::new(rpc_conn));
-
-        // Use default config for mocks
-        let config = Config::default();
 
         Self::new(config, storage, postgres, rpc)
     }

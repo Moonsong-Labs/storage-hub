@@ -60,13 +60,14 @@ mod tests {
     use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 
     use crate::{
-        api::mock_app,
+        api::{create_app, mock_app},
         config::Config,
         constants::auth::MOCK_ENS,
         models::auth::{
             JwtClaims, NonceRequest, NonceResponse, TokenResponse, User, VerifyRequest,
             VerifyResponse,
         },
+        services::Services,
         test_utils::auth::{eth_wallet, sign_message},
     };
 
@@ -180,10 +181,16 @@ mod tests {
 
     #[tokio::test]
     async fn login_fails_with_wrong_signature() {
-        let app = mock_app();
+        let mut cfg = Config::default();
+        cfg.auth.mock_mode = false;
+
+        let services = Services::mocks_with_config(cfg);
+        let app = create_app(services);
         let server = TestServer::new(app).unwrap();
+
         let (address, _) = eth_wallet();
-        let (_, wrong_signing_key) = eth_wallet(); // Different wallet
+        let (wrong_address, wrong_signing_key) = eth_wallet(); // Different wallet
+        assert_ne!(address, wrong_address);
 
         // Get valid nonce
         let nonce_request = NonceRequest {
