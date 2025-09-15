@@ -334,13 +334,13 @@ impl MspService {
         let temp_path = format!("uploads/{}", file_key);
         let upload_url = format!("{}/{}", self.msp_callback_url, temp_path);
 
-        // Create params
-        let params = jsonrpsee::rpc_params![file_key, &upload_url];
-
         // Make the RPC call to download file and get metadata
         let rpc_response: SaveFileToDisk = self
             .rpc
-            .call("storagehubclient_saveFileToDisk", params)
+            .call(
+                "storagehubclient_saveFileToDisk",
+                (file_key, upload_url.as_str()),
+            )
             .await
             .map_err(|e| Error::BadRequest(e.to_string()))?;
 
