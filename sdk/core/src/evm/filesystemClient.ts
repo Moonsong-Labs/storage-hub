@@ -10,6 +10,7 @@
 
 import { toHex, parseGwei, type Address, type PublicClient, type WalletClient } from 'viem';
 import { getFileSystemContract, type FileSystemContract, filesystemAbi, FILE_SYSTEM_PRECOMPILE_ADDRESS } from './filesystem';
+import type { EvmWriteOptions } from './types';
 
 export type FileSystemClientOptions = {
   client: PublicClient | WalletClient;
@@ -21,41 +22,6 @@ export type FileSystemClientOptions = {
   publicClient?: PublicClient;
 };
 
-/**
- * Optional EVM write overrides for SDK calls.
- *
- * Use these when you need to customize the transaction envelope or
- * sidestep under-estimation issues on Frontier/weight based pallets.
- *
- * - If `gas` is not provided, the SDK will estimate gas for the function
- *   and apply `gasMultiplier` (default 5) for headroom.
- * - You can provide legacy `gasPrice`, or EIP-1559 fees via
- *   `maxFeePerGas` and `maxPriorityFeePerGas`.
- */
-export type EvmWriteOptions = {
-  /**
-   * Explicit gas limit. If omitted, the SDK will estimate and multiply.
-   */
-  gas?: bigint;
-  /**
-   * Multiplier applied over the SDK gas estimate when `gas` is not supplied.
-   * Defaults to 5.
-   */
-  gasMultiplier?: number;
-  /**
-   * Legacy gas price (wei). If set, EIP-1559 fields are ignored by most clients.
-   */
-  gasPrice?: bigint;
-  /**
-   * EIP-1559: max fee per gas (wei). Use with `maxPriorityFeePerGas`.
-   */
-  maxFeePerGas?: bigint;
-  /**
-   * EIP-1559: max priority fee per gas (wei).
-   */
-  maxPriorityFeePerGas?: bigint;
-};
-
 export class FileSystemClient {
   private readonly contract: FileSystemContract<PublicClient> | FileSystemContract<WalletClient>;
   private readonly publicClient: PublicClient | undefined;
@@ -63,12 +29,6 @@ export class FileSystemClient {
   private static readonly MAX_BUCKET_NAME_BYTES = 100;
   private static readonly DEFAULT_GAS_MULTIPLIER = 5;
   private static readonly DEFAULT_GAS_PRICE = parseGwei('1');
-  private ensureWrite(): NonNullable<typeof this.contract.write> {
-    if ('write' in this.contract && this.contract.write) {
-      return this.contract.write;
-    }
-    throw new Error('FileSystemClient: WalletClient required for write operations');
-  }
   private getRead(): NonNullable<typeof this.contract.read> {
     if (this.contract.read) return this.contract.read;
     throw new Error('FileSystemClient: read client not available');
@@ -79,15 +39,22 @@ export class FileSystemClient {
     if (!m) throw new Error(`FileSystemClient: read method ${String(name)} unavailable`);
     return m as NonNullable<typeof r[K]>;
   }
-  private getWriteMethod<K extends keyof NonNullable<typeof this.contract.write>>(name: K) {
-    const w = this.ensureWrite();
-    const m = w[name];
-    if (!m) throw new Error(`FileSystemClient: write method ${String(name)} unavailable`);
-    return m as NonNullable<typeof w[K]>;
-  }
   private getWalletClient(): WalletClient | undefined {
     // Check if the client is a WalletClient (has account property)
     return 'account' in this.client ? (this.client as WalletClient) : undefined;
+  }
+
+  /**
+   * @deprecated This method will be removed in Phase 4 when all write methods are updated
+   * Temporary method to support legacy write methods that haven't been updated yet
+   */
+  private getWriteMethod<K extends keyof NonNullable<typeof this.contract.write>>(name: K) {
+    if (!('write' in this.contract) || !this.contract.write) {
+      throw new Error('FileSystemClient: WalletClient required for write operations');
+    }
+    const m = this.contract.write[name];
+    if (!m) throw new Error(`FileSystemClient: write method ${String(name)} unavailable`);
+    return m as NonNullable<NonNullable<typeof this.contract.write>[K]>;
   }
 
   /**
@@ -141,41 +108,6 @@ export class FileSystemClient {
     }
 
     return txOpts;
-  }
-  private async buildWriteOptions(
-    fn: keyof NonNullable<typeof this.contract.write>,
-    args: unknown[],
-    options?: EvmWriteOptions,
-  ): Promise<Record<string, unknown>> {
-    const writeOpts: Record<string, unknown> = {};
-    const wc = this.getWalletClient();
-    const client: any = (this.contract as any).client;
-    if (!options?.gas && client && typeof client.estimateContractGas === 'function') {
-      try {
-        const account: any = (client?.account?.address ?? client?.account);
-        const gasEst: bigint = await client.estimateContractGas({
-          address: (this.contract as any).address,
-          abi: filesystemAbi,
-          functionName: fn as string,
-          args: args as any,
-          account,
-        });
-        const mult = options?.gasMultiplier ?? FileSystemClient.DEFAULT_GAS_MULTIPLIER;
-        writeOpts.gas = gasEst * BigInt(Math.max(1, Math.floor(mult)));
-      } catch {
-        // ignore estimation failures; user can supply gas explicitly
-      }
-    } else if (options?.gas) {
-      writeOpts.gas = options.gas;
-    }
-    const useEip1559 = options?.maxFeePerGas !== undefined || options?.maxPriorityFeePerGas !== undefined;
-    if (useEip1559) {
-      if (options?.maxFeePerGas) writeOpts.maxFeePerGas = options.maxFeePerGas;
-      if (options?.maxPriorityFeePerGas) writeOpts.maxPriorityFeePerGas = options.maxPriorityFeePerGas;
-    } else {
-      writeOpts.gasPrice = options?.gasPrice ?? FileSystemClient.DEFAULT_GAS_PRICE;
-    }
-    return writeOpts;
   }
   private static assertMaxBytes(bytes: Uint8Array, max: number, label: string) {
     if (bytes.length > max) {
