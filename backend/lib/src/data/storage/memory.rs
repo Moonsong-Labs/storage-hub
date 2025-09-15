@@ -96,7 +96,9 @@ impl InMemoryStorage {
 
     pub async fn shutdown(&self) {
         self.shutdown.store(true, Ordering::Relaxed);
-        if let Some(handle) = self.cleanup_task.write().take() {
+        let handle = self.cleanup_task.write().take();
+
+        if let Some(handle) = handle {
             let _ = handle.await;
         }
     }

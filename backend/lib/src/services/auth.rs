@@ -240,10 +240,10 @@ impl AuthenticatedUser {
     pub fn from_claims(claims: JwtClaims) -> Result<Self, Error> {
         let now = Utc::now();
         let exp = DateTime::<Utc>::from_timestamp(claims.exp, 0)
-            .ok_or_else(|| Error::Unauthorized(format!("Invalid JWT expiry")))?;
+            .ok_or_else(|| Error::Unauthorized("Invalid JWT expiry".to_string()))?;
 
         if now >= exp {
-            return Err(Error::Unauthorized(format!("Expired JWT")));
+            return Err(Error::Unauthorized("Expired JWT".to_string()));
         }
 
         Ok(AuthenticatedUser {
