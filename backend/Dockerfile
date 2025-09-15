@@ -34,4 +34,4 @@ COPY --from=builder /app/target/release/sh-msp-backend /usr/local/bin/sh-msp-bac
 
 EXPOSE 8080
 
-CMD ["/usr/local/bin/sh-msp-backend", "--host", "0.0.0.0", "--port", "8080"]
+ENTRYPOINT ["/usr/local/bin/sh-msp-backend"]
