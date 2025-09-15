@@ -1,6 +1,7 @@
 use std::io::Cursor;
 
 use axum::{
+    body::Bytes,
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
@@ -13,6 +14,7 @@ use axum_extra::{
     TypedHeader,
 };
 use serde::Deserialize;
+use tokio::fs::File;
 use tokio_util::io::ReaderStream;
 
 use crate::{
@@ -169,19 +171,71 @@ pub async fn download_by_location(
     Ok(file_stream_resp.into_response())
 }
 
-pub async fn download_by_key(
+// Used by the MSP RPC to upload a file to the backend
+// The file is only temporary and will be deleted after the stream is closed
+pub async fn internal_upload_by_key(
     State(_services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
-    Path((_bucket_id, _file_key)): Path<(String, String)>,
+    Path(file_key): Path<String>,
+    body: Bytes,
+) -> (StatusCode, impl IntoResponse) {
+    // TODO: re-add auth
+    // FIXME: make this only callable by the rpc itself
+    // let _auth = extract_bearer_token(&auth)?;
+    if let Err(e) = tokio::fs::create_dir_all("uploads").await {
+        return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
+    }
+    // Validate file_key is a hex string
+    let key = file_key.trim_start_matches("0x");
+    if hex::decode(key).is_err() {
+        return (StatusCode::BAD_REQUEST, "Invalid file key".to_string());
+    }
+
+    match tokio::fs::write(format!("uploads/{}", file_key), body).await {
+        Ok(_) => (StatusCode::OK, "Upload successful".to_string()),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+pub async fn download_by_key(
+    State(services): State<Services>,
+    Path(file_key): Path<String>,
 ) -> Result<impl IntoResponse, Error> {
-    let _auth = extract_bearer_token(&auth)?;
+    // TODO: re-add auth
+    // let _auth = extract_bearer_token(&auth)?;
 
-    // TODO(MOCK): return proper data
-    let file_data = b"Mock file content for download".to_vec();
-    let stream = ReaderStream::new(Cursor::new(file_data));
-    let file_stream_resp = FileStream::new(stream).file_name("by_key.txt");
+    // Validate file_key is a hex string
+    let key = file_key.trim_start_matches("0x");
+    if hex::decode(key).is_err() {
+        return Err(Error::BadRequest("Invalid file key".to_string()));
+    }
 
-    Ok(file_stream_resp.into_response())
+    let download_result = services.msp.get_file_from_key(&file_key).await?;
+
+    // Extract filename from location or use file_key as fallback
+    let filename = download_result
+        .location
+        .split('/')
+        .last()
+        .unwrap_or(&file_key)
+        .to_string();
+
+    // Open file for streaming
+    let file = File::open(&download_result.temp_path)
+        .await
+        .map_err(|e| Error::BadRequest(format!("Failed to open downloaded file: {}", e)))?;
+
+    // On Unix, unlink the path immediately; the open fd remains valid for streaming
+    // TODO: we should implement proper cleanup after the stream is closed
+    // But as we will probably change implementation to just redirect the RPC stream to user, leaving it as is for now (not a problem if we run on unix).
+    #[cfg(unix)]
+    {
+        let _ = tokio::fs::remove_file(&download_result.temp_path).await;
+    }
+
+    let stream = ReaderStream::new(file);
+    let file_stream_resp = FileStream::new(stream).file_name(&filename).into_response();
+
+    Ok(file_stream_resp)
 }
 
 pub async fn get_file_info(

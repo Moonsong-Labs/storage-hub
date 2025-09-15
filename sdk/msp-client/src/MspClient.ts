@@ -176,13 +176,9 @@ export class MspClient {
     return new Blob([file as BlobPart]);
   }
 
-  /** Download a file by bucket and key. */
-  async downloadByKey(
-    bucketId: string,
-    fileKey: string,
-    options?: DownloadOptions,
-  ): Promise<DownloadResult> {
-    const path = `/buckets/${encodeURIComponent(bucketId)}/download/${encodeURIComponent(fileKey)}`;
+  /** Download a file by key. */
+  async downloadByKey(fileKey: string, options?: DownloadOptions): Promise<DownloadResult> {
+    const path = `/download/${encodeURIComponent(fileKey)}`;
     const baseHeaders: Record<string, string> = { Accept: '*/*' };
     if (options?.range) {
       const { start, end } = options.range;

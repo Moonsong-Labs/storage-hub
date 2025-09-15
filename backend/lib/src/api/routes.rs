@@ -19,6 +19,10 @@ pub fn routes(services: Services) -> Router {
         )
         .route_layer(DefaultBodyLimit::disable());
 
+    let internal_file_upload = Router::new()
+        .route("/uploads/{file_key}", put(handlers::internal_upload_by_key))
+        .route_layer(DefaultBodyLimit::disable());
+
     Router::new()
         // Auth routes
         .route("/auth/nonce", post(handlers::nonce))
@@ -41,18 +45,12 @@ pub fn routes(services: Services) -> Router {
             get(handlers::get_file_info),
         )
         .merge(file_upload)
+        .merge(internal_file_upload)
         .route(
             "/buckets/{bucket_id}/distribute/{file_key}",
             post(handlers::distribute_file),
         )
-        .route(
-            "/buckets/{bucket_id}/download/{file_key}",
-            get(handlers::download_by_key),
-        )
-        .route(
-            "/buckets/{bucket_id}/download/path/{*file_location}",
-            get(handlers::download_by_location),
-        )
+        .route("/download/{file_key}", get(handlers::download_by_key))
         // Payment streams routes
         .route("/payment_stream", get(handlers::payment_stream))
         // Add state to all routes
@@ -61,10 +59,12 @@ pub fn routes(services: Services) -> Router {
 
 #[cfg(all(test, feature = "mocks"))]
 mod tests {
+    use crate::{constants::mocks::DOWNLOAD_FILE_CONTENT, services::health::HealthService};
+
+    use std::path::Path;
+
     use axum::http::StatusCode;
     use axum_test::TestServer;
-
-    use crate::services::health::HealthService;
 
     #[tokio::test]
     async fn test_health_route() {
@@ -76,5 +76,25 @@ mod tests {
 
         let json: serde_json::Value = response.json();
         assert_eq!(json["status"], HealthService::HEALTHY);
+    }
+
+    #[tokio::test]
+    async fn test_download_by_key_streams_and_cleans_temp() {
+        let app = crate::api::mock_app();
+        let server = TestServer::new(app).unwrap();
+
+        let file_key = "0xde4a17999bc1482ba71737367e5d858a133ed1e13327a29c495ab976004a138f";
+        let temp_path = format!("uploads/{}", file_key);
+
+        let response = server.get(&format!("/download/{}", file_key)).await;
+
+        assert_eq!(response.status_code(), StatusCode::OK);
+
+        // Assert: body bytes match the mocked content written by RPC mock
+        let body = response.as_bytes();
+        assert_eq!(body.as_ref(), DOWNLOAD_FILE_CONTENT.as_bytes());
+
+        // Assert: temp file was removed
+        assert!(!Path::new(&temp_path).exists());
     }
 }
