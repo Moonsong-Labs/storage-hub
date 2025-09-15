@@ -45,19 +45,21 @@ export class StorageHubClient {
   }
 
   /**
-   * @deprecated This method will be removed in Phase 4 when all write methods are updated
-   * Temporary method to support legacy write methods that haven't been updated yet
+   * Get write methods with runtime safety check.
+   * Returns the write object directly for cleaner method calls.
    */
-  private getWriteMethod<K extends keyof NonNullable<typeof this.contract.write>>(name: K) {
-    // Create temporary wallet-bound contract for legacy methods
-    const walletContract = getFileSystemContract(this.walletClient);
-    if (!walletContract.write) {
-      throw new Error('StorageHubClient: WalletClient required for write operations');
+  private getWriteContract() {
+    const directContract = getFileSystemContract(this.walletClient);
+
+    // Runtime safety check: ensure write capabilities are available
+    if (!directContract.write) {
+      throw new Error('StorageHubClient: WalletClient write capabilities not available');
     }
-    const m = walletContract.write[name];
-    if (!m) throw new Error(`StorageHubClient: write method ${String(name)} unavailable`);
-    return m as NonNullable<NonNullable<typeof walletContract.write>[K]>;
+
+    // Return write methods directly for cleaner API
+    return (directContract as FileSystemContract<WalletClient>).write;
   }
+
 
   /**
    * Reusable gas estimation for any contract method.
@@ -216,15 +218,8 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas('createBucket', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    // Direct contract access pattern (proven to work)
-    const directContract = getFileSystemContract(this.walletClient);
-
-    // Runtime safety check: ensure write capabilities are available
-    if (!directContract.write) {
-      throw new Error('StorageHubClient: WalletClient write capabilities not available for createBucket');
-    }
-
-    return directContract.write.createBucket(args, txOpts);
+    // Use centralized write contract helper
+    return this.getWriteContract().createBucket(args, txOpts);
   }
 
   /**
@@ -249,39 +244,67 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas('requestMoveBucket', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    const directContract = getFileSystemContract(this.walletClient);
-
-    // Runtime safety check: ensure write capabilities are available
-    if (!directContract.write) {
-      throw new Error('StorageHubClient: WalletClient write capabilities not available for requestMoveBucket');
-    }
-
-    return directContract.write.requestMoveBucket(args, txOpts);
+    // Use centralized write contract helper
+    return this.getWriteContract().requestMoveBucket(args, txOpts);
   }
 
   /**
    * Update bucket privacy flag.
    * @param bucketId - 32-byte bucket ID
    * @param isPrivate - true for private
+   * @param options - optional gas and fee overrides
    */
-  updateBucketPrivacy(bucketId: `0x${string}`, isPrivate: boolean) {
-    return this.getWriteMethod('updateBucketPrivacy')([bucketId, isPrivate]);
+  async updateBucketPrivacy(
+    bucketId: `0x${string}`,
+    isPrivate: boolean,
+    options?: EvmWriteOptions
+  ) {
+    const args = [bucketId, isPrivate] as const;
+
+    // Use reusable gas estimation and transaction building logic
+    const gasLimit = await this.estimateGas('updateBucketPrivacy', args, options);
+    const txOpts = this.buildTxOptions(gasLimit, options);
+
+    // Use centralized write contract helper
+    return this.getWriteContract().updateBucketPrivacy(args, txOpts);
   }
 
   /**
    * Create and associate a collection with a bucket.
    * @param bucketId - 32-byte bucket ID
+   * @param options - optional gas and fee overrides
    */
-  createAndAssociateCollectionWithBucket(bucketId: `0x${string}`) {
-    return this.getWriteMethod('createAndAssociateCollectionWithBucket')([bucketId]);
+  async createAndAssociateCollectionWithBucket(
+    bucketId: `0x${string}`,
+    options?: EvmWriteOptions
+  ) {
+    const args = [bucketId] as const;
+
+    // Use reusable gas estimation and transaction building logic
+    const gasLimit = await this.estimateGas('createAndAssociateCollectionWithBucket', args, options);
+    const txOpts = this.buildTxOptions(gasLimit, options);
+
+    // Use centralized write contract helper
+    return this.getWriteContract().createAndAssociateCollectionWithBucket(args, txOpts);
   }
 
   /**
    * Delete an empty bucket.
    * @param bucketId - 32-byte bucket ID
+   * @param options - optional gas and fee overrides
    */
-  deleteBucket(bucketId: `0x${string}`) {
-    return this.getWriteMethod('deleteBucket')([bucketId]);
+  async deleteBucket(
+    bucketId: `0x${string}`,
+    options?: EvmWriteOptions
+  ) {
+    const args = [bucketId] as const;
+
+    // Use reusable gas estimation and transaction building logic
+    const gasLimit = await this.estimateGas('deleteBucket', args, options);
+    const txOpts = this.buildTxOptions(gasLimit, options);
+
+    // Use centralized write contract helper
+    return this.getWriteContract().deleteBucket(args, txOpts);
   }
 
   /**
@@ -294,8 +317,9 @@ export class StorageHubClient {
    * @param peerIds - array of peer id bytes (<= 5 entries, each <= 100 bytes)
    * @param replicationTarget - 0 Basic, 1 Standard, 2 HighSecurity, 3 SuperHighSecurity, 4 UltraHighSecurity, 5 Custom
    * @param customReplicationTarget - required if replicationTarget = 5 (Custom)
+   * @param options - optional gas and fee overrides
    */
-  issueStorageRequest(
+  async issueStorageRequest(
     bucketId: `0x${string}`,
     location: Uint8Array,
     fingerprint: `0x${string}`,
@@ -303,26 +327,48 @@ export class StorageHubClient {
     mspId: `0x${string}`,
     peerIds: Uint8Array[],
     replicationTarget: number,
-    customReplicationTarget: number
+    customReplicationTarget: number,
+    options?: EvmWriteOptions
   ) {
-    return this.getWriteMethod('issueStorageRequest')([
+    // Input validation and hex encoding
+    const locationHex = toHex(location);
+    const peerIdsHex = peerIds.map((p) => toHex(p));
+    const args = [
       bucketId,
-      toHex(location),
+      locationHex,
       fingerprint,
       size,
       mspId,
-      peerIds.map((p) => toHex(p)),
+      peerIdsHex,
       replicationTarget,
       customReplicationTarget,
-    ]);
+    ] as const;
+
+    // Use reusable gas estimation and transaction building logic
+    const gasLimit = await this.estimateGas('issueStorageRequest', args, options);
+    const txOpts = this.buildTxOptions(gasLimit, options);
+
+    // Use centralized write contract helper
+    return this.getWriteContract().issueStorageRequest(args, txOpts);
   }
 
   /**
    * Revoke a pending storage request by file key.
    * @param fileKey - 32-byte file key
+   * @param options - optional gas and fee overrides
    */
-  revokeStorageRequest(fileKey: `0x${string}`) {
-    return this.getWriteMethod('revokeStorageRequest')([fileKey]);
+  async revokeStorageRequest(
+    fileKey: `0x${string}`,
+    options?: EvmWriteOptions
+  ) {
+    const args = [fileKey] as const;
+
+    // Use reusable gas estimation and transaction building logic
+    const gasLimit = await this.estimateGas('revokeStorageRequest', args, options);
+    const txOpts = this.buildTxOptions(gasLimit, options);
+
+    // Use centralized write contract helper
+    return this.getWriteContract().revokeStorageRequest(args, txOpts);
   }
 
   /**
@@ -333,23 +379,35 @@ export class StorageHubClient {
    * @param location - file path bytes (<= 512 bytes)
    * @param size - file size as bigint (storage units)
    * @param fingerprint - 32-byte file fingerprint
+   * @param options - optional gas and fee overrides
    */
-  requestDeleteFile(
+  async requestDeleteFile(
     signedIntention: readonly [`0x${string}`, number],
     signature: Uint8Array,
     bucketId: `0x${string}`,
     location: Uint8Array,
     size: bigint,
-    fingerprint: `0x${string}`
+    fingerprint: `0x${string}`,
+    options?: EvmWriteOptions
   ) {
-    return this.getWriteMethod('requestDeleteFile')([
+    // Input validation and hex encoding
+    const signatureHex = toHex(signature);
+    const locationHex = toHex(location);
+    const args = [
       signedIntention,
-      toHex(signature),
+      signatureHex,
       bucketId,
-      toHex(location),
+      locationHex,
       size,
       fingerprint,
-    ]);
+    ] as const;
+
+    // Use reusable gas estimation and transaction building logic
+    const gasLimit = await this.estimateGas('requestDeleteFile', args, options);
+    const txOpts = this.buildTxOptions(gasLimit, options);
+
+    // Use centralized write contract helper
+    return this.getWriteContract().requestDeleteFile(args, txOpts);
   }
 }
 
