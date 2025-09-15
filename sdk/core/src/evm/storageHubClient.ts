@@ -1,47 +1,47 @@
 /**
- * FileSystemClient wrapper
- *
- * Provides ergonomic read/write methods for the FileSystem precompile using viem.
- * Internally relies on getFileSystemContract and the precompile address.
- *
+ * StorageHubClient - Unified EVM client for StorageHub blockchain
+ * 
+ * Provides ergonomic read/write methods for StorageHub precompiles using viem.
+ * Handles gas estimation automatically with Frontier-optimized defaults.
+ * 
  * All arguments are strongly typed. Binary data should be passed as Uint8Array (e.g., TextEncoder for strings).
  * Hex values should be 0x-prefixed strings (32-byte IDs like bucketId, mspId, etc.).
+ * 
+ * @example
+ * // Simple setup
+ * const hub = new StorageHubClient({
+ *   rpcUrl: 'http://localhost:9944',
+ *   chain: storageHubChain,
+ *   walletClient: myWalletClient
+ * });
+ * 
+ * // Read operations (no gas needed)
+ * const bucketId = await hub.deriveBucketId(owner, name);
+ * 
+ * // Write operations (automatic gas estimation)
+ * const txHash = await hub.createBucket(mspId, name, false, valuePropId);
  */
 
-import { toHex, parseGwei, type Address, type PublicClient, type WalletClient } from 'viem';
-import { getFileSystemContract, type FileSystemContract, filesystemAbi, FILE_SYSTEM_PRECOMPILE_ADDRESS } from './filesystem';
-import type { EvmWriteOptions } from './types';
+import { FILE_SYSTEM_PRECOMPILE_ADDRESS, filesystemAbi, type FileSystemContract, getFileSystemContract } from './filesystem';
+import type { EvmWriteOptions, StorageHubClientOptions } from './types';
+import { type Address, createPublicClient, http, parseGwei, type PublicClient, toHex, type WalletClient } from 'viem';
 
-export type FileSystemClientOptions = {
-  client: PublicClient | WalletClient;
-  /**
-   * Optional separate public client for gas estimation.
-   * If not provided, will attempt to use the main client for estimation.
-   * Recommended for Frontier-based chains where wallet client estimation may be unreliable.
-   */
-  publicClient?: PublicClient;
-};
-
-export class FileSystemClient {
-  private readonly contract: FileSystemContract<PublicClient> | FileSystemContract<WalletClient>;
-  private readonly publicClient: PublicClient | undefined;
-  private readonly client: PublicClient | WalletClient;
+export class StorageHubClient {
+  private readonly publicClient: PublicClient;   // Internal for gas estimation
+  private readonly walletClient: WalletClient;   // User-provided
+  private readonly contract: FileSystemContract<PublicClient>;
   private static readonly MAX_BUCKET_NAME_BYTES = 100;
   private static readonly DEFAULT_GAS_MULTIPLIER = 5;
   private static readonly DEFAULT_GAS_PRICE = parseGwei('1');
   private getRead(): NonNullable<typeof this.contract.read> {
     if (this.contract.read) return this.contract.read;
-    throw new Error('FileSystemClient: read client not available');
+    throw new Error('StorageHubClient: read client not available');
   }
   private getReadMethod<K extends keyof NonNullable<typeof this.contract.read>>(name: K) {
     const r = this.getRead();
     const m = r[name];
-    if (!m) throw new Error(`FileSystemClient: read method ${String(name)} unavailable`);
+    if (!m) throw new Error(`StorageHubClient: read method ${String(name)} unavailable`);
     return m as NonNullable<typeof r[K]>;
-  }
-  private getWalletClient(): WalletClient | undefined {
-    // Check if the client is a WalletClient (has account property)
-    return 'account' in this.client ? (this.client as WalletClient) : undefined;
   }
 
   /**
@@ -49,17 +49,34 @@ export class FileSystemClient {
    * Temporary method to support legacy write methods that haven't been updated yet
    */
   private getWriteMethod<K extends keyof NonNullable<typeof this.contract.write>>(name: K) {
-    if (!('write' in this.contract) || !this.contract.write) {
-      throw new Error('FileSystemClient: WalletClient required for write operations');
+    // Create temporary wallet-bound contract for legacy methods
+    const walletContract = getFileSystemContract(this.walletClient);
+    if (!walletContract.write) {
+      throw new Error('StorageHubClient: WalletClient required for write operations');
     }
-    const m = this.contract.write[name];
-    if (!m) throw new Error(`FileSystemClient: write method ${String(name)} unavailable`);
-    return m as NonNullable<NonNullable<typeof this.contract.write>[K]>;
+    const m = walletContract.write[name];
+    if (!m) throw new Error(`StorageHubClient: write method ${String(name)} unavailable`);
+    return m as NonNullable<NonNullable<typeof walletContract.write>[K]>;
   }
 
   /**
    * Reusable gas estimation for any contract method.
-   * Handles automatic estimation with safety multiplier or uses explicit gas.
+   * 
+   * Uses internal PublicClient for reliable estimation on Frontier chains.
+   * Applies safety multiplier to handle weight→gas conversion issues.
+   * 
+   * @param functionName - Contract method name
+   * @param args - Method arguments
+   * @param options - Gas overrides (explicit gas, multiplier, etc.)
+   * @returns Estimated gas limit with safety multiplier applied
+   * 
+   * @example
+   * // Automatic estimation with 5x multiplier
+   * const gas = await this.estimateGas('createBucket', args);
+   * 
+   * @example  
+   * // Custom multiplier for complex operations
+   * const gas = await this.estimateGas('createBucket', args, { gasMultiplier: 8 });
    */
   private async estimateGas(
     functionName: string,
@@ -71,22 +88,18 @@ export class FileSystemClient {
       return options.gas;
     }
 
-    // Automatic gas estimation with safety multiplier
-    const wc = this.getWalletClient();
-    if (!wc) throw new Error('FileSystemClient: WalletClient required for gas estimation');
+    // Automatic gas estimation using internal PublicClient
+    const accountAddr = this.walletClient.account?.address;
 
-    const accountAddr: any = (wc as any).account?.address;
-    const estimationClient = this.publicClient || (this.contract as any).client;
-
-    const gasEst: bigint = await estimationClient.estimateContractGas({
+    const gasEst: bigint = await this.publicClient.estimateContractGas({
       address: FILE_SYSTEM_PRECOMPILE_ADDRESS,
       abi: filesystemAbi,
       functionName,
-      args: args as any,
+      args,
       account: accountAddr,
     });
 
-    const mult = options?.gasMultiplier ?? FileSystemClient.DEFAULT_GAS_MULTIPLIER;
+    const mult = options?.gasMultiplier ?? StorageHubClient.DEFAULT_GAS_MULTIPLIER;
     return gasEst * BigInt(Math.max(1, Math.floor(mult)));
   }
 
@@ -104,7 +117,7 @@ export class FileSystemClient {
       if (options?.maxPriorityFeePerGas) txOpts.maxPriorityFeePerGas = options.maxPriorityFeePerGas;
     } else {
       // Default to legacy gas pricing (better for Frontier chains)
-      txOpts.gasPrice = options?.gasPrice ?? FileSystemClient.DEFAULT_GAS_PRICE;
+      txOpts.gasPrice = options?.gasPrice ?? StorageHubClient.DEFAULT_GAS_PRICE;
     }
 
     return txOpts;
@@ -116,15 +129,29 @@ export class FileSystemClient {
   }
 
   /**
-   * Create a FileSystem client bound to the precompile address.
-   * @param opts.client - viem PublicClient (reads) or WalletClient (writes)
-   * @param opts.publicClient - optional separate PublicClient for gas estimation (recommended for Frontier chains)
+   * Create a StorageHub client with automatic gas estimation.
+   * 
+   * @param opts.rpcUrl - RPC endpoint URL for the StorageHub chain
+   * @param opts.chain - Viem chain configuration
+   * @param opts.walletClient - Wallet client for transaction signing
+   * 
+   * @example
+   * const hub = new StorageHubClient({
+   *   rpcUrl: 'http://localhost:9944',
+   *   chain: storageHubChain,
+   *   walletClient: myWalletClient
+   * });
    */
-  constructor(opts: FileSystemClientOptions) {
-    // For now we always use the precompile address; address option reserved for future flexibility.
-    this.contract = getFileSystemContract(opts.client);
-    this.publicClient = opts.publicClient;
-    this.client = opts.client;
+  constructor(opts: StorageHubClientOptions) {
+    // Create internal PublicClient for reliable gas estimation
+    this.publicClient = createPublicClient({
+      chain: opts.chain,
+      transport: http(opts.rpcUrl)
+    });
+    this.walletClient = opts.walletClient;
+
+    // Use PublicClient for the contract (reads only)
+    this.contract = getFileSystemContract(this.publicClient);
   }
 
   // -------- Reads --------
@@ -136,7 +163,7 @@ export class FileSystemClient {
    * @returns bucketId as 0x-prefixed 32-byte hex
    */
   deriveBucketId(owner: Address, name: Uint8Array) {
-    FileSystemClient.assertMaxBytes(name, FileSystemClient.MAX_BUCKET_NAME_BYTES, 'Bucket name');
+    StorageHubClient.assertMaxBytes(name, StorageHubClient.MAX_BUCKET_NAME_BYTES, 'Bucket name');
     return this.getReadMethod('deriveBucketId')([owner, toHex(name)]);
   }
 
@@ -181,20 +208,23 @@ export class FileSystemClient {
     valuePropId: `0x${string}`,
     options?: EvmWriteOptions,
   ) {
-    FileSystemClient.assertMaxBytes(name, FileSystemClient.MAX_BUCKET_NAME_BYTES, 'Bucket name');
+    StorageHubClient.assertMaxBytes(name, StorageHubClient.MAX_BUCKET_NAME_BYTES, 'Bucket name');
     const nameHex = toHex(name);
     const args = [mspId, nameHex, isPrivate, valuePropId] as const;
-
-    const wc = this.getWalletClient();
-    if (!wc) throw new Error('FileSystemClient: WalletClient required for createBucket');
 
     // Use reusable gas estimation and transaction option builders
     const gasLimit = await this.estimateGas('createBucket', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
     // Direct contract access pattern (proven to work)
-    const directContract = getFileSystemContract(wc);
-    return (directContract as any).write.createBucket(args, txOpts);
+    const directContract = getFileSystemContract(this.walletClient);
+
+    // Runtime safety check: ensure write capabilities are available
+    if (!directContract.write) {
+      throw new Error('StorageHubClient: WalletClient write capabilities not available for createBucket');
+    }
+
+    return directContract.write.createBucket(args, txOpts);
   }
 
   /**
@@ -215,15 +245,18 @@ export class FileSystemClient {
   ) {
     const args = [bucketId, newMspId, newValuePropId] as const;
 
-    const wc = this.getWalletClient();
-    if (!wc) throw new Error('FileSystemClient: WalletClient required for requestMoveBucket');
-
     // Reuse the same gas estimation and transaction building logic
     const gasLimit = await this.estimateGas('requestMoveBucket', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    const directContract = getFileSystemContract(wc);
-    return (directContract as any).write.requestMoveBucket(args, txOpts);
+    const directContract = getFileSystemContract(this.walletClient);
+
+    // Runtime safety check: ensure write capabilities are available
+    if (!directContract.write) {
+      throw new Error('StorageHubClient: WalletClient write capabilities not available for requestMoveBucket');
+    }
+
+    return directContract.write.requestMoveBucket(args, txOpts);
   }
 
   /**

@@ -5,7 +5,7 @@
  * and return viem clients for reads (public) and writes (wallet) with a minimal API.
  */
 
-import { createPublicClient, createWalletClient, http, custom, type Chain, type Account, type EIP1193Provider } from 'viem';
+import { type Account, type Chain, createPublicClient, createWalletClient, custom, type EIP1193Provider,http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 
 // Transport options (exclusive via nested union)

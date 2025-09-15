@@ -5,8 +5,8 @@
  * strongly-typed ABI from src/abi/filesystem.
  */
 
-import { getContract, type Address, type PublicClient, type WalletClient, type GetContractReturnType } from 'viem';
 import { filesystemAbi } from '../abi/filesystem';
+import { type Address, getContract, type GetContractReturnType,type PublicClient, type WalletClient } from 'viem';
 
 export { filesystemAbi };
 
