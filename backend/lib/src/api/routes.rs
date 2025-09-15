@@ -59,8 +59,7 @@ pub fn routes(services: Services) -> Router {
 
 #[cfg(all(test, feature = "mocks"))]
 mod tests {
-    use crate::constants::mocks::DOWNLOAD_FILE_CONTENT;
-    use crate::services::health::HealthService;
+    use crate::{constants::mocks::DOWNLOAD_FILE_CONTENT, services::health::HealthService};
 
     use std::path::Path;
 

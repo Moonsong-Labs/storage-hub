@@ -26,10 +26,10 @@ tokio = { workspace = true, features = ["full"] }
 tokio-util = { workspace = true }
 toml = { workspace = true }
 tower-http = { workspace = true }
-shc-rpc = { workspace = true, features = ["std"] }
 
 # Workspace dependencies
 shc-indexer-db = { workspace = true, default-features = true }
+shc-rpc = { workspace = true, features = ["std"] }
 shp-types = { workspace = true }
 
 [dev-dependencies]
