@@ -342,8 +342,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn generate_jwt_creates_valid_token() {
+    #[tokio::test]
+    async fn generate_jwt_creates_valid_token() {
         let (auth_service, _, cfg) = create_test_auth_service(true);
 
         let address = MOCK_ADDRESS;

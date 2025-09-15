@@ -12,13 +12,16 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 
 use async_trait::async_trait;
 use parking_lot::RwLock;
 use thiserror::Error;
-use tokio::{task::JoinHandle, time::interval};
+use tokio::{
+    task::JoinHandle,
+    time::{interval, Instant},
+};
 
 use super::Storage;
 
@@ -33,7 +36,7 @@ pub enum InMemoryStorageError {
 #[derive(Clone, Debug)]
 struct NonceEntry {
     address: String,
-    expiration_timestamp: u64,
+    expires_at: Instant,
 }
 
 /// In-memory storage implementation
@@ -81,13 +84,10 @@ impl InMemoryStorage {
                 }
 
                 // Clean up expired nonces
-                let current_time = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs();
+                let now = Instant::now();
 
                 let mut nonces_guard = nonces.write();
-                nonces_guard.retain(|_, entry| entry.expiration_timestamp > current_time);
+                nonces_guard.retain(|_, entry| entry.expires_at > now);
             }
         });
 
@@ -118,15 +118,12 @@ impl Storage for InMemoryStorage {
         address: String,
         expiration_seconds: u64,
     ) -> Result<(), Self::Error> {
-        let current_time = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        let expiration_timestamp = current_time + expiration_seconds;
+        let now = Instant::now();
+        let expires_at = now + Duration::from_secs(expiration_seconds);
 
         let entry = NonceEntry {
             address,
-            expiration_timestamp,
+            expires_at,
         };
 
         self.nonces.write().insert(message, entry);
@@ -137,12 +134,9 @@ impl Storage for InMemoryStorage {
         let nonces = self.nonces.read();
 
         if let Some(entry) = nonces.get(message) {
-            let current_time = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs();
+            let now = Instant::now();
 
-            if current_time < entry.expiration_timestamp {
+            if now < entry.expires_at {
                 return Ok(Some(entry.address.clone()));
             }
             // Entry is expired but will be cleaned up by the background task
