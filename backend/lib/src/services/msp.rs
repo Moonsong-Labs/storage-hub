@@ -440,8 +440,10 @@ impl MspService {
         // Encode the FileKeyProof as SCALE for transport
         let encoded_proof = file_key_proof.encode();
 
+        // TODO: We should make these configurable.
         let mut retry_attempts = 0;
         let max_retries = 3;
+        let delay_between_retries_secs = 1;
 
         while retry_attempts < max_retries {
             let result: Result<Vec<u8>, _> = self
@@ -471,7 +473,10 @@ impl MspService {
                             retry_attempts,
                             e
                         );
-                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                        tokio::time::sleep(std::time::Duration::from_secs(
+                            delay_between_retries_secs,
+                        ))
+                        .await;
                     } else {
                         return Err(Error::Internal);
                     }

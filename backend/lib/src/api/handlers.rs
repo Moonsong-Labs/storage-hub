@@ -270,16 +270,16 @@ pub async fn upload_file(
     })?;
 
     // Validate that the bucket ID received in the URL matches the bucket ID in the file metadata.
-    let expected_bucket_id = format!("0x{}", hex::encode(file_metadata.bucket_id()));
-    if bucket_id != expected_bucket_id {
+    let expected_bucket_id = hex::encode(file_metadata.bucket_id());
+    if bucket_id.trim_start_matches("0x") != expected_bucket_id {
         return Err(Error::BadRequest(
             "Bucket ID in URL does not match file metadata".to_string(),
         ));
     }
 
     // Generate the file key from the obtained file metadata and ensure it matches the file key received in the URL.
-    let expected_file_key = format!("0x{}", hex::encode(file_metadata.file_key::<BlakeTwo256>()));
-    if file_key != expected_file_key {
+    let expected_file_key = hex::encode(file_metadata.file_key::<BlakeTwo256>());
+    if file_key.trim_start_matches("0x") != expected_file_key {
         return Err(Error::BadRequest(
             "File key in URL does not match file metadata".to_string(),
         ));

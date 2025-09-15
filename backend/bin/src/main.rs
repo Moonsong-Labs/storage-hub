@@ -177,8 +177,10 @@ async fn create_rpc_client(config: &Config) -> Result<Arc<StorageHubRpcClient>> 
 }
 
 async fn create_rpc_client_with_retry(config: &Config) -> Result<Arc<StorageHubRpcClient>> {
+    // TODO: We should make these configurable.
     let mut attempts: u32 = 0;
-    let max_attempts: u32 = 30; // ~60 seconds with 2s delay
+    let max_attempts: u32 = 30;
+    let delay_between_retries_secs: u64 = 2;
     loop {
         match create_rpc_client(config).await {
             Ok(client) => return Ok(client),
@@ -190,7 +192,8 @@ async fn create_rpc_client_with_retry(config: &Config) -> Result<Arc<StorageHubR
                     max_attempts,
                     e
                 );
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                tokio::time::sleep(std::time::Duration::from_secs(delay_between_retries_secs))
+                    .await;
             }
             Err(e) => return Err(e),
         }
