@@ -15358,6 +15358,7 @@ dependencies = [
  "shc-file-manager",
  "shc-indexer-db",
  "shp-file-metadata",
+ "shc-rpc",
  "shp-types",
  "sp-core 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-runtime 40.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",

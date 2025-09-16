@@ -34,7 +34,7 @@ pub trait RpcConnection: Send + Sync {
     where
         R: DeserializeOwned,
     {
-        // Default implementation using empty tuple as params
+        // Default implementation using empty params
         self.call::<_, R>(method, jsonrpsee::rpc_params![]).await
     }
 

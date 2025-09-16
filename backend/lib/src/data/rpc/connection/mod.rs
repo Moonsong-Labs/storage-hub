@@ -42,7 +42,7 @@ impl Debug for AnyRpcConnection {
 impl RpcConnection for AnyRpcConnection {
     async fn call<P, R>(&self, method: &str, params: P) -> RpcResult<R>
     where
-        P: ToRpcParams + Send,
+        P: Serialize + Send + Sync,
         R: DeserializeOwned,
     {
         match self {

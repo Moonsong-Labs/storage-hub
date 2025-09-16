@@ -44,6 +44,10 @@ struct Args {
     /// Override RPC URL
     #[arg(long)]
     rpc_url: Option<String>,
+
+    /// Override MSP callback URL
+    #[arg(long)]
+    msp_callback_url: Option<String>,
 }
 
 #[tokio::main]
@@ -64,7 +68,7 @@ async fn main() -> Result<()> {
     let storage = Arc::new(BoxedStorageWrapper::new(memory_storage));
 
     let postgres_client = create_postgres_client(&config).await?;
-    let rpc_client = create_rpc_client_with_retry(&config).await?;
+    let rpc_client = create_rpc_client(&config).await?;
     let services = Services::new(storage, postgres_client, rpc_client);
 
     // Start server
@@ -104,6 +108,9 @@ fn load_config() -> Result<Config> {
     }
     if let Some(rpc_url) = args.rpc_url {
         config.storage_hub.rpc_url = rpc_url;
+    }
+    if let Some(msp_callback_url) = args.msp_callback_url {
+        config.storage_hub.msp_callback_url = msp_callback_url;
     }
 
     Ok(config)
