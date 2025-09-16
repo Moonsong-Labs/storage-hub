@@ -22,18 +22,16 @@ export class StorageHubClient {
   private static readonly MAX_PEER_ID_BYTES = 100;
   private static readonly DEFAULT_GAS_MULTIPLIER = 5;
   private static readonly DEFAULT_GAS_PRICE = parseGwei('1');
+
   /**
    * Get any contract method - reads and writes handled automatically.
-   * Universal wrapper that auto-detects and returns the correct method.
    * 
-   * @param methodName - Name of the contract method
+   * @param methodName - Name of the contract method as it's state in the .abi.json
    * @returns Validated contract method ready to call
    */
   private getContract(methodName: string) {
     const contract = getFileSystemContract(this.walletClient);
 
-    // Try read methods first (cheaper), then write methods
-    // Safe to use ! operators: we validate method exists below
     const readMethod = contract.read?.[methodName as keyof typeof contract.read];
     const writeMethod = contract.write?.[methodName as keyof typeof contract.write];
 
@@ -55,29 +53,19 @@ export class StorageHubClient {
    * @param args - Method arguments
    * @param options - Gas overrides (explicit gas, multiplier, etc.)
    * @returns Estimated gas limit with safety multiplier applied
-   * 
-   * @example
-   * // Automatic estimation with 5x multiplier
-   * const gas = await this.estimateGas('createBucket', args);
-   * 
-   * @example  
-   * // Custom multiplier for complex operations
-   * const gas = await this.estimateGas('createBucket', args, { gasMultiplier: 8 });
    */
   private async estimateGas(
     functionName: string,
     args: readonly unknown[],
     options?: EvmWriteOptions
   ): Promise<bigint> {
+    // User provided explicit gas limit
     if (options?.gas) {
-      // User provided explicit gas limit
       return options.gas;
     }
 
-    // Automatic gas estimation using internal PublicClient
     const accountAddr = this.walletClient.account?.address;
-
-    const gasEst: bigint = await this.publicClient.estimateContractGas({
+    const gasEstimation: bigint = await this.publicClient.estimateContractGas({
       address: FILE_SYSTEM_PRECOMPILE_ADDRESS,
       abi: filesystemAbi,
       functionName,
@@ -85,8 +73,8 @@ export class StorageHubClient {
       account: accountAddr,
     });
 
-    const mult = options?.gasMultiplier ?? StorageHubClient.DEFAULT_GAS_MULTIPLIER;
-    return gasEst * BigInt(Math.max(1, Math.floor(mult)));
+    const multiplier = options?.gasMultiplier ?? StorageHubClient.DEFAULT_GAS_MULTIPLIER;
+    return gasEstimation * BigInt(Math.max(1, Math.floor(multiplier)));
   }
 
   /**
@@ -102,12 +90,13 @@ export class StorageHubClient {
       if (options?.maxFeePerGas) txOpts.maxFeePerGas = options.maxFeePerGas;
       if (options?.maxPriorityFeePerGas) txOpts.maxPriorityFeePerGas = options.maxPriorityFeePerGas;
     } else {
-      // Default to legacy gas pricing (better for Frontier chains)
+      // Default to legacy gas pricing
       txOpts.gasPrice = options?.gasPrice ?? StorageHubClient.DEFAULT_GAS_PRICE;
     }
 
     return txOpts;
   }
+
   /**
    * Validate string length in UTF-8 bytes and convert to hex.
    * @param str - Input string to validate and encode
@@ -123,28 +112,15 @@ export class StorageHubClient {
     return stringToHex(str);
   }
 
-  private static assertMaxBytes(bytes: Uint8Array, max: number, label: string) {
-    if (bytes.length > max) {
-      throw new Error(`${label} exceeds maximum length of ${max} bytes`);
-    }
-  }
-
   /**
    * Create a StorageHub client with automatic gas estimation.
    * 
    * @param opts.rpcUrl - RPC endpoint URL for the StorageHub chain
    * @param opts.chain - Viem chain configuration
    * @param opts.walletClient - Wallet client for transaction signing
-   * 
-   * @example
-   * const hub = new StorageHubClient({
-   *   rpcUrl: 'http://localhost:9944',
-   *   chain: storageHubChain,
-   *   walletClient: myWalletClient
-   * });
    */
   constructor(opts: StorageHubClientOptions) {
-    // Create internal PublicClient for reliable gas estimation
+    // Create internal PublicClient for gas estimation
     this.publicClient = createPublicClient({
       chain: opts.chain,
       transport: http(opts.rpcUrl)
@@ -183,26 +159,11 @@ export class StorageHubClient {
 
   /**
    * Create a new bucket.
-   * 
-   * Gas estimation and fees are handled automatically with sensible defaults.
-   * The SDK will estimate gas and apply a 5x safety multiplier, using 1 gwei gas price.
-   * 
    * @param mspId - 32-byte MSP ID (0x-prefixed hex)
    * @param name - bucket name as string (max 100 UTF-8 bytes)
    * @param isPrivate - true for private bucket
    * @param valuePropId - 32-byte value proposition ID (0x-prefixed hex)
    * @param options - optional gas and fee overrides
-   * 
-   * @example
-   * // Simple usage (automatic gas estimation)
-   * const txHash = await hub.createBucket(mspId, "my-bucket", false, valuePropId);
-   * 
-   * @example
-   * // With custom gas options
-   * const txHash = await hub.createBucket(mspId, "my-bucket", false, valuePropId, {
-   *   gasMultiplier: 8,
-   *   gasPrice: parseGwei('2')
-   * });
    */
   async createBucket(
     mspId: `0x${string}`,
@@ -213,21 +174,15 @@ export class StorageHubClient {
   ) {
     const nameHex = this.validateStringLength(name, StorageHubClient.MAX_BUCKET_NAME_BYTES, 'Bucket name');
     const args = [mspId, nameHex, isPrivate, valuePropId] as const;
-
-    // Use reusable gas estimation and transaction option builders
     const gasLimit = await this.estimateGas('createBucket', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    // Use unified contract wrapper - get the exact method ready to call
     const createBucket = this.getContract('createBucket');
     return createBucket(args, txOpts);
   }
 
   /**
    * Request moving a bucket to a new MSP/value proposition.
-   * 
-   * Gas estimation and fees are handled automatically with sensible defaults.
-   * 
    * @param bucketId - 32-byte bucket ID
    * @param newMspId - 32-byte new MSP ID
    * @param newValuePropId - 32-byte new value proposition ID
@@ -240,12 +195,9 @@ export class StorageHubClient {
     options?: EvmWriteOptions
   ) {
     const args = [bucketId, newMspId, newValuePropId] as const;
-
-    // Reuse the same gas estimation and transaction building logic
     const gasLimit = await this.estimateGas('requestMoveBucket', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    // Use unified contract wrapper - get the exact method ready to call
     const requestMoveBucket = this.getContract('requestMoveBucket');
     return requestMoveBucket(args, txOpts);
   }
@@ -262,12 +214,9 @@ export class StorageHubClient {
     options?: EvmWriteOptions
   ) {
     const args = [bucketId, isPrivate] as const;
-
-    // Use reusable gas estimation and transaction building logic
     const gasLimit = await this.estimateGas('updateBucketPrivacy', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    // Use unified contract wrapper - get the exact method ready to call
     const updateBucketPrivacy = this.getContract('updateBucketPrivacy');
     return updateBucketPrivacy(args, txOpts);
   }
@@ -282,12 +231,9 @@ export class StorageHubClient {
     options?: EvmWriteOptions
   ) {
     const args = [bucketId] as const;
-
-    // Use reusable gas estimation and transaction building logic
     const gasLimit = await this.estimateGas('createAndAssociateCollectionWithBucket', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    // Use unified contract wrapper - get the exact method ready to call
     const createAndAssociateCollectionWithBucket = this.getContract('createAndAssociateCollectionWithBucket');
     return createAndAssociateCollectionWithBucket(args, txOpts);
   }
@@ -302,12 +248,9 @@ export class StorageHubClient {
     options?: EvmWriteOptions
   ) {
     const args = [bucketId] as const;
-
-    // Use reusable gas estimation and transaction building logic
     const gasLimit = await this.estimateGas('deleteBucket', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    // Use unified contract wrapper - get the exact method ready to call
     const deleteBucket = this.getContract('deleteBucket');
     return deleteBucket(args, txOpts);
   }
@@ -335,7 +278,6 @@ export class StorageHubClient {
     customReplicationTarget: number,
     options?: EvmWriteOptions
   ) {
-    // Input validation and hex encoding
     const locationHex = this.validateStringLength(location, StorageHubClient.MAX_LOCATION_BYTES, 'File location');
     const peerIdsHex = peerIds.map((peerId, i) =>
       this.validateStringLength(peerId, StorageHubClient.MAX_PEER_ID_BYTES, `Peer ID ${i + 1}`)
@@ -350,12 +292,9 @@ export class StorageHubClient {
       replicationTarget,
       customReplicationTarget,
     ] as const;
-
-    // Use reusable gas estimation and transaction building logic
     const gasLimit = await this.estimateGas('issueStorageRequest', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    // Use unified contract wrapper - get the exact method ready to call
     const issueStorageRequest = this.getContract('issueStorageRequest');
     return issueStorageRequest(args, txOpts);
   }
@@ -370,12 +309,9 @@ export class StorageHubClient {
     options?: EvmWriteOptions
   ) {
     const args = [fileKey] as const;
-
-    // Use reusable gas estimation and transaction building logic
     const gasLimit = await this.estimateGas('revokeStorageRequest', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    // Use unified contract wrapper - get the exact method ready to call
     const revokeStorageRequest = this.getContract('revokeStorageRequest');
     return revokeStorageRequest(args, txOpts);
   }
@@ -399,7 +335,6 @@ export class StorageHubClient {
     fingerprint: `0x${string}`,
     options?: EvmWriteOptions
   ) {
-    // Input validation and hex encoding
     const signatureHex = toHex(signature);
     const locationHex = this.validateStringLength(location, StorageHubClient.MAX_LOCATION_BYTES, 'File location');
     const args = [
@@ -411,11 +346,9 @@ export class StorageHubClient {
       fingerprint,
     ] as const;
 
-    // Use reusable gas estimation and transaction building logic
     const gasLimit = await this.estimateGas('requestDeleteFile', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    // Use unified contract wrapper - get the exact method ready to call
     const requestDeleteFile = this.getContract('requestDeleteFile');
     return requestDeleteFile(args, txOpts);
   }
