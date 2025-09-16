@@ -21,7 +21,7 @@ use crate::{
 
 use shc_client::builder::{
     BlockchainServiceOptions, BspChargeFeesOptions, BspMoveBucketOptions, BspSubmitProofOptions,
-    BspUploadFileOptions, MspChargeFeesOptions, MspMoveBucketOptions,
+    BspUploadFileOptions, FishermanOptions, MspChargeFeesOptions, MspMoveBucketOptions,
 };
 use shc_rpc::RpcConfig;
 
@@ -67,6 +67,15 @@ pub struct ProviderOptions {
     pub blockchain_service: Option<BlockchainServiceOptions>,
     /// Whether the node is running in maintenance mode.
     pub maintenance_mode: bool,
+}
+
+/// Role configuration enum that ensures mutual exclusivity between Provider and Fisherman roles.
+#[derive(Debug, Clone)]
+pub enum RoleOptions {
+    /// Storage Provider configuration
+    Provider(ProviderOptions),
+    /// Fisherman configuration
+    Fisherman(FishermanOptions),
 }
 
 fn load_spec(id: &str) -> std::result::Result<Box<dyn ChainSpec>, String> {
@@ -278,24 +287,46 @@ pub fn run() -> Result<()> {
             }
         }
         None => {
-            let mut provider_options = None;
+            let mut role_options = None;
             let mut indexer_options = None;
-            let mut fisherman_options = None;
             let runner = cli.create_runner(&cli.run.normalize())?;
 
             // If we have a provider config file
             if let Some(provider_config_file) = cli.provider_config_file {
                 let config = config::read_config(&provider_config_file);
                 if let Some(c) = config {
-                    provider_options = Some(c.provider);
+                    // Check for mutual exclusivity in config file
+                    let has_provider = matches!(
+                        c.provider.provider_type,
+                        ProviderType::Bsp | ProviderType::Msp
+                    );
+                    let has_fisherman = !c.fisherman.database_url.is_empty();
+
+                    if has_provider && has_fisherman {
+                        return Err("Cannot configure both provider and fisherman in the same config file. Please choose one role.".into());
+                    }
+
+                    if has_provider {
+                        role_options = Some(RoleOptions::Provider(c.provider));
+                    } else if has_fisherman {
+                        role_options = Some(RoleOptions::Fisherman(c.fisherman));
+                    }
+
                     indexer_options = Some(c.indexer);
-                    fisherman_options = Some(c.fisherman);
                 };
             };
 
-            // We then check cli (the cli doesn't allow to have both cli parameters and a config file so we should not have overlap here)
+            if cli.provider_config.provider && cli.fisherman_config.fisherman {
+                return Err(
+                    "Cannot run as a fisherman and a provider at the same time. Please choose one role."
+                        .into(),
+                );
+            }
+
             if cli.provider_config.provider {
-                provider_options = Some(cli.provider_config.provider_options());
+                role_options = Some(RoleOptions::Provider(
+                    cli.provider_config.provider_options(),
+                ));
             };
 
             if cli.indexer_config.indexer {
@@ -303,7 +334,9 @@ pub fn run() -> Result<()> {
             };
 
             if cli.fisherman_config.fisherman {
-                fisherman_options = cli.fisherman_config.fisherman_options();
+                role_options = Some(RoleOptions::Fisherman(
+                    cli.fisherman_config.fisherman_options().unwrap(),
+                ));
             };
 
             runner.run_node_until_exit(|config| async move {
@@ -331,9 +364,8 @@ pub fn run() -> Result<()> {
 						if dev_service {
 							crate::service::start_dev_node::<sc_network::NetworkWorker<_, _>>(
 								config,
-								provider_options,
+								role_options,
 								indexer_options,
-								fisherman_options.clone(),
 								hwbench,
 								id,
 								cli.run.sealing,
@@ -354,9 +386,8 @@ pub fn run() -> Result<()> {
 								config,
 								polkadot_config,
 								collator_options,
-								provider_options,
+								role_options,
 								indexer_options,
-								fisherman_options.clone(),
 								id,
 								hwbench,
 							)
@@ -369,9 +400,8 @@ pub fn run() -> Result<()> {
 						if dev_service {
 							crate::service::start_dev_node::<sc_network::Litep2pNetworkBackend>(
 								config,
-								provider_options,
+								role_options,
 								indexer_options,
-								fisherman_options.clone(),
 								hwbench,
 								id,
 								cli.run.sealing,
@@ -392,9 +422,8 @@ pub fn run() -> Result<()> {
 								config,
 								polkadot_config,
 								collator_options,
-								provider_options,
+								role_options,
 								indexer_options,
-								fisherman_options.clone(),
 								id,
 								hwbench,
 							)

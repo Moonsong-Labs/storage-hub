@@ -512,12 +512,12 @@ describeMspNet(
       // Seal block to process the fisherman-submitted extrinsics
       const deletionResult = await userApi.block.seal();
 
-      assertEventPresent(userApi, "fileSystem", "MspFileDeletionCompleted", deletionResult.events);
+      assertEventPresent(userApi, "fileSystem", "BucketFileDeletionCompleted", deletionResult.events);
       assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", deletionResult.events);
 
       // Extract deletion events to verify root changes
       const mspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.MspFileDeletionCompleted,
+        userApi.events.fileSystem.BucketFileDeletionCompleted,
         deletionResult.events
       );
       const bspDeletionEvent = userApi.assert.fetchEvent(

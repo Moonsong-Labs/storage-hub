@@ -1699,7 +1699,7 @@ export default {
         signedDeleteIntention: "PalletFileSystemFileOperationIntention",
         signature: "SpRuntimeMultiSignature"
       },
-      MspFileDeletionCompleted: {
+      BucketFileDeletionCompleted: {
         user: "AccountId32",
         fileKey: "H256",
         fileSize: "u64",

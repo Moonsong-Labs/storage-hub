@@ -2132,8 +2132,8 @@ declare module "@polkadot/types/lookup" {
       readonly signedDeleteIntention: PalletFileSystemFileOperationIntention;
       readonly signature: SpRuntimeMultiSignature;
     } & Struct;
-    readonly isMspFileDeletionCompleted: boolean;
-    readonly asMspFileDeletionCompleted: {
+    readonly isBucketFileDeletionCompleted: boolean;
+    readonly asBucketFileDeletionCompleted: {
       readonly user: AccountId32;
       readonly fileKey: H256;
       readonly fileSize: u64;
@@ -2193,7 +2193,7 @@ declare module "@polkadot/types/lookup" {
       | "FailedToReleaseStorageRequestCreationDeposit"
       | "FailedToTransferDepositFundsToBsp"
       | "FileDeletionRequested"
-      | "MspFileDeletionCompleted"
+      | "BucketFileDeletionCompleted"
       | "BspFileDeletionCompleted"
       | "FileDeletedFromIncompleteStorageRequest"
       | "IncompleteStorageRequest";

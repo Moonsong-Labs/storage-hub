@@ -11573,7 +11573,7 @@ mod msp_stop_storing_bucket {
 
                 // Verify event was emitted
                 System::assert_has_event(
-                    Event::MspFileDeletionCompleted {
+                    Event::BucketFileDeletionCompleted {
                         user: owner.clone(),
                         file_key,
                         file_size: size,
@@ -11995,9 +11995,9 @@ mod delete_file_tests {
                     forest_proof,
                 ));
 
-                // Verify MspFileDeletionCompleted event was emitted
+                // Verify BucketFileDeletionCompleted event was emitted
                 System::assert_last_event(
-                    Event::MspFileDeletionCompleted {
+                    Event::BucketFileDeletionCompleted {
                         user: alice.clone(),
                         file_key,
                         file_size: size,
@@ -12317,7 +12317,7 @@ mod delete_file_tests {
 
                 // Verify event shows Alice as the user
                 System::assert_last_event(
-                    Event::MspFileDeletionCompleted {
+                    Event::BucketFileDeletionCompleted {
                         user: alice.clone(),
                         file_key,
                         file_size: size,

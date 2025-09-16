@@ -540,7 +540,7 @@ impl IndexerConfigurations {
 #[derive(Debug, Parser, Clone)]
 pub struct FishermanConfigurations {
     /// Enable the fisherman service.
-    #[clap(long)]
+    #[clap(long, conflicts_with = "provider")]
     pub fisherman: bool,
 
     /// Postgres database URL for the fisherman service.

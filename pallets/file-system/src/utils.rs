@@ -2787,7 +2787,7 @@ where
         }
 
         // Emit the MSP file deletion completed event
-        Self::deposit_event(Event::MspFileDeletionCompleted {
+        Self::deposit_event(Event::BucketFileDeletionCompleted {
             user: file_owner,
             file_key,
             file_size: size,

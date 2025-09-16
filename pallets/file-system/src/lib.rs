@@ -761,8 +761,8 @@ pub mod pallet {
             signed_delete_intention: FileOperationIntention<T>,
             signature: T::OffchainSignature,
         },
-        /// Notifies that a file deletion has been completed successfully for an MSP.
-        MspFileDeletionCompleted {
+        /// Notifies that a file deletion has been completed successfully for a Bucket.
+        BucketFileDeletionCompleted {
             user: T::AccountId,
             file_key: MerkleHash<T>,
             file_size: StorageDataUnit<T>,

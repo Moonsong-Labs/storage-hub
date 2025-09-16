@@ -291,12 +291,12 @@ describeMspNet(
       // Now finalize the blocks to process the extrinsics
       const { events } = await userApi.block.seal();
 
-      assertEventPresent(userApi, "fileSystem", "MspFileDeletionCompleted", events);
+      assertEventPresent(userApi, "fileSystem", "BucketFileDeletionCompleted", events);
       assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", events);
 
       // Extract deletion events to verify root changes
       const mspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.MspFileDeletionCompleted,
+        userApi.events.fileSystem.BucketFileDeletionCompleted,
         events
       );
       const bspDeletionEvent = userApi.assert.fetchEvent(

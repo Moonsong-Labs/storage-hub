@@ -293,9 +293,9 @@ describeMspNet(
         deletionResult.events
       );
 
-      // Verify MspFileDeletionCompleted event with no MSP ID
+      // Verify BucketFileDeletionCompleted event with no MSP ID
       const mspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.MspFileDeletionCompleted,
+        userApi.events.fileSystem.BucketFileDeletionCompleted,
         deletionResult.events
       );
 

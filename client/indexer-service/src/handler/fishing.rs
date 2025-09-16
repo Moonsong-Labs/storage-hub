@@ -73,7 +73,7 @@ where
                         bucket_id, old_msp_id, new_msp_id, value_prop_id);
                     self.index_file_system_event(conn, fs_event).await?
                 }
-                pallet_file_system::Event::MspFileDeletionCompleted {
+                pallet_file_system::Event::BucketFileDeletionCompleted {
                     user,
                     file_key,
                     file_size,

@@ -1668,7 +1668,7 @@ declare const _default: {
         signedDeleteIntention: string;
         signature: string;
       };
-      MspFileDeletionCompleted: {
+      BucketFileDeletionCompleted: {
         user: string;
         fileKey: string;
         fileSize: string;

@@ -472,7 +472,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             pallet_file_system::Event::FileDeletedFromIncompleteStorageRequest { .. } => {
                 // TODO: index this event
             }
-            pallet_file_system::Event::MspFileDeletionCompleted {
+            pallet_file_system::Event::BucketFileDeletionCompleted {
                 user: _,
                 file_key,
                 file_size: _,

@@ -2198,8 +2198,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
             let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
 
-            // Get the MSP ID of the MSP that's currently storing the bucket. A bucket cannot decrease in size
-            // if it's not currently being stored by an MSP.
+            // Get the MSP ID of the MSP that's currently storing the bucket.
             let msp_id = bucket
                 .msp_id
                 .ok_or(Error::<T>::BucketMustHaveMspForOperation)?;

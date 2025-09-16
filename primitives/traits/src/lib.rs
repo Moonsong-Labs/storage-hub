@@ -352,12 +352,16 @@ pub trait MutateBucketsInterface {
     ) -> DispatchResult;
 
     /// Decrease the size of a bucket.
+    ///
+    /// Will return an error if there is no MSP storing the bucket.
     fn decrease_bucket_size(
         bucket_id: &Self::BucketId,
         delta: Self::StorageDataUnit,
     ) -> DispatchResult;
 
     /// Decrease the size of a bucket that does not have an MSP.
+    ///
+    /// Will return an error if there is an MSP storing the bucket.
     fn decrease_bucket_size_without_msp(
         bucket_id: &Self::BucketId,
         delta: Self::StorageDataUnit,
