@@ -13,7 +13,7 @@ import { BspNetTestApi } from "./test-api";
 export const addCopypartyContainer = async (options?: { name?: string }) => {
   const docker = new Docker();
   const containerName = options?.name || "storage-hub-sh-copyparty";
-  const imageName = "copyparty/min:latest";
+  const imageName = "copyparty/min:1.19.8";
 
   // Remove any existing container with same name
   try {
@@ -42,7 +42,7 @@ export const addCopypartyContainer = async (options?: { name?: string }) => {
   }
 
   const container = await docker.createContainer({
-    Image: "copyparty/min:latest",
+    Image: imageName,
     name: containerName,
     Labels: {
       "com.docker.compose.project": "storage-hub",

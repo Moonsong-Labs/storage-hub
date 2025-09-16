@@ -4,7 +4,10 @@ use serde::{Deserialize, Serialize};
 use crate::constants::{
     api::{DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE},
     database::DEFAULT_DATABASE_URL,
-    rpc::{DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_RPC_URL, DEFAULT_TIMEOUT_SECS},
+    rpc::{
+        DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_MSP_CALLBACK_URL, DEFAULT_RPC_URL,
+        DEFAULT_TIMEOUT_SECS,
+    },
     server::{DEFAULT_HOST, DEFAULT_PORT},
 };
 
@@ -75,6 +78,8 @@ pub struct StorageHubConfig {
     pub max_concurrent_requests: Option<usize>,
     /// Whether to verify TLS certificates for secure connections
     pub verify_tls: bool,
+    /// URL for the node to reach the MSP backend
+    pub msp_callback_url: String,
     /// When enabled, uses mock RPC operations for testing
     #[cfg(feature = "mocks")]
     pub mock_mode: bool,
@@ -117,6 +122,7 @@ impl Default for Config {
                 timeout_secs: Some(DEFAULT_TIMEOUT_SECS),
                 max_concurrent_requests: Some(DEFAULT_MAX_CONCURRENT_REQUESTS),
                 verify_tls: true,
+                msp_callback_url: DEFAULT_MSP_CALLBACK_URL.to_string(),
                 #[cfg(feature = "mocks")]
                 mock_mode: true,
             },

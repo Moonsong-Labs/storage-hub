@@ -38,10 +38,10 @@ pub struct Services {
 impl Services {
     /// Create a new services struct
     pub fn new(
-        config: Config,
         storage: Arc<dyn BoxedStorage>,
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
+        config: Config,
     ) -> Self {
         let jwt_secret = config
             .auth
@@ -87,6 +87,7 @@ impl Services {
             storage.clone(),
             postgres.clone(),
             rpc.clone(),
+            config.storage_hub.msp_callback_url.clone(),
         ));
         Self {
             auth,
@@ -124,7 +125,7 @@ impl Services {
         let rpc_conn = Arc::new(AnyRpcConnection::Mock(mock_conn));
         let rpc = Arc::new(StorageHubRpcClient::new(rpc_conn));
 
-        Self::new(config, storage, postgres, rpc)
+        Self::new(storage, postgres, rpc, config)
     }
 }
 

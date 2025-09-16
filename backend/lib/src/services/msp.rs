@@ -5,6 +5,8 @@
 use std::sync::Arc;
 
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
+use shc_rpc::SaveFileToDisk;
 
 use crate::{
     data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage},
@@ -17,6 +19,15 @@ use crate::{
     },
 };
 
+/// Placeholder  
+#[derive(Debug, Deserialize, Serialize)]
+pub struct FileDownloadResult {
+    pub file_size: u64,
+    pub location: String,
+    pub fingerprint: [u8; 32],
+    pub temp_path: String,
+}
+
 /// Service for handling MSP-related operations
 #[derive(Clone)]
 pub struct MspService {
@@ -26,6 +37,7 @@ pub struct MspService {
     postgres: Arc<DBClient>,
     #[allow(dead_code)]
     rpc: Arc<StorageHubRpcClient>,
+    msp_callback_url: String,
 }
 
 impl MspService {
@@ -34,11 +46,13 @@ impl MspService {
         storage: Arc<dyn BoxedStorage>,
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
+        msp_callback_url: String,
     ) -> Self {
         Self {
             storage,
             postgres,
             rpc,
+            msp_callback_url,
         }
     }
 
@@ -308,12 +322,56 @@ impl MspService {
             out_of_funds_tick: None,
         })
     }
+
+    /// Download a file by `file_key` via the MSP RPC into `uploads/<file_key>` and
+    /// return its size, UTF-8 location, fingerprint, and temp path.
+    /// Returns BadRequest on RPC/parse errors.
+    ///
+    /// We provide an URL as saveFileToDisk RPC requires it to stream the file.
+    /// We also implemented the internal_upload_by_key handler to handle this temporary file upload.
+    pub async fn get_file_from_key(&self, file_key: &str) -> Result<FileDownloadResult, Error> {
+        // TODO: authenticate user
+
+        // Create temp url for download
+        let temp_path = format!("uploads/{}", file_key);
+        let upload_url = format!("{}/{}", self.msp_callback_url, temp_path);
+
+        // Make the RPC call to download file and get metadata
+        let rpc_response: SaveFileToDisk = self
+            .rpc
+            .call(
+                "storagehubclient_saveFileToDisk",
+                (file_key, upload_url.as_str()),
+            )
+            .await
+            .map_err(|e| Error::BadRequest(e.to_string()))?;
+
+        match rpc_response {
+            SaveFileToDisk::FileNotFound => Err(Error::NotFound("File not found".to_string())),
+            SaveFileToDisk::IncompleteFile(_status) => {
+                Err(Error::BadRequest("File is incomplete".to_string()))
+            }
+            SaveFileToDisk::Success(file_metadata) => {
+                // Convert location bytes to string
+                let location = String::from_utf8_lossy(file_metadata.location()).to_string();
+                let fingerprint: [u8; 32] = file_metadata.fingerprint().as_hash();
+                let file_size = file_metadata.file_size();
+
+                Ok(FileDownloadResult {
+                    file_size,
+                    location,
+                    fingerprint,
+                    temp_path,
+                })
+            }
+        }
+    }
 }
 
 #[cfg(all(test, feature = "mocks"))]
 mod tests {
     use super::*;
-    use crate::services::Services;
+    use crate::{constants::rpc::DEFAULT_MSP_CALLBACK_URL, services::Services};
 
     async fn create_test_service() -> MspService {
         let services = Services::mocks();
@@ -322,6 +380,7 @@ mod tests {
             services.storage.clone(),
             services.postgres.clone(),
             services.rpc.clone(),
+            DEFAULT_MSP_CALLBACK_URL.to_string(),
         )
     }
 
