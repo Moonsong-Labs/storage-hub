@@ -75,7 +75,7 @@ pub mod snapshot_move_bucket {
     pub const FILE_ONE_LOCATION: &str = "test/whatsup.jpg";
 }
 
-/// Setup an indexer-db instance (thru a container) and run the provided raw SQL queries
+/// Setup an indexer-db instance (through a container) and run the provided raw SQL queries
 ///
 /// # Arguments:
 /// * pre_migrations: the raw SQL query to run before migrations
