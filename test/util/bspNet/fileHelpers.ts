@@ -17,7 +17,7 @@ export const sendNewStorageRequest = async (
   source: string,
   location: string,
   bucketId: H256,
-  owner?: KeyringPair,
+  owner: KeyringPair,
   mspId?: HexString
 ): Promise<FileMetadata> => {
   const ownerHexString = u8aToHex(decodeAddress(ShConsts.NODE_INFOS.user.AddressId));
@@ -28,7 +28,7 @@ export const sendNewStorageRequest = async (
     bucketId
   );
 
-  const issueOwner = owner ?? shUser;
+  const issueOwner = owner;
 
   const replicationTarget = {
     Basic: null

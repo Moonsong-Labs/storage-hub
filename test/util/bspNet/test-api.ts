@@ -437,7 +437,15 @@ export class BspNetTestApi implements AsyncDisposable {
         bucketId: H256,
         owner?: KeyringPair,
         msp_id?: HexString
-      ) => Files.sendNewStorageRequest(this._api, source, location, bucketId, owner, msp_id),
+      ) =>
+        Files.sendNewStorageRequest(
+          this._api,
+          source,
+          location,
+          bucketId,
+          owner ?? (this._runtimeType === "solochain" ? ethShUser : shUser),
+          msp_id
+        ),
 
       /**
        * Creates a new bucket and submits a new storage request.
