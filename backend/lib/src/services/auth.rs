@@ -3,7 +3,7 @@ use std::{str::FromStr, sync::Arc};
 use alloy_core::primitives::{eip191_hash_message, PrimitiveSignature};
 use alloy_signer::utils::public_key_to_address;
 use axum::{
-    extract::{FromRef, FromRequestParts, State},
+    extract::{FromRef, FromRequestParts},
     http::request::Parts,
 };
 use axum_jwt::{
@@ -171,6 +171,8 @@ impl AuthService {
     /// The method will fail if `message` has expired
     pub async fn login(&self, message: &str, signature: &str) -> Result<VerifyResponse, Error> {
         // Retrieve the stored address for this message from storage
+        // TODO: change it so the nonce is removed in this operation to avoid nonce reuse
+        // if verification fails we can reisert the nonce
         let address = self
             .storage
             .get_nonce(message)
