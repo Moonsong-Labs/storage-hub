@@ -49,7 +49,6 @@ impl Services {
         ));
 
         let msp = Arc::new(MspService::new(
-            &config,
             Arc::clone(&storage),
             Arc::clone(&postgres),
             Arc::clone(&rpc),

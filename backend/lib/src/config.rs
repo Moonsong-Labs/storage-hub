@@ -1,12 +1,9 @@
-use hex::ToHex;
 use serde::{Deserialize, Serialize};
-
-use shp_types::Hash;
 
 use crate::constants::{
     api::{DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE},
     database::DEFAULT_DATABASE_URL,
-    rpc::{DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_RPC_URL, DEFAULT_TIMEOUT_SECS, DUMMY_MSP_ID},
+    rpc::{DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_RPC_URL, DEFAULT_TIMEOUT_SECS},
     server::{DEFAULT_HOST, DEFAULT_PORT},
 };
 

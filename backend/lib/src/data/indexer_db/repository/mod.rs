@@ -31,32 +31,13 @@ use shc_indexer_db::{
     models::{Bsp, Bucket, File, Msp},
     OnchainBspId, OnchainMspId,
 };
+use shp_types::Hash;
 
 pub mod error;
 pub mod pool;
 pub mod postgres;
 
 use error::RepositoryResult;
-
-/// Represents an onchain Bucket ID
-///
-/// This is used to differentiate between the database id and the onchain id
-// TODO: replace with appropriate type from runtime
-pub struct BucketId<'a>(pub &'a [u8]);
-impl<'a> From<&'a [u8]> for BucketId<'a> {
-    fn from(value: &'a [u8]) -> Self {
-        Self(value)
-    }
-}
-
-/// Represents an onchain File Key
-// TODO: replace with appropriate type from runtime
-pub struct FileKey<'a>(pub &'a [u8]);
-impl<'a> From<&'a [u8]> for FileKey<'a> {
-    fn from(value: &'a [u8]) -> Self {
-        Self(value)
-    }
-}
 
 /// Read-only operations for indexer data access.
 ///
@@ -87,7 +68,7 @@ pub trait IndexerOps: Send + Sync {
     ///
     /// # Arguments
     /// * `bucket` - the Bucket ID (onchain)
-    async fn get_bucket_by_onchain_id(&self, bucket: BucketId<'_>) -> RepositoryResult<Bucket>;
+    async fn get_bucket_by_onchain_id(&self, bucket: &Hash) -> RepositoryResult<Bucket>;
 
     /// List the account's buckets with the given MSP
     ///
@@ -117,7 +98,7 @@ pub trait IndexerOps: Send + Sync {
     ///
     /// # Arguments
     /// * `key` - the File Key to search
-    async fn get_file_by_file_key(&self, file_key: FileKey<'_>) -> RepositoryResult<File>;
+    async fn get_file_by_file_key(&self, file_key: &Hash) -> RepositoryResult<File>;
 }
 
 /// Mutable operations for test environments.
@@ -176,12 +157,12 @@ pub trait IndexerOpsMut: IndexerOps {
         account: &str,
         msp_id: Option<i64>,
         name: &[u8],
-        onchain_bucket_id: BucketId<'_>,
+        onchain_bucket_id: &Hash,
         private: bool,
     ) -> RepositoryResult<Bucket>;
 
     /// Delete a bucket by its onchain ID.
-    async fn delete_bucket(&self, onchain_bucket_id: BucketId<'_>) -> RepositoryResult<()>;
+    async fn delete_bucket(&self, onchain_bucket_id: &Hash) -> RepositoryResult<()>;
 
     /// Create a new file.
     ///
@@ -196,16 +177,16 @@ pub trait IndexerOpsMut: IndexerOps {
     async fn create_file(
         &self,
         account: &[u8],
-        file_key: FileKey<'_>,
+        file_key: &Hash,
         bucket_id: i64,
-        onchain_bucket_id: BucketId<'_>,
+        onchain_bucket_id: &Hash,
         location: &[u8],
         fingerprint: &[u8],
         size: i64,
     ) -> RepositoryResult<File>;
 
     /// Delete a file by its file key.
-    async fn delete_file(&self, file_key: FileKey<'_>) -> RepositoryResult<()>;
+    async fn delete_file(&self, file_key: &Hash) -> RepositoryResult<()>;
 }
 
 // The following trait aliases are so when compiling for unit tests we get access to write operations

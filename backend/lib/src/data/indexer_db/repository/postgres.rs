@@ -25,10 +25,9 @@ use shc_indexer_db::{
     schema::{bsp, bucket, file},
     OnchainMspId,
 };
+use shp_types::Hash;
 
-use crate::data::indexer_db::repository::{
-    error::RepositoryResult, pool::SmartPool, BucketId, FileKey, IndexerOps,
-};
+use crate::data::indexer_db::repository::{error::RepositoryResult, pool::SmartPool, IndexerOps};
 #[cfg(test)]
 use crate::{constants::test, data::indexer_db::repository::IndexerOpsMut};
 
@@ -81,13 +80,10 @@ impl IndexerOps for Repository {
     }
 
     // ============ Bucket Read Operations ============
-    async fn get_bucket_by_onchain_id(
-        &self,
-        onchain_bucket_id: BucketId<'_>,
-    ) -> RepositoryResult<Bucket> {
+    async fn get_bucket_by_onchain_id(&self, onchain_bucket_id: &Hash) -> RepositoryResult<Bucket> {
         let mut conn = self.pool.get().await?;
 
-        Bucket::get_by_onchain_bucket_id(&mut conn, onchain_bucket_id.0.to_owned())
+        Bucket::get_by_onchain_bucket_id(&mut conn, onchain_bucket_id.as_bytes().to_vec())
             .await
             .map_err(Into::into)
     }
@@ -134,10 +130,10 @@ impl IndexerOps for Repository {
     }
 
     // ============ File Read Operations ============
-    async fn get_file_by_file_key(&self, file_key: FileKey<'_>) -> RepositoryResult<File> {
+    async fn get_file_by_file_key(&self, file_key: &Hash) -> RepositoryResult<File> {
         let mut conn = self.pool.get().await?;
 
-        File::get_by_file_key(&mut conn, file_key.0)
+        File::get_by_file_key(&mut conn, file_key.as_bytes())
             .await
             .map_err(Into::into)
     }
@@ -208,7 +204,7 @@ impl IndexerOpsMut for Repository {
         account: &str,
         msp_id: Option<i64>,
         name: &[u8],
-        onchain_bucket_id: BucketId<'_>,
+        onchain_bucket_id: &Hash,
         private: bool,
     ) -> RepositoryResult<Bucket> {
         let mut conn = self.pool.get().await?;
@@ -217,7 +213,7 @@ impl IndexerOpsMut for Repository {
             &mut conn,
             msp_id,
             account.to_string(),
-            onchain_bucket_id.0.to_vec(),
+            onchain_bucket_id.as_bytes().to_vec(),
             name.to_vec(),
             None, // No collection_id
             private,
@@ -228,19 +224,19 @@ impl IndexerOpsMut for Repository {
         Ok(bucket)
     }
 
-    async fn delete_bucket(&self, onchain_bucket_id: BucketId<'_>) -> RepositoryResult<()> {
+    async fn delete_bucket(&self, onchain_bucket_id: &Hash) -> RepositoryResult<()> {
         let mut conn = self.pool.get().await?;
 
-        Bucket::delete(&mut conn, onchain_bucket_id.0.to_vec()).await?;
+        Bucket::delete(&mut conn, onchain_bucket_id.as_bytes().to_vec()).await?;
         Ok(())
     }
 
     async fn create_file(
         &self,
         account: &[u8],
-        file_key: FileKey<'_>,
+        file_key: &Hash,
         bucket_id: i64,
-        onchain_bucket_id: BucketId<'_>,
+        onchain_bucket_id: &Hash,
         location: &[u8],
         fingerprint: &[u8],
         size: i64,
@@ -250,9 +246,9 @@ impl IndexerOpsMut for Repository {
         let file = File::create(
             &mut conn,
             account.to_vec(),
-            file_key.0.to_vec(),
+            file_key.as_bytes().to_vec(),
             bucket_id,
-            onchain_bucket_id.0.to_vec(),
+            onchain_bucket_id.as_bytes().to_vec(),
             location.to_vec(),
             fingerprint.to_vec(),
             size,
@@ -264,10 +260,10 @@ impl IndexerOpsMut for Repository {
         Ok(file)
     }
 
-    async fn delete_file(&self, file_key: FileKey<'_>) -> RepositoryResult<()> {
+    async fn delete_file(&self, file_key: &Hash) -> RepositoryResult<()> {
         let mut conn = self.pool.get().await?;
 
-        File::delete(&mut conn, file_key.0).await?;
+        File::delete(&mut conn, file_key.as_bytes()).await?;
         Ok(())
     }
 }
@@ -366,7 +362,7 @@ mod tests {
 
         // Test getting bucket by onchain ID
         let bucket = repo
-            .get_bucket_by_onchain_id(BUCKET_ONCHAIN_ID.as_slice().into())
+            .get_bucket_by_onchain_id(&Hash::from_slice(BUCKET_ONCHAIN_ID.as_slice()))
             .await
             .expect("Failed to get bucket");
 
@@ -385,9 +381,9 @@ mod tests {
             .expect("Failed to create repository");
 
         // Any non-existent bucket ID will work for this test
-        let result = repo
-            .get_bucket_by_onchain_id(placeholder_ids::NONEXISTENT_BUCKET_ID.as_slice().into())
-            .await;
+        let nonexistent_hash =
+            Hash::from_slice(placeholder_ids::NONEXISTENT_BUCKET_ID.as_slice().into());
+        let result = repo.get_bucket_by_onchain_id(&nonexistent_hash).await;
 
         assert!(
             result.is_err(),
@@ -421,24 +417,26 @@ mod tests {
 
         // Add a second bucket with one file to verify filtering
         // These values are arbitrary placeholders - the exact values don't matter for this test
-        let additional_bucket_id = placeholder_ids::ADDITIONAL_BUCKET_ID;
+        let additional_bucket_id =
+            Hash::from_slice(placeholder_ids::ADDITIONAL_BUCKET_ID.as_slice());
         let additional_bucket = repo
             .create_bucket(
                 "5CombC1j5ZmdNMEpWYpeEWcKPPYcKsC1WgMPgzGLU72SLa4o",
                 Some(MSP_TWO_ID),
                 b"other-bucket",
-                additional_bucket_id.as_slice(),
+                &additional_bucket_id,
                 false,
             )
             .await
             .expect("Failed to create additional bucket");
 
         // Add a file to the second bucket
+        let file_key = Hash::from_slice(placeholder_ids::TEST_FILE_KEY.as_slice());
         repo.create_file(
-            placeholder_ids::TEST_FILE_ACCOUNT,
-            placeholder_ids::TEST_FILE_KEY,
+            placeholder_ids::TEST_FILE_ACCOUNT.as_slice(),
+            &file_key,
             additional_bucket.id,
-            additional_bucket_id.as_slice(),
+            &additional_bucket_id,
             b"file.txt",
             placeholder_ids::TEST_FILE_FINGERPRINT,
             12345,
@@ -554,12 +552,13 @@ mod tests {
             .await
             .expect("Failed to get MSP");
 
+        let empty_bucket_id = Hash::from_slice(placeholder_ids::EMPTY_BUCKET_ID.as_slice());
         let empty_bucket = repo
             .create_bucket(
                 "0xemptybucketuser",
                 Some(empty_msp.id),
                 b"empty-bucket",
-                placeholder_ids::EMPTY_BUCKET_ID.as_slice(),
+                &empty_bucket_id,
                 false,
             )
             .await
@@ -615,21 +614,23 @@ mod tests {
         // SNAPSHOT_SQL already has 1 bucket for BUCKET_ACCOUNT with MSP #2
         // Add 2 more buckets for BUCKET_ACCOUNT with MSP #2
         // These bucket names and IDs are arbitrary placeholders
+        let bucket_id_2 = Hash::from_slice(placeholder_ids::USER_BUCKET2_ID.as_slice());
         repo.create_bucket(
             BUCKET_ACCOUNT,
             Some(MSP_TWO_ID),
             b"user-bucket2",
-            placeholder_ids::USER_BUCKET2_ID.as_slice(),
+            &bucket_id_2,
             true,
         )
         .await
         .expect("Failed to create bucket 2");
 
+        let bucket_id_3 = Hash::from_slice(placeholder_ids::USER_BUCKET3_ID.as_slice());
         repo.create_bucket(
             BUCKET_ACCOUNT,
             Some(MSP_TWO_ID),
             b"user-bucket3",
-            placeholder_ids::USER_BUCKET3_ID.as_slice(),
+            &bucket_id_3,
             false,
         )
         .await
@@ -660,21 +661,23 @@ mod tests {
         // Add more buckets for pagination testing
         // SNAPSHOT_SQL already has 1 bucket for BUCKET_ACCOUNT with MSP #2
         // These bucket names and IDs are arbitrary placeholders
+        let pb2_id = Hash::from_slice(placeholder_ids::PAGINATION_BUCKET2_ID.as_slice());
         repo.create_bucket(
             BUCKET_ACCOUNT,
             Some(MSP_TWO_ID),
             b"pagination-bucket-2",
-            placeholder_ids::PAGINATION_BUCKET2_ID.as_slice(),
+            &pb2_id,
             false,
         )
         .await
         .expect("Failed to create pagination bucket 2");
 
+        let pb3_id = Hash::from_slice(placeholder_ids::PAGINATION_BUCKET3_ID.as_slice());
         repo.create_bucket(
             BUCKET_ACCOUNT,
             Some(MSP_TWO_ID),
             b"pagination-bucket-3",
-            placeholder_ids::PAGINATION_BUCKET3_ID.as_slice(),
+            &pb3_id,
             false,
         )
         .await
@@ -731,11 +734,12 @@ mod tests {
         // Add one bucket for a different user with MSP #2 to test filtering
         // The exact user account doesn't matter, just needs to be different from BUCKET_ACCOUNT
         let other_user = "0xotheruser";
+        let oub1_id = Hash::from_slice(placeholder_ids::OTHER_USER_BUCKET_ID.as_slice());
         repo.create_bucket(
             other_user,
             Some(MSP_TWO_ID),
             b"other-user-bucket",
-            placeholder_ids::OTHER_USER_BUCKET_ID.as_slice(),
+            &oub1_id,
             false,
         )
         .await
@@ -792,11 +796,12 @@ mod tests {
 
         // Add bucket for BUCKET_ACCOUNT with MSP #1 to test MSP filtering
         let msp1_bucket_name = b"user-msp1-bucket"; // saved for assertion
+        let mb1_id = Hash::from_slice(placeholder_ids::MSP1_USER_BUCKET_ID.as_slice());
         repo.create_bucket(
             BUCKET_ACCOUNT,
             Some(MSP_ONE_ID),
             msp1_bucket_name,
-            placeholder_ids::MSP1_USER_BUCKET_ID.as_slice(),
+            &mb1_id,
             false,
         )
         .await
@@ -861,11 +866,12 @@ mod tests {
 
         // Add bucket with NULL MSP to test filtering
         let no_msp_bucket_name = b"no-msp-bucket"; // saved for assertion
+        let nmb1_id = Hash::from_slice(placeholder_ids::NO_MSP_BUCKET_ID.as_slice());
         repo.create_bucket(
             BUCKET_ACCOUNT,
             None, // NULL MSP
             no_msp_bucket_name,
-            placeholder_ids::NO_MSP_BUCKET_ID.as_slice(),
+            &nmb1_id,
             false,
         )
         .await
@@ -912,7 +918,7 @@ mod tests {
             .expect("Failed to create repository");
 
         let file = repo
-            .get_file_by_file_key(FILE_ONE_FILE_KEY.as_slice().into())
+            .get_file_by_file_key(&Hash::from_slice(FILE_ONE_FILE_KEY.as_slice()))
             .await
             .expect("Failed to get file info");
 
@@ -931,9 +937,9 @@ mod tests {
             .expect("Failed to create repository");
 
         // Any non-existent file key will work for this test
-        let result = repo
-            .get_file_by_file_key(placeholder_ids::NONEXISTENT_FILE_KEY.as_slice().into())
-            .await;
+        let nonexistent_key =
+            Hash::from_slice(placeholder_ids::NONEXISTENT_FILE_KEY.as_slice().into());
+        let result = repo.get_file_by_file_key(&nonexistent_key).await;
 
         assert!(
             result.is_err(),

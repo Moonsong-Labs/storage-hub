@@ -88,8 +88,9 @@ impl DBClient {
 
     /// Retrieve info on a specific bucket given its onchain ID
     pub async fn get_bucket(&self, bucket_onchain_id: &[u8]) -> Result<Bucket> {
+        let hash = shp_types::Hash::from_slice(bucket_onchain_id);
         self.repository
-            .get_bucket_by_onchain_id(bucket_onchain_id.into())
+            .get_bucket_by_onchain_id(&hash)
             .await
             .map_err(|e| Error::Database(e.to_string()))
     }
@@ -132,8 +133,9 @@ impl DBClient {
     }
 
     pub async fn get_file_info(&self, file_key: &[u8]) -> Result<File> {
+        let hash = shp_types::Hash::from_slice(file_key);
         self.repository
-            .get_file_by_file_key(file_key.into())
+            .get_file_by_file_key(&hash)
             .await
             .map_err(|e| Error::Database(e.to_string()))
     }
@@ -194,8 +196,9 @@ impl DBClient {
         onchain_bucket_id: &[u8],
         private: bool,
     ) -> crate::error::Result<Bucket> {
+        let hash = shp_types::Hash::from_slice(onchain_bucket_id);
         self.repository
-            .create_bucket(account, msp_id, name, onchain_bucket_id, private)
+            .create_bucket(account, msp_id, name, &hash, private)
             .await
             .map_err(|e| Error::Database(e.to_string()))
     }
@@ -203,8 +206,9 @@ impl DBClient {
     /// Delete a bucket
     pub async fn delete_bucket(&self, onchain_bucket_id: &[u8]) -> crate::error::Result<()> {
         // TODO: also clear related associations
+        let hash = shp_types::Hash::from_slice(onchain_bucket_id);
         self.repository
-            .delete_bucket(onchain_bucket_id)
+            .delete_bucket(&hash)
             .await
             .map_err(|e| Error::Database(e.to_string()))
     }
@@ -220,12 +224,14 @@ impl DBClient {
         fingerprint: &[u8],
         size: i64,
     ) -> crate::error::Result<File> {
+        let file_hash = shp_types::Hash::from_slice(file_key);
+        let bucket_hash = shp_types::Hash::from_slice(onchain_bucket_id);
         self.repository
             .create_file(
                 account,
-                file_key,
+                &file_hash,
                 bucket_id,
-                onchain_bucket_id,
+                &bucket_hash,
                 location,
                 fingerprint,
                 size,
@@ -237,8 +243,9 @@ impl DBClient {
     /// Delete a file
     pub async fn delete_file(&self, file_key: &[u8]) -> crate::error::Result<()> {
         // TODO: also clear related associations, like bsp_file
+        let hash = shp_types::Hash::from_slice(file_key);
         self.repository
-            .delete_file(file_key)
+            .delete_file(&hash)
             .await
             .map_err(|e| Error::Database(e.to_string()))
     }

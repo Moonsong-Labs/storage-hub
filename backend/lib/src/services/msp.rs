@@ -10,7 +10,6 @@ use shc_indexer_db::{models::Bucket as DBBucket, OnchainMspId};
 use shp_types::Hash;
 
 use crate::{
-    config::Config,
     constants::{
         mocks::{PLACEHOLDER_BUCKET_FILE_COUNT, PLACEHOLDER_BUCKET_SIZE_BYTES},
         rpc::DUMMY_MSP_ID,
@@ -43,7 +42,6 @@ pub struct MspService {
 impl MspService {
     /// Create a new MSP service
     pub fn new(
-        config: &Config,
         storage: Arc<dyn BoxedStorage>,
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
@@ -318,7 +316,6 @@ mod tests {
         storage: Arc<BoxedStorageWrapper<InMemoryStorage>>,
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
-        config: Config,
     }
 
     impl MockMspServiceBuilder {
@@ -338,7 +335,6 @@ mod tests {
                 storage,
                 postgres,
                 rpc,
-                config: Config::default(),
             }
         }
 
@@ -353,7 +349,7 @@ mod tests {
 
         /// Build the final MspService
         fn build(self) -> MspService {
-            MspService::new(&self.config, self.storage, self.postgres, self.rpc)
+            MspService::new(self.storage, self.postgres, self.rpc)
                 .expect("Failed to create MspService with valid test config")
         }
     }
