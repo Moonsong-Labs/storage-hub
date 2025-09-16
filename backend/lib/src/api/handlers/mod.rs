@@ -2,7 +2,7 @@ use std::io::Cursor;
 
 use axum::{
     body::Bytes,
-    extract::{Path, Query, State},
+    extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -13,7 +13,6 @@ use axum_extra::{
     response::file_stream::FileStream,
     TypedHeader,
 };
-use serde::Deserialize;
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
 

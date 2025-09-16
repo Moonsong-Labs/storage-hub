@@ -331,7 +331,7 @@ pub mod tests {
         rpc::DUMMY_MSP_ID,
         test::{accounts::*, bucket, file},
     };
-    use crate::test_utils::{random_bytes_32, random_hash};
+    use crate::test_utils::random_hash;
 
     #[tokio::test]
     async fn get_msp_by_onchain_id() {
