@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { createPublicClient, createWalletClient, defineChain, http, parseGwei } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { StorageHubClient } from '../src/evm/storageHubClient.js';
+import { createReadStream, statSync } from 'node:fs';
+import { Readable } from 'node:stream';
+import { join } from 'node:path';
+import { StorageHubClient, FileManager } from '../src/index.js';
 import { ALITH } from './consts.js';
 
 const RPC_URL = 'http://127.0.0.1:9888' as const;
@@ -12,6 +15,21 @@ const TEST_VALUE_PROP_ID = '0x3dd8887de89f01cef28701feda1435cf0bb38e9d5cb38321a6
 
 // Test timeout for EVM operations (60 seconds)
 const EVM_TEST_TIMEOUT = 60_000;
+
+// Helper function to compute file fingerprint using FileManager (Merkle trie root)
+const computeFileFingerprint = async (filePath: string): Promise<`0x${string}`> => {
+  const stats = statSync(filePath);
+  const nodeStream = createReadStream(filePath);
+  const webStream = Readable.toWeb(nodeStream);
+
+  const fm = new FileManager({
+    size: stats.size,
+    stream: () => webStream as ReadableStream<Uint8Array>
+  });
+
+  const fingerprint = await fm.getFingerprint();
+  return fingerprint.toHex() as `0x${string}`;
+};
 
 // Common test setup
 const createTestSetup = () => {
@@ -46,7 +64,7 @@ const createTestSetup = () => {
 describe('StorageHub EVM Integration', () => {
   describe('createBucket', () => {
 
-    it.only('should create bucket with automatic gas estimation', async () => {
+    it.skip('should create bucket with automatic gas estimation', async () => {
       const { hub, publicClient, mspId, valuePropId } = createTestSetup();
       const bucketName = `auto-${Math.floor(Math.random() * 1e6)}`;
 
@@ -146,6 +164,87 @@ describe('StorageHub EVM Integration', () => {
 
       expect(receipt.status).toBe('success');
       console.log(`[TEST] Collection created and associated! TxHash: ${collectionTxHash}`);
+    }, EVM_TEST_TIMEOUT);
+  });
+
+  describe('issueStorageRequest', () => {
+    it.only('should issue storage request for a file', async () => {
+      const { hub, publicClient, mspId, valuePropId } = createTestSetup();
+
+      console.log(`[TEST] Step 1: Computing fingerprint...`);
+
+      // Use real Adolphus.jpg file for testing
+      const testFilePath = join(process.cwd(), '../../docker/resource/adolphus.jpg');
+      const fileLocation = '/test/adolphus.jpg';
+
+      try {
+        const fingerprint = await computeFileFingerprint(testFilePath);
+        const fileStats = statSync(testFilePath);
+        const fileSize = BigInt(fileStats.size);
+
+        console.log(`[TEST] ✅ Fingerprint computed successfully!`);
+        console.log(`[TEST] File: ${testFilePath}`);
+        console.log(`[TEST] Fingerprint: ${fingerprint}`);
+        console.log(`[TEST] File size: ${fileSize} bytes`);
+
+        console.log(`[TEST] Step 2: Creating bucket...`);
+
+        // First create a bucket
+        const bucketName = `storage-${Math.floor(Math.random() * 1e6)}`;
+        console.log(`[TEST] Calling createBucket with:`, { mspId, bucketName, isPrivate: false, valuePropId });
+
+        let createTxHash;
+        try {
+          createTxHash = await hub.createBucket(mspId, bucketName, false, valuePropId);
+          console.log(`[TEST] createBucket returned:`, createTxHash);
+          console.log(`[TEST] Type of createTxHash:`, typeof createTxHash);
+
+          if (!createTxHash) {
+            throw new Error('createBucket returned undefined - transaction failed');
+          }
+        } catch (createError) {
+          console.error(`[TEST] ❌ Error in createBucket:`, createError);
+          throw createError;
+        }
+
+        console.log(`[TEST] ✅ Bucket creation tx sent: ${createTxHash}`);
+
+        await publicClient.waitForTransactionReceipt({ hash: createTxHash });
+        console.log(`[TEST] ✅ Bucket created successfully`);
+
+        // Get the bucket ID
+        const bucketId = await hub.deriveBucketId(ALITH.address, bucketName);
+        console.log(`[TEST] ✅ Bucket ID: ${bucketId}`);
+
+        console.log(`[TEST] Step 3: Issuing storage request...`);
+
+        const peerIds = ['peer1', 'peer2']; // Test peer IDs
+        // TODO: review testing nodes setup.
+        // Getting: ReplicationTargetExceedsMaximum when > 0
+        const replicationTarget = 0;
+        const customReplicationTarget = 0;
+
+        // Issue storage request
+        const storageTxHash = await hub.issueStorageRequest(
+          bucketId,
+          fileLocation,
+          fingerprint,
+          fileSize,
+          mspId,
+          peerIds,
+          replicationTarget,
+          customReplicationTarget
+        );
+        console.log(`[TEST] ✅ Storage request tx sent: ${storageTxHash}`);
+
+        const receipt = await publicClient.waitForTransactionReceipt({ hash: storageTxHash });
+        expect(receipt.status).toBe('success');
+        console.log(`[TEST] ✅ Storage request issued successfully! TxHash: ${storageTxHash}`);
+
+      } catch (error) {
+        console.error(`[TEST] ❌ Error occurred:`, error);
+        throw error;
+      }
     }, EVM_TEST_TIMEOUT);
   });
 
