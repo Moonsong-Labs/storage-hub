@@ -40,7 +40,7 @@ impl Services {
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
         config: Config,
-    ) -> Result<Self, crate::error::Error> {
+    ) -> Self {
         let auth = Arc::new(AuthService::default());
         let health = Arc::new(HealthService::new(
             storage.clone(),
@@ -55,14 +55,15 @@ impl Services {
             config.storage_hub.msp_callback_url.clone(),
         ));
 
-        Ok(Self {
+        Self {
+            config,
             auth,
             health,
             msp,
             storage,
             postgres,
             rpc,
-        })
+        }
     }
 }
 
@@ -83,6 +84,6 @@ impl Services {
         let rpc_conn = Arc::new(AnyRpcConnection::Mock(mock_conn));
         let rpc = Arc::new(StorageHubRpcClient::new(rpc_conn));
 
-        Self::new(storage, postgres, rpc, Config::default()).expect("Failed to create mock services")
+        Self::new(storage, postgres, rpc, Config::default())
     }
 }

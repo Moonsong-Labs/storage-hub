@@ -58,17 +58,17 @@ impl MspService {
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
         msp_callback_url: String,
-    ) -> Result<Self, Error> {
+    ) -> Self {
         // TODO: retrieve from RPC
         let msp_id = OnchainMspId::new(Hash::from_slice(DUMMY_MSP_ID.as_slice()));
 
-        Ok(Self {
+        Self {
             msp_id,
             storage,
             postgres,
             rpc,
             msp_callback_url,
-        })
+        }
     }
 
     /// Get MSP information
@@ -359,6 +359,7 @@ impl MspService {
 mod tests {
     use super::*;
     use crate::{
+        config::Config,
         constants::{mocks::MOCK_ADDRESS, rpc::DUMMY_MSP_ID, test::bucket},
         data::{
             indexer_db::{client::DBClient, mock_repository::MockRepository},
@@ -408,8 +409,13 @@ mod tests {
         /// Build the final MspService
         fn build(self) -> MspService {
             let cfg = Config::default();
-            MspService::new(self.storage, self.postgres, self.rpc, config.rpc.msp_callback_url)
-                .expect("Failed to create MspService with valid test config")
+
+            MspService::new(
+                self.storage,
+                self.postgres,
+                self.rpc,
+                cfg.storage_hub.msp_callback_url,
+            )
         }
     }
 
