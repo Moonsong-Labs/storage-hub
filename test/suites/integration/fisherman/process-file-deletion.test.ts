@@ -17,11 +17,7 @@ import {
   waitForBspFileAssociation
 } from "../../../util/indexerHelpers";
 import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
-import {
-  waitForDeleteFileExtrinsic,
-  waitForIncompleteStorageRequestExtrinsic,
-  waitForFishermanProcessing
-} from "../../../util/fisherman/fishermanHelpers";
+import { waitForFishermanProcessing } from "../../../util/fisherman/fishermanHelpers";
 
 /**
  * FISHERMAN PROCESS FILE DELETION - COMPREHENSIVE EVENT PROCESSING
@@ -169,11 +165,11 @@ describeMspNet(
       await waitForIndexing(userApi, false);
 
       // Verify delete_file extrinsics are submitted
-      const deleteFileFound = await waitForDeleteFileExtrinsic(userApi, 2, 30000);
-      assert(
-        deleteFileFound,
-        "Should find 2 delete_file extrinsics in transaction pool (BSP and MSP)"
-      );
+      await userApi.wait.waitForTxInPool({
+        module: "fileSystem",
+        method: "deleteFile",
+        checkQuantity: 2
+      });
 
       // Seal block to process the extrinsics
       const deletionResult = await userApi.block.seal();
@@ -315,15 +311,10 @@ describeMspNet(
       await waitForIndexing(userApi, false);
 
       // Verify delete_file_for_incomplete_storage_request extrinsic is submitted
-      const deleteIncompleteFileFound = await waitForIncompleteStorageRequestExtrinsic(
-        userApi,
-        1,
-        30000
-      );
-      assert(
-        deleteIncompleteFileFound,
-        "Should find 1 delete_file_for_incomplete_storage_request extrinsic in transaction pool"
-      );
+      await userApi.wait.waitForTxInPool({
+        module: "fileSystem",
+        method: "deleteFileForIncompleteStorageRequest"
+      });
 
       // Seal block to process the extrinsic
       const deletionResult = await userApi.block.seal();
@@ -397,15 +388,11 @@ describeMspNet(
       assert(incompleteProcessingFound, "Should find fisherman processing incomplete storage");
 
       // Verify 2 extrsinsics submitted for each MSP and BSP
-      const deleteIncompleteFileFound = await waitForIncompleteStorageRequestExtrinsic(
-        userApi,
-        2,
-        30000
-      );
-      assert(
-        deleteIncompleteFileFound,
-        "Should find 2 delete_file_for_incomplete_storage_request extrinsic in transaction pool"
-      );
+      await userApi.wait.waitForTxInPool({
+        module: "fileSystem",
+        method: "deleteFileForIncompleteStorageRequest",
+        checkQuantity: 2
+      });
 
       // Seal block to process the extrinsic
       const deletionResult = await userApi.block.seal();
@@ -553,11 +540,11 @@ describeMspNet(
       await waitForIndexing(userApi, false);
 
       // Verify TWO delete_file extrinsics are submitted (one for BSP and one for MSP)
-      const deleteFileFound = await waitForDeleteFileExtrinsic(userApi, 2);
-      assert(
-        deleteFileFound,
-        "Should find 2 delete_file extrinsics in transaction pool (BSP and MSP)"
-      );
+      await userApi.wait.waitForTxInPool({
+        module: "fileSystem",
+        method: "deleteFile",
+        checkQuantity: 2
+      });
 
       // Seal block to process the extrinsics
       const deletionResult = await userApi.block.seal();
@@ -753,15 +740,11 @@ describeMspNet(
       await waitForIndexing(userApi, false);
 
       // Verify 2 delete extrinsics are submitted (bucket and BSP)
-      const deleteIncompleteFileFound = await waitForIncompleteStorageRequestExtrinsic(
-        userApi,
-        2,
-        30000
-      );
-      assert(
-        deleteIncompleteFileFound,
-        "Should find 2 delete_file_for_incomplete_storage_request extrinsics in transaction pool"
-      );
+      await userApi.wait.waitForTxInPool({
+        module: "fileSystem",
+        method: "deleteFileForIncompleteStorageRequest",
+        checkQuantity: 2
+      });
 
       // Seal block to process the extrinsics
       const deletionResult = await userApi.block.seal();

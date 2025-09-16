@@ -657,7 +657,7 @@ where
     })?;
 
     // Finish building the StorageHubBuilder if node is running as a Storage Provider.
-    if matches!(role_options, Some(RoleOptions::Provider(_))) {
+    if role_options.is_some() {
         finish_sh_builder_and_run_tasks(
             sh_builder.expect("StorageHubBuilder should already be initialised."),
             client.clone(),

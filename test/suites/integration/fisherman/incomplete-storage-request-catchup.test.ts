@@ -11,7 +11,6 @@ import {
   sleep
 } from "../../../util";
 import { createBucketAndSendNewStorageRequest } from "../../../util/bspNet/fileHelpers";
-import { waitForIncompleteStorageRequestExtrinsic } from "../../../util/fisherman/fishermanHelpers";
 
 /**
  * FISHERMAN INCOMPLETE STORAGE REQUESTS WITH CATCHUP
@@ -105,15 +104,10 @@ describeMspNet(
       await userApi.block.skipTo(currentBlockNumber + storageRequestTtl, { finalised: false });
 
       // Verify only one delete extrinsic is submitted (for the BSP)
-      const deleteIncompleteFileFound = await waitForIncompleteStorageRequestExtrinsic(
-        userApi,
-        1,
-        30000
-      );
-      assert(
-        deleteIncompleteFileFound,
-        "Should find 1 delete_file_for_incomplete_storage_request extrinsic in transaction pool"
-      );
+      await userApi.wait.waitForTxInPool({
+        module: "fileSystem",
+        method: "deleteFileForIncompleteStorageRequest"
+      });
 
       // Seal block to process the extrinsic
       const deletionResult = await userApi.block.seal();
@@ -183,15 +177,11 @@ describeMspNet(
       );
 
       // Verify two delete extrinsics are submitted (for MSP and BSP)
-      const deleteIncompleteFileFound = await waitForIncompleteStorageRequestExtrinsic(
-        userApi,
-        2,
-        30000
-      );
-      assert(
-        deleteIncompleteFileFound,
-        "Should find 2 delete_file_for_incomplete_storage_request extrinsics in transaction pool"
-      );
+      await userApi.wait.waitForTxInPool({
+        module: "fileSystem",
+        method: "deleteFileForIncompleteStorageRequest",
+        checkQuantity: 2
+      });
 
       // Seal block to process the extrinsics
       const deletionResult = await userApi.block.seal();
@@ -272,15 +262,11 @@ describeMspNet(
       // Verify two delete extrinsics are submitted:
       // 1. For the bucket (no MSP present)
       // 2. For the BSP
-      const deleteIncompleteFileFound = await waitForIncompleteStorageRequestExtrinsic(
-        userApi,
-        2,
-        30000
-      );
-      assert(
-        deleteIncompleteFileFound,
-        "Should find 2 delete_file_for_incomplete_storage_request extrinsics in transaction pool"
-      );
+      await userApi.wait.waitForTxInPool({
+        module: "fileSystem",
+        method: "deleteFileForIncompleteStorageRequest",
+        checkQuantity: 2
+      });
 
       // Seal block to process the extrinsics
       const deletionResult = await userApi.block.seal();

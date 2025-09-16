@@ -16,10 +16,7 @@ import {
   waitForBspFileAssociation
 } from "../../../util/indexerHelpers";
 import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
-import {
-  waitForDeleteFileExtrinsic,
-  waitForFishermanProcessing
-} from "../../../util/fisherman/fishermanHelpers";
+import { waitForFishermanProcessing } from "../../../util/fisherman/fishermanHelpers";
 
 /**
  * FISHERMAN FILE DELETION FLOW WITH CATCHUP
@@ -282,11 +279,11 @@ describeMspNet(
       assert(processingFound, "Should find fisherman processing log even from unfinalized blocks");
 
       // Verify delete_file extrinsics are submitted (should be 2: one for BSP and one for MSP)
-      const deleteFileFound = await waitForDeleteFileExtrinsic(userApi, 2, 30000);
-      assert(
-        deleteFileFound,
-        "Should find 2 delete_file extrinsics in transaction pool (BSP and MSP)"
-      );
+      await userApi.wait.waitForTxInPool({
+        module: "fileSystem",
+        method: "deleteFile",
+        checkQuantity: 2
+      });
 
       // Now finalize the blocks to process the extrinsics
       const { events } = await userApi.block.seal();

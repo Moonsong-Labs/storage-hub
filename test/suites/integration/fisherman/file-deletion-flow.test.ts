@@ -15,7 +15,6 @@ import {
   waitForBspFileAssociation
 } from "../../../util/indexerHelpers";
 import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
-import { waitForDeleteFileExtrinsic } from "../../../util/fisherman/fishermanHelpers";
 
 /**
  * FISHERMAN FILE DELETION FLOW - BASIC HAPPY PATH
@@ -174,11 +173,11 @@ describeMspNet(
       await waitForIndexing(userApi, false);
 
       // Verify delete_file extrinsics are submitted
-      const deleteFileFound = await waitForDeleteFileExtrinsic(userApi, 2, 30000);
-      assert(
-        deleteFileFound,
-        "Should find 2 delete_file extrinsics in transaction pool (BSP and MSP)"
-      );
+      await userApi.wait.waitForTxInPool({
+        module: "fileSystem",
+        method: "deleteFile",
+        checkQuantity: 2
+      });
 
       // Seal block to process the extrinsics
       const deletionResult = await userApi.block.seal();
