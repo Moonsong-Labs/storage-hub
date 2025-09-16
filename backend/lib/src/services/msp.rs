@@ -377,7 +377,7 @@ impl MspService {
     /// This implementation:
     /// 1. Gets the MSP info to get its multiaddresses.
     /// 2. Extracts the peer IDs from the multiaddresses.
-    /// 3. Sends the FileKeyProof with the batch of chunks to the MSP through the `uploadToPeer` RPC method.
+    /// 3. Sends the FileKeyProof with the batch of chunks to the MSP through the `receiveBackendFileChunks` RPC method.
     ///
     /// Note: obtaining the peer ID previous to sending the request is needed as this is the peer ID that the MSP
     /// will send the file to. If it's different than its local one, it will probably fail.
@@ -505,7 +505,7 @@ impl MspService {
             let result: Result<Vec<u8>, _> = self
                 .rpc
                 .call(
-                    "storagehubclient_uploadToPeer",
+                    "storagehubclient_receiveBackendFileChunks",
                     (
                         peer_id_str.clone(),
                         file_key,
@@ -720,7 +720,7 @@ mod tests {
     async fn test_upload_to_msp() {
         let service = MockMspServiceBuilder::new()
             .with_rpc_responses(vec![(
-                "storagehubclient_uploadToPeer",
+                "storagehubclient_receiveBackendFileChunks",
                 serde_json::json!([]),
             )])
             .await

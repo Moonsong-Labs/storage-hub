@@ -134,7 +134,7 @@ impl MockConnection {
     /// Build mock JSON response for `storagehubclient_saveFileToDisk` and write mock file
     async fn mock_save_file_to_disk<P>(&self, params: P) -> Value
     where
-        P: ToRpcParams + Send + Sync,
+        P: ToRpcParams + Send,
     {
         // We assume params are [file_key, upload_url]
         let raw = params.to_rpc_params().unwrap().unwrap();

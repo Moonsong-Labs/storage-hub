@@ -268,6 +268,7 @@ where
                 .expect("Forest Storage Handler not initialized. Use `setup_storage_layer` before calling `create_rpc_config`."),
             keystore,
             config,
+						// TODO: Remove this if we stop using the FileTransferService as an event emitter for RPC calls
             self.file_transfer
                 .as_ref()
                 .expect("File Transfer not set.")

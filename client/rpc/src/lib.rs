@@ -323,8 +323,8 @@ pub trait StorageHubClientApi {
     ) -> RpcResult<()>;
 
     /// Send a RemoteUploadDataRequest via the node's FileTransferService
-    #[method(name = "uploadToPeer", with_extensions)]
-    async fn upload_to_peer(
+    #[method(name = "receiveBackendFileChunks", with_extensions)]
+    async fn receive_backend_file_chunks(
         &self,
         peer_id: String,
         file_key: shp_types::Hash,
@@ -1109,7 +1109,7 @@ where
         Ok(())
     }
 
-    async fn upload_to_peer(
+    async fn receive_backend_file_chunks(
         &self,
         ext: &Extensions,
         peer_id: String,

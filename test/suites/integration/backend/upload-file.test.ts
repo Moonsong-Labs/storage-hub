@@ -146,6 +146,9 @@ await describeMspNet(
       }
       const bucketId = newBucketEventDataBlob.bucketId.toString();
 
+      // Get the root of the created bucket
+      const bucketRoot = (await userApi.rpc.storagehubclient.getForestRoot(bucketId)).unwrap();
+
       // Load a file into storage to get its metadata, then remove it from the user's node storage so it doesn't get sent to the MSP automatically.
       const ownerHex = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
       const { file_key, file_metadata } = await userApi.rpc.storagehubclient.loadFileInStorage(
@@ -248,6 +251,16 @@ await describeMspNet(
       assert(
         hexFileKey === acceptedFileKey,
         "File key accepted by the MSP should be the same as the one uploaded"
+      );
+
+      // Ensure the file is now stored in the MSP's file storage
+      await msp1Api.wait.fileStorageComplete(file_key);
+
+      // Check that the root of the bucket has changed
+      const localBucketRoot = (await msp1Api.rpc.storagehubclient.getForestRoot(bucketId)).unwrap();
+      assert(
+        localBucketRoot.toString() !== bucketRoot.toString(),
+        "Root of bucket should have changed"
       );
     });
   }

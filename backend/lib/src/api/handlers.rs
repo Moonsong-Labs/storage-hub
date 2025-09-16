@@ -20,7 +20,7 @@ use shc_common::types::{
     FILE_CHUNK_SIZE,
 };
 use shc_file_manager::{in_memory::InMemoryFileDataTrie, traits::FileDataTrie};
-use sp_runtime::traits::BlakeTwo256;
+use shp_types::Hashing;
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
 
@@ -332,7 +332,7 @@ pub async fn upload_file(
     }
 
     // Generate the file key from the obtained file metadata and ensure it matches the file key received in the URL.
-    let expected_file_key = hex::encode(file_metadata.file_key::<BlakeTwo256>());
+    let expected_file_key = hex::encode(file_metadata.file_key::<Hashing>());
     if file_key.trim_start_matches("0x") != expected_file_key {
         return Err(Error::BadRequest(
             "File key in URL does not match file metadata".to_string(),
