@@ -6,15 +6,17 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
-use serde::{de::DeserializeOwned, Serialize};
+use jsonrpsee::core::traits::ToRpcParams;
+use serde::de::DeserializeOwned;
 use serde_json::Value;
 use tokio::{
+    fs,
     sync::{Mutex, RwLock},
     time::sleep,
 };
 
 use crate::{
-    constants::rpc::TIMEOUT_MULTIPLIER,
+    constants::{mocks::DOWNLOAD_FILE_CONTENT, rpc::TIMEOUT_MULTIPLIER},
     data::rpc::{
         connection::error::{RpcConnectionError, RpcResult},
         RpcConnection,
@@ -128,6 +130,40 @@ impl MockConnection {
             }
         }
     }
+
+    /// Build mock JSON response for `storagehubclient_saveFileToDisk` and write mock file
+    async fn mock_save_file_to_disk<P>(&self, params: P) -> Value
+    where
+        P: ToRpcParams + Send + Sync,
+    {
+        // We assume params are [file_key, upload_url]
+        let raw = params.to_rpc_params().unwrap().unwrap();
+        let (file_key, upload_url): (String, String) = serde_json::from_str(raw.get()).unwrap();
+
+        // Derive filename from upload_url
+        let file_name = upload_url
+            .rsplit('/')
+            .next()
+            .unwrap_or_else(|| file_key.as_str())
+            .to_string();
+        let local_path = format!("uploads/{}", file_name);
+
+        // Create mock file content
+        let _ = fs::create_dir_all("uploads").await;
+        let content = DOWNLOAD_FILE_CONTENT.as_bytes();
+        let _ = fs::write(&local_path, content).await;
+
+        // Return expected response shape
+        serde_json::json!({
+            "Success": {
+                "owner": vec![0u8; 32],
+                "bucket_id": vec![0u8; 32],
+                "location": file_name.as_bytes().to_vec(),
+                "file_size": content.len() as u64,
+                "fingerprint": vec![0u8; 32]
+            }
+        })
+    }
 }
 
 impl Default for MockConnection {
@@ -144,12 +180,12 @@ impl Default for MockConnection {
 
 #[async_trait]
 impl RpcConnection for MockConnection {
-    async fn call<P, R>(&self, method: &str, _params: P) -> RpcResult<R>
+    async fn call<P, R>(&self, method: &str, params: P) -> RpcResult<R>
     where
-        P: Serialize + Send + Sync,
+        P: ToRpcParams + Send + Sync,
         R: DeserializeOwned,
     {
-        // Check if connected
+        // Global checks
         {
             let connected = self.connected.read().await;
             if !*connected {
@@ -157,25 +193,26 @@ impl RpcConnection for MockConnection {
             }
         }
 
-        // Simulate network latency if configured
         let latency = *self.latency_ms.read().await;
         if let Some(latency_ms) = latency {
             sleep(Duration::from_millis(latency_ms)).await;
         }
 
-        // Check for simulated errors
         self.check_error().await?;
 
-        // Get response for method
-        let response = {
-            let responses = self.responses.read().await;
-            responses
-                .get(method)
-                .cloned()
-                .unwrap_or(serde_json::json!(null))
+        // Build JSON response by method
+        let response: Value = match method {
+            "storagehubclient_saveFileToDisk" => self.mock_save_file_to_disk(params).await,
+            _ => {
+                let responses = self.responses.read().await;
+                responses
+                    .get(method)
+                    .cloned()
+                    .unwrap_or(serde_json::json!(null))
+            }
         };
 
-        // Deserialize the response
+        // Deserialize to expected type
         serde_json::from_value(response).map_err(|e| {
             RpcConnectionError::Serialization(format!("Failed to deserialize response: {}", e))
         })
@@ -211,7 +248,10 @@ mod tests {
         .await;
 
         // Test system health call
-        let health: Value = conn.call(SAMPLE_METHOD, ()).await.unwrap();
+        let health: Value = conn
+            .call(SAMPLE_METHOD, jsonrpsee::rpc_params![])
+            .await
+            .unwrap();
         assert_eq!(health[SAMPLE_FIELD], SAMPLE_VALUE);
 
         // Test connection status
@@ -233,7 +273,10 @@ mod tests {
         )
         .await;
 
-        let response: Value = conn.call(SAMPLE_METHOD, ()).await.unwrap();
+        let response: Value = conn
+            .call(SAMPLE_METHOD, jsonrpsee::rpc_params![])
+            .await
+            .unwrap();
         assert_eq!(response[SAMPLE_FIELD], SAMPLE_VALUE);
     }
 
@@ -242,7 +285,7 @@ mod tests {
         let conn = MockConnection::new();
         conn.set_error_mode(ErrorMode::Timeout).await;
 
-        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, ()).await;
+        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, jsonrpsee::rpc_params![]).await;
         assert!(matches!(result, Err(RpcConnectionError::Timeout)));
     }
 
@@ -251,7 +294,7 @@ mod tests {
         let conn = MockConnection::new();
         conn.set_error_mode(ErrorMode::ConnectionClosed).await;
 
-        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, ()).await;
+        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, jsonrpsee::rpc_params![]).await;
         assert!(matches!(result, Err(RpcConnectionError::ConnectionClosed)));
     }
 
@@ -263,7 +306,7 @@ mod tests {
         ))
         .await;
 
-        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, ()).await;
+        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, jsonrpsee::rpc_params![]).await;
         match result {
             Err(RpcConnectionError::Transport(msg)) => {
                 assert_eq!(msg, TEST_TRANSPORT_ERROR_MSG);
@@ -278,7 +321,7 @@ mod tests {
         conn.set_error_mode(ErrorMode::RpcError(TEST_RPC_ERROR_MSG.to_string()))
             .await;
 
-        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, ()).await;
+        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, jsonrpsee::rpc_params![]).await;
         match result {
             Err(RpcConnectionError::Rpc(msg)) => {
                 assert_eq!(msg, TEST_RPC_ERROR_MSG);
@@ -302,12 +345,15 @@ mod tests {
 
         // First N calls should succeed
         for _ in 0..FAIL_AFTER_N_CALLS_THRESHOLD {
-            let result: Value = conn.call(SAMPLE_METHOD, ()).await.unwrap();
+            let result: Value = conn
+                .call(SAMPLE_METHOD, jsonrpsee::rpc_params![])
+                .await
+                .unwrap();
             assert_eq!(result[SAMPLE_FIELD], SAMPLE_VALUE);
         }
 
         // Next call should fail
-        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, ()).await;
+        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, jsonrpsee::rpc_params![]).await;
         match result {
             Err(RpcConnectionError::Rpc(msg)) => {
                 assert!(msg.contains(ERROR_MESSAGE_FAIL_AFTER_N));
@@ -328,7 +374,7 @@ mod tests {
         assert!(!conn.is_connected().await);
 
         // Try to call - should fail
-        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, ()).await;
+        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, jsonrpsee::rpc_params![]).await;
         assert!(matches!(result, Err(RpcConnectionError::ConnectionClosed)));
 
         // Reconnect
@@ -343,7 +389,10 @@ mod tests {
             }),
         )
         .await;
-        let response: Value = conn.call(SAMPLE_METHOD, ()).await.unwrap();
+        let response: Value = conn
+            .call(SAMPLE_METHOD, jsonrpsee::rpc_params![])
+            .await
+            .unwrap();
         assert_eq!(response[SAMPLE_FIELD], SAMPLE_VALUE);
     }
 }
