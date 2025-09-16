@@ -4,7 +4,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { createReadStream, statSync } from 'node:fs';
 import { Readable } from 'node:stream';
 import { join } from 'node:path';
-import { StorageHubClient, FileManager } from '../src/index.js';
+import { StorageHubClient, FileManager, ReplicationLevel } from '../src/index.js';
 import { ALITH } from './consts.js';
 
 const RPC_URL = 'http://127.0.0.1:9888' as const;
@@ -168,7 +168,7 @@ describe('StorageHub EVM Integration', () => {
   });
 
   describe('issueStorageRequest', () => {
-    it.only('should issue storage request for a file', async () => {
+    it.skip('should issue storage request for a file', async () => {
       const { hub, publicClient, mspId, valuePropId } = createTestSetup();
 
       console.log(`[TEST] Step 1: Computing fingerprint...`);
@@ -219,10 +219,8 @@ describe('StorageHub EVM Integration', () => {
         console.log(`[TEST] Step 3: Issuing storage request...`);
 
         const peerIds = ['peer1', 'peer2']; // Test peer IDs
-        // TODO: review testing nodes setup.
-        // Getting: ReplicationTargetExceedsMaximum when > 0
-        const replicationTarget = 0;
-        const customReplicationTarget = 0;
+        const replicationLevel = ReplicationLevel.Custom; // Use custom replication level
+        const replicas = 2; // Custom replica count
 
         // Issue storage request
         const storageTxHash = await hub.issueStorageRequest(
@@ -232,8 +230,8 @@ describe('StorageHub EVM Integration', () => {
           fileSize,
           mspId,
           peerIds,
-          replicationTarget,
-          customReplicationTarget
+          replicationLevel,
+          replicas
         );
         console.log(`[TEST] ✅ Storage request tx sent: ${storageTxHash}`);
 

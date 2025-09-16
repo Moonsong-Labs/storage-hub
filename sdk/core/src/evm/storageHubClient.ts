@@ -10,6 +10,7 @@
 
 import { FILE_SYSTEM_PRECOMPILE_ADDRESS, filesystemAbi, type FileSystemContract, getFileSystemContract } from './filesystem';
 import type { EvmWriteOptions, StorageHubClientOptions } from './types';
+import { ReplicationLevel } from './types';
 import { type Address, createPublicClient, http, parseGwei, type PublicClient, stringToBytes, stringToHex, toHex, type WalletClient, type GetContractReturnType } from 'viem';
 
 
@@ -261,8 +262,8 @@ export class StorageHubClient {
    * @param size - file size as bigint (storage units)
    * @param mspId - 32-byte MSP ID
    * @param peerIds - array of peer ID strings (max 5 entries, each max 100 UTF-8 bytes)
-   * @param replicationTarget - 0 Basic, 1 Standard, 2 HighSecurity, 3 SuperHighSecurity, 4 UltraHighSecurity, 5 Custom
-   * @param customReplicationTarget - required if replicationTarget = 5 (Custom)
+   * @param replicationLevel - replication level
+   * @param replicas - number of replicas (only required for ReplicationLevel.Custom)
    * @param options - optional gas and fee overrides
    */
   async issueStorageRequest(
@@ -272,8 +273,8 @@ export class StorageHubClient {
     size: bigint,
     mspId: `0x${string}`,
     peerIds: string[],
-    replicationTarget: number,
-    customReplicationTarget: number,
+    replicationLevel: ReplicationLevel,
+    replicas: number,
     options?: EvmWriteOptions
   ) {
     const locationHex = this.validateStringLength(location, StorageHubClient.MAX_LOCATION_BYTES, 'File location');
@@ -287,8 +288,8 @@ export class StorageHubClient {
       size,
       mspId,
       peerIdsHex,
-      replicationTarget,
-      customReplicationTarget,
+      replicationLevel,
+      replicas,
     ] as const;
     const gasLimit = await this.estimateGas('issueStorageRequest', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);

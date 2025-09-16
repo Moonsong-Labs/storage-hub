@@ -56,3 +56,22 @@ export type EvmWriteOptions = {
    */
   maxPriorityFeePerGas?: bigint;
 };
+
+/**
+ * Replication levels for storage requests.
+ * Each level provides different redundancy and availability guarantees.
+ */
+export enum ReplicationLevel {
+  /** Basic replication (default) */
+  Basic = 0,
+  /** Standard replication */
+  Standard = 1,
+  /** High security replication */
+  HighSecurity = 2,
+  /** Super high security replication */
+  SuperHighSecurity = 3,
+  /** Ultra high security replication */
+  UltraHighSecurity = 4,
+  /** Custom replication (requires specifying exact replica count) */
+  Custom = 5
+}
