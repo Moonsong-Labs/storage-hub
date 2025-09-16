@@ -456,6 +456,7 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param mspId - <TODO> Optional MSP ID to use for the new storage request. Defaults to DUMMY_MSP_ID.
        * @param owner - Optional signer with which to issue the newStorageRequest Defaults to SH_USER.
        * @param replicationTarget - Optional number of replicas to store the file. Defaults to the BasicReplicationTarget of the runtime.
+       * @param finalizeBlock - Optional boolean to finalize the blocks created when sending the new storage request. Defaults to true.
        * @returns A promise that resolves to file metadata.
        */
       createBucketAndSendNewStorageRequest: (
