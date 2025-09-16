@@ -1,17 +1,16 @@
-import assert, { strictEqual, notEqual } from "node:assert";
+import assert, { notEqual, strictEqual } from "node:assert";
 import { BN } from "@polkadot/util";
 import {
+  assertEventPresent,
+  bspKey,
   describeMspNet,
   type EnrichedBspApi,
+  ShConsts,
   type SqlClient,
   shUser,
-  bspKey,
   sleep,
-  waitFor,
-  assertEventPresent,
-  ShConsts
+  waitFor
 } from "../../../util";
-import { createBucketAndSendNewStorageRequest } from "../../../util/bspNet/fileHelpers";
 import { waitForDeleteFileExtrinsic } from "../../../util/fisherman/fishermanHelpers";
 import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
 import {
@@ -75,8 +74,7 @@ await describeMspNet(
       const source = "res/smile.jpg";
       const destination = "test/file.txt";
 
-      const { fileKey } = await createBucketAndSendNewStorageRequest(
-        userApi,
+      const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
         destination,
         bucketName
@@ -102,8 +100,7 @@ await describeMspNet(
       const source = "res/whatsup.jpg";
       const destination = "test/bsp-file.txt";
 
-      const { fileKey } = await createBucketAndSendNewStorageRequest(
-        userApi,
+      const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
         destination,
         bucketName
@@ -147,8 +144,7 @@ await describeMspNet(
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
       const valuePropId = valueProps[0].id;
 
-      const { fileKey } = await createBucketAndSendNewStorageRequest(
-        userApi,
+      const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
         destination,
         bucketName,
@@ -198,8 +194,7 @@ await describeMspNet(
       const source = "res/smile.jpg";
       const destination = "test/revoke.txt";
 
-      const { fileKey } = await createBucketAndSendNewStorageRequest(
-        userApi,
+      const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
         destination,
         bucketName,
@@ -211,7 +206,7 @@ await describeMspNet(
 
       // Stop the other BSP so it doesn't volunteer for the files.
       await userApi.docker.pauseContainer("storage-hub-sh-bsp-1");
-      // Stop the other MSP so it doesnt't accept the file before we revoke the storage request
+      // Stop the other MSP so it doesn't accept the file before we revoke the storage request
       await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
 
       const revokeStorageRequestResult = await userApi.block.seal({
@@ -239,7 +234,7 @@ await describeMspNet(
       const destination = "test/bsp-stop.txt";
 
       const { fileKey, bucketId, location, fingerprint, fileSize } =
-        await createBucketAndSendNewStorageRequest(userApi, source, destination, bucketName);
+        await userApi.file.createBucketAndSendNewStorageRequest(source, destination, bucketName);
 
       await userApi.wait.bspVolunteer();
 
@@ -367,8 +362,7 @@ await describeMspNet(
       const source = "res/smile.jpg";
       const destination = "test/fulfilled.txt";
 
-      const { fileKey } = await createBucketAndSendNewStorageRequest(
-        userApi,
+      const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
         destination,
         bucketName
@@ -398,8 +392,7 @@ await describeMspNet(
       const source = "res/smile.jpg";
       const destination = "test/expired.txt";
 
-      const { fileKey } = await createBucketAndSendNewStorageRequest(
-        userApi,
+      const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
         destination,
         bucketName
@@ -430,8 +423,7 @@ await describeMspNet(
       const valuePropId = valueProps[0].id;
 
       const { fileKey, bucketId, location, fingerprint, fileSize } =
-        await createBucketAndSendNewStorageRequest(
-          userApi,
+        await userApi.file.createBucketAndSendNewStorageRequest(
           source,
           destination,
           bucketName,
@@ -577,8 +569,7 @@ await describeMspNet(
       const source = "res/whatsup.jpg";
       const destination = "test/bsp-delete.txt";
 
-      const { fileKey, bucketId } = await createBucketAndSendNewStorageRequest(
-        userApi,
+      const { fileKey, bucketId } = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
         destination,
         bucketName,
@@ -672,8 +663,7 @@ await describeMspNet(
       const source = "res/whatsup.jpg";
       const destination = "test/insolvent-file.txt";
 
-      const { fileKey } = await createBucketAndSendNewStorageRequest(
-        userApi,
+      const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
         destination,
         bucketName,

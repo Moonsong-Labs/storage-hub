@@ -1,4 +1,4 @@
-export const ALL_TYPES = {
+export const SHARED_TYPES = {
   FileMetadata: {
     owner: "Vec<u8>",
     bucket_id: "Vec<u8>",
@@ -241,5 +241,16 @@ export const ALL_TYPES = {
       InternalError: null
     }
   }
+};
+// Parachain currently does not override base account types
+export const PARACHAIN_TYPES = {
+  ...SHARED_TYPES
+};
+// Solochain-EVM overrides base account-related types to Ethereum style
+export const SOLOCHAIN_EVM_TYPES = {
+  ...SHARED_TYPES,
+  AccountId: "EthereumAccountId",
+  Address: "AccountId",
+  LookupSource: "AccountId"
 };
 //# sourceMappingURL=types.js.map
