@@ -4,11 +4,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { StorageHubClient } from '../src/evm/storageHubClient.js';
 import { ALITH } from './consts.js';
 
-// const RPC_URL = 'http://127.0.0.1:9944' as const;
 const RPC_URL = 'http://127.0.0.1:9888' as const;
-
-// Dev keys for SH local dev (same pair used in evmTransfer test)
-const ALITH_PRIVATE_KEY = '0x5fb92d6e98884f76de468fa3f6278f8807c48bebc13595d45af5bdc4da702133' as `0x${string}`;
 
 // Test constants from network bootstrap
 const TEST_MSP_ID = '0x0000000000000000000000000000000000000000000000000000000000000300' as `0x${string}`;
@@ -26,7 +22,7 @@ const createTestSetup = () => {
     rpcUrls: { default: { http: [RPC_URL] } },
   });
 
-  const account = privateKeyToAccount(ALITH_PRIVATE_KEY);
+  const account = privateKeyToAccount(ALITH.privateKey);
   const walletClient = createWalletClient({ chain, account, transport: http(RPC_URL) });
   const publicClient = createPublicClient({ chain, transport: http(RPC_URL) });
 
@@ -50,9 +46,9 @@ const createTestSetup = () => {
 describe('StorageHub EVM Integration', () => {
   describe('createBucket', () => {
 
-    it.skip('should create bucket with automatic gas estimation', async () => {
+    it.only('should create bucket with automatic gas estimation', async () => {
       const { hub, publicClient, mspId, valuePropId } = createTestSetup();
-      const bucketName = new TextEncoder().encode(`auto-${Math.floor(Math.random() * 1e6)}`);
+      const bucketName = `auto-${Math.floor(Math.random() * 1e6)}`;
 
       console.log(`[TEST] Creating bucket with automatic gas estimation...`);
 
@@ -66,7 +62,7 @@ describe('StorageHub EVM Integration', () => {
 
     it.skip('should create bucket with custom gas options', async () => {
       const { hub, publicClient, mspId, valuePropId } = createTestSetup();
-      const bucketName = new TextEncoder().encode(`custom-${Math.floor(Math.random() * 1e6)}`);
+      const bucketName = `custom-${Math.floor(Math.random() * 1e6)}`;
 
       console.log(`[TEST] Creating bucket with custom gas options...`);
 
@@ -88,7 +84,7 @@ describe('StorageHub EVM Integration', () => {
       const { hub, publicClient, mspId, valuePropId } = createTestSetup();
 
       // First create a bucket
-      const bucketName = new TextEncoder().encode(`privacy-${Math.floor(Math.random() * 1e6)}`);
+      const bucketName = `privacy-${Math.floor(Math.random() * 1e6)}`;
       const initialBucketPrivacy: boolean = false;
       const createTxHash = await hub.createBucket(mspId, bucketName, initialBucketPrivacy, valuePropId);
       await publicClient.waitForTransactionReceipt({ hash: createTxHash });
@@ -112,7 +108,7 @@ describe('StorageHub EVM Integration', () => {
       const { hub, publicClient, mspId, valuePropId } = createTestSetup();
 
       // First create a bucket
-      const bucketName = new TextEncoder().encode(`delete-${Math.floor(Math.random() * 1e6)}`);
+      const bucketName = `delete-${Math.floor(Math.random() * 1e6)}`;
       const createTxHash = await hub.createBucket(mspId, bucketName, false, valuePropId);
       await publicClient.waitForTransactionReceipt({ hash: createTxHash });
 
@@ -135,7 +131,7 @@ describe('StorageHub EVM Integration', () => {
       const { hub, publicClient, mspId, valuePropId } = createTestSetup();
 
       // First create a bucket
-      const bucketName = new TextEncoder().encode(`collection-${Math.floor(Math.random() * 1e6)}`);
+      const bucketName = `collection-${Math.floor(Math.random() * 1e6)}`;
       const createTxHash = await hub.createBucket(mspId, bucketName, false, valuePropId);
       await publicClient.waitForTransactionReceipt({ hash: createTxHash });
 
@@ -156,7 +152,7 @@ describe('StorageHub EVM Integration', () => {
   describe('read operations', () => {
     it.skip('should derive bucket ID from owner and name', async () => {
       const { hub } = createTestSetup();
-      const bucketName = new TextEncoder().encode('test-bucket');
+      const bucketName = 'test-bucket';
 
       console.log(`[TEST] Deriving bucket ID...`);
 
@@ -184,7 +180,7 @@ describe('StorageHub EVM Integration', () => {
       const { hub, mspId, valuePropId } = createTestSetup();
 
       // Create a bucket name that exceeds 100 bytes
-      const longName = new TextEncoder().encode('a'.repeat(101));
+      const longName = 'a'.repeat(101);
 
       console.log(`[TEST] Testing bucket name validation...`);
 
@@ -197,7 +193,7 @@ describe('StorageHub EVM Integration', () => {
 
     it.skip('should handle invalid hex addresses', async () => {
       const { hub, valuePropId } = createTestSetup();
-      const bucketName = new TextEncoder().encode('test');
+      const bucketName = 'test';
 
       console.log(`[TEST] Testing invalid address handling...`);
 
