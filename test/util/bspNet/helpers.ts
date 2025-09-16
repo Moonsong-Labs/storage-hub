@@ -176,7 +176,7 @@ export const addBsp = async (
     additionalArgs?: string[];
     waitForIdle?: boolean;
     initialCapacity?: bigint;
-    signer?: KeyringPair;
+    sudoSigner?: KeyringPair;
   }
 ) => {
   // Launch a BSP node.
@@ -206,7 +206,7 @@ export const addBsp = async (
   await sealBlock(
     api,
     api.tx.sudo.sudo(api.tx.balances.forceSetBalance(bspKey.address, amount)),
-    options?.signer
+    options?.sudoSigner
   );
 
   const bspIp = await getContainerIp(containerName);
@@ -225,7 +225,7 @@ export const addBsp = async (
         options?.bspStartingWeight ?? null
       )
     ),
-    options?.signer
+    options?.sudoSigner
   );
 
   return { containerName, rpcPort, p2pPort, peerId };

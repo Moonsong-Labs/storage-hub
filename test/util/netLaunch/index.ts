@@ -657,7 +657,7 @@ export class NetworkLauncher {
       bspStartingWeight: this.config.capacity,
       extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
       additionalArgs: ["--keystore-path=/keystore/bsp-down", ...runtimeTypeArgs],
-      signer: api.accounts.sudo
+      sudoSigner: api.accounts.sudo
     });
     const { rpcPort: bspTwoRpcPort } = await addBsp(api, api.accounts.bspTwoKey, {
       name: "sh-bsp-two",
@@ -666,7 +666,7 @@ export class NetworkLauncher {
       bspStartingWeight: this.config.capacity,
       extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
       additionalArgs: ["--keystore-path=/keystore/bsp-two", ...runtimeTypeArgs],
-      signer: api.accounts.sudo
+      sudoSigner: api.accounts.sudo
     });
     const { rpcPort: bspThreeRpcPort } = await addBsp(api, api.accounts.bspThreeKey, {
       name: "sh-bsp-three",
@@ -675,7 +675,7 @@ export class NetworkLauncher {
       bspStartingWeight: this.config.capacity,
       extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
       additionalArgs: ["--keystore-path=/keystore/bsp-three", ...runtimeTypeArgs],
-      signer: api.accounts.sudo
+      sudoSigner: api.accounts.sudo
     });
 
     const source = "res/whatsup.jpg";
