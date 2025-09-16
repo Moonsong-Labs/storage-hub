@@ -277,7 +277,6 @@ mod tests {
 
     use super::*;
     use crate::{
-        constants::test::placeholder_ids,
         data::indexer_db::{
             repository::{error::RepositoryError, postgres::Repository, IndexerOpsMut},
             test_helpers::{
@@ -289,6 +288,7 @@ mod tests {
                 },
             },
         },
+        test_utils::{random_bytes_32, random_hash},
     };
 
     #[tokio::test]
@@ -381,9 +381,7 @@ mod tests {
             .expect("Failed to create repository");
 
         // Any non-existent bucket ID will work for this test
-        let nonexistent_hash =
-            Hash::from_slice(placeholder_ids::NONEXISTENT_BUCKET_ID.as_slice().into());
-        let result = repo.get_bucket_by_onchain_id(&nonexistent_hash).await;
+        let result = repo.get_bucket_by_onchain_id(&random_hash()).await;
 
         assert!(
             result.is_err(),
@@ -417,8 +415,7 @@ mod tests {
 
         // Add a second bucket with one file to verify filtering
         // These values are arbitrary placeholders - the exact values don't matter for this test
-        let additional_bucket_id =
-            Hash::from_slice(placeholder_ids::ADDITIONAL_BUCKET_ID.as_slice());
+        let additional_bucket_id = random_hash();
         let additional_bucket = repo
             .create_bucket(
                 "5CombC1j5ZmdNMEpWYpeEWcKPPYcKsC1WgMPgzGLU72SLa4o",
@@ -431,14 +428,14 @@ mod tests {
             .expect("Failed to create additional bucket");
 
         // Add a file to the second bucket
-        let file_key = Hash::from_slice(placeholder_ids::TEST_FILE_KEY.as_slice());
+        let file_key = random_hash();
         repo.create_file(
-            placeholder_ids::TEST_FILE_ACCOUNT.as_slice(),
+            &random_bytes_32(),
             &file_key,
             additional_bucket.id,
             &additional_bucket_id,
             b"file.txt",
-            placeholder_ids::TEST_FILE_FINGERPRINT,
+            &random_bytes_32(),
             12345,
         )
         .await
@@ -552,13 +549,12 @@ mod tests {
             .await
             .expect("Failed to get MSP");
 
-        let empty_bucket_id = Hash::from_slice(placeholder_ids::EMPTY_BUCKET_ID.as_slice());
         let empty_bucket = repo
             .create_bucket(
                 "0xemptybucketuser",
                 Some(empty_msp.id),
                 b"empty-bucket",
-                &empty_bucket_id,
+                &random_hash(),
                 false,
             )
             .await
@@ -614,23 +610,21 @@ mod tests {
         // SNAPSHOT_SQL already has 1 bucket for BUCKET_ACCOUNT with MSP #2
         // Add 2 more buckets for BUCKET_ACCOUNT with MSP #2
         // These bucket names and IDs are arbitrary placeholders
-        let bucket_id_2 = Hash::from_slice(placeholder_ids::USER_BUCKET2_ID.as_slice());
         repo.create_bucket(
             BUCKET_ACCOUNT,
             Some(MSP_TWO_ID),
             b"user-bucket2",
-            &bucket_id_2,
+            &random_hash(),
             true,
         )
         .await
         .expect("Failed to create bucket 2");
 
-        let bucket_id_3 = Hash::from_slice(placeholder_ids::USER_BUCKET3_ID.as_slice());
         repo.create_bucket(
             BUCKET_ACCOUNT,
             Some(MSP_TWO_ID),
             b"user-bucket3",
-            &bucket_id_3,
+            &random_hash(),
             false,
         )
         .await
@@ -661,23 +655,21 @@ mod tests {
         // Add more buckets for pagination testing
         // SNAPSHOT_SQL already has 1 bucket for BUCKET_ACCOUNT with MSP #2
         // These bucket names and IDs are arbitrary placeholders
-        let pb2_id = Hash::from_slice(placeholder_ids::PAGINATION_BUCKET2_ID.as_slice());
         repo.create_bucket(
             BUCKET_ACCOUNT,
             Some(MSP_TWO_ID),
             b"pagination-bucket-2",
-            &pb2_id,
+            &random_hash(),
             false,
         )
         .await
         .expect("Failed to create pagination bucket 2");
 
-        let pb3_id = Hash::from_slice(placeholder_ids::PAGINATION_BUCKET3_ID.as_slice());
         repo.create_bucket(
             BUCKET_ACCOUNT,
             Some(MSP_TWO_ID),
             b"pagination-bucket-3",
-            &pb3_id,
+            &random_hash(),
             false,
         )
         .await
@@ -734,12 +726,11 @@ mod tests {
         // Add one bucket for a different user with MSP #2 to test filtering
         // The exact user account doesn't matter, just needs to be different from BUCKET_ACCOUNT
         let other_user = "0xotheruser";
-        let oub1_id = Hash::from_slice(placeholder_ids::OTHER_USER_BUCKET_ID.as_slice());
         repo.create_bucket(
             other_user,
             Some(MSP_TWO_ID),
             b"other-user-bucket",
-            &oub1_id,
+            &random_hash(),
             false,
         )
         .await
@@ -796,12 +787,11 @@ mod tests {
 
         // Add bucket for BUCKET_ACCOUNT with MSP #1 to test MSP filtering
         let msp1_bucket_name = b"user-msp1-bucket"; // saved for assertion
-        let mb1_id = Hash::from_slice(placeholder_ids::MSP1_USER_BUCKET_ID.as_slice());
         repo.create_bucket(
             BUCKET_ACCOUNT,
             Some(MSP_ONE_ID),
             msp1_bucket_name,
-            &mb1_id,
+            &random_hash(),
             false,
         )
         .await
@@ -866,12 +856,11 @@ mod tests {
 
         // Add bucket with NULL MSP to test filtering
         let no_msp_bucket_name = b"no-msp-bucket"; // saved for assertion
-        let nmb1_id = Hash::from_slice(placeholder_ids::NO_MSP_BUCKET_ID.as_slice());
         repo.create_bucket(
             BUCKET_ACCOUNT,
             None, // NULL MSP
             no_msp_bucket_name,
-            &nmb1_id,
+            &random_hash(),
             false,
         )
         .await
@@ -937,9 +926,7 @@ mod tests {
             .expect("Failed to create repository");
 
         // Any non-existent file key will work for this test
-        let nonexistent_key =
-            Hash::from_slice(placeholder_ids::NONEXISTENT_FILE_KEY.as_slice().into());
-        let result = repo.get_file_by_file_key(&nonexistent_key).await;
+        let result = repo.get_file_by_file_key(&random_hash()).await;
 
         assert!(
             result.is_err(),

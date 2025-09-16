@@ -300,7 +300,7 @@ mod tests {
     use chrono::DateTime;
 
     use super::*;
-    use crate::constants::test::placeholder_ids;
+    use crate::test_utils::random_bytes_32;
 
     fn test_file_with_location_key_and_size(location: &str, file_key: &[u8], size: i64) -> DBFile {
         DBFile {
@@ -368,14 +368,15 @@ mod tests {
     #[test]
     fn business_rules_root_optional() {
         // Test that /folder/file.txt and folder/file.txt produce the same result
+        let file_key = random_bytes_32();
         let files1 = vec![test_file_with_location_key_and_size(
             "/folder/file.txt",
-            placeholder_ids::TEST_FILE_KEY1,
+            &file_key,
             100,
         )];
         let files2 = vec![test_file_with_location_key_and_size(
             "folder/file.txt",
-            placeholder_ids::TEST_FILE_KEY1,
+            &file_key,
             100,
         )];
 
@@ -395,21 +396,9 @@ mod tests {
     fn business_rules_duplicate_slashes_collapsed() {
         // Test that multiple slashes are collapsed to single path
         let files = vec![
-            test_file_with_location_key_and_size(
-                "//file1.txt",
-                placeholder_ids::TEST_FILE_KEY1,
-                100,
-            ),
-            test_file_with_location_key_and_size(
-                "////file2.txt",
-                placeholder_ids::TEST_FILE_KEY2,
-                200,
-            ),
-            test_file_with_location_key_and_size(
-                "/file3.txt",
-                placeholder_ids::TEST_FILE_KEY3,
-                300,
-            ),
+            test_file_with_location_key_and_size("//file1.txt", &random_bytes_32(), 100),
+            test_file_with_location_key_and_size("////file2.txt", &random_bytes_32(), 200),
+            test_file_with_location_key_and_size("/file3.txt", &random_bytes_32(), 300),
         ];
 
         let tree = FileTree::from_files_filtered(files, "/");
@@ -428,9 +417,11 @@ mod tests {
     #[test]
     fn business_rules_trailing_slashes_trimmed() {
         // Test that trailing slashes are trimmed
+        let key1 = random_bytes_32();
+        let key2 = random_bytes_32();
         let files = vec![
-            test_file_with_location_key_and_size("file.txt/", placeholder_ids::TEST_FILE_KEY1, 100),
-            test_file_with_location_key_and_size("file.txt", placeholder_ids::TEST_FILE_KEY2, 200),
+            test_file_with_location_key_and_size("file.txt/", &key1, 100),
+            test_file_with_location_key_and_size("file.txt", &key2, 200),
         ];
 
         let tree = FileTree::from_files_filtered(files, "/");
@@ -443,11 +434,11 @@ mod tests {
 
             // Verify they are different files
             if let FileTreeEntry::File(file1) = &folder.children[0].entry {
-                assert_eq!(file1.file_key, hex::encode(placeholder_ids::TEST_FILE_KEY1));
+                assert_eq!(file1.file_key, hex::encode(&key1));
                 assert_eq!(file1.size_bytes, 100);
             }
             if let FileTreeEntry::File(file2) = &folder.children[1].entry {
-                assert_eq!(file2.file_key, hex::encode(placeholder_ids::TEST_FILE_KEY2));
+                assert_eq!(file2.file_key, hex::encode(&key2));
                 assert_eq!(file2.size_bytes, 200);
             }
         }
@@ -455,27 +446,15 @@ mod tests {
 
     #[test]
     fn file_tree_from_files_basic() {
+        let key1 = random_bytes_32();
+        let key2 = random_bytes_32();
+        let key3 = random_bytes_32();
+        let key4 = random_bytes_32();
         let files = vec![
-            test_file_with_location_key_and_size(
-                "/path/to/file/foo.txt",
-                placeholder_ids::TEST_FILE_KEY1,
-                100,
-            ),
-            test_file_with_location_key_and_size(
-                "/path/to/file/bar.txt",
-                placeholder_ids::TEST_FILE_KEY2,
-                200,
-            ),
-            test_file_with_location_key_and_size(
-                "/path/to/another/thing.txt",
-                placeholder_ids::TEST_FILE_KEY3,
-                300,
-            ),
-            test_file_with_location_key_and_size(
-                "/a/different/file.txt",
-                placeholder_ids::TEST_FILE_KEY4,
-                400,
-            ),
+            test_file_with_location_key_and_size("/path/to/file/foo.txt", &key1, 100),
+            test_file_with_location_key_and_size("/path/to/file/bar.txt", &key2, 200),
+            test_file_with_location_key_and_size("/path/to/another/thing.txt", &key3, 300),
+            test_file_with_location_key_and_size("/a/different/file.txt", &key4, 400),
         ];
 
         let tree = FileTree::from_files(files);
@@ -511,7 +490,7 @@ mod tests {
 
                     if let FileTreeEntry::File(file) = &file_entry.entry {
                         assert_eq!(file.size_bytes, 400);
-                        assert_eq!(file.file_key, hex::encode(placeholder_ids::TEST_FILE_KEY4));
+                        assert_eq!(file.file_key, hex::encode(&key4));
                     } else {
                         panic!("'file.txt' should be a file");
                     }
@@ -558,31 +537,15 @@ mod tests {
     #[test]
     fn file_tree_filtered_at_root() {
         let files = vec![
-            test_file_with_location_key_and_size(
-                "/path/to/file/foo.txt",
-                placeholder_ids::TEST_FILE_KEY1,
-                100,
-            ),
-            test_file_with_location_key_and_size(
-                "/path/to/file/bar.txt",
-                placeholder_ids::TEST_FILE_KEY2,
-                200,
-            ),
+            test_file_with_location_key_and_size("/path/to/file/foo.txt", &random_bytes_32(), 100),
+            test_file_with_location_key_and_size("/path/to/file/bar.txt", &random_bytes_32(), 200),
             test_file_with_location_key_and_size(
                 "/path/to/another/thing.txt",
-                placeholder_ids::TEST_FILE_KEY3,
+                &random_bytes_32(),
                 300,
             ),
-            test_file_with_location_key_and_size(
-                "/a/different/file.txt",
-                placeholder_ids::TEST_FILE_KEY4,
-                400,
-            ),
-            test_file_with_location_key_and_size(
-                "/root_file.txt",
-                placeholder_ids::TEST_FILE_KEY5,
-                500,
-            ),
+            test_file_with_location_key_and_size("/a/different/file.txt", &random_bytes_32(), 400),
+            test_file_with_location_key_and_size("/root_file.txt", &random_bytes_32(), 500),
         ];
 
         // Test root path (should show only direct children: "path", "a", and "root_file.txt")
@@ -625,26 +588,14 @@ mod tests {
     #[test]
     fn file_tree_filtered_at_specific_path() {
         let files = vec![
-            test_file_with_location_key_and_size(
-                "/path/to/file/foo.txt",
-                placeholder_ids::TEST_FILE_KEY1,
-                100,
-            ),
-            test_file_with_location_key_and_size(
-                "/path/to/file/bar.txt",
-                placeholder_ids::TEST_FILE_KEY2,
-                200,
-            ),
+            test_file_with_location_key_and_size("/path/to/file/foo.txt", &random_bytes_32(), 100),
+            test_file_with_location_key_and_size("/path/to/file/bar.txt", &random_bytes_32(), 200),
             test_file_with_location_key_and_size(
                 "/path/to/another/thing.txt",
-                placeholder_ids::TEST_FILE_KEY3,
+                &random_bytes_32(),
                 300,
             ),
-            test_file_with_location_key_and_size(
-                "/path/direct_file.txt",
-                placeholder_ids::TEST_FILE_KEY6,
-                600,
-            ),
+            test_file_with_location_key_and_size("/path/direct_file.txt", &random_bytes_32(), 600),
         ];
 
         // Test "/path" - should show "to" folder and "direct_file.txt"
@@ -681,26 +632,14 @@ mod tests {
     #[test]
     fn file_tree_filtered_at_deeper_path() {
         let files = vec![
-            test_file_with_location_key_and_size(
-                "/path/to/file/foo.txt",
-                placeholder_ids::TEST_FILE_KEY1,
-                100,
-            ),
-            test_file_with_location_key_and_size(
-                "/path/to/file/bar.txt",
-                placeholder_ids::TEST_FILE_KEY2,
-                200,
-            ),
+            test_file_with_location_key_and_size("/path/to/file/foo.txt", &random_bytes_32(), 100),
+            test_file_with_location_key_and_size("/path/to/file/bar.txt", &random_bytes_32(), 200),
             test_file_with_location_key_and_size(
                 "/path/to/another/thing.txt",
-                placeholder_ids::TEST_FILE_KEY3,
+                &random_bytes_32(),
                 300,
             ),
-            test_file_with_location_key_and_size(
-                "/path/to/direct.txt",
-                placeholder_ids::TEST_FILE_KEY7,
-                700,
-            ),
+            test_file_with_location_key_and_size("/path/to/direct.txt", &random_bytes_32(), 700),
         ];
 
         // Test "/path/to" - should show "file" folder, "another" folder, and "direct.txt"
