@@ -24,23 +24,21 @@ export class StorageHubClient {
   private static readonly DEFAULT_GAS_PRICE = parseGwei('1');
 
   /**
-   * Get any contract method - reads and writes handled automatically.
+   * Get write contract instance bound to the wallet client.
    * 
-   * @param methodName - Name of the contract method as it's state in the .abi.json
-   * @returns Validated contract method ready to call
+   * @returns Contract instance for write operations (transactions)
    */
-  private getContract(methodName: string) {
-    const contract = getFileSystemContract(this.walletClient);
+  private getWriteContract() {
+    return getFileSystemContract(this.walletClient);
+  }
 
-    const readMethod = contract.read?.[methodName as keyof typeof contract.read];
-    const writeMethod = contract.write?.[methodName as keyof typeof contract.write];
-
-    const method = readMethod || writeMethod;
-    if (!method) {
-      throw new Error(`StorageHubClient: method ${methodName} not available`);
-    }
-
-    return method;
+  /**
+   * Get read contract instance bound to the public client.
+   * 
+   * @returns Contract instance for read operations (view calls)
+   */
+  private getReadContract() {
+    return getFileSystemContract(this.publicClient);
   }
 
   /**
@@ -141,8 +139,8 @@ export class StorageHubClient {
    */
   deriveBucketId(owner: Address, name: string) {
     const nameHex = this.validateStringLength(name, StorageHubClient.MAX_BUCKET_NAME_BYTES, 'Bucket name');
-    const deriveBucketId = this.getContract('deriveBucketId');
-    return deriveBucketId([owner, nameHex]);
+    const contract = this.getReadContract();
+    return contract.read.deriveBucketId!([owner, nameHex]);
   }
 
   /**
@@ -151,8 +149,8 @@ export class StorageHubClient {
    * @returns count as number
    */
   getPendingFileDeletionRequestsCount(user: Address) {
-    const getPendingFileDeletionRequestsCount = this.getContract('getPendingFileDeletionRequestsCount');
-    return getPendingFileDeletionRequestsCount([user]);
+    const contract = this.getReadContract();
+    return contract.read.getPendingFileDeletionRequestsCount!([user]);
   }
 
   // -------- Writes --------
@@ -177,8 +175,8 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas('createBucket', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    const createBucket = this.getContract('createBucket');
-    return createBucket(args, txOpts);
+    const contract = this.getWriteContract();
+    return await contract.write.createBucket!(args, txOpts);
   }
 
   /**
@@ -198,8 +196,8 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas('requestMoveBucket', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    const requestMoveBucket = this.getContract('requestMoveBucket');
-    return requestMoveBucket(args, txOpts);
+    const contract = this.getWriteContract();
+    return await contract.write.requestMoveBucket!(args, txOpts);
   }
 
   /**
@@ -217,8 +215,8 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas('updateBucketPrivacy', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    const updateBucketPrivacy = this.getContract('updateBucketPrivacy');
-    return updateBucketPrivacy(args, txOpts);
+    const contract = this.getWriteContract();
+    return await contract.write.updateBucketPrivacy!(args, txOpts);
   }
 
   /**
@@ -234,8 +232,8 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas('createAndAssociateCollectionWithBucket', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    const createAndAssociateCollectionWithBucket = this.getContract('createAndAssociateCollectionWithBucket');
-    return createAndAssociateCollectionWithBucket(args, txOpts);
+    const contract = this.getWriteContract();
+    return await contract.write.createAndAssociateCollectionWithBucket!(args, txOpts);
   }
 
   /**
@@ -251,8 +249,8 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas('deleteBucket', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    const deleteBucket = this.getContract('deleteBucket');
-    return deleteBucket(args, txOpts);
+    const contract = this.getWriteContract();
+    return await contract.write.deleteBucket!(args, txOpts);
   }
 
   /**
@@ -295,8 +293,8 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas('issueStorageRequest', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    const issueStorageRequest = this.getContract('issueStorageRequest');
-    return issueStorageRequest(args, txOpts);
+    const contract = this.getWriteContract();
+    return await contract.write.issueStorageRequest!(args, txOpts);
   }
 
   /**
@@ -312,8 +310,8 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas('revokeStorageRequest', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    const revokeStorageRequest = this.getContract('revokeStorageRequest');
-    return revokeStorageRequest(args, txOpts);
+    const contract = this.getWriteContract();
+    return await contract.write.revokeStorageRequest!(args, txOpts);
   }
 
   /**
@@ -349,7 +347,7 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas('requestDeleteFile', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    const requestDeleteFile = this.getContract('requestDeleteFile');
-    return requestDeleteFile(args, txOpts);
+    const contract = this.getWriteContract();
+    return await contract.write.requestDeleteFile!(args, txOpts);
   }
 }
