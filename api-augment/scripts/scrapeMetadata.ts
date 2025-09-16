@@ -37,42 +37,53 @@ const fetchMetadata = async () => {
   throw new Error("Error fetching metadata");
 };
 
+const runCombination = async (metadataPath: string, dockerComposePath: string) => {
+  console.log(`\n=== Starting container for compose: ${dockerComposePath} ===`);
+  try {
+    // Start services in background
+    spawn(
+      "docker",
+      ["compose", "-f", dockerComposePath, "up", "-d", "--remove-orphans", "--renew-anon-volumes"],
+      { stdio: "inherit" }
+    );
+
+    const metadata = await fetchMetadata();
+    const jsonResponse = await new Response(metadata).json();
+    fs.writeFileSync(metadataPath, JSON.stringify(jsonResponse, null, 2));
+    console.log("✅ Metadata file written to:", metadataPath);
+  } finally {
+    try {
+      execSync(`docker compose -f=${dockerComposePath} down --remove-orphans --volumes`, {
+        stdio: "inherit"
+      });
+    } catch (e) {
+      console.warn("⚠️ Error bringing docker compose down:", e);
+    }
+  }
+};
+
 async function main() {
   const nodePath = path.join(process.cwd(), "..", "target", "release", "storage-hub-node");
-  const metadataPath = path.join(process.cwd(), "storagehub.json");
+  const metadataPaths = [
+    path.join(process.cwd(), "metadata-sh-parachain.json"),
+    path.join(process.cwd(), "metadata-sh-solochain-evm.json")
+  ];
+  const dockerComposePaths = [
+    path.join(process.cwd(), "..", "docker", "local-parachain-compose.yml"),
+    path.join(process.cwd(), "..", "docker", "local-solochain-evm-compose.yml")
+  ];
 
   if (!fs.existsSync(nodePath)) {
     console.error("Storage Hub Node not found at path: ", nodePath);
     throw new Error("File not found");
   }
 
-  // TODO: replace with dockerode
-  spawn(
-    "docker",
-    [
-      "compose",
-      "-f=../docker/local-node-compose.yml",
-      "up",
-      "--remove-orphans",
-      "--renew-anon-volumes"
-    ],
-    {
-      stdio: "inherit"
-    }
-  );
-
-  const metadata = await fetchMetadata();
-  const jsonResponse = await new Response(metadata).json();
-  fs.writeFileSync(metadataPath, JSON.stringify(jsonResponse, null, 2));
-
-  console.log("✅ Metadata file written to:", metadataPath);
+  // Run sequentially for each combination
+  for (let index = 0; index < metadataPaths.length; index++) {
+    const metadataPath = metadataPaths[index];
+    const dockerComposePath = dockerComposePaths[index];
+    await runCombination(metadataPath, dockerComposePath);
+  }
 }
 
-await main()
-  .catch((error) => {
-    console.error(error);
-    process.exitCode = 1;
-  })
-  .finally(() => {
-    execSync("docker compose -f=../docker/local-node-compose.yml down --remove-orphans --volumes");
-  });
+await main();

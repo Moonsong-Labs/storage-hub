@@ -1,1 +1,0 @@
-{"version":3,"file":"definitions.js","sourceRoot":"","sources":["../../../src/interfaces/storagehubclient/definitions.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,qBAAqB,EAAE,MAAM,0BAA0B,CAAC;AAEjE,eAAe;IACb,KAAK,EAAE,qBAAqB,CAAC,KAAK,EAAE,CAAC,CAAC,CAAC,CAAC,KAAK;IAC7C,OAAO,EAAE,qBAAqB,CAAC,OAAO;IACtC,GAAG,EAAE,qBAAqB,CAAC,GAAG,EAAE,gBAAgB;CACjD,CAAC"}

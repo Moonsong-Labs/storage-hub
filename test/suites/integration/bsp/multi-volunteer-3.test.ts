@@ -7,9 +7,7 @@ import {
   alice,
   bob,
   bspThreeKey,
-  bspThreeSeed,
   bspTwoKey,
-  bspTwoSeed,
   charlie,
   describeBspNet,
   type EnrichedBspApi,
@@ -51,7 +49,6 @@ await describeBspNet("BSPNet: Mulitple BSP Volunteering - 3", ({ before, it, cre
     await api.docker.onboardBsp({
       bspSigner: bspTwoKey,
       name: "sh-bsp-two",
-      bspKeySeed: bspTwoSeed,
       bspId: ShConsts.BSP_TWO_ID,
       additionalArgs: ["--keystore-path=/keystore/bsp-two"],
       waitForIdle: true
@@ -60,7 +57,6 @@ await describeBspNet("BSPNet: Mulitple BSP Volunteering - 3", ({ before, it, cre
     await api.docker.onboardBsp({
       bspSigner: bspThreeKey,
       name: "sh-bsp-three",
-      bspKeySeed: bspThreeSeed,
       bspId: ShConsts.BSP_THREE_ID,
       additionalArgs: ["--keystore-path=/keystore/bsp-three"],
       waitForIdle: true

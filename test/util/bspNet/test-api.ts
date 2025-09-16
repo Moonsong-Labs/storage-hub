@@ -7,6 +7,30 @@ import type { HexString } from "@polkadot/util/types";
 import { types as BundledTypes } from "@storagehub/types-bundle";
 import type { AssertExtrinsicOptions } from "../asserts";
 import * as Assertions from "../asserts";
+import {
+  alith,
+  ethBspDownKey,
+  ethBspKey,
+  ethBspThreeKey,
+  ethBspTwoKey,
+  ethMspDownKey,
+  ethMspKey,
+  ethMspThreeKey,
+  ethMspTwoKey,
+  ethShUser
+} from "../evmNet/keyring";
+import {
+  alice,
+  bspDownKey,
+  bspKey,
+  bspThreeKey,
+  bspTwoKey,
+  mspDownKey,
+  mspKey,
+  mspThreeKey,
+  mspTwoKey,
+  shUser
+} from "../pjsKeyring";
 import * as BspNetBlock from "./block";
 import * as ShConsts from "./consts";
 import * as DockerBspNet from "./docker";
@@ -47,10 +71,16 @@ export interface WaitForTxOptions {
 export class BspNetTestApi implements AsyncDisposable {
   private _api: ApiPromise;
   private _endpoint: `ws://${string}` | `wss://${string}`;
+  private _runtimeType: "parachain" | "solochain";
 
-  private constructor(api: ApiPromise, endpoint: `ws://${string}` | `wss://${string}`) {
+  private constructor(
+    api: ApiPromise,
+    endpoint: `ws://${string}` | `wss://${string}`,
+    runtimeType: "parachain" | "solochain"
+  ) {
     this._api = api;
     this._endpoint = endpoint;
+    this._runtimeType = runtimeType;
   }
 
   /**
@@ -59,11 +89,14 @@ export class BspNetTestApi implements AsyncDisposable {
    * @param endpoint - The WebSocket endpoint to connect to.
    * @returns A promise that resolves to an enriched BspNetApi.
    */
-  public static async create(endpoint: `ws://${string}` | `wss://${string}`) {
+  public static async create(
+    endpoint: `ws://${string}` | `wss://${string}`,
+    runtimeType?: "parachain" | "solochain"
+  ) {
     const api = await BspNetTestApi.connect(endpoint);
     await api.isReady;
 
-    const ctx = new BspNetTestApi(api, endpoint);
+    const ctx = new BspNetTestApi(api, endpoint, runtimeType ?? "parachain");
 
     return ctx.enrichApi();
   }
@@ -122,12 +155,18 @@ export class BspNetTestApi implements AsyncDisposable {
       source,
       location,
       bucketName,
+      this._runtimeType === "solochain" ? ethShUser : shUser,
       valuePropId
     );
   }
 
   private async createBucket(bucketName: string, valuePropId?: HexString | null) {
-    return Files.createBucket(this._api, bucketName, valuePropId);
+    return Files.createBucket(
+      this._api,
+      bucketName,
+      this._runtimeType === "solochain" ? ethShUser : shUser,
+      valuePropId
+    );
   }
 
   private assertEvent(module: string, method: string, events?: EventRecord[]) {
@@ -135,6 +174,20 @@ export class BspNetTestApi implements AsyncDisposable {
   }
 
   private enrichApi() {
+    const runtimeType = this._runtimeType;
+    const remappedAccountsNs = {
+      sudo: runtimeType === "solochain" ? alith : alice,
+      bspKey: runtimeType === "solochain" ? ethBspKey : bspKey,
+      bspDownKey: runtimeType === "solochain" ? ethBspDownKey : bspDownKey,
+      bspTwoKey: runtimeType === "solochain" ? ethBspTwoKey : bspTwoKey,
+      bspThreeKey: runtimeType === "solochain" ? ethBspThreeKey : bspThreeKey,
+      mspKey: runtimeType === "solochain" ? ethMspKey : mspKey,
+      mspDownKey: runtimeType === "solochain" ? ethMspDownKey : mspDownKey,
+      mspTwoKey: runtimeType === "solochain" ? ethMspTwoKey : mspTwoKey,
+      mspThreeKey: runtimeType === "solochain" ? ethMspThreeKey : mspThreeKey,
+      shUser: runtimeType === "solochain" ? ethShUser : shUser
+    } as const;
+
     const remappedAssertNs = {
       fetchEvent: Assertions.fetchEvent,
 
@@ -366,7 +419,14 @@ export class BspNetTestApi implements AsyncDisposable {
         owner?: KeyringPair,
         valuePropId?: HexString | null,
         mspId?: HexString | null
-      ) => Files.createBucket(this._api, bucketName, valuePropId, mspId, owner),
+      ) =>
+        Files.createBucket(
+          this._api,
+          bucketName,
+          owner ?? (this._runtimeType === "solochain" ? ethShUser : shUser),
+          valuePropId,
+          mspId
+        ),
 
       /**
        * Issue a new storage request.
@@ -384,7 +444,15 @@ export class BspNetTestApi implements AsyncDisposable {
         bucketId: H256,
         owner?: KeyringPair,
         msp_id?: HexString
-      ) => Files.sendNewStorageRequest(this._api, source, location, bucketId, owner, msp_id),
+      ) =>
+        Files.sendNewStorageRequest(
+          this._api,
+          source,
+          location,
+          bucketId,
+          owner ?? (this._runtimeType === "solochain" ? ethShUser : shUser),
+          msp_id
+        ),
 
       /**
        * Creates a new bucket and submits a new storage request.
@@ -395,6 +463,7 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param mspId - <TODO> Optional MSP ID to use for the new storage request. Defaults to DUMMY_MSP_ID.
        * @param owner - Optional signer with which to issue the newStorageRequest Defaults to SH_USER.
        * @param replicationTarget - Optional number of replicas to store the file. Defaults to the BasicReplicationTarget of the runtime.
+       * @param finalizeBlock - Optional boolean to finalize the blocks created when sending the new storage request. Defaults to true.
        * @returns A promise that resolves to file metadata.
        */
       createBucketAndSendNewStorageRequest: (
@@ -404,17 +473,19 @@ export class BspNetTestApi implements AsyncDisposable {
         valuePropId?: HexString | null,
         msp_id?: HexString | null,
         owner?: KeyringPair | null,
-        replicationTarget?: number | null
+        replicationTarget?: number | null,
+        finalizeBlock?: boolean
       ) =>
         Files.createBucketAndSendNewStorageRequest(
           this._api,
           source,
           location,
           bucketName,
+          owner ?? (this._runtimeType === "solochain" ? ethShUser : shUser),
           valuePropId,
           msp_id,
-          owner,
-          replicationTarget
+          replicationTarget,
+          finalizeBlock
         )
     };
 
@@ -467,7 +538,7 @@ export class BspNetTestApi implements AsyncDisposable {
         BspNetBlock.sealBlock(
           this._api,
           options?.calls,
-          options?.signer,
+          options?.signer ?? (this._runtimeType === "solochain" ? alith : alice),
           options?.nonce,
           options?.parentHash,
           options?.finaliseBlock,
@@ -598,13 +669,18 @@ export class BspNetTestApi implements AsyncDisposable {
         bspSigner: KeyringPair;
         name?: string;
         rocksdb?: boolean;
-        bspKeySeed?: string;
         bspId?: string;
         bspStartingWeight?: bigint;
         maxStorageCapacity?: number;
         additionalArgs?: string[];
         waitForIdle?: boolean;
-      }) => addBsp(this._api, options.bspSigner, options)
+      }) =>
+        addBsp(
+          this._api,
+          options.bspSigner,
+          this._runtimeType === "solochain" ? alith : alice,
+          options
+        )
     };
 
     return Object.assign(this._api, {
@@ -658,6 +734,12 @@ export class BspNetTestApi implements AsyncDisposable {
        * Offers methods for interacting with Docker containers in the BSP network test environment.
        */
       docker: remappedDockerNs,
+      /**
+       * Accounts namespace
+       * Provides runtime-dependent test accounts for convenience.
+       * Access as: api.accounts.sudo, api.accounts.bspKey, etc.
+       */
+      accounts: remappedAccountsNs,
       [Symbol.asyncDispose]: this.disconnect.bind(this)
     }) satisfies BspNetApi;
   }

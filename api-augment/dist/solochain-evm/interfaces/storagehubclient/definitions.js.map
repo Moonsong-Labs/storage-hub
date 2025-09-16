@@ -1,0 +1,1 @@
+{"version":3,"file":"definitions.js","sourceRoot":"","sources":["../../../../src/solochain-evm/interfaces/storagehubclient/definitions.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,yBAAyB,EAAE,MAAM,0BAA0B,CAAC;AAErE,eAAe;IACb,KAAK,EAAE,yBAAyB,CAAC,KAAK,EAAE,CAAC,CAAC,CAAC,CAAC,KAAK;IACjD,OAAO,EAAE,yBAAyB,CAAC,OAAO;IAC1C,GAAG,EAAE,yBAAyB,CAAC,GAAG,EAAE,gBAAgB;CACrD,CAAC"}
