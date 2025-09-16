@@ -4,62 +4,46 @@
  * Provides ergonomic read/write methods for StorageHub precompiles using viem.
  * Handles gas estimation automatically with Frontier-optimized defaults.
  * 
- * All arguments are strongly typed. Binary data should be passed as Uint8Array (e.g., TextEncoder for strings).
- * Hex values should be 0x-prefixed strings (32-byte IDs like bucketId, mspId, etc.).
- * 
- * @example
- * // Simple setup
- * const hub = new StorageHubClient({
- *   rpcUrl: 'http://localhost:9944',
- *   chain: storageHubChain,
- *   walletClient: myWalletClient
- * });
- * 
- * // Read operations (no gas needed)
- * const bucketId = await hub.deriveBucketId(owner, name);
- * 
- * // Write operations (automatic gas estimation)
- * const txHash = await hub.createBucket(mspId, name, false, valuePropId);
+ * All arguments are strongly typed. String data (names, paths) are passed as strings and encoded internally.
+ * Binary data (signatures) are passed as Uint8Array. Hex values are 0x-prefixed strings (32-byte IDs).
  */
 
 import { FILE_SYSTEM_PRECOMPILE_ADDRESS, filesystemAbi, type FileSystemContract, getFileSystemContract } from './filesystem';
 import type { EvmWriteOptions, StorageHubClientOptions } from './types';
-import { type Address, createPublicClient, http, parseGwei, type PublicClient, toHex, type WalletClient } from 'viem';
+import { type Address, createPublicClient, http, parseGwei, type PublicClient, stringToBytes, stringToHex, toHex, type WalletClient, type GetContractReturnType } from 'viem';
+
 
 export class StorageHubClient {
   private readonly publicClient: PublicClient;   // Internal for gas estimation
   private readonly walletClient: WalletClient;   // User-provided
-  private readonly contract: FileSystemContract<PublicClient>;
+  private readonly contract: FileSystemContract<PublicClient>;  // For reads
   private static readonly MAX_BUCKET_NAME_BYTES = 100;
+  private static readonly MAX_LOCATION_BYTES = 512;
+  private static readonly MAX_PEER_ID_BYTES = 100;
   private static readonly DEFAULT_GAS_MULTIPLIER = 5;
   private static readonly DEFAULT_GAS_PRICE = parseGwei('1');
-  private getRead(): NonNullable<typeof this.contract.read> {
-    if (this.contract.read) return this.contract.read;
-    throw new Error('StorageHubClient: read client not available');
-  }
-  private getReadMethod<K extends keyof NonNullable<typeof this.contract.read>>(name: K) {
-    const r = this.getRead();
-    const m = r[name];
-    if (!m) throw new Error(`StorageHubClient: read method ${String(name)} unavailable`);
-    return m as NonNullable<typeof r[K]>;
-  }
-
   /**
-   * Get write methods with runtime safety check.
-   * Returns the write object directly for cleaner method calls.
+   * Get any contract method - reads and writes handled automatically.
+   * Universal wrapper that auto-detects and returns the correct method.
+   * 
+   * @param methodName - Name of the contract method
+   * @returns Validated contract method ready to call
    */
-  private getWriteContract() {
-    const directContract = getFileSystemContract(this.walletClient);
+  private getContract(methodName: string) {
+    const contract = getFileSystemContract(this.walletClient);
 
-    // Runtime safety check: ensure write capabilities are available
-    if (!directContract.write) {
-      throw new Error('StorageHubClient: WalletClient write capabilities not available');
+    // Try read methods first (cheaper), then write methods
+    // Safe to use ! operators: we validate method exists below
+    const readMethod = contract.read?.[methodName as keyof typeof contract.read];
+    const writeMethod = contract.write?.[methodName as keyof typeof contract.write];
+
+    const method = readMethod || writeMethod;
+    if (!method) {
+      throw new Error(`StorageHubClient: method ${methodName} not available`);
     }
 
-    // Return write methods directly for cleaner API
-    return (directContract as FileSystemContract<WalletClient>).write;
+    return method;
   }
-
 
   /**
    * Reusable gas estimation for any contract method.
@@ -124,6 +108,21 @@ export class StorageHubClient {
 
     return txOpts;
   }
+  /**
+   * Validate string length in UTF-8 bytes and convert to hex.
+   * @param str - Input string to validate and encode
+   * @param maxBytes - Maximum allowed byte length
+   * @param label - Label for error messages
+   * @returns 0x-prefixed hex string
+   */
+  private validateStringLength(str: string, maxBytes: number, label: string): `0x${string}` {
+    const bytes = stringToBytes(str);
+    if (bytes.length > maxBytes) {
+      throw new Error(`${label} exceeds maximum length of ${maxBytes} bytes (got ${bytes.length})`);
+    }
+    return stringToHex(str);
+  }
+
   private static assertMaxBytes(bytes: Uint8Array, max: number, label: string) {
     if (bytes.length > max) {
       throw new Error(`${label} exceeds maximum length of ${max} bytes`);
@@ -161,12 +160,13 @@ export class StorageHubClient {
   /**
    * Derive a bucket ID deterministically from owner + name.
    * @param owner - EVM address of the bucket owner
-   * @param name - bucket name as bytes (max 100 bytes). Use TextEncoder for UTF-8 strings
+   * @param name - bucket name as string (max 100 UTF-8 bytes)
    * @returns bucketId as 0x-prefixed 32-byte hex
    */
-  deriveBucketId(owner: Address, name: Uint8Array) {
-    StorageHubClient.assertMaxBytes(name, StorageHubClient.MAX_BUCKET_NAME_BYTES, 'Bucket name');
-    return this.getReadMethod('deriveBucketId')([owner, toHex(name)]);
+  deriveBucketId(owner: Address, name: string) {
+    const nameHex = this.validateStringLength(name, StorageHubClient.MAX_BUCKET_NAME_BYTES, 'Bucket name');
+    const deriveBucketId = this.getContract('deriveBucketId');
+    return deriveBucketId([owner, nameHex]);
   }
 
   /**
@@ -175,7 +175,8 @@ export class StorageHubClient {
    * @returns count as number
    */
   getPendingFileDeletionRequestsCount(user: Address) {
-    return this.getReadMethod('getPendingFileDeletionRequestsCount')([user]);
+    const getPendingFileDeletionRequestsCount = this.getContract('getPendingFileDeletionRequestsCount');
+    return getPendingFileDeletionRequestsCount([user]);
   }
 
   // -------- Writes --------
@@ -187,39 +188,39 @@ export class StorageHubClient {
    * The SDK will estimate gas and apply a 5x safety multiplier, using 1 gwei gas price.
    * 
    * @param mspId - 32-byte MSP ID (0x-prefixed hex)
-   * @param name - bucket name bytes (<= 100 bytes)
+   * @param name - bucket name as string (max 100 UTF-8 bytes)
    * @param isPrivate - true for private bucket
    * @param valuePropId - 32-byte value proposition ID (0x-prefixed hex)
    * @param options - optional gas and fee overrides
    * 
    * @example
    * // Simple usage (automatic gas estimation)
-   * const txHash = await fs.createBucket(mspId, bucketName, false, valuePropId);
+   * const txHash = await hub.createBucket(mspId, "my-bucket", false, valuePropId);
    * 
    * @example
    * // With custom gas options
-   * const txHash = await fs.createBucket(mspId, bucketName, false, valuePropId, {
+   * const txHash = await hub.createBucket(mspId, "my-bucket", false, valuePropId, {
    *   gasMultiplier: 8,
    *   gasPrice: parseGwei('2')
    * });
    */
   async createBucket(
     mspId: `0x${string}`,
-    name: Uint8Array,
+    name: string,
     isPrivate: boolean,
     valuePropId: `0x${string}`,
     options?: EvmWriteOptions,
   ) {
-    StorageHubClient.assertMaxBytes(name, StorageHubClient.MAX_BUCKET_NAME_BYTES, 'Bucket name');
-    const nameHex = toHex(name);
+    const nameHex = this.validateStringLength(name, StorageHubClient.MAX_BUCKET_NAME_BYTES, 'Bucket name');
     const args = [mspId, nameHex, isPrivate, valuePropId] as const;
 
     // Use reusable gas estimation and transaction option builders
     const gasLimit = await this.estimateGas('createBucket', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    // Use centralized write contract helper
-    return this.getWriteContract().createBucket(args, txOpts);
+    // Use unified contract wrapper - get the exact method ready to call
+    const createBucket = this.getContract('createBucket');
+    return createBucket(args, txOpts);
   }
 
   /**
@@ -244,8 +245,9 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas('requestMoveBucket', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    // Use centralized write contract helper
-    return this.getWriteContract().requestMoveBucket(args, txOpts);
+    // Use unified contract wrapper - get the exact method ready to call
+    const requestMoveBucket = this.getContract('requestMoveBucket');
+    return requestMoveBucket(args, txOpts);
   }
 
   /**
@@ -265,8 +267,9 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas('updateBucketPrivacy', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    // Use centralized write contract helper
-    return this.getWriteContract().updateBucketPrivacy(args, txOpts);
+    // Use unified contract wrapper - get the exact method ready to call
+    const updateBucketPrivacy = this.getContract('updateBucketPrivacy');
+    return updateBucketPrivacy(args, txOpts);
   }
 
   /**
@@ -284,8 +287,9 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas('createAndAssociateCollectionWithBucket', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    // Use centralized write contract helper
-    return this.getWriteContract().createAndAssociateCollectionWithBucket(args, txOpts);
+    // Use unified contract wrapper - get the exact method ready to call
+    const createAndAssociateCollectionWithBucket = this.getContract('createAndAssociateCollectionWithBucket');
+    return createAndAssociateCollectionWithBucket(args, txOpts);
   }
 
   /**
@@ -303,36 +307,39 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas('deleteBucket', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    // Use centralized write contract helper
-    return this.getWriteContract().deleteBucket(args, txOpts);
+    // Use unified contract wrapper - get the exact method ready to call
+    const deleteBucket = this.getContract('deleteBucket');
+    return deleteBucket(args, txOpts);
   }
 
   /**
    * Issue a storage request for a file.
    * @param bucketId - 32-byte bucket ID
-   * @param location - file path bytes (<= 512 bytes)
+   * @param location - file path as string (max 512 UTF-8 bytes)
    * @param fingerprint - 32-byte file fingerprint
    * @param size - file size as bigint (storage units)
    * @param mspId - 32-byte MSP ID
-   * @param peerIds - array of peer id bytes (<= 5 entries, each <= 100 bytes)
+   * @param peerIds - array of peer ID strings (max 5 entries, each max 100 UTF-8 bytes)
    * @param replicationTarget - 0 Basic, 1 Standard, 2 HighSecurity, 3 SuperHighSecurity, 4 UltraHighSecurity, 5 Custom
    * @param customReplicationTarget - required if replicationTarget = 5 (Custom)
    * @param options - optional gas and fee overrides
    */
   async issueStorageRequest(
     bucketId: `0x${string}`,
-    location: Uint8Array,
+    location: string,
     fingerprint: `0x${string}`,
     size: bigint,
     mspId: `0x${string}`,
-    peerIds: Uint8Array[],
+    peerIds: string[],
     replicationTarget: number,
     customReplicationTarget: number,
     options?: EvmWriteOptions
   ) {
     // Input validation and hex encoding
-    const locationHex = toHex(location);
-    const peerIdsHex = peerIds.map((p) => toHex(p));
+    const locationHex = this.validateStringLength(location, StorageHubClient.MAX_LOCATION_BYTES, 'File location');
+    const peerIdsHex = peerIds.map((peerId, i) =>
+      this.validateStringLength(peerId, StorageHubClient.MAX_PEER_ID_BYTES, `Peer ID ${i + 1}`)
+    );
     const args = [
       bucketId,
       locationHex,
@@ -348,8 +355,9 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas('issueStorageRequest', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    // Use centralized write contract helper
-    return this.getWriteContract().issueStorageRequest(args, txOpts);
+    // Use unified contract wrapper - get the exact method ready to call
+    const issueStorageRequest = this.getContract('issueStorageRequest');
+    return issueStorageRequest(args, txOpts);
   }
 
   /**
@@ -367,8 +375,9 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas('revokeStorageRequest', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    // Use centralized write contract helper
-    return this.getWriteContract().revokeStorageRequest(args, txOpts);
+    // Use unified contract wrapper - get the exact method ready to call
+    const revokeStorageRequest = this.getContract('revokeStorageRequest');
+    return revokeStorageRequest(args, txOpts);
   }
 
   /**
@@ -376,7 +385,7 @@ export class StorageHubClient {
    * @param signedIntention - tuple [fileKey: 0x32, operation: number] where operation must be 0 (Delete)
    * @param signature - 65-byte secp256k1 signature over the SCALE-encoded intention
    * @param bucketId - 32-byte bucket ID
-   * @param location - file path bytes (<= 512 bytes)
+   * @param location - file path as string (max 512 UTF-8 bytes)
    * @param size - file size as bigint (storage units)
    * @param fingerprint - 32-byte file fingerprint
    * @param options - optional gas and fee overrides
@@ -385,14 +394,14 @@ export class StorageHubClient {
     signedIntention: readonly [`0x${string}`, number],
     signature: Uint8Array,
     bucketId: `0x${string}`,
-    location: Uint8Array,
+    location: string,
     size: bigint,
     fingerprint: `0x${string}`,
     options?: EvmWriteOptions
   ) {
     // Input validation and hex encoding
     const signatureHex = toHex(signature);
-    const locationHex = toHex(location);
+    const locationHex = this.validateStringLength(location, StorageHubClient.MAX_LOCATION_BYTES, 'File location');
     const args = [
       signedIntention,
       signatureHex,
@@ -406,9 +415,8 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas('requestDeleteFile', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    // Use centralized write contract helper
-    return this.getWriteContract().requestDeleteFile(args, txOpts);
+    // Use unified contract wrapper - get the exact method ready to call
+    const requestDeleteFile = this.getContract('requestDeleteFile');
+    return requestDeleteFile(args, txOpts);
   }
 }
-
-
