@@ -661,13 +661,18 @@ export class BspNetTestApi implements AsyncDisposable {
         bspSigner: KeyringPair;
         name?: string;
         rocksdb?: boolean;
-        bspKeySeed?: string;
         bspId?: string;
         bspStartingWeight?: bigint;
         maxStorageCapacity?: number;
         additionalArgs?: string[];
         waitForIdle?: boolean;
-      }) => addBsp(this._api, options.bspSigner, options)
+      }) =>
+        addBsp(
+          this._api,
+          options.bspSigner,
+          this._runtimeType === "solochain" ? alith : alice,
+          options
+        )
     };
 
     return Object.assign(this._api, {
