@@ -428,10 +428,9 @@ mod tests {
             .expect("Failed to create additional bucket");
 
         // Add a file to the second bucket
-        let file_key = random_hash();
         repo.create_file(
             &random_bytes_32(),
-            &file_key,
+            &random_hash(),
             additional_bucket.id,
             &additional_bucket_id,
             b"file.txt",

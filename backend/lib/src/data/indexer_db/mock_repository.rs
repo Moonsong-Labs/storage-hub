@@ -431,10 +431,9 @@ pub mod tests {
             .await
             .expect("should create bucket");
 
-        let file1_key = random_hash();
         repo.create_file(
             TEST_BSP_ACCOUNT_STR.as_bytes(),
-            &file1_key,
+            &random_hash(),
             bucket.id,
             &bucket_hash,
             file::DEFAULT_LOCATION.as_bytes(),
@@ -444,10 +443,9 @@ pub mod tests {
         .await
         .expect("should create file");
 
-        let file2_key = random_hash();
         repo.create_file(
             TEST_BSP_ACCOUNT_STR.as_bytes(),
-            &file2_key,
+            &random_hash(),
             bucket.id,
             &bucket_hash,
             file::DEFAULT_LOCATION.as_bytes(),
@@ -457,10 +455,9 @@ pub mod tests {
         .await
         .expect("should create file");
 
-        let file3_key = random_hash();
         repo.create_file(
             TEST_BSP_ACCOUNT_STR.as_bytes(),
-            &file3_key,
+            &random_hash(),
             bucket.id,
             &bucket_hash,
             file::DEFAULT_LOCATION.as_bytes(),
@@ -483,10 +480,9 @@ pub mod tests {
             .await
             .expect("should create another bucket");
 
-        let other_file_key = random_hash();
         repo.create_file(
             TEST_BSP_ACCOUNT_STR.as_bytes(),
-            &other_file_key,
+            &random_hash(),
             other_bucket.id,
             &other_bucket_hash,
             file::DEFAULT_LOCATION.as_bytes(),
@@ -526,12 +522,11 @@ pub mod tests {
             .await
             .expect("should create bucket");
 
-        let file1_key = random_hash();
         let file1_bucket_hash = Hash::from_slice(bucket::DEFAULT_BUCKET_ID.as_slice());
         let file1 = repo
             .create_file(
                 TEST_BSP_ACCOUNT_STR.as_bytes(),
-                &file1_key,
+                &random_hash(),
                 bucket.id,
                 &file1_bucket_hash,
                 file::DEFAULT_LOCATION.as_bytes(),
@@ -541,12 +536,11 @@ pub mod tests {
             .await
             .expect("should create file1");
 
-        let file2_key = random_hash();
         let file2_bucket_hash = Hash::from_slice(bucket::DEFAULT_BUCKET_ID.as_slice());
         let file2 = repo
             .create_file(
                 TEST_BSP_ACCOUNT_STR.as_bytes(),
-                &file2_key,
+                &random_hash(),
                 bucket.id,
                 &file2_bucket_hash,
                 file::DEFAULT_LOCATION.as_bytes(),
@@ -556,12 +550,11 @@ pub mod tests {
             .await
             .expect("should create file2");
 
-        let file3_key = random_hash();
         let file3_bucket_hash = Hash::from_slice(bucket::DEFAULT_BUCKET_ID.as_slice());
         let file3 = repo
             .create_file(
                 TEST_BSP_ACCOUNT_STR.as_bytes(),
-                &file3_key,
+                &random_hash(),
                 bucket.id,
                 &file3_bucket_hash,
                 file::DEFAULT_LOCATION.as_bytes(),
@@ -652,37 +645,34 @@ pub mod tests {
         let user_account = "test_user";
 
         // Create buckets for the same user with the same MSP
-        let bucket1_hash = random_hash();
         let bucket1_id = repo
             .create_bucket(
                 user_account,
                 Some(msp_id),
                 "bucket1".as_bytes(),
-                &bucket1_hash,
+                &random_hash(),
                 !bucket::DEFAULT_IS_PUBLIC,
             )
             .await
             .expect("should create bucket")
             .id;
-        let bucket2_hash = random_hash();
         let bucket2_id = repo
             .create_bucket(
                 user_account,
                 Some(msp_id),
                 "bucket2".as_bytes(),
-                &bucket2_hash,
+                &random_hash(),
                 !bucket::DEFAULT_IS_PUBLIC,
             )
             .await
             .expect("should create bucket")
             .id;
-        let bucket3_hash = random_hash();
         let bucket3_id = repo
             .create_bucket(
                 user_account,
                 Some(msp_id),
                 "bucket3".as_bytes(),
-                &bucket3_hash,
+                &random_hash(),
                 !bucket::DEFAULT_IS_PUBLIC,
             )
             .await
@@ -721,13 +711,12 @@ pub mod tests {
         let user_account = "test_user";
 
         // Create bucket for target user
-        let user_bucket_hash = random_hash();
         let user_bucket_id = repo
             .create_bucket(
                 user_account,
                 Some(msp_id),
                 "user_bucket".as_bytes(),
-                &user_bucket_hash,
+                &random_hash(),
                 !bucket::DEFAULT_IS_PUBLIC,
             )
             .await
@@ -788,25 +777,23 @@ pub mod tests {
         let user_account = "test_user";
 
         // Create buckets for the same user with different MSPs
-        let msp1_bucket_hash = random_hash();
         let msp1_bucket_id = repo
             .create_bucket(
                 user_account,
                 Some(msp1_id),
                 "msp1_bucket".as_bytes(),
-                &msp1_bucket_hash,
+                &random_hash(),
                 !bucket::DEFAULT_IS_PUBLIC,
             )
             .await
             .expect("should create bucket")
             .id;
-        let msp2_bucket_hash = random_hash();
         let _msp2_bucket = repo
             .create_bucket(
                 user_account,
                 Some(msp2_id),
                 "msp2_bucket".as_bytes(),
-                &msp2_bucket_hash,
+                &random_hash(),
                 !bucket::DEFAULT_IS_PUBLIC,
             )
             .await
@@ -838,13 +825,12 @@ pub mod tests {
         let user_account = "test_user";
 
         // Create bucket with MSP
-        let with_msp_hash = random_hash();
         let msp_bucket_id = repo
             .create_bucket(
                 user_account,
                 Some(msp_id),
                 "with_msp".as_bytes(),
-                &with_msp_hash,
+                &random_hash(),
                 !bucket::DEFAULT_IS_PUBLIC,
             )
             .await
@@ -852,13 +838,12 @@ pub mod tests {
             .id;
 
         // Create bucket without MSP (None)
-        let no_msp_hash = random_hash();
         let _no_msp_bucket = repo
             .create_bucket(
                 user_account,
                 None,
                 "no_msp".as_bytes(),
-                &no_msp_hash,
+                &random_hash(),
                 !bucket::DEFAULT_IS_PUBLIC,
             )
             .await
@@ -890,37 +875,34 @@ pub mod tests {
         let user_account = "test_user";
 
         // Create multiple buckets
-        let pagination_bucket1_hash = random_hash();
         let bucket1_id = repo
             .create_bucket(
                 user_account,
                 Some(msp_id),
                 "bucket1".as_bytes(),
-                &pagination_bucket1_hash,
+                &random_hash(),
                 !bucket::DEFAULT_IS_PUBLIC,
             )
             .await
             .expect("should create bucket")
             .id;
-        let pagination_bucket2_hash = random_hash();
         let bucket2_id = repo
             .create_bucket(
                 user_account,
                 Some(msp_id),
                 "bucket2".as_bytes(),
-                &pagination_bucket2_hash,
+                &random_hash(),
                 !bucket::DEFAULT_IS_PUBLIC,
             )
             .await
             .expect("should create bucket")
             .id;
-        let pagination_bucket3_hash = random_hash();
         let bucket3_id = repo
             .create_bucket(
                 user_account,
                 Some(msp_id),
                 "bucket3".as_bytes(),
-                &pagination_bucket3_hash,
+                &random_hash(),
                 !bucket::DEFAULT_IS_PUBLIC,
             )
             .await
@@ -960,26 +942,24 @@ pub mod tests {
     #[tokio::test]
     async fn get_file_by_file_key() {
         let repo = MockRepository::new();
-        let file_key_bucket_hash = Hash::from_slice(bucket::DEFAULT_BUCKET_ID.as_slice());
         let bucket = repo
             .create_bucket(
                 TEST_BSP_ACCOUNT_STR,
                 None,
                 bucket::DEFAULT_BUCKET_NAME.as_bytes(),
-                &file_key_bucket_hash,
+                &Hash::from_slice(bucket::DEFAULT_BUCKET_ID.as_slice()),
                 !bucket::DEFAULT_IS_PUBLIC,
             )
             .await
             .expect("should create bucket");
 
         let file_key = random_hash();
-        let created_file_bucket_hash = Hash::from_slice(bucket::DEFAULT_BUCKET_ID.as_slice());
         let created_file = repo
             .create_file(
                 TEST_BSP_ACCOUNT_STR.as_bytes(),
                 &file_key,
                 bucket.id,
-                &created_file_bucket_hash,
+                &Hash::from_slice(bucket::DEFAULT_BUCKET_ID.as_slice()),
                 file::DEFAULT_LOCATION.as_bytes(),
                 file::DEFAULT_FINGERPRINT,
                 file::DEFAULT_SIZE,
@@ -1000,24 +980,21 @@ pub mod tests {
     #[tokio::test]
     async fn get_file_by_file_key_not_found() {
         let repo = MockRepository::new();
-        let not_found_bucket_hash = Hash::from_slice(bucket::DEFAULT_BUCKET_ID.as_slice());
         let bucket = repo
             .create_bucket(
                 TEST_BSP_ACCOUNT_STR,
                 None,
                 bucket::DEFAULT_BUCKET_NAME.as_bytes(),
-                &not_found_bucket_hash,
+                &Hash::from_slice(bucket::DEFAULT_BUCKET_ID.as_slice()),
                 !bucket::DEFAULT_IS_PUBLIC,
             )
             .await
             .expect("should create bucket");
-        let existing_file_key_hash = random_hash();
-        let existing_file_bucket_hash = Hash::from_slice(bucket::DEFAULT_BUCKET_ID.as_slice());
         repo.create_file(
             TEST_BSP_ACCOUNT_STR.as_bytes(),
-            &existing_file_key_hash,
+            &random_hash(),
             bucket.id,
-            &existing_file_bucket_hash,
+            &Hash::from_slice(bucket::DEFAULT_BUCKET_ID.as_slice()),
             file::DEFAULT_LOCATION.as_bytes(),
             file::DEFAULT_FINGERPRINT,
             file::DEFAULT_SIZE,
