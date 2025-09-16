@@ -36,10 +36,10 @@ pub struct Services {
 impl Services {
     /// Create a new services struct
     pub fn new(
-        config: Config,
         storage: Arc<dyn BoxedStorage>,
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
+        config: Config,
     ) -> Result<Self, crate::error::Error> {
         let auth = Arc::new(AuthService::default());
         let health = Arc::new(HealthService::new(
@@ -49,13 +49,13 @@ impl Services {
         ));
 
         let msp = Arc::new(MspService::new(
-            Arc::clone(&storage),
-            Arc::clone(&postgres),
-            Arc::clone(&rpc),
-        )?);
+            storage.clone(),
+            postgres.clone(),
+            rpc.clone(),
+            config.storage_hub.msp_callback_url.clone(),
+        ));
 
         Ok(Self {
-            config,
             auth,
             health,
             msp,
@@ -83,7 +83,6 @@ impl Services {
         let rpc_conn = Arc::new(AnyRpcConnection::Mock(mock_conn));
         let rpc = Arc::new(StorageHubRpcClient::new(rpc_conn));
 
-        Self::new(Config::default(), storage, postgres, rpc)
-            .expect("Failed to create mock services")
+        Self::new(storage, postgres, rpc, Config::default()).expect("Failed to create mock services")
     }
 }

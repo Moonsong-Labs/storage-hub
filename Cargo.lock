@@ -15600,6 +15600,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shc-indexer-db",
+ "shc-rpc",
  "shp-types",
  "testcontainers",
  "testcontainers-modules",

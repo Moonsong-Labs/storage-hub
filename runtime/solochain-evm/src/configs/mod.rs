@@ -3,7 +3,6 @@ mod runtime_params;
 #[cfg(feature = "std")]
 pub mod storage_hub;
 
-// Substrate and Polkadot dependencies
 use core::marker::PhantomData;
 use fp_account::AccountId20;
 use frame_support::{

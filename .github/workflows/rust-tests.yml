@@ -8,6 +8,10 @@
 
 name: Rust Tests
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 on:
   pull_request:
   push:
@@ -32,7 +36,7 @@ jobs:
           BASE_SHA="${{ github.event.pull_request.base.sha || github.event.before }}"
           HEAD_SHA="${{ github.sha }}"
 
-          if [[ "${{ env.SKIP_BUILD_LABEL_PRESENT }}" != "true" ]] && git diff --name-only $BASE_SHA $HEAD_SHA | grep -E '^(client|node|pallets|runtime)/|^Cargo\.toml$'; then
+          if [[ "${{ env.SKIP_BUILD_LABEL_PRESENT }}" != "true" ]] && git diff --name-only $BASE_SHA $HEAD_SHA | grep -E '^(client|node|pallets|runtime|backend)/|^Cargo\.toml$'; then
             echo "changed=true" >> $GITHUB_OUTPUT
           else
             echo "Comparing changes from $BASE_SHA to $HEAD_SHA"
@@ -45,9 +49,9 @@ jobs:
     name: Prepare artifacts
     runs-on: ubuntu-latest
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-      CARGO_INCREMENTAL: "0"
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: 'sccache'
+      CARGO_INCREMENTAL: '0'
       CARGO_TERM_COLOR: always
     steps:
       - uses: actions/checkout@v4
@@ -57,21 +61,36 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
         with:
-          cache: false
+          cache: true
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.9
+      - name: Cache cargo registry and git index
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
       - uses: rui314/setup-mold@v1
+      - name: Set build flags (use mold linker)
+        run: echo "RUSTFLAGS=${{ env.RUSTFLAGS }} -C linker=clang -C link-arg=-fuse-ld=mold" >> $GITHUB_ENV
       - name: Install nextest
         uses: taiki-e/install-action@nextest
       # Install libpq-dev
       - name: Install libpq-dev
-        run: sudo apt-get update && sudo apt-get install -y libpq-dev
+        run: sudo apt-get update && sudo apt-get install -y libpq-dev libclang-dev
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and archive tests
         run: cargo nextest archive --archive-file nextest-archive.tar.zst --workspace --features sh-msp-backend-lib/mocks
+      - name: Build Stats
+        run: sccache --show-stats || true
       - name: Upload archive to workflow
         uses: actions/upload-artifact@v4
         with:

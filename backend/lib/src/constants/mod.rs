@@ -29,6 +29,9 @@ pub mod rpc {
     pub const DUMMY_MSP_ID: [u8; 32] =
         hex!("0000000000000000000000000000000000000000000000000000000000000300");
 
+    /// Default MSP callback URL
+    pub const DEFAULT_MSP_CALLBACK_URL: &str = "http://localhost:8080";
+
     /// Timeout multiplier for simulating network delays in mocks
     pub const TIMEOUT_MULTIPLIER: u64 = 10;
 }
@@ -67,4 +70,7 @@ pub mod mocks {
 
     pub const PLACEHOLDER_BUCKET_SIZE_BYTES: u64 = 0;
     pub const PLACEHOLDER_BUCKET_FILE_COUNT: u64 = 0;
+
+    /// Shared mock file content used by tests and RPC mocks
+    pub const DOWNLOAD_FILE_CONTENT: &str = "GoodFla mock file content for download";
 }
