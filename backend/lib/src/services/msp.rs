@@ -11,7 +11,10 @@ use shp_types::Hash;
 
 use crate::{
     config::Config,
-    constants::mocks::{PLACEHOLDER_BUCKET_FILE_COUNT, PLACEHOLDER_BUCKET_SIZE_BYTES},
+    constants::{
+        mocks::{PLACEHOLDER_BUCKET_FILE_COUNT, PLACEHOLDER_BUCKET_SIZE_BYTES},
+        rpc::DUMMY_MSP_ID,
+    },
     data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage},
     error::Error,
     models::{
@@ -45,19 +48,8 @@ impl MspService {
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
     ) -> Result<Self, Error> {
-        let msp_id_hex = config.storage_hub.msp_id.trim_start_matches("0x");
-
-        let decoded = hex::decode(msp_id_hex)
-            .map_err(|e| Error::BadRequest(format!("Invalid MSP ID hex encoding: {}", e)))?;
-
-        if decoded.len() != 32 {
-            return Err(Error::BadRequest(format!(
-                "Invalid MSP ID length. Expected 32 bytes, got {}",
-                decoded.len()
-            )));
-        }
-
-        let msp_id = OnchainMspId::new(Hash::from_slice(&decoded));
+        // TODO: retrieve from RPC
+        let msp_id = OnchainMspId::new(Hash::from_slice(DUMMY_MSP_ID.as_slice()));
 
         Ok(Self {
             msp_id,
