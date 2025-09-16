@@ -22,7 +22,7 @@ use shc_indexer_db::{
 };
 
 use crate::{
-    constants::test,
+    constants::test::{self, placeholder_ids},
     data::indexer_db::repository::{
         error::{RepositoryError, RepositoryResult},
         BucketId, FileKey, IndexerOps, IndexerOpsMut,
@@ -405,7 +405,7 @@ pub mod tests {
         .expect("should create bucket");
 
         let result = repo
-            .get_bucket_by_onchain_id(BucketId(b"nonexistent_bucket_id"))
+            .get_bucket_by_onchain_id(BucketId(placeholder_ids::NONEXISTENT_BUCKET_ID.as_slice()))
             .await;
 
         assert!(result.is_err());
@@ -473,7 +473,7 @@ pub mod tests {
                 TEST_BSP_ACCOUNT_STR,
                 None,
                 "other_bucket".as_bytes(),
-                b"other_bucket_id",
+                placeholder_ids::OTHER_BUCKET_ID.as_slice(),
                 !bucket::DEFAULT_IS_PUBLIC,
             )
             .await
@@ -483,7 +483,7 @@ pub mod tests {
             TEST_BSP_ACCOUNT_STR.as_bytes(),
             "other.txt".as_bytes(),
             other_bucket.id,
-            b"other_bucket_id",
+            placeholder_ids::OTHER_BUCKET_ID.as_slice(),
             file::DEFAULT_LOCATION.as_bytes(),
             file::DEFAULT_FINGERPRINT,
             file::DEFAULT_SIZE,
@@ -644,7 +644,7 @@ pub mod tests {
                 user_account,
                 Some(msp_id),
                 "bucket1".as_bytes(),
-                b"bucket1_id",
+                placeholder_ids::BUCKET1_ID.as_slice(),
                 !bucket::DEFAULT_IS_PUBLIC,
             )
             .await
@@ -655,7 +655,7 @@ pub mod tests {
                 user_account,
                 Some(msp_id),
                 "bucket2".as_bytes(),
-                b"bucket2_id",
+                placeholder_ids::BUCKET2_ID.as_slice(),
                 !bucket::DEFAULT_IS_PUBLIC,
             )
             .await
@@ -666,7 +666,7 @@ pub mod tests {
                 user_account,
                 Some(msp_id),
                 "bucket3".as_bytes(),
-                b"bucket3_id",
+                placeholder_ids::BUCKET3_ID.as_slice(),
                 !bucket::DEFAULT_IS_PUBLIC,
             )
             .await
@@ -710,7 +710,7 @@ pub mod tests {
                 user_account,
                 Some(msp_id),
                 "user_bucket".as_bytes(),
-                b"user_bucket_id",
+                placeholder_ids::USER_BUCKET_ID.as_slice(),
                 !bucket::DEFAULT_IS_PUBLIC,
             )
             .await
@@ -722,7 +722,7 @@ pub mod tests {
             "other_user1",
             Some(msp_id),
             "other1".as_bytes(),
-            b"other1_id",
+            placeholder_ids::OTHER1_ID.as_slice(),
             !bucket::DEFAULT_IS_PUBLIC,
         )
         .await
@@ -732,7 +732,7 @@ pub mod tests {
             "other_user2",
             Some(msp_id),
             "other2".as_bytes(),
-            b"other2_id",
+            placeholder_ids::OTHER2_ID.as_slice(),
             !bucket::DEFAULT_IS_PUBLIC,
         )
         .await
@@ -776,7 +776,7 @@ pub mod tests {
                 user_account,
                 Some(msp1_id),
                 "msp1_bucket".as_bytes(),
-                b"msp1_bucket_id",
+                placeholder_ids::MSP1_BUCKET_ID.as_slice(),
                 !bucket::DEFAULT_IS_PUBLIC,
             )
             .await
@@ -787,7 +787,7 @@ pub mod tests {
                 user_account,
                 Some(msp2_id),
                 "msp2_bucket".as_bytes(),
-                b"msp2_bucket_id",
+                placeholder_ids::MSP2_BUCKET_ID.as_slice(),
                 !bucket::DEFAULT_IS_PUBLIC,
             )
             .await
@@ -824,7 +824,7 @@ pub mod tests {
                 user_account,
                 Some(msp_id),
                 "with_msp".as_bytes(),
-                b"with_msp_id",
+                placeholder_ids::WITH_MSP_ID.as_slice(),
                 !bucket::DEFAULT_IS_PUBLIC,
             )
             .await
@@ -837,7 +837,7 @@ pub mod tests {
                 user_account,
                 None,
                 "no_msp".as_bytes(),
-                b"no_msp_id",
+                placeholder_ids::NO_MSP_ID.as_slice(),
                 !bucket::DEFAULT_IS_PUBLIC,
             )
             .await
@@ -874,7 +874,7 @@ pub mod tests {
                 user_account,
                 Some(msp_id),
                 "bucket1".as_bytes(),
-                b"bucket1_id",
+                placeholder_ids::BUCKET1_ID.as_slice(),
                 !bucket::DEFAULT_IS_PUBLIC,
             )
             .await
@@ -885,7 +885,7 @@ pub mod tests {
                 user_account,
                 Some(msp_id),
                 "bucket2".as_bytes(),
-                b"bucket2_id",
+                placeholder_ids::BUCKET2_ID.as_slice(),
                 !bucket::DEFAULT_IS_PUBLIC,
             )
             .await
@@ -896,7 +896,7 @@ pub mod tests {
                 user_account,
                 Some(msp_id),
                 "bucket3".as_bytes(),
-                b"bucket3_id",
+                placeholder_ids::BUCKET3_ID.as_slice(),
                 !bucket::DEFAULT_IS_PUBLIC,
             )
             .await
@@ -996,7 +996,7 @@ pub mod tests {
         .expect("should create file");
 
         let result = repo
-            .get_file_by_file_key(b"nonexistent_file.txt".as_slice().into())
+            .get_file_by_file_key(placeholder_ids::NONEXISTENT_FILE_KEY.as_slice().into())
             .await;
 
         assert!(result.is_err());

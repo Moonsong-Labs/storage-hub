@@ -280,14 +280,17 @@ mod tests {
     use shp_types::Hash;
 
     use super::*;
-    use crate::data::indexer_db::{
-        repository::{error::RepositoryError, postgres::Repository, IndexerOpsMut},
-        test_helpers::{
-            setup_test_db,
-            snapshot_move_bucket::{
-                BSP_NUM, BUCKET_ACCOUNT, BUCKET_FILES, BUCKET_ID, BUCKET_NAME, BUCKET_ONCHAIN_ID,
-                BUCKET_PRIVATE, FILE_ONE_FILE_KEY, FILE_ONE_LOCATION, MSP_ONE_ACCOUNT, MSP_ONE_ID,
-                MSP_ONE_ONCHAIN_ID, MSP_TWO_ID, SNAPSHOT_SQL,
+    use crate::{
+        constants::test::placeholder_ids,
+        data::indexer_db::{
+            repository::{error::RepositoryError, postgres::Repository, IndexerOpsMut},
+            test_helpers::{
+                setup_test_db,
+                snapshot_move_bucket::{
+                    BSP_NUM, BUCKET_ACCOUNT, BUCKET_FILES, BUCKET_ID, BUCKET_NAME,
+                    BUCKET_ONCHAIN_ID, BUCKET_PRIVATE, FILE_ONE_FILE_KEY, FILE_ONE_LOCATION,
+                    MSP_ONE_ACCOUNT, MSP_ONE_ID, MSP_ONE_ONCHAIN_ID, MSP_TWO_ID, SNAPSHOT_SQL,
+                },
             },
         },
     };
@@ -383,7 +386,7 @@ mod tests {
 
         // Any non-existent bucket ID will work for this test
         let result = repo
-            .get_bucket_by_onchain_id(b"nonexistent_bucket_id".as_slice().into())
+            .get_bucket_by_onchain_id(placeholder_ids::NONEXISTENT_BUCKET_ID.as_slice().into())
             .await;
 
         assert!(
@@ -418,13 +421,13 @@ mod tests {
 
         // Add a second bucket with one file to verify filtering
         // These values are arbitrary placeholders - the exact values don't matter for this test
-        let additional_bucket_id = b"additional-bucket";
+        let additional_bucket_id = placeholder_ids::ADDITIONAL_BUCKET_ID;
         let additional_bucket = repo
             .create_bucket(
                 "5CombC1j5ZmdNMEpWYpeEWcKPPYcKsC1WgMPgzGLU72SLa4o",
                 Some(MSP_TWO_ID),
                 b"other-bucket",
-                additional_bucket_id,
+                additional_bucket_id.as_slice(),
                 false,
             )
             .await
@@ -432,12 +435,12 @@ mod tests {
 
         // Add a file to the second bucket
         repo.create_file(
-            &hex!("20d81e86ed5b986d1d6ddbe416627f96f740252c4a80ab8ed91db58f7ecf9657"),
-            &hex!("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"),
+            placeholder_ids::TEST_FILE_ACCOUNT,
+            placeholder_ids::TEST_FILE_KEY,
             additional_bucket.id,
-            additional_bucket_id,
+            additional_bucket_id.as_slice(),
             b"file.txt",
-            &hex!("0000000000000000000000000000000000000000000000000000000000000002"),
+            placeholder_ids::TEST_FILE_FINGERPRINT,
             12345,
         )
         .await
@@ -556,7 +559,7 @@ mod tests {
                 "0xemptybucketuser",
                 Some(empty_msp.id),
                 b"empty-bucket",
-                b"empty-bucket-id",
+                placeholder_ids::EMPTY_BUCKET_ID.as_slice(),
                 false,
             )
             .await
@@ -616,7 +619,7 @@ mod tests {
             BUCKET_ACCOUNT,
             Some(MSP_TWO_ID),
             b"user-bucket2",
-            b"b2",
+            placeholder_ids::USER_BUCKET2_ID.as_slice(),
             true,
         )
         .await
@@ -626,7 +629,7 @@ mod tests {
             BUCKET_ACCOUNT,
             Some(MSP_TWO_ID),
             b"user-bucket3",
-            b"b3",
+            placeholder_ids::USER_BUCKET3_ID.as_slice(),
             false,
         )
         .await
@@ -661,7 +664,7 @@ mod tests {
             BUCKET_ACCOUNT,
             Some(MSP_TWO_ID),
             b"pagination-bucket-2",
-            b"pb2",
+            placeholder_ids::PAGINATION_BUCKET2_ID.as_slice(),
             false,
         )
         .await
@@ -671,7 +674,7 @@ mod tests {
             BUCKET_ACCOUNT,
             Some(MSP_TWO_ID),
             b"pagination-bucket-3",
-            b"pb3",
+            placeholder_ids::PAGINATION_BUCKET3_ID.as_slice(),
             false,
         )
         .await
@@ -732,7 +735,7 @@ mod tests {
             other_user,
             Some(MSP_TWO_ID),
             b"other-user-bucket",
-            b"oub1",
+            placeholder_ids::OTHER_USER_BUCKET_ID.as_slice(),
             false,
         )
         .await
@@ -793,7 +796,7 @@ mod tests {
             BUCKET_ACCOUNT,
             Some(MSP_ONE_ID),
             msp1_bucket_name,
-            b"mb1",
+            placeholder_ids::MSP1_USER_BUCKET_ID.as_slice(),
             false,
         )
         .await
@@ -862,7 +865,7 @@ mod tests {
             BUCKET_ACCOUNT,
             None, // NULL MSP
             no_msp_bucket_name,
-            b"nmb1",
+            placeholder_ids::NO_MSP_BUCKET_ID.as_slice(),
             false,
         )
         .await
@@ -929,7 +932,7 @@ mod tests {
 
         // Any non-existent file key will work for this test
         let result = repo
-            .get_file_by_file_key(b"non-existing-file-key".as_slice().into())
+            .get_file_by_file_key(placeholder_ids::NONEXISTENT_FILE_KEY.as_slice().into())
             .await;
 
         assert!(

@@ -94,6 +94,85 @@ pub mod file {
     pub const DEFAULT_STEP: i32 = 1;
 }
 
+/// Test placeholder IDs - properly formatted 32-byte hex strings for testing
+pub mod placeholder_ids {
+    use hex_literal::hex;
+
+    // Bucket IDs (32 bytes each)
+    pub const NONEXISTENT_BUCKET_ID: &[u8; 32] =
+        &hex!("0000000000000000000000000000000000000000000000000000000000000000");
+    pub const OTHER_BUCKET_ID: &[u8; 32] =
+        &hex!("1111111111111111111111111111111111111111111111111111111111111111");
+    pub const BUCKET1_ID: &[u8; 32] =
+        &hex!("2222222222222222222222222222222222222222222222222222222222222222");
+    pub const BUCKET2_ID: &[u8; 32] =
+        &hex!("3333333333333333333333333333333333333333333333333333333333333333");
+    pub const BUCKET3_ID: &[u8; 32] =
+        &hex!("4444444444444444444444444444444444444444444444444444444444444444");
+    pub const USER_BUCKET_ID: &[u8; 32] =
+        &hex!("5555555555555555555555555555555555555555555555555555555555555555");
+    pub const OTHER1_ID: &[u8; 32] =
+        &hex!("6666666666666666666666666666666666666666666666666666666666666666");
+    pub const OTHER2_ID: &[u8; 32] =
+        &hex!("7777777777777777777777777777777777777777777777777777777777777777");
+    pub const MSP1_BUCKET_ID: &[u8; 32] =
+        &hex!("8888888888888888888888888888888888888888888888888888888888888888");
+    pub const MSP2_BUCKET_ID: &[u8; 32] =
+        &hex!("9999999999999999999999999999999999999999999999999999999999999999");
+    pub const WITH_MSP_ID: &[u8; 32] =
+        &hex!("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    pub const NO_MSP_ID: &[u8; 32] =
+        &hex!("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+
+    // Additional bucket IDs for postgres tests
+    pub const ADDITIONAL_BUCKET_ID: &[u8; 32] =
+        &hex!("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc");
+    pub const EMPTY_BUCKET_ID: &[u8; 32] =
+        &hex!("dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd");
+    pub const USER_BUCKET2_ID: &[u8; 32] =
+        &hex!("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+    pub const USER_BUCKET3_ID: &[u8; 32] =
+        &hex!("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+    pub const PAGINATION_BUCKET2_ID: &[u8; 32] =
+        &hex!("1010101010101010101010101010101010101010101010101010101010101010");
+    pub const PAGINATION_BUCKET3_ID: &[u8; 32] =
+        &hex!("2020202020202020202020202020202020202020202020202020202020202020");
+    pub const OTHER_USER_BUCKET_ID: &[u8; 32] =
+        &hex!("3030303030303030303030303030303030303030303030303030303030303030");
+    pub const MSP1_USER_BUCKET_ID: &[u8; 32] =
+        &hex!("4040404040404040404040404040404040404040404040404040404040404040");
+    pub const NO_MSP_BUCKET_ID: &[u8; 32] =
+        &hex!("5050505050505050505050505050505050505050505050505050505050505050");
+
+    // File keys (32 bytes each)
+    pub const NONEXISTENT_FILE_KEY: &[u8; 32] =
+        &hex!("abababababababababababababababababababababababababababababababab");
+    pub const TEST_FILE_KEY1: &[u8; 32] =
+        &hex!("0101010101010101010101010101010101010101010101010101010101010101");
+    pub const TEST_FILE_KEY2: &[u8; 32] =
+        &hex!("0202020202020202020202020202020202020202020202020202020202020202");
+    pub const TEST_FILE_KEY3: &[u8; 32] =
+        &hex!("0303030303030303030303030303030303030303030303030303030303030303");
+    pub const TEST_FILE_KEY4: &[u8; 32] =
+        &hex!("0404040404040404040404040404040404040404040404040404040404040404");
+    pub const TEST_FILE_KEY5: &[u8; 32] =
+        &hex!("0505050505050505050505050505050505050505050505050505050505050505");
+    pub const TEST_FILE_KEY6: &[u8; 32] =
+        &hex!("0606060606060606060606060606060606060606060606060606060606060606");
+    pub const TEST_FILE_KEY7: &[u8; 32] =
+        &hex!("0707070707070707070707070707070707070707070707070707070707070707");
+
+    // File fingerprints
+    pub const TEST_FILE_FINGERPRINT: &[u8; 32] =
+        &hex!("0000000000000000000000000000000000000000000000000000000000000002");
+
+    // Test account IDs (32 bytes)
+    pub const TEST_FILE_ACCOUNT: &[u8; 32] =
+        &hex!("20d81e86ed5b986d1d6ddbe416627f96f740252c4a80ab8ed91db58f7ecf9657");
+    pub const TEST_FILE_KEY: &[u8; 32] =
+        &hex!("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
+}
+
 /// Mock connection test data
 pub mod mock_rpc {
     /// Test method names
