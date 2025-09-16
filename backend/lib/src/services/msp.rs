@@ -482,15 +482,10 @@ impl MspService {
             peer_id
         );
 
-        // Encode the peer ID to a base-58 string to make it serializable, the RPC method then decodes it back to a PeerId.
-        let peer_id_str = peer_id.to_base58();
-
         // Get fhe file metadata from the received FileKeyProof.
         let file_metadata = file_key_proof.clone().file_metadata;
 
-        // Get the bucket ID and file key from the file metadata.
-        let bucket_id = file_metadata.bucket_id();
-        let bucket_id_hash = H256::from_slice(bucket_id.as_slice());
+        // Get the file key from the file metadata.
         let file_key: H256 = file_metadata.file_key::<Blake2Hasher>();
 
         // Encode the FileKeyProof as SCALE for transport
@@ -506,12 +501,7 @@ impl MspService {
                 .rpc
                 .call(
                     "storagehubclient_receiveBackendFileChunks",
-                    (
-                        peer_id_str.clone(),
-                        file_key,
-                        encoded_proof.clone(),
-                        Some(bucket_id_hash),
-                    ),
+                    (file_key, encoded_proof.clone()),
                 )
                 .await;
 

@@ -84,6 +84,19 @@ pub enum FileTransferServiceCommand<Runtime: StorageEnableRuntime> {
         /// part of the specified bucket.
         bucket_id: Option<BucketId<Runtime>>,
     },
+    #[command(
+        mode = "AsyncResponse", 
+        success_type = (Vec<u8>, ProtocolName),
+        inner_channel_type = futures::channel::oneshot::Receiver,
+        error_type = RequestFailure
+    )]
+    ReceiveBackendFileChunksRequest {
+        /// File key of the file we are receiving via backend.
+        file_key: FileKey,
+        /// File key proof to be processed locally. This contains 1 or more chunks of the file
+        /// and the Merkle proof of them.
+        file_key_proof: FileKeyProof,
+    },
     UploadResponse {
         /// The request ID used to send back the response through the FileTransferService
         request_id: UploadRequestId,

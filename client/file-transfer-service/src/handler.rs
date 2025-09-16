@@ -163,56 +163,68 @@ impl<Runtime: StorageEnableRuntime> Actor for FileTransferService<Runtime> {
                     let mut request_data = Vec::new();
                     request.encode(&mut request_data);
 
-                    // If the target is our own peer, bypass the network and route locally.
-                    // This is used to accept and process file transfer requests from an RPC method executed locally.
-                    if peer_id == self.network.local_peer_id().into() {
-                        let (tx_local, rx_local) = futures::channel::oneshot::channel();
+                    let (tx, rx) = futures::channel::oneshot::channel();
+                    self.network.start_request(
+                        peer_id.into(),
+                        self.protocol_name.clone(),
+                        request_data,
+                        None,
+                        tx,
+                        IfDisconnected::ImmediateError,
+                    );
 
-                        // Directly handle the request as if it was received from the network.
-                        self.handle_request(peer_id.into(), request_data, tx_local)
-                            .await;
+                    match callback.send(rx) {
+                        Ok(()) => {}
+                        Err(_) => error!(
+                            target: LOG_TARGET,
+                            "Failed to send the response back. Looks like the requester task is gone."
+                        ),
+                    }
+                }
+                FileTransferServiceCommand::ReceiveBackendFileChunksRequest {
+                    file_key,
+                    file_key_proof,
+                    callback,
+                } => {
+                    let request = schema::v1::provider::request::Request::RemoteUploadDataRequest(
+                        schema::v1::provider::RemoteUploadDataRequest {
+                            file_key: file_key.encode(),
+                            file_key_proof: file_key_proof.encode(),
+                            bucket_id: None,
+                        },
+                    );
 
-                        // Map the local response to the equivalent network result shape.
-                        let (tx_net, rx_net) = futures::channel::oneshot::channel();
-                        let protocol = self.protocol_name.clone();
-                        tokio::spawn(async move {
-                            let mapped: Result<(Vec<u8>, ProtocolName), RequestFailure> =
-                                match rx_local.await {
-                                    Ok(out) => match out.result {
-                                        Ok(bytes) => Ok((bytes, protocol)),
-                                        Err(()) => Err(RequestFailure::Refused),
-                                    },
-                                    Err(_) => Err(RequestFailure::NotConnected),
-                                };
-                            let _ = tx_net.send(mapped);
-                        });
+                    // Serialize the request
+                    let mut request_data = Vec::new();
+                    request.encode(&mut request_data);
 
-                        // Once the response is mapped, send it back to the RPC method.
-                        match callback.send(rx_net) {
-                            Ok(()) => {}
-                            Err(_) => error!(
-                                target: LOG_TARGET,
-                                "Failed to send the response back. Looks like the requester task is gone."
-                            ),
-                        }
-                    } else {
-                        let (tx, rx) = futures::channel::oneshot::channel();
-                        self.network.start_request(
-                            peer_id.into(),
-                            self.protocol_name.clone(),
-                            request_data,
-                            None,
-                            tx,
-                            IfDisconnected::ImmediateError,
-                        );
+                    // Directly handle the request locally, using the local peer ID
+                    let local_peer = self.network.local_peer_id();
+                    let (tx_local, rx_local) = futures::channel::oneshot::channel();
+                    self.handle_request(local_peer, request_data, tx_local)
+                        .await;
 
-                        match callback.send(rx) {
-                            Ok(()) => {}
-                            Err(_) => error!(
-                                target: LOG_TARGET,
-                                "Failed to send the response back. Looks like the requester task is gone."
-                            ),
-                        }
+                    // Map the local response to the expected result shape
+                    let (tx_net, rx_net) = futures::channel::oneshot::channel();
+                    let protocol = self.protocol_name.clone();
+                    tokio::spawn(async move {
+                        let mapped: Result<(Vec<u8>, ProtocolName), RequestFailure> =
+                            match rx_local.await {
+                                Ok(out) => match out.result {
+                                    Ok(bytes) => Ok((bytes, protocol)),
+                                    Err(()) => Err(RequestFailure::Refused),
+                                },
+                                Err(_) => Err(RequestFailure::NotConnected),
+                            };
+                        let _ = tx_net.send(mapped);
+                    });
+
+                    match callback.send(rx_net) {
+                        Ok(()) => {}
+                        Err(_) => error!(
+                            target: LOG_TARGET,
+                            "Failed to send the response back. Looks like the requester task is gone."
+                        ),
                     }
                 }
                 FileTransferServiceCommand::UploadResponse {

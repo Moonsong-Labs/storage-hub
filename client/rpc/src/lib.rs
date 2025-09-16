@@ -14,15 +14,14 @@ use tokio::{fs, io::AsyncReadExt, sync::RwLock};
 
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
-use sc_network::PeerId;
 use sc_rpc_api::check_if_safe;
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
     traits::StorageEnableRuntime,
     types::{
-        BlockHash, BucketId, ChunkId, FileKey, FileKeyProof, FileMetadata, HashT, KeyProof,
-        KeyProofs, OpaqueBlock, ParachainClient, ProofsDealerProviderId, Proven, RandomnessOutput,
+        BlockHash, ChunkId, FileKey, FileKeyProof, FileMetadata, HashT, KeyProof, KeyProofs,
+        OpaqueBlock, ParachainClient, ProofsDealerProviderId, Proven, RandomnessOutput,
         StorageProof, StorageProofsMerkleTrieLayout, BCSV_KEY_TYPE,
     },
 };
@@ -326,10 +325,8 @@ pub trait StorageHubClientApi {
     #[method(name = "receiveBackendFileChunks", with_extensions)]
     async fn receive_backend_file_chunks(
         &self,
-        peer_id: String,
         file_key: shp_types::Hash,
         file_key_proof: Vec<u8>,
-        bucket_id: Option<shp_types::Hash>,
     ) -> RpcResult<Vec<u8>>;
 }
 
@@ -1112,26 +1109,21 @@ where
     async fn receive_backend_file_chunks(
         &self,
         ext: &Extensions,
-        peer_id: String,
         file_key: shp_types::Hash,
         file_key_proof: Vec<u8>,
-        bucket_id: Option<shp_types::Hash>,
     ) -> RpcResult<Vec<u8>> {
         // Check if the execution is safe.
         check_if_safe(ext)?;
 
         // Parse inputs
-        let peer_id = PeerId::from_str(&peer_id)
-            .map_err(|e| into_rpc_error(format!("Invalid peer id: {:?}", e)))?;
         let file_key: FileKey = file_key.into();
         let proof: FileKeyProof = codec::Decode::decode(&mut &file_key_proof[..])
             .map_err(|e| into_rpc_error(format!("Failed to decode FileKeyProof: {:?}", e)))?;
-        let bucket_opt: Option<BucketId<Runtime>> = bucket_id.map(Into::into);
 
-        // Forward via FileTransferService's `UploadRequest` command
+        // Forward via FileTransferService's local `ReceiveBackendFileChunksRequest` command
         let (raw, _proto) = self
             .file_transfer
-            .upload_request(peer_id, file_key, proof, bucket_opt)
+            .receive_backend_file_chunks_request(file_key, proof)
             .await
             .map_err(into_rpc_error)?;
 
