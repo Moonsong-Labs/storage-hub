@@ -3,7 +3,7 @@ use std::{str::FromStr, sync::Arc};
 use alloy_core::primitives::{eip191_hash_message, PrimitiveSignature};
 use alloy_signer::utils::public_key_to_address;
 use axum::{
-    extract::{FromRef, FromRequestParts},
+    extract::{FromRef, FromRequestParts, State},
     http::request::Parts,
 };
 use axum_jwt::{
@@ -16,12 +16,14 @@ use rand::{distributions::Alphanumeric, Rng};
 
 use crate::{
     api::validation::validate_eth_address,
-    constants::auth::{
-        AUTH_NONCE_EXPIRATION_SECONDS, AUTH_SIWE_DOMAIN, JWT_EXPIRY_OFFSET, MOCK_ENS,
+    constants::{
+        auth::{AUTH_NONCE_EXPIRATION_SECONDS, AUTH_SIWE_DOMAIN, JWT_EXPIRY_OFFSET, MOCK_ENS},
+        mocks::MOCK_ADDRESS,
     },
     data::storage::BoxedStorage,
     error::Error,
     models::auth::{JwtClaims, NonceResponse, TokenResponse, User, VerifyResponse},
+    services::Services,
 };
 
 #[derive(Clone)]
@@ -259,21 +261,45 @@ impl AuthenticatedUser {
             address: claims.address,
         })
     }
-}
 
-impl<S> FromRequestParts<S> for AuthenticatedUser
-where
-    Decoder: FromRef<S>,
-    S: Sync,
-{
-    type Rejection = Error;
-
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts_impl<S>(parts: &mut Parts, state: &S) -> Result<Self, Error>
+    where
+        S: Send + Sync,
+        Decoder: FromRef<S>,
+    {
         let claims = Claims::<JwtClaims>::from_request_parts(parts, state)
             .await
             .map_err(|e| Error::Unauthorized(format!("Invalid JWT: {e:?}")))?;
 
         Self::from_claims(claims.0)
+    }
+}
+
+impl<S> FromRequestParts<S> for AuthenticatedUser
+where
+    Decoder: FromRef<S>,
+    Services: FromRef<S>,
+    S: Send + Sync,
+{
+    type Rejection = Error;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let services = Services::from_ref(state);
+        let maybe_auth = AuthenticatedUser::from_request_parts_impl(parts, state).await;
+
+        match maybe_auth {
+            Ok(ok) => Ok(ok),
+            // if services are configured to not validate signature
+            // return a mocked result as fallback
+            Err(e) if !services.auth.validate_signature => {
+                tracing::warn!("Authentication failed: {e:?}");
+                tracing::debug!("Bypassing authentication - authenticating user as MOCK_ADDDRESS");
+                return Ok(AuthenticatedUser {
+                    address: MOCK_ADDRESS.to_string(),
+                });
+            }
+            Err(e) => Err(e),
+        }
     }
 }
 
