@@ -100,7 +100,7 @@ impl WsConnection {
 impl RpcConnection for WsConnection {
     async fn call<P, R>(&self, method: &str, params: P) -> RpcResult<R>
     where
-        P: Serialize + Send + Sync,
+        P: ToRpcParams + Send,
         R: DeserializeOwned,
     {
         let client = self.get_client().await?;
