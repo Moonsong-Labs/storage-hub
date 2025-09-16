@@ -72,19 +72,22 @@ impl IndexerOps for Repository {
     }
 
     // ============ MSP Read Operations ============
-    async fn get_msp_by_onchain_id(&self, msp: &OnchainMspId) -> RepositoryResult<Msp> {
+    async fn get_msp_by_onchain_id(&self, onchain_msp_id: &OnchainMspId) -> RepositoryResult<Msp> {
         let mut conn = self.pool.get().await?;
 
-        Msp::get_by_onchain_msp_id(&mut conn, msp.clone())
+        Msp::get_by_onchain_msp_id(&mut conn, onchain_msp_id.clone())
             .await
             .map_err(Into::into)
     }
 
     // ============ Bucket Read Operations ============
-    async fn get_bucket_by_onchain_id(&self, bid: BucketId<'_>) -> RepositoryResult<Bucket> {
+    async fn get_bucket_by_onchain_id(
+        &self,
+        onchain_bucket_id: BucketId<'_>,
+    ) -> RepositoryResult<Bucket> {
         let mut conn = self.pool.get().await?;
 
-        Bucket::get_by_onchain_bucket_id(&mut conn, bid.0.to_owned())
+        Bucket::get_by_onchain_bucket_id(&mut conn, onchain_bucket_id.0.to_owned())
             .await
             .map_err(Into::into)
     }
@@ -131,10 +134,10 @@ impl IndexerOps for Repository {
     }
 
     // ============ File Read Operations ============
-    async fn get_file_by_file_key(&self, key: FileKey<'_>) -> RepositoryResult<File> {
+    async fn get_file_by_file_key(&self, file_key: FileKey<'_>) -> RepositoryResult<File> {
         let mut conn = self.pool.get().await?;
 
-        File::get_by_file_key(&mut conn, key.0)
+        File::get_by_file_key(&mut conn, file_key.0)
             .await
             .map_err(Into::into)
     }
@@ -205,7 +208,7 @@ impl IndexerOpsMut for Repository {
         account: &str,
         msp_id: Option<i64>,
         name: &[u8],
-        onchain_bucket_id: &[u8],
+        onchain_bucket_id: BucketId<'_>,
         private: bool,
     ) -> RepositoryResult<Bucket> {
         let mut conn = self.pool.get().await?;
@@ -214,7 +217,7 @@ impl IndexerOpsMut for Repository {
             &mut conn,
             msp_id,
             account.to_string(),
-            onchain_bucket_id.to_vec(),
+            onchain_bucket_id.0.to_vec(),
             name.to_vec(),
             None, // No collection_id
             private,
@@ -225,19 +228,19 @@ impl IndexerOpsMut for Repository {
         Ok(bucket)
     }
 
-    async fn delete_bucket(&self, onchain_bucket_id: &[u8]) -> RepositoryResult<()> {
+    async fn delete_bucket(&self, onchain_bucket_id: BucketId<'_>) -> RepositoryResult<()> {
         let mut conn = self.pool.get().await?;
 
-        Bucket::delete(&mut conn, onchain_bucket_id.to_vec()).await?;
+        Bucket::delete(&mut conn, onchain_bucket_id.0.to_vec()).await?;
         Ok(())
     }
 
     async fn create_file(
         &self,
         account: &[u8],
-        file_key: &[u8],
+        file_key: FileKey<'_>,
         bucket_id: i64,
-        onchain_bucket_id: &[u8],
+        onchain_bucket_id: BucketId<'_>,
         location: &[u8],
         fingerprint: &[u8],
         size: i64,
@@ -247,9 +250,9 @@ impl IndexerOpsMut for Repository {
         let file = File::create(
             &mut conn,
             account.to_vec(),
-            file_key.to_vec(),
+            file_key.0.to_vec(),
             bucket_id,
-            onchain_bucket_id.to_vec(),
+            onchain_bucket_id.0.to_vec(),
             location.to_vec(),
             fingerprint.to_vec(),
             size,
@@ -261,10 +264,10 @@ impl IndexerOpsMut for Repository {
         Ok(file)
     }
 
-    async fn delete_file(&self, file_key: &[u8]) -> RepositoryResult<()> {
+    async fn delete_file(&self, file_key: FileKey<'_>) -> RepositoryResult<()> {
         let mut conn = self.pool.get().await?;
 
-        File::delete(&mut conn, file_key).await?;
+        File::delete(&mut conn, file_key.0).await?;
         Ok(())
     }
 }

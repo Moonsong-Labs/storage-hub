@@ -81,7 +81,7 @@ pub trait IndexerOps: Send + Sync {
     async fn list_bsps(&self, limit: i64, offset: i64) -> RepositoryResult<Vec<Bsp>>;
 
     /// Retrieve the specified MSP's information given its onchain id
-    async fn get_msp_by_onchain_id(&self, msp: &OnchainMspId) -> RepositoryResult<Msp>;
+    async fn get_msp_by_onchain_id(&self, onchain_msp_id: &OnchainMspId) -> RepositoryResult<Msp>;
 
     /// Retrieve the information of the given bucket
     ///
@@ -117,7 +117,7 @@ pub trait IndexerOps: Send + Sync {
     ///
     /// # Arguments
     /// * `key` - the File Key to search
-    async fn get_file_by_file_key(&self, key: FileKey<'_>) -> RepositoryResult<File>;
+    async fn get_file_by_file_key(&self, file_key: FileKey<'_>) -> RepositoryResult<File>;
 }
 
 /// Mutable operations for test environments.
@@ -176,12 +176,12 @@ pub trait IndexerOpsMut: IndexerOps {
         account: &str,
         msp_id: Option<i64>,
         name: &[u8],
-        onchain_bucket_id: &[u8],
+        onchain_bucket_id: BucketId<'_>,
         private: bool,
     ) -> RepositoryResult<Bucket>;
 
     /// Delete a bucket by its onchain ID.
-    async fn delete_bucket(&self, onchain_bucket_id: &[u8]) -> RepositoryResult<()>;
+    async fn delete_bucket(&self, onchain_bucket_id: BucketId<'_>) -> RepositoryResult<()>;
 
     /// Create a new file.
     ///
@@ -196,16 +196,16 @@ pub trait IndexerOpsMut: IndexerOps {
     async fn create_file(
         &self,
         account: &[u8],
-        file_key: &[u8],
+        file_key: FileKey<'_>,
         bucket_id: i64,
-        onchain_bucket_id: &[u8],
+        onchain_bucket_id: BucketId<'_>,
         location: &[u8],
         fingerprint: &[u8],
         size: i64,
     ) -> RepositoryResult<File>;
 
     /// Delete a file by its file key.
-    async fn delete_file(&self, file_key: &[u8]) -> RepositoryResult<()>;
+    async fn delete_file(&self, file_key: FileKey<'_>) -> RepositoryResult<()>;
 }
 
 // The following trait aliases are so when compiling for unit tests we get access to write operations

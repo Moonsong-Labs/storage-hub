@@ -81,20 +81,23 @@ impl IndexerOps for MockRepository {
     }
 
     // ============ MSP Read Operations ============
-    async fn get_msp_by_onchain_id(&self, msp: &OnchainMspId) -> RepositoryResult<Msp> {
+    async fn get_msp_by_onchain_id(&self, onchain_msp_id: &OnchainMspId) -> RepositoryResult<Msp> {
         let msps = self.msps.read().await;
         msps.values()
-            .find(|m| &m.onchain_msp_id == msp)
+            .find(|m| &m.onchain_msp_id == onchain_msp_id)
             .cloned()
             .ok_or_else(|| RepositoryError::not_found("MSP"))
     }
 
     // ============ Bucket Read Operations ============
-    async fn get_bucket_by_onchain_id(&self, bid: BucketId<'_>) -> RepositoryResult<Bucket> {
+    async fn get_bucket_by_onchain_id(
+        &self,
+        onchain_bucket_id: BucketId<'_>,
+    ) -> RepositoryResult<Bucket> {
         let buckets = self.buckets.read().await;
         buckets
             .values()
-            .find(|b| b.onchain_bucket_id == bid.0)
+            .find(|b| b.onchain_bucket_id == onchain_bucket_id.0)
             .cloned()
             .ok_or_else(|| RepositoryError::not_found("Bucket"))
     }
@@ -135,12 +138,12 @@ impl IndexerOps for MockRepository {
     }
 
     // ============ File Read Operations ============
-    async fn get_file_by_file_key(&self, key: FileKey<'_>) -> RepositoryResult<File> {
+    async fn get_file_by_file_key(&self, file_key: FileKey<'_>) -> RepositoryResult<File> {
         let files = self.files.read().await;
 
         files
             .values()
-            .find(|f| f.file_key.as_slice() == key.0)
+            .find(|f| f.file_key.as_slice() == file_key.0)
             .cloned()
             .ok_or_else(|| RepositoryError::not_found("File"))
     }
@@ -234,7 +237,7 @@ impl IndexerOpsMut for MockRepository {
         account: &str,
         msp_id: Option<i64>,
         name: &[u8],
-        onchain_bucket_id: &[u8],
+        onchain_bucket_id: BucketId<'_>,
         private: bool,
     ) -> RepositoryResult<Bucket> {
         let id = self.next_id();
@@ -244,7 +247,7 @@ impl IndexerOpsMut for MockRepository {
             id,
             msp_id,
             account: account.to_string(),
-            onchain_bucket_id: onchain_bucket_id.to_vec(),
+            onchain_bucket_id: onchain_bucket_id.0.to_vec(),
             name: name.to_vec(),
             collection_id: None,
             private,
@@ -257,11 +260,11 @@ impl IndexerOpsMut for MockRepository {
         Ok(bucket)
     }
 
-    async fn delete_bucket(&self, onchain_bucket_id: &[u8]) -> RepositoryResult<()> {
+    async fn delete_bucket(&self, onchain_bucket_id: BucketId<'_>) -> RepositoryResult<()> {
         let mut buckets = self.buckets.write().await;
         let id_to_remove = buckets
             .values()
-            .find(|b| b.onchain_bucket_id == onchain_bucket_id)
+            .find(|b| b.onchain_bucket_id == onchain_bucket_id.0)
             .map(|b| b.id);
 
         if let Some(id) = id_to_remove {
@@ -276,9 +279,9 @@ impl IndexerOpsMut for MockRepository {
     async fn create_file(
         &self,
         account: &[u8],
-        file_key: &[u8],
+        file_key: FileKey<'_>,
         bucket_id: i64,
-        onchain_bucket_id: &[u8],
+        onchain_bucket_id: BucketId<'_>,
         location: &[u8],
         fingerprint: &[u8],
         size: i64,
@@ -289,9 +292,9 @@ impl IndexerOpsMut for MockRepository {
         let file = File {
             id,
             account: account.to_vec(),
-            file_key: file_key.to_vec(),
+            file_key: file_key.0.to_vec(),
             bucket_id,
-            onchain_bucket_id: onchain_bucket_id.to_vec(),
+            onchain_bucket_id: onchain_bucket_id.0.to_vec(),
             location: location.to_vec(),
             fingerprint: fingerprint.to_vec(),
             size,
@@ -305,11 +308,11 @@ impl IndexerOpsMut for MockRepository {
         Ok(file)
     }
 
-    async fn delete_file(&self, file_key: &[u8]) -> RepositoryResult<()> {
+    async fn delete_file(&self, file_key: FileKey<'_>) -> RepositoryResult<()> {
         let mut files = self.files.write().await;
         let id_to_remove = files
             .values()
-            .find(|f| f.file_key == file_key)
+            .find(|f| f.file_key == file_key.0)
             .map(|f| f.id);
 
         if let Some(id) = id_to_remove {
