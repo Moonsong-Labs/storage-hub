@@ -159,46 +159,6 @@ impl MspService {
             })
     }
 
-    /// Verifies user can access the given bucket
-    fn can_user_view_bucket(&self, bucket: DBBucket, user: &str) -> Result<DBBucket, Error> {
-        // TODO: NFT ownership
-        if bucket.private {
-            if bucket.account.as_str() == user {
-                Ok(bucket)
-            } else {
-                Err(Error::Unauthorized(format!(
-                    "Specified user is not authorized to view this bucket"
-                )))
-            }
-        } else {
-            Ok(bucket)
-        }
-    }
-
-    /// Retrieve a bucket from the DB and verify read permission
-    async fn get_db_bucket(
-        &self,
-        bucket_id: &str,
-        user: &str,
-    ) -> Result<shc_indexer_db::models::Bucket, Error> {
-        let bucket_id_hex = bucket_id.trim_start_matches("0x");
-
-        let bucket_id = hex::decode(bucket_id_hex)
-            .map_err(|e| Error::BadRequest(format!("Invalid Bucket ID hex encoding: {}", e)))?;
-
-        if bucket_id.len() != 32 {
-            return Err(Error::BadRequest(format!(
-                "Invalid Bucket ID length. Expected 32 bytes, got {}",
-                bucket_id.len()
-            )));
-        }
-
-        self.postgres
-            .get_bucket(&bucket_id)
-            .await
-            .and_then(|bucket| self.can_user_view_bucket(bucket, user))
-    }
-
     /// Get a specific bucket by ID
     ///
     /// Verifies ownership of bucket is `user`
@@ -294,6 +254,48 @@ impl MspService {
             user_deposit: 100000,
             out_of_funds_tick: None,
         })
+    }
+}
+
+impl MspService {
+    /// Verifies user can access the given bucket
+    fn can_user_view_bucket(&self, bucket: DBBucket, user: &str) -> Result<DBBucket, Error> {
+        // TODO: NFT ownership
+        if bucket.private {
+            if bucket.account.as_str() == user {
+                Ok(bucket)
+            } else {
+                Err(Error::Unauthorized(format!(
+                    "Specified user is not authorized to view this bucket"
+                )))
+            }
+        } else {
+            Ok(bucket)
+        }
+    }
+
+    /// Retrieve a bucket from the DB and verify read permission
+    async fn get_db_bucket(
+        &self,
+        bucket_id: &str,
+        user: &str,
+    ) -> Result<shc_indexer_db::models::Bucket, Error> {
+        let bucket_id_hex = bucket_id.trim_start_matches("0x");
+
+        let bucket_id = hex::decode(bucket_id_hex)
+            .map_err(|e| Error::BadRequest(format!("Invalid Bucket ID hex encoding: {}", e)))?;
+
+        if bucket_id.len() != 32 {
+            return Err(Error::BadRequest(format!(
+                "Invalid Bucket ID length. Expected 32 bytes, got {}",
+                bucket_id.len()
+            )));
+        }
+
+        self.postgres
+            .get_bucket(&bucket_id)
+            .await
+            .and_then(|bucket| self.can_user_view_bucket(bucket, user))
     }
 }
 
