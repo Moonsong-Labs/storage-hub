@@ -1687,7 +1687,7 @@ declare const _default: {
       };
       FileDeletedFromIncompleteStorageRequest: {
         fileKey: string;
-        providerId: string;
+        bspId: string;
       };
       IncompleteStorageRequest: {
         fileKey: string;
@@ -3748,12 +3748,12 @@ declare const _default: {
         location: string;
         size_: string;
         fingerprint: string;
-        providerId: string;
+        bspId: string;
         forestProof: string;
       };
       delete_file_for_incomplete_storage_request: {
         fileKey: string;
-        providerId: string;
+        bspId: string;
         forestProof: string;
       };
     };

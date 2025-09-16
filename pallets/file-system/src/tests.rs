@@ -11991,7 +11991,7 @@ mod delete_file_tests {
                     location,
                     size,
                     fingerprint,
-                    msp_id,
+                    None,
                     forest_proof,
                 ));
 
@@ -12098,7 +12098,7 @@ mod delete_file_tests {
                     location,
                     size,
                     fingerprint,
-                    bsp_id,
+                    Some(bsp_id),
                     forest_proof,
                 ));
 
@@ -12216,7 +12216,7 @@ mod delete_file_tests {
                     location,
                     size,
                     fingerprint,
-                    bsp_id,
+                    Some(bsp_id),
                     forest_proof,
                 ));
 
@@ -12311,7 +12311,7 @@ mod delete_file_tests {
                     location,
                     size,
                     fingerprint,
-                    msp_id,
+                    None,
                     forest_proof,
                 ));
 
@@ -12369,7 +12369,7 @@ mod delete_file_tests {
                         location,
                         size,
                         fingerprint,
-                        msp_id,
+                        None,
                         forest_proof,
                     ),
                     Error::<Test>::InvalidSignature
@@ -12407,7 +12407,7 @@ mod delete_file_tests {
                         location,
                         size,
                         fingerprint,
-                        msp_id,
+                        None,
                         invalid_forest_proof,
                     ),
                     Error::<Test>::ExpectedInclusionProof
@@ -12448,7 +12448,7 @@ mod delete_file_tests {
                         location,
                         size,
                         fingerprint,
-                        msp_id,
+                        None,
                         forest_proof,
                     ),
                     Error::<Test>::OperationNotAllowedWithInsolventUser
@@ -12495,7 +12495,7 @@ mod delete_file_tests {
                         location,
                         size,
                         fingerprint,
-                        msp_id,
+                        None,
                         forest_proof,
                     ),
                     Error::<Test>::InvalidFileKeyMetadata
@@ -12532,7 +12532,7 @@ mod delete_file_tests {
                         location,
                         size,
                         fingerprint,
-                        invalid_provider_id,
+                        Some(invalid_provider_id), // Invalid BSP ID
                         forest_proof,
                     ),
                     Error::<Test>::InvalidProviderID
@@ -12568,7 +12568,7 @@ mod delete_file_tests {
                         location,
                         size,
                         fingerprint,
-                        msp_id,
+                        None,
                         forest_proof,
                     ),
                     Error::<Test>::InvalidFileKeyMetadata
@@ -12792,7 +12792,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::FileDeletedFromIncompleteStorageRequest {
                         file_key,
-                        provider_id: Some(bsp_id),
+                        bsp_id: Some(bsp_id),
                     }
                     .into(),
                 );
@@ -13046,7 +13046,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::FileDeletedFromIncompleteStorageRequest {
                         file_key: file_key2,
-                        provider_id: Some(bsp_id),
+                        bsp_id: Some(bsp_id),
                     }
                     .into(),
                 );
@@ -13244,7 +13244,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::FileDeletedFromIncompleteStorageRequest {
                         file_key,
-                        provider_id: Some(bsp1_id),
+                        bsp_id: Some(bsp1_id),
                     }
                     .into(),
                 );
@@ -13288,7 +13288,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::FileDeletedFromIncompleteStorageRequest {
                         file_key,
-                        provider_id: Some(bsp2_id),
+                        bsp_id: Some(bsp2_id),
                     }
                     .into(),
                 );
@@ -13419,7 +13419,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::FileDeletedFromIncompleteStorageRequest {
                         file_key,
-                        provider_id: Some(bsp_id),
+                        bsp_id: Some(bsp_id),
                     }
                     .into(),
                 );
@@ -13524,7 +13524,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::FileDeletedFromIncompleteStorageRequest {
                         file_key,
-                        provider_id: None,
+                        bsp_id: None,
                     }
                     .into(),
                 );
@@ -13681,14 +13681,14 @@ mod delete_file_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::FileDeletedFromIncompleteStorageRequest {
                         file_key,
-                        provider_id: None,
+                        bsp_id: None,
                     }
                     .into(),
                 );
                 System::assert_has_event(
                     Event::FileDeletedFromIncompleteStorageRequest {
                         file_key,
-                        provider_id: Some(bsp_id),
+                        bsp_id: Some(bsp_id),
                     }
                     .into(),
                 );
@@ -13843,14 +13843,14 @@ mod delete_file_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::FileDeletedFromIncompleteStorageRequest {
                         file_key,
-                        provider_id: Some(bsp_id),
+                        bsp_id: Some(bsp_id),
                     }
                     .into(),
                 );
                 System::assert_has_event(
                     Event::FileDeletedFromIncompleteStorageRequest {
                         file_key,
-                        provider_id: None,
+                        bsp_id: None,
                     }
                     .into(),
                 );
@@ -13974,7 +13974,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::FileDeletedFromIncompleteStorageRequest {
                         file_key,
-                        provider_id: Some(bsp_id),
+                        bsp_id: Some(bsp_id),
                     }
                     .into(),
                 );

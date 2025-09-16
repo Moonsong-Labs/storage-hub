@@ -431,10 +431,11 @@ where
             )
             .await?;
 
-        let provider_id = match provider_id {
-            Some(StorageProviderId::BackupStorageProvider(id)) => id,
-            Some(StorageProviderId::MainStorageProvider(id)) => id, // TODO: support not requiring an MSP here since there could be a scenario where the bucket is not stored by the MSP
-            None => return Err(anyhow!("No provider ID provided")),
+        // Build the delete_file_for_incomplete_storage_request extrinsic call
+        // Pass None for bucket deletion (MSP), Some(id) for BSP deletion
+        let maybe_bsp_id = match provider_id {
+            Some(StorageProviderId::BackupStorageProvider(id)) => Some(id),
+            Some(StorageProviderId::MainStorageProvider(_)) | None => None,
         };
 
         // Log the signed intention file key for signed deletions
@@ -460,7 +461,7 @@ where
                 .map_err(|_| anyhow!("Location too long"))?,
             size,
             fingerprint: H256::from_slice(fingerprint.as_ref()),
-            provider_id,
+            bsp_id: maybe_bsp_id,
             forest_proof: forest_proof.proof,
         };
 
@@ -537,7 +538,7 @@ where
 
         // Build the delete_file_for_incomplete_storage_request extrinsic call
         // Pass None for bucket deletion (MSP), Some(id) for BSP deletion
-        let provider_id_param = match provider_id {
+        let maybe_bsp_id = match provider_id {
             Some(StorageProviderId::BackupStorageProvider(id)) => Some(id),
             Some(StorageProviderId::MainStorageProvider(_)) | None => None,
         };
@@ -545,7 +546,7 @@ where
         let call =
             pallet_file_system::Call::<Runtime>::delete_file_for_incomplete_storage_request {
                 file_key: (*file_key).into(),
-                provider_id: provider_id_param,
+                bsp_id: maybe_bsp_id,
                 forest_proof: forest_proof.proof,
             };
 

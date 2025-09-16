@@ -1718,7 +1718,7 @@ export default {
       },
       FileDeletedFromIncompleteStorageRequest: {
         fileKey: "H256",
-        providerId: "Option<H256>"
+        bspId: "Option<H256>"
       },
       IncompleteStorageRequest: {
         fileKey: "H256"
@@ -3856,12 +3856,12 @@ export default {
         location: "Bytes",
         size_: "u64",
         fingerprint: "H256",
-        providerId: "H256",
+        bspId: "Option<H256>",
         forestProof: "SpTrieStorageProofCompactProof"
       },
       delete_file_for_incomplete_storage_request: {
         fileKey: "H256",
-        providerId: "Option<H256>",
+        bspId: "Option<H256>",
         forestProof: "SpTrieStorageProofCompactProof"
       }
     }

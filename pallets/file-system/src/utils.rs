@@ -1265,6 +1265,8 @@ where
     /// 4. Validating the signature against the encoded intention
     /// 5. Computing the file key from provided metadata and verifying it matches the signed intention
     /// 6. Verifying the forest proof and updating the provider's root
+    ///
+    /// Passing `None` for `bsp_id` will treat this as a Bucket Forest deletion and a BSP Forest deletion otherwise.
     pub(crate) fn do_delete_file(
         file_owner: T::AccountId,
         signed_intention: FileOperationIntention<T>,
@@ -1273,7 +1275,7 @@ where
         location: FileLocation<T>,
         size: StorageDataUnit<T>,
         fingerprint: Fingerprint<T>,
-        provider_id: ProviderIdFor<T>,
+        bsp_id: Option<ProviderIdFor<T>>,
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
         // Check that the file owner is not currently insolvent.
@@ -1311,15 +1313,16 @@ where
         );
 
         // Forest proof verification and file deletion
-        if <T::Providers as ReadStorageProvidersInterface>::is_msp(&provider_id) {
-            // Verify that the provided MSP is the one storing the bucket
-            // TODO: This check is necessary for now until tasks/runtime code is changed to support deleting files without an MSP
-            let maybe_bucket_msp =
-                <T::Providers as ReadBucketsInterface>::get_bucket_msp(&bucket_id)?;
-            if let Some(bucket_msp) = maybe_bucket_msp {
-                ensure!(provider_id == bucket_msp, Error::<T>::MspNotStoringBucket);
-            }
+        if let Some(bsp_id) = bsp_id {
+            // Ensure the provided ID is actually a BSP
+            ensure!(
+                <T::Providers as ReadStorageProvidersInterface>::is_bsp(&bsp_id),
+                Error::<T>::InvalidProviderID
+            );
 
+            Self::delete_file_from_bsp(file_owner, computed_file_key, size, bsp_id, forest_proof)?;
+        } else {
+            // Delete from bucket forest - no MSP requirement
             Self::delete_file_from_bucket(
                 file_owner,
                 computed_file_key,
@@ -1327,17 +1330,6 @@ where
                 bucket_id,
                 forest_proof,
             )?;
-        } else if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&provider_id) {
-            Self::delete_file_from_bsp(
-                file_owner,
-                computed_file_key,
-                size,
-                provider_id,
-                forest_proof,
-            )?;
-        } else {
-            // Entity provided an incorrect provider ID
-            return Err(Error::<T>::InvalidProviderID.into());
         }
 
         // TODO: Reward the caller

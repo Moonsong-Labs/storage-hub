@@ -184,7 +184,12 @@ describeMspNet(
       const deletionResult = await userApi.block.seal();
 
       // Verify both deletion completion events
-      assertEventPresent(userApi, "fileSystem", "BucketFileDeletionCompleted", deletionResult.events);
+      assertEventPresent(
+        userApi,
+        "fileSystem",
+        "BucketFileDeletionCompleted",
+        deletionResult.events
+      );
       assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", deletionResult.events);
 
       // Extract deletion events to verify root changes

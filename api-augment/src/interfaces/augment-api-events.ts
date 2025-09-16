@@ -578,8 +578,8 @@ declare module "@polkadot/api-base/types/events" {
        **/
       FileDeletedFromIncompleteStorageRequest: AugmentedEvent<
         ApiType,
-        [fileKey: H256, providerId: Option<H256>],
-        { fileKey: H256; providerId: Option<H256> }
+        [fileKey: H256, bspId: Option<H256>],
+        { fileKey: H256; bspId: Option<H256> }
       >;
       /**
        * Notifies that a file will be deleted.

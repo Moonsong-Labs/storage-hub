@@ -783,7 +783,7 @@ pub mod pallet {
         /// Notifies that a file has been deleted from a rejected storage request.
         FileDeletedFromIncompleteStorageRequest {
             file_key: MerkleHash<T>,
-            provider_id: Option<ProviderIdFor<T>>,
+            bsp_id: Option<ProviderIdFor<T>>,
         },
         /// Notifies that a storage request was marked as incomplete.
         ///
@@ -1498,6 +1498,9 @@ pub mod pallet {
         /// This extrinsic allows any actor to execute file deletion based on signed intentions
         /// from the `FileDeletionRequested` event. It requires a valid forest proof showing that the
         /// file exists in the specified provider's forest before allowing deletion.
+        ///
+        /// If `bsp_id` is `None`, the file will be deleted from the bucket forest.
+        /// If `bsp_id` is `Some(id)`, the file will be deleted from the specified BSP's forest.
         #[pallet::call_index(17)]
         #[pallet::weight(Weight::zero())]
         pub fn delete_file(
@@ -1509,7 +1512,7 @@ pub mod pallet {
             location: FileLocation<T>,
             size: StorageDataUnit<T>,
             fingerprint: Fingerprint<T>,
-            provider_id: ProviderIdFor<T>,
+            bsp_id: Option<ProviderIdFor<T>>,
             forest_proof: ForestProof<T>,
         ) -> DispatchResult {
             // TODO: We need to reward the caller of delete_file
@@ -1523,7 +1526,7 @@ pub mod pallet {
                 location,
                 size,
                 fingerprint,
-                provider_id,
+                bsp_id,
                 forest_proof,
             )?;
 
@@ -1540,22 +1543,18 @@ pub mod pallet {
         pub fn delete_file_for_incomplete_storage_request(
             origin: OriginFor<T>,
             file_key: MerkleHash<T>,
-            provider_id: Option<ProviderIdFor<T>>,
+            bsp_id: Option<ProviderIdFor<T>>,
             forest_proof: ForestProof<T>,
         ) -> DispatchResult {
             // TODO: We need to reward the caller of delete_file_for_incomplete_storage_request
             let _caller = ensure_signed(origin)?;
 
-            Self::do_delete_file_for_incomplete_storage_request(
-                file_key,
-                provider_id,
-                forest_proof,
-            )?;
+            Self::do_delete_file_for_incomplete_storage_request(file_key, bsp_id, forest_proof)?;
 
             // Emit event
             Self::deposit_event(Event::FileDeletedFromIncompleteStorageRequest {
                 file_key,
-                provider_id,
+                bsp_id,
             });
 
             Ok(())

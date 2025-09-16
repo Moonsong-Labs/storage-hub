@@ -2154,7 +2154,7 @@ declare module "@polkadot/types/lookup" {
     readonly isFileDeletedFromIncompleteStorageRequest: boolean;
     readonly asFileDeletedFromIncompleteStorageRequest: {
       readonly fileKey: H256;
-      readonly providerId: Option<H256>;
+      readonly bspId: Option<H256>;
     } & Struct;
     readonly isIncompleteStorageRequest: boolean;
     readonly asIncompleteStorageRequest: {
@@ -4640,13 +4640,13 @@ declare module "@polkadot/types/lookup" {
       readonly location: Bytes;
       readonly size_: u64;
       readonly fingerprint: H256;
-      readonly providerId: H256;
+      readonly bspId: Option<H256>;
       readonly forestProof: SpTrieStorageProofCompactProof;
     } & Struct;
     readonly isDeleteFileForIncompleteStorageRequest: boolean;
     readonly asDeleteFileForIncompleteStorageRequest: {
       readonly fileKey: H256;
-      readonly providerId: Option<H256>;
+      readonly bspId: Option<H256>;
       readonly forestProof: SpTrieStorageProofCompactProof;
     } & Struct;
     readonly type:
