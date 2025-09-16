@@ -6,7 +6,6 @@
 use std::{sync::Arc, time::Duration};
 
 use async_trait::async_trait;
-use jsonrpsee::core::traits::ToRpcParams;
 use jsonrpsee::{
     core::{client::ClientT, traits::ToRpcParams},
     ws_client::{WsClient, WsClientBuilder},
