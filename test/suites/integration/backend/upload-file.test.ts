@@ -4,7 +4,7 @@ import path from "node:path";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
 import * as $ from "scale-codec";
-import { type EnrichedBspApi, describeMspNet, shUser } from "../../../util";
+import { type EnrichedBspApi, describeMspNet, shUser, waitFor } from "../../../util";
 
 /**
  * Mock JWT generator that matches the backend's generate_mock_jwt function
@@ -173,6 +173,12 @@ await describeMspNet(
           )
         ],
         signer: shUser
+      });
+
+      // Poll until the file is expected
+      await waitFor({
+        lambda: async () =>
+          (await msp1Api.rpc.storagehubclient.isFileKeyExpected(file_key)).isTrue
       });
 
       // Prepare a multipart HTTP request to send to the backend's upload endpoint

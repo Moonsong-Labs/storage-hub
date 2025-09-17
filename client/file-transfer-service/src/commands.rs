@@ -139,6 +139,17 @@ pub enum FileTransferServiceCommand<Runtime: StorageEnableRuntime> {
     UnregisterFile {
         file_key: FileKey,
     },
+    #[command(
+        mode = "ImmediateResponse",
+        success_type = bool
+    )]
+    /// Query whether this node is currently expecting to receive the given file key.
+    ///
+    /// Returns true if the file key has been registered (i.e., is allowed from at least one peer).
+    IsFileExpected {
+        /// File key to check for expectation/registration.
+        file_key: FileKey,
+    },
     RegisterNewBucketPeer {
         peer_id: PeerId,
         bucket_id: BucketId<Runtime>,

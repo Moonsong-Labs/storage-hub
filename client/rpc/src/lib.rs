@@ -257,6 +257,10 @@ pub trait StorageHubClientApi {
         file_key: shp_types::Hash,
     ) -> RpcResult<Option<FileMetadata>>;
 
+    /// Check if this node is currently expecting to receive the given file key (i.e., it has been registered)
+    #[method(name = "isFileKeyExpected")]
+    async fn is_file_key_expected(&self, file_key: shp_types::Hash) -> RpcResult<bool>;
+
     // Note: this RPC method returns a Vec<u8> because the `ForestProof` struct is not serializable.
     // so we SCALE-encode it. The user of this RPC will have to decode it.
     #[method(name = "generateForestProof")]
@@ -799,6 +803,15 @@ where
         Ok(read_fs
             .get_file_metadata(&file_key)
             .map_err(into_rpc_error)?)
+    }
+
+    async fn is_file_key_expected(&self, file_key: shp_types::Hash) -> RpcResult<bool> {
+        let expected = self
+            .file_transfer
+            .is_file_expected(file_key.into())
+            .await
+            .map_err(into_rpc_error)?;
+        Ok(expected)
     }
 
     async fn generate_forest_proof(

@@ -287,6 +287,18 @@ pub async fn upload_file(
 ) -> Result<impl IntoResponse, Error> {
     let _auth = extract_bearer_token(&auth)?;
 
+    // Pre-check with MSP whether this file key is expected before doing heavy processing
+    let is_expected = services
+        .msp
+        .is_msp_expecting_file_key(&file_key)
+        .await
+        .unwrap_or(false);
+    if !is_expected {
+        return Err(Error::BadRequest(
+            "MSP is not expecting this file key".to_string(),
+        ));
+    }
+
     // Extract from the request the file data stream and file metadata.
     let mut file_data_stream: Option<Field> = None;
     let mut file_metadata: Option<FileMetadata> = None;

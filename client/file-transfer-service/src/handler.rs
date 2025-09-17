@@ -454,6 +454,16 @@ impl<Runtime: StorageEnableRuntime> Actor for FileTransferService<Runtime> {
                         ),
                     }
                 }
+                FileTransferServiceCommand::IsFileExpected { file_key, callback } => {
+                    let is_expected = self.peers_by_file.contains_key(&file_key);
+                    match callback.send(Ok(is_expected)) {
+                        Ok(()) => {}
+                        Err(_) => error!(
+                            target: LOG_TARGET,
+                            "Failed to send the response back. Looks like the requester task is gone."
+                        ),
+                    }
+                }
                 FileTransferServiceCommand::RegisterNewBucketPeer {
                     peer_id,
                     bucket_id,

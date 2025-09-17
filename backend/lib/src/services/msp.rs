@@ -305,6 +305,16 @@ impl MspService {
         })
     }
 
+    /// Check via MSP RPC if this node is expecting to receive the given file key
+    pub async fn is_msp_expecting_file_key(&self, file_key: &str) -> Result<bool, Error> {
+        let expected: bool = self
+            .rpc
+            .call("storagehubclient_isFileKeyExpected", (file_key,))
+            .await
+            .map_err(|e| Error::BadRequest(e.to_string()))?;
+        Ok(expected)
+    }
+
     /// Distribute a file to BSPs
     pub async fn distribute_file(
         &self,
