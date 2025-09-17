@@ -10,7 +10,7 @@ import {
   StorageHubClient,
   FileManager,
   ReplicationLevel
-} from "../../../../sdk/core/dist/index.node.js";
+} from "@storagehub-sdk/core";
 
 // Helper function to compute file fingerprint using FileManager (Merkle trie root)
 const computeFileFingerprint = async (filePath: string): Promise<`0x${string}`> => {

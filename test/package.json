@@ -73,6 +73,7 @@
     "@storagehub/api-augment": "workspace:*",
     "@storagehub/types-bundle": "workspace:*",
     "@storagehub-sdk/msp-client": "file:../sdk/msp-client",
+    "@storagehub-sdk/core": "file:../sdk/core",
     "ethers": "^6.15.0",
     "viem": "^2.9.20",
     "@types/tmp": "^0.2.6",
