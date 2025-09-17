@@ -183,11 +183,7 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param options.timeout - Optional. The maximum time (in milliseconds) to wait for the log message to appear. Default 10s.
        * @returns A promise that resolves to the matching log message if found, or rejects if the timeout is reached.
        */
-      log: async (options: {
-        searchString: string;
-        containerName: string;
-        timeout?: number;
-      }) => {
+      log: async (options: { searchString: string; containerName: string; timeout?: number }) => {
         return Assertions.assertDockerLog(
           options.containerName,
           options.searchString,

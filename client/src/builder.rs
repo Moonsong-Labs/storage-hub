@@ -819,4 +819,7 @@ pub struct FishermanOptions {
     /// Deserializing as "fisherman_database_url" to match the expected field name in the toml file.
     #[serde(rename = "fisherman_database_url")]
     pub database_url: String,
+    /// Whether the node is running in maintenance mode.
+    #[serde(default)]
+    pub maintenance_mode: bool,
 }

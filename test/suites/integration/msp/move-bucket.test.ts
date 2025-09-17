@@ -1,21 +1,20 @@
-import { strictEqual } from "node:assert";
-import assert from "node:assert";
+import assert, { strictEqual } from "node:assert";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
 import {
-  type EnrichedBspApi,
-  ShConsts,
   assertEventPresent,
   bspThreeKey,
   bspThreeSeed,
   bspTwoKey,
   bspTwoSeed,
   describeMspNet,
+  type EnrichedBspApi,
+  ShConsts,
   shUser,
   waitFor
 } from "../../../util";
 
-describeMspNet(
+await describeMspNet(
   "MSP moves bucket to another MSP",
   { initialised: false, indexer: true },
   ({ before, createMsp1Api, createMsp2Api, it, createUserApi }) => {

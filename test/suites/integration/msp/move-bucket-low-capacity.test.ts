@@ -1,11 +1,8 @@
-import { strictEqual } from "node:assert";
-import assert from "node:assert";
+import assert, { strictEqual } from "node:assert";
 import type { EventRecord } from "@polkadot/types/interfaces";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
 import {
-  type EnrichedBspApi,
-  ShConsts,
   addMspContainer,
   assertEventPresent,
   bspThreeKey,
@@ -13,13 +10,15 @@ import {
   bspTwoKey,
   bspTwoSeed,
   describeMspNet,
+  type EnrichedBspApi,
   getContainerIp,
   mspThreeKey,
+  ShConsts,
   shUser,
   sleep
 } from "../../../util";
 
-describeMspNet(
+await describeMspNet(
   "MSP rejects bucket move requests due to low capacity",
   { initialised: false, indexer: true },
   ({ before, after, createMsp1Api, it, createUserApi, createApi }) => {

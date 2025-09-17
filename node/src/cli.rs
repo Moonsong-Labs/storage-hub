@@ -114,14 +114,8 @@ pub struct ProviderConfigurations {
     #[arg(long)]
     pub provider: bool,
 
-    /// Run the node in maintenance mode.
-    /// In this mode, the node will not import blocks or participate in consensus,
-    /// but will allow specific RPC calls for file and storage management.
-    #[arg(long, default_value = "false")]
-    pub maintenance_mode: bool,
-
     /// Type of StorageHub provider.
-    #[clap(
+    #[arg(
         long,
         value_enum,
         value_name = "PROVIDER_TYPE",
@@ -130,7 +124,7 @@ pub struct ProviderConfigurations {
     pub provider_type: Option<ProviderType>,
 
     /// Maximum storage capacity of the provider (bytes).
-    #[clap(long, required_if_eq_all([
+    #[arg(long, required_if_eq_all([
         ("provider", "true"),
         ("provider_type", "msp"),
     ]), required_if_eq_all([
@@ -140,7 +134,7 @@ pub struct ProviderConfigurations {
     pub max_storage_capacity: Option<StorageDataUnit>,
 
     /// Jump capacity (bytes).
-    #[clap(long, required_if_eq_all([
+    #[arg(long, required_if_eq_all([
         ("provider", "true"),
         ("provider_type", "msp"),
     ]), required_if_eq_all([
@@ -151,7 +145,7 @@ pub struct ProviderConfigurations {
 
     /// Type of StorageHub provider.
     /// Currently: `memory` and `rocks-db`.
-    #[clap(
+    #[arg(
         long,
         value_enum,
         value_name = "STORAGE_LAYER",
@@ -160,29 +154,29 @@ pub struct ProviderConfigurations {
     pub storage_layer: Option<StorageLayer>,
 
     /// Storage location in the file system
-    #[clap(long, required_if_eq("storage_layer", "rocks-db"))]
+    #[arg(long, required_if_eq("storage_layer", "rocks-db"))]
     pub storage_path: Option<String>,
 
     /// Extrinsic retry timeout in seconds.
-    #[clap(long, default_value = "60")]
+    #[arg(long, default_value = "60")]
     pub extrinsic_retry_timeout: Option<u64>,
 
     /// The minimum number of blocks behind the current best block to consider the node out of sync.
-    #[clap(long, default_value = "5")]
+    #[arg(long, default_value = "5")]
     pub sync_mode_min_blocks_behind: Option<u32>,
 
     /// On blocks that are multiples of this number, the blockchain service will trigger the catch of proofs.
-    #[clap(long, default_value = "4")]
+    #[arg(long, default_value = "4")]
     pub check_for_pending_proofs_period: Option<u32>,
 
     /// The maximum number of blocks from the past that will be processed for catching up the root changes.
-    #[clap(long, default_value = "10")]
+    #[arg(long, default_value = "10")]
     pub max_blocks_behind_to_catch_up_root_changes: Option<u32>,
 
     // ============== Provider RPC options ==============
     // ============== Remote file upload/download options ==============
     /// Maximum file size in bytes (default: 10GB)
-    #[clap(
+    #[arg(
         long,
         value_name = "BYTES",
         help_heading = "RPC - Remote File Options",
@@ -191,40 +185,40 @@ pub struct ProviderConfigurations {
     pub max_file_size: Option<u64>,
 
     /// Connection timeout in seconds (default: 30)
-    #[clap(long, value_name = "SECONDS", default_value = "30")]
+    #[arg(long, value_name = "SECONDS", default_value = "30")]
     pub connection_timeout: Option<u64>,
 
     /// Read timeout in seconds (default: 300)
-    #[clap(long, value_name = "SECONDS", default_value = "300")]
+    #[arg(long, value_name = "SECONDS", default_value = "300")]
     pub read_timeout: Option<u64>,
 
     /// Whether to follow redirects (default: true)
-    #[clap(long, value_name = "BOOLEAN", default_value = "true")]
+    #[arg(long, value_name = "BOOLEAN", default_value = "true")]
     pub follow_redirects: Option<bool>,
 
     /// Maximum number of redirects (default: 10)
-    #[clap(long, value_name = "COUNT", default_value = "10")]
+    #[arg(long, value_name = "COUNT", default_value = "10")]
     pub max_redirects: Option<u64>,
 
     /// User agent string (default: "StorageHub-Client/1.0")
-    #[clap(long, value_name = "STRING", default_value = "StorageHub-Client/1.0")]
+    #[arg(long, value_name = "STRING", default_value = "StorageHub-Client/1.0")]
     pub user_agent: Option<String>,
 
     /// Chunk size in bytes. This is different from the FILE_CHUNK_SIZE constant in the runtime, as it only affects file upload/download. (default: 8KB)
-    #[clap(long, value_name = "BYTES", default_value = "8192")]
+    #[arg(long, value_name = "BYTES", default_value = "8192")]
     pub chunk_size: Option<u64>,
 
     /// Number of `chunk_size` chunks to buffer during upload/download. (default: 512)
-    #[clap(long, value_name = "COUNT", default_value = "512")]
+    #[arg(long, value_name = "COUNT", default_value = "512")]
     pub chunks_buffer: Option<u64>,
 
     // ============== MSP Charge Fees task options ==============
     /// Enable and configure MSP Charge Fees task.
-    #[clap(long)]
+    #[arg(long)]
     pub msp_charge_fees_task: bool,
 
     /// Minimum debt threshold for charging users.
-    #[clap(
+    #[arg(
         long,
         value_name = "AMOUNT",
         help_heading = "MSP Charge Fees Options",
@@ -237,7 +231,7 @@ pub struct ProviderConfigurations {
 
     /// MSP charging fees period (in blocks).
     /// Setting it to 600 with a block every 6 seconds will charge user every hour.
-    #[clap(long, required_if_eq_all([
+    #[arg(long, required_if_eq_all([
         ("provider", "true"),
         ("provider_type", "msp"),
     ]))]
@@ -245,11 +239,11 @@ pub struct ProviderConfigurations {
 
     // ============== MSP Move Bucket task options ==============
     /// Enable and configure MSP Move Bucket task.
-    #[clap(long)]
+    #[arg(long)]
     pub msp_move_bucket_task: bool,
 
     /// Maximum number of times to retry a move bucket request.
-    #[clap(
+    #[arg(
         long,
         value_name = "COUNT",
         help_heading = "MSP Move Bucket Options",
@@ -261,7 +255,7 @@ pub struct ProviderConfigurations {
     pub msp_move_bucket_max_try_count: Option<u32>,
 
     /// Maximum tip amount to use when submitting a move bucket request extrinsic.
-    #[clap(
+    #[arg(
         long,
         value_name = "AMOUNT",
         help_heading = "MSP Move Bucket Options",
@@ -274,11 +268,11 @@ pub struct ProviderConfigurations {
 
     // ============== BSP Upload File task options ==============
     /// Enable and configure BSP Upload File task.
-    #[clap(long)]
+    #[arg(long)]
     pub bsp_upload_file_task: bool,
 
     /// Maximum number of times to retry an upload file request.
-    #[clap(
+    #[arg(
         long,
         value_name = "COUNT",
         help_heading = "BSP Upload File Options",
@@ -290,7 +284,7 @@ pub struct ProviderConfigurations {
     pub bsp_upload_file_max_try_count: Option<u32>,
 
     /// Maximum tip amount to use when submitting an upload file request extrinsic.
-    #[clap(
+    #[arg(
         long,
         value_name = "AMOUNT",
         help_heading = "BSP Upload File Options",
@@ -303,11 +297,11 @@ pub struct ProviderConfigurations {
 
     // ============== BSP Move Bucket task options ==============
     /// Enable and configure BSP Move Bucket task.
-    #[clap(long)]
+    #[arg(long)]
     pub bsp_move_bucket_task: bool,
 
     /// Grace period in seconds to accept download requests after a bucket move is accepted.
-    #[clap(
+    #[arg(
         long,
         value_name = "SECONDS",
         help_heading = "BSP Move Bucket Options",
@@ -320,11 +314,11 @@ pub struct ProviderConfigurations {
 
     // ============== BSP Charge Fees task options ==============
     /// Enable and configure BSP Charge Fees task.
-    #[clap(long)]
+    #[arg(long)]
     pub bsp_charge_fees_task: bool,
 
     /// Minimum debt threshold for charging users.
-    #[clap(
+    #[arg(
         long,
         value_name = "AMOUNT",
         help_heading = "BSP Charge Fees Options",
@@ -337,11 +331,11 @@ pub struct ProviderConfigurations {
 
     // ============== BSP Submit Proof task options ==============
     /// Enable and configure BSP Submit Proof task.
-    #[clap(long)]
+    #[arg(long)]
     pub bsp_submit_proof_task: bool,
 
     /// Maximum number of attempts to submit a proof.
-    #[clap(
+    #[arg(
         long,
         value_name = "COUNT",
         help_heading = "BSP Submit Proof Options",
@@ -354,7 +348,7 @@ pub struct ProviderConfigurations {
 }
 
 impl ProviderConfigurations {
-    pub fn provider_options(&self) -> ProviderOptions {
+    pub fn provider_options(&self, maintenance_mode: bool) -> ProviderOptions {
         // Configure RPC options for Provider
         let mut rpc_config = RpcConfig::default();
         if let Some(max_file_size) = self.max_file_size {
@@ -490,7 +484,7 @@ impl ProviderConfigurations {
             bsp_charge_fees,
             bsp_submit_proof,
             blockchain_service,
-            maintenance_mode: self.maintenance_mode,
+            maintenance_mode,
         }
     }
 }
@@ -498,7 +492,7 @@ impl ProviderConfigurations {
 #[derive(Debug, Parser, Clone)]
 pub struct IndexerConfigurations {
     /// Enable the indexer service.
-    #[clap(long)]
+    #[arg(long)]
     pub indexer: bool,
 
     /// The mode in which the indexer runs.
@@ -513,7 +507,7 @@ pub struct IndexerConfigurations {
     ///
     /// If not provided, the indexer will use the `INDEXER_DATABASE_URL` environment variable. If the
     /// environment variable is not set, the node will abort.
-    #[clap(
+    #[arg(
         long("indexer-database-url"),
         env = "INDEXER_DATABASE_URL",
         required_if_eq("indexer", "true")
@@ -540,14 +534,14 @@ impl IndexerConfigurations {
 #[derive(Debug, Parser, Clone)]
 pub struct FishermanConfigurations {
     /// Enable the fisherman service.
-    #[clap(long, conflicts_with = "provider")]
+    #[arg(long, conflicts_with = "provider")]
     pub fisherman: bool,
 
     /// Postgres database URL for the fisherman service.
     ///
     /// If not provided, the fisherman will use the `FISHERMAN_DATABASE_URL` environment variable.
     /// If the environment variable is not set, the node will abort.
-    #[clap(
+    #[arg(
         long("fisherman-database-url"),
         env = "FISHERMAN_DATABASE_URL",
         required_if_eq("fisherman", "true")
@@ -556,13 +550,14 @@ pub struct FishermanConfigurations {
 }
 
 impl FishermanConfigurations {
-    pub fn fisherman_options(&self) -> Option<FishermanOptions> {
+    pub fn fisherman_options(&self, maintenance_mode: bool) -> Option<FishermanOptions> {
         if self.fisherman {
             Some(FishermanOptions {
                 database_url: self
                     .fisherman_database_url
                     .clone()
                     .expect("Fisherman database URL is required"),
+                maintenance_mode,
             })
         } else {
             None
@@ -615,7 +610,7 @@ const AFTER_HELP_EXAMPLE: &str = color_print::cstr!(
     args_conflicts_with_subcommands = true,
     subcommand_negates_reqs = true
 )]
-#[clap(after_help = AFTER_HELP_EXAMPLE)]
+#[command(after_help = AFTER_HELP_EXAMPLE)]
 pub struct Cli {
     #[command(subcommand)]
     pub subcommand: Option<Subcommand>,
@@ -637,12 +632,18 @@ pub struct Cli {
     #[arg(raw = true)]
     pub relay_chain_args: Vec<String>,
 
+    /// Run the node in maintenance mode.
+    /// In this mode, the node will not import blocks or participate in consensus,
+    /// but will allow specific RPC calls for file and storage management.
+    #[arg(default_value = "false")]
+    pub maintenance_mode: bool,
+
     /// Provider configurations
     #[command(flatten)]
     pub provider_config: ProviderConfigurations,
 
     /// Provider configurations file path (allow to specify the provider configuration in a file instead of the cli)
-    #[clap(long, conflicts_with_all = [
+    #[arg(long, conflicts_with_all = [
         "provider", "provider_type", "max_storage_capacity", "jump_capacity",
         "storage_layer", "storage_path", "extrinsic_retry_timeout", "sync_mode_min_blocks_behind",
         "check_for_pending_proofs_period", "max_blocks_behind_to_catch_up_root_changes",
@@ -667,13 +668,13 @@ pub struct Cli {
 #[derive(Debug, Parser)]
 #[group(skip)]
 pub struct RunCmd {
-    #[clap(flatten)]
+    #[command(flatten)]
     pub base: cumulus_client_cli::RunCmd,
 
     /// When blocks should be sealed in the dev service.
     ///
     /// Options are "instant", "manual", or timer interval in milliseconds
-    #[clap(long, default_value = "instant")]
+    #[arg(long, default_value = "instant")]
     pub sealing: Sealing,
 }
 

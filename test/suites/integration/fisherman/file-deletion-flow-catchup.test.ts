@@ -36,7 +36,7 @@ import { waitForFishermanProcessing } from "../../../util/fisherman/fishermanHel
  * 3. Sends file deletion request in an unfinalized block
  * 4. Verifies fisherman can index and process events from unfinalized blocks
  */
-describeMspNet(
+await describeMspNet(
   "Fisherman File Deletion Flow with Catchup",
   {
     initialised: false,

@@ -43,7 +43,7 @@ import { waitForFishermanProcessing } from "../../../util/fisherman/fishermanHel
  * 4. Multiple providers: File stored by both BSP and MSP, deletion affects both
  * 5. StorageRequestRejected: Provider rejection scenarios (placeholder for future)
  */
-describeMspNet(
+await describeMspNet(
   "Fisherman Process File Deletion",
   {
     initialised: false,
@@ -713,6 +713,10 @@ describeMspNet(
         stopStoringResult.events
       );
 
+      // Check that the bucket no longer has an MSP
+      const bucketMsp = (await userApi.query.providers.buckets(bucketId)).unwrap().mspId;
+      assert(bucketMsp.isNone, "Bucket should have no MSP after stop storing");
+
       // Revoke the storage request to create incomplete state
       const revokeStorageRequestResult = await userApi.block.seal({
         calls: [userApi.tx.fileSystem.revokeStorageRequest(fileKey)],
@@ -732,10 +736,6 @@ describeMspNet(
         "IncompleteStorageRequest",
         revokeStorageRequestResult.events
       );
-
-      // Check that the bucket no longer has an MSP
-      const bucketMsp = (await userApi.query.providers.buckets(bucketId)).unwrap().mspId;
-      assert(bucketMsp.isNone, "Bucket should have no MSP after stop storing");
 
       await waitForIndexing(userApi, false);
 
@@ -785,12 +785,12 @@ describeMspNet(
       );
 
       // Verify current BSP root matches event
-      const currentBspRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
-      strictEqual(
-        currentBspRoot.toString(),
-        bspDeletionEvent.data.newRoot.toString(),
-        "Current BSP forest root should match the new root from deletion event"
-      );
+      await waitFor({
+        lambda: async () => {
+          const currentBspRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
+          return currentBspRoot.toString() === bspDeletionEvent.data.newRoot.toString();
+        }
+      });
 
       // Verify the incomplete storage request has been fully processed
       const incompleteRequest = await userApi.query.fileSystem.incompleteStorageRequests(fileKey);

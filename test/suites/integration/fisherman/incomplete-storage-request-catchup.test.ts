@@ -24,7 +24,7 @@ import { createBucketAndSendNewStorageRequest } from "../../../util/bspNet/fileH
  * - Verifies that the fisherman correctly identifies which providers (MSP, BSP, or both)
  *   need to perform a deletion and submits the appropriate extrinsics.
  */
-describeMspNet(
+await describeMspNet(
   "Fisherman Incomplete Storage Requests with Catchup",
   {
     initialised: false,

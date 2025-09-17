@@ -9,12 +9,12 @@ import {
   assertEventPresent
 } from "../../../util";
 import { createBucketAndSendNewStorageRequest } from "../../../util/bspNet/fileHelpers";
-import {
-  waitForFileIndexed,
-  waitForMspFileAssociation,
-  waitForBspFileAssociation
-} from "../../../util/indexerHelpers";
 import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
+import {
+  waitForBspFileAssociation,
+  waitForFileIndexed,
+  waitForMspFileAssociation
+} from "../../../util/indexerHelpers";
 
 /**
  * FISHERMAN FILE DELETION FLOW - BASIC HAPPY PATH
@@ -39,7 +39,7 @@ import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
  * Note: The user node is running the indexer, so any finalize blocks we seal on the user node, directly affects the data that is being
  * indexed in the database.
  */
-describeMspNet(
+await describeMspNet(
   "Fisherman File Deletion Flow",
   {
     initialised: false,
