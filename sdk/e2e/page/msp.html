@@ -621,7 +621,7 @@
       try {
         await ensureConnected();
         setStatus('Getting value props...');
-        const valueProps = await client.getValueProps();
+        const valueProps = await client.getValuePropositions();
         window.__msp.valueProps = valueProps;
         document.getElementById('valuePropsJson').textContent = JSON.stringify(valueProps, null, 2);
         console.log('[MSP][VALUE-PROPS]', `count=${Array.isArray(valueProps) ? valueProps.length : 0}`, JSON.stringify(valueProps, null, 2));
