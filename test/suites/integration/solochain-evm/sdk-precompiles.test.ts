@@ -1,3 +1,4 @@
+// @ts-nocheck - SDK dependency not available during general typecheck
 import assert from "node:assert";
 import { createReadStream, statSync } from "node:fs";
 import { Readable } from "node:stream";
