@@ -6,8 +6,11 @@ import { privateKeyToAccount } from "viem/accounts";
 import { describeBspNet, type EnrichedBspApi, ShConsts } from "../../../util";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/bspNet/consts";
 import { ALITH_PRIVATE_KEY } from "../../../util/evmNet/keyring";
-import { StorageHubClient, FileManager, ReplicationLevel } from "../../../../sdk/core/dist/index.node.js";
-import { MspClient } from "../../../../sdk/msp-client/dist/index.node.js";
+import {
+  StorageHubClient,
+  FileManager,
+  ReplicationLevel
+} from "../../../../sdk/core/dist/index.node.js";
 
 // Helper function to compute file fingerprint using FileManager (Merkle trie root)
 const computeFileFingerprint = async (filePath: string): Promise<`0x${string}`> => {
@@ -26,11 +29,16 @@ const computeFileFingerprint = async (filePath: string): Promise<`0x${string}`> 
 
 await describeBspNet(
   "Solochain EVM SDK Precompiles Integration",
-  { initialised: false, networkConfig: "standard", runtimeType: "solochain", keepAlive: true, indexer: true, /*backend: true*/ },
+  {
+    initialised: false,
+    networkConfig: "standard",
+    runtimeType: "solochain",
+    keepAlive: true,
+    indexer: true /*backend: true*/
+  },
   ({ before, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
     let storageHubClient: InstanceType<typeof StorageHubClient>;
-    let mspClient: InstanceType<typeof MspClient>;
     let publicClient: ReturnType<typeof createPublicClient>;
     let walletClient: ReturnType<typeof createWalletClient>;
     let account: ReturnType<typeof privateKeyToAccount>;
@@ -47,34 +55,29 @@ await describeBspNet(
         id: SH_EVM_SOLOCHAIN_CHAIN_ID,
         name: "SH-EVM_SOLO",
         nativeCurrency: { name: "StorageHub", symbol: "SH", decimals: 18 },
-        rpcUrls: { default: { http: [rpcUrl] } },
+        rpcUrls: { default: { http: [rpcUrl] } }
       });
 
       account = privateKeyToAccount(ALITH_PRIVATE_KEY);
       walletClient = createWalletClient({ chain, account, transport: http(rpcUrl) });
       publicClient = createPublicClient({ chain, transport: http(rpcUrl) });
 
-      // @ts-ignore - viem version mismatch between test and SDK packages
       storageHubClient = new StorageHubClient({
         rpcUrl,
         chain,
         walletClient
       });
-
-      // Set up MSP Client
-      const mspEndpoint = `http://127.0.0.1:${ShConsts.NODE_INFOS.msp1.port}`;
-      mspClient = await MspClient.connect({
-        baseUrl: mspEndpoint
-      });
     });
 
     // Create bucket
     it("should create bucket using StorageHubClient", async () => {
-      bucketName = `sdk-precompiles-test-bucket`;
+      bucketName = "sdk-precompiles-test-bucket";
 
       console.log(`[TEST] Creating bucket: ${bucketName}`);
 
-      const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(userApi.shConsts.DUMMY_MSP_ID);
+      const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
+        userApi.shConsts.DUMMY_MSP_ID
+      );
 
       assert(valueProps.length > 0, "No value propositions found for MSP");
       assert(valueProps[0].id, "Value proposition ID is undefined");
@@ -98,10 +101,7 @@ await describeBspNet(
       assert(receipt.status === "success", "Create bucket transaction failed");
 
       // Store bucket ID for subsequent tests
-      bucketId = await storageHubClient.deriveBucketId(
-        account.address,
-        bucketName
-      ) as string;
+      bucketId = (await storageHubClient.deriveBucketId(account.address, bucketName)) as string;
 
       console.log(`[TEST] ✅ Bucket created successfully! TxHash: ${txHash}`);
       console.log(`[TEST] ✅ Bucket ID: ${bucketId}`);
@@ -111,24 +111,25 @@ await describeBspNet(
     it("should issue storage request for Adolphus.jpg using StorageHubClient", async () => {
       assert(bucketId, "Bucket must be created first");
 
-      console.log(`[TEST] Computing fingerprint for Adolphus.jpg...`);
-      const testFilePath = new URL("../../../../docker/resource/adolphus.jpg", import.meta.url).pathname;
+      console.log("[TEST] Computing fingerprint for Adolphus.jpg...");
+      const testFilePath = new URL("../../../../docker/resource/adolphus.jpg", import.meta.url)
+        .pathname;
       const fileLocation = "/test/adolphus.jpg";
 
       const fingerprint = await computeFileFingerprint(testFilePath);
       const fileStats = statSync(testFilePath);
       const fileSize = BigInt(fileStats.size);
 
-      console.log(`[TEST] ✅ Fingerprint computed successfully!`);
+      console.log("[TEST] ✅ Fingerprint computed successfully!");
       console.log(`[TEST] File: ${testFilePath}`);
       console.log(`[TEST] Fingerprint: ${fingerprint}`);
       console.log(`[TEST] File size: ${fileSize} bytes`);
 
-      console.log(`[TEST] Issuing storage request...`);
+      console.log("[TEST] Issuing storage request...");
       // TODO: if the owner of the file wants to perform the distribute, the peerId must be provided
       // At the moment, we rely on the MSP to distribute the file to BSPs
       const peerIds = [
-        userApi.shConsts.NODE_INFOS.msp1.expectedPeerId, // MSP peer ID
+        userApi.shConsts.NODE_INFOS.msp1.expectedPeerId // MSP peer ID
       ];
       const replicationLevel = ReplicationLevel.Basic;
       const replicas = 0; // Used only when ReplicationLevel = Custom
