@@ -34,7 +34,7 @@ export async function runMspDemo(): Promise<void> {
   console.log('info:', info);
   const stats: StatsResponse = await client.getStats();
   console.log('stats:', stats);
-  const valueProps: ValueProp[] = await client.getValueProps();
+  const valueProps: ValueProp[] = await client.getValuePropositions();
   console.log('valueProps count:', Array.isArray(valueProps) ? valueProps.length : 0);
 
   // Prepare wallet (test key) and derive address
