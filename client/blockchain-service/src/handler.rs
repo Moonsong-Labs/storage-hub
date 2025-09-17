@@ -1356,14 +1356,14 @@ where
     ) {
         trace!(target: LOG_TARGET, "📠 Processing block import #{}: {}", block_number, block_hash);
 
-        // Provider-specific code to run on every block import.
+        // Provider-specific code to run at the start of every block import.
         match self.maybe_managed_provider {
             Some(ManagedProvider::Bsp(_)) => {
-                self.bsp_init_block_processing(block_hash, block_number, tree_route)
+                self.bsp_init_block_processing(block_hash, block_number, tree_route.clone())
                     .await;
             }
             Some(ManagedProvider::Msp(_)) => {
-                self.msp_init_block_processing(block_hash, block_number, tree_route)
+                self.msp_init_block_processing(block_hash, block_number, tree_route.clone())
                     .await;
             }
             None => {
@@ -1432,6 +1432,21 @@ where
                 // TODO: a node that has a newer version of the runtime, therefore the EventsVec type is different.
                 // TODO: Consider using runtime APIs for getting old data of previous blocks, and this just for current blocks.
                 error!(target: LOG_TARGET, "Failed to get events storage element: {:?}", e);
+            }
+        }
+
+        // Provider-specific code to run at the end of every block import.
+        match self.maybe_managed_provider {
+            Some(ManagedProvider::Bsp(_)) => {
+                self.bsp_end_block_processing(block_hash, block_number, tree_route)
+                    .await;
+            }
+            Some(ManagedProvider::Msp(_)) => {
+                self.msp_end_block_processing(block_hash, block_number, tree_route)
+                    .await;
+            }
+            None => {
+                trace!(target: LOG_TARGET, "No Provider ID found. This node is not managing a Provider.");
             }
         }
 

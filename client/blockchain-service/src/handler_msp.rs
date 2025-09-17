@@ -162,6 +162,22 @@ where
         }
     }
 
+    /// Runs at the end of every block import for a MSP.
+    ///
+    /// Steps:
+    /// 1. Check for BSPs who volunteered for files this MSP has to distribute, and spawn task
+    /// to distribute them.
+    pub(crate) async fn msp_end_block_processing<Block>(
+        &self,
+        _block_hash: &Runtime::Hash,
+        _block_number: &BlockNumber<Runtime>,
+        _tree_route: TreeRoute<Block>,
+    ) where
+        Block: BlockT<Hash = Runtime::Hash>,
+    {
+        // TODO: Check for BSPs volunteered for files this MSP has to distribute.
+    }
+
     /// Processes finality events that are only relevant for an MSP.
     pub(crate) fn msp_process_finality_events(
         &self,
