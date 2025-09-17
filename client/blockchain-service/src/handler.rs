@@ -5,9 +5,9 @@ use std::{collections::BTreeMap, marker::PhantomData, path::PathBuf, sync::Arc};
 use sc_client_api::{
     BlockImportNotification, BlockchainEvents, FinalityNotification, HeaderBackend,
 };
+use sc_network_types::PeerId;
 use sc_service::RpcHandlers;
 use sc_tracing::tracing::{debug, error, info, trace, warn};
-use serde::Deserialize;
 use shc_common::traits::StorageEnableRuntime;
 use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_blockchain::TreeRoute;
@@ -114,7 +114,7 @@ where
     _runtime: PhantomData<Runtime>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct BlockchainServiceConfig<Runtime>
 where
     Runtime: StorageEnableRuntime,
@@ -136,6 +136,9 @@ where
     /// the maximum size of the `tree_route` in the [`NewBlockNotificationKind::NewBestBlock`] enum
     /// variant.
     pub max_blocks_behind_to_catch_up_root_changes: BlockNumber<Runtime>,
+
+    /// The peer ID of this node.
+    pub peer_id: PeerId,
 }
 
 impl<Runtime> Default for BlockchainServiceConfig<Runtime>
@@ -148,6 +151,7 @@ where
             sync_mode_min_blocks_behind: 5u32.into(),
             check_for_pending_proofs_period: 4u32.into(),
             max_blocks_behind_to_catch_up_root_changes: 10u32.into(),
+            peer_id: PeerId::from_bytes(&[0; 32]).unwrap(),
         }
     }
 }

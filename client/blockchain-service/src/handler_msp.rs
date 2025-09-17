@@ -652,7 +652,7 @@ where
     ///
     /// - `block_hash`: Block hash used to perform consistent runtime API queries.
     ///
-    /// Behavior:
+    /// Behaviour:
     /// - No-ops with an error log if the node is not managing an MSP.
     /// - Logs and returns early if runtime API calls fail.
     /// - Safe to call repeatedly; per-file deduplication is enforced downstream using
