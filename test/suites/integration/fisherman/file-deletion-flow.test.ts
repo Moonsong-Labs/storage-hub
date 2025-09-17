@@ -8,6 +8,7 @@ import {
   shUser,
   waitFor
 } from "../../../util";
+import { waitForDeleteFileExtrinsic } from "../../../util/fisherman/fishermanHelpers";
 import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
 import {
   waitForBspFileAssociation,
@@ -171,27 +172,22 @@ await describeMspNet(
       await waitForIndexing(userApi, false);
 
       // Verify delete_file extrinsics are submitted
-      await userApi.wait.waitForTxInPool({
-        module: "fileSystem",
-        method: "deleteFile",
-        checkQuantity: 2
-      });
+      const deleteFileFound = await waitForDeleteFileExtrinsic(userApi, 2, 30000);
+      assert(
+        deleteFileFound,
+        "Should find 2 delete_file extrinsics in transaction pool (BSP and MSP)"
+      );
 
       // Seal block to process the extrinsics
       const deletionResult = await userApi.block.seal();
 
       // Verify both deletion completion events
-      assertEventPresent(
-        userApi,
-        "fileSystem",
-        "BucketFileDeletionCompleted",
-        deletionResult.events
-      );
+      assertEventPresent(userApi, "fileSystem", "MspFileDeletionCompleted", deletionResult.events);
       assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", deletionResult.events);
 
       // Extract deletion events to verify root changes
       const mspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BucketFileDeletionCompleted,
+        userApi.events.fileSystem.MspFileDeletionCompleted,
         deletionResult.events
       );
       const bspDeletionEvent = userApi.assert.fetchEvent(
