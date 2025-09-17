@@ -16,9 +16,8 @@ use shc_indexer_db::{
 };
 
 use crate::{
-    constants::database::DEFAULT_PAGE_LIMIT,
-    data::indexer_db::repository::StorageOperations,
-    error::{Error, Result},
+    constants::database::DEFAULT_PAGE_LIMIT, data::indexer_db::repository::StorageOperations,
+    error::Result,
 };
 
 /// Database client that delegates to a repository implementation
