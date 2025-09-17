@@ -16,7 +16,10 @@ use tokio::{
 };
 
 use crate::{
-    constants::{mocks::DOWNLOAD_FILE_CONTENT, rpc::TIMEOUT_MULTIPLIER},
+    constants::{
+        mocks::{DOWNLOAD_FILE_CONTENT, PRICE_PER_GIGA_UNIT},
+        rpc::TIMEOUT_MULTIPLIER,
+    },
     data::rpc::{
         connection::error::{RpcConnectionError, RpcResult},
         RpcConnection,
@@ -203,6 +206,10 @@ impl RpcConnection for MockConnection {
         // Build JSON response by method
         let response: Value = match method {
             "storagehubclient_saveFileToDisk" => self.mock_save_file_to_disk(params).await,
+            "storagehubclient_getCurrentPricePerUnitPerTick" => {
+                // Return a mock price value (e.g., 100 units)
+                serde_json::json!(MOCK_PRICE_PER_GIGA_UNIT)
+            }
             _ => {
                 let responses = self.responses.read().await;
                 responses

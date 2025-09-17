@@ -30,6 +30,19 @@ impl StorageHubRpcClient {
     {
         self.connection.call(method, params).await
     }
+
+    /// Get the current price per giga unit per tick
+    ///
+    /// Returns the price value (u128) that represents the cost per giga unit per tick
+    /// in the StorageHub network.
+    pub async fn get_current_price_per_unit_per_tick(&self) -> RpcResult<u128> {
+        self.connection
+            .call(
+                "storagehubclient_getCurrentPricePerUnitPerTick",
+                jsonrpsee::rpc_params![],
+            )
+            .await
+    }
 }
 
 #[cfg(all(test, feature = "mocks"))]
@@ -49,5 +62,19 @@ mod tests {
 
         let connected = client.is_connected().await;
         assert!(!connected);
+    }
+
+    #[tokio::test]
+    async fn test_get_current_price_per_unit_per_tick() {
+        let mock_conn = MockConnection::new();
+        let connection = Arc::new(AnyRpcConnection::Mock(mock_conn));
+        let client = StorageHubRpcClient::new(connection);
+
+        // Test that the mock returns the expected price
+        let price = client
+            .get_current_price_per_unit_per_tick()
+            .await
+            .expect("able to retrieve current price per giga unit");
+        assert_eq!(price > 0);
     }
 }
