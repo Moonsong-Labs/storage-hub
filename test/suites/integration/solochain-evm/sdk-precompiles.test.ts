@@ -6,11 +6,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { describeBspNet, type EnrichedBspApi, ShConsts } from "../../../util";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/bspNet/consts";
 import { ALITH_PRIVATE_KEY } from "../../../util/evmNet/keyring";
-import {
-  StorageHubClient,
-  FileManager,
-  ReplicationLevel
-} from "@storagehub-sdk/core";
+import { StorageHubClient, FileManager, ReplicationLevel } from "@storagehub-sdk/core";
 
 // Helper function to compute file fingerprint using FileManager (Merkle trie root)
 const computeFileFingerprint = async (filePath: string): Promise<`0x${string}`> => {
