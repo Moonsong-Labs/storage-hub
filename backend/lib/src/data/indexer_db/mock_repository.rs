@@ -54,6 +54,163 @@ impl MockRepository {
         }
     }
 
+    /// Create a new mock repository with some sample data loaded in
+    pub async fn sample() -> Self {
+        let this = Self::new();
+
+        // Create 3 MSPs
+        // MSP 1: The main MSP with DUMMY_MSP_ID
+        let msp1 = this
+            .create_msp(
+                crate::constants::mocks::MOCK_ADDRESS,
+                OnchainMspId::new(Hash::from_slice(&crate::constants::rpc::DUMMY_MSP_ID)),
+            )
+            .await
+            .expect("should create MSP 1");
+
+        // MSP 2: Another MSP
+        let msp2 = this
+            .create_msp(
+                "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+                OnchainMspId::new(Hash::from_slice(&[
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 4, 0,
+                ])),
+            )
+            .await
+            .expect("should create MSP 2");
+
+        // MSP 3: Third MSP
+        let msp3 = this
+            .create_msp(
+                "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+                OnchainMspId::new(Hash::from_slice(&[
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 5, 0,
+                ])),
+            )
+            .await
+            .expect("should create MSP 3");
+
+        // Create 3 buckets, one per MSP
+        // Bucket 1: For MOCK_ADDRESS and DUMMY_MSP_ID
+        let bucket1_hash = Hash::from_slice(&[
+            0xd8, 0x79, 0x3e, 0x41, 0x87, 0xf5, 0x64, 0x2e, 0x96, 0x01, 0x6a, 0x96, 0xfb, 0x33,
+            0x84, 0x9a, 0x7e, 0x03, 0xed, 0xa9, 0x13, 0x58, 0xb3, 0x11, 0xbb, 0xd4, 0x26, 0xed,
+            0x38, 0xb2, 0x66, 0x92,
+        ]);
+        let bucket1 = this
+            .create_bucket(
+                crate::constants::mocks::MOCK_ADDRESS,
+                Some(msp1.id),
+                b"Documents",
+                &bucket1_hash,
+                true, // private
+            )
+            .await
+            .expect("should create bucket 1");
+
+        // Bucket 2: For MSP 2
+        let bucket2_hash = Hash::from_slice(&[
+            0xa1, 0x23, 0x4e, 0x41, 0x87, 0xf5, 0x64, 0x2e, 0x96, 0x01, 0x6a, 0x96, 0xfb, 0x33,
+            0x84, 0x9a, 0x7e, 0x03, 0xed, 0xa9, 0x13, 0x58, 0xb3, 0x11, 0xbb, 0xd4, 0x26, 0xed,
+            0x38, 0xb2, 0x66, 0x93,
+        ]);
+        let bucket2 = this
+            .create_bucket(
+                "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+                Some(msp2.id),
+                b"Photos",
+                &bucket2_hash,
+                false, // public
+            )
+            .await
+            .expect("should create bucket 2");
+
+        // Bucket 3: For MSP 3
+        let bucket3_hash = Hash::from_slice(&[
+            0xb5, 0x67, 0x8e, 0x41, 0x87, 0xf5, 0x64, 0x2e, 0x96, 0x01, 0x6a, 0x96, 0xfb, 0x33,
+            0x84, 0x9a, 0x7e, 0x03, 0xed, 0xa9, 0x13, 0x58, 0xb3, 0x11, 0xbb, 0xd4, 0x26, 0xed,
+            0x38, 0xb2, 0x66, 0x94,
+        ]);
+        let bucket3 = this
+            .create_bucket(
+                "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+                Some(msp3.id),
+                b"Projects",
+                &bucket3_hash,
+                true, // private
+            )
+            .await
+            .expect("should create bucket 3");
+
+        // Create 3 files, one per bucket
+        // File 1: In bucket 1
+        let file1_key = Hash::from_slice(&[
+            0x3d, 0xe0, 0xc6, 0xd1, 0x95, 0x9e, 0xce, 0x55, 0x8e, 0xc0, 0x30, 0xf3, 0x72, 0x92,
+            0xe3, 0x83, 0xa9, 0xc9, 0x5f, 0x49, 0x7e, 0x82, 0x35, 0xb8, 0x97, 0x01, 0xb9, 0x14,
+            0xbe, 0x9b, 0xd1, 0xfb,
+        ]);
+        this.create_file(
+            crate::constants::mocks::MOCK_ADDRESS.as_bytes(),
+            &file1_key,
+            bucket1.id,
+            &bucket1_hash,
+            b"Thesis/chapter1.pdf",
+            &[
+                1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+                24, 25, 26, 27, 28, 29, 30, 31, 32,
+            ],
+            1048576, // 1MB
+        )
+        .await
+        .expect("should create file 1");
+
+        // File 2: In bucket 2
+        let file2_key = Hash::from_slice(&[
+            0x4e, 0xf1, 0xd7, 0xe2, 0x07, 0x0f, 0xd6, 0x59, 0xbd, 0x1d, 0x06, 0x0b, 0x30, 0x96,
+            0xf3, 0x8b, 0x5a, 0x1d, 0x65, 0xe6, 0x08, 0x34, 0x7c, 0xa9, 0x08, 0x02, 0xc0, 0xa1,
+            0xb9, 0xbd, 0xe2, 0xfc,
+        ]);
+        this.create_file(
+            b"0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+            &file2_key,
+            bucket2.id,
+            &bucket2_hash,
+            b"vacation/beach.jpg",
+            &[
+                2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+                25, 26, 27, 28, 29, 30, 31, 32, 33,
+            ],
+            5242880, // 5MB
+        )
+        .await
+        .expect("should create file 2");
+
+        // File 3: In bucket 3
+        let file3_key = Hash::from_slice(&[
+            0x5a, 0xf2, 0xe8, 0xf3, 0x18, 0x1f, 0xe7, 0x70, 0xce, 0x2e, 0x16, 0x1c, 0x41, 0x07,
+            0xf4, 0x9c, 0x6b, 0x2e, 0x76, 0xf7, 0x19, 0x45, 0x8d, 0xb0, 0x19, 0x13, 0xd1, 0xc1,
+            0xc9, 0xce, 0x3f, 0xd0,
+        ]);
+        this.create_file(
+            b"0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+            &file3_key,
+            bucket3.id,
+            &bucket3_hash,
+            b"code/src/main.rs",
+            &[
+                3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+                25, 26, 27, 28, 29, 30, 31, 32, 33, 34,
+            ],
+            65536, // 64KB
+        )
+        .await
+        .expect("should create file 3");
+
+        this
+    }
+
     /// Generate next unique ID
     pub fn next_id(&self) -> i64 {
         self.next_id.fetch_add(1, Ordering::SeqCst)

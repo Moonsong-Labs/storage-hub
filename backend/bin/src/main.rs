@@ -123,7 +123,7 @@ async fn create_postgres_client(config: &Config) -> Result<Arc<DBClient>> {
         if config.database.mock_mode {
             info!("Using mock repository (mock_mode enabled)");
 
-            let mock_repo = MockRepository::new();
+            let mock_repo = MockRepository::sample().await;
             let client = DBClient::new(Arc::new(mock_repo));
 
             // Test the connection (mock always succeeds)
