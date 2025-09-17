@@ -143,9 +143,9 @@ console.log('Folder files:', files);
   - `file: ReadStream | Blob | File | Uint8Array | ArrayBuffer` - File data to upload
   - `owner: string` - File owner
   - `location: string` - File location/path within the bucket
-- **`hexToBytes(hex)`** - Convert hex string to Uint8Array (handles 0x prefix)
-- **`formFileMetadata(owner, bucketId, location, fingerprint, size)`** - Create FileMetadata instance
-- **`computeFileKey(metadata)`** - Compute file key from FileMetadata
+- **`hexToBytes(hex)`** - Convert hex string to Uint8Array (handles 0x prefix) (TODO: Move to `core` package)
+- **`formFileMetadata(owner, bucketId, location, fingerprint, size)`** - Create FileMetadata instance (TODO: Move to `core` package under `FileMetadata`)
+- **`computeFileKey(metadata)`** - Compute file key from FileMetadata (TODO: This already exists in `core` package under `FileManager`, but requires a file stream to be provided, make it more flexible there and remove it here)
 - **`downloadByKey(fileKey)`** - Download file by key
   - Returns: `{ stream: ReadableStream, status: string }`
 - **`listBuckets()`** - List all buckets of the currently authenticated user

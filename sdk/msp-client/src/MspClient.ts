@@ -142,6 +142,9 @@ export class MspClient {
     const fileSize = fileBlob.size;
 
     // Compute the fingerprint first
+    // TODO: We should instead use FileManager here and use its `getFingerprint` method.
+    // This would allow us to remove the `initWasm` call at the top and to stream the file
+    // instead of loading it into memory as a blob.
     const fingerprint = await this.computeFileFingerprint(fileBlob);
 
     // Create the FileMetadata instance
@@ -256,12 +259,24 @@ export class MspClient {
   }
 
   hexToBytes(hex: string): Uint8Array {
-    const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
-    const bytes = new Uint8Array(cleanHex.length / 2);
-    for (let i = 0; i < bytes.length; i++) {
-      bytes[i] = Number.parseInt(cleanHex.substr(i * 2, 2), 16);
+    if (!hex) {
+      throw new Error('hex string cannot be empty');
     }
-    return bytes;
+    
+    const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
+    
+    if (cleanHex.length % 2 !== 0) {
+      throw new Error('hex string must have an even number of characters');
+    }
+    
+    if (!/^[0-9a-fA-F]*$/.test(cleanHex)) {
+      throw new Error('hex string contains invalid characters');
+    }
+    
+    return new Uint8Array(
+      cleanHex
+        .match(/.{2}/g)?.map(byte => Number.parseInt(byte, 16)) || []
+    );
   }
 
   async computeFileKey(fileMetadata: FileMetadata): Promise<Uint8Array> {
