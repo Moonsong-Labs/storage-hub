@@ -10,32 +10,32 @@ use sp_runtime::traits::Block as BlockT;
 use pallet_file_system_runtime_api::FileSystemApi;
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use shc_actors_framework::actor::Actor;
-use shc_common::traits::StorageEnableRuntime;
 use shc_common::{
+    traits::StorageEnableRuntime,
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
     types::{
-        BlockHash, BlockNumber, Fingerprint, ProviderId, StorageEnableEvents,
-        StorageRequestMetadata,
+        BackupStorageProviderId, BlockHash, BlockNumber, Fingerprint, ProviderId,
+        StorageEnableEvents, StorageRequestMetadata,
     },
 };
 use shc_forest_manager::traits::ForestStorageHandler;
 
 use crate::{
     events::{
-        FileDeletionRequest, FinalisedBucketMovedAway, FinalisedMspStopStoringBucketInsolventUser,
-        FinalisedMspStoppedStoringBucket, FinalisedProofSubmittedForPendingFileDeletionRequest,
-        ForestWriteLockTaskData, MoveBucketRequestedForMsp, NewStorageRequest,
-        ProcessFileDeletionRequest, ProcessFileDeletionRequestData,
-        ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData,
-        ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
-        StartMovedBucketDownload,
+        DistributeFileToBsp, FileDeletionRequest, FinalisedBucketMovedAway,
+        FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
+        FinalisedProofSubmittedForPendingFileDeletionRequest, ForestWriteLockTaskData,
+        MoveBucketRequestedForMsp, NewStorageRequest, ProcessFileDeletionRequest,
+        ProcessFileDeletionRequestData, ProcessMspRespondStoringRequest,
+        ProcessMspRespondStoringRequestData, ProcessStopStoringForInsolventUserRequest,
+        ProcessStopStoringForInsolventUserRequestData, StartMovedBucketDownload,
     },
     handler::LOG_TARGET,
     state::{
         OngoingProcessFileDeletionRequestCf, OngoingProcessMspRespondStorageRequestCf,
         OngoingProcessStopStoringForInsolventUserRequestCf,
     },
-    types::ManagedProvider,
+    types::{FileDistributionInfo, ManagedProvider},
     BlockchainService,
 };
 
@@ -168,14 +168,14 @@ where
     /// 1. Check for BSPs who volunteered for files this MSP has to distribute, and spawn task
     /// to distribute them.
     pub(crate) async fn msp_end_block_processing<Block>(
-        &self,
-        _block_hash: &Runtime::Hash,
+        &mut self,
+        block_hash: &Runtime::Hash,
         _block_number: &BlockNumber<Runtime>,
         _tree_route: TreeRoute<Block>,
     ) where
         Block: BlockT<Hash = Runtime::Hash>,
     {
-        // TODO: Check for BSPs volunteered for files this MSP has to distribute.
+        self.spawn_distribute_file_to_bsps_tasks(block_hash);
     }
 
     /// Processes finality events that are only relevant for an MSP.
@@ -639,6 +639,114 @@ where
             ForestWriteLockTaskData::SubmitProofRequest(_) => {
                 unreachable!("MSPs do not submit proofs.")
             }
+        }
+    }
+
+    pub(crate) fn spawn_distribute_file_to_bsps_tasks(&mut self, block_hash: &Runtime::Hash) {
+        let managed_msp_id = match &self.maybe_managed_provider {
+            Some(ManagedProvider::Msp(msp_handler)) => &msp_handler.msp_id,
+            _ => {
+                error!(target: LOG_TARGET, "`spawn_distribute_file_to_bsps_tasks` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
+                return;
+            }
+        };
+
+        // Get pending storage requests that this MSP should distribute the file to BSPs for.
+        let pending_storage_requests_for_this_msp = match self
+            .client
+            .runtime_api()
+            .pending_storage_requests_by_msp(*block_hash, *managed_msp_id)
+        {
+            Ok(pending_storage_requests) => pending_storage_requests,
+            Err(e) => {
+                error!(target: LOG_TARGET, "Failed to execute runtime API call to get pending storage requests for MSP [{:?}]: {:?}", managed_msp_id, e);
+                return;
+            }
+        };
+
+        // Filter out storage requests that this MSP has not already accepted.
+        // Cannot distribute files that this MSP doesn't have already.
+        let storage_requests_to_distribute =
+            pending_storage_requests_for_this_msp
+                .iter()
+                .filter(|(_, storage_request)| {
+                    // We already know that the values in this map are storage requests that
+                    // this MSP is assigned to, we just have to check that it has already accepted
+                    // the storage request, which is indicated by the second element of the tuple.
+                    // See [`shc_common::types::StorageRequestMetadata`] for more details.
+                    if let Some(msp) = storage_request.msp {
+                        msp.1
+                    } else {
+                        false
+                    }
+                });
+
+        // Distribute the files to the BSPs.
+        for storage_request in storage_requests_to_distribute {
+            let file_key = storage_request.0;
+            self.distribute_file_to_bsps(block_hash, file_key);
+        }
+    }
+
+    pub(crate) fn distribute_file_to_bsps(
+        &mut self,
+        block_hash: &Runtime::Hash,
+        file_key: &Runtime::Hash,
+    ) {
+        let managed_msp = match &mut self.maybe_managed_provider {
+            Some(ManagedProvider::Msp(msp_handler)) => msp_handler,
+            _ => {
+                error!(target: LOG_TARGET, "`spawn_distribute_file_to_bsps_tasks` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
+                return;
+            }
+        };
+
+        let file_key = file_key.clone().into();
+
+        // Get the BSPs who volunteered to store the file.
+        let bsps_volunteered: Vec<BackupStorageProviderId<Runtime>> = match self
+            .client
+            .runtime_api()
+            .query_bsps_volunteered_for_file(*block_hash, file_key)
+        {
+            Ok(bsps_volunteered_result) => match bsps_volunteered_result {
+                Ok(bsps_volunteered) => bsps_volunteered,
+                Err(e) => {
+                    error!(target: LOG_TARGET, "Failed to get BSPs volunteered for file [{:?}]: {:?}", file_key, e);
+                    return;
+                }
+            },
+            Err(e) => {
+                error!(target: LOG_TARGET, "Failed run runtime API call to query BSPs volunteered for file [{:?}]: {:?}", file_key, e);
+                return;
+            }
+        };
+
+        // Get the BSPs for which there are tasks currently distributing the file.
+        // If there is no entry for the file key, create a new one.
+        let to_emit = {
+            let file_distribution_info = managed_msp
+                .files_to_distribute
+                .entry(file_key.clone().into())
+                .or_insert(FileDistributionInfo::new());
+
+            bsps_volunteered
+                .into_iter()
+                .filter(|bsp_id| {
+                    !file_distribution_info.bsps_distributing.contains(bsp_id)
+                        && !file_distribution_info.bsps_confirmed.contains(bsp_id)
+                })
+                .collect::<Vec<_>>()
+        };
+
+        // For each BSP who volunteered to store the file, send an event to distribute the file to them,
+        // as long as there is not already a task for that BSP, or the file has already been confirmed to be stored.
+        // This loop is executed separately from the one above to avoid compiler error with `self` being borrowed mutably.
+        for bsp_id in to_emit {
+            self.emit(DistributeFileToBsp {
+                file_key: file_key.into(),
+                bsp_id,
+            });
         }
     }
 }
