@@ -2,13 +2,9 @@ name: StorageHub SDK - E2E tests
 
 on:
   pull_request:
-    paths:
-      - 'sdk/**'
   push:
     branches:
       - '**'
-    paths:
-      - 'sdk/**'
   workflow_dispatch:
 
 env:
