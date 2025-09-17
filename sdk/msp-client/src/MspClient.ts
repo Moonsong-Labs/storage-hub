@@ -304,21 +304,18 @@ export class MspClient {
     if (!hex) {
       throw new Error('hex string cannot be empty');
     }
-    
+
     const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
-    
+
     if (cleanHex.length % 2 !== 0) {
       throw new Error('hex string must have an even number of characters');
     }
-    
+
     if (!/^[0-9a-fA-F]*$/.test(cleanHex)) {
       throw new Error('hex string contains invalid characters');
     }
-    
-    return new Uint8Array(
-      cleanHex
-        .match(/.{2}/g)?.map(byte => Number.parseInt(byte, 16)) || []
-    );
+
+    return new Uint8Array(cleanHex.match(/.{2}/g)?.map((byte) => Number.parseInt(byte, 16)) || []);
   }
 
   async computeFileKey(fileMetadata: FileMetadata): Promise<Uint8Array> {

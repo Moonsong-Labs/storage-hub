@@ -177,8 +177,7 @@ await describeMspNet(
 
       // Poll until the file is expected
       await waitFor({
-        lambda: async () =>
-          (await msp1Api.rpc.storagehubclient.isFileKeyExpected(file_key)).isTrue
+        lambda: async () => (await msp1Api.rpc.storagehubclient.isFileKeyExpected(file_key)).isTrue
       });
 
       // Prepare a multipart HTTP request to send to the backend's upload endpoint
