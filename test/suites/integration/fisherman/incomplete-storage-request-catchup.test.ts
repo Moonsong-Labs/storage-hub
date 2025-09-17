@@ -53,8 +53,7 @@ await describeMspNet(
       await userApi.rpc.engine.createBlock(true, true);
     });
 
-    // TODO: fix race condition somewhere (fails in CI)
-    it.skip("processes expired request (BSP only) in unfinalized block", async () => {
+    it("processes expired request (BSP only) in unfinalized block", async () => {
       const bucketName = "test-expired-bsp-catchup";
       const source = "res/whatsup.jpg";
       const destination = "test/expired-bsp.txt";
@@ -71,7 +70,7 @@ await describeMspNet(
         null,
         null,
         1,
-        false // Do not finalize
+        false
       );
 
       // Wait for BSP to volunteer and store
@@ -152,7 +151,7 @@ await describeMspNet(
         null,
         null,
         2, // Keep the storage request opened to be able to revoke
-        false // Do not finalize
+        false
       );
 
       await userApi.wait.mspResponseInTxPool(1);
@@ -227,11 +226,11 @@ await describeMspNet(
         source,
         destination,
         bucketName,
+        null,
         valuePropId,
         mspId,
-        null,
         2, // Keep the storage request opened to be able to revoke
-        false // Do not finalize
+        false
       );
 
       // Wait for MSP to accept storage request

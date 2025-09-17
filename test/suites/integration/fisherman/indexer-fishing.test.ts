@@ -193,6 +193,11 @@ await describeMspNet(
       const source = "res/smile.jpg";
       const destination = "test/revoke.txt";
 
+      // Stop the other BSP so it doesn't volunteer for the files.
+      await userApi.docker.pauseContainer("storage-hub-sh-bsp-1");
+      // Stop the other MSP so it doesn't accept the file before we revoke the storage request
+      await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
+
       const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
         destination,
@@ -202,11 +207,6 @@ await describeMspNet(
         null,
         1
       );
-
-      // Stop the other BSP so it doesn't volunteer for the files.
-      await userApi.docker.pauseContainer("storage-hub-sh-bsp-1");
-      // Stop the other MSP so it doesn't accept the file before we revoke the storage request
-      await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
 
       const revokeStorageRequestResult = await userApi.block.seal({
         calls: [userApi.tx.fileSystem.revokeStorageRequest(fileKey)],

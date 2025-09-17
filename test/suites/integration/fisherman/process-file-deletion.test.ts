@@ -92,10 +92,11 @@ await describeMspNet(
           source,
           destination,
           bucketName,
+          null,
           valuePropId,
           mspId,
-          null,
-          1
+          1,
+          true
         );
 
       // Wait for MSP to store the file
@@ -240,8 +241,7 @@ await describeMspNet(
       });
     });
 
-    // TODO: fix race condition somewhere (fails in CI)
-    it.skip("processes expired storage request when MSP doesn't accept in time", async () => {
+    it("processes expired storage request when MSP doesn't accept in time", async () => {
       const bucketName = "test-fisherman-expired";
       const source = "res/whatsup.jpg";
       const destination = "test/expired.txt";
@@ -282,7 +282,8 @@ await describeMspNet(
         null,
         null,
         null,
-        1
+        1,
+        true
       );
 
       // Wait for BSP to volunteer and store
@@ -361,7 +362,8 @@ await describeMspNet(
         null,
         null,
         null,
-        2 // Keep the storage request opened to be able to revoke
+        2, // Keep the storage request opened to be able to revoke
+        true
       );
 
       await userApi.wait.mspResponseInTxPool();
@@ -494,10 +496,11 @@ await describeMspNet(
           source,
           destination,
           bucketName,
+          null,
           valuePropId,
           mspId,
-          null,
-          1
+          1,
+          true
         );
 
       // Wait for both MSP and BSP to store the file
@@ -640,45 +643,6 @@ await describeMspNet(
       });
     });
 
-    it("handles StorageRequestRejected event processing", async () => {
-      const bucketName = "test-fisherman-rejected";
-      const source = "res/smile.jpg";
-      const destination = "test/rejected.txt";
-
-      // This test simulates a rejection scenario
-      // In practice, rejection might happen due to various validation failures
-      // For now, we'll create a request and manually trigger a rejection-like scenario
-
-      // Pause containers to prevent normal processing
-      await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
-      await userApi.docker.pauseContainer("storage-hub-sh-bsp-1");
-
-      const { fileKey: _ } = await createBucketAndSendNewStorageRequest(
-        userApi,
-        source,
-        destination,
-        bucketName,
-        null,
-        null,
-        null,
-        1
-      );
-
-      // Skip some blocks and then resume to potentially trigger rejection-like behavior
-      await userApi.block.seal();
-      await userApi.block.seal();
-
-      // Resume containers
-      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-msp-1" });
-      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-bsp-1" });
-
-      await waitForIndexing(userApi);
-
-      // This test is mainly for simulating rejection-like scenarios
-      // In practice, actual rejection events would trigger the fisherman processing
-      // For completeness, we could add logic here if specific rejection events are generated
-    });
-
     it("processes MSP stop storing bucket during incomplete storage request", async () => {
       const bucketName = "test-msp-stop-incomplete";
       const source = "res/smile.jpg";
@@ -694,10 +658,11 @@ await describeMspNet(
         source,
         destination,
         bucketName,
+        null,
         valuePropId,
         mspId,
-        null,
-        2 // Keep the storage request opened to be able to revoke
+        2, // Keep the storage request opened to be able to revoke
+        true
       );
 
       // Wait for MSP to store the file

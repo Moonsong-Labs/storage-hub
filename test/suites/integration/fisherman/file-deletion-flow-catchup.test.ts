@@ -94,10 +94,11 @@ await describeMspNet(
         source,
         destination,
         bucketName,
+        null,
         valuePropId,
         mspId,
-        null,
-        1
+        1,
+        true
       );
 
       fileKey = fileMetadata.fileKey;
@@ -146,9 +147,9 @@ await describeMspNet(
           source,
           destination,
           bucketName,
+          null,
           valuePropId,
           mspId,
-          null,
           1,
           false
         );
