@@ -61,7 +61,7 @@ export class MspClient {
   }
 
   /** Get available value propositions */
-  getValueProps(options?: { signal?: AbortSignal }): Promise<ValueProp[]> {
+  getValuePropositions(options?: { signal?: AbortSignal }): Promise<ValueProp[]> {
     return this.http.get<ValueProp[]>('/value-props', {
       ...(options?.signal !== undefined && { signal: options.signal }),
     });
