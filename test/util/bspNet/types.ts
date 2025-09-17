@@ -1,13 +1,13 @@
+import type { after, afterEach, before, beforeEach, it } from "node:test";
 import type { ApiPromise } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import type { Address, Event, EventRecord } from "@polkadot/types/interfaces";
 import type { Codec, IEventData, ISubmittableResult } from "@polkadot/types/types";
 import type { HexString } from "@polkadot/util/types";
-import type { after, afterEach, before, beforeEach, it } from "node:test";
-import type { BspNetTestApi } from "./test-api";
-import type { NetworkLauncher } from "../netLaunch";
 import type postgres from "postgres";
+import type { NetworkLauncher } from "../netLaunch";
+import type { BspNetTestApi } from "./test-api";
 
 // biome-ignore lint/complexity/noBannedTypes: Good enough untill we integrate ORM
 export type SqlClient = postgres.Sql<{}>;
@@ -16,6 +16,22 @@ export type SqlClient = postgres.Sql<{}>;
  * Represents an enhanced API for interacting with StorageHub BSPNet.
  */
 export interface BspNetApi extends ApiPromise {
+  /**
+   * Runtime-aware accounts namespace.
+   * Access test accounts via api.accounts.sudo, api.accounts.bspKey, etc.
+   */
+  accounts: {
+    sudo: KeyringPair;
+    bspKey: KeyringPair;
+    bspDownKey: KeyringPair;
+    bspTwoKey: KeyringPair;
+    bspThreeKey: KeyringPair;
+    mspKey: KeyringPair;
+    mspDownKey: KeyringPair;
+    mspTwoKey: KeyringPair;
+    mspThreeKey: KeyringPair;
+    shUser: KeyringPair;
+  };
   /**
    * @description Creates a new bucket and submits a new storage request.
    *
@@ -373,6 +389,12 @@ export type TestOptions = {
   fisherman?: boolean;
   /** If true, runs backend service */
   backend?: boolean;
+  /**
+   * Set the runtime type to use
+   * 'parachain' - Polkadot parachain runtime (default)
+   * 'solochain' - Solochain EVM runtime
+   */
+  runtimeType?: "parachain" | "solochain";
 };
 
 /**

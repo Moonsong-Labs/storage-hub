@@ -1,5 +1,5 @@
-import { Keyring } from "@polkadot/api";
 import { randomBytes } from "node:crypto";
+import { Keyring } from "@polkadot/api";
 import { cryptoWaitReady } from "@polkadot/util-crypto";
 
 export const keyring = new Keyring({ type: "sr25519" });

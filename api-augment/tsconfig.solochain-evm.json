@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src/solochain-evm",
+    "outDir": "dist/solochain-evm",
+    "declaration": true,
+    "declarationDir": "dist/types/solochain-evm",
+    "paths": {
+      "@storagehub/api-augment/solochain-evm/*": ["src/solochain-evm/*"],
+      "@storagehub/api-augment/*": ["src/*"],
+      "@polkadot/api/augment": ["src/solochain-evm/interfaces/augment-api.ts"],
+      "@polkadot/types/augment": ["src/solochain-evm/interfaces/augment-types.ts"],
+      "@polkadot/types/lookup": ["src/solochain-evm/interfaces/types-lookup.ts"]
+    }
+  },
+  "include": ["src/solochain-evm/**/*.ts"]
+}

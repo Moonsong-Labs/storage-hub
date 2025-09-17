@@ -1,11 +1,11 @@
 import { EventEmitter } from "node:events";
-import { after, before, describe, it, afterEach, beforeEach } from "node:test";
+import { after, afterEach, before, beforeEach, describe, it } from "node:test";
+import { createSqlClient, verifyContainerFreshness } from "..";
+import { NetworkLauncher } from "../netLaunch";
+import * as ShConsts from "./consts";
 import { cleardownTest } from "./helpers";
 import { BspNetTestApi, type EnrichedBspApi } from "./test-api";
 import type { BspNetContext, FullNetContext, TestOptions } from "./types";
-import * as ShConsts from "./consts";
-import { NetworkLauncher } from "../netLaunch";
-import { createSqlClient, verifyContainerFreshness } from "..";
 
 export const launchEventEmitter = new EventEmitter();
 
@@ -66,7 +66,8 @@ export async function describeBspNet<
         const launchResponse = await NetworkLauncher.create("fullnet", {
           ...bspNetConfig,
           toxics: options?.toxics,
-          initialised: options?.initialised
+          initialised: options?.initialised,
+          runtimeType: options?.runtimeType
         });
         launchEventEmitter.emit("networkLaunched", launchResponse);
 
@@ -155,7 +156,8 @@ export async function describeMspNet<
         const launchResponse = await NetworkLauncher.create("fullnet", {
           ...fullNetConfig,
           toxics: options?.toxics,
-          initialised: options?.initialised
+          initialised: options?.initialised,
+          runtimeType: options?.runtimeType
         });
         launchEventEmitter.emit("networkLaunched", launchResponse);
 
