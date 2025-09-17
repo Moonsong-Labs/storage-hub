@@ -642,6 +642,22 @@ where
         }
     }
 
+    /// Scans pending storage requests for this MSP and triggers distribution tasks.
+    ///
+    /// This function should be called at the end of a block import for MSP-managed nodes.
+    /// It queries the runtime for pending storage requests assigned to this MSP, filters
+    /// only those already accepted by the MSP (i.e., files that this MSP already has),
+    /// and for each eligible file delegates to [`distribute_file_to_bsps`] which emits
+    /// a `DistributeFileToBsp` event per volunteering BSP (avoiding duplicates).
+    ///
+    /// - `block_hash`: Block hash used to perform consistent runtime API queries.
+    ///
+    /// Behavior:
+    /// - No-ops with an error log if the node is not managing an MSP.
+    /// - Logs and returns early if runtime API calls fail.
+    /// - Safe to call repeatedly; per-file deduplication is enforced downstream using
+    ///   the in-memory `files_to_distribute` state to not spawn duplicate tasks or
+    ///   re-emit for already-confirmed BSPs.
     pub(crate) fn spawn_distribute_file_to_bsps_tasks(&mut self, block_hash: &Runtime::Hash) {
         let managed_msp_id = match &self.maybe_managed_provider {
             Some(ManagedProvider::Msp(msp_handler)) => &msp_handler.msp_id,
@@ -688,6 +704,24 @@ where
         }
     }
 
+    /// Emits distribution events for all volunteering BSPs for a given file.
+    ///
+    /// Queries the runtime for BSPs that volunteered to store `file_key` and emits
+    /// a `DistributeFileToBsp` event for each BSP that doesn't already have a running
+    /// task. BSPs that have already confirmed storage are skipped as well. Uses the
+    /// MSP's `files_to_distribute` to avoid duplicate work.
+    ///
+    /// Preconditions:
+    /// - This node must be managing an MSP; otherwise the function logs and returns.
+    /// - Typically invoked by [`spawn_distribute_file_to_bsps_tasks`], after ensuring the
+    ///   MSP accepted the corresponding storage request.
+    ///
+    /// Parameters:
+    /// - `block_hash`: Block hash used for consistent runtime API queries.
+    /// - `file_key`: The file key to distribute.
+    ///
+    /// Errors:
+    /// - Logs and returns early if runtime API queries fail or return errors.
     pub(crate) fn distribute_file_to_bsps(
         &mut self,
         block_hash: &Runtime::Hash,
