@@ -13,6 +13,7 @@ use log::{debug, error, info};
 use tokio::{fs, io::AsyncReadExt, sync::RwLock};
 
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
+use pallet_payment_streams_runtime_api::PaymentStreamsApi as PaymentStreamsRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
 use sc_rpc_api::check_if_safe;
 use shc_common::{
@@ -306,6 +307,10 @@ pub trait StorageHubClientApi {
         file_key: shp_types::Hash,
         exclude_type: String,
     ) -> RpcResult<()>;
+
+    /// Get the current price per giga unit per tick from the payment streams pallet.
+    #[method(name = "paymentStreams_getCurrentPricePerGigaUnitPerTick")]
+    fn get_current_price_per_giga_unit_per_tick(&self) -> RpcResult<u128>;
 }
 
 /// Stores the required objects to be used in our RPC method.
@@ -1080,6 +1085,29 @@ where
         drop(write_file_storage);
 
         Ok(())
+    }
+
+    fn get_current_price_per_giga_unit_per_tick(&self) -> RpcResult<u128> {
+        let api = self.client.runtime_api();
+        let at_hash = self.client.info().best_hash;
+
+        let balance = api
+            .get_current_price_per_giga_unit_per_tick(at_hash)
+            .map_err(|e| {
+                JsonRpseeError::owned(
+                    INTERNAL_ERROR_CODE,
+                    format!(
+                        "Failed to get current price per giga unit per tick: {:?}",
+                        e
+                    ),
+                    None::<()>,
+                )
+            })?;
+
+        // Convert Balance to u128 (Balance is u128 in our runtimes)
+        // We use saturated_into to safely convert
+        use sp_runtime::SaturatedConversion;
+        Ok(balance.saturated_into())
     }
 }
 
