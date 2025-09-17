@@ -182,16 +182,16 @@ export class MspClient {
         path,
         authHeaders
           ? {
-            body: file,
-            headers: {
-              ...authHeaders,
-              'Content-Type': 'application/octet-stream',
-            },
-          }
+              body: file,
+              headers: {
+                ...authHeaders,
+                'Content-Type': 'application/octet-stream',
+              },
+            }
           : {
-            body: file,
-            headers: { 'Content-Type': 'application/octet-stream' },
-          },
+              body: file,
+              headers: { 'Content-Type': 'application/octet-stream' },
+            },
       );
       return res;
     }
