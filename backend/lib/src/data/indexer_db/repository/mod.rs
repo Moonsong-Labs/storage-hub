@@ -25,6 +25,7 @@
 //! ```
 
 use async_trait::async_trait;
+use bigdecimal::BigDecimal;
 use shc_indexer_db::{models::Bsp, OnchainBspId};
 
 pub mod error;
@@ -32,6 +33,15 @@ pub mod pool;
 pub mod postgres;
 
 use error::RepositoryResult;
+
+/// Payment stream data from the database
+#[derive(Debug, Clone)]
+pub struct PaymentStreamData {
+    pub provider: String,
+    pub total_amount_paid: BigDecimal,
+    pub rate: Option<BigDecimal>,
+    pub amount_provided: Option<BigDecimal>,
+}
 
 /// Read-only operations for indexer data access.
 ///
@@ -58,6 +68,32 @@ pub trait IndexerOps: Send + Sync {
     /// # Returns
     /// * Vector of BSPs
     async fn list_bsps(&self, limit: i64, offset: i64) -> RepositoryResult<Vec<Bsp>>;
+
+    /// Get all payment streams for a user account
+    ///
+    /// # Arguments
+    /// * `user_account` - The user's account address
+    ///
+    /// # Returns
+    /// * Vector of payment stream data
+    async fn get_payment_streams_for_user(
+        &self,
+        user_account: &str,
+    ) -> RepositoryResult<Vec<PaymentStreamData>>;
+
+    /// Calculate total storage provided by an MSP for a user
+    ///
+    /// # Arguments
+    /// * `msp_id` - The MSP database ID
+    /// * `user_account` - The user's account address
+    ///
+    /// # Returns
+    /// * Total storage in bytes as BigDecimal
+    async fn calculate_msp_storage_for_user(
+        &self,
+        msp_id: i64,
+        user_account: &str,
+    ) -> RepositoryResult<BigDecimal>;
 }
 
 /// Mutable operations for test environments.

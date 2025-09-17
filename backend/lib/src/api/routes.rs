@@ -52,7 +52,7 @@ pub fn routes(services: Services) -> Router {
         )
         .route("/download/{file_key}", get(handlers::download_by_key))
         // Payment streams routes
-        .route("/payment_stream", get(handlers::payment_stream))
+        .route("/payment_streams", get(handlers::payment_streams))
         // Add state to all routes
         .with_state(services)
 }

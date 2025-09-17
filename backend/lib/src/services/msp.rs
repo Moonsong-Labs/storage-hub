@@ -4,6 +4,7 @@
 
 use std::sync::Arc;
 
+use bigdecimal::BigDecimal;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use shc_rpc::SaveFileToDisk;
@@ -15,7 +16,7 @@ use crate::{
         buckets::{Bucket, FileEntry},
         files::{DistributeResponse, FileInfo},
         msp_info::{Capacity, InfoResponse, MspHealthResponse, StatsResponse, ValueProp},
-        payment::PaymentStream,
+        payment::{PaymentStream, PaymentStreamInfo, PaymentStreamsResponse},
     },
 };
 
@@ -312,15 +313,69 @@ impl MspService {
         })
     }
 
-    /// Get payment stream for a user
-    pub async fn get_payment_stream(&self, _user_address: &str) -> Result<PaymentStream, Error> {
-        // Mock implementation
-        Ok(PaymentStream {
-            tokens_per_block: 100,
-            last_charged_tick: 1234567,
-            user_deposit: 100000,
-            out_of_funds_tick: None,
-        })
+    /// Get all payment streams for a user
+    pub async fn get_payment_streams(
+        &self,
+        user_address: &str,
+    ) -> Result<PaymentStreamsResponse, Error> {
+        // Get all payment streams for the user from the database
+        let payment_stream_data = self
+            .postgres
+            .get_payment_streams_for_user(user_address)
+            .await?;
+
+        // Get current price per unit per tick from RPC (for dynamic rate calculations)
+        let current_price_per_unit_per_tick = self
+            .rpc
+            .get_current_price_per_unit_per_tick()
+            .await
+            .map_err(|e| Error::BadRequest(format!("Failed to get price per unit: {}", e)))?;
+
+        // Process each payment stream
+        let mut streams = Vec::new();
+        for stream_data in payment_stream_data {
+            let (provider_type, cost_per_tick) = if let Some(rate) = stream_data.rate {
+                // This is an MSP (fixed rate payment stream)
+                // Cost per tick = total storage * rate
+
+                // TODO(MOCK): obtain MSP db ID by doing a lookup on the MSP Onchain ID
+                let msp_id = 1i64; // Mock MSP database ID
+
+                // Calculate total storage for this MSP and user
+                let total_storage = self
+                    .postgres
+                    .calculate_msp_storage_for_user(msp_id, user_address)
+                    .await
+                    .unwrap_or_else(|_| BigDecimal::from(0));
+
+                // Calculate cost per tick using BigDecimal for precision
+                // Cost = total_storage * rate
+                let cost = total_storage * rate;
+
+                ("msp".to_string(), cost.to_string())
+            } else if let Some(amount_provided) = stream_data.amount_provided {
+                // This is a BSP (dynamic rate payment stream)
+                // Cost per tick = amount_provided * current_price_per_unit_per_tick
+
+                // Convert u128 price to BigDecimal and multiply
+                let price_bd = BigDecimal::from(current_price_per_unit_per_tick);
+                let cost = amount_provided * price_bd;
+
+                ("bsp".to_string(), cost.to_string())
+            } else {
+                // Unknown stream type, skip
+                continue;
+            };
+
+            streams.push(PaymentStreamInfo {
+                provider: stream_data.provider,
+                provider_type,
+                total_amount_paid: stream_data.total_amount_paid.to_string(),
+                cost_per_tick,
+            });
+        }
+
+        Ok(PaymentStreamsResponse { streams })
     }
 
     /// Download a file by `file_key` via the MSP RPC into `uploads/<file_key>` and

@@ -1,8 +1,13 @@
+use bigdecimal::BigDecimal;
 use chrono::NaiveDateTime;
+use diesel::dsl::sum;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
-use crate::{schema::bucket, DbConnection};
+use crate::{
+    schema::{bucket, file},
+    DbConnection,
+};
 
 /// Table that holds the Buckets.
 #[derive(Debug, Clone, Queryable, Insertable, Selectable)]
@@ -165,5 +170,20 @@ impl Bucket {
             .load(conn)
             .await?;
         Ok(buckets)
+    }
+
+    /// Calculate the total size of all files in a bucket
+    pub async fn calculate_size<'a>(
+        conn: &mut DbConnection<'a>,
+        bucket_id: i64,
+    ) -> Result<BigDecimal, diesel::result::Error> {
+        let total_size: Option<BigDecimal> = file::table
+            .filter(file::bucket_id.eq(bucket_id))
+            .select(sum(file::size))
+            .first(conn)
+            .await?;
+
+        // Return BigDecimal directly, defaulting to zero if None
+        Ok(total_size.unwrap_or_else(|| BigDecimal::from(0)))
     }
 }

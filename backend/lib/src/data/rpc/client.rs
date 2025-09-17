@@ -75,6 +75,6 @@ mod tests {
             .get_current_price_per_unit_per_tick()
             .await
             .expect("able to retrieve current price per giga unit");
-        assert_eq!(price > 0);
+        assert!(price > 0);
     }
 }

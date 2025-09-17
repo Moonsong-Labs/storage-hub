@@ -208,7 +208,7 @@ impl RpcConnection for MockConnection {
             "storagehubclient_saveFileToDisk" => self.mock_save_file_to_disk(params).await,
             "storagehubclient_getCurrentPricePerUnitPerTick" => {
                 // Return a mock price value (e.g., 100 units)
-                serde_json::json!(MOCK_PRICE_PER_GIGA_UNIT)
+                serde_json::json!(PRICE_PER_GIGA_UNIT)
             }
             _ => {
                 let responses = self.responses.read().await;

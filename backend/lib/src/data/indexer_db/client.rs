@@ -6,10 +6,14 @@
 
 use std::sync::Arc;
 
+use bigdecimal::BigDecimal;
+
 use shc_indexer_db::models::Bsp;
 
 use crate::{
-    constants::database::DEFAULT_PAGE_LIMIT, data::indexer_db::repository::StorageOperations,
+    constants::database::DEFAULT_PAGE_LIMIT,
+    data::indexer_db::repository::{PaymentStreamData, StorageOperations},
+    error::{Error, Result},
 };
 
 /// Database client that delegates to a repository implementation
@@ -47,28 +51,47 @@ impl DBClient {
     }
 
     /// Test the database connection
-    pub async fn test_connection(&self) -> crate::error::Result<()> {
+    pub async fn test_connection(&self) -> Result<()> {
         // Try to list BSPs with a limit of 1 to test the connection
         self.repository
             .list_bsps(1, 0)
             .await
-            .map_err(|e| crate::error::Error::Database(e.to_string()))?;
+            .map_err(|e| Error::Database(e.to_string()))?;
         Ok(())
     }
 
     /// Get all BSPs with optional pagination
-    pub async fn get_all_bsps(
-        &self,
-        limit: Option<i64>,
-        offset: Option<i64>,
-    ) -> crate::error::Result<Vec<Bsp>> {
+    pub async fn get_all_bsps(&self, limit: Option<i64>, offset: Option<i64>) -> Result<Vec<Bsp>> {
         let limit = limit.unwrap_or(DEFAULT_PAGE_LIMIT);
         let offset = offset.unwrap_or(0);
 
         self.repository
             .list_bsps(limit, offset)
             .await
-            .map_err(|e| crate::error::Error::Database(e.to_string()))
+            .map_err(|e| Error::Database(e.to_string()))
+    }
+
+    /// Get all payment streams for a user
+    pub async fn get_payment_streams_for_user(
+        &self,
+        user_account: &str,
+    ) -> Result<Vec<PaymentStreamData>> {
+        self.repository
+            .get_payment_streams_for_user(user_account)
+            .await
+            .map_err(|e| Error::Database(e.to_string()))
+    }
+
+    /// Calculate total storage provided by an MSP for a user
+    pub async fn calculate_msp_storage_for_user(
+        &self,
+        msp_id: i64,
+        user_account: &str,
+    ) -> Result<BigDecimal> {
+        self.repository
+            .calculate_msp_storage_for_user(msp_id, user_account)
+            .await
+            .map_err(|e| Error::Database(e.to_string()))
     }
 }
 
@@ -76,13 +99,13 @@ impl DBClient {
 #[cfg(test)]
 impl DBClient {
     /// Delete a BSP
-    pub async fn delete_bsp(&self, account: &shp_types::Hash) -> crate::error::Result<()> {
+    pub async fn delete_bsp(&self, account: &shp_types::Hash) -> Result<()> {
         use shc_indexer_db::OnchainBspId;
 
         self.repository
             .delete_bsp(&OnchainBspId::new(*account))
             .await
-            .map_err(|e| crate::error::Error::Database(e.to_string()))
+            .map_err(|e| Error::Database(e.to_string()))
     }
 }
 

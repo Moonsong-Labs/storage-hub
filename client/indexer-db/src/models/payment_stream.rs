@@ -125,4 +125,15 @@ impl PaymentStream {
             .await?;
         Ok(())
     }
+
+    pub async fn get_all_by_user<'a>(
+        conn: &mut DbConnection<'a>,
+        account: String,
+    ) -> Result<Vec<Self>, diesel::result::Error> {
+        let payment_streams = paymentstream::table
+            .filter(paymentstream::account.eq(account))
+            .load(conn)
+            .await?;
+        Ok(payment_streams)
+    }
 }
