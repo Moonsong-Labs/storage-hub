@@ -89,11 +89,9 @@ jobs:
           cache: false
 
       - name: Setup Protobuf (protoc)
-        uses: arduino/setup-protoc@v2
+        uses: arduino/setup-protoc@v3
         with:
-          version: '25.x'
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install wasm-pack
         run: curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
