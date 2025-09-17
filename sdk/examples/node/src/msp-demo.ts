@@ -29,7 +29,7 @@ export async function runMspDemo(): Promise<void> {
   const health: HealthStatus = await client.getHealth();
   console.log('health:', health);
 
-  // New: MSP info endpoints (open)
+  // MSP info endpoints
   const info: InfoResponse = await client.getInfo();
   console.log('info:', info);
   const stats: StatsResponse = await client.getStats();
