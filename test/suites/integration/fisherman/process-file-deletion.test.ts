@@ -8,9 +8,7 @@ import {
   shUser,
   waitFor
 } from "../../../util";
-import {
-  waitForFishermanProcessing
-} from "../../../util/fisherman/fishermanHelpers";
+import { waitForFishermanProcessing } from "../../../util/fisherman/fishermanHelpers";
 import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
 import {
   waitForBspFileAssociation,
