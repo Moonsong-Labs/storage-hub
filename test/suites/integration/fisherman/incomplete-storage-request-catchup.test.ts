@@ -104,9 +104,18 @@ await describeMspNet(
       await userApi.block.skipTo(currentBlockNumber + storageRequestTtl, { finalised: false });
 
       // Verify only one delete extrinsic is submitted (for the BSP)
-      await userApi.wait.waitForTxInPool({
-        module: "fileSystem",
-        method: "deleteFileForIncompleteStorageRequest"
+      await waitFor({
+        lambda: async () => {
+          const deleteFileMatch = await userApi.assert.extrinsicPresent({
+            method: "deleteFileForIncompleteStorageRequest",
+            module: "fileSystem",
+            checkTxPool: true,
+            assertLength: 1
+          });
+          return deleteFileMatch.length >= 1;
+        },
+        iterations: 300,
+        delay: 100
       });
 
       // Seal block to process the extrinsic
@@ -177,10 +186,18 @@ await describeMspNet(
       );
 
       // Verify two delete extrinsics are submitted (for MSP and BSP)
-      await userApi.wait.waitForTxInPool({
-        module: "fileSystem",
-        method: "deleteFileForIncompleteStorageRequest",
-        checkQuantity: 2
+      await waitFor({
+        lambda: async () => {
+          const deleteFileMatch = await userApi.assert.extrinsicPresent({
+            method: "deleteFileForIncompleteStorageRequest",
+            module: "fileSystem",
+            checkTxPool: true,
+            assertLength: 2
+          });
+          return deleteFileMatch.length >= 2;
+        },
+        iterations: 300,
+        delay: 100
       });
 
       // Seal block to process the extrinsics
@@ -262,10 +279,18 @@ await describeMspNet(
       // Verify two delete extrinsics are submitted:
       // 1. For the bucket (no MSP present)
       // 2. For the BSP
-      await userApi.wait.waitForTxInPool({
-        module: "fileSystem",
-        method: "deleteFileForIncompleteStorageRequest",
-        checkQuantity: 2
+      await waitFor({
+        lambda: async () => {
+          const deleteFileMatch = await userApi.assert.extrinsicPresent({
+            method: "deleteFileForIncompleteStorageRequest",
+            module: "fileSystem",
+            checkTxPool: true,
+            assertLength: 2
+          });
+          return deleteFileMatch.length >= 2;
+        },
+        iterations: 300,
+        delay: 100
       });
 
       // Seal block to process the extrinsics

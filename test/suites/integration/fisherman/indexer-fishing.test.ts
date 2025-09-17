@@ -11,7 +11,6 @@ import {
   sleep,
   waitFor
 } from "../../../util";
-import { waitForDeleteFileExtrinsic } from "../../../util/fisherman/fishermanHelpers";
 import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
 import {
   chargeUserUntilInsolvent,
@@ -495,21 +494,35 @@ await describeMspNet(
       );
 
       // Verify fisherman submits delete_file extrinsics
-      const deleteFileFound = await waitForDeleteFileExtrinsic(userApi, 2, 15000);
-      assert(
-        deleteFileFound,
-        "Should find 2 delete_file extrinsics in transaction pool (BSP and MSP)"
-      );
+      await waitFor({
+        lambda: async () => {
+          const deleteFileMatch = await userApi.assert.extrinsicPresent({
+            method: "deleteFile",
+            module: "fileSystem",
+            checkTxPool: true,
+            assertLength: 2
+          });
+          return deleteFileMatch.length >= 2;
+        },
+        iterations: 150,
+        delay: 100
+      });
+      assert(true, "Should find 2 delete_file extrinsics in transaction pool (BSP and MSP)");
 
       // Seal block to process the fisherman-submitted extrinsics
       const deletionResult = await userApi.block.seal();
 
-      assertEventPresent(userApi, "fileSystem", "MspFileDeletionCompleted", deletionResult.events);
+      assertEventPresent(
+        userApi,
+        "fileSystem",
+        "BucketFileDeletionCompleted",
+        deletionResult.events
+      );
       assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", deletionResult.events);
 
       // Extract deletion events to verify root changes
-      const mspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.MspFileDeletionCompleted,
+      const bucketDeletionEvent = userApi.assert.fetchEvent(
+        userApi.events.fileSystem.BucketFileDeletionCompleted,
         deletionResult.events
       );
       const bspDeletionEvent = userApi.assert.fetchEvent(
@@ -521,16 +534,16 @@ await describeMspNet(
       await waitFor({
         lambda: async () => {
           notEqual(
-            mspDeletionEvent.data.oldRoot.toString(),
-            mspDeletionEvent.data.newRoot.toString(),
+            bucketDeletionEvent.data.oldRoot.toString(),
+            bucketDeletionEvent.data.newRoot.toString(),
             "MSP forest root should have changed after file deletion"
           );
           const currentBucketRoot = await msp1Api.rpc.storagehubclient.getForestRoot(
-            mspDeletionEvent.data.bucketId.toString()
+            bucketDeletionEvent.data.bucketId.toString()
           );
           strictEqual(
             currentBucketRoot.toString(),
-            mspDeletionEvent.data.newRoot.toString(),
+            bucketDeletionEvent.data.newRoot.toString(),
             "Current bucket forest root should match the new root from deletion event"
           );
           return true;
@@ -556,11 +569,8 @@ await describeMspNet(
       });
 
       await waitForIndexing(userApi);
-
       await waitForFileDeleted(sql, fileKey);
-
       await verifyNoOrphanedMspAssociations(sql, mspId);
-
       await verifyNoOrphanedBspAssociations(sql, userApi.shConsts.DUMMY_BSP_ID);
     });
 
