@@ -13,7 +13,7 @@ use shc_indexer_db::models::Bsp;
 use crate::{
     constants::database::DEFAULT_PAGE_LIMIT,
     data::indexer_db::repository::{PaymentStreamData, StorageOperations},
-    error::{Error, Result},
+    error::Result,
 };
 
 /// Database client that delegates to a repository implementation
@@ -53,10 +53,7 @@ impl DBClient {
     /// Test the database connection
     pub async fn test_connection(&self) -> Result<()> {
         // Try to list BSPs with a limit of 1 to test the connection
-        self.repository
-            .list_bsps(1, 0)
-            .await
-            .map_err(|e| Error::Database(e.to_string()))?;
+        self.repository.list_bsps(1, 0).await?;
         Ok(())
     }
 
@@ -68,7 +65,7 @@ impl DBClient {
         self.repository
             .list_bsps(limit, offset)
             .await
-            .map_err(|e| Error::Database(e.to_string()))
+            .map_err(Into::into)
     }
 
     /// Get all payment streams for a user
@@ -79,7 +76,7 @@ impl DBClient {
         self.repository
             .get_payment_streams_for_user(user_account)
             .await
-            .map_err(|e| Error::Database(e.to_string()))
+            .map_err(Into::into)
     }
 
     /// Calculate total storage provided by an MSP for a user
@@ -91,7 +88,7 @@ impl DBClient {
         self.repository
             .calculate_msp_storage_for_user(msp_id, user_account)
             .await
-            .map_err(|e| Error::Database(e.to_string()))
+            .map_err(Into::into)
     }
 }
 
@@ -105,7 +102,7 @@ impl DBClient {
         self.repository
             .delete_bsp(&OnchainBspId::new(*account))
             .await
-            .map_err(|e| Error::Database(e.to_string()))
+            .map_err(Into::into)
     }
 }
 

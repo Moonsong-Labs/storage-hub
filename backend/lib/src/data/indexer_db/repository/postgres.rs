@@ -26,7 +26,9 @@ use shc_indexer_db::{
 #[cfg(test)]
 use crate::data::indexer_db::repository::IndexerOpsMut;
 use crate::data::indexer_db::repository::{
-    error::RepositoryResult, pool::SmartPool, IndexerOps, PaymentStreamData,
+    error::{RepositoryError, RepositoryResult},
+    pool::SmartPool,
+    IndexerOps, PaymentStreamData, PaymentStreamKind,
 };
 
 /// PostgreSQL repository implementation.
@@ -79,17 +81,26 @@ impl IndexerOps for Repository {
         let streams = PaymentStream::get_all_by_user(&mut conn, user_account.to_string()).await?;
 
         // Convert to our PaymentStreamData format, preserving BigDecimal types
-        let stream_data: Vec<PaymentStreamData> = streams
+        streams
             .into_iter()
-            .map(|stream| PaymentStreamData {
-                provider: stream.provider,
-                total_amount_paid: stream.total_amount_paid,
-                rate: stream.rate,
-                amount_provided: stream.amount_provided,
-            })
-            .collect();
+            .map(|stream| {
+                let kind = match (stream.rate, stream.amount_provided) {
+                    (Some(rate), None) => Ok(PaymentStreamKind::Fixed { rate }),
+                    (None, Some(amount_provided)) => {
+                        Ok(PaymentStreamKind::Dynamic { amount_provided })
+                    }
+                    _ => Err(RepositoryError::configuration(
+                        "payment stream must be either fixed or dynamic",
+                    )),
+                }?;
 
-        Ok(stream_data)
+                Ok(PaymentStreamData {
+                    provider: stream.provider,
+                    total_amount_paid: stream.total_amount_paid,
+                    kind,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()
     }
 
     async fn calculate_msp_storage_for_user(

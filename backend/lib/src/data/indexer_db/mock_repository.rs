@@ -19,7 +19,7 @@ use shc_indexer_db::{models::Bsp, OnchainBspId};
 
 use crate::data::indexer_db::repository::{
     error::{RepositoryError, RepositoryResult},
-    IndexerOps, IndexerOpsMut, PaymentStreamData,
+    IndexerOps, IndexerOpsMut, PaymentStreamData, PaymentStreamKind,
 };
 
 /// Mock repository implementation using in-memory storage
@@ -75,14 +75,16 @@ impl IndexerOps for MockRepository {
             PaymentStreamData {
                 provider: "0x1234567890abcdef1234567890abcdef12345678".to_string(),
                 total_amount_paid: BigDecimal::from_i64(500000).unwrap(),
-                rate: Some(BigDecimal::from_i64(5).unwrap()),
-                amount_provided: None,
+                kind: PaymentStreamKind::Fixed {
+                    rate: BigDecimal::from_i64(5).unwrap(),
+                },
             },
             PaymentStreamData {
                 provider: "0xabcdef1234567890abcdef1234567890abcdef12".to_string(),
                 total_amount_paid: BigDecimal::from_i64(200000).unwrap(),
-                rate: None,
-                amount_provided: Some(BigDecimal::from_i64(10).unwrap()),
+                kind: PaymentStreamKind::Dynamic {
+                    amount_provided: BigDecimal::from_i64(10).unwrap(),
+                },
             },
         ])
     }

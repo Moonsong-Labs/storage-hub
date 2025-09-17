@@ -34,13 +34,19 @@ pub mod postgres;
 
 use error::RepositoryResult;
 
+/// Represents the different types of payment streams
+#[derive(Debug, Clone)]
+pub enum PaymentStreamKind {
+    Fixed { rate: BigDecimal },
+    Dynamic { amount_provided: BigDecimal },
+}
+
 /// Payment stream data from the database
 #[derive(Debug, Clone)]
 pub struct PaymentStreamData {
     pub provider: String,
     pub total_amount_paid: BigDecimal,
-    pub rate: Option<BigDecimal>,
-    pub amount_provided: Option<BigDecimal>,
+    pub kind: PaymentStreamKind,
 }
 
 /// Read-only operations for indexer data access.
