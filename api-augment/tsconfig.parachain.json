@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src/parachain",
+    "outDir": "dist/parachain",
+    "declaration": true,
+    "declarationDir": "dist/types/parachain",
+    "paths": {
+      "@storagehub/api-augment/parachain/*": ["src/parachain/*"],
+      "@storagehub/api-augment/*": ["src/*"],
+      "@polkadot/api/augment": ["src/parachain/interfaces/augment-api.ts"],
+      "@polkadot/types/augment": ["src/parachain/interfaces/augment-types.ts"],
+      "@polkadot/types/lookup": ["src/parachain/interfaces/types-lookup.ts"]
+    }
+  },
+  "include": ["src/parachain/**/*.ts"]
+}

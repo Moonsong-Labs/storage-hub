@@ -1106,7 +1106,7 @@ where
                         let mut timestamp = 0u64;
                         // This allows us to create multiple blocks without considering the actual slot duration wait time. We increment the timestamp by slot_duration in inherent data.
                         TIMESTAMP.with(|x| {
-                            timestamp = x.clone().take();
+                            timestamp = *x.borrow();
                         });
 
                         // If we don't increment the timestamp, we will hit a para slot and relay slot mismatch.
@@ -1395,7 +1395,7 @@ where
 
     // If we are a provider we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
-    if provider_options.is_some() {
+    if provider_options.is_some() || fisherman_options.is_some() {
         file_transfer_request_protocol =
             Some(configure_file_transfer_network::<_, ParachainRuntime>(
                 fetch_genesis_hash(client.clone()),
@@ -1994,6 +1994,33 @@ where
     use async_io::Timer;
     use sc_consensus_manual_seal::{run_manual_seal, EngineCommand, ManualSealParams};
 
+    // Provide a mock duration starting at Utc::now() in milliseconds for timestamp inherent.
+    // Each call will increment timestamp by slot_duration making BABE think time has passed.
+    thread_local!(static SOLO_EVM_TIMESTAMP: RefCell<u64> = RefCell::new(Utc::now().timestamp_millis().try_into().unwrap()));
+
+    struct SoloEvmMockTimestampInherentDataProvider;
+
+    #[async_trait::async_trait]
+    impl sp_inherents::InherentDataProvider for SoloEvmMockTimestampInherentDataProvider {
+        async fn provide_inherent_data(
+            &self,
+            inherent_data: &mut sp_inherents::InherentData,
+        ) -> Result<(), sp_inherents::Error> {
+            SOLO_EVM_TIMESTAMP.with(|x| {
+                *x.borrow_mut() += sh_solochain_evm_runtime::SLOT_DURATION;
+                inherent_data.put_data(sp_timestamp::INHERENT_IDENTIFIER, &*x.borrow())
+            })
+        }
+
+        async fn try_handle_error(
+            &self,
+            _identifier: &sp_inherents::InherentIdentifier,
+            _error: &[u8],
+        ) -> Option<Result<(), sp_inherents::Error>> {
+            None
+        }
+    }
+
     // Maintenance mode: reuse non-dev maintenance path but drop client result
     let maintenance_mode = provider_options
         .as_ref()
@@ -2021,7 +2048,19 @@ where
         transaction_pool,
         other:
             (block_import, _grandpa_link, babe_link, frontier_backend, storage_override, mut telemetry),
-    } = new_partial_solochain_evm(&config)?;
+    } = new_partial_solochain_evm(&config, true)?;
+
+    let signing_dev_key = config
+        .dev_key_seed
+        .clone()
+        .expect("Dev key seed must be present in dev mode.");
+    let keystore = keystore_container.keystore();
+
+    // Initialise seed for signing transactions using blockchain service.
+    // In dev mode we use a well known dev account.
+    keystore
+        .ecdsa_generate_new(BCSV_KEY_TYPE, Some(signing_dev_key.as_ref()))
+        .expect("Invalid dev signing key provided.");
 
     let mut net_config = sc_network::config::FullNetworkConfiguration::<
         Block,
@@ -2224,6 +2263,23 @@ where
         telemetry: telemetry.as_mut(),
     })?;
 
+    // Announce imported blocks to peers to ensure propagation in dev/manual seal mode
+    {
+        let import_stream = client.import_notification_stream();
+        let sync = sync_service.clone();
+        task_manager.spawn_essential_handle().spawn(
+            "announce-imported-blocks",
+            Some("network"),
+            async move {
+                use futures::StreamExt;
+                let mut stream = import_stream;
+                while let Some(notif) = stream.next().await {
+                    sync.announce_block(notif.hash, None);
+                }
+            },
+        );
+    }
+
     // Spawn Frontier background tasks: mapping sync, filter maintenance, fee history
     {
         let frontier_kv = match &*frontier_backend {
@@ -2314,11 +2370,19 @@ where
                 create_inherent_data_providers: move |_, ()| {
                     let slot_duration = slot_duration;
                     async move {
-                        let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
+                        // Compute the next mocked timestamp (advance by one slot) for BABE's slot provider
+                        let mut ts: u64 = 0;
+                        SOLO_EVM_TIMESTAMP.with(|x| {
+                            ts = *x.borrow();
+                        });
+                        ts += sh_solochain_evm_runtime::SLOT_DURATION;
+
                         let slot = sp_consensus_babe::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
-                            *timestamp,
+                            ts.into(),
                             slot_duration,
                         );
+
+                        let timestamp = SoloEvmMockTimestampInherentDataProvider;
                         Ok((timestamp, slot))
                     }
                 },
@@ -2450,6 +2514,7 @@ pub async fn start_solochain_evm_node<Network: NetworkBackend<OpaqueBlock, Block
 /// StorageHub Solochain EVM node.
 pub fn new_partial_solochain_evm(
     config: &Configuration,
+    dev_service: bool,
 ) -> Result<SolochainService, sc_service::Error> {
     // Telemetry
     let telemetry = config
@@ -2560,32 +2625,44 @@ pub fn new_partial_solochain_evm(
         )?)))
     };
 
-    // Import queue (BABE)
-    let slot_duration = babe_link.config().slot_duration();
-    let (import_queue, babe_worker_handle) = sc_consensus_babe::import_queue(
-        BabeImportQueueParams {
-            link: babe_link.clone(),
-            block_import: block_import.clone(),
-            justification_import: Some(Box::new(grandpa_block_import.clone())),
-            client: client.clone(),
-            select_chain: select_chain.clone(),
-            create_inherent_data_providers: move |_, ()| async move {
-                let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
-                let slot = sp_consensus_babe::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
-                *timestamp,
-                slot_duration,
-            );
-                Ok((slot, timestamp))
+    // Import queue
+    let import_queue = if dev_service {
+        // Manual-seal import queue for dev nodes
+        sc_consensus_manual_seal::import_queue(
+            Box::new(client.clone()),
+            &task_manager.spawn_essential_handle(),
+            config.prometheus_registry(),
+        )
+    } else {
+        // BABE import queue for normal nodes
+        let slot_duration = babe_link.config().slot_duration();
+        let (import_queue, babe_worker_handle) = sc_consensus_babe::import_queue(
+            BabeImportQueueParams {
+                link: babe_link.clone(),
+                block_import: block_import.clone(),
+                justification_import: Some(Box::new(grandpa_block_import.clone())),
+                client: client.clone(),
+                select_chain: select_chain.clone(),
+                create_inherent_data_providers: move |_, ()| async move {
+                    let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
+                    let slot = sp_consensus_babe::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
+                    *timestamp,
+                    slot_duration,
+                );
+                    Ok((slot, timestamp))
+                },
+                spawner: &task_manager.spawn_essential_handle(),
+                registry: config.prometheus_registry(),
+                telemetry: telemetry.as_ref().map(|x| x.handle()),
+                offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(
+                    transaction_pool.clone(),
+                ),
             },
-            spawner: &task_manager.spawn_essential_handle(),
-            registry: config.prometheus_registry(),
-            telemetry: telemetry.as_ref().map(|x| x.handle()),
-            offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(transaction_pool.clone()),
-        },
-    )?;
-
-    // TODO: Wire up to RPC
-    std::mem::forget(babe_worker_handle);
+        )?;
+        // TODO: Wire up to RPC
+        std::mem::forget(babe_worker_handle);
+        import_queue
+    };
 
     Ok(sc_service::PartialComponents {
         client,
@@ -2646,7 +2723,7 @@ where
         transaction_pool,
         other:
             (block_import, grandpa_link, babe_link, frontier_backend, storage_override, mut telemetry),
-    } = new_partial_solochain_evm(&config)?;
+    } = new_partial_solochain_evm(&config, false)?;
 
     let mut net_config = sc_network::config::FullNetworkConfiguration::<
         Block,
@@ -3033,7 +3110,7 @@ where
                 storage_override,
                 mut telemetry,
             ),
-    } = new_partial_solochain_evm(&config)?;
+    } = new_partial_solochain_evm(&config, false)?;
 
     let mut net_config = sc_network::config::FullNetworkConfiguration::<
         Block,

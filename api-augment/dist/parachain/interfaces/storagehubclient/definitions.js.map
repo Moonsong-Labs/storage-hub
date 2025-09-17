@@ -1,0 +1,1 @@
+{"version":3,"file":"definitions.js","sourceRoot":"","sources":["../../../../src/parachain/interfaces/storagehubclient/definitions.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,sBAAsB,EAAE,MAAM,0BAA0B,CAAC;AAElE,eAAe;IACb,KAAK,EAAE,sBAAsB,CAAC,KAAK,EAAE,CAAC,CAAC,CAAC,CAAC,KAAK;IAC9C,OAAO,EAAE,sBAAsB,CAAC,OAAO;IACvC,GAAG,EAAE,sBAAsB,CAAC,GAAG,EAAE,gBAAgB;CAClD,CAAC"}

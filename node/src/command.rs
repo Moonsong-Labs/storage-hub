@@ -98,7 +98,7 @@ macro_rules! run_async_cmd_for_chain {
             })
         } else if load_spec($chain)?.is_solochain_evm() {
             $runner.async_run(|$config| {
-                let $components = new_partial_solochain_evm(&$config)?;
+                let $components = new_partial_solochain_evm(&$config, $dev_service)?;
                 let task_manager = $components.task_manager;
                 Ok(($body, task_manager))
             })
@@ -287,7 +287,7 @@ pub fn run() -> Result<()> {
                     let partials = new_partial_parachain(&config, dev_service)?;
                     cmd.run(partials.client)
                 } else if config.chain_spec.is_solochain_evm() {
-                    let partials = new_partial_solochain_evm(&config)?;
+                    let partials = new_partial_solochain_evm(&config, dev_service)?;
                     cmd.run(partials.client)
                 } else {
                     unreachable!("Invalid chain spec")
@@ -319,7 +319,7 @@ pub fn run() -> Result<()> {
                         let partials = new_partial_parachain(&config, dev_service)?;
                         cmd.run(partials.client)
                     } else if config.chain_spec.is_solochain_evm() {
-                        let partials = new_partial_solochain_evm(&config)?;
+                        let partials = new_partial_solochain_evm(&config, dev_service)?;
                         cmd.run(partials.client)
                     } else {
                         unreachable!("Invalid chain spec")
@@ -342,7 +342,7 @@ pub fn run() -> Result<()> {
                         let storage = partials.backend.expose_storage();
                         cmd.run(config, partials.client.clone(), db, storage)
                     } else if config.chain_spec.is_solochain_evm() {
-                        let partials = new_partial_solochain_evm(&config)?;
+                        let partials = new_partial_solochain_evm(&config, dev_service)?;
                         let db = partials.backend.expose_db();
                         let storage = partials.backend.expose_storage();
                         cmd.run(config, partials.client.clone(), db, storage)
