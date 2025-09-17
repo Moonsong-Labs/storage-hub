@@ -73,5 +73,5 @@ export enum ReplicationLevel {
   /** Ultra high security replication */
   UltraHighSecurity = 4,
   /** Custom replication (requires specifying exact replica count) */
-  Custom = 5
+  Custom = 5,
 }

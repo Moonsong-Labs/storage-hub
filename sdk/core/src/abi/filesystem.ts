@@ -9,5 +9,3 @@ export const filesystemAbi = fileSystemAbiJson as const;
 if (!Array.isArray(filesystemAbi)) {
   throw new Error('Invalid FileSystem ABI: expected array');
 }
-
-

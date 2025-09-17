@@ -5,7 +5,15 @@
  * and return viem clients for reads (public) and writes (wallet) with a minimal API.
  */
 
-import { type Account, type Chain, createPublicClient, createWalletClient, custom, type EIP1193Provider,http } from 'viem';
+import {
+  type Account,
+  type Chain,
+  createPublicClient,
+  createWalletClient,
+  custom,
+  type EIP1193Provider,
+  http,
+} from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 
 // Transport options (exclusive via nested union)
@@ -93,5 +101,3 @@ export function createEvmClients(opts: EvmClientsOptions): EvmClients {
 
   return { readClient, writeClient };
 }
-
-

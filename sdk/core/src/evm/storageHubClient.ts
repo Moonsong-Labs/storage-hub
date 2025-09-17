@@ -1,23 +1,37 @@
 /**
  * StorageHubClient - Unified EVM client for StorageHub blockchain
- * 
+ *
  * Provides ergonomic read/write methods for StorageHub precompiles using viem.
  * Handles gas estimation automatically with Frontier-optimized defaults.
- * 
+ *
  * All arguments are strongly typed. String data (names, paths) are passed as strings and encoded internally.
  * Binary data (signatures) are passed as Uint8Array. Hex values are 0x-prefixed strings (32-byte IDs).
  */
 
-import { FILE_SYSTEM_PRECOMPILE_ADDRESS, filesystemAbi, type FileSystemContract, getFileSystemContract } from './filesystem';
+import {
+  FILE_SYSTEM_PRECOMPILE_ADDRESS,
+  filesystemAbi,
+  type FileSystemContract,
+  getFileSystemContract,
+} from './filesystem';
 import type { EvmWriteOptions, StorageHubClientOptions } from './types';
 import { ReplicationLevel } from './types';
-import { type Address, createPublicClient, http, parseGwei, type PublicClient, stringToBytes, stringToHex, toHex, type WalletClient, type GetContractReturnType } from 'viem';
-
+import {
+  type Address,
+  createPublicClient,
+  http,
+  parseGwei,
+  type PublicClient,
+  stringToBytes,
+  stringToHex,
+  toHex,
+  type WalletClient,
+} from 'viem';
 
 export class StorageHubClient {
-  private readonly publicClient: PublicClient;   // Internal for gas estimation
-  private readonly walletClient: WalletClient;   // User-provided
-  private readonly contract: FileSystemContract<PublicClient>;  // For reads
+  private readonly publicClient: PublicClient; // Internal for gas estimation
+  private readonly walletClient: WalletClient; // User-provided
+  private readonly contract: FileSystemContract<PublicClient>; // For reads
   private static readonly MAX_BUCKET_NAME_BYTES = 100;
   private static readonly MAX_LOCATION_BYTES = 512;
   private static readonly MAX_PEER_ID_BYTES = 100;
@@ -26,7 +40,7 @@ export class StorageHubClient {
 
   /**
    * Get write contract instance bound to the wallet client.
-   * 
+   *
    * @returns Contract instance for write operations (transactions)
    */
   private getWriteContract() {
@@ -35,7 +49,7 @@ export class StorageHubClient {
 
   /**
    * Get read contract instance bound to the public client.
-   * 
+   *
    * @returns Contract instance for read operations (view calls)
    */
   private getReadContract() {
@@ -44,10 +58,10 @@ export class StorageHubClient {
 
   /**
    * Reusable gas estimation for any contract method.
-   * 
+   *
    * Uses internal PublicClient for reliable estimation on Frontier chains.
    * Applies safety multiplier to handle weight→gas conversion issues.
-   * 
+   *
    * @param functionName - Contract method name
    * @param args - Method arguments
    * @param options - Gas overrides (explicit gas, multiplier, etc.)
@@ -56,7 +70,7 @@ export class StorageHubClient {
   private async estimateGas(
     functionName: string,
     args: readonly unknown[],
-    options?: EvmWriteOptions
+    options?: EvmWriteOptions,
   ): Promise<bigint> {
     // User provided explicit gas limit
     if (options?.gas) {
@@ -81,7 +95,8 @@ export class StorageHubClient {
    * Handles both legacy and EIP-1559 fee structures.
    */
   private buildTxOptions(gasLimit: bigint, options?: EvmWriteOptions): Record<string, unknown> {
-    const useEip1559 = options?.maxFeePerGas !== undefined || options?.maxPriorityFeePerGas !== undefined;
+    const useEip1559 =
+      options?.maxFeePerGas !== undefined || options?.maxPriorityFeePerGas !== undefined;
     const txOpts: Record<string, unknown> = { gas: gasLimit };
 
     if (useEip1559) {
@@ -113,7 +128,7 @@ export class StorageHubClient {
 
   /**
    * Create a StorageHub client with automatic gas estimation.
-   * 
+   *
    * @param opts.rpcUrl - RPC endpoint URL for the StorageHub chain
    * @param opts.chain - Viem chain configuration
    * @param opts.walletClient - Wallet client for transaction signing
@@ -122,7 +137,7 @@ export class StorageHubClient {
     // Create internal PublicClient for gas estimation
     this.publicClient = createPublicClient({
       chain: opts.chain,
-      transport: http(opts.rpcUrl)
+      transport: http(opts.rpcUrl),
     });
     this.walletClient = opts.walletClient;
 
@@ -139,7 +154,11 @@ export class StorageHubClient {
    * @returns bucketId as 0x-prefixed 32-byte hex
    */
   deriveBucketId(owner: Address, name: string) {
-    const nameHex = this.validateStringLength(name, StorageHubClient.MAX_BUCKET_NAME_BYTES, 'Bucket name');
+    const nameHex = this.validateStringLength(
+      name,
+      StorageHubClient.MAX_BUCKET_NAME_BYTES,
+      'Bucket name',
+    );
     const contract = this.getReadContract();
     return contract.read.deriveBucketId!([owner, nameHex]);
   }
@@ -171,7 +190,11 @@ export class StorageHubClient {
     valuePropId: `0x${string}`,
     options?: EvmWriteOptions,
   ) {
-    const nameHex = this.validateStringLength(name, StorageHubClient.MAX_BUCKET_NAME_BYTES, 'Bucket name');
+    const nameHex = this.validateStringLength(
+      name,
+      StorageHubClient.MAX_BUCKET_NAME_BYTES,
+      'Bucket name',
+    );
     const args = [mspId, nameHex, isPrivate, valuePropId] as const;
     const gasLimit = await this.estimateGas('createBucket', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
@@ -191,7 +214,7 @@ export class StorageHubClient {
     bucketId: `0x${string}`,
     newMspId: `0x${string}`,
     newValuePropId: `0x${string}`,
-    options?: EvmWriteOptions
+    options?: EvmWriteOptions,
   ) {
     const args = [bucketId, newMspId, newValuePropId] as const;
     const gasLimit = await this.estimateGas('requestMoveBucket', args, options);
@@ -210,7 +233,7 @@ export class StorageHubClient {
   async updateBucketPrivacy(
     bucketId: `0x${string}`,
     isPrivate: boolean,
-    options?: EvmWriteOptions
+    options?: EvmWriteOptions,
   ) {
     const args = [bucketId, isPrivate] as const;
     const gasLimit = await this.estimateGas('updateBucketPrivacy', args, options);
@@ -225,12 +248,13 @@ export class StorageHubClient {
    * @param bucketId - 32-byte bucket ID
    * @param options - optional gas and fee overrides
    */
-  async createAndAssociateCollectionWithBucket(
-    bucketId: `0x${string}`,
-    options?: EvmWriteOptions
-  ) {
+  async createAndAssociateCollectionWithBucket(bucketId: `0x${string}`, options?: EvmWriteOptions) {
     const args = [bucketId] as const;
-    const gasLimit = await this.estimateGas('createAndAssociateCollectionWithBucket', args, options);
+    const gasLimit = await this.estimateGas(
+      'createAndAssociateCollectionWithBucket',
+      args,
+      options,
+    );
     const txOpts = this.buildTxOptions(gasLimit, options);
 
     const contract = this.getWriteContract();
@@ -242,10 +266,7 @@ export class StorageHubClient {
    * @param bucketId - 32-byte bucket ID
    * @param options - optional gas and fee overrides
    */
-  async deleteBucket(
-    bucketId: `0x${string}`,
-    options?: EvmWriteOptions
-  ) {
+  async deleteBucket(bucketId: `0x${string}`, options?: EvmWriteOptions) {
     const args = [bucketId] as const;
     const gasLimit = await this.estimateGas('deleteBucket', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
@@ -275,11 +296,15 @@ export class StorageHubClient {
     peerIds: string[],
     replicationLevel: ReplicationLevel,
     replicas: number,
-    options?: EvmWriteOptions
+    options?: EvmWriteOptions,
   ) {
-    const locationHex = this.validateStringLength(location, StorageHubClient.MAX_LOCATION_BYTES, 'File location');
+    const locationHex = this.validateStringLength(
+      location,
+      StorageHubClient.MAX_LOCATION_BYTES,
+      'File location',
+    );
     const peerIdsHex = peerIds.map((peerId, i) =>
-      this.validateStringLength(peerId, StorageHubClient.MAX_PEER_ID_BYTES, `Peer ID ${i + 1}`)
+      this.validateStringLength(peerId, StorageHubClient.MAX_PEER_ID_BYTES, `Peer ID ${i + 1}`),
     );
     const args = [
       bucketId,
@@ -303,10 +328,7 @@ export class StorageHubClient {
    * @param fileKey - 32-byte file key
    * @param options - optional gas and fee overrides
    */
-  async revokeStorageRequest(
-    fileKey: `0x${string}`,
-    options?: EvmWriteOptions
-  ) {
+  async revokeStorageRequest(fileKey: `0x${string}`, options?: EvmWriteOptions) {
     const args = [fileKey] as const;
     const gasLimit = await this.estimateGas('revokeStorageRequest', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
@@ -332,18 +354,15 @@ export class StorageHubClient {
     location: string,
     size: bigint,
     fingerprint: `0x${string}`,
-    options?: EvmWriteOptions
+    options?: EvmWriteOptions,
   ) {
     const signatureHex = toHex(signature);
-    const locationHex = this.validateStringLength(location, StorageHubClient.MAX_LOCATION_BYTES, 'File location');
-    const args = [
-      signedIntention,
-      signatureHex,
-      bucketId,
-      locationHex,
-      size,
-      fingerprint,
-    ] as const;
+    const locationHex = this.validateStringLength(
+      location,
+      StorageHubClient.MAX_LOCATION_BYTES,
+      'File location',
+    );
+    const args = [signedIntention, signatureHex, bucketId, locationHex, size, fingerprint] as const;
 
     const gasLimit = await this.estimateGas('requestDeleteFile', args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);

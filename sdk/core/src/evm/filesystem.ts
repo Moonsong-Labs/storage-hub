@@ -6,13 +6,22 @@
  */
 
 import { filesystemAbi } from '../abi/filesystem';
-import { type Address, getContract, type GetContractReturnType,type PublicClient, type WalletClient } from 'viem';
+import {
+  type Address,
+  getContract,
+  type GetContractReturnType,
+  type PublicClient,
+  type WalletClient,
+} from 'viem';
 
 export { filesystemAbi };
 
 export type EvmClient = PublicClient | WalletClient;
 
-export type FileSystemContract<TClient extends EvmClient> = GetContractReturnType<typeof filesystemAbi, TClient>;
+export type FileSystemContract<TClient extends EvmClient> = GetContractReturnType<
+  typeof filesystemAbi,
+  TClient
+>;
 
 /**
  * Constant precompile address for FileSystem on StorageHub runtimes.
@@ -25,6 +34,8 @@ export const FILE_SYSTEM_PRECOMPILE_ADDRESS =
  * Returns a viem contract instance bound to the FileSystem ABI at the precompile address.
  * - `client` can be a PublicClient (reads) or WalletClient (writes)
  */
-export function getFileSystemContract<TClient extends EvmClient>(client: TClient): FileSystemContract<TClient> {
+export function getFileSystemContract<TClient extends EvmClient>(
+  client: TClient,
+): FileSystemContract<TClient> {
   return getContract({ address: FILE_SYSTEM_PRECOMPILE_ADDRESS, abi: filesystemAbi, client });
 }
