@@ -1,21 +1,20 @@
-import assert, { strictEqual, notEqual } from "node:assert";
+import assert, { notEqual, strictEqual } from "node:assert";
 import {
+  assertEventPresent,
+  bspKey,
   describeMspNet,
   type EnrichedBspApi,
   type SqlClient,
   shUser,
-  bspKey,
-  waitFor,
-  assertEventPresent
+  waitFor
 } from "../../../util";
-import { createBucketAndSendNewStorageRequest } from "../../../util/bspNet/fileHelpers";
-import {
-  waitForFileIndexed,
-  waitForMspFileAssociation,
-  waitForBspFileAssociation
-} from "../../../util/indexerHelpers";
-import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
 import { waitForDeleteFileExtrinsic } from "../../../util/fisherman/fishermanHelpers";
+import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
+import {
+  waitForBspFileAssociation,
+  waitForFileIndexed,
+  waitForMspFileAssociation
+} from "../../../util/indexerHelpers";
 
 /**
  * FISHERMAN FILE DELETION FLOW - BASIC HAPPY PATH
@@ -40,7 +39,7 @@ import { waitForDeleteFileExtrinsic } from "../../../util/fisherman/fishermanHel
  * Note: The user node is running the indexer, so any finalize blocks we seal on the user node, directly affects the data that is being
  * indexed in the database.
  */
-describeMspNet(
+await describeMspNet(
   "Fisherman File Deletion Flow",
   {
     initialised: false,
@@ -88,8 +87,7 @@ describeMspNet(
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
       const valuePropId = valueProps[0].id;
 
-      const fileMetadata = await createBucketAndSendNewStorageRequest(
-        userApi,
+      const fileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
         destination,
         bucketName,

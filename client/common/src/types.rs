@@ -141,6 +141,10 @@ pub type ParachainExecutor = WasmExecutor<HostFunctions>;
 ///
 /// It is abstracted over the set of runtime APIs, defined later by a `Runtime` type that
 /// should implement the [`StorageEnableRuntime`](crate::traits::StorageEnableRuntime) trait.
+///
+/// The name `ParachainClient` is a bit misleading, as it is not necessarily a client for a
+/// parachain. But it is called this way because it uses the `ParachainExecutor` which is
+/// a [WasmExecutor] with the [`HostFunctions`] that are available in a regular Polkadot Parachain.
 pub type ParachainClient<RuntimeApi> =
     TFullClient<shp_opaque::Block, RuntimeApi, ParachainExecutor>;
 

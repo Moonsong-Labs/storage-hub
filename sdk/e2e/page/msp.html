@@ -2,552 +2,662 @@
 <html>
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MSP + SDK Web Tests</title>
-    <script type="importmap">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MSP + SDK Web Tests</title>
+  <script type="importmap">
     {
       "imports": {
-        "@storagehub-sdk/msp-client": "http://localhost:3001/msp-client/dist/index.js",
-        "@storagehub-sdk/core": "http://localhost:3001/core/dist/index.js",
-        "@storagehub/wasm": "http://localhost:3001/core/wasm/pkg/storagehub_wasm.js",
+        "@storagehub-sdk/msp-client": "/msp-client/dist/index.browser.js",
+        "@storagehub-sdk/core": "/core/dist/index.browser.js",
         "@polkadot/types": "https://cdn.jsdelivr.net/npm/@polkadot/types@10.9.1/+esm",
         "@polkadot/types/interfaces": "https://cdn.jsdelivr.net/npm/@polkadot/types@10.9.1/interfaces/+esm",
         "ethers": "https://cdn.jsdelivr.net/npm/ethers@6.15.0/+esm"
       }
     }
     </script>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 24px;
-        }
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 24px;
+    }
 
-        h1 {
-            margin-bottom: 8px;
-        }
+    h1 {
+      margin-bottom: 8px;
+    }
 
-        .row {
-            margin: 8px 0;
-            display: flex;
-            gap: 8px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
+    .row {
+      margin: 8px 0;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
 
-        label {
-            font-weight: bold;
-            margin-right: 4px;
-        }
+    label {
+      font-weight: bold;
+      margin-right: 4px;
+    }
 
-        input[type="text"],
-        input[type="number"] {
-            padding: 6px 8px;
-            min-width: 260px;
-        }
+    input[type="text"],
+    input[type="number"] {
+      padding: 6px 8px;
+      min-width: 260px;
+    }
 
-        button {
-            background: #0066cc;
-            color: #fff;
-            border: none;
-            padding: 10px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-        }
+    button {
+      background: #0066cc;
+      color: #fff;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
 
-        button:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
 
-        #status {
-            margin: 12px 0;
-            font-weight: bold;
-        }
+    #status {
+      margin: 12px 0;
+      font-weight: bold;
+    }
 
-        .mono {
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-        }
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
 
-        .grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-        }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
 
-        .card {
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            padding: 12px;
-        }
-    </style>
+    .card {
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 12px;
+    }
+  </style>
 </head>
 
 <body>
-    <h1>MSP + SDK Web Tests</h1>
+  <h1>MSP + SDK Web Tests</h1>
 
-    <div class="grid">
-        <!-- Connection section -->
-        <section class="card">
-            <h3>1) Connection</h3>
+  <div class="grid">
+    <!-- Connection section -->
+    <section class="card">
+      <h3>1) Connection</h3>
 
-            <div class="row">
-                <label for="address">Address</label>
-                <input id="address" type="text" placeholder="0x... (optional; LocalWallet used for signing)" />
-                <button id="connect-msp">Connect MSP</button>
-            </div>
-            <div class="row">
-                <div id="status" class="mono">Ready</div>
-            </div>
-        </section>
+      <div class="row">
+        <label for="address">Address</label>
+        <input id="address" type="text" placeholder="0x... (optional; LocalWallet used for signing)" />
+        <button id="connect-msp">Connect MSP</button>
+      </div>
+      <div class="row">
+        <div id="status" class="mono">Ready</div>
+      </div>
+    </section>
 
-        <!-- Health section -->
-        <section class="card">
-            <h3>2) Health</h3>
-            <div class="row">
-                <button id="health">Get Health</button>
-            </div>
-            <div class="row">
-                <div><strong>Health:</strong> <span id="healthStatus" class="mono"></span></div>
-            </div>
-            <div class="row">
-                <div><strong>Response:</strong></div>
-            </div>
-            <pre id="healthJson" class="mono" style="white-space: pre-wrap; word-break: break-word;"></pre>
-        </section>
+    <!-- Health section -->
+    <section class="card">
+      <h3>2) Health</h3>
+      <div class="row">
+        <button id="health">Get Health</button>
+      </div>
+      <div class="row">
+        <div><strong>Health:</strong> <span id="healthStatus" class="mono"></span></div>
+      </div>
+      <div class="row">
+        <div><strong>Response:</strong></div>
+      </div>
+      <pre id="healthJson" class="mono" style="white-space: pre-wrap; word-break: break-word;"></pre>
+    </section>
 
-        <!-- Auth section -->
-        <section class="card">
-            <h3>3) Auth</h3>
-            <div class="row">
-                <button id="get-nonce">Get Nonce</button>
-                <button id="sign-message">Sign Message</button>
-                <button id="verify">Verify (set token)</button>
-            </div>
-            <div class="row">
-                <div><strong>Nonce:</strong> <span id="nonce" class="mono"></span></div>
-            </div>
-            <div class="row">
-                <div><strong>Message:</strong> <span id="message" class="mono"></span></div>
-            </div>
-            <div class="row">
-                <div><strong>Nonce Response:</strong></div>
-            </div>
-            <pre id="nonceJson" class="mono" style="white-space: pre-wrap; word-break: break-word;"></pre>
-            <div class="row">
-                <div><strong>Signature:</strong> <span id="signature" class="mono"></span></div>
-            </div>
-            <div class="row">
-                <div><strong>Sign Response:</strong></div>
-            </div>
-            <pre id="signJson" class="mono" style="white-space: pre-wrap; word-break: break-word;"></pre>
-            <div class="row">
-                <div><strong>Token:</strong> <span id="token" class="mono"></span></div>
-            </div>
-            <div class="row">
-                <div><strong>User:</strong> <span id="user" class="mono"></span></div>
-            </div>
-            <div class="row">
-                <div><strong>Verify Response:</strong></div>
-            </div>
-            <pre id="verifyJson" class="mono" style="white-space: pre-wrap; word-break: break-word;"></pre>
-            <div class="row">
-                <label for="manualToken">Manual Token</label>
-                <input id="manualToken" type="text" placeholder="paste dummy token here" />
-                <button id="set-token-manual">Set Token (Manual)</button>
-            </div>
-        </section>
+    <!-- Auth section -->
+    <section class="card">
+      <h3>3) Auth</h3>
+      <div class="row">
+        <button id="get-nonce">Get Nonce</button>
+        <button id="sign-message">Sign Message</button>
+        <button id="verify">Verify (set token)</button>
+      </div>
+      <div class="row">
+        <div><strong>Nonce:</strong> <span id="nonce" class="mono"></span></div>
+      </div>
+      <div class="row">
+        <div><strong>Message:</strong> <span id="message" class="mono"></span></div>
+      </div>
+      <div class="row">
+        <div><strong>Nonce Response:</strong></div>
+      </div>
+      <pre id="nonceJson" class="mono" style="white-space: pre-wrap; word-break: break-word;"></pre>
+      <div class="row">
+        <div><strong>Signature:</strong> <span id="signature" class="mono"></span></div>
+      </div>
+      <div class="row">
+        <div><strong>Sign Response:</strong></div>
+      </div>
+      <pre id="signJson" class="mono" style="white-space: pre-wrap; word-break: break-word;"></pre>
+      <div class="row">
+        <div><strong>Token:</strong> <span id="token" class="mono"></span></div>
+      </div>
+      <div class="row">
+        <div><strong>User:</strong> <span id="user" class="mono"></span></div>
+      </div>
+      <div class="row">
+        <div><strong>Verify Response:</strong></div>
+      </div>
+      <pre id="verifyJson" class="mono" style="white-space: pre-wrap; word-break: break-word;"></pre>
+      <div class="row">
+        <label for="manualToken">Manual Token</label>
+        <input id="manualToken" type="text" placeholder="paste dummy token here" />
+        <button id="set-token-manual">Set Token (Manual)</button>
+      </div>
+    </section>
 
-        <!-- Transfer section -->
-        <section class="card">
-            <h3>4) Transfer</h3>
-            <div class="row">
-                <button id="upload">Upload adolphus.jpg</button>
-            </div>
-            <div class="row">
-                <button id="download-key">Download by Key</button>
-                <button id="download-path">Download by Path</button>
-            </div>
-            <div class="row">
-                <div><strong>Upload Receipt:</strong> <span id="uploadReceipt" class="mono"></span></div>
-            </div>
-            <div class="row">
-                <div><strong>Download Meta:</strong> <span id="downloadMeta" class="mono"></span></div>
-            </div>
-        </section>
+    <!-- Transfer section -->
+    <section class="card">
+      <h3>4) Transfer</h3>
+      <div class="row">
+        <button id="upload">Upload adolphus.jpg</button>
+      </div>
+      <div class="row">
+        <button id="download-key">Download by Key</button>
+        <button id="download-path">Download by Path</button>
+      </div>
+      <div class="row">
+        <div><strong>Upload Receipt:</strong> <span id="uploadReceipt" class="mono"></span></div>
+      </div>
+      <div class="row">
+        <div><strong>Download Meta:</strong> <span id="downloadMeta" class="mono"></span></div>
+      </div>
+    </section>
 
-        <!-- Buckets section -->
-        <section class="card">
-            <h3>5) Buckets</h3>
-            <div class="row">
-                <button id="list-buckets">List Buckets</button>
-                <input id="bucketIdInput" type="text" placeholder="bucket id (optional uses first)" />
-                <button id="get-bucket">Get Bucket</button>
-                <input id="pathInput" type="text" placeholder="path (e.g., Thesis or Reports)" />
-                <button id="get-files">Get Files</button>
-            </div>
-            <div class="row">
-                <div><strong>Buckets Count:</strong> <span id="bucketsCount" class="mono"></span></div>
-            </div>
-            <div class="row">
-                <div><strong>Last Bucket:</strong> <span id="bucketJson" class="mono"></span></div>
-            </div>
-            <div class="row">
-                <div><strong>File Tree:</strong></div>
-            </div>
-            <pre id="filesJson" class="mono" style="white-space: pre-wrap; word-break: break-word;"></pre>
-        </section>
+    <!-- Buckets section -->
+    <section class="card">
+      <h3>5) Buckets</h3>
+      <div class="row">
+        <button id="list-buckets">List Buckets</button>
+        <input id="bucketIdInput" type="text" placeholder="bucket id (optional uses first)" />
+        <button id="get-bucket">Get Bucket</button>
+        <input id="pathInput" type="text" placeholder="path (e.g., Thesis or Reports)" />
+        <button id="get-files">Get Files</button>
+      </div>
+      <div class="row">
+        <div><strong>Buckets Count:</strong> <span id="bucketsCount" class="mono"></span></div>
+      </div>
+      <div class="row">
+        <div><strong>Last Bucket:</strong> <span id="bucketJson" class="mono"></span></div>
+      </div>
+      <div class="row">
+        <div><strong>File Tree:</strong></div>
+      </div>
+      <pre id="filesJson" class="mono" style="white-space: pre-wrap; word-break: break-word;"></pre>
+    </section>
 
-        <!-- Errors -->
-        <section class="card">
-            <h3>Errors</h3>
-            <div class="row">
-                <div><strong>Error:</strong> <span id="error" class="mono"></span></div>
-            </div>
-        </section>
-    </div>
+    <!-- MSP Info section -->
+    <section class="card">
+      <h3>6) MSP Info</h3>
+      <div class="row">
+        <button id="get-info">Get Info</button>
+        <button id="get-stats">Get Stats</button>
+        <button id="get-value-props">Get Value Props</button>
+      </div>
+      <div class="row">
+        <div><strong>Info:</strong></div>
+      </div>
+      <pre id="infoJson" class="mono" style="white-space: pre-wrap; word-break: break-word;"></pre>
+      <div class="row">
+        <div><strong>Stats:</strong></div>
+      </div>
+      <pre id="statsJson" class="mono" style="white-space: pre-wrap; word-break: break-word;"></pre>
+      <div class="row">
+        <div><strong>Value Props:</strong></div>
+      </div>
+      <pre id="valuePropsJson" class="mono" style="white-space: pre-wrap; word-break: break-word;"></pre>
+    </section>
 
-    <script>
-        // Page state for Playwright assertions
-        window.__msp = { status: undefined, nonce: undefined, message: undefined, signature: undefined, token: undefined, user: undefined, uploadReceipt: undefined, downloadMeta: undefined, error: undefined, buckets: undefined, lastBucket: undefined, files: undefined };
+    <!-- File Info section -->
+    <section class="card">
+      <h3>7) File Info</h3>
+      <div class="row">
+        <input id="bucketInfoIdInput" type="text" placeholder="bucket id"
+          value="d8793e4187f5642e96016a96fb33849a7e03eda91358b311bbd426ed38b26692" />
+        <input id="fileKeyInput" type="text" placeholder="file key"
+          value="e901c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f7" />
+        <button id="get-file-info">Get File Info</button>
+      </div>
+      <div class="row">
+        <div><strong>File Info:</strong></div>
+      </div>
+      <pre id="fileInfoJson" class="mono" style="white-space: pre-wrap; word-break: break-word;"></pre>
+    </section>
 
-        const statusEl = document.getElementById('status');
-        const setStatus = (t) => { statusEl.textContent = t; };
-        const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = typeof v === 'string' ? v : JSON.stringify(v); };
+    <!-- Errors -->
+    <section class="card">
+      <h3>Errors</h3>
+      <div class="row">
+        <div><strong>Error:</strong> <span id="error" class="mono"></span></div>
+      </div>
+    </section>
+  </div>
 
-        let client = null;
-        let connectedBaseUrl = null;
+  <script>
+    // Page state for Playwright assertions
+    window.__msp = { status: undefined, nonce: undefined, message: undefined, signature: undefined, token: undefined, user: undefined, uploadReceipt: undefined, downloadMeta: undefined, error: undefined, buckets: undefined, lastBucket: undefined, files: undefined, info: undefined, stats: undefined, valueProps: undefined, fileInfo: undefined };
 
-        function toBase64Url(str) {
-            return btoa(unescape(encodeURIComponent(str)))
-                .replace(/\+/g, '-')
-                .replace(/\//g, '_')
-                .replace(/=+$/g, '');
+    const statusEl = document.getElementById('status');
+    const setStatus = (t) => { statusEl.textContent = t; };
+    const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = typeof v === 'string' ? v : JSON.stringify(v); };
+
+    let client = null;
+    let connectedBaseUrl = null;
+
+    function toBase64Url(str) {
+      return btoa(unescape(encodeURIComponent(str)))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/g, '');
+    }
+
+    function generateMockJwt(address) {
+      const header = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9'; // {"alg":"HS256","typ":"JWT"}
+      const now = Math.floor(Date.now() / 1000);
+      const payload = {
+        sub: address || '0x0123456789012345678901234567890123456789',
+        iat: now,
+        exp: now + 3600,
+        address: address || '0x0123456789012345678901234567890123456789'
+      };
+      const payloadB64 = toBase64Url(JSON.stringify(payload));
+      const signatureB64 = toBase64Url('mock_signature');
+      return `${header}.${payloadB64}.${signatureB64}`;
+    }
+
+    async function loadAdolphusBlob() {
+      const candidates = ['/e2e/page/adolphus.jpg', '/docker/resource/adolphus.jpg'];
+      for (const url of candidates) {
+        try {
+          const r = await fetch(url);
+          if (r.ok) return await r.blob();
+        } catch (_) { }
+      }
+      // Fallback: generate a small dummy JPEG-like blob
+      const bytes = new Uint8Array(1024).fill(65);
+      return new Blob([bytes], { type: 'image/jpeg' });
+    }
+
+    async function ensureConnected() {
+      const baseUrl = 'http://127.0.0.1:8080';
+      if (client && connectedBaseUrl === baseUrl) return client;
+      const { MspClient } = await import('@storagehub-sdk/msp-client');
+      client = await MspClient.connect({ baseUrl, timeoutMs: 60000 });
+      connectedBaseUrl = baseUrl;
+      return client;
+    }
+
+    // Optional: initialize WASM (for core types if needed by the browser)
+    (async () => {
+      try {
+        const { initWasm } = await import('@storagehub-sdk/core');
+        await initWasm();
+        console.log('WASM ready');
+      } catch (e) {
+        console.warn('WASM init skipped/failed', e);
+      }
+    })();
+
+    document.getElementById('connect-msp').onclick = async () => {
+      try {
+        setStatus('Connecting MSP...');
+        await ensureConnected();
+        setStatus('MSP connected');
+      } catch (e) {
+        setStatus('Connect failed');
+        window.__msp.error = e?.message || String(e);
+        setText('error', window.__msp.error);
+      }
+    };
+
+    document.getElementById('health').onclick = async () => {
+      try {
+        await ensureConnected();
+        setStatus('Health...');
+        const h = await client.getHealth();
+        window.__msp.status = h?.status;
+        window.__msp.health = h;
+        console.log('[HEALTH]', h);
+        setStatus(`Health: ${h?.status || 'unknown'}`);
+      } catch (e) {
+        setStatus('Health failed');
+        window.__msp.error = e?.message || String(e);
+        console.error('[HEALTH][ERROR]', e);
+      }
+    };
+
+    document.getElementById('get-nonce').onclick = async () => {
+      try {
+        await ensureConnected();
+        setStatus('Requesting nonce...');
+        let address = document.getElementById('address').value.trim();
+        const chainId = 1;
+        // Auto-fill a valid address if none/invalid is provided
+        const isValidEth = /^0x[a-fA-F0-9]{40}$/.test(address);
+        if (!isValidEth) {
+          const { LocalWallet } = await import('@storagehub-sdk/core');
+          const wallet = LocalWallet.fromMnemonic('test test test test test test test test test test test junk');
+          address = await wallet.getAddress();
+          const addrInput = document.getElementById('address');
+          if (addrInput) addrInput.value = address;
         }
+        const res = await client.getNonce(address, chainId);
+        const { message, nonce } = res;
+        window.__msp.message = message; window.__msp.nonce = nonce; window.__msp.nonceResponse = res;
+        console.log('[NONCE]', res);
+        setStatus('Nonce ready');
+      } catch (e) {
+        setStatus('Get nonce failed');
+        window.__msp.error = e?.message || String(e);
+        console.error('[NONCE][ERROR]', e);
+      }
+    };
 
-        function generateMockJwt(address) {
-            const header = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9'; // {"alg":"HS256","typ":"JWT"}
-            const now = Math.floor(Date.now() / 1000);
-            const payload = {
-                sub: address || '0x0123456789012345678901234567890123456789',
-                iat: now,
-                exp: now + 3600,
-                address: address || '0x0123456789012345678901234567890123456789'
-            };
-            const payloadB64 = toBase64Url(JSON.stringify(payload));
-            const signatureB64 = toBase64Url('mock_signature');
-            return `${header}.${payloadB64}.${signatureB64}`;
+    document.getElementById('sign-message').onclick = async () => {
+      try {
+        setStatus('Signing message...');
+        const msg = window.__msp.message;
+        if (!msg) throw new Error('No message to sign. Click Get Nonce first.');
+        const { LocalWallet } = await import('@storagehub-sdk/core');
+        const wallet = LocalWallet.fromMnemonic('test test test test test test test test test test test junk');
+        const address = await wallet.getAddress();
+        const sig = await wallet.signMessage(msg);
+        window.__msp.signature = sig;
+        window.__msp.signResponse = { address, message: msg, signature: sig };
+        console.log('[SIGN]', window.__msp.signResponse);
+        setStatus('Signed');
+      } catch (e) {
+        setStatus('Sign failed');
+        window.__msp.error = e?.message || String(e);
+        console.error('[SIGN][ERROR]', e);
+      }
+    };
+
+    document.getElementById('verify').onclick = async () => {
+      try {
+        await ensureConnected();
+        setStatus('Verifying...');
+        const { message, signature } = window.__msp;
+        if (!message || !signature) throw new Error('Need message and signature.');
+        const res = await client.verify(message, signature);
+        const { token, user } = res;
+        window.__msp.token = token; window.__msp.user = user;
+        client.setToken(token);
+        console.log('[VERIFY]', res);
+        setStatus('Verified / token set');
+      } catch (e) {
+        setStatus('Verify failed');
+        window.__msp.error = e?.message || String(e);
+        console.error('[VERIFY][ERROR]', e);
+      }
+    };
+
+    document.getElementById('set-token-manual').onclick = async () => {
+      try {
+        await ensureConnected();
+        const inputEl = document.getElementById('manualToken');
+        const val = inputEl && typeof (inputEl).value === 'string' ? inputEl.value.trim() : '';
+        if (!val) throw new Error('Enter a token first');
+        client.setToken(val);
+        window.__msp.token = val;
+        console.log('[TOKEN][SET-MANUAL]', val);
+        setStatus('Token set (manual)');
+      } catch (e) {
+        setStatus('Set token failed');
+        window.__msp.error = e?.message || String(e);
+        console.error('[TOKEN][ERROR]', e);
+      }
+    };
+
+    document.getElementById('upload').onclick = async () => {
+      try {
+        if (!client) throw new Error('Connect MSP first');
+        setStatus('Uploading...');
+        const bucketId = 'e2e-bucket';
+        const fileKey = 'web-file';
+        // Use a valid-looking mock JWT for mocked backend
+        const jwt = generateMockJwt();
+        client.setToken(jwt);
+        window.__msp.token = jwt;
+        console.log('[TOKEN][AUTO]', window.__msp.token);
+        const blob = await loadAdolphusBlob();
+        const receipt = await client.uploadFile(bucketId, fileKey, blob);
+        window.__msp.uploadReceipt = receipt;
+        console.log('[UPLOAD][RECEIPT]', receipt);
+        setStatus('Upload done');
+      } catch (e) {
+        setStatus('Upload failed');
+        window.__msp.error = e?.message || String(e);
+        console.error('[UPLOAD][ERROR]', e);
+      }
+    };
+
+    document.getElementById('download-key').onclick = async () => {
+      try {
+        if (!client) throw new Error('Connect MSP first');
+        setStatus('Downloading by key...');
+        const fileKey = '0xde4a17999bc1482ba71737367e5d858a133ed1e13327a29c495ab976004a138f';
+        if (!window.__msp.token) {
+          const jwt = generateMockJwt();
+          client.setToken(jwt);
+          window.__msp.token = jwt;
+          console.log('[TOKEN][AUTO]', jwt);
         }
+        const dl = await client.downloadByKey(fileKey);
+        window.__msp.downloadMeta = { status: dl?.status, contentType: dl?.contentType, contentLength: dl?.contentLength, contentRange: dl?.contentRange };
+        console.log('[DOWNLOAD][KEY][META]', window.__msp.downloadMeta);
+        // Save to user-selected location (browsers cannot write to /tmp)
+        const blob = await new Response(dl.stream).blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileKey;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        setStatus('Download (key) done');
+      } catch (e) {
+        setStatus('Download (key) failed');
+        window.__msp.error = e?.message || String(e);
+        console.error('[DOWNLOAD][KEY][ERROR]', e);
+      }
+    };
 
-        async function loadAdolphusBlob() {
-            const candidates = ['/e2e/page/adolphus.jpg', '/docker/resource/adolphus.jpg'];
-            for (const url of candidates) {
-                try {
-                    const r = await fetch(url);
-                    if (r.ok) return await r.blob();
-                } catch (_) { }
-            }
-            // Fallback: generate a small dummy JPEG-like blob
-            const bytes = new Uint8Array(1024).fill(65);
-            return new Blob([bytes], { type: 'image/jpeg' });
+    document.getElementById('download-path').onclick = async () => {
+      try {
+        if (!client) throw new Error('Connect MSP first');
+        setStatus('Downloading by path...');
+        const bucketId = 'e2e-bucket';
+        const path = 'files/e2e-bucket/adolphus.jpg';
+        if (!window.__msp.token) {
+          const jwt = generateMockJwt();
+          client.setToken(jwt);
+          window.__msp.token = jwt;
+          console.log('[TOKEN][AUTO]', jwt);
         }
+        const dl = await client.downloadByLocation(bucketId, path);
+        window.__msp.downloadMeta = { status: dl?.status, contentType: dl?.contentType, contentLength: dl?.contentLength, contentRange: dl?.contentRange };
+        console.log('[DOWNLOAD][PATH][META]', window.__msp.downloadMeta);
+        // Save to user-selected location (browsers cannot write to /tmp)
+        const blob = await new Response(dl.stream).blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = '/tmp/download_by_location.txt';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        setStatus('Download (path) done');
+      } catch (e) {
+        setStatus('Download (path) failed');
+        window.__msp.error = e?.message || String(e);
+        console.error('[DOWNLOAD][PATH][ERROR]', e);
+      }
+    };
 
-        async function ensureConnected() {
-            const baseUrl = 'http://127.0.0.1:8080';
-            if (client && connectedBaseUrl === baseUrl) return client;
-            const { MspClient } = await import('/msp-client/dist/index.js');
-            client = await MspClient.connect({ baseUrl, timeoutMs: 60000 });
-            connectedBaseUrl = baseUrl;
-            return client;
+    // Buckets
+    document.getElementById('list-buckets').onclick = async () => {
+      try {
+        if (!client) throw new Error('Connect MSP first');
+        setStatus('Listing buckets...');
+        if (!window.__msp.token) {
+          const jwt = generateMockJwt();
+          client.setToken(jwt);
+          window.__msp.token = jwt;
         }
+        const buckets = await client.listBuckets();
+        window.__msp.buckets = buckets;
+        document.getElementById('bucketsCount').textContent = String(buckets.length);
+        console.log('[BUCKETS][LIST]', buckets);
+        setStatus('Buckets listed');
+      } catch (e) {
+        setStatus('List buckets failed');
+        window.__msp.error = e?.message || String(e);
+        console.error('[BUCKETS][LIST][ERROR]', e);
+      }
+    };
 
-        // Optional: initialize WASM (for core types if needed by the browser)
-        (async () => {
-            try {
-                const { initWasm } = await import('/core/dist/index.js');
-                await initWasm();
-                console.log('WASM ready');
-            } catch (e) {
-                console.warn('WASM init skipped/failed', e);
-            }
-        })();
+    async function getSelectedBucketId() {
+      const input = document.getElementById('bucketIdInput');
+      const val = input && typeof input.value === 'string' ? input.value.trim() : '';
+      if (val) return val;
+      if (Array.isArray(window.__msp.buckets) && window.__msp.buckets.length > 0) return window.__msp.buckets[0].bucketId;
+      return 'e2e-bucket';
+    }
 
-        document.getElementById('connect-msp').onclick = async () => {
-            try {
-                setStatus('Connecting MSP...');
-                await ensureConnected();
-                setStatus('MSP connected');
-            } catch (e) {
-                setStatus('Connect failed');
-                window.__msp.error = e?.message || String(e);
-                setText('error', window.__msp.error);
-            }
-        };
-
-        document.getElementById('health').onclick = async () => {
-            try {
-                await ensureConnected();
-                setStatus('Health...');
-                const h = await client.getHealth();
-                window.__msp.status = h?.status;
-                window.__msp.health = h;
-                console.log('[HEALTH]', h);
-                setStatus(`Health: ${h?.status || 'unknown'}`);
-            } catch (e) {
-                setStatus('Health failed');
-                window.__msp.error = e?.message || String(e);
-                console.error('[HEALTH][ERROR]', e);
-            }
-        };
-
-        document.getElementById('get-nonce').onclick = async () => {
-            try {
-                await ensureConnected();
-                setStatus('Requesting nonce...');
-                let address = document.getElementById('address').value.trim();
-                const chainId = 1;
-                // Auto-fill a valid address if none/invalid is provided
-                const isValidEth = /^0x[a-fA-F0-9]{40}$/.test(address);
-                if (!isValidEth) {
-                    const { LocalWallet } = await import('/core/dist/index.js');
-                    const wallet = LocalWallet.fromMnemonic('test test test test test test test test test test test junk');
-                    address = await wallet.getAddress();
-                    const addrInput = document.getElementById('address');
-                    if (addrInput) addrInput.value = address;
-                }
-                const res = await client.getNonce(address, chainId);
-                const { message, nonce } = res;
-                window.__msp.message = message; window.__msp.nonce = nonce; window.__msp.nonceResponse = res;
-                console.log('[NONCE]', res);
-                setStatus('Nonce ready');
-            } catch (e) {
-                setStatus('Get nonce failed');
-                window.__msp.error = e?.message || String(e);
-                console.error('[NONCE][ERROR]', e);
-            }
-        };
-
-        document.getElementById('sign-message').onclick = async () => {
-            try {
-                setStatus('Signing message...');
-                const msg = window.__msp.message;
-                if (!msg) throw new Error('No message to sign. Click Get Nonce first.');
-                const { LocalWallet } = await import('/core/dist/index.js');
-                const wallet = LocalWallet.fromMnemonic('test test test test test test test test test test test junk');
-                const address = await wallet.getAddress();
-                const sig = await wallet.signMessage(msg);
-                window.__msp.signature = sig;
-                window.__msp.signResponse = { address, message: msg, signature: sig };
-                console.log('[SIGN]', window.__msp.signResponse);
-                setStatus('Signed');
-            } catch (e) {
-                setStatus('Sign failed');
-                window.__msp.error = e?.message || String(e);
-                console.error('[SIGN][ERROR]', e);
-            }
-        };
-
-        document.getElementById('verify').onclick = async () => {
-            try {
-                await ensureConnected();
-                setStatus('Verifying...');
-                const { message, signature } = window.__msp;
-                if (!message || !signature) throw new Error('Need message and signature.');
-                const res = await client.verify(message, signature);
-                const { token, user } = res;
-                window.__msp.token = token; window.__msp.user = user;
-                client.setToken(token);
-                console.log('[VERIFY]', res);
-                setStatus('Verified / token set');
-            } catch (e) {
-                setStatus('Verify failed');
-                window.__msp.error = e?.message || String(e);
-                console.error('[VERIFY][ERROR]', e);
-            }
-        };
-
-        document.getElementById('set-token-manual').onclick = async () => {
-            try {
-                await ensureConnected();
-                const inputEl = document.getElementById('manualToken');
-                const val = inputEl && typeof (inputEl).value === 'string' ? inputEl.value.trim() : '';
-                if (!val) throw new Error('Enter a token first');
-                client.setToken(val);
-                window.__msp.token = val;
-                console.log('[TOKEN][SET-MANUAL]', val);
-                setStatus('Token set (manual)');
-            } catch (e) {
-                setStatus('Set token failed');
-                window.__msp.error = e?.message || String(e);
-                console.error('[TOKEN][ERROR]', e);
-            }
-        };
-
-        document.getElementById('upload').onclick = async () => {
-            try {
-                if (!client) throw new Error('Connect MSP first');
-                setStatus('Uploading...');
-                const bucketId = 'e2e-bucket';
-                const fileKey = 'web-file';
-                // Use a valid-looking mock JWT for mocked backend
-                const jwt = generateMockJwt();
-                client.setToken(jwt);
-                window.__msp.token = jwt;
-                console.log('[TOKEN][AUTO]', window.__msp.token);
-                const blob = await loadAdolphusBlob();
-                const receipt = await client.uploadFile(bucketId, fileKey, blob);
-                window.__msp.uploadReceipt = receipt;
-                console.log('[UPLOAD][RECEIPT]', receipt);
-                setStatus('Upload done');
-            } catch (e) {
-                setStatus('Upload failed');
-                window.__msp.error = e?.message || String(e);
-                console.error('[UPLOAD][ERROR]', e);
-            }
-        };
-
-        document.getElementById('download-key').onclick = async () => {
-            try {
-                if (!client) throw new Error('Connect MSP first');
-                setStatus('Downloading by key...');
-                const bucketId = 'e2e-bucket';
-                const fileKey = 'web-file';
-                if (!window.__msp.token) {
-                    const jwt = generateMockJwt();
-                    client.setToken(jwt);
-                    window.__msp.token = jwt;
-                    console.log('[TOKEN][AUTO]', jwt);
-                }
-                const dl = await client.downloadByKey(bucketId, fileKey);
-                window.__msp.downloadMeta = { status: dl?.status, contentType: dl?.contentType, contentLength: dl?.contentLength, contentRange: dl?.contentRange };
-                console.log('[DOWNLOAD][KEY][META]', window.__msp.downloadMeta);
-                // Save to user-selected location (browsers cannot write to /tmp)
-                const blob = await new Response(dl.stream).blob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = fileKey;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                setTimeout(() => URL.revokeObjectURL(url), 1000);
-                setStatus('Download (key) done');
-            } catch (e) {
-                setStatus('Download (key) failed');
-                window.__msp.error = e?.message || String(e);
-                console.error('[DOWNLOAD][KEY][ERROR]', e);
-            }
-        };
-
-        document.getElementById('download-path').onclick = async () => {
-            try {
-                if (!client) throw new Error('Connect MSP first');
-                setStatus('Downloading by path...');
-                const bucketId = 'e2e-bucket';
-                const path = 'files/e2e-bucket/adolphus.jpg';
-                if (!window.__msp.token) {
-                    const jwt = generateMockJwt();
-                    client.setToken(jwt);
-                    window.__msp.token = jwt;
-                    console.log('[TOKEN][AUTO]', jwt);
-                }
-                const dl = await client.downloadByLocation(bucketId, path);
-                window.__msp.downloadMeta = { status: dl?.status, contentType: dl?.contentType, contentLength: dl?.contentLength, contentRange: dl?.contentRange };
-                console.log('[DOWNLOAD][PATH][META]', window.__msp.downloadMeta);
-                // Save to user-selected location (browsers cannot write to /tmp)
-                const blob = await new Response(dl.stream).blob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = '/tmp/download_by_location.txt';
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                setTimeout(() => URL.revokeObjectURL(url), 1000);
-                setStatus('Download (path) done');
-            } catch (e) {
-                setStatus('Download (path) failed');
-                window.__msp.error = e?.message || String(e);
-                console.error('[DOWNLOAD][PATH][ERROR]', e);
-            }
-        };
-
-        // Buckets
-        document.getElementById('list-buckets').onclick = async () => {
-            try {
-                if (!client) throw new Error('Connect MSP first');
-                setStatus('Listing buckets...');
-                if (!window.__msp.token) {
-                    const jwt = generateMockJwt();
-                    client.setToken(jwt);
-                    window.__msp.token = jwt;
-                }
-                const buckets = await client.listBuckets();
-                window.__msp.buckets = buckets;
-                document.getElementById('bucketsCount').textContent = String(buckets.length);
-                console.log('[BUCKETS][LIST]', buckets);
-                setStatus('Buckets listed');
-            } catch (e) {
-                setStatus('List buckets failed');
-                window.__msp.error = e?.message || String(e);
-                console.error('[BUCKETS][LIST][ERROR]', e);
-            }
-        };
-
-        async function getSelectedBucketId() {
-            const input = document.getElementById('bucketIdInput');
-            const val = input && typeof input.value === 'string' ? input.value.trim() : '';
-            if (val) return val;
-            if (Array.isArray(window.__msp.buckets) && window.__msp.buckets.length > 0) return window.__msp.buckets[0].bucketId;
-            return 'e2e-bucket';
+    document.getElementById('get-bucket').onclick = async () => {
+      try {
+        if (!client) throw new Error('Connect MSP first');
+        setStatus('Getting bucket...');
+        if (!window.__msp.token) {
+          const jwt = generateMockJwt();
+          client.setToken(jwt);
+          window.__msp.token = jwt;
         }
+        const bucketId = await getSelectedBucketId();
+        const bucket = await client.getBucket(bucketId);
+        window.__msp.lastBucket = bucket;
+        document.getElementById('bucketJson').textContent = JSON.stringify(bucket);
+        console.log('[BUCKETS][GET]', bucket);
+        setStatus('Bucket loaded');
+      } catch (e) {
+        setStatus('Get bucket failed');
+        window.__msp.error = e?.message || String(e);
+        console.error('[BUCKETS][GET][ERROR]', e);
+      }
+    };
 
-        document.getElementById('get-bucket').onclick = async () => {
-            try {
-                if (!client) throw new Error('Connect MSP first');
-                setStatus('Getting bucket...');
-                if (!window.__msp.token) {
-                    const jwt = generateMockJwt();
-                    client.setToken(jwt);
-                    window.__msp.token = jwt;
-                }
-                const bucketId = await getSelectedBucketId();
-                const bucket = await client.getBucket(bucketId);
-                window.__msp.lastBucket = bucket;
-                document.getElementById('bucketJson').textContent = JSON.stringify(bucket);
-                console.log('[BUCKETS][GET]', bucket);
-                setStatus('Bucket loaded');
-            } catch (e) {
-                setStatus('Get bucket failed');
-                window.__msp.error = e?.message || String(e);
-                console.error('[BUCKETS][GET][ERROR]', e);
-            }
-        };
+    document.getElementById('get-files').onclick = async () => {
+      try {
+        if (!client) throw new Error('Connect MSP first');
+        setStatus('Getting files...');
+        if (!window.__msp.token) {
+          const jwt = generateMockJwt();
+          client.setToken(jwt);
+          window.__msp.token = jwt;
+        }
+        const bucketId = await getSelectedBucketId();
+        const pathEl = document.getElementById('pathInput');
+        const pathVal = pathEl && typeof pathEl.value === 'string' ? pathEl.value.trim() : '';
+        const files = await client.getFiles(bucketId, pathVal ? { path: pathVal } : undefined);
+        window.__msp.files = files;
+        document.getElementById('filesJson').textContent = JSON.stringify(files, null, 2);
+        console.log('[BUCKETS][FILES]', files);
+        setStatus('Files loaded');
+      } catch (e) {
+        setStatus('Get files failed');
+        window.__msp.error = e?.message || String(e);
+        console.error('[BUCKETS][FILES][ERROR]', e);
+      }
+    };
 
-        document.getElementById('get-files').onclick = async () => {
-            try {
-                if (!client) throw new Error('Connect MSP first');
-                setStatus('Getting files...');
-                if (!window.__msp.token) {
-                    const jwt = generateMockJwt();
-                    client.setToken(jwt);
-                    window.__msp.token = jwt;
-                }
-                const bucketId = await getSelectedBucketId();
-                const pathEl = document.getElementById('pathInput');
-                const pathVal = pathEl && typeof pathEl.value === 'string' ? pathEl.value.trim() : '';
-                const files = await client.getFiles(bucketId, pathVal ? { path: pathVal } : undefined);
-                window.__msp.files = files;
-                document.getElementById('filesJson').textContent = JSON.stringify(files, null, 2);
-                console.log('[BUCKETS][FILES]', files);
-                setStatus('Files loaded');
-            } catch (e) {
-                setStatus('Get files failed');
-                window.__msp.error = e?.message || String(e);
-                console.error('[BUCKETS][FILES][ERROR]', e);
-            }
-        };
-    </script>
+    // MSP Info handlers
+    document.getElementById('get-info').onclick = async () => {
+      try {
+        await ensureConnected();
+        setStatus('Getting info...');
+        const info = await client.getInfo();
+        window.__msp.info = info;
+        document.getElementById('infoJson').textContent = JSON.stringify(info, null, 2);
+        console.log('[MSP][INFO]', info);
+        setStatus('Info loaded');
+      } catch (e) {
+        setStatus('Get info failed');
+        window.__msp.error = e?.message || String(e);
+        console.error('[MSP][INFO][ERROR]', e);
+      }
+    };
+
+    document.getElementById('get-stats').onclick = async () => {
+      try {
+        await ensureConnected();
+        setStatus('Getting stats...');
+        const stats = await client.getStats();
+        window.__msp.stats = stats;
+        document.getElementById('statsJson').textContent = JSON.stringify(stats, null, 2);
+        console.log('[MSP][STATS]', stats);
+        setStatus('Stats loaded');
+      } catch (e) {
+        setStatus('Get stats failed');
+        window.__msp.error = e?.message || String(e);
+        console.error('[MSP][STATS][ERROR]', e);
+      }
+    };
+
+    document.getElementById('get-value-props').onclick = async () => {
+      try {
+        await ensureConnected();
+        setStatus('Getting value props...');
+        const valueProps = await client.getValuePropositions();
+        window.__msp.valueProps = valueProps;
+        document.getElementById('valuePropsJson').textContent = JSON.stringify(valueProps, null, 2);
+        console.log('[MSP][VALUE-PROPS]', `count=${Array.isArray(valueProps) ? valueProps.length : 0}`, JSON.stringify(valueProps, null, 2));
+        setStatus('Value props loaded');
+      } catch (e) {
+        setStatus('Get value props failed');
+        window.__msp.error = e?.message || String(e);
+        console.error('[MSP][VALUE-PROPS][ERROR]', e);
+      }
+    };
+
+    document.getElementById('get-file-info').onclick = async () => {
+      try {
+        await ensureConnected();
+        setStatus('Getting file info...');
+        if (!window.__msp.token) {
+          const jwt = generateMockJwt();
+          client.setToken(jwt);
+          window.__msp.token = jwt;
+        }
+        const bucketEl = document.getElementById('bucketInfoIdInput');
+        const fileKeyEl = document.getElementById('fileKeyInput');
+        const bucketId = bucketEl && typeof bucketEl.value === 'string' && bucketEl.value.trim() ? bucketEl.value.trim() : 'd8793e4187f5642e96016a96fb33849a7e03eda91358b311bbd426ed38b26692';
+        const fileKey = fileKeyEl && typeof fileKeyEl.value === 'string' && fileKeyEl.value.trim() ? fileKeyEl.value.trim() : 'e901c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f7';
+        const info = await client.getFileInfo(bucketId, fileKey);
+        window.__msp.fileInfo = info;
+        document.getElementById('fileInfoJson').textContent = JSON.stringify(info, null, 2);
+        console.log('[MSP][FILE-INFO]', info);
+        setStatus('File info loaded');
+      } catch (e) {
+        setStatus('Get file info failed');
+        window.__msp.error = e?.message || String(e);
+        console.error('[MSP][FILE-INFO][ERROR]', e);
+      }
+    };
+  </script>
 </body>
 
 </html>

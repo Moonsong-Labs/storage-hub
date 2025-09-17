@@ -2,12 +2,16 @@ import type {
   Bucket,
   DownloadOptions,
   DownloadResult,
+  FileInfo,
   FileListResponse,
   GetFilesOptions,
   HealthStatus,
+  InfoResponse,
   NonceResponse,
+  StatsResponse,
   UploadOptions,
   UploadReceipt,
+  ValueProp,
   VerifyResponse,
 } from './types.js';
 import type { HttpClientConfig } from '@storagehub-sdk/core';
@@ -16,7 +20,7 @@ import { HttpClient } from '@storagehub-sdk/core';
 export class MspClient {
   public readonly config: HttpClientConfig;
   private readonly http: HttpClient;
-  private token?: string;
+  public token?: string;
 
   private constructor(config: HttpClientConfig, http: HttpClient) {
     this.config = config;
@@ -38,6 +42,27 @@ export class MspClient {
 
   getHealth(options?: { signal?: AbortSignal }): Promise<HealthStatus> {
     return this.http.get<HealthStatus>('/health', {
+      ...(options?.signal !== undefined && { signal: options.signal }),
+    });
+  }
+
+  /** Get general MSP information */
+  getInfo(options?: { signal?: AbortSignal }): Promise<InfoResponse> {
+    return this.http.get<InfoResponse>('/info', {
+      ...(options?.signal !== undefined && { signal: options.signal }),
+    });
+  }
+
+  /** Get MSP statistics */
+  getStats(options?: { signal?: AbortSignal }): Promise<StatsResponse> {
+    return this.http.get<StatsResponse>('/stats', {
+      ...(options?.signal !== undefined && { signal: options.signal }),
+    });
+  }
+
+  /** Get available value propositions */
+  getValuePropositions(options?: { signal?: AbortSignal }): Promise<ValueProp[]> {
+    return this.http.get<ValueProp[]>('/value-props', {
       ...(options?.signal !== undefined && { signal: options.signal }),
     });
   }
@@ -113,6 +138,23 @@ export class MspClient {
     });
   }
 
+  /** Get metadata for a file in a bucket by fileKey */
+  getFileInfo(
+    bucketId: string,
+    fileKey: string,
+    options?: { signal?: AbortSignal },
+  ): Promise<FileInfo> {
+    const headers = this.withAuth();
+    const path = `/buckets/${encodeURIComponent(bucketId)}/info/${encodeURIComponent(fileKey)}`;
+    type FileInfoWire = Omit<FileInfo, 'uploadedAt'> & { uploadedAt: string };
+    return this.http
+      .get<FileInfoWire>(path, {
+        ...(headers ? { headers } : {}),
+        ...(options?.signal ? { signal: options.signal } : {}),
+      })
+      .then((wire): FileInfo => ({ ...wire, uploadedAt: new Date(wire.uploadedAt) }));
+  }
+
   // File endpoints:
 
   /**
@@ -176,13 +218,9 @@ export class MspClient {
     return new Blob([file as BlobPart]);
   }
 
-  /** Download a file by bucket and key. */
-  async downloadByKey(
-    bucketId: string,
-    fileKey: string,
-    options?: DownloadOptions,
-  ): Promise<DownloadResult> {
-    const path = `/buckets/${encodeURIComponent(bucketId)}/download/${encodeURIComponent(fileKey)}`;
+  /** Download a file by key. */
+  async downloadByKey(fileKey: string, options?: DownloadOptions): Promise<DownloadResult> {
+    const path = `/download/${encodeURIComponent(fileKey)}`;
     const baseHeaders: Record<string, string> = { Accept: '*/*' };
     if (options?.range) {
       const { start, end } = options.range;

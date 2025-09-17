@@ -4,19 +4,17 @@ import type { ISubmittableResult } from "@polkadot/types/types";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
 import {
-  type EnrichedBspApi,
-  ShConsts,
   alice,
   bob,
   bspThreeKey,
-  bspThreeSeed,
   bspTwoKey,
-  bspTwoSeed,
   charlie,
-  describeBspNet
+  describeBspNet,
+  type EnrichedBspApi,
+  ShConsts
 } from "../../../util";
 
-describeBspNet("BSPNet: Mulitple BSP Volunteering - 3", ({ before, it, createUserApi }) => {
+await describeBspNet("BSPNet: Mulitple BSP Volunteering - 3", ({ before, it, createUserApi }) => {
   let api: EnrichedBspApi;
 
   before(async () => {
@@ -51,7 +49,6 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 3", ({ before, it, createUse
     await api.docker.onboardBsp({
       bspSigner: bspTwoKey,
       name: "sh-bsp-two",
-      bspKeySeed: bspTwoSeed,
       bspId: ShConsts.BSP_TWO_ID,
       additionalArgs: ["--keystore-path=/keystore/bsp-two"],
       waitForIdle: true
@@ -60,7 +57,6 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 3", ({ before, it, createUse
     await api.docker.onboardBsp({
       bspSigner: bspThreeKey,
       name: "sh-bsp-three",
-      bspKeySeed: bspThreeSeed,
       bspId: ShConsts.BSP_THREE_ID,
       additionalArgs: ["--keystore-path=/keystore/bsp-three"],
       waitForIdle: true

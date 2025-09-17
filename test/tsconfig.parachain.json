@@ -1,0 +1,13 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": "./",
+    "paths": {
+      "@storagehub/api-augment/parachain": ["../api-augment/src/parachain/index.ts"],
+      "@storagehub/types-bundle": ["../types-bundle/src/index.ts"],
+      "@storagehub/types-bundle/*": ["../types-bundle/src/*"]
+    }
+  },
+  "include": ["suites/integration/**/*.ts", "util/**/*.ts"],
+  "exclude": ["suites/solo-node/**"]
+}

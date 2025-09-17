@@ -1,8 +1,8 @@
 import { execSync } from "node:child_process";
-import inquirer from "inquirer";
-import path from "node:path";
 import fs from "node:fs";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
+import inquirer from "inquirer";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -52,7 +52,7 @@ async function main() {
 const execCommand = (command: string): string => {
   try {
     return execSync(command, { stdio: "pipe" }).toString().trim();
-  } catch (error) {
+  } catch (_error) {
     return "";
   }
 };
@@ -115,4 +115,4 @@ const buildAndCopyLibpq = async (target: string): Promise<void> => {
   console.log(`RUSTFLAGS set to: ${process.env.RUSTFLAGS}`);
 };
 
-main();
+await main();

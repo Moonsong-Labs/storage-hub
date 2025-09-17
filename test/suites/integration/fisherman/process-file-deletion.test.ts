@@ -1,24 +1,23 @@
-import assert, { strictEqual, notEqual } from "node:assert";
+import assert, { notEqual, strictEqual } from "node:assert";
 import {
+  assertEventPresent,
+  bspKey,
   describeMspNet,
   type EnrichedBspApi,
   type SqlClient,
   shUser,
-  bspKey,
-  waitFor,
-  assertEventPresent
+  waitFor
 } from "../../../util";
-import { createBucketAndSendNewStorageRequest } from "../../../util/bspNet/fileHelpers";
-import {
-  waitForFileIndexed,
-  waitForMspFileAssociation,
-  waitForBspFileAssociation
-} from "../../../util/indexerHelpers";
-import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
 import {
   waitForDeleteFileExtrinsic,
   waitForFishermanProcessing
 } from "../../../util/fisherman/fishermanHelpers";
+import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
+import {
+  waitForBspFileAssociation,
+  waitForFileIndexed,
+  waitForMspFileAssociation
+} from "../../../util/indexerHelpers";
 
 /**
  * FISHERMAN PROCESS FILE DELETION - COMPREHENSIVE EVENT PROCESSING
@@ -44,7 +43,7 @@ import {
  * 4. Multiple providers: File stored by both BSP and MSP, deletion affects both
  * 5. StorageRequestRejected: Provider rejection scenarios (placeholder for future)
  */
-describeMspNet(
+await describeMspNet(
   "Fisherman Process File Deletion",
   {
     initialised: false,
@@ -88,8 +87,7 @@ describeMspNet(
       const valuePropId = valueProps[0].id;
 
       const { fileKey, bucketId, location, fingerprint, fileSize } =
-        await createBucketAndSendNewStorageRequest(
-          userApi,
+        await userApi.file.createBucketAndSendNewStorageRequest(
           source,
           destination,
           bucketName,
@@ -237,8 +235,7 @@ describeMspNet(
       await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
       await userApi.docker.pauseContainer("storage-hub-sh-bsp-1");
 
-      const { fileKey } = await createBucketAndSendNewStorageRequest(
-        userApi,
+      const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
         destination,
         bucketName,
@@ -293,8 +290,7 @@ describeMspNet(
       await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
       await userApi.docker.pauseContainer("storage-hub-sh-bsp-1");
 
-      const { fileKey } = await createBucketAndSendNewStorageRequest(
-        userApi,
+      const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
         destination,
         bucketName,
@@ -349,8 +345,7 @@ describeMspNet(
       const valuePropId = valueProps[0].id;
 
       const { fileKey, bucketId, location, fingerprint, fileSize } =
-        await createBucketAndSendNewStorageRequest(
-          userApi,
+        await userApi.file.createBucketAndSendNewStorageRequest(
           source,
           destination,
           bucketName,
@@ -500,8 +495,7 @@ describeMspNet(
       await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
       await userApi.docker.pauseContainer("storage-hub-sh-bsp-1");
 
-      const { fileKey: _ } = await createBucketAndSendNewStorageRequest(
-        userApi,
+      const { fileKey: _ } = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
         destination,
         bucketName,

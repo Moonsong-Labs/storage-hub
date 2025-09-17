@@ -1,25 +1,22 @@
-import { strictEqual } from "node:assert";
-import assert from "node:assert";
+import assert, { strictEqual } from "node:assert";
 import type { EventRecord } from "@polkadot/types/interfaces";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
 import {
-  type EnrichedBspApi,
-  ShConsts,
   addMspContainer,
   assertEventPresent,
   bspThreeKey,
-  bspThreeSeed,
   bspTwoKey,
-  bspTwoSeed,
   describeMspNet,
+  type EnrichedBspApi,
   getContainerIp,
   mspThreeKey,
+  ShConsts,
   shUser,
   sleep
 } from "../../../util";
 
-describeMspNet(
+await describeMspNet(
   "MSP rejects bucket move requests due to low capacity",
   { initialised: false, indexer: true },
   ({ before, after, createMsp1Api, it, createUserApi, createApi }) => {
@@ -77,7 +74,6 @@ describeMspNet(
       await userApi.docker.onboardBsp({
         bspSigner: bspTwoKey,
         name: "sh-bsp-two",
-        bspKeySeed: bspTwoSeed,
         bspId: ShConsts.BSP_TWO_ID,
         additionalArgs: ["--keystore-path=/keystore/bsp-two"],
         waitForIdle: true
@@ -86,7 +82,6 @@ describeMspNet(
       await userApi.docker.onboardBsp({
         bspSigner: bspThreeKey,
         name: "sh-bsp-three",
-        bspKeySeed: bspThreeSeed,
         bspId: ShConsts.BSP_THREE_ID,
         additionalArgs: ["--keystore-path=/keystore/bsp-three"],
         waitForIdle: true

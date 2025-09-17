@@ -1,53 +1,23 @@
 //! Service and ServiceFactory implementation. Specialized wrapper over substrate service.
 
 // std
-use futures::{Stream, StreamExt};
-use log::{error, info};
-use shc_blockchain_service::capacity_manager::CapacityConfig;
-use shc_client::builder::{FishermanOptions, IndexerOptions};
-use shc_indexer_db::DbPool;
-use shc_indexer_service::spawn_indexer_service;
 use std::{cell::RefCell, path::PathBuf, sync::Arc, time::Duration};
 
 use async_channel::Receiver;
 use chrono::Utc;
-use codec::Encode;
-use cumulus_client_cli::CollatorOptions;
-use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, MockXcmConfig};
-
-use polkadot_primitives::{BlakeTwo256, HashT, HeadData};
-use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
-use shc_actors_framework::actor::TaskSpawner;
-use shc_common::types::*;
-use shc_rpc::StorageHubClientRpcConfig;
-use sp_blockchain::HeaderBackend;
-use sp_consensus_aura::Slot;
-use sp_core::H256;
-
-// Local Runtime Types
-use sh_parachain_runtime::{apis::RuntimeApi, Runtime};
-use shp_opaque::{Block, Hash};
-
-// Cumulus Imports
-use cumulus_client_collator::service::CollatorService;
-use cumulus_client_consensus_common::ParachainBlockImport as TParachainBlockImport;
-use cumulus_client_consensus_proposer::Proposer;
-use cumulus_client_service::{
-    build_network, build_relay_chain_interface, prepare_node_config, start_relay_chain_tasks,
-    BuildNetworkParams, CollatorSybilResistance, DARecoveryProfile, StartRelayChainTasksParams,
-};
-use cumulus_primitives_core::{
-    relay_chain::{well_known_keys as RelayChainWellKnownKeys, CollatorPair, ValidationCode},
-    ParaId,
-};
-use cumulus_relay_chain_interface::{OverseerHandle, RelayChainInterface};
+use futures::{Stream, StreamExt};
+use log::{error, info};
 
 // Substrate Imports
-use cumulus_primitives_core::CollectCollationInfo;
+use codec::Encode;
 use frame_benchmarking_cli::SUBSTRATE_REFERENCE_HARDWARE;
 use polkadot_primitives::UpgradeGoAhead;
-use sc_client_api::Backend;
+use polkadot_primitives::{BlakeTwo256, HashT, HeadData};
+use sc_client_api::{Backend, BlockBackend};
 use sc_consensus::{ImportQueue, LongestChain};
+use sc_consensus_manual_seal::consensus::{
+    aura::AuraConsensusDataProvider, babe::BabeConsensusDataProvider,
+};
 use sc_executor::{HeapAllocStrategy, DEFAULT_HEAP_ALLOC_STRATEGY};
 use sc_network::{
     config::IncomingRequest, service::traits::NetworkService, NetworkBackend, NetworkBlock,
@@ -57,6 +27,50 @@ use sc_service::{Configuration, PartialComponents, RpcHandlers, TFullBackend, Ta
 use sc_telemetry::{Telemetry, TelemetryHandle, TelemetryWorker, TelemetryWorkerHandle};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sc_transaction_pool_api::TransactionPool;
+use sp_api::ProvideRuntimeApi;
+use sp_blockchain::HeaderBackend;
+use sp_consensus_aura::Slot;
+use sp_core::H256;
+use sp_keystore::{Keystore, KeystorePtr};
+use sp_runtime::traits::SaturatedConversion;
+use substrate_prometheus_endpoint::Registry;
+
+// Cumulus Imports
+use cumulus_client_cli::CollatorOptions;
+use cumulus_client_collator::service::CollatorService;
+use cumulus_client_consensus_common::ParachainBlockImport as TParachainBlockImport;
+use cumulus_client_consensus_proposer::Proposer;
+use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, MockXcmConfig};
+use cumulus_client_service::{
+    build_network, build_relay_chain_interface, prepare_node_config, start_relay_chain_tasks,
+    BuildNetworkParams, CollatorSybilResistance, DARecoveryProfile, StartRelayChainTasksParams,
+};
+use cumulus_primitives_core::CollectCollationInfo;
+use cumulus_primitives_core::{
+    relay_chain::{well_known_keys as RelayChainWellKnownKeys, CollatorPair, ValidationCode},
+    ParaId,
+};
+use cumulus_relay_chain_interface::{OverseerHandle, RelayChainInterface};
+
+// Frontier / EVM imports (solochain)
+use fc_consensus::FrontierBlockImport;
+use fc_db::{self, DatabaseSource};
+use fc_mapping_sync::{kv::MappingSyncWorker, SyncStrategy};
+use fc_rpc::EthTask;
+use fc_rpc_core::types::{FeeHistoryCache, FeeHistoryCacheLimit, FilterPool};
+use fc_storage::{self, StorageOverride, StorageOverrideHandler};
+use sc_client_api::BlockchainEvents;
+use sc_consensus_babe::ImportQueueParams as BabeImportQueueParams;
+
+use crate::{
+    cli::{self, ProviderType, StorageLayer},
+    command::ProviderOptions,
+};
+
+// StorageHub Imports
+use shc_actors_framework::actor::TaskSpawner;
+use shc_blockchain_service::capacity_manager::CapacityConfig;
+use shc_client::builder::{FishermanOptions, IndexerOptions};
 use shc_client::{
     builder::{Buildable, StorageHubBuilder, StorageLayerBuilder},
     handler::{RunnableTasks, StorageHubHandler},
@@ -65,35 +79,45 @@ use shc_client::{
         RocksDbStorageLayer, ShNodeType, ShRole, ShStorageLayer, UserRole,
     },
 };
+use shc_common::{traits::StorageEnableRuntime, types::*};
 use shc_file_transfer_service::{configure_file_transfer_network, fetch_genesis_hash};
-use sp_api::ProvideRuntimeApi;
-use sp_keystore::{Keystore, KeystorePtr};
-use substrate_prometheus_endpoint::Registry;
+use shc_indexer_db::DbPool;
+use shc_indexer_service::spawn_indexer_service;
+use shc_rpc::StorageHubClientRpcConfig;
+use shp_opaque::{Block, Hash};
 
-use crate::{
-    cli::{self, ProviderType, StorageLayer},
-    command::ProviderOptions,
+// Local Runtime Types
+use sh_parachain_runtime::{apis::RuntimeApi as ParachainRuntimeApi, Runtime as ParachainRuntime};
+use sh_solochain_evm_runtime::{
+    Runtime as SolochainEvmRuntime, RuntimeApi as SolochainEvmRuntimeApi,
 };
 
-//* These type definitions were moved from this file to the common crate to be used by'
-//* the StorageHub services crates
-type ParachainExecutor = shc_common::types::ParachainExecutor;
-type ParachainClient = shc_common::types::ParachainClient<RuntimeApi>;
+//╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
+//║                                        Generic Types over Runtime                                             ║
+//╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 
-pub(crate) type ParachainBackend = TFullBackend<Block>;
+// Generic client type over Runtime
+pub(crate) type StorageEnableClient<Runtime> =
+    shc_common::types::ParachainClient<<Runtime as StorageEnableRuntime>::RuntimeApi>;
+pub(crate) type StorageEnableBackend = TFullBackend<Block>;
+pub(crate) type StorageEnableSelectChain = sc_consensus::LongestChain<StorageEnableBackend, Block>;
+pub(crate) type StorageEnablePool<Runtime> =
+    sc_transaction_pool::TransactionPoolHandle<Block, StorageEnableClient<Runtime>>;
+
+//╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
+//║                                        StorageHub Parachain Types                                             ║
+//╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 
 pub(crate) type ParachainBlockImport =
-    TParachainBlockImport<Block, Arc<ParachainClient>, ParachainBackend>;
-
-type MaybeSelectChain = Option<sc_consensus::LongestChain<ParachainBackend, Block>>;
+    TParachainBlockImport<Block, Arc<StorageEnableClient<ParachainRuntime>>, StorageEnableBackend>;
 
 /// Assembly of PartialComponents (enough to run chain ops subcommands)
-pub type Service = PartialComponents<
-    ParachainClient,
-    ParachainBackend,
-    MaybeSelectChain,
+pub type ParachainService = PartialComponents<
+    StorageEnableClient<ParachainRuntime>,
+    StorageEnableBackend,
+    Option<StorageEnableSelectChain>,
     sc_consensus::DefaultImportQueue<Block>,
-    sc_transaction_pool::TransactionPoolHandle<Block, ParachainClient>,
+    StorageEnablePool<ParachainRuntime>,
     (
         ParachainBlockImport,
         Option<Telemetry>,
@@ -101,113 +125,58 @@ pub type Service = PartialComponents<
     ),
 >;
 
-/// Starts a `ServiceBuilder` for a full service.
-///
-/// Use this macro if you don't actually need the full service, but just the builder in order to
-/// be able to perform chain operations.
-pub fn new_partial(
-    config: &Configuration,
-    dev_service: bool,
-) -> Result<Service, sc_service::Error> {
-    let telemetry = config
-        .telemetry_endpoints
-        .clone()
-        .filter(|x| !x.is_empty())
-        .map(|endpoints| -> Result<_, sc_telemetry::Error> {
-            let worker = TelemetryWorker::new(16)?;
-            let telemetry = worker.handle().new_telemetry(endpoints);
-            Ok((worker, telemetry))
-        })
-        .transpose()?;
+//╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
+//║                                      StorageHub Solochain EVM Types                                           ║
+//╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 
-    let heap_pages = config
-        .executor
-        .default_heap_pages
-        .map_or(DEFAULT_HEAP_ALLOC_STRATEGY, |h| HeapAllocStrategy::Static {
-            extra_pages: h as _,
-        });
+/// Partial components returned by the Solochain EVM.
+type SolochainService = sc_service::PartialComponents<
+    StorageEnableClient<SolochainEvmRuntime>,
+    StorageEnableBackend,
+    StorageEnableSelectChain,
+    sc_consensus::DefaultImportQueue<Block>,
+    sc_transaction_pool::BasicPool<
+        sc_transaction_pool::FullChainApi<StorageEnableClient<SolochainEvmRuntime>, Block>,
+        Block,
+    >,
+    (
+        sc_consensus_babe::BabeBlockImport<
+            Block,
+            StorageEnableClient<SolochainEvmRuntime>,
+            FrontierBlockImport<
+                Block,
+                sc_consensus_grandpa::GrandpaBlockImport<
+                    StorageEnableBackend,
+                    Block,
+                    StorageEnableClient<SolochainEvmRuntime>,
+                    StorageEnableSelectChain,
+                >,
+                StorageEnableClient<SolochainEvmRuntime>,
+            >,
+        >,
+        sc_consensus_grandpa::LinkHalf<
+            Block,
+            StorageEnableClient<SolochainEvmRuntime>,
+            StorageEnableSelectChain,
+        >,
+        sc_consensus_babe::BabeLink<Block>,
+        Arc<fc_db::Backend<Block, StorageEnableClient<SolochainEvmRuntime>>>,
+        Arc<dyn StorageOverride<Block>>,
+        Option<Telemetry>,
+    ),
+>;
 
-    let executor = ParachainExecutor::builder()
-        .with_execution_method(config.executor.wasm_method)
-        .with_onchain_heap_alloc_strategy(heap_pages)
-        .with_offchain_heap_alloc_strategy(heap_pages)
-        .with_max_runtime_instances(config.executor.max_runtime_instances)
-        .with_runtime_cache_size(config.executor.runtime_cache_size)
-        .build();
-
-    let (client, backend, keystore_container, task_manager) =
-        sc_service::new_full_parts_record_import::<Block, RuntimeApi, _>(
-            config,
-            telemetry.as_ref().map(|(_, telemetry)| telemetry.handle()),
-            executor,
-            true,
-        )?;
-    let client = Arc::new(client);
-
-    let telemetry_worker_handle = telemetry.as_ref().map(|(worker, _)| worker.handle());
-
-    let telemetry = telemetry.map(|(worker, telemetry)| {
-        task_manager
-            .spawn_handle()
-            .spawn("telemetry", None, worker.run());
-        telemetry
-    });
-
-    // FIXME: The `config.transaction_pool.options` field is private, so for now use its default value
-    // let transaction_pool = Arc::from(BasicPool::new_full(
-    //     Default::default(),
-    //     config.role.is_authority().into(),
-    //     config.prometheus_registry(),
-    //     task_manager.spawn_essential_handle(),
-    //     client.clone(),
-    // ));
-
-    let transaction_pool = Arc::from(
-        sc_transaction_pool::Builder::new(
-            task_manager.spawn_essential_handle(),
-            client.clone(),
-            config.role.is_authority().into(),
-        )
-        .with_options(config.transaction_pool.clone())
-        .with_prometheus(config.prometheus_registry())
-        .build(),
-    );
-
-    let block_import = ParachainBlockImport::new(client.clone(), backend.clone());
-
-    let import_queue = if dev_service {
-        sc_consensus_manual_seal::import_queue(
-            Box::new(client.clone()),
-            &task_manager.spawn_essential_handle(),
-            config.prometheus_registry(),
-        )
-    } else {
-        build_import_queue(
-            client.clone(),
-            block_import.clone(),
-            config,
-            telemetry.as_ref().map(|telemetry| telemetry.handle()),
-            &task_manager,
-        )
-    };
-
-    let select_chain = if dev_service {
-        Some(LongestChain::new(backend.clone()))
-    } else {
-        None
-    };
-
-    Ok(PartialComponents {
-        backend,
-        client,
-        import_queue,
-        keystore_container,
-        task_manager,
-        transaction_pool,
-        select_chain,
-        other: (block_import, telemetry, telemetry_worker_handle),
-    })
+fn frontier_database_dir(config: &Configuration, path: &str) -> std::path::PathBuf {
+    config
+        .base_path
+        .config_dir(config.chain_spec.id())
+        .join("frontier")
+        .join(path)
 }
+
+//╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
+//║                                   StorageHub Client Setup Utilities                                           ║
+//╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 
 /// Helper function to setup database pool
 async fn setup_database_pool(database_url: String) -> Result<DbPool, sc_service::Error> {
@@ -216,10 +185,11 @@ async fn setup_database_pool(database_url: String) -> Result<DbPool, sc_service:
         .map_err(|e| sc_service::Error::Application(Box::new(e)))
 }
 
-async fn configure_and_spawn_indexer(
+/// Configure and spawn the indexer service.
+async fn configure_and_spawn_indexer<Runtime: StorageEnableRuntime>(
     indexer_options: &Option<IndexerOptions>,
     task_manager: &TaskManager,
-    client: Arc<ParachainClient>,
+    client: Arc<StorageEnableClient<Runtime>>,
 ) -> Result<Option<DbPool>, sc_service::Error> {
     let indexer_options = match indexer_options {
         Some(config) => config,
@@ -246,11 +216,11 @@ async fn configure_and_spawn_indexer(
     Ok(Some(db_pool))
 }
 
-async fn configure_and_spawn_fisherman(
+async fn configure_and_spawn_fisherman<Runtime: StorageEnableRuntime>(
     fisherman_options: &Option<FishermanOptions>,
     indexer_config: &Option<IndexerOptions>,
     task_manager: &TaskManager,
-    client: Arc<ParachainClient>,
+    client: Arc<StorageEnableClient<Runtime>>,
     keystore: KeystorePtr,
     rpc_handlers: Arc<RpcHandlers>,
     rocksdb_root_path: impl Into<PathBuf>,
@@ -319,13 +289,14 @@ async fn configure_and_spawn_fisherman(
     Ok(Some(db_pool))
 }
 
-async fn init_sh_builder<R, S>(
+/// Initialize the StorageHubBuilder for the StorageHub node.
+async fn init_sh_builder<R, S, Runtime: StorageEnableRuntime>(
     provider_options: &Option<ProviderOptions>,
     task_manager: &TaskManager,
     file_transfer_request_protocol: Option<(ProtocolName, Receiver<IncomingRequest>)>,
     network: Arc<dyn NetworkService>,
     keystore: KeystorePtr,
-    client: Arc<ParachainClient>,
+    client: Arc<StorageEnableClient<Runtime>>,
     indexer_options: Option<IndexerOptions>,
 ) -> Result<
     Option<(
@@ -345,7 +316,8 @@ where
     StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder,
 {
     let maybe_indexer_db_pool =
-        configure_and_spawn_indexer(&indexer_options, &task_manager, client.clone()).await?;
+        configure_and_spawn_indexer::<Runtime>(&indexer_options, &task_manager, client.clone())
+            .await?;
 
     match provider_options {
         Some(ProviderOptions {
@@ -390,8 +362,8 @@ where
             storage_hub_builder
                 .setup_storage_layer(storage_path.clone())
                 .with_capacity_config(Some(CapacityConfig::new(
-                    max_storage_capacity.unwrap_or_default(),
-                    jump_capacity.unwrap_or_default(),
+                    max_storage_capacity.unwrap_or_default().saturated_into(),
+                    jump_capacity.unwrap_or_default().saturated_into(),
                 )));
 
             storage_hub_builder.with_msp_charge_fees_config(msp_charge_fees.clone());
@@ -422,9 +394,10 @@ where
     }
 }
 
-async fn finish_sh_builder_and_run_tasks<R, S>(
+/// Finish the StorageHubBuilder and run the tasks.
+async fn finish_sh_builder_and_run_tasks<R, S, Runtime: StorageEnableRuntime>(
     mut sh_builder: StorageHubBuilder<R, S, Runtime>,
-    client: Arc<ParachainClient>,
+    client: Arc<StorageEnableClient<Runtime>>,
     rpc_handlers: RpcHandlers,
     keystore: KeystorePtr,
     rocksdb_root_path: impl Into<PathBuf>,
@@ -462,8 +435,314 @@ where
     Ok(())
 }
 
+//╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
+//║                                 StorageHub Parachain Node Setup Functions                                     ║
+//╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
+
+/// Start the StorageHub Parachain node in development mode.
+///
+/// This is the entrypoint function to launch a StorageHub Parachain node,
+/// when running in development mode.
+pub async fn start_dev_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
+    config: Configuration,
+    provider_options: Option<ProviderOptions>,
+    indexer_options: Option<IndexerOptions>,
+    fisherman_options: Option<FishermanOptions>,
+    hwbench: Option<sc_sysinfo::HwBench>,
+    para_id: ParaId,
+    sealing: cli::Sealing,
+) -> sc_service::error::Result<TaskManager> {
+    if let Some(provider_options) = provider_options {
+        match (
+            &provider_options.provider_type,
+            &provider_options.storage_layer,
+        ) {
+            (&ProviderType::Bsp, &StorageLayer::Memory) => {
+                start_dev_parachain_impl::<BspProvider, InMemoryStorageLayer, Network>(
+                    config,
+                    Some(provider_options),
+                    indexer_options,
+                    fisherman_options,
+                    hwbench,
+                    para_id,
+                    sealing,
+                )
+                .await
+            }
+            (&ProviderType::Bsp, &StorageLayer::RocksDB) => {
+                start_dev_parachain_impl::<BspProvider, RocksDbStorageLayer, Network>(
+                    config,
+                    Some(provider_options),
+                    indexer_options,
+                    fisherman_options,
+                    hwbench,
+                    para_id,
+                    sealing,
+                )
+                .await
+            }
+            (&ProviderType::Msp, &StorageLayer::Memory) => {
+                start_dev_parachain_impl::<MspProvider, InMemoryStorageLayer, Network>(
+                    config,
+                    Some(provider_options),
+                    indexer_options,
+                    fisherman_options,
+                    hwbench,
+                    para_id,
+                    sealing,
+                )
+                .await
+            }
+            (&ProviderType::Msp, &StorageLayer::RocksDB) => {
+                start_dev_parachain_impl::<MspProvider, RocksDbStorageLayer, Network>(
+                    config,
+                    Some(provider_options),
+                    indexer_options,
+                    fisherman_options,
+                    hwbench,
+                    para_id,
+                    sealing,
+                )
+                .await
+            }
+            (&ProviderType::User, _) => {
+                start_dev_parachain_impl::<UserRole, NoStorageLayer, Network>(
+                    config,
+                    Some(provider_options),
+                    indexer_options,
+                    fisherman_options,
+                    hwbench,
+                    para_id,
+                    sealing,
+                )
+                .await
+            }
+        }
+    } else {
+        // Start node without provider options which in turn will not start any storage hub related role services (e.g. Storage Provider, User)
+        start_dev_parachain_impl::<UserRole, NoStorageLayer, Network>(
+            config,
+            None,
+            indexer_options,
+            fisherman_options,
+            hwbench,
+            para_id,
+            sealing,
+        )
+        .await
+    }
+}
+
+/// Start the StorageHub Parachain node.
+///
+/// This is the entrypoint function to launch a StorageHub Parachain node.
+pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
+    parachain_config: Configuration,
+    polkadot_config: Configuration,
+    collator_options: CollatorOptions,
+    provider_options: Option<ProviderOptions>,
+    indexer_options: Option<IndexerOptions>,
+    fisherman_options: Option<FishermanOptions>,
+    para_id: ParaId,
+    hwbench: Option<sc_sysinfo::HwBench>,
+) -> sc_service::error::Result<(TaskManager, Arc<StorageEnableClient<ParachainRuntime>>)> {
+    if let Some(provider_options) = provider_options {
+        match (
+            &provider_options.provider_type,
+            &provider_options.storage_layer,
+        ) {
+            (&ProviderType::Bsp, &StorageLayer::Memory) => {
+                start_parachain_node_impl::<BspProvider, InMemoryStorageLayer, Network>(
+                    parachain_config,
+                    polkadot_config,
+                    collator_options,
+                    Some(provider_options),
+                    indexer_options,
+                    fisherman_options,
+                    para_id,
+                    hwbench,
+                )
+                .await
+            }
+            (&ProviderType::Bsp, &StorageLayer::RocksDB) => {
+                start_parachain_node_impl::<BspProvider, RocksDbStorageLayer, Network>(
+                    parachain_config,
+                    polkadot_config,
+                    collator_options,
+                    Some(provider_options),
+                    indexer_options,
+                    fisherman_options,
+                    para_id,
+                    hwbench,
+                )
+                .await
+            }
+            (&ProviderType::Msp, &StorageLayer::Memory) => {
+                start_parachain_node_impl::<MspProvider, InMemoryStorageLayer, Network>(
+                    parachain_config,
+                    polkadot_config,
+                    collator_options,
+                    Some(provider_options),
+                    indexer_options,
+                    fisherman_options,
+                    para_id,
+                    hwbench,
+                )
+                .await
+            }
+            (&ProviderType::Msp, &StorageLayer::RocksDB) => {
+                start_parachain_node_impl::<MspProvider, RocksDbStorageLayer, Network>(
+                    parachain_config,
+                    polkadot_config,
+                    collator_options,
+                    Some(provider_options),
+                    indexer_options,
+                    fisherman_options,
+                    para_id,
+                    hwbench,
+                )
+                .await
+            }
+            (&ProviderType::User, _) => {
+                start_parachain_node_impl::<UserRole, NoStorageLayer, Network>(
+                    parachain_config,
+                    polkadot_config,
+                    collator_options,
+                    Some(provider_options),
+                    indexer_options,
+                    fisherman_options,
+                    para_id,
+                    hwbench,
+                )
+                .await
+            }
+        }
+    } else {
+        // Start node without provider options which in turn will not start any storage hub related role services (e.g. Storage Provider, User)
+        start_parachain_node_impl::<UserRole, NoStorageLayer, Network>(
+            parachain_config,
+            polkadot_config,
+            collator_options,
+            None,
+            indexer_options,
+            fisherman_options,
+            para_id,
+            hwbench,
+        )
+        .await
+    }
+}
+
+/// Create a new partial components for the StorageHub Parachain node.
+///
+/// This is the entrypoint function used when executing subcommands of the
+/// StorageHub Parachain node.
+pub fn new_partial_parachain(
+    config: &Configuration,
+    dev_service: bool,
+) -> Result<ParachainService, sc_service::Error> {
+    let telemetry = config
+        .telemetry_endpoints
+        .clone()
+        .filter(|x| !x.is_empty())
+        .map(|endpoints| -> Result<_, sc_telemetry::Error> {
+            let worker = TelemetryWorker::new(16)?;
+            let telemetry = worker.handle().new_telemetry(endpoints);
+            Ok((worker, telemetry))
+        })
+        .transpose()?;
+
+    let heap_pages = config
+        .executor
+        .default_heap_pages
+        .map_or(DEFAULT_HEAP_ALLOC_STRATEGY, |h| HeapAllocStrategy::Static {
+            extra_pages: h as _,
+        });
+
+    let executor = ParachainExecutor::builder()
+        .with_execution_method(config.executor.wasm_method)
+        .with_onchain_heap_alloc_strategy(heap_pages)
+        .with_offchain_heap_alloc_strategy(heap_pages)
+        .with_max_runtime_instances(config.executor.max_runtime_instances)
+        .with_runtime_cache_size(config.executor.runtime_cache_size)
+        .build();
+
+    let (client, backend, keystore_container, task_manager) =
+        sc_service::new_full_parts_record_import::<Block, ParachainRuntimeApi, _>(
+            config,
+            telemetry.as_ref().map(|(_, telemetry)| telemetry.handle()),
+            executor,
+            true,
+        )?;
+    let client = Arc::new(client);
+
+    let telemetry_worker_handle = telemetry.as_ref().map(|(worker, _)| worker.handle());
+
+    let telemetry = telemetry.map(|(worker, telemetry)| {
+        task_manager
+            .spawn_handle()
+            .spawn("telemetry", None, worker.run());
+        telemetry
+    });
+
+    // FIXME: The `config.transaction_pool.options` field is private, so for now use its default value
+    // let transaction_pool = Arc::from(BasicPool::new_full(
+    //     Default::default(),
+    //     config.role.is_authority().into(),
+    //     config.prometheus_registry(),
+    //     task_manager.spawn_essential_handle(),
+    //     client.clone(),
+    // ));
+
+    let transaction_pool = Arc::from(
+        sc_transaction_pool::Builder::new(
+            task_manager.spawn_essential_handle(),
+            client.clone(),
+            config.role.is_authority().into(),
+        )
+        .with_options(config.transaction_pool.clone())
+        .with_prometheus(config.prometheus_registry())
+        .build(),
+    );
+
+    let block_import = ParachainBlockImport::new(client.clone(), backend.clone());
+
+    let import_queue = if dev_service {
+        sc_consensus_manual_seal::import_queue(
+            Box::new(client.clone()),
+            &task_manager.spawn_essential_handle(),
+            config.prometheus_registry(),
+        )
+    } else {
+        build_parachain_import_queue(
+            client.clone(),
+            block_import.clone(),
+            config,
+            telemetry.as_ref().map(|telemetry| telemetry.handle()),
+            &task_manager,
+        )
+    };
+
+    let select_chain = if dev_service {
+        Some(LongestChain::new(backend.clone()))
+    } else {
+        None
+    };
+
+    Ok(PartialComponents {
+        backend,
+        client,
+        import_queue,
+        keystore_container,
+        task_manager,
+        transaction_pool,
+        select_chain,
+        other: (block_import, telemetry, telemetry_worker_handle),
+    })
+}
+
 /// Start a development node with the given solo chain `Configuration`.
-async fn start_dev_impl<R, S, Network>(
+async fn start_dev_parachain_impl<R, S, Network>(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
     indexer_options: Option<IndexerOptions>,
@@ -475,9 +754,10 @@ async fn start_dev_impl<R, S, Network>(
 where
     R: ShRole,
     S: ShStorageLayer,
-    (R, S): ShNodeType<Runtime>,
-    StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder + Buildable<(R, S), Runtime>,
-    StorageHubHandler<(R, S), Runtime>: RunnableTasks,
+    (R, S): ShNodeType<ParachainRuntime>,
+    StorageHubBuilder<R, S, ParachainRuntime>:
+        StorageLayerBuilder + Buildable<(R, S), ParachainRuntime>,
+    StorageHubHandler<(R, S), ParachainRuntime>: RunnableTasks,
     Network: sc_network::NetworkBackend<OpaqueBlock, BlockHash>,
 {
     use async_io::Timer;
@@ -491,7 +771,7 @@ where
         log::info!("🛠️  Running dev node in maintenance mode");
         log::info!("🛠️  Network participation is disabled");
         log::info!("🛠️  Only storage management RPC methods are available");
-        return start_dev_in_maintenance_mode::<R, S, Network>(
+        return start_dev_parachain_in_maintenance_mode::<R, S, Network>(
             config,
             provider_options,
             indexer_options,
@@ -510,7 +790,7 @@ where
         select_chain: maybe_select_chain,
         transaction_pool,
         other: (_, mut telemetry, _),
-    } = new_partial(&config, true)?;
+    } = new_partial_parachain(&config, true)?;
 
     let signing_dev_key = config
         .dev_key_seed
@@ -539,11 +819,12 @@ where
     // If we are a provider or fisherman we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
     if provider_options.is_some() || fisherman_options.is_some() {
-        file_transfer_request_protocol = Some(configure_file_transfer_network::<_, Runtime>(
-            fetch_genesis_hash(client.clone()),
-            config.chain_spec.fork_id(),
-            &mut net_config,
-        ));
+        file_transfer_request_protocol =
+            Some(configure_file_transfer_network::<_, ParachainRuntime>(
+                fetch_genesis_hash(client.clone()),
+                config.chain_spec.fork_id(),
+                &mut net_config,
+            ));
     }
 
     let metrics = Network::register_notification_metrics(
@@ -630,20 +911,21 @@ where
         };
 
     // If node is running as a Storage Provider, start building the StorageHubHandler using the StorageHubBuilder.
-    let (sh_builder, maybe_storage_hub_client_rpc_config) = match init_sh_builder::<R, S>(
-        &provider_options,
-        &task_manager,
-        file_transfer_request_protocol,
-        network.clone(),
-        keystore.clone(),
-        client.clone(),
-        indexer_options.clone(),
-    )
-    .await?
-    {
-        Some((shb, rpc)) => (Some(shb), Some(rpc)),
-        None => (None, None),
-    };
+    let (sh_builder, maybe_storage_hub_client_rpc_config) =
+        match init_sh_builder::<R, S, ParachainRuntime>(
+            &provider_options,
+            &task_manager,
+            file_transfer_request_protocol,
+            network.clone(),
+            keystore.clone(),
+            client.clone(),
+            indexer_options.clone(),
+        )
+        .await?
+        {
+            Some((shb, rpc)) => (Some(shb), Some(rpc)),
+            None => (None, None),
+        };
 
     let rpc_builder = {
         let client = client.clone();
@@ -657,7 +939,7 @@ where
                 command_sink: command_sink.clone(),
             };
 
-            crate::rpc::create_full::<_, _, _, Runtime>(deps).map_err(Into::into)
+            crate::rpc::create_full_parachain::<_, _, _, ParachainRuntime>(deps).map_err(Into::into)
         })
     };
 
@@ -691,7 +973,7 @@ where
         .await?;
     }
 
-    configure_and_spawn_fisherman(
+    configure_and_spawn_fisherman::<ParachainRuntime>(
         &fisherman_options,
         &indexer_options,
         &task_manager,
@@ -824,7 +1106,7 @@ where
                         let mut timestamp = 0u64;
                         // This allows us to create multiple blocks without considering the actual slot duration wait time. We increment the timestamp by slot_duration in inherent data.
                         TIMESTAMP.with(|x| {
-                            timestamp = x.clone().take();
+                            timestamp = *x.borrow();
                         });
 
                         // If we don't increment the timestamp, we will hit a para slot and relay slot mismatch.
@@ -884,7 +1166,7 @@ where
     Ok(task_manager)
 }
 
-async fn start_dev_in_maintenance_mode<R, S, Network>(
+async fn start_dev_parachain_in_maintenance_mode<R, S, Network>(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
     indexer_options: Option<IndexerOptions>,
@@ -894,9 +1176,10 @@ async fn start_dev_in_maintenance_mode<R, S, Network>(
 where
     R: ShRole,
     S: ShStorageLayer,
-    (R, S): ShNodeType<Runtime>,
-    StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder + Buildable<(R, S), Runtime>,
-    StorageHubHandler<(R, S), Runtime>: RunnableTasks,
+    (R, S): ShNodeType<ParachainRuntime>,
+    StorageHubBuilder<R, S, ParachainRuntime>:
+        StorageLayerBuilder + Buildable<(R, S), ParachainRuntime>,
+    StorageHubHandler<(R, S), ParachainRuntime>: RunnableTasks,
     Network: sc_network::NetworkBackend<OpaqueBlock, BlockHash>,
 {
     let sc_service::PartialComponents {
@@ -908,7 +1191,7 @@ where
         select_chain: _maybe_select_chain,
         transaction_pool,
         other: (_, mut telemetry, _),
-    } = new_partial(&config, true)?;
+    } = new_partial_parachain(&config, true)?;
 
     let signing_dev_key = config
         .dev_key_seed
@@ -933,11 +1216,12 @@ where
     // If we are a provider or fisherman we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
     if provider_options.is_some() || fisherman_options.is_some() {
-        file_transfer_request_protocol = Some(configure_file_transfer_network::<_, Runtime>(
-            fetch_genesis_hash(client.clone()),
-            config.chain_spec.fork_id(),
-            &mut net_config,
-        ));
+        file_transfer_request_protocol =
+            Some(configure_file_transfer_network::<_, ParachainRuntime>(
+                fetch_genesis_hash(client.clone()),
+                config.chain_spec.fork_id(),
+                &mut net_config,
+            ));
     }
 
     let metrics = Network::register_notification_metrics(
@@ -964,20 +1248,21 @@ where
     let (command_sink, _) = futures::channel::mpsc::channel(1000);
 
     // If node is running as a Storage Provider, start building the StorageHubHandler using the StorageHubBuilder.
-    let (sh_builder, maybe_storage_hub_client_rpc_config) = match init_sh_builder::<R, S>(
-        &provider_options,
-        &task_manager,
-        file_transfer_request_protocol,
-        network.clone(),
-        keystore.clone(),
-        client.clone(),
-        indexer_options.clone(),
-    )
-    .await?
-    {
-        Some((shb, rpc)) => (Some(shb), Some(rpc)),
-        None => (None, None),
-    };
+    let (sh_builder, maybe_storage_hub_client_rpc_config) =
+        match init_sh_builder::<R, S, ParachainRuntime>(
+            &provider_options,
+            &task_manager,
+            file_transfer_request_protocol,
+            network.clone(),
+            keystore.clone(),
+            client.clone(),
+            indexer_options.clone(),
+        )
+        .await?
+        {
+            Some((shb, rpc)) => (Some(shb), Some(rpc)),
+            None => (None, None),
+        };
 
     let rpc_builder = {
         let client = client.clone();
@@ -991,7 +1276,7 @@ where
                 command_sink: Some(command_sink.clone()),
             };
 
-            crate::rpc::create_full::<_, _, _, Runtime>(deps).map_err(Into::into)
+            crate::rpc::create_full_parachain::<_, _, _, ParachainRuntime>(deps).map_err(Into::into)
         })
     };
 
@@ -1051,7 +1336,7 @@ where
 /// Start a node with the given parachain `Configuration` and relay chain `Configuration`.
 ///
 /// This is the actual implementation that is abstract over the executor and the runtime api.
-async fn start_node_impl<R, S, Network>(
+async fn start_parachain_node_impl<R, S, Network>(
     parachain_config: Configuration,
     polkadot_config: Configuration,
     collator_options: CollatorOptions,
@@ -1060,13 +1345,14 @@ async fn start_node_impl<R, S, Network>(
     fisherman_options: Option<FishermanOptions>,
     para_id: ParaId,
     hwbench: Option<sc_sysinfo::HwBench>,
-) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)>
+) -> sc_service::error::Result<(TaskManager, Arc<StorageEnableClient<ParachainRuntime>>)>
 where
     R: ShRole,
     S: ShStorageLayer,
-    (R, S): ShNodeType<Runtime>,
-    StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder + Buildable<(R, S), Runtime>,
-    StorageHubHandler<(R, S), Runtime>: RunnableTasks,
+    (R, S): ShNodeType<ParachainRuntime>,
+    StorageHubBuilder<R, S, ParachainRuntime>:
+        StorageLayerBuilder + Buildable<(R, S), ParachainRuntime>,
+    StorageHubHandler<(R, S), ParachainRuntime>: RunnableTasks,
     Network: NetworkBackend<OpaqueBlock, BlockHash>,
 {
     // Check if we're in maintenance mode and build the node in maintenance mode if so
@@ -1077,7 +1363,7 @@ where
         log::info!("🛠️  Running dev node in maintenance mode");
         log::info!("🛠️  Network participation is disabled");
         log::info!("🛠️  Only storage management RPC methods are available");
-        return start_node_in_maintenance_mode::<R, S, Network>(
+        return start_parachain_node_in_maintenance_mode::<R, S, Network>(
             parachain_config,
             polkadot_config,
             collator_options,
@@ -1092,7 +1378,7 @@ where
 
     let parachain_config = prepare_node_config(parachain_config);
 
-    let params = new_partial(&parachain_config, false)?;
+    let params = new_partial_parachain(&parachain_config, false)?;
     let (block_import, mut telemetry, telemetry_worker_handle) = params.other;
     let mut net_config = sc_network::config::FullNetworkConfiguration::<_, _, Network>::new(
         &parachain_config.network,
@@ -1109,12 +1395,13 @@ where
 
     // If we are a provider we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
-    if provider_options.is_some() {
-        file_transfer_request_protocol = Some(configure_file_transfer_network::<_, Runtime>(
-            fetch_genesis_hash(client.clone()),
-            parachain_config.chain_spec.fork_id(),
-            &mut net_config,
-        ));
+    if provider_options.is_some() || fisherman_options.is_some() {
+        file_transfer_request_protocol =
+            Some(configure_file_transfer_network::<_, ParachainRuntime>(
+                fetch_genesis_hash(client.clone()),
+                parachain_config.chain_spec.fork_id(),
+                &mut net_config,
+            ));
     }
 
     let (relay_chain_interface, collator_key) = build_relay_chain_interface(
@@ -1171,20 +1458,21 @@ where
     }
 
     // If node is running as a Storage Provider, start building the StorageHubHandler using the StorageHubBuilder.
-    let (sh_builder, maybe_storage_hub_client_rpc_config) = match init_sh_builder::<R, S>(
-        &provider_options,
-        &task_manager,
-        file_transfer_request_protocol,
-        network.clone(),
-        keystore.clone(),
-        client.clone(),
-        indexer_options.clone(),
-    )
-    .await?
-    {
-        Some((shb, rpc)) => (Some(shb), Some(rpc)),
-        None => (None, None),
-    };
+    let (sh_builder, maybe_storage_hub_client_rpc_config) =
+        match init_sh_builder::<R, S, ParachainRuntime>(
+            &provider_options,
+            &task_manager,
+            file_transfer_request_protocol,
+            network.clone(),
+            keystore.clone(),
+            client.clone(),
+            indexer_options.clone(),
+        )
+        .await?
+        {
+            Some((shb, rpc)) => (Some(shb), Some(rpc)),
+            None => (None, None),
+        };
 
     let rpc_builder = {
         let client = client.clone();
@@ -1198,7 +1486,7 @@ where
                 command_sink: None,
             };
 
-            crate::rpc::create_full::<_, _, _, Runtime>(deps).map_err(Into::into)
+            crate::rpc::create_full_parachain::<_, _, _, ParachainRuntime>(deps).map_err(Into::into)
         })
     };
 
@@ -1232,7 +1520,7 @@ where
         .await?;
     }
 
-    configure_and_spawn_fisherman(
+    configure_and_spawn_fisherman::<ParachainRuntime>(
         &fisherman_options,
         &indexer_options,
         &task_manager,
@@ -1295,7 +1583,7 @@ where
     })?;
 
     if validator {
-        start_consensus(
+        start_parachain_consensus(
             client.clone(),
             backend.clone(),
             block_import,
@@ -1318,7 +1606,7 @@ where
     Ok((task_manager, client))
 }
 
-async fn start_node_in_maintenance_mode<R, S, Network>(
+async fn start_parachain_node_in_maintenance_mode<R, S, Network>(
     parachain_config: Configuration,
     polkadot_config: Configuration,
     collator_options: CollatorOptions,
@@ -1327,18 +1615,19 @@ async fn start_node_in_maintenance_mode<R, S, Network>(
     fisherman_options: Option<FishermanOptions>,
     para_id: ParaId,
     hwbench: Option<sc_sysinfo::HwBench>,
-) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)>
+) -> sc_service::error::Result<(TaskManager, Arc<StorageEnableClient<ParachainRuntime>>)>
 where
     R: ShRole,
     S: ShStorageLayer,
-    (R, S): ShNodeType<Runtime>,
-    StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder + Buildable<(R, S), Runtime>,
-    StorageHubHandler<(R, S), Runtime>: RunnableTasks,
+    (R, S): ShNodeType<ParachainRuntime>,
+    StorageHubBuilder<R, S, ParachainRuntime>:
+        StorageLayerBuilder + Buildable<(R, S), ParachainRuntime>,
+    StorageHubHandler<(R, S), ParachainRuntime>: RunnableTasks,
     Network: NetworkBackend<OpaqueBlock, BlockHash>,
 {
     let parachain_config = prepare_node_config(parachain_config);
 
-    let params = new_partial(&parachain_config, false)?;
+    let params = new_partial_parachain(&parachain_config, false)?;
     let (_block_import, mut telemetry, telemetry_worker_handle) = params.other;
 
     // Create network configuration
@@ -1358,11 +1647,12 @@ where
     // If we are a provider we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
     if provider_options.is_some() {
-        file_transfer_request_protocol = Some(configure_file_transfer_network::<_, Runtime>(
-            fetch_genesis_hash(client.clone()),
-            parachain_config.chain_spec.fork_id(),
-            &mut net_config,
-        ));
+        file_transfer_request_protocol =
+            Some(configure_file_transfer_network::<_, ParachainRuntime>(
+                fetch_genesis_hash(client.clone()),
+                parachain_config.chain_spec.fork_id(),
+                &mut net_config,
+            ));
     }
 
     // Create relay chain interface
@@ -1396,20 +1686,21 @@ where
     // No need for offchain workers in maintenance mode
 
     // If node is running as a Storage Provider, start building the StorageHubHandler using the StorageHubBuilder.
-    let (sh_builder, maybe_storage_hub_client_rpc_config) = match init_sh_builder::<R, S>(
-        &provider_options,
-        &task_manager,
-        file_transfer_request_protocol,
-        network.clone(),
-        keystore.clone(),
-        client.clone(),
-        indexer_options.clone(),
-    )
-    .await?
-    {
-        Some((shb, rpc)) => (Some(shb), Some(rpc)),
-        None => (None, None),
-    };
+    let (sh_builder, maybe_storage_hub_client_rpc_config) =
+        match init_sh_builder::<R, S, ParachainRuntime>(
+            &provider_options,
+            &task_manager,
+            file_transfer_request_protocol,
+            network.clone(),
+            keystore.clone(),
+            client.clone(),
+            indexer_options.clone(),
+        )
+        .await?
+        {
+            Some((shb, rpc)) => (Some(shb), Some(rpc)),
+            None => (None, None),
+        };
 
     let rpc_builder = {
         let client = client.clone();
@@ -1423,7 +1714,7 @@ where
                 command_sink: None,
             };
 
-            crate::rpc::create_full::<_, _, _, Runtime>(deps).map_err(Into::into)
+            crate::rpc::create_full_parachain::<_, _, _, ParachainRuntime>(deps).map_err(Into::into)
         })
     };
 
@@ -1457,7 +1748,7 @@ where
         .await?;
     }
 
-    configure_and_spawn_fisherman(
+    configure_and_spawn_fisherman::<ParachainRuntime>(
         &fisherman_options,
         &indexer_options,
         &task_manager,
@@ -1495,8 +1786,8 @@ where
 }
 
 /// Build the import queue for the parachain runtime.
-fn build_import_queue(
-    client: Arc<ParachainClient>,
+fn build_parachain_import_queue(
+    client: Arc<StorageEnableClient<ParachainRuntime>>,
     block_import: ParachainBlockImport,
     config: &Configuration,
     telemetry: Option<TelemetryHandle>,
@@ -1522,15 +1813,15 @@ fn build_import_queue(
     )
 }
 
-fn start_consensus(
-    client: Arc<ParachainClient>,
-    backend: Arc<ParachainBackend>,
+fn start_parachain_consensus(
+    client: Arc<StorageEnableClient<ParachainRuntime>>,
+    backend: Arc<StorageEnableBackend>,
     block_import: ParachainBlockImport,
     prometheus_registry: Option<&Registry>,
     telemetry: Option<TelemetryHandle>,
     task_manager: &TaskManager,
     relay_chain_interface: Arc<dyn RelayChainInterface>,
-    transaction_pool: Arc<sc_transaction_pool::TransactionPoolHandle<Block, ParachainClient>>,
+    transaction_pool: Arc<StorageEnablePool<ParachainRuntime>>,
     keystore: KeystorePtr,
     relay_chain_slot_duration: Duration,
     para_id: ParaId,
@@ -1546,7 +1837,7 @@ fn start_consensus(
     let proposer_factory = sc_basic_authorship::ProposerFactory::with_proof_recording(
         task_manager.spawn_handle(),
         client.clone(),
-        transaction_pool,
+        transaction_pool.clone(),
         prometheus_registry,
         telemetry.clone(),
     );
@@ -1593,13 +1884,20 @@ fn start_consensus(
     Ok(())
 }
 
-pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
+//╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
+//║                               StorageHub Solochain EVM Node Setup Functions                                   ║
+//╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
+
+/// Start the StorageHub Solochain EVM node in development mode.
+///
+/// This is the entrypoint function to launch a StorageHub Solochain EVM node,
+/// when running in development mode.
+pub async fn start_dev_solochain_evm_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
     indexer_options: Option<IndexerOptions>,
     fisherman_options: Option<FishermanOptions>,
     hwbench: Option<sc_sysinfo::HwBench>,
-    para_id: ParaId,
     sealing: cli::Sealing,
 ) -> sc_service::error::Result<TaskManager> {
     if let Some(provider_options) = provider_options {
@@ -1608,174 +1906,1329 @@ pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
             &provider_options.storage_layer,
         ) {
             (&ProviderType::Bsp, &StorageLayer::Memory) => {
-                start_dev_impl::<BspProvider, InMemoryStorageLayer, Network>(
+                start_dev_solochain_evm_node_impl::<BspProvider, InMemoryStorageLayer, Network>(
                     config,
                     Some(provider_options),
                     indexer_options,
                     fisherman_options,
                     hwbench,
-                    para_id,
                     sealing,
                 )
                 .await
             }
             (&ProviderType::Bsp, &StorageLayer::RocksDB) => {
-                start_dev_impl::<BspProvider, RocksDbStorageLayer, Network>(
+                start_dev_solochain_evm_node_impl::<BspProvider, RocksDbStorageLayer, Network>(
                     config,
                     Some(provider_options),
                     indexer_options,
                     fisherman_options,
                     hwbench,
-                    para_id,
                     sealing,
                 )
                 .await
             }
             (&ProviderType::Msp, &StorageLayer::Memory) => {
-                start_dev_impl::<MspProvider, InMemoryStorageLayer, Network>(
+                start_dev_solochain_evm_node_impl::<MspProvider, InMemoryStorageLayer, Network>(
                     config,
                     Some(provider_options),
                     indexer_options,
                     fisherman_options,
                     hwbench,
-                    para_id,
                     sealing,
                 )
                 .await
             }
             (&ProviderType::Msp, &StorageLayer::RocksDB) => {
-                start_dev_impl::<MspProvider, RocksDbStorageLayer, Network>(
+                start_dev_solochain_evm_node_impl::<MspProvider, RocksDbStorageLayer, Network>(
                     config,
                     Some(provider_options),
                     indexer_options,
                     fisherman_options,
                     hwbench,
-                    para_id,
                     sealing,
                 )
                 .await
             }
             (&ProviderType::User, _) => {
-                start_dev_impl::<UserRole, NoStorageLayer, Network>(
+                start_dev_solochain_evm_node_impl::<UserRole, NoStorageLayer, Network>(
                     config,
                     Some(provider_options),
                     indexer_options,
                     fisherman_options,
                     hwbench,
-                    para_id,
                     sealing,
                 )
                 .await
             }
         }
     } else {
-        // Start node without provider options which in turn will not start any storage hub related role services (e.g. Storage Provider, User)
-        start_dev_impl::<UserRole, NoStorageLayer, Network>(
+        start_dev_solochain_evm_node_impl::<UserRole, NoStorageLayer, Network>(
             config,
             None,
             indexer_options,
             fisherman_options,
             hwbench,
-            para_id,
             sealing,
         )
         .await
     }
 }
 
-pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
-    parachain_config: Configuration,
-    polkadot_config: Configuration,
-    collator_options: CollatorOptions,
+async fn start_dev_solochain_evm_node_impl<R, S, Network>(
+    config: Configuration,
     provider_options: Option<ProviderOptions>,
     indexer_options: Option<IndexerOptions>,
     fisherman_options: Option<FishermanOptions>,
-    para_id: ParaId,
     hwbench: Option<sc_sysinfo::HwBench>,
-) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)> {
+    sealing: cli::Sealing,
+) -> sc_service::error::Result<TaskManager>
+where
+    R: ShRole,
+    S: ShStorageLayer,
+    (R, S): ShNodeType<SolochainEvmRuntime>,
+    StorageHubBuilder<R, S, SolochainEvmRuntime>:
+        StorageLayerBuilder + Buildable<(R, S), SolochainEvmRuntime>,
+    StorageHubHandler<(R, S), SolochainEvmRuntime>: RunnableTasks,
+    Network: NetworkBackend<OpaqueBlock, BlockHash>,
+{
+    use async_io::Timer;
+    use sc_consensus_manual_seal::{run_manual_seal, EngineCommand, ManualSealParams};
+
+    // Provide a mock duration starting at Utc::now() in milliseconds for timestamp inherent.
+    // Each call will increment timestamp by slot_duration making BABE think time has passed.
+    thread_local!(static SOLO_EVM_TIMESTAMP: RefCell<u64> = RefCell::new(Utc::now().timestamp_millis().try_into().unwrap()));
+
+    struct SoloEvmMockTimestampInherentDataProvider;
+
+    #[async_trait::async_trait]
+    impl sp_inherents::InherentDataProvider for SoloEvmMockTimestampInherentDataProvider {
+        async fn provide_inherent_data(
+            &self,
+            inherent_data: &mut sp_inherents::InherentData,
+        ) -> Result<(), sp_inherents::Error> {
+            SOLO_EVM_TIMESTAMP.with(|x| {
+                *x.borrow_mut() += sh_solochain_evm_runtime::SLOT_DURATION;
+                inherent_data.put_data(sp_timestamp::INHERENT_IDENTIFIER, &*x.borrow())
+            })
+        }
+
+        async fn try_handle_error(
+            &self,
+            _identifier: &sp_inherents::InherentIdentifier,
+            _error: &[u8],
+        ) -> Option<Result<(), sp_inherents::Error>> {
+            None
+        }
+    }
+
+    // Maintenance mode: reuse non-dev maintenance path but drop client result
+    let maintenance_mode = provider_options
+        .as_ref()
+        .map_or(false, |opts| opts.maintenance_mode);
+    if maintenance_mode {
+        let (task_manager, _client) =
+            start_solochain_evm_node_in_maintenance_mode::<R, S, Network>(
+                config,
+                provider_options,
+                indexer_options,
+            )
+            .await?;
+        return Ok(task_manager);
+    }
+
+    let config = prepare_node_config(config);
+
+    let sc_service::PartialComponents {
+        client,
+        backend,
+        mut task_manager,
+        import_queue,
+        keystore_container,
+        select_chain,
+        transaction_pool,
+        other:
+            (block_import, _grandpa_link, babe_link, frontier_backend, storage_override, mut telemetry),
+    } = new_partial_solochain_evm(&config, true)?;
+
+    let signing_dev_key = config
+        .dev_key_seed
+        .clone()
+        .expect("Dev key seed must be present in dev mode.");
+    let keystore = keystore_container.keystore();
+
+    // Initialise seed for signing transactions using blockchain service.
+    // In dev mode we use a well known dev account.
+    keystore
+        .ecdsa_generate_new(BCSV_KEY_TYPE, Some(signing_dev_key.as_ref()))
+        .expect("Invalid dev signing key provided.");
+
+    let mut net_config = sc_network::config::FullNetworkConfiguration::<
+        Block,
+        <Block as sp_runtime::traits::Block>::Hash,
+        Network,
+    >::new(&config.network, config.prometheus_registry().cloned());
+
+    // Optional file-transfer protocol (providers only)
+    let mut file_transfer_request_protocol = None;
+    if provider_options.is_some() {
+        file_transfer_request_protocol = Some(
+            shc_file_transfer_service::configure_file_transfer_network::<_, SolochainEvmRuntime>(
+                fetch_genesis_hash(client.clone()),
+                config.chain_spec.fork_id(),
+                &mut net_config,
+            ),
+        );
+    }
+
+    let metrics = Network::register_notification_metrics(config.prometheus_registry());
+
+    // GRANDPA peer set (required for solochain networking)
+    let peer_store_handle = net_config.peer_store_handle();
+    let genesis_hash = client
+        .block_hash(0)
+        .ok()
+        .flatten()
+        .expect("Genesis block exists; qed");
+    let grandpa_protocol_name =
+        sc_consensus_grandpa::protocol_standard_name(&genesis_hash, &config.chain_spec);
+    let (grandpa_protocol_config, _grandpa_notification_service) =
+        sc_consensus_grandpa::grandpa_peers_set_config::<_, Network>(
+            grandpa_protocol_name.clone(),
+            metrics.clone(),
+            Arc::clone(&peer_store_handle),
+        );
+    net_config.add_notification_protocol(grandpa_protocol_config);
+
+    let (network, system_rpc_tx, tx_handler_controller, network_starter, sync_service) =
+        sc_service::build_network(sc_service::BuildNetworkParams {
+            config: &config,
+            net_config,
+            client: client.clone(),
+            transaction_pool: transaction_pool.clone(),
+            spawn_handle: task_manager.spawn_handle(),
+            import_queue,
+            block_announce_validator_builder: None,
+            warp_sync_config: None,
+            block_relay: None,
+            metrics,
+        })?;
+
+    if config.offchain_worker.enabled {
+        use futures::FutureExt;
+        task_manager.spawn_handle().spawn(
+            "offchain-workers-runner",
+            "offchain-work",
+            sc_offchain::OffchainWorkers::new(sc_offchain::OffchainWorkerOptions {
+                runtime_api_provider: client.clone(),
+                keystore: Some(keystore_container.keystore()),
+                offchain_db: backend.offchain_storage(),
+                transaction_pool: Some(OffchainTransactionPoolFactory::new(
+                    transaction_pool.clone(),
+                )),
+                network_provider: Arc::new(network.clone()),
+                is_validator: config.role.is_authority(),
+                enable_http_requests: true,
+                custom_extensions: move |_| vec![],
+            })?
+            .run(client.clone(), task_manager.spawn_handle())
+            .boxed(),
+        );
+    }
+
+    // Build StorageHub services if provider
+    let (sh_builder, maybe_storage_hub_client_rpc_config) =
+        match init_sh_builder::<R, S, SolochainEvmRuntime>(
+            &provider_options,
+            &task_manager,
+            file_transfer_request_protocol,
+            network.clone(),
+            keystore_container.keystore(),
+            client.clone(),
+            indexer_options.clone(),
+        )
+        .await?
+        {
+            Some((shb, rpc)) => (Some(shb), Some(rpc)),
+            None => (None, None),
+        };
+
+    let role = config.role;
+    let is_authority_role = role.is_authority();
+
+    // Manual seal command stream
+    let mut command_sink = None;
+    let commands_stream: Box<dyn Stream<Item = EngineCommand<H256>> + Send + Sync + Unpin> =
+        match sealing {
+            cli::Sealing::Instant => {
+                Box::new(transaction_pool.import_notification_stream().map(|_| {
+                    EngineCommand::SealNewBlock {
+                        create_empty: false,
+                        finalize: false,
+                        parent_hash: None,
+                        sender: None,
+                    }
+                }))
+            }
+            cli::Sealing::Manual => {
+                let (sink, stream) = futures::channel::mpsc::channel(1000);
+                command_sink = Some(sink);
+                Box::new(stream)
+            }
+            cli::Sealing::Interval(millis) => {
+                if millis < 3000 {
+                    log::info!(
+                        "⚠️ Sealing interval is very short. Normally setting this to 6000 ms is recommended."
+                    );
+                }
+                Box::new(StreamExt::map(
+                    Timer::interval(Duration::from_millis(millis)),
+                    |_| EngineCommand::SealNewBlock {
+                        create_empty: true,
+                        finalize: false,
+                        parent_hash: None,
+                        sender: None,
+                    },
+                ))
+            }
+        };
+
+    // RPC builder including Frontier and manual seal RPC when applicable
+    // Shared Frontier caches (used both by RPC and background tasks)
+    let filter_pool: Option<FilterPool> = Some(Default::default());
+    let fee_history_cache: FeeHistoryCache = Default::default();
+    let fee_history_limit: FeeHistoryCacheLimit = 2048;
+
+    let rpc_builder = {
+        let client = client.clone();
+        let transaction_pool = transaction_pool.clone();
+        let frontier_backend = frontier_backend.clone();
+        let storage_override = storage_override.clone();
+        let network = network.clone();
+        let sync_service = sync_service.clone();
+        let prometheus_registry = config.prometheus_registry().cloned();
+        let spawn_handle = task_manager.spawn_handle();
+        let block_data_cache = Arc::new(fc_rpc::EthBlockDataCacheTask::new(
+            spawn_handle.clone(),
+            storage_override.clone(),
+            100,
+            100,
+            prometheus_registry.clone(),
+        ));
+        let filter_pool = filter_pool.clone();
+        let fee_history_cache = fee_history_cache.clone();
+        let fee_history_limit_captured = fee_history_limit;
+        let command_sink = command_sink.clone();
+        Box::new(move |_| {
+            crate::rpc::create_full_solochain_evm::<_, _, _, SolochainEvmRuntime, _>(
+                crate::rpc::SolochainEvmDeps {
+                    client: client.clone(),
+                    pool: transaction_pool.clone(),
+                    maybe_storage_hub_client_config: maybe_storage_hub_client_rpc_config.clone(),
+                    command_sink: command_sink.clone(),
+                    network: network.clone(),
+                    sync: sync_service.clone(),
+                    overrides: storage_override.clone(),
+                    frontier_backend: match &*frontier_backend {
+                        fc_db::Backend::KeyValue(b) => b.clone(),
+                    },
+                    graph: transaction_pool.pool().clone(),
+                    block_data_cache: block_data_cache.clone(),
+                    filter_pool: filter_pool.clone(),
+                    fee_history_cache: fee_history_cache.clone(),
+                    fee_history_limit: fee_history_limit_captured,
+                    max_past_logs: 10_000,
+                    forced_parent_hashes: None,
+                    is_authority: is_authority_role,
+                },
+            )
+            .map_err(Into::into)
+        })
+    };
+
+    let base_path = config.base_path.path().to_path_buf().clone();
+    let prometheus_registry = config.prometheus_registry().cloned();
+
+    let rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
+        rpc_builder,
+        client: client.clone(),
+        transaction_pool: transaction_pool.clone(),
+        task_manager: &mut task_manager,
+        config,
+        keystore: keystore_container.keystore(),
+        backend: backend.clone(),
+        network: network.clone(),
+        sync_service: sync_service.clone(),
+        system_rpc_tx,
+        tx_handler_controller,
+        telemetry: telemetry.as_mut(),
+    })?;
+
+    // Announce imported blocks to peers to ensure propagation in dev/manual seal mode
+    {
+        let import_stream = client.import_notification_stream();
+        let sync = sync_service.clone();
+        task_manager.spawn_essential_handle().spawn(
+            "announce-imported-blocks",
+            Some("network"),
+            async move {
+                use futures::StreamExt;
+                let mut stream = import_stream;
+                while let Some(notif) = stream.next().await {
+                    sync.announce_block(notif.hash, None);
+                }
+            },
+        );
+    }
+
+    // Spawn Frontier background tasks: mapping sync, filter maintenance, fee history
+    {
+        let frontier_kv = match &*frontier_backend {
+            fc_db::Backend::KeyValue(b) => b.clone(),
+        };
+        // Use StorageOverrideHandler (implements StorageOverride) for MappingSyncWorker
+        let overrides_handle: Arc<dyn StorageOverride<Block>> = storage_override.clone();
+
+        // Pubsub sinks for notifications
+        let pubsub_notification_sinks: fc_mapping_sync::EthereumBlockNotificationSinks<
+            fc_mapping_sync::EthereumBlockNotification<Block>,
+        > = Default::default();
+        let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
+
+        // Mapping Sync Worker
+        task_manager.spawn_essential_handle().spawn(
+            "frontier-mapping-sync-worker",
+            Some("frontier"),
+            MappingSyncWorker::new(
+                client.import_notification_stream(),
+                Duration::from_secs(6),
+                client.clone(),
+                backend.clone(),
+                overrides_handle.clone(),
+                frontier_kv.clone(),
+                3,
+                0u32.into(),
+                SyncStrategy::Normal,
+                sync_service.clone(),
+                pubsub_notification_sinks,
+            )
+            .for_each(|()| futures::future::ready(())),
+        );
+
+        // EthFilter maintenance (keep in sync with RPC filter_pool)
+        if let Some(filter_pool) = filter_pool.clone() {
+            task_manager.spawn_essential_handle().spawn(
+                "frontier-filter-pool",
+                Some("frontier"),
+                EthTask::filter_pool_task(client.clone(), filter_pool, 100),
+            );
+        }
+
+        // FeeHistory maintenance (keep in sync with RPC fee cache)
+        task_manager.spawn_essential_handle().spawn(
+            "frontier-fee-history",
+            Some("frontier"),
+            EthTask::fee_history_task(
+                client.clone(),
+                storage_override.clone(),
+                fee_history_cache.clone(),
+                fee_history_limit,
+            ),
+        );
+    }
+
+    // Start manual sealing authorship
+    if is_authority_role {
+        let proposer_factory = sc_basic_authorship::ProposerFactory::with_proof_recording(
+            task_manager.spawn_handle(),
+            client.clone(),
+            transaction_pool.clone(),
+            prometheus_registry.as_ref(),
+            telemetry.as_ref().map(|t| t.handle()),
+        );
+
+        let slot_duration = babe_link.clone().config().slot_duration();
+
+        task_manager.spawn_essential_handle().spawn_blocking(
+            "babe-manual-seal",
+            Some("block-authoring"),
+            run_manual_seal(ManualSealParams {
+                block_import: block_import.clone(),
+                env: proposer_factory,
+                client: client.clone(),
+                pool: transaction_pool.clone(),
+                commands_stream,
+                select_chain,
+                consensus_data_provider: Some(Box::new(
+                    BabeConsensusDataProvider::new(
+                        client.clone(),
+                        keystore_container.keystore(),
+                        babe_link.epoch_changes().clone(),
+                        babe_link.config().authorities.clone(),
+                    )
+                    .expect("failed to create BabeConsensusDataProvider"),
+                )),
+                create_inherent_data_providers: move |_, ()| {
+                    let slot_duration = slot_duration;
+                    async move {
+                        // Compute the next mocked timestamp (advance by one slot) for BABE's slot provider
+                        let mut ts: u64 = 0;
+                        SOLO_EVM_TIMESTAMP.with(|x| {
+                            ts = *x.borrow();
+                        });
+                        ts += sh_solochain_evm_runtime::SLOT_DURATION;
+
+                        let slot = sp_consensus_babe::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
+                            ts.into(),
+                            slot_duration,
+                        );
+
+                        let timestamp = SoloEvmMockTimestampInherentDataProvider;
+                        Ok((timestamp, slot))
+                    }
+                },
+            }),
+        );
+    }
+
+    if let Some(hwbench) = hwbench {
+        sc_sysinfo::print_hwbench(&hwbench);
+        if let Some(ref mut telemetry) = telemetry {
+            let telemetry_handle = telemetry.handle();
+            task_manager.spawn_handle().spawn(
+                "telemetry_hwbench",
+                None,
+                sc_sysinfo::initialize_hwbench_telemetry(telemetry_handle, hwbench),
+            );
+        }
+    }
+
+    if let Some(_) = provider_options {
+        finish_sh_builder_and_run_tasks(
+            sh_builder.expect("StorageHubBuilder should already be initialised."),
+            client.clone(),
+            rpc_handlers.clone(),
+            keystore_container.keystore(),
+            base_path.clone(),
+            false,
+        )
+        .await?;
+    }
+
+    configure_and_spawn_fisherman::<SolochainEvmRuntime>(
+        &fisherman_options,
+        &indexer_options,
+        &task_manager,
+        client.clone(),
+        keystore_container.keystore(),
+        Arc::new(rpc_handlers.clone()),
+        base_path,
+        network.clone(),
+    )
+    .await?;
+
+    network_starter.start_network();
+    Ok(task_manager)
+}
+
+/// Start the StorageHub Solochain EVM node.
+///
+/// This is the entrypoint function to launch a StorageHub Solochain EVM node.
+pub async fn start_solochain_evm_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
+    config: Configuration,
+    provider_options: Option<ProviderOptions>,
+    indexer_options: Option<IndexerOptions>,
+    fisherman_options: Option<FishermanOptions>,
+    hwbench: Option<sc_sysinfo::HwBench>,
+) -> sc_service::error::Result<(TaskManager, Arc<StorageEnableClient<SolochainEvmRuntime>>)> {
     if let Some(provider_options) = provider_options {
         match (
             &provider_options.provider_type,
             &provider_options.storage_layer,
         ) {
             (&ProviderType::Bsp, &StorageLayer::Memory) => {
-                start_node_impl::<BspProvider, InMemoryStorageLayer, Network>(
-                    parachain_config,
-                    polkadot_config,
-                    collator_options,
+                start_solochain_evm_node_impl::<BspProvider, InMemoryStorageLayer, Network>(
+                    config,
                     Some(provider_options),
                     indexer_options,
                     fisherman_options,
-                    para_id,
                     hwbench,
                 )
                 .await
             }
             (&ProviderType::Bsp, &StorageLayer::RocksDB) => {
-                start_node_impl::<BspProvider, RocksDbStorageLayer, Network>(
-                    parachain_config,
-                    polkadot_config,
-                    collator_options,
+                start_solochain_evm_node_impl::<BspProvider, RocksDbStorageLayer, Network>(
+                    config,
                     Some(provider_options),
                     indexer_options,
                     fisherman_options,
-                    para_id,
                     hwbench,
                 )
                 .await
             }
             (&ProviderType::Msp, &StorageLayer::Memory) => {
-                start_node_impl::<MspProvider, InMemoryStorageLayer, Network>(
-                    parachain_config,
-                    polkadot_config,
-                    collator_options,
+                start_solochain_evm_node_impl::<MspProvider, InMemoryStorageLayer, Network>(
+                    config,
                     Some(provider_options),
                     indexer_options,
                     fisherman_options,
-                    para_id,
                     hwbench,
                 )
                 .await
             }
             (&ProviderType::Msp, &StorageLayer::RocksDB) => {
-                start_node_impl::<MspProvider, RocksDbStorageLayer, Network>(
-                    parachain_config,
-                    polkadot_config,
-                    collator_options,
+                start_solochain_evm_node_impl::<MspProvider, RocksDbStorageLayer, Network>(
+                    config,
                     Some(provider_options),
                     indexer_options,
                     fisherman_options,
-                    para_id,
                     hwbench,
                 )
                 .await
             }
             (&ProviderType::User, _) => {
-                start_node_impl::<UserRole, NoStorageLayer, Network>(
-                    parachain_config,
-                    polkadot_config,
-                    collator_options,
+                start_solochain_evm_node_impl::<UserRole, NoStorageLayer, Network>(
+                    config,
                     Some(provider_options),
                     indexer_options,
                     fisherman_options,
-                    para_id,
                     hwbench,
                 )
                 .await
             }
         }
     } else {
-        // Start node without provider options which in turn will not start any storage hub related role services (e.g. Storage Provider, User)
-        start_node_impl::<UserRole, NoStorageLayer, Network>(
-            parachain_config,
-            polkadot_config,
-            collator_options,
+        start_solochain_evm_node_impl::<UserRole, NoStorageLayer, Network>(
+            config,
             None,
             indexer_options,
             fisherman_options,
-            para_id,
             hwbench,
         )
         .await
     }
+}
+
+/// Create a new partial components for the StorageHub Solochain EVM node.
+///
+/// This is the entrypoint function used when executing subcommands of the
+/// StorageHub Solochain EVM node.
+pub fn new_partial_solochain_evm(
+    config: &Configuration,
+    dev_service: bool,
+) -> Result<SolochainService, sc_service::Error> {
+    // Telemetry
+    let telemetry = config
+        .telemetry_endpoints
+        .clone()
+        .filter(|x| !x.is_empty())
+        .map(|endpoints| -> Result<_, sc_telemetry::Error> {
+            let worker = TelemetryWorker::new(16)?;
+            let telemetry = worker.handle().new_telemetry(endpoints);
+            Ok((worker, telemetry))
+        })
+        .transpose()?;
+
+    // Wasm executor (reuse ParachainExecutor host functions)
+    let heap_pages = config
+        .executor
+        .default_heap_pages
+        .map_or(DEFAULT_HEAP_ALLOC_STRATEGY, |h| HeapAllocStrategy::Static {
+            extra_pages: h as _,
+        });
+
+    let executor = shc_common::types::ParachainExecutor::builder()
+        .with_execution_method(config.executor.wasm_method)
+        .with_onchain_heap_alloc_strategy(heap_pages)
+        .with_offchain_heap_alloc_strategy(heap_pages)
+        .with_max_runtime_instances(config.executor.max_runtime_instances)
+        .with_runtime_cache_size(config.executor.runtime_cache_size)
+        .build();
+
+    let (client, backend, keystore_container, task_manager) =
+        sc_service::new_full_parts::<Block, SolochainEvmRuntimeApi, _>(
+            config,
+            telemetry.as_ref().map(|(_, telemetry)| telemetry.handle()),
+            executor,
+        )?;
+
+    let client = Arc::new(client);
+
+    let telemetry = telemetry.map(|(worker, telemetry)| {
+        task_manager
+            .spawn_handle()
+            .spawn("telemetry", None, worker.run());
+        telemetry
+    });
+
+    let select_chain = sc_consensus::LongestChain::new(backend.clone());
+
+    // Transaction pool (use BasicPool to access underlying graph via `.pool()` for Frontier RPC)
+    let transaction_pool = Arc::from(sc_transaction_pool::BasicPool::new_full(
+        Default::default(),
+        config.role.is_authority().into(),
+        config.prometheus_registry(),
+        task_manager.spawn_essential_handle(),
+        client.clone(),
+    ));
+
+    // GRANDPA block import and link
+    let (grandpa_block_import, grandpa_link) = sc_consensus_grandpa::block_import(
+        client.clone(),
+        512u32, // justification period
+        &client,
+        select_chain.clone(),
+        telemetry.as_ref().map(|x| x.handle()),
+    )?;
+
+    // Frontier block import on top of GRANDPA
+    let frontier_block_import =
+        FrontierBlockImport::new(grandpa_block_import.clone(), client.clone());
+
+    // BABE block import and link
+    let (block_import, babe_link) = sc_consensus_babe::block_import(
+        sc_consensus_babe::configuration(&*client)?,
+        frontier_block_import,
+        client.clone(),
+    )?;
+
+    // Frontier storage override and backend
+    let storage_override = Arc::new(StorageOverrideHandler::<Block, _, _>::new(client.clone()));
+
+    let frontier_backend: Arc<fc_db::Backend<Block, StorageEnableClient<SolochainEvmRuntime>>> = {
+        // Only Key-Value backend for now
+        let db_settings = match config.database {
+            sc_service::config::DatabaseSource::RocksDb { .. } => DatabaseSource::RocksDb {
+                path: frontier_database_dir(config, "db"),
+                cache_size: 0,
+            },
+            sc_service::config::DatabaseSource::ParityDb { .. } => DatabaseSource::ParityDb {
+                path: frontier_database_dir(config, "paritydb"),
+            },
+            sc_service::config::DatabaseSource::Auto { .. } => DatabaseSource::Auto {
+                rocksdb_path: frontier_database_dir(config, "db"),
+                paritydb_path: frontier_database_dir(config, "paritydb"),
+                cache_size: 0,
+            },
+            _ => DatabaseSource::RocksDb {
+                path: frontier_database_dir(config, "db"),
+                cache_size: 0,
+            },
+        };
+        Arc::new(fc_db::Backend::KeyValue(Arc::new(fc_db::kv::Backend::<
+            Block,
+            StorageEnableClient<SolochainEvmRuntime>,
+        >::new(
+            client.clone(),
+            &fc_db::kv::DatabaseSettings {
+                source: db_settings,
+            },
+        )?)))
+    };
+
+    // Import queue
+    let import_queue = if dev_service {
+        // Manual-seal import queue for dev nodes
+        sc_consensus_manual_seal::import_queue(
+            Box::new(client.clone()),
+            &task_manager.spawn_essential_handle(),
+            config.prometheus_registry(),
+        )
+    } else {
+        // BABE import queue for normal nodes
+        let slot_duration = babe_link.config().slot_duration();
+        let (import_queue, babe_worker_handle) = sc_consensus_babe::import_queue(
+            BabeImportQueueParams {
+                link: babe_link.clone(),
+                block_import: block_import.clone(),
+                justification_import: Some(Box::new(grandpa_block_import.clone())),
+                client: client.clone(),
+                select_chain: select_chain.clone(),
+                create_inherent_data_providers: move |_, ()| async move {
+                    let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
+                    let slot = sp_consensus_babe::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
+                    *timestamp,
+                    slot_duration,
+                );
+                    Ok((slot, timestamp))
+                },
+                spawner: &task_manager.spawn_essential_handle(),
+                registry: config.prometheus_registry(),
+                telemetry: telemetry.as_ref().map(|x| x.handle()),
+                offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(
+                    transaction_pool.clone(),
+                ),
+            },
+        )?;
+        // TODO: Wire up to RPC
+        std::mem::forget(babe_worker_handle);
+        import_queue
+    };
+
+    Ok(sc_service::PartialComponents {
+        client,
+        backend,
+        task_manager,
+        import_queue,
+        keystore_container,
+        select_chain,
+        transaction_pool,
+        other: (
+            block_import,
+            grandpa_link,
+            babe_link,
+            frontier_backend,
+            storage_override,
+            telemetry,
+        ),
+    })
+}
+
+async fn start_solochain_evm_node_impl<R, S, Network>(
+    config: Configuration,
+    provider_options: Option<ProviderOptions>,
+    indexer_options: Option<IndexerOptions>,
+    fisherman_options: Option<FishermanOptions>,
+    hwbench: Option<sc_sysinfo::HwBench>,
+) -> sc_service::error::Result<(TaskManager, Arc<StorageEnableClient<SolochainEvmRuntime>>)>
+where
+    R: ShRole,
+    S: ShStorageLayer,
+    (R, S): ShNodeType<SolochainEvmRuntime>,
+    StorageHubBuilder<R, S, SolochainEvmRuntime>:
+        StorageLayerBuilder + Buildable<(R, S), SolochainEvmRuntime>,
+    StorageHubHandler<(R, S), SolochainEvmRuntime>: RunnableTasks,
+    Network: NetworkBackend<OpaqueBlock, BlockHash>,
+{
+    let maintenance_mode = provider_options
+        .as_ref()
+        .map_or(false, |opts| opts.maintenance_mode);
+    if maintenance_mode {
+        return start_solochain_evm_node_in_maintenance_mode::<R, S, Network>(
+            config,
+            provider_options,
+            indexer_options,
+        )
+        .await;
+    }
+
+    let config = prepare_node_config(config);
+
+    let sc_service::PartialComponents {
+        client,
+        backend,
+        mut task_manager,
+        import_queue,
+        keystore_container,
+        select_chain: _,
+        transaction_pool,
+        other:
+            (block_import, grandpa_link, babe_link, frontier_backend, storage_override, mut telemetry),
+    } = new_partial_solochain_evm(&config, false)?;
+
+    let mut net_config = sc_network::config::FullNetworkConfiguration::<
+        Block,
+        <Block as sp_runtime::traits::Block>::Hash,
+        Network,
+    >::new(&config.network, config.prometheus_registry().cloned());
+
+    let mut file_transfer_request_protocol = None;
+    if provider_options.is_some() {
+        file_transfer_request_protocol = Some(
+            shc_file_transfer_service::configure_file_transfer_network::<_, SolochainEvmRuntime>(
+                fetch_genesis_hash(client.clone()),
+                config.chain_spec.fork_id(),
+                &mut net_config,
+            ),
+        );
+    }
+
+    let metrics = Network::register_notification_metrics(config.prometheus_registry());
+
+    // Configure GRANDPA peers set before building network (solochain)
+    let peer_store_handle = net_config.peer_store_handle();
+    let genesis_hash = client
+        .block_hash(0)
+        .ok()
+        .flatten()
+        .expect("Genesis block exists; qed");
+    let grandpa_protocol_name =
+        sc_consensus_grandpa::protocol_standard_name(&genesis_hash, &config.chain_spec);
+    let (grandpa_protocol_config, grandpa_notification_service) =
+        sc_consensus_grandpa::grandpa_peers_set_config::<_, Network>(
+            grandpa_protocol_name.clone(),
+            metrics.clone(),
+            Arc::clone(&peer_store_handle),
+        );
+    net_config.add_notification_protocol(grandpa_protocol_config);
+
+    let (network, system_rpc_tx, tx_handler_controller, network_starter, sync_service) =
+        sc_service::build_network(sc_service::BuildNetworkParams {
+            config: &config,
+            net_config,
+            client: client.clone(),
+            transaction_pool: transaction_pool.clone(),
+            spawn_handle: task_manager.spawn_handle(),
+            import_queue,
+            block_announce_validator_builder: None,
+            warp_sync_config: None,
+            block_relay: None,
+            metrics,
+        })?;
+
+    if config.offchain_worker.enabled {
+        use futures::FutureExt;
+        task_manager.spawn_handle().spawn(
+            "offchain-workers-runner",
+            "offchain-work",
+            sc_offchain::OffchainWorkers::new(sc_offchain::OffchainWorkerOptions {
+                runtime_api_provider: client.clone(),
+                keystore: Some(keystore_container.keystore()),
+                offchain_db: backend.offchain_storage(),
+                transaction_pool: Some(OffchainTransactionPoolFactory::new(
+                    transaction_pool.clone(),
+                )),
+                network_provider: Arc::new(network.clone()),
+                is_validator: config.role.is_authority(),
+                enable_http_requests: true,
+                custom_extensions: move |_| vec![],
+            })?
+            .run(client.clone(), task_manager.spawn_handle())
+            .boxed(),
+        );
+    }
+
+    let (sh_builder, maybe_storage_hub_client_rpc_config) =
+        match init_sh_builder::<R, S, SolochainEvmRuntime>(
+            &provider_options,
+            &task_manager,
+            file_transfer_request_protocol,
+            network.clone(),
+            keystore_container.keystore(),
+            client.clone(),
+            indexer_options.clone(),
+        )
+        .await?
+        {
+            Some((shb, rpc)) => (Some(shb), Some(rpc)),
+            None => (None, None),
+        };
+
+    // Capture values needed later before moving config
+    let role = config.role;
+    let is_authority_role = role.is_authority();
+
+    let rpc_builder = {
+        let client = client.clone();
+        let transaction_pool = transaction_pool.clone();
+        let frontier_backend = frontier_backend.clone();
+        let storage_override = storage_override.clone();
+        let network = network.clone();
+        let sync_service = sync_service.clone();
+        let prometheus_registry = config.prometheus_registry().cloned();
+        let spawn_handle = task_manager.spawn_handle();
+        let block_data_cache = Arc::new(fc_rpc::EthBlockDataCacheTask::new(
+            spawn_handle.clone(),
+            storage_override.clone(),
+            100, // log block cache
+            100, // statuses cache
+            prometheus_registry.clone(),
+        ));
+        // Shared Frontier caches
+        let filter_pool: Option<FilterPool> = Some(Default::default());
+        let fee_history_cache: FeeHistoryCache = Default::default();
+        let fee_history_limit: FeeHistoryCacheLimit = 2048;
+        let filter_pool_captured = filter_pool.clone();
+        let fee_history_cache_captured = fee_history_cache.clone();
+        let fee_history_limit_captured = fee_history_limit;
+        Box::new(move |_| {
+            crate::rpc::create_full_solochain_evm::<_, _, _, SolochainEvmRuntime, _>(
+                crate::rpc::SolochainEvmDeps {
+                    client: client.clone(),
+                    pool: transaction_pool.clone(),
+                    maybe_storage_hub_client_config: maybe_storage_hub_client_rpc_config.clone(),
+                    command_sink: None,
+                    network: network.clone(),
+                    sync: sync_service.clone(),
+                    overrides: storage_override.clone(),
+                    frontier_backend: match &*frontier_backend {
+                        fc_db::Backend::KeyValue(b) => b.clone(),
+                    },
+                    graph: transaction_pool.pool().clone(),
+                    block_data_cache: block_data_cache.clone(),
+                    filter_pool: filter_pool_captured.clone(),
+                    fee_history_cache: fee_history_cache_captured.clone(),
+                    fee_history_limit: fee_history_limit_captured,
+                    max_past_logs: 10_000,
+                    forced_parent_hashes: None,
+                    is_authority: is_authority_role,
+                },
+            )
+            .map_err(Into::into)
+        })
+    };
+
+    let base_path = config.base_path.path().to_path_buf().clone();
+
+    let node_name = config.network.node_name.clone();
+    let prometheus_registry = config.prometheus_registry().cloned();
+    let disable_grandpa = config.disable_grandpa;
+    let force_authoring = config.force_authoring;
+
+    let rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
+        rpc_builder,
+        client: client.clone(),
+        transaction_pool: transaction_pool.clone(),
+        task_manager: &mut task_manager,
+        config,
+        keystore: keystore_container.keystore(),
+        backend: backend.clone(),
+        network: network.clone(),
+        sync_service: sync_service.clone(),
+        system_rpc_tx,
+        tx_handler_controller,
+        telemetry: telemetry.as_mut(),
+    })?;
+
+    // Spawn Frontier background tasks (mapping sync, filter maintenance, fee history)
+    {
+        let frontier_kv = match &*frontier_backend {
+            fc_db::Backend::KeyValue(b) => b.clone(),
+        };
+        let overrides_handle: Arc<dyn StorageOverride<Block>> = storage_override.clone();
+
+        // Pubsub sinks for notifications
+        let pubsub_notification_sinks: fc_mapping_sync::EthereumBlockNotificationSinks<
+            fc_mapping_sync::EthereumBlockNotification<Block>,
+        > = Default::default();
+        let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
+
+        // Mapping Sync Worker
+        task_manager.spawn_essential_handle().spawn(
+            "frontier-mapping-sync-worker",
+            Some("frontier"),
+            MappingSyncWorker::new(
+                client.import_notification_stream(),
+                Duration::from_secs(6),
+                client.clone(),
+                backend.clone(),
+                overrides_handle.clone(),
+                frontier_kv.clone(),
+                3,
+                0u32.into(),
+                SyncStrategy::Normal,
+                sync_service.clone(),
+                pubsub_notification_sinks,
+            )
+            .for_each(|()| futures::future::ready(())),
+        );
+
+        // EthFilter maintenance (keep in sync with RPC filter_pool)
+        let filter_pool: Option<FilterPool> = Some(Default::default());
+        if let Some(filter_pool) = filter_pool.clone() {
+            task_manager.spawn_essential_handle().spawn(
+                "frontier-filter-pool",
+                Some("frontier"),
+                EthTask::filter_pool_task(client.clone(), filter_pool, 100),
+            );
+        }
+
+        // FeeHistory maintenance (keep in sync with RPC fee cache)
+        let fee_history_cache: FeeHistoryCache = Default::default();
+        let fee_history_limit: FeeHistoryCacheLimit = 2048;
+        task_manager.spawn_essential_handle().spawn(
+            "frontier-fee-history",
+            Some("frontier"),
+            EthTask::fee_history_task(
+                client.clone(),
+                storage_override.clone(),
+                fee_history_cache,
+                fee_history_limit,
+            ),
+        );
+    }
+
+    // Start BABE (block production)
+    if is_authority_role {
+        let proposer_factory = sc_basic_authorship::ProposerFactory::new(
+            task_manager.spawn_handle(),
+            client.clone(),
+            transaction_pool.clone(),
+            prometheus_registry.as_ref(),
+            telemetry.as_ref().map(|t| t.handle()),
+        );
+
+        let slot_duration = babe_link.clone().config().slot_duration();
+        let babe_params = sc_consensus_babe::BabeParams {
+            keystore: keystore_container.keystore(),
+            client: client.clone(),
+            select_chain: sc_consensus::LongestChain::new(backend.clone()),
+            env: proposer_factory,
+            block_import: block_import.clone(),
+            sync_oracle: sync_service.clone(),
+            justification_sync_link: sync_service.clone(),
+            create_inherent_data_providers: move |_, ()| async move {
+                let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
+                let slot = sp_consensus_babe::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
+                    *timestamp,
+                    slot_duration,
+                );
+                Ok((slot, timestamp))
+            },
+            force_authoring,
+            backoff_authoring_blocks: None::<()>,
+            babe_link,
+            block_proposal_slot_portion: sc_consensus_babe::SlotProportion::new(0.5),
+            max_block_proposal_slot_portion: None,
+            telemetry: telemetry.as_ref().map(|t| t.handle()),
+        };
+        let babe = sc_consensus_babe::start_babe(babe_params)?;
+        task_manager.spawn_essential_handle().spawn_blocking(
+            "babe-proposer",
+            Some("block-authoring"),
+            babe,
+        );
+    }
+
+    // Start GRANDPA (finality)
+    if !disable_grandpa {
+        let role = role;
+        let keystore = if role.is_authority() {
+            Some(keystore_container.keystore())
+        } else {
+            None
+        };
+
+        let grandpa_config = sc_consensus_grandpa::Config {
+            gossip_duration: std::time::Duration::from_millis(333),
+            justification_generation_period: 512,
+            name: Some(node_name),
+            observer_enabled: false,
+            keystore,
+            local_role: role,
+            telemetry: telemetry.as_ref().map(|t| t.handle()),
+            protocol_name: grandpa_protocol_name,
+        };
+        let grandpa_params = sc_consensus_grandpa::GrandpaParams {
+            config: grandpa_config,
+            link: grandpa_link,
+            network: network.clone(),
+            sync: Arc::new(sync_service.clone()),
+            notification_service: grandpa_notification_service,
+            voting_rule: sc_consensus_grandpa::VotingRulesBuilder::default().build(),
+            prometheus_registry,
+            shared_voter_state: sc_consensus_grandpa::SharedVoterState::empty(),
+            telemetry: telemetry.as_ref().map(|t| t.handle()),
+            offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(transaction_pool.clone()),
+        };
+        task_manager.spawn_essential_handle().spawn_blocking(
+            "grandpa-voter",
+            None,
+            sc_consensus_grandpa::run_grandpa_voter(grandpa_params)?,
+        );
+    }
+
+    if let Some(hwbench) = hwbench {
+        sc_sysinfo::print_hwbench(&hwbench);
+        match SUBSTRATE_REFERENCE_HARDWARE.check_hardware(&hwbench, false) {
+            Err(err) if is_authority_role => {
+                log::warn!("⚠️  The hardware does not meet the minimal requirements {} for role 'Authority'.", err);
+            }
+            _ => {}
+        }
+        if let Some(ref mut telemetry) = telemetry {
+            let telemetry_handle = telemetry.handle();
+            task_manager.spawn_handle().spawn(
+                "telemetry_hwbench",
+                None,
+                sc_sysinfo::initialize_hwbench_telemetry(telemetry_handle, hwbench),
+            );
+        }
+    }
+
+    if let Some(_) = provider_options {
+        finish_sh_builder_and_run_tasks(
+            sh_builder.expect("StorageHubBuilder should already be initialised."),
+            client.clone(),
+            rpc_handlers.clone(),
+            keystore_container.keystore(),
+            base_path.clone(),
+            false,
+        )
+        .await?;
+    }
+
+    configure_and_spawn_fisherman::<SolochainEvmRuntime>(
+        &fisherman_options,
+        &indexer_options,
+        &task_manager,
+        client.clone(),
+        keystore_container.keystore(),
+        Arc::new(rpc_handlers.clone()),
+        base_path,
+        network.clone(),
+    )
+    .await?;
+
+    network_starter.start_network();
+    Ok((task_manager, client))
+}
+
+async fn start_solochain_evm_node_in_maintenance_mode<R, S, Network>(
+    config: Configuration,
+    provider_options: Option<ProviderOptions>,
+    indexer_options: Option<IndexerOptions>,
+) -> sc_service::error::Result<(TaskManager, Arc<StorageEnableClient<SolochainEvmRuntime>>)>
+where
+    R: ShRole,
+    S: ShStorageLayer,
+    (R, S): ShNodeType<SolochainEvmRuntime>,
+    StorageHubBuilder<R, S, SolochainEvmRuntime>:
+        StorageLayerBuilder + Buildable<(R, S), SolochainEvmRuntime>,
+    StorageHubHandler<(R, S), SolochainEvmRuntime>: RunnableTasks,
+    Network: NetworkBackend<OpaqueBlock, BlockHash>,
+{
+    log::info!("🛠️  Running node in maintenance mode");
+    log::info!("🛠️  Network participation is disabled");
+    log::info!("🛠️  Only storage management RPC methods are available");
+
+    let config = prepare_node_config(config);
+
+    let sc_service::PartialComponents {
+        client,
+        backend,
+        mut task_manager,
+        import_queue,
+        keystore_container,
+        select_chain: _,
+        transaction_pool,
+        other:
+            (
+                _block_import,
+                _grandpa_link,
+                _babe_link,
+                frontier_backend,
+                storage_override,
+                mut telemetry,
+            ),
+    } = new_partial_solochain_evm(&config, false)?;
+
+    let mut net_config = sc_network::config::FullNetworkConfiguration::<
+        Block,
+        <Block as sp_runtime::traits::Block>::Hash,
+        Network,
+    >::new(&config.network, config.prometheus_registry().cloned());
+
+    let mut file_transfer_request_protocol = None;
+    if provider_options.is_some() {
+        file_transfer_request_protocol = Some(
+            shc_file_transfer_service::configure_file_transfer_network::<_, SolochainEvmRuntime>(
+                fetch_genesis_hash(client.clone()),
+                config.chain_spec.fork_id(),
+                &mut net_config,
+            ),
+        );
+    }
+
+    let metrics = Network::register_notification_metrics(config.prometheus_registry());
+    let (network, system_rpc_tx, tx_handler_controller, network_starter, sync_service) =
+        sc_service::build_network(sc_service::BuildNetworkParams {
+            config: &config,
+            net_config,
+            client: client.clone(),
+            transaction_pool: transaction_pool.clone(),
+            spawn_handle: task_manager.spawn_handle(),
+            import_queue,
+            block_announce_validator_builder: None,
+            warp_sync_config: None,
+            block_relay: None,
+            metrics,
+        })?;
+
+    let (sh_builder, maybe_storage_hub_client_rpc_config) =
+        match init_sh_builder::<R, S, SolochainEvmRuntime>(
+            &provider_options,
+            &task_manager,
+            file_transfer_request_protocol,
+            network.clone(),
+            keystore_container.keystore(),
+            client.clone(),
+            indexer_options.clone(),
+        )
+        .await?
+        {
+            Some((shb, rpc)) => (Some(shb), Some(rpc)),
+            None => (None, None),
+        };
+
+    let rpc_builder = {
+        let client = client.clone();
+        let transaction_pool = transaction_pool.clone();
+        let network = network.clone();
+        let sync_service = sync_service.clone();
+        let prometheus_registry = config.prometheus_registry().cloned();
+        let spawn_handle = task_manager.spawn_handle();
+        Box::new(move |_| {
+            crate::rpc::create_full_solochain_evm::<_, _, _, SolochainEvmRuntime, _>(
+                crate::rpc::SolochainEvmDeps {
+                    client: client.clone(),
+                    pool: transaction_pool.clone(),
+                    maybe_storage_hub_client_config: maybe_storage_hub_client_rpc_config.clone(),
+                    command_sink: None,
+                    network: network.clone(),
+                    sync: sync_service.clone(),
+                    overrides: storage_override.clone(),
+                    frontier_backend: match &*frontier_backend {
+                        fc_db::Backend::KeyValue(b) => b.clone(),
+                    },
+                    graph: transaction_pool.pool().clone(),
+                    block_data_cache: Arc::new(fc_rpc::EthBlockDataCacheTask::new(
+                        spawn_handle.clone(),
+                        storage_override.clone(),
+                        100,
+                        100,
+                        prometheus_registry.clone(),
+                    )),
+                    filter_pool: Some(Default::default()),
+                    fee_history_cache: Default::default(),
+                    fee_history_limit: 2048,
+                    max_past_logs: 10_000,
+                    forced_parent_hashes: None,
+                    is_authority: false,
+                },
+            )
+            .map_err(Into::into)
+        })
+    };
+
+    let base_path = config.base_path.path().to_path_buf().clone();
+
+    let rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
+        rpc_builder,
+        client: client.clone(),
+        transaction_pool: transaction_pool.clone(),
+        task_manager: &mut task_manager,
+        config,
+        keystore: keystore_container.keystore(),
+        backend: backend.clone(),
+        network: network.clone(),
+        sync_service: sync_service.clone(),
+        system_rpc_tx,
+        tx_handler_controller,
+        telemetry: telemetry.as_mut(),
+    })?;
+
+    if let Some(_) = provider_options {
+        finish_sh_builder_and_run_tasks(
+            sh_builder.expect("StorageHubBuilder should already be initialised."),
+            client.clone(),
+            rpc_handlers,
+            keystore_container.keystore(),
+            base_path,
+            true,
+        )
+        .await?;
+    }
+
+    network_starter.start_network();
+    Ok((task_manager, client))
 }

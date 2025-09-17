@@ -1,9 +1,9 @@
 import { strictEqual } from "node:assert";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
-import { type EnrichedBspApi, describeBspNet, shUser } from "../../../util";
+import { describeBspNet, type EnrichedBspApi, shUser } from "../../../util";
 
-describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) => {
+await describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) => {
   let userApi: EnrichedBspApi;
 
   before(async () => {

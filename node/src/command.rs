@@ -13,10 +13,10 @@ use sh_parachain_runtime::Block;
 use shp_types::StorageDataUnit;
 
 use crate::{
-    chain_spec,
+    chain_spec::{self, NetworkType},
     cli::{Cli, ProviderType, RelayChainCli, StorageLayer, Subcommand},
     config,
-    service::new_partial,
+    service::{new_partial_parachain, new_partial_solochain_evm},
 };
 
 use shc_client::builder::{
@@ -71,13 +71,41 @@ pub struct ProviderOptions {
 
 fn load_spec(id: &str) -> std::result::Result<Box<dyn ChainSpec>, String> {
     Ok(match id {
-        "dev" => Box::new(chain_spec::development_config()),
-        "template-rococo" => Box::new(chain_spec::local_testnet_config()),
-        "" | "local" => Box::new(chain_spec::local_testnet_config()),
+        // Parachain variants (default fallback for compatibility)
+        "dev" | "parachain-dev" => Box::new(chain_spec::parachain::development_config()),
+        "" | "local" | "parachain-local" => Box::new(chain_spec::parachain::local_testnet_config()),
+        "template-rococo" => Box::new(chain_spec::parachain::local_testnet_config()),
+
+        // Solochain EVM variants
+        "solochain-evm-dev" => Box::new(chain_spec::solochain_evm::development_config()?),
+        "solochain-evm-local" => Box::new(chain_spec::solochain_evm::local_testnet_config()?),
+
+        // Custom chain spec from file
         path => Box::new(chain_spec::ChainSpec::from_json_file(
             std::path::PathBuf::from(path),
         )?),
     })
+}
+
+// DRY helper to branch on chain spec and run an async runner with the proper partials
+macro_rules! run_async_cmd_for_chain {
+    ($runner:expr, $chain:expr, $dev_service:expr, |$config:ident, $components:ident| $body:expr) => {{
+        if load_spec($chain)?.is_parachain() {
+            $runner.async_run(|$config| {
+                let $components = new_partial_parachain(&$config, $dev_service)?;
+                let task_manager = $components.task_manager;
+                Ok(($body, task_manager))
+            })
+        } else if load_spec($chain)?.is_solochain_evm() {
+            $runner.async_run(|$config| {
+                let $components = new_partial_solochain_evm(&$config, $dev_service)?;
+                let task_manager = $components.task_manager;
+                Ok(($body, task_manager))
+            })
+        } else {
+            unreachable!("Invalid chain spec")
+        }
+    }};
 }
 
 impl SubstrateCli for Cli {
@@ -152,17 +180,6 @@ impl SubstrateCli for RelayChainCli {
     }
 }
 
-macro_rules! construct_async_run {
-	(|$components:ident, $cli:ident, $cmd:ident, $config:ident, $dev_service:ident| $( $code:tt )* ) => {{
-		let runner = $cli.create_runner($cmd)?;
-		runner.async_run(|$config| {
-			let $components = new_partial(&$config, $dev_service)?;
-			let task_manager = $components.task_manager;
-			{ $( $code )* }.map(|v| (v, task_manager))
-		})
-	}}
-}
-
 /// Parse command line arguments into service configuration.
 pub fn run() -> Result<()> {
     let cli = Cli::from_args();
@@ -175,29 +192,72 @@ pub fn run() -> Result<()> {
             runner.sync_run(|config| cmd.run(config.chain_spec, config.network))
         }
         Some(Subcommand::CheckBlock(cmd)) => {
-            construct_async_run!(|components, cli, cmd, config, dev_service| {
-                Ok(cmd.run(components.client, components.import_queue))
-            })
+            let runner = cli.create_runner(cmd)?;
+            let chain = cli
+                .run
+                .base
+                .base
+                .shared_params
+                .chain
+                .clone()
+                .unwrap_or_default();
+            run_async_cmd_for_chain!(runner, &chain, dev_service, |config, components| cmd
+                .run(components.client, components.import_queue))
         }
         Some(Subcommand::ExportBlocks(cmd)) => {
-            construct_async_run!(|components, cli, cmd, config, dev_service| {
-                Ok(cmd.run(components.client, config.database))
-            })
+            let runner = cli.create_runner(cmd)?;
+            let chain = cli
+                .run
+                .base
+                .base
+                .shared_params
+                .chain
+                .clone()
+                .unwrap_or_default();
+            run_async_cmd_for_chain!(runner, &chain, dev_service, |config, components| cmd
+                .run(components.client, config.database))
         }
         Some(Subcommand::ExportState(cmd)) => {
-            construct_async_run!(|components, cli, cmd, config, dev_service| {
-                Ok(cmd.run(components.client, config.chain_spec))
-            })
+            let runner = cli.create_runner(cmd)?;
+            let chain = cli
+                .run
+                .base
+                .base
+                .shared_params
+                .chain
+                .clone()
+                .unwrap_or_default();
+            run_async_cmd_for_chain!(runner, &chain, dev_service, |config, components| cmd
+                .run(components.client, config.chain_spec))
         }
         Some(Subcommand::ImportBlocks(cmd)) => {
-            construct_async_run!(|components, cli, cmd, config, dev_service| {
-                Ok(cmd.run(components.client, components.import_queue))
-            })
+            let runner = cli.create_runner(cmd)?;
+            let chain = cli
+                .run
+                .base
+                .base
+                .shared_params
+                .chain
+                .clone()
+                .unwrap_or_default();
+            run_async_cmd_for_chain!(runner, &chain, dev_service, |config, components| cmd
+                .run(components.client, components.import_queue))
         }
         Some(Subcommand::Revert(cmd)) => {
-            construct_async_run!(|components, cli, cmd, config, dev_service| {
-                Ok(cmd.run(components.client, components.backend, None))
-            })
+            let runner = cli.create_runner(cmd)?;
+            let chain = cli
+                .run
+                .base
+                .base
+                .shared_params
+                .chain
+                .clone()
+                .unwrap_or_default();
+            run_async_cmd_for_chain!(runner, &chain, dev_service, |config, components| cmd.run(
+                components.client,
+                components.backend,
+                None
+            ))
         }
         Some(Subcommand::PurgeChain(cmd)) => {
             let runner = cli.create_runner(cmd)?;
@@ -223,9 +283,15 @@ pub fn run() -> Result<()> {
         Some(Subcommand::ExportGenesisHead(cmd)) => {
             let runner = cli.create_runner(cmd)?;
             runner.sync_run(|config| {
-                let partials = new_partial(&config, dev_service)?;
-
-                cmd.run(partials.client)
+                if config.chain_spec.is_parachain() {
+                    let partials = new_partial_parachain(&config, dev_service)?;
+                    cmd.run(partials.client)
+                } else if config.chain_spec.is_solochain_evm() {
+                    let partials = new_partial_solochain_evm(&config, dev_service)?;
+                    cmd.run(partials.client)
+                } else {
+                    unreachable!("Invalid chain spec")
+                }
             })
         }
         Some(Subcommand::ExportGenesisWasm(cmd)) => {
@@ -249,8 +315,15 @@ pub fn run() -> Result<()> {
                     }
                 }
                 BenchmarkCmd::Block(cmd) => runner.sync_run(|config| {
-                    let partials = new_partial(&config, dev_service)?;
-                    cmd.run(partials.client)
+                    if config.chain_spec.is_parachain() {
+                        let partials = new_partial_parachain(&config, dev_service)?;
+                        cmd.run(partials.client)
+                    } else if config.chain_spec.is_solochain_evm() {
+                        let partials = new_partial_solochain_evm(&config, dev_service)?;
+                        cmd.run(partials.client)
+                    } else {
+                        unreachable!("Invalid chain spec")
+                    }
                 }),
                 #[cfg(not(feature = "runtime-benchmarks"))]
                 BenchmarkCmd::Storage(_) => {
@@ -263,10 +336,19 @@ pub fn run() -> Result<()> {
                 }
                 #[cfg(feature = "runtime-benchmarks")]
                 BenchmarkCmd::Storage(cmd) => runner.sync_run(|config| {
-                    let partials = new_partial(&config, dev_service)?;
-                    let db = partials.backend.expose_db();
-                    let storage = partials.backend.expose_storage();
-                    cmd.run(config, partials.client.clone(), db, storage)
+                    if config.chain_spec.is_parachain() {
+                        let partials = new_partial_parachain(&config, dev_service)?;
+                        let db = partials.backend.expose_db();
+                        let storage = partials.backend.expose_storage();
+                        cmd.run(config, partials.client.clone(), db, storage)
+                    } else if config.chain_spec.is_solochain_evm() {
+                        let partials = new_partial_solochain_evm(&config, dev_service)?;
+                        let db = partials.backend.expose_db();
+                        let storage = partials.backend.expose_storage();
+                        cmd.run(config, partials.client.clone(), db, storage)
+                    } else {
+                        unreachable!("Invalid chain spec")
+                    }
                 }),
                 BenchmarkCmd::Machine(cmd) => {
                     runner.sync_run(|config| cmd.run(&config, SUBSTRATE_REFERENCE_HARDWARE.clone()))
@@ -307,104 +389,219 @@ pub fn run() -> Result<()> {
             };
 
             runner.run_node_until_exit(|config| async move {
-				let hwbench = (!cli.no_hardware_benchmarks)
-					.then_some(config.database.path().map(|database_path| {
-						let _ = std::fs::create_dir_all(database_path);
-						sc_sysinfo::gather_hwbench(Some(database_path), &SUBSTRATE_REFERENCE_HARDWARE)
-					}))
-					.flatten();
+                let hwbench = (!cli.no_hardware_benchmarks)
+                    .then_some(config.database.path().map(|database_path| {
+                        let _ = std::fs::create_dir_all(database_path);
+                        sc_sysinfo::gather_hwbench(
+                            Some(database_path),
+                            &SUBSTRATE_REFERENCE_HARDWARE,
+                        )
+                    }))
+                    .flatten();
 
-
-                let para_id = chain_spec::Extensions::try_get(&*config.chain_spec)
-                    .map(|e| e.para_id)
-                    .ok_or("Could not find parachain ID in chain-spec.")?;
-
-                let id = ParaId::from(para_id);
-
-                info!("Is collating: {}", if config.role.is_authority() { "yes" } else { "no" });
+                info!(
+                    "Is collating: {}",
+                    if config.role.is_authority() {
+                        "yes"
+                    } else {
+                        "no"
+                    }
+                );
 
                 let default_backend = config.chain_spec.network_backend();
                 let network_backend = config.network.network_backend.unwrap_or(default_backend);
 
-				match network_backend {
-					sc_network::config::NetworkBackendType::Libp2p => {
-						if dev_service {
-							crate::service::start_dev_node::<sc_network::NetworkWorker<_, _>>(
-								config,
-								provider_options,
-								indexer_options,
-								fisherman_options.clone(),
-								hwbench,
-								id,
-								cli.run.sealing,
-							)
-							.await
-							.map_err(Into::into)
-						} else {
-							let collator_options = cli.run.collator_options();
-							let polkadot_cli = RelayChainCli::new(
-								&config,
-								[RelayChainCli::executable_name()].iter().chain(cli.relay_chain_args.iter()),
-							);
-							let tokio_handle = config.tokio_handle.clone();
-							let polkadot_config =
-								SubstrateCli::create_configuration(&polkadot_cli, &polkadot_cli, tokio_handle)
-									.map_err(|err| format!("Relay chain argument error: {}", err))?;
-							crate::service::start_parachain_node::<sc_network::NetworkWorker<_, _>>(
-								config,
-								polkadot_config,
-								collator_options,
-								provider_options,
-								indexer_options,
-								fisherman_options.clone(),
-								id,
-								hwbench,
-							)
-							.await
-							.map(|r| r.0)
-							.map_err(Into::into)
-						}
-					},
-					sc_network::config::NetworkBackendType::Litep2p => {
-						if dev_service {
-							crate::service::start_dev_node::<sc_network::Litep2pNetworkBackend>(
-								config,
-								provider_options,
-								indexer_options,
-								fisherman_options.clone(),
-								hwbench,
-								id,
-								cli.run.sealing,
-							)
-							.await
-							.map_err(Into::into)
-						} else {
-							let collator_options = cli.run.collator_options();
-							let polkadot_cli = RelayChainCli::new(
-								&config,
-								[RelayChainCli::executable_name()].iter().chain(cli.relay_chain_args.iter()),
-							);
-							let tokio_handle = config.tokio_handle.clone();
-							let polkadot_config =
-								SubstrateCli::create_configuration(&polkadot_cli, &polkadot_cli, tokio_handle)
-									.map_err(|err| format!("Relay chain argument error: {}", err))?;
-							crate::service::start_parachain_node::<sc_network::Litep2pNetworkBackend>(
-								config,
-								polkadot_config,
-								collator_options,
-								provider_options,
-								indexer_options,
-								fisherman_options.clone(),
-								id,
-								hwbench,
-							)
-							.await
-							.map(|r| r.0)
-							.map_err(Into::into)
-						}
-					},
-				}
-			})
+                match network_backend {
+                    sc_network::config::NetworkBackendType::Libp2p => {
+                        if dev_service {
+                            if config.chain_spec.is_parachain() {
+                                let para_id = chain_spec::Extensions::try_get(&*config.chain_spec)
+                                    .map(|e| e.para_id)
+                                    .ok_or("Could not find parachain ID in chain-spec.")?;
+
+                                let id = ParaId::from(para_id);
+
+                                crate::service::start_dev_parachain_node::<
+                                    sc_network::NetworkWorker<_, _>,
+                                >(
+                                    config,
+                                    provider_options,
+                                    indexer_options,
+                                    fisherman_options.clone(),
+                                    hwbench,
+                                    id,
+                                    cli.run.sealing,
+                                )
+                                .await
+                                .map_err(Into::into)
+                            } else if config.chain_spec.is_solochain_evm() {
+                                crate::service::start_dev_solochain_evm_node::<
+                                    sc_network::NetworkWorker<_, _>,
+                                >(
+                                    config,
+                                    provider_options,
+                                    indexer_options,
+                                    fisherman_options.clone(),
+                                    hwbench,
+                                    cli.run.sealing,
+                                )
+                                .await
+                                .map_err(Into::into)
+                            } else {
+                                unreachable!("Invalid chain spec")
+                            }
+                        } else {
+                            let collator_options = cli.run.collator_options();
+                            let polkadot_cli = RelayChainCli::new(
+                                &config,
+                                [RelayChainCli::executable_name()]
+                                    .iter()
+                                    .chain(cli.relay_chain_args.iter()),
+                            );
+                            let tokio_handle = config.tokio_handle.clone();
+                            let polkadot_config = SubstrateCli::create_configuration(
+                                &polkadot_cli,
+                                &polkadot_cli,
+                                tokio_handle,
+                            )
+                            .map_err(|err| format!("Relay chain argument error: {}", err))?;
+
+                            if config.chain_spec.is_parachain() {
+                                let para_id = chain_spec::Extensions::try_get(&*config.chain_spec)
+                                    .map(|e| e.para_id)
+                                    .ok_or("Could not find parachain ID in chain-spec.")?;
+
+                                let id = ParaId::from(para_id);
+
+                                crate::service::start_parachain_node::<
+                                    sc_network::NetworkWorker<_, _>,
+                                >(
+                                    config,
+                                    polkadot_config,
+                                    collator_options,
+                                    provider_options,
+                                    indexer_options,
+                                    fisherman_options.clone(),
+                                    id,
+                                    hwbench,
+                                )
+                                .await
+                                .map(|r| r.0)
+                                .map_err(Into::into)
+                            } else if config.chain_spec.is_solochain_evm() {
+                                crate::service::start_solochain_evm_node::<
+                                    sc_network::NetworkWorker<_, _>,
+                                >(
+                                    config,
+                                    provider_options,
+                                    indexer_options,
+                                    fisherman_options.clone(),
+                                    hwbench,
+                                )
+                                .await
+                                .map(|r| r.0)
+                                .map_err(Into::into)
+                            } else {
+                                unreachable!("Invalid chain spec")
+                            }
+                        }
+                    }
+                    sc_network::config::NetworkBackendType::Litep2p => {
+                        if dev_service {
+                            if config.chain_spec.is_parachain() {
+                                let para_id = chain_spec::Extensions::try_get(&*config.chain_spec)
+                                    .map(|e| e.para_id)
+                                    .ok_or("Could not find parachain ID in chain-spec.")?;
+
+                                let id = ParaId::from(para_id);
+
+                                crate::service::start_dev_parachain_node::<
+                                    sc_network::Litep2pNetworkBackend,
+                                >(
+                                    config,
+                                    provider_options,
+                                    indexer_options,
+                                    fisherman_options.clone(),
+                                    hwbench,
+                                    id,
+                                    cli.run.sealing,
+                                )
+                                .await
+                                .map_err(Into::into)
+                            } else if config.chain_spec.is_solochain_evm() {
+                                crate::service::start_dev_solochain_evm_node::<
+                                    sc_network::Litep2pNetworkBackend,
+                                >(
+                                    config,
+                                    provider_options,
+                                    indexer_options,
+                                    fisherman_options.clone(),
+                                    hwbench,
+                                    cli.run.sealing,
+                                )
+                                .await
+                                .map_err(Into::into)
+                            } else {
+                                unreachable!("Invalid chain spec")
+                            }
+                        } else {
+                            let collator_options = cli.run.collator_options();
+                            let polkadot_cli = RelayChainCli::new(
+                                &config,
+                                [RelayChainCli::executable_name()]
+                                    .iter()
+                                    .chain(cli.relay_chain_args.iter()),
+                            );
+                            let tokio_handle = config.tokio_handle.clone();
+                            let polkadot_config = SubstrateCli::create_configuration(
+                                &polkadot_cli,
+                                &polkadot_cli,
+                                tokio_handle,
+                            )
+                            .map_err(|err| format!("Relay chain argument error: {}", err))?;
+
+                            if config.chain_spec.is_parachain() {
+                                let para_id = chain_spec::Extensions::try_get(&*config.chain_spec)
+                                    .map(|e| e.para_id)
+                                    .ok_or("Could not find parachain ID in chain-spec.")?;
+
+                                let id = ParaId::from(para_id);
+
+                                crate::service::start_parachain_node::<
+                                    sc_network::Litep2pNetworkBackend,
+                                >(
+                                    config,
+                                    polkadot_config,
+                                    collator_options,
+                                    provider_options,
+                                    indexer_options,
+                                    fisherman_options.clone(),
+                                    id,
+                                    hwbench,
+                                )
+                                .await
+                                .map(|r| r.0)
+                                .map_err(Into::into)
+                            } else if config.chain_spec.is_solochain_evm() {
+                                crate::service::start_solochain_evm_node::<
+                                    sc_network::Litep2pNetworkBackend,
+                                >(
+                                    config,
+                                    provider_options,
+                                    indexer_options,
+                                    fisherman_options.clone(),
+                                    hwbench,
+                                )
+                                .await
+                                .map(|r| r.0)
+                                .map_err(Into::into)
+                            } else {
+                                unreachable!("Invalid chain spec")
+                            }
+                        }
+                    }
+                }
+            })
         }
     }
 }

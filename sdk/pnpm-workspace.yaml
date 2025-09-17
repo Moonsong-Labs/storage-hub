@@ -2,4 +2,5 @@ packages:
   - core
   - msp-client
   - e2e
-  - examples
+  - examples/node
+  - examples/nextjs

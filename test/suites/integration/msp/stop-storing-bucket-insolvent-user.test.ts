@@ -2,7 +2,7 @@ import assert, { strictEqual } from "node:assert";
 import { describeMspNet, type EnrichedBspApi } from "../../../util";
 import { MSP_CHARGING_PERIOD } from "../../../util/bspNet/consts";
 
-describeMspNet(
+await describeMspNet(
   "MSP test: MSP stops storing buckets that belong to insolvent users",
   ({ before, createMsp1Api, it, createUserApi }) => {
     let userApi: EnrichedBspApi;

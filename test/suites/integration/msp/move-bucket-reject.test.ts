@@ -1,24 +1,21 @@
-import { strictEqual } from "node:assert";
-import assert from "node:assert";
+import assert, { strictEqual } from "node:assert";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
 import Docker from "dockerode";
 import {
-  type EnrichedBspApi,
-  ShConsts,
   assertEventPresent,
   bspThreeKey,
-  bspThreeSeed,
   bspTwoKey,
-  bspTwoSeed,
   createSqlClient,
   describeMspNet,
+  type EnrichedBspApi,
+  ShConsts,
   shUser,
   sleep,
   waitFor
 } from "../../../util";
 
-describeMspNet(
+await describeMspNet(
   "MSP rejects bucket move requests",
   { initialised: false, indexer: true },
   ({ before, createMsp1Api, createMsp2Api, it, createUserApi }) => {
@@ -93,7 +90,6 @@ describeMspNet(
       await userApi.docker.onboardBsp({
         bspSigner: bspTwoKey,
         name: "sh-bsp-two",
-        bspKeySeed: bspTwoSeed,
         bspId: ShConsts.BSP_TWO_ID,
         additionalArgs: ["--keystore-path=/keystore/bsp-two"],
         waitForIdle: true
@@ -102,7 +98,6 @@ describeMspNet(
       await userApi.docker.onboardBsp({
         bspSigner: bspThreeKey,
         name: "sh-bsp-three",
-        bspKeySeed: bspThreeSeed,
         bspId: ShConsts.BSP_THREE_ID,
         additionalArgs: ["--keystore-path=/keystore/bsp-three"],
         waitForIdle: true

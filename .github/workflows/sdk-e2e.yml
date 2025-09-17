@@ -2,13 +2,9 @@ name: StorageHub SDK - E2E tests
 
 on:
   pull_request:
-    paths:
-      - 'sdk/**'
   push:
     branches:
       - '**'
-    paths:
-      - 'sdk/**'
   workflow_dispatch:
 
 env:
@@ -39,19 +35,15 @@ jobs:
 
       - name: Install dependencies (sdk)
         working-directory: sdk
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
-      - name: Build WASM
-        working-directory: sdk
-        run: pnpm build:wasm
-
-      - name: Build SDK (core dist)
+      - name: Build SDK
         working-directory: sdk
         run: pnpm build
 
       - name: Install e2e deps (sdk/e2e)
         working-directory: sdk/e2e
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Install Playwright Chromium with system deps (sdk/e2e)
         working-directory: sdk/e2e
@@ -93,20 +85,16 @@ jobs:
           cache: false
 
       - name: Setup Protobuf (protoc)
-        uses: arduino/setup-protoc@v2
+        uses: arduino/setup-protoc@v3
         with:
-          version: '25.x'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install wasm-pack
         run: curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
 
       - name: Install dependencies (sdk workspace, no scripts)
         working-directory: sdk
-        run: pnpm install
-
-      - name: Build WASM
-        working-directory: sdk
-        run: pnpm build:wasm
+        run: pnpm install --frozen-lockfile
 
       - name: Build SDK (core dist + types + msp-client)
         working-directory: sdk
@@ -122,7 +110,7 @@ jobs:
 
       - name: Install e2e deps (sdk/e2e)
         working-directory: sdk/e2e
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Install Playwright Chromium with system deps (sdk/e2e)
         working-directory: sdk/e2e

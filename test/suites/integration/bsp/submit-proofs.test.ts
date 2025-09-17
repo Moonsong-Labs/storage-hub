@@ -1,15 +1,15 @@
 import assert, { strictEqual } from "node:assert";
 import {
-  ShConsts,
   bspThreeKey,
   describeBspNet,
-  waitFor,
   type EnrichedBspApi,
-  type FileMetadata
+  type FileMetadata,
+  ShConsts,
+  waitFor
 } from "../../../util";
 import { BSP_THREE_ID, BSP_TWO_ID, DUMMY_BSP_ID, NODE_INFOS } from "../../../util/bspNet/consts";
 
-describeBspNet(
+await describeBspNet(
   "BSP: Many BSPs Submit Proofs",
   { initialised: "multi", networkConfig: "standard" },
   ({ before, createUserApi, after, it, createApi, createBspApi, getLaunchResponse }) => {

@@ -71,6 +71,7 @@ hex-literal = { version = "0.4.1" }
 jsonrpsee = { version = "0.24.9" }
 jsonrpsee-core = { version = "0.24.9" }
 jsonwebtoken = "9"
+k256 = "0.13"
 kvdb = "0.13.0"
 kvdb-memorydb = "0.13.0"
 kvdb-rocksdb = "0.19.0"
@@ -99,7 +100,9 @@ tokio-util = { version = "0.7", features = ["io"] }
 toml = "0.8.19"
 tower-http = { version = "0.5", features = ["cors"] }
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "=0.3.19", features = [
+	"env-filter",
+] } # Dependency pinned because 0.3.20 messes up text formatting in substrate logs
 trie-db = { version = "0.29", default-features = false }
 trybuild = "1.0"
 proc-macro2 = "1.0.79"
@@ -142,6 +145,8 @@ sc-client-api = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = 
 sc-offchain = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sc-consensus = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sc-consensus-aura = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
+sc-consensus-babe = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
+sc-consensus-grandpa = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sc-consensus-manual-seal = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sc-executor = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sc-network = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }

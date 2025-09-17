@@ -1,19 +1,16 @@
 import assert, { strictEqual } from "node:assert";
 import {
   addBsp,
-  bspDownKey,
-  bspDownSeed,
   BspNetTestApi,
+  bspDownKey,
   bspThreeKey,
-  bspThreeSeed,
   bspTwoKey,
-  bspTwoSeed,
   describeBspNet,
   type EnrichedBspApi,
   ShConsts
 } from "../../../util";
 
-describeBspNet(
+await describeBspNet(
   "BSPNet: BSP Volunteering Thresholds",
   { initialised: false, bspStartingWeight: 100n, networkConfig: "standard" },
   ({ before, it, createUserApi, createBspApi }) => {
@@ -224,9 +221,8 @@ describeBspNet(
       });
 
       // Create a new BSP and onboard with no reputation
-      const { rpcPort } = await addBsp(userApi, bspDownKey, {
+      const { rpcPort } = await addBsp(userApi, bspDownKey, userApi.accounts.sudo, {
         name: "sh-bsp-down",
-        bspKeySeed: bspDownSeed,
         bspId: ShConsts.BSP_DOWN_ID,
         additionalArgs: ["--keystore-path=/keystore/bsp-down"],
         bspStartingWeight: 1n
@@ -320,9 +316,8 @@ describeBspNet(
       });
 
       // Add the second BSP
-      const { rpcPort } = await addBsp(userApi, bspTwoKey, {
+      const { rpcPort } = await addBsp(userApi, bspTwoKey, userApi.accounts.sudo, {
         name: "sh-bsp-two",
-        bspKeySeed: bspTwoSeed,
         bspId: ShConsts.BSP_TWO_ID,
         additionalArgs: ["--keystore-path=/keystore/bsp-two"]
       });
@@ -377,9 +372,8 @@ describeBspNet(
 
     it("BSP with reputation is prioritised", async () => {
       // Add a new, high reputation BSP
-      const { rpcPort } = await addBsp(userApi, bspThreeKey, {
+      const { rpcPort } = await addBsp(userApi, bspThreeKey, userApi.accounts.sudo, {
         name: "sh-bsp-three",
-        bspKeySeed: bspThreeSeed,
         bspId: ShConsts.BSP_THREE_ID,
         additionalArgs: ["--keystore-path=/keystore/bsp-three"],
         bspStartingWeight: 800_000_000n

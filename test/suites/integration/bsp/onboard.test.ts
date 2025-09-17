@@ -1,15 +1,15 @@
-import Docker from "dockerode";
 import assert, { strictEqual } from "node:assert";
+import Docker from "dockerode";
 import {
   addBspContainer,
-  describeBspNet,
   DOCKER_IMAGE,
-  waitFor,
-  type EnrichedBspApi
+  describeBspNet,
+  type EnrichedBspApi,
+  waitFor
 } from "../../../util";
 import { CAPACITY, MAX_STORAGE_CAPACITY } from "../../../util/bspNet/consts.ts";
 
-describeBspNet("BSPNet: Adding new BSPs", ({ before, createUserApi, createApi, it }) => {
+await describeBspNet("BSPNet: Adding new BSPs", ({ before, createUserApi, createApi, it }) => {
   let userApi: EnrichedBspApi;
 
   before(async () => {
