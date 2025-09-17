@@ -58,10 +58,7 @@ impl DBClient {
     /// Test the database connection
     pub async fn test_connection(&self) -> Result<()> {
         // Try to list BSPs with a limit of 1 to test the connection
-        self.repository
-            .list_bsps(1, 0)
-            .await
-            .map_err(|e| Error::Database(e.to_string()))?;
+        self.repository.list_bsps(1, 0).await?;
         Ok(())
     }
 
@@ -73,7 +70,7 @@ impl DBClient {
         self.repository
             .list_bsps(limit, offset)
             .await
-            .map_err(|e| Error::Database(e.to_string()))
+            .map_err(Into::into)
     }
 
     /// Retrieve a given MSP's entry by its onchain ID
@@ -83,7 +80,7 @@ impl DBClient {
         self.repository
             .get_msp_by_onchain_id(msp_onchain_id)
             .await
-            .map_err(|e| Error::Database(e.to_string()))
+            .map_err(Into::into)
     }
 
     /// Retrieve info on a specific bucket given its onchain ID
@@ -92,7 +89,7 @@ impl DBClient {
         self.repository
             .get_bucket_by_onchain_id(&hash)
             .await
-            .map_err(|e| Error::Database(e.to_string()))
+            .map_err(Into::into)
     }
 
     /// Get the files of the given bucket with pagination
@@ -108,7 +105,7 @@ impl DBClient {
         self.repository
             .get_files_by_bucket(bucket, limit, offset)
             .await
-            .map_err(|e| Error::Database(e.to_string()))
+            .map_err(Into::into)
     }
 
     /// Get all the `user`'s buckets with the given MSP
@@ -129,7 +126,7 @@ impl DBClient {
                 offset.unwrap_or(0),
             )
             .await
-            .map_err(|e| Error::Database(e.to_string()))
+            .map_err(Into::into)
     }
 
     pub async fn get_file_info(&self, file_key: &[u8]) -> Result<File> {
@@ -137,7 +134,7 @@ impl DBClient {
         self.repository
             .get_file_by_file_key(&hash)
             .await
-            .map_err(|e| Error::Database(e.to_string()))
+            .map_err(Into::into)
     }
 }
 
@@ -153,7 +150,7 @@ impl DBClient {
         self.repository
             .create_msp(account, onchain_msp_id)
             .await
-            .map_err(|e| Error::Database(e.to_string()))
+            .map_err(Into::into)
     }
 
     /// Delete an MSP
@@ -161,7 +158,7 @@ impl DBClient {
         self.repository
             .delete_msp(onchain_msp_id)
             .await
-            .map_err(|e| Error::Database(e.to_string()))
+            .map_err(Into::into)
     }
 
     /// Create a new BSP
@@ -175,7 +172,7 @@ impl DBClient {
         self.repository
             .create_bsp(account, onchain_bsp_id, capacity, stake)
             .await
-            .map_err(|e| Error::Database(e.to_string()))
+            .map_err(Into::into)
     }
 
     /// Delete a BSP
@@ -184,7 +181,7 @@ impl DBClient {
         self.repository
             .delete_bsp(onchain_bsp_id)
             .await
-            .map_err(|e| Error::Database(e.to_string()))
+            .map_err(Into::into)
     }
 
     /// Create a new bucket
@@ -200,7 +197,7 @@ impl DBClient {
         self.repository
             .create_bucket(account, msp_id, name, &hash, private)
             .await
-            .map_err(|e| Error::Database(e.to_string()))
+            .map_err(Into::into)
     }
 
     /// Delete a bucket
@@ -210,7 +207,7 @@ impl DBClient {
         self.repository
             .delete_bucket(&hash)
             .await
-            .map_err(|e| Error::Database(e.to_string()))
+            .map_err(Into::into)
     }
 
     /// Create a new file
@@ -237,17 +234,14 @@ impl DBClient {
                 size,
             )
             .await
-            .map_err(|e| Error::Database(e.to_string()))
+            .map_err(Into::into)
     }
 
     /// Delete a file
     pub async fn delete_file(&self, file_key: &[u8]) -> crate::error::Result<()> {
         // TODO: also clear related associations, like bsp_file
         let hash = shp_types::Hash::from_slice(file_key);
-        self.repository
-            .delete_file(&hash)
-            .await
-            .map_err(|e| Error::Database(e.to_string()))
+        self.repository.delete_file(&hash).await.map_err(Into::into)
     }
 }
 
