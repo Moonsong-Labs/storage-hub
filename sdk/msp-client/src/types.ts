@@ -127,3 +127,48 @@ export interface GetFilesOptions {
   path?: string;
   signal?: AbortSignal;
 }
+
+// MSP info
+export interface InfoResponse {
+  client: string;
+  version: string;
+  mspId: string;
+  multiaddresses: string[];
+  ownerAccount: string;
+  paymentAccount: string;
+  status: string;
+  activeSince: number;
+  uptime: string;
+}
+
+export interface Capacity {
+  totalBytes: number;
+  availableBytes: number;
+  usedBytes: number;
+}
+
+export interface StatsResponse {
+  capacity: Capacity;
+  activeUsers: number;
+  lastCapacityChange: number;
+  valuePropsAmount: number;
+  bucketsAmount: number;
+}
+
+export interface ValueProp {
+  id: string;
+  pricePerGbBlock: number;
+  dataLimitPerBucketBytes: number;
+  isAvailable: boolean;
+}
+
+export interface FileInfo {
+  fileKey: string;
+  fingerprint: string;
+  bucketId: string;
+  name: string;
+  location: string;
+  size: number;
+  isPublic: boolean;
+  uploadedAt: Date;
+}
