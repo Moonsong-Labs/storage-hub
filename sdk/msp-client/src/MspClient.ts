@@ -20,7 +20,7 @@ import { HttpClient } from '@storagehub-sdk/core';
 export class MspClient {
   public readonly config: HttpClientConfig;
   private readonly http: HttpClient;
-  private token?: string;
+  public token?: string;
 
   private constructor(config: HttpClientConfig, http: HttpClient) {
     this.config = config;
@@ -182,16 +182,16 @@ export class MspClient {
         path,
         authHeaders
           ? {
-              body: file,
-              headers: {
-                ...authHeaders,
-                'Content-Type': 'application/octet-stream',
-              },
-            }
-          : {
-              body: file,
-              headers: { 'Content-Type': 'application/octet-stream' },
+            body: file,
+            headers: {
+              ...authHeaders,
+              'Content-Type': 'application/octet-stream',
             },
+          }
+          : {
+            body: file,
+            headers: { 'Content-Type': 'application/octet-stream' },
+          },
       );
       return res;
     }
