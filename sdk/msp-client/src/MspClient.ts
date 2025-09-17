@@ -11,7 +11,7 @@ import type {
   VerifyResponse,
 } from './types.js';
 import type { HttpClientConfig } from '@storagehub-sdk/core';
-import { HttpClient, initWasm, FileMetadata, FileTrie } from '@storagehub-sdk/core';
+import { FileMetadata, FileTrie,HttpClient, initWasm } from '@storagehub-sdk/core';
 
 export class MspClient {
   public readonly config: HttpClientConfig;
@@ -130,6 +130,8 @@ export class MspClient {
     location: string,
     _options?: UploadOptions,
   ): Promise<UploadReceipt> {
+    void _options;
+    
     await initWasm();
 
     const backendPath = `/buckets/${encodeURIComponent(bucketId)}/upload/${encodeURIComponent(fileKey)}`;

@@ -346,10 +346,11 @@ pub async fn upload_file(
     {
         // Consume the file field to ensure it is correct
         {
-            let _file_bytes = file_data_stream.bytes().await.map_err(|e| {
-                Error::BadRequest(format!("Failed to read file: {}", e))
-            })?;
-        } 
+            let _file_bytes = file_data_stream
+                .bytes()
+                .await
+                .map_err(|e| Error::BadRequest(format!("Failed to read file: {}", e)))?;
+        }
 
         // Return a mock success response
         let bytes_location = file_metadata.location().clone();
