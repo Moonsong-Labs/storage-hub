@@ -1,11 +1,5 @@
 import { strictEqual } from "node:assert";
-import {
-  bspTwoKey,
-  bspTwoSeed,
-  describeBspNet,
-  type EnrichedBspApi,
-  ShConsts
-} from "../../../util";
+import { bspTwoKey, describeBspNet, type EnrichedBspApi, ShConsts } from "../../../util";
 
 await describeBspNet(
   "BSPNet: Maintenance Mode Test",
@@ -36,7 +30,6 @@ await describeBspNet(
       const { rpcPort: maintenanceBspRpcPort } = await userApi.docker.onboardBsp({
         bspSigner: bspTwoKey,
         name: "sh-bsp-maintenance",
-        bspKeySeed: bspTwoSeed,
         bspId: ShConsts.BSP_TWO_ID,
         additionalArgs: [
           "--keystore-path=/keystore/bsp-two",

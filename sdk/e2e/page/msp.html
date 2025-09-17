@@ -447,15 +447,14 @@
       try {
         if (!client) throw new Error('Connect MSP first');
         setStatus('Downloading by key...');
-        const bucketId = 'e2e-bucket';
-        const fileKey = 'web-file';
+        const fileKey = '0xde4a17999bc1482ba71737367e5d858a133ed1e13327a29c495ab976004a138f';
         if (!window.__msp.token) {
           const jwt = generateMockJwt();
           client.setToken(jwt);
           window.__msp.token = jwt;
           console.log('[TOKEN][AUTO]', jwt);
         }
-        const dl = await client.downloadByKey(bucketId, fileKey);
+        const dl = await client.downloadByKey(fileKey);
         window.__msp.downloadMeta = { status: dl?.status, contentType: dl?.contentType, contentLength: dl?.contentLength, contentRange: dl?.contentRange };
         console.log('[DOWNLOAD][KEY][META]', window.__msp.downloadMeta);
         // Save to user-selected location (browsers cannot write to /tmp)

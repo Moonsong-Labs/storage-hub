@@ -6,9 +6,7 @@ import {
   addMspContainer,
   assertEventPresent,
   bspThreeKey,
-  bspThreeSeed,
   bspTwoKey,
-  bspTwoSeed,
   describeMspNet,
   type EnrichedBspApi,
   getContainerIp,
@@ -76,7 +74,6 @@ await describeMspNet(
       await userApi.docker.onboardBsp({
         bspSigner: bspTwoKey,
         name: "sh-bsp-two",
-        bspKeySeed: bspTwoSeed,
         bspId: ShConsts.BSP_TWO_ID,
         additionalArgs: ["--keystore-path=/keystore/bsp-two"],
         waitForIdle: true
@@ -85,7 +82,6 @@ await describeMspNet(
       await userApi.docker.onboardBsp({
         bspSigner: bspThreeKey,
         name: "sh-bsp-three",
-        bspKeySeed: bspThreeSeed,
         bspId: ShConsts.BSP_THREE_ID,
         additionalArgs: ["--keystore-path=/keystore/bsp-three"],
         waitForIdle: true

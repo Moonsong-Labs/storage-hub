@@ -19,6 +19,10 @@
 
 name: Storage Hub Parachain CI/CD
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 on:
   pull_request:
   push:
@@ -68,25 +72,41 @@ jobs:
       SCCACHE_GHA_ENABLED: 'true'
       RUSTC_WRAPPER: 'sccache'
       CARGO_INCREMENTAL: '0'
+      CARGO_TERM_COLOR: always
     steps:
       - uses: actions/checkout@v4
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.9
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
         with:
-          cache: false
+          cache: true
+      - name: Cache cargo registry and git index
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
       - uses: rui314/setup-mold@v1
+      - name: Set build flags (use mold linker)
+        run: echo "RUSTFLAGS=${{ env.RUSTFLAGS }} -C linker=clang -C link-arg=-fuse-ld=mold" >> $GITHUB_ENV
       - uses: ./.github/workflow-templates/setup-pnpm
       # Install libpq-dev
       - name: Install libpq-dev
-        run: sudo apt-get update && sudo apt-get install -y libpq-dev
+        run: sudo apt-get update && sudo apt-get install -y libpq-dev libclang-dev
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build All
         # TODO: Make this only build the parachain node project
-        run: cargo build --release
+        run: cargo build --release --locked
+      - name: Build Stats
+        run: sccache --show-stats || true
       - name: Check Built By Mold
         run: readelf -p .comment target/release/storage-hub-node
       - name: Prepare artefacts
@@ -111,13 +131,7 @@ jobs:
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      - name: Cache Docker layers
-        uses: actions/cache@v4
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
+      # Use GitHub Actions cache storage for Docker Buildx layers
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -131,8 +145,8 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: ${{ steps.prep.outputs.tags }}
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new
+          cache-from: type=gha,scope=storage-hub-node-build
+          cache-to: type=gha,mode=max,scope=storage-hub-node-build
           labels: |
             org.opencontainers.image.title=${{ github.event.repository.name }}
             org.opencontainers.image.description=${{ github.event.repository.description }}
@@ -655,6 +669,80 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fisherman-test-logs
+          path: test-logs/
+          retention-days: 5
+          if-no-files-found: warn
+
+  solochain_evm:
+    needs: [build_image, setup]
+    if: always()
+    name: 'Run Solochain EVM Tests'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/workflow-templates/setup-pnpm
+        with:
+          node_version: 23
+      - run: mkdir -p target/release/
+      - name: Get Node Binary if changed
+        if: needs.setup.outputs.node_changed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: node
+          path: target/release/
+      - name: Get Latest Node Binary if not changed
+        if: needs.setup.outputs.node_changed == 'false'
+        run: |
+          docker pull moonsonglabs/storage-hub:latest
+          docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
+          docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
+          docker rm temp_storage_hub
+      - name: Build Local Docker Image
+        run: |
+          chmod +x target/release/storage-hub-node
+          chmod -R 777 docker/dev-keystores
+          cd test
+          pnpm install
+          pnpm docker:build
+      - name: Run Typegen
+        run: |
+          cd test
+          pnpm typegen
+      - name: Run Solochain EVM Tests
+        id: run_tests
+        run: |
+          cd test
+          pnpm i
+          node --import tsx                        \
+              --test                               \
+              --test-reporter=@reporters/github    \
+              --test-reporter-destination=stdout   \
+              --test-reporter=spec                 \
+              --test-reporter-destination=stdout   \
+              --test-concurrency=1                 \
+              ./suites/integration/solochain-evm/**.test.ts
+      - name: Collect Docker Logs on Failure
+        if: failure() && steps.run_tests.outcome == 'failure'
+        run: |
+          echo "::group::Docker Container Status"
+          docker ps -a
+          echo "::endgroup::"
+
+          mkdir -p test-logs
+
+          for container in $(docker ps -a --filter "ancestor=moonsonglabs/storage-hub" --format "{{.Names}}"); do
+            echo "Collecting logs from $container"
+            docker logs $container > "test-logs/${container}.log" 2>&1
+          done
+
+          echo "Collected log files:"
+          ls -la test-logs/
+      - name: Upload logs as artifact
+        if: failure() && steps.run_tests.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: solochain-evm-test-logs
           path: test-logs/
           retention-days: 5
           if-no-files-found: warn
