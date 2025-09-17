@@ -54,6 +54,8 @@
     "test:node": "node --no-deprecation --import tsx --test ./suites/solo-node/**/**.test.ts",
     "test:node:only": "node --no-deprecation --import tsx --test --test-only ./suites/solo-node/**/**.test.ts",
     "test:node:single": "node --no-deprecation --import tsx --test --test-name-pattern=$FILTER ./suites/solo-node/**/**.test.ts",
+    "test:sdk-precompiles": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/integration/solochain-evm/sdk-precompiles.test.ts",
+    "test:sdk-precompiles:only": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test --test-only ./suites/integration/solochain-evm/sdk-precompiles.test.ts",
     "test:fisherman": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/integration/fisherman/**.test.ts",
     "test:fisherman:only": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test --test-only ./suites/integration/fisherman/**.test.ts"
   },
@@ -70,7 +72,9 @@
     "@reporters/github": "1.10.0",
     "@storagehub/api-augment": "workspace:*",
     "@storagehub/types-bundle": "workspace:*",
+    "@storagehub-sdk/msp-client": "file:../sdk/msp-client",
     "ethers": "^6.15.0",
+    "viem": "^2.9.20",
     "@types/tmp": "^0.2.6",
     "@zombienet/cli": "1.3.133",
     "@zombienet/utils": "0.0.29",

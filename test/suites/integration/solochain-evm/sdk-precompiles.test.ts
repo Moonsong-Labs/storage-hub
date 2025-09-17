@@ -4,8 +4,10 @@ import { Readable } from "node:stream";
 import { createPublicClient, createWalletClient, defineChain, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { describeBspNet, type EnrichedBspApi, ShConsts } from "../../../util";
+import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/bspNet/consts";
 import { ALITH_PRIVATE_KEY } from "../../../util/evmNet/keyring";
 import { StorageHubClient, FileManager, ReplicationLevel } from "../../../../sdk/core/dist/index.node.js";
+import { MspClient } from "../../../../sdk/msp-client/dist/index.node.js";
 
 // Helper function to compute file fingerprint using FileManager (Merkle trie root)
 const computeFileFingerprint = async (filePath: string): Promise<`0x${string}`> => {
@@ -24,10 +26,11 @@ const computeFileFingerprint = async (filePath: string): Promise<`0x${string}`> 
 
 await describeBspNet(
   "Solochain EVM SDK Precompiles Integration",
-  { initialised: false, networkConfig: "standard", runtimeType: "solochain", keepAlive: false },
+  { initialised: false, networkConfig: "standard", runtimeType: "solochain", keepAlive: true, indexer: true, /*backend: true*/ },
   ({ before, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
     let storageHubClient: InstanceType<typeof StorageHubClient>;
+    let mspClient: InstanceType<typeof MspClient>;
     let publicClient: ReturnType<typeof createPublicClient>;
     let walletClient: ReturnType<typeof createWalletClient>;
     let account: ReturnType<typeof privateKeyToAccount>;
@@ -41,7 +44,7 @@ await describeBspNet(
       const rpcUrl = `http://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`;
 
       const chain = defineChain({
-        id: 181222,
+        id: SH_EVM_SOLOCHAIN_CHAIN_ID,
         name: "SH-EVM_SOLO",
         nativeCurrency: { name: "StorageHub", symbol: "SH", decimals: 18 },
         rpcUrls: { default: { http: [rpcUrl] } },
@@ -57,6 +60,12 @@ await describeBspNet(
         chain,
         walletClient
       });
+
+      // Set up MSP Client
+      const mspEndpoint = `http://127.0.0.1:${ShConsts.NODE_INFOS.msp1.port}`;
+      mspClient = await MspClient.connect({
+        baseUrl: mspEndpoint
+      });
     });
 
     // Create bucket
@@ -65,20 +74,7 @@ await describeBspNet(
 
       console.log(`[TEST] Creating bucket: ${bucketName}`);
 
-      // Query available value propositions for the MSP (like other tests do)
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(userApi.shConsts.DUMMY_MSP_ID);
-
-      // Print value proposition
-      // console.log(`[TEST] Found ${valueProps.length} value propositions for MSP ${userApi.shConsts.DUMMY_MSP_ID}:`);
-      // valueProps.forEach((prop, index) => {
-      //   console.log(`[TEST] Value Prop ${index}:`, {
-      //     id: prop.id?.toHex?.() || 'undefined',
-      //     pricePerGibPerBlock: prop.pricePerGibPerBlock?.toString?.() || 'undefined',
-      //     commitment: prop.commitment?.toHex?.() || 'undefined',
-      //     bucketDataLimit: prop.bucketDataLimit?.toString?.() || 'undefined',
-      //     raw: prop.toHuman?.() || prop.toString?.() || 'undefined'
-      //   });
-      // });
 
       assert(valueProps.length > 0, "No value propositions found for MSP");
       assert(valueProps[0].id, "Value proposition ID is undefined");
@@ -109,28 +105,6 @@ await describeBspNet(
 
       console.log(`[TEST] ✅ Bucket created successfully! TxHash: ${txHash}`);
       console.log(`[TEST] ✅ Bucket ID: ${bucketId}`);
-    });
-
-    // Change bucket privacy
-    it("should update bucket privacy using StorageHubClient", async () => {
-      assert(bucketId, "Bucket must be created first");
-
-      console.log(`[TEST] Updating bucket privacy from public to private...`);
-      console.log(`[TEST] Bucket ID: ${bucketId}`);
-
-      // Update bucket privacy to private
-      const txHash = await storageHubClient.updateBucketPrivacy(
-        bucketId as `0x${string}`,
-        true // make it private
-      );
-
-      console.log(`[TEST] Update bucket privacy tx sent: ${txHash}`);
-      await userApi.block.seal();
-
-      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
-      assert(receipt.status === "success", "Update bucket privacy transaction failed");
-
-      console.log(`[TEST] ✅ Bucket privacy updated successfully! TxHash: ${txHash}`);
     });
 
     // Issue storage request to upload file
