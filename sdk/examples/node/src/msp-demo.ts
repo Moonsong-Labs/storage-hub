@@ -32,10 +32,12 @@ export async function runMspDemo(): Promise<void> {
   console.log('verified user:', verified.user);
 
   // Upload a file from disk
-  const bucketId = '0xBucketId';
-  const fileKey = '0xFileKey';
+  const bucketId = '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
+  const fileKey = '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890';
   const filePath = new URL('../data/hello.txt', import.meta.url);
-  const receipt: UploadReceipt = await client.uploadFile(bucketId, fileKey, createReadStream(filePath));
+  const owner = address;
+  const location = 'hello.txt';
+  const receipt: UploadReceipt = await client.uploadFile(bucketId, fileKey, createReadStream(filePath), owner, location);
   console.log('uploaded:', receipt);
 
   // Download the file to disk

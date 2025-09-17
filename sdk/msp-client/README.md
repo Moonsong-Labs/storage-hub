@@ -77,11 +77,13 @@ const verified = await client.verify(message, signature);
 client.setToken(verified.token); // Set auth token for subsequent requests
 
 // 4. Upload a file
-const bucketId = '0xYourBucketId'; // StorageHub bucket identifier  
-const fileKey = '0xYourFileKey';   // Unique file identifier
+const bucketId = '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef'; // StorageHub bucket identifier
+const fileKey = '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890';   // Unique file identifier
 const filePath = './myfile.txt';
+const owner = walletAddress;      // File owner
+const location = 'myfile.txt';    // File location/path within the bucket
 
-const receipt = await client.uploadFile(bucketId, fileKey, createReadStream(filePath));
+const receipt = await client.uploadFile(bucketId, fileKey, createReadStream(filePath), owner, location);
 console.log('File uploaded successfully:', receipt);
 
 // 5. Download the file
@@ -135,10 +137,15 @@ console.log('Folder files:', files);
   - `message: string` - The message that was signed
   - `signature: string` - Wallet signature (0x...)
 - **`setToken(token)`** - Set authentication token for subsequent requests
-- **`uploadFile(bucketId, fileKey, file)`** - Upload file to storage
+- **`uploadFile(bucketId, fileKey, file, owner, location)`** - Upload file to storage
   - `bucketId: string` - Storage bucket identifier
   - `fileKey: string` - Unique file key/identifier
-  - `file: ReadStream | Blob | File` - File data to upload
+  - `file: ReadStream | Blob | File | Uint8Array | ArrayBuffer` - File data to upload
+  - `owner: string` - File owner
+  - `location: string` - File location/path within the bucket
+- **`hexToBytes(hex)`** - Convert hex string to Uint8Array (handles 0x prefix)
+- **`formFileMetadata(owner, bucketId, location, fingerprint, size)`** - Create FileMetadata instance
+- **`computeFileKey(metadata)`** - Compute file key from FileMetadata
 - **`downloadByKey(fileKey)`** - Download file by key
   - Returns: `{ stream: ReadableStream, status: string }`
 - **`listBuckets()`** - List all buckets of the currently authenticated user

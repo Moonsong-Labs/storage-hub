@@ -270,6 +270,9 @@ pub async fn get_file_info(
 /// - `file`: The file data to upload
 /// - `file_metadata`: Encoded FileMetadata (Vec<u8>) containing owner, bucket_id, location, file_size, and fingerprint
 ///
+/// When running with the `mocks` feature enabled, this performs minimal validation
+/// and returns a mock success response without actual file processing.
+///
 /// TODO: Further optimize this to avoid having to load the entire file into memory.
 pub async fn upload_file(
     State(services): State<Services>,
@@ -337,6 +340,31 @@ pub async fn upload_file(
         return Err(Error::BadRequest(
             "File key in URL does not match file metadata".to_string(),
         ));
+    }
+
+    #[cfg(feature = "mocks")]
+    {
+        // Consume the file field to ensure it is correct
+        {
+            let _file_bytes = file_data_stream.bytes().await.map_err(|e| {
+                Error::BadRequest(format!("Failed to read file: {}", e))
+            })?;
+        } 
+
+        // Return a mock success response
+        let bytes_location = file_metadata.location().clone();
+        let location = str::from_utf8(&bytes_location)
+            .unwrap_or(&file_key)
+            .to_string();
+        let response = FileUploadResponse {
+            status: "upload_successful".to_string(),
+            file_key: file_key.clone(),
+            bucket_id: bucket_id.clone(),
+            fingerprint: hex::encode(file_metadata.fingerprint().as_ref()),
+            location,
+        };
+
+        return Ok((StatusCode::CREATED, Json(response)));
     }
 
     // Initialize the trie that will hold the chunked file data.

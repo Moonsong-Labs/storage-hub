@@ -58,6 +58,15 @@ impl FileMetadata {
     /// 32-byte `Uint8Array`.
     #[wasm_bindgen(js_name = getFileKey)]
     pub fn get_file_key(&self) -> Vec<u8> {
-        blake2_256(&self.inner.encode()).to_vec()
+        // Match the exact calculation from primitives/file-metadata/src/lib.rs
+        let encoded = self.inner.encode();
+        blake2_256(encoded.as_slice()).to_vec()
+    }
+
+    /// Returns the SCALE-encoded FileMetadata as bytes.
+    /// This is used for multipart uploads to the backend.
+    #[wasm_bindgen(js_name = encode)]
+    pub fn encode(&self) -> Vec<u8> {
+        self.inner.encode()
     }
 }
