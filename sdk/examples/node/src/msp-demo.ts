@@ -19,8 +19,7 @@ export async function runMspDemo(): Promise<void> {
   console.log('health:', health);
 
   // Prepare wallet (test key) and derive address
-  const TEST_PK =
-    '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+  const TEST_PK = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
   const wallet = LocalWallet.fromPrivateKey(TEST_PK);
   const address = await wallet.getAddress();
 
@@ -37,7 +36,13 @@ export async function runMspDemo(): Promise<void> {
   const filePath = new URL('../data/hello.txt', import.meta.url);
   const owner = address;
   const location = 'hello.txt';
-  const receipt: UploadReceipt = await client.uploadFile(bucketId, fileKey, createReadStream(filePath), owner, location);
+  const receipt: UploadReceipt = await client.uploadFile(
+    bucketId,
+    fileKey,
+    createReadStream(filePath),
+    owner,
+    location,
+  );
   console.log('uploaded:', receipt);
 
   // Download the file to disk

@@ -11,7 +11,7 @@ import type {
   VerifyResponse,
 } from './types.js';
 import type { HttpClientConfig } from '@storagehub-sdk/core';
-import { FileMetadata, FileTrie,HttpClient, initWasm } from '@storagehub-sdk/core';
+import { FileMetadata, FileTrie, HttpClient, initWasm } from '@storagehub-sdk/core';
 
 export class MspClient {
   public readonly config: HttpClientConfig;
@@ -131,7 +131,7 @@ export class MspClient {
     _options?: UploadOptions,
   ): Promise<UploadReceipt> {
     void _options;
-    
+
     await initWasm();
 
     const backendPath = `/buckets/${encodeURIComponent(bucketId)}/upload/${encodeURIComponent(fileKey)}`;
@@ -140,18 +140,26 @@ export class MspClient {
     // Convert the file to a blob and get its size
     const fileBlob = await this.coerceToFormPart(file);
     const fileSize = fileBlob.size;
-    
+
     // Compute the fingerprint first
     const fingerprint = await this.computeFileFingerprint(fileBlob);
-    
+
     // Create the FileMetadata instance
-    const metadata = await this.formFileMetadata(owner, bucketId, location, fingerprint, BigInt(fileSize));
+    const metadata = await this.formFileMetadata(
+      owner,
+      bucketId,
+      location,
+      fingerprint,
+      BigInt(fileSize),
+    );
 
     // Compute the file key and ensure it matches the provided file key
     const computedFileKey = await this.computeFileKey(metadata);
     const expectedFileKeyBytes = this.hexToBytes(fileKey);
-    if (computedFileKey.length !== expectedFileKeyBytes.length || 
-        !computedFileKey.every((byte, index) => byte === expectedFileKeyBytes[index])) {
+    if (
+      computedFileKey.length !== expectedFileKeyBytes.length ||
+      !computedFileKey.every((byte, index) => byte === expectedFileKeyBytes[index])
+    ) {
       throw new Error('Computed file key does not match provided file key');
     }
 
@@ -161,7 +169,7 @@ export class MspClient {
     // Create the multipart form with both the file and its metadata
     const form = new FormData();
     const fileMetadataBlob = new Blob([new Uint8Array(encodedMetadata)], {
-      type: "application/octet-stream"
+      type: 'application/octet-stream',
     });
     form.append('file_metadata', fileMetadataBlob, 'file_metadata');
     form.append('file', fileBlob, 'file');
@@ -175,17 +183,19 @@ export class MspClient {
     return res;
   }
 
-  private async coerceToFormPart(file: Blob | ArrayBuffer | Uint8Array | ReadableStream<Uint8Array> | unknown): Promise<Blob> {
+  private async coerceToFormPart(
+    file: Blob | ArrayBuffer | Uint8Array | ReadableStream<Uint8Array> | unknown,
+  ): Promise<Blob> {
     if (typeof Blob !== 'undefined' && file instanceof Blob) return file;
     if (file instanceof Uint8Array) return new Blob([file.buffer as ArrayBuffer]);
     if (typeof ArrayBuffer !== 'undefined' && file instanceof ArrayBuffer) return new Blob([file]);
-    
+
     // Handle ReadableStream by reading it into memory
     if (file instanceof ReadableStream) {
       const reader = file.getReader();
       const chunks: Uint8Array[] = [];
       let totalLength = 0;
-      
+
       try {
         while (true) {
           const { done, value } = await reader.read();
@@ -198,7 +208,7 @@ export class MspClient {
       } finally {
         reader.releaseLock();
       }
-      
+
       // Combine all chunks into a single Uint8Array
       const combined = new Uint8Array(totalLength);
       let offset = 0;
@@ -206,32 +216,38 @@ export class MspClient {
         combined.set(chunk, offset);
         offset += chunk.length;
       }
-      
-      return new Blob([combined], { type: "application/octet-stream" });
+
+      return new Blob([combined], { type: 'application/octet-stream' });
     }
 
-    return new Blob([file as BlobPart], { type: "application/octet-stream" });
+    return new Blob([file as BlobPart], { type: 'application/octet-stream' });
   }
 
   private async computeFileFingerprint(fileBlob: Blob): Promise<Uint8Array> {
     const trie = new FileTrie();
     const fileBytes = new Uint8Array(await fileBlob.arrayBuffer());
-    
+
     // Process the file in 1KB chunks (matching CHUNK_SIZE from constants)
     const CHUNK_SIZE = 1024;
     let offset = 0;
-    
+
     while (offset < fileBytes.length) {
       const end = Math.min(offset + CHUNK_SIZE, fileBytes.length);
       const chunk = fileBytes.slice(offset, end);
       trie.push_chunk(chunk);
       offset = end;
     }
-    
+
     return trie.get_root();
   }
 
-  async formFileMetadata(owner: string, bucketId: string, location: string, fingerprint: Uint8Array, size: bigint): Promise<FileMetadata> {
+  async formFileMetadata(
+    owner: string,
+    bucketId: string,
+    location: string,
+    fingerprint: Uint8Array,
+    size: bigint,
+  ): Promise<FileMetadata> {
     const ownerBytes = this.hexToBytes(owner);
     const bucketIdBytes = this.hexToBytes(bucketId);
     const locationBytes = new TextEncoder().encode(location);
