@@ -85,7 +85,7 @@ export async function runMspDemo(): Promise<void> {
     console.log(` Entry name: ${entry.name}`);
   }
 
-  // New: get file info (returns Date for uploadedAt in SDK)
+  // Get file info
   const fileInfo: FileInfo = await client.getFileInfo(bucketId, fileKey);
   console.log('fileInfo:', { ...fileInfo, uploadedAt: fileInfo.uploadedAt.toISOString() });
 }
