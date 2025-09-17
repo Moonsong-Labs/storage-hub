@@ -1,4 +1,6 @@
-use std::{collections::HashSet, io::Cursor};
+#[cfg(not(feature = "mocks"))]
+use std::collections::HashSet;
+use std::io::Cursor;
 
 use axum::{
     body::Bytes,
@@ -15,10 +17,12 @@ use axum_extra::{
 };
 use codec::Decode;
 use serde::Deserialize;
+use shc_common::types::FileMetadata;
+#[cfg(not(feature = "mocks"))]
 use shc_common::types::{
-    ChunkId, FileMetadata, StorageProofsMerkleTrieLayout, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
-    FILE_CHUNK_SIZE,
+    ChunkId, StorageProofsMerkleTrieLayout, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE, FILE_CHUNK_SIZE,
 };
+#[cfg(not(feature = "mocks"))]
 use shc_file_manager::{in_memory::InMemoryFileDataTrie, traits::FileDataTrie};
 use shp_types::Hashing;
 use tokio::fs::File;
@@ -274,6 +278,7 @@ pub async fn get_file_info(
 /// and returns a mock success response without actual file processing.
 ///
 /// TODO: Further optimize this to avoid having to load the entire file into memory.
+#[cfg_attr(feature = "mocks", allow(unused_variables))]
 pub async fn upload_file(
     State(services): State<Services>,
     TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
@@ -319,7 +324,7 @@ pub async fn upload_file(
     }
 
     // Ensure both the file data stream and the file metadata were provided.
-    let mut file_data_stream = file_data_stream
+    let file_data_stream = file_data_stream
         .ok_or_else(|| Error::BadRequest("Missing 'file' field in multipart data".to_string()))?;
 
     let file_metadata = file_metadata.ok_or_else(|| {
@@ -342,32 +347,54 @@ pub async fn upload_file(
         ));
     }
 
-    #[cfg(feature = "mocks")]
-    {
-        // Consume the file field to ensure it is correct
-        {
-            let _file_bytes = file_data_stream
-                .bytes()
-                .await
-                .map_err(|e| Error::BadRequest(format!("Failed to read file: {}", e)))?;
-        }
+    process_upload_after_validation(
+        file_data_stream,
+        file_metadata,
+        &bucket_id,
+        &file_key,
+        &services,
+    )
+    .await
+}
 
-        // Return a mock success response
-        let bytes_location = file_metadata.location().clone();
-        let location = str::from_utf8(&bytes_location)
-            .unwrap_or(&file_key)
-            .to_string();
-        let response = FileUploadResponse {
-            status: "upload_successful".to_string(),
-            file_key: file_key.clone(),
-            bucket_id: bucket_id.clone(),
-            fingerprint: hex::encode(file_metadata.fingerprint().as_ref()),
-            location,
-        };
+#[cfg(feature = "mocks")]
+async fn process_upload_after_validation(
+    file_data_stream: Field,
+    file_metadata: FileMetadata,
+    bucket_id: &str,
+    file_key: &str,
+    _services: &Services,
+) -> Result<impl IntoResponse, Error> {
+    // Consume the file field to ensure it is correct
+    let _file_bytes = file_data_stream
+        .bytes()
+        .await
+        .map_err(|e| Error::BadRequest(format!("Failed to read file: {}", e)))?;
 
-        return Ok((StatusCode::CREATED, Json(response)));
-    }
+    // Return a mock success response
+    let bytes_location = file_metadata.location().clone();
+    let location = str::from_utf8(&bytes_location)
+        .unwrap_or(file_key)
+        .to_string();
+    let response = FileUploadResponse {
+        status: "upload_successful".to_string(),
+        file_key: file_key.to_string(),
+        bucket_id: bucket_id.to_string(),
+        fingerprint: hex::encode(file_metadata.fingerprint().as_ref()),
+        location,
+    };
 
+    Ok((StatusCode::CREATED, Json(response)))
+}
+
+#[cfg(not(feature = "mocks"))]
+async fn process_upload_after_validation(
+    mut file_data_stream: Field,
+    file_metadata: FileMetadata,
+    bucket_id: &str,
+    file_key: &str,
+    services: &Services,
+) -> Result<impl IntoResponse, Error> {
     // Initialize the trie that will hold the chunked file data.
     let mut trie = InMemoryFileDataTrie::<StorageProofsMerkleTrieLayout>::new();
 
@@ -472,12 +499,12 @@ pub async fn upload_file(
     // If the complete file was uploaded to the MSP successfully, we can return the response.
     let bytes_location = file_metadata.location().clone();
     let location = str::from_utf8(&bytes_location)
-        .unwrap_or(&file_key)
+        .unwrap_or(file_key)
         .to_string();
     let response = FileUploadResponse {
         status: "upload_successful".to_string(),
-        file_key: file_key.clone(),
-        bucket_id: bucket_id.clone(),
+        file_key: file_key.to_string(),
+        bucket_id: bucket_id.to_string(),
         fingerprint: hex::encode(trie.get_root()),
         location,
     };
