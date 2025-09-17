@@ -309,7 +309,7 @@ pub trait StorageHubClientApi {
     ) -> RpcResult<()>;
 
     /// Get the current price per giga unit per tick from the payment streams pallet.
-    #[method(name = "paymentStreams_getCurrentPricePerGigaUnitPerTick")]
+    #[method(name = "getCurrentPricePerGigaUnitPerTick")]
     fn get_current_price_per_giga_unit_per_tick(&self) -> RpcResult<u128>;
 }
 
