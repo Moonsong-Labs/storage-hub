@@ -61,9 +61,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@polkadot/api": "^16.4.6",
+    "@polkadot/api": "^16.4.7",
     "@polkadot/keyring": "13.5.6",
-    "@polkadot/types": "^16.4.6",
+    "@polkadot/types": "^16.4.7",
     "@polkadot/util": "13.5.6",
     "@polkadot/util-crypto": "13.5.6",
     "@polkadot/wasm-crypto": "7.5.1",
