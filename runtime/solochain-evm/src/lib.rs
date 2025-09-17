@@ -27,8 +27,8 @@ use pallet_evm::{FeeCalculator, GasWeightMapping, Runner};
 use pallet_file_system::types::StorageRequestMetadata;
 use pallet_file_system_runtime_api::{
     GenericApplyDeltaEventInfoError, IsStorageRequestOpenToVolunteersError,
-    QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerTickError,
-    QueryMspConfirmChunksToProveForFileError,
+    QueryBspConfirmChunksToProveForFileError, QueryBspsVolunteeredForFileError,
+    QueryFileEarliestVolunteerTickError, QueryMspConfirmChunksToProveForFileError,
 };
 use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
 use pallet_proofs_dealer::types::{
@@ -723,7 +723,11 @@ impl_runtime_apis! {
             FileSystem::query_msp_confirm_chunks_to_prove_for_file(msp_id, file_key)
         }
 
-       fn decode_generic_apply_delta_event_info(encoded_event_info: Vec<u8>) -> Result<BucketId<Runtime>, GenericApplyDeltaEventInfoError> {
+        fn query_bsps_volunteered_for_file(file_key: H256) -> Result<Vec<BackupStorageProviderId<Runtime>>, QueryBspsVolunteeredForFileError> {
+            FileSystem::query_bsps_volunteered_for_file(file_key)
+        }
+
+        fn decode_generic_apply_delta_event_info(encoded_event_info: Vec<u8>) -> Result<BucketId<Runtime>, GenericApplyDeltaEventInfoError> {
             FileSystem::decode_generic_apply_delta_event_info(encoded_event_info)
         }
 

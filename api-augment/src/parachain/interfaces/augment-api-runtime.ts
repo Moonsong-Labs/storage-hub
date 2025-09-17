@@ -81,6 +81,7 @@ import type {
   ProviderId,
   QueryAvailableStorageCapacityError,
   QueryBspConfirmChunksToProveForFileError,
+  QueryBspsVolunteeredForFileError,
   QueryBucketsForMspError,
   QueryBucketsOfUserStoredByMspError,
   QueryEarliestChangeCapacityBlockError,
@@ -336,6 +337,15 @@ declare module "@polkadot/api-base/types/calls" {
           bspId: BackupStorageProviderId | string | Uint8Array,
           fileKey: H256 | string | Uint8Array
         ) => Observable<Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>>
+      >;
+      /**
+       * Query the BSPs that volunteered for a file.
+       **/
+      queryBspsVolunteeredForFile: AugmentedCall<
+        ApiType,
+        (
+          fileKey: H256 | string | Uint8Array
+        ) => Observable<Result<Vec<BackupStorageProviderId>, QueryBspsVolunteeredForFileError>>
       >;
       /**
        * Query the earliest tick number that a BSP can volunteer for a file.
