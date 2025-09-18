@@ -4,7 +4,7 @@ description: Installs pnpm and caches the pnpm store
 inputs:
   node_version:
     description: "Node.js version"
-    default: "23"
+    default: "23.11.1"
     required: false
 
 runs:
@@ -14,6 +14,7 @@ runs:
       uses: actions/setup-node@v4
       with:
         node-version: ${{ inputs.node_version }}
+        cache: 'pnpm'
 
     - name: Install pnpm
       uses: pnpm/action-setup@v4
@@ -41,5 +42,6 @@ runs:
         node-version: ${{ inputs.node_version }}
         registry-url: https://registry.npmjs.org/
         always-auth: true
+        cache: 'pnpm'
       env:
         NODE_AUTH_TOKEN: ${{ env.NODE_AUTH_TOKEN }}
