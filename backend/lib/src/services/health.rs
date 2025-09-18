@@ -5,6 +5,7 @@
 use std::sync::Arc;
 
 use serde::Serialize;
+use sp_core::H256;
 
 use crate::data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage};
 
@@ -108,12 +109,22 @@ impl HealthService {
     }
 
     async fn check_rpc(&self) -> ComponentHealth {
-        let (status, message) = match self.rpc.is_connected().await {
-            true => (Self::HEALTHY, None),
-            false => (
-                Self::UNHEALTHY,
-                Some("RPC connection not established".to_string()),
-            ),
+        // First check if the connection to the RPC is established
+        if !self.rpc.is_connected().await {
+            return ComponentHealth {
+                status: Self::UNHEALTHY.to_string(),
+                message: Some("RPC connection not established".to_string()),
+            };
+        }
+
+        // Then to make sure everything works test actual RPC functionality by calling the getForestRoot method
+        let (status, message) = match self
+            .rpc
+            .call::<_, Option<H256>>("storagehubclient_getForestRoot", (None::<H256>,))
+            .await
+        {
+            Ok(_) => (Self::HEALTHY, None),
+            Err(e) => (Self::UNHEALTHY, Some(format!("RPC call failed: {}", e))),
         };
 
         ComponentHealth {

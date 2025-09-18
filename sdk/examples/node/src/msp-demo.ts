@@ -38,8 +38,7 @@ export async function runMspDemo(): Promise<void> {
   console.log('valueProps count:', Array.isArray(valueProps) ? valueProps.length : 0);
 
   // Prepare wallet (test key) and derive address
-  const TEST_PK =
-    '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+  const TEST_PK = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
   const wallet = LocalWallet.fromPrivateKey(TEST_PK);
   const address = await wallet.getAddress();
 
@@ -50,11 +49,19 @@ export async function runMspDemo(): Promise<void> {
   client.setToken(verified.token);
   console.log('verified user:', verified.user);
 
-  // Upload a file from disk (mock defaults are fine)
+  // Upload a file from disk
   const bucketId = process.env.BUCKET_ID || 'd8793e4187f5642e96016a96fb33849a7e03eda91358b311bbd426ed38b26692';
   const fileKey = process.env.FILE_KEY || 'e901c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f7';
   const filePath = new URL('../data/hello.txt', import.meta.url);
-  const receipt: UploadReceipt = await client.uploadFile(bucketId, fileKey, createReadStream(filePath));
+  const owner = address;
+  const location = 'hello.txt';
+  const receipt: UploadReceipt = await client.uploadFile(
+    bucketId,
+    fileKey,
+    createReadStream(filePath),
+    owner,
+    location,
+  );
   console.log('uploaded:', receipt);
 
   // Download the file to disk

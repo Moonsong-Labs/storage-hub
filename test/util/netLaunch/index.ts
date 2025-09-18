@@ -306,6 +306,15 @@ export class NetworkLauncher {
       });
 
       await this.runMigrations();
+
+      // Start backend only if backend flag is enabled (depends on msp-1 and postgres)
+      if (this.config.backend && this.type === "fullnet") {
+        await compose.upOne("sh-backend", {
+          cwd: cwd,
+          config: tmpFile,
+          log: verbose
+        });
+      }
     }
 
     await compose.upOne("sh-user", {
@@ -889,6 +898,12 @@ export type NetLaunchConfig = {
    * Optional parameter to run the fisherman service.
    */
   fisherman?: boolean;
+
+  /**
+   * Optional parameter to run the backend service.
+   * Requires indexer to be enabled.
+   */
+  backend?: boolean;
 
   /**
    * Optional parameter to set the indexer mode when indexer is enabled.
