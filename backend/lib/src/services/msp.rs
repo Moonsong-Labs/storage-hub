@@ -604,7 +604,7 @@ mod tests {
     use super::*;
 
     use crate::{
-        constants::rpc::DEFAULT_MSP_CALLBACK_URL,
+        constants::{mocks::PRICE_PER_GIGA_UNIT, rpc::DEFAULT_MSP_CALLBACK_URL},
         data::{
             indexer_db::mock_repository::MockRepository,
             rpc::{AnyRpcConnection, MockConnection, StorageHubRpcClient},
@@ -761,14 +761,30 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_payment_stream() {
-        let service = MockMspServiceBuilder::new().build();
+        let service = MockMspServiceBuilder::new()
+            .with_rpc_responses(vec![(
+                "storagehubclient_getCurrentPricePerGigaUnitPerTick",
+                serde_json::json!(PRICE_PER_GIGA_UNIT),
+            )])
+            .await
+            .build();
+
         let ps = service
-            .get_payment_stream("0x123")
+            .get_payment_streams("0x123") // TODO: random address
             .await
             .expect("get_payment_stream should succeed");
 
-        assert!(ps.tokens_per_block > 0);
-        assert!(ps.user_deposit > 0);
+        // These are present in the MockRepository
+        assert!(ps.streams.len() == 2);
+
+        ps.streams
+            .iter()
+            .find(|s| s.provider_type == "msp")
+            .expect("a fixed stream");
+        ps.streams
+            .iter()
+            .find(|s| s.provider_type == "bsp")
+            .expect("a dynamic stream");
     }
 
     #[tokio::test]
