@@ -265,7 +265,7 @@
     function generateMockJwt(address) {
       const header = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9'; // {"alg":"HS256","typ":"JWT"}
       const now = Math.floor(Date.now() / 1000);
-      const user = addres || '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
+      const user = address || '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
       const payload = {
         sub: user,
         iat: now,
