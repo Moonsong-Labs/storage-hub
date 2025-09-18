@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { after, afterEach, before, beforeEach, describe, it } from "node:test";
-import { createSqlClient, verifyContainerFreshness, closeAllSqlClients } from "..";
+import { createSqlClient, verifyContainerFreshness } from "..";
 import { NetworkLauncher } from "../netLaunch";
 import * as ShConsts from "./consts";
 import { cleardownTest } from "./helpers";

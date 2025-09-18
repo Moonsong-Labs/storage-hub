@@ -72,6 +72,7 @@ export const verifyContainerFreshness = async () => {
 };
 
 // Global tracking of SQL clients for cleanup
+// biome-ignore lint/complexity/noBannedTypes: Good enough until we integrate ORM
 const activeSqlClients = new Set<postgres.Sql<{}>>();
 
 export const createSqlClient = () => {
