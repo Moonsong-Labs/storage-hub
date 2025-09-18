@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { after, afterEach, before, beforeEach, describe, it } from "node:test";
-import { createSqlClient, verifyContainerFreshness } from "..";
+import { createSqlClient, verifyContainerFreshness, closeAllSqlClients } from "..";
 import { NetworkLauncher } from "../netLaunch";
 import * as ShConsts from "./consts";
 import { cleardownTest } from "./helpers";
@@ -93,6 +93,11 @@ export async function describeBspNet<
           console.log("ℹ️ Hint: close network with:   pnpm docker:stop:bspnet  ");
           process.exit(0);
         }
+      });
+
+      // Add a final after hook to ensure all SQL clients are closed
+      after(async () => {
+        await closeAllSqlClients();
       });
 
       const context = {
@@ -203,6 +208,11 @@ export async function describeMspNet<
           console.log("ℹ️ Hint: close network with:   pnpm docker:stop:fullnet  ");
           process.exit(0);
         }
+      });
+
+      // Add a final after hook to ensure all SQL clients are closed
+      after(async () => {
+        await closeAllSqlClients();
       });
 
       const context = {

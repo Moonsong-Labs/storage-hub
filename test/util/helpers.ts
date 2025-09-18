@@ -71,14 +71,44 @@ export const verifyContainerFreshness = async () => {
   }
 };
 
+// Global tracking of SQL clients for cleanup
+const activeSqlClients = new Set<postgres.Sql<{}>>();
+
 export const createSqlClient = () => {
-  return postgres({
+  const client = postgres({
     host: "localhost",
     port: 5432,
     database: "storage_hub",
     username: "postgres",
     password: "postgres"
   });
+
+  // Track the client for cleanup
+  activeSqlClients.add(client);
+
+  // Override the end method to remove from tracking
+  const originalEnd = client.end.bind(client);
+  client.end = async () => {
+    activeSqlClients.delete(client);
+    return originalEnd();
+  };
+
+  return client;
+};
+
+export const closeAllSqlClients = async () => {
+  const clientsToClose = Array.from(activeSqlClients);
+  activeSqlClients.clear();
+
+  await Promise.allSettled(
+    clientsToClose.map(async (client) => {
+      try {
+        await client.end();
+      } catch (error) {
+        console.warn("Error closing SQL client:", error);
+      }
+    })
+  );
 };
 
 export const checkSHRunningContainers = async (docker: Docker) => {

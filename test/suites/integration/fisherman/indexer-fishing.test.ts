@@ -26,7 +26,6 @@ import {
   waitForFileIndexed,
   waitForMspFileAssociation
 } from "../../../util/indexerHelpers";
-import { after } from "node:test";
 
 await describeMspNet(
   "Fisherman Indexer - Fishing Mode",
@@ -67,13 +66,6 @@ await describeMspNet(
 
       await waitForIndexing(userApi);
       await waitForIndexing(userApi);
-    });
-
-    after(async () => {
-      // Ensure SQL client is properly closed
-      if (sql) {
-        await sql.end();
-      }
     });
 
     it("indexes NewStorageRequest events", async () => {
