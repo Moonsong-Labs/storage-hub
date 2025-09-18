@@ -27,7 +27,7 @@
     "build": "node ./build.js && pnpm run build:types",
     "build:abi": "node scripts/compile-abi.js",
     "build:types": "tsc --emitDeclarationOnly -p tsconfig.json",
-    "clean": "rm -rf dist node_modules wasm/pkg/*",
+    "clean": "rm -rf dist node_modules wasm/pkg/* src/abi/*.abi.json",
     "coverage": "vitest run --coverage",
     "dev": "node ./build.js --watch",
     "format": "prettier --write \"{src/**/*.ts,src/**/*.tsx}\"",
