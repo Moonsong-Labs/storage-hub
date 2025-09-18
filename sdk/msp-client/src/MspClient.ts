@@ -270,7 +270,7 @@ export class MspClient {
     return new Blob([file as BlobPart], { type: "application/octet-stream" });
   }
 
-  async computeFileFingerprint(fileBlob: Blob): Promise<Uint8Array> {
+  private async computeFileFingerprint(fileBlob: Blob): Promise<Uint8Array> {
     const trie = new FileTrie();
     const fileBytes = new Uint8Array(await fileBlob.arrayBuffer());
 
