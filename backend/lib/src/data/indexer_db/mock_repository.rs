@@ -14,6 +14,7 @@ use std::{
 use async_trait::async_trait;
 use bigdecimal::BigDecimal;
 use chrono::Utc;
+use hex_literal::hex;
 use tokio::sync::RwLock;
 
 use shc_indexer_db::{
@@ -88,8 +89,11 @@ impl MockRepository {
             .expect("should create MSP 3");
 
         // Create 3 buckets, one per MSP
-        // Bucket 1: For MOCK_ADDRESS and DUMMY_MSP_ID
-        let bucket1_hash = random_hash();
+        // Bucket 1: For MOCK_ADDRESS and DUMMY_MSP_ID, as expected by SDK tests
+        // same hash as what the SDK test excepts
+        let bucket1_hash = Hash::from_slice(&hex!(
+            "d8793e4187f5642e96016a96fb33849a7e03eda91358b311bbd426ed38b26692"
+        ));
         let bucket1 = this
             .create_bucket(
                 crate::constants::mocks::MOCK_ADDRESS,
@@ -130,14 +134,33 @@ impl MockRepository {
             .expect("should create bucket 3");
 
         // Create 3 files, one per bucket
-        // File 1: In bucket 1
-        let file1_key = random_hash();
+        // but bucket 1 should have 2 files
+
+        // File 1: /Reports/Q1-2024.pdf
+        // same hash as what the SDK test excepts
+        let bucket1_file1_key = Hash::from_slice(&hex!(
+            "e901c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f7"
+        ));
         this.create_file(
             crate::constants::mocks::MOCK_ADDRESS.as_bytes(),
-            &file1_key,
+            &bucket1_file1_key,
             bucket1.id,
             &bucket1_hash,
-            b"Thesis/chapter1.pdf",
+            b"/Reports/Q1-2024.pdf", // expected by the SDK tests
+            &random_bytes_32(),
+            1048576, // 1MB
+        )
+        .await
+        .expect("should create file 1");
+
+        // File 2: /Thesis/chapter1.pdf
+        let bucket1_file2_key = random_hash();
+        this.create_file(
+            crate::constants::mocks::MOCK_ADDRESS.as_bytes(),
+            &bucket1_file2_key,
+            bucket1.id,
+            &bucket1_hash,
+            b"/Thesis/chapter1.pdf", // expected by the SDK tests
             &random_bytes_32(),
             1048576, // 1MB
         )
