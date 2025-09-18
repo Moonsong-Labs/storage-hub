@@ -843,6 +843,18 @@ jobs:
         run: |
           cd test
           pnpm typegen
+      - name: Setup Rust toolchain (for SDK wasm build)
+        uses: actions-rust-lang/setup-rust-toolchain@v1.8
+        with:
+          target: wasm32-unknown-unknown
+          cache: false
+      - name: Install wasm-pack (for SDK build)
+        run: curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
+      - name: Build SDK
+        run: |
+          cd sdk
+          pnpm install --frozen-lockfile
+          pnpm build
       - name: Run Solochain EVM Tests
         id: run_tests
         run: |
