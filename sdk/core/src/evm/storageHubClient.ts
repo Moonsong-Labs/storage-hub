@@ -15,6 +15,7 @@ import {
   type Address,
   createPublicClient,
   getContract,
+  type GetContractReturnType,
   http,
   parseGwei,
   type PublicClient,
@@ -22,7 +23,6 @@ import {
   stringToHex,
   toHex,
   type WalletClient,
-  type GetContractReturnType,
 } from 'viem';
 
 // Re-export filesystemAbi for external use
