@@ -66,6 +66,24 @@ importers:
       '@types/node':
         specifier: ^20.11.19
         version: 20.19.16
+      '@typescript-eslint/eslint-plugin':
+        specifier: ^8.37.0
+        version: 8.44.0(@typescript-eslint/parser@8.44.0(eslint@9.35.0(jiti@2.5.1))(typescript@5.5.4))(eslint@9.35.0(jiti@2.5.1))(typescript@5.5.4)
+      '@typescript-eslint/parser':
+        specifier: ^8.37.0
+        version: 8.44.0(eslint@9.35.0(jiti@2.5.1))(typescript@5.5.4)
+      eslint:
+        specifier: ^9.31.0
+        version: 9.35.0(jiti@2.5.1)
+      eslint-config-prettier:
+        specifier: ^10.1.5
+        version: 10.1.8(eslint@9.35.0(jiti@2.5.1))
+      eslint-plugin-simple-import-sort:
+        specifier: ^12.1.1
+        version: 12.1.1(eslint@9.35.0(jiti@2.5.1))
+      prettier:
+        specifier: ^3.6.2
+        version: 3.6.2
       solc:
         specifier: ^0.8.26
         version: 0.8.30
@@ -149,9 +167,30 @@ importers:
 
   msp-client:
     devDependencies:
+      '@eslint/eslintrc':
+        specifier: 3.3.1
+        version: 3.3.1
       '@storagehub-sdk/core':
         specifier: workspace:*
         version: link:../core
+      '@typescript-eslint/eslint-plugin':
+        specifier: ^8.37.0
+        version: 8.44.0(@typescript-eslint/parser@8.44.0(eslint@9.35.0(jiti@2.5.1))(typescript@5.5.4))(eslint@9.35.0(jiti@2.5.1))(typescript@5.5.4)
+      '@typescript-eslint/parser':
+        specifier: ^8.37.0
+        version: 8.44.0(eslint@9.35.0(jiti@2.5.1))(typescript@5.5.4)
+      eslint:
+        specifier: ^9.31.0
+        version: 9.35.0(jiti@2.5.1)
+      eslint-config-prettier:
+        specifier: ^10.1.5
+        version: 10.1.8(eslint@9.35.0(jiti@2.5.1))
+      eslint-plugin-simple-import-sort:
+        specifier: ^12.1.1
+        version: 12.1.1(eslint@9.35.0(jiti@2.5.1))
+      prettier:
+        specifier: ^3.6.2
+        version: 3.6.2
 
 packages:
 

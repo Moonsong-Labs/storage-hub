@@ -1,8 +1,8 @@
+import { TypeRegistry } from "@polkadot/types";
+import type { AccountId20, H256 } from "@polkadot/types/interfaces";
 import { CHUNK_SIZE } from "./constants";
 import { initWasm } from "./init.js";
 import { FileMetadata, FileTrie } from "./wasm.js";
-import { TypeRegistry } from "@polkadot/types";
-import type { AccountId20, H256 } from "@polkadot/types/interfaces";
 
 export class FileManager {
   constructor(private readonly file: { size: number; stream: () => ReadableStream<Uint8Array> }) {}
@@ -143,9 +143,7 @@ export class FileManager {
     }
     await this.getFingerprint();
     if (!this.fileBlob) {
-      throw new Error(
-        "File blob is unavailable after streaming. The source stream may not be readable again."
-      );
+      throw new Error("Failed to create file blob during fingerprint computation.");
     }
     return this.fileBlob;
   }

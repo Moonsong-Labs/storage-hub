@@ -1,3 +1,4 @@
+// @ts-nocheck - SDK dependencies are not available during general typecheck in CI
 import assert, { strictEqual } from "node:assert";
 import { createReadStream, statSync } from "node:fs";
 import { Readable } from "node:stream";
