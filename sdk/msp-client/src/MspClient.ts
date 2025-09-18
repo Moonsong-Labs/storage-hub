@@ -1,3 +1,5 @@
+import type { HttpClientConfig } from "@storagehub-sdk/core";
+import { FileMetadata, FileTrie, HttpClient, initWasm } from "@storagehub-sdk/core";
 import type {
   Bucket,
   DownloadOptions,
@@ -12,10 +14,8 @@ import type {
   UploadOptions,
   UploadReceipt,
   ValueProp,
-  VerifyResponse,
-} from './types.js';
-import type { HttpClientConfig } from '@storagehub-sdk/core';
-import { FileMetadata, FileTrie, HttpClient, initWasm } from '@storagehub-sdk/core';
+  VerifyResponse
+} from "./types.js";
 
 export class MspClient {
   public readonly config: HttpClientConfig;
@@ -28,42 +28,42 @@ export class MspClient {
   }
 
   static async connect(config: HttpClientConfig): Promise<MspClient> {
-    if (!config?.baseUrl) throw new Error('MspClient.connect: baseUrl is required');
+    if (!config?.baseUrl) throw new Error("MspClient.connect: baseUrl is required");
 
     const http = new HttpClient({
       baseUrl: config.baseUrl,
       ...(config.timeoutMs !== undefined && { timeoutMs: config.timeoutMs }),
       ...(config.defaultHeaders !== undefined && { defaultHeaders: config.defaultHeaders }),
-      ...(config.fetchImpl !== undefined && { fetchImpl: config.fetchImpl }),
+      ...(config.fetchImpl !== undefined && { fetchImpl: config.fetchImpl })
     });
 
     return new MspClient(config, http);
   }
 
   getHealth(options?: { signal?: AbortSignal }): Promise<HealthStatus> {
-    return this.http.get<HealthStatus>('/health', {
-      ...(options?.signal !== undefined && { signal: options.signal }),
+    return this.http.get<HealthStatus>("/health", {
+      ...(options?.signal !== undefined && { signal: options.signal })
     });
   }
 
   /** Get general MSP information */
   getInfo(options?: { signal?: AbortSignal }): Promise<InfoResponse> {
-    return this.http.get<InfoResponse>('/info', {
-      ...(options?.signal !== undefined && { signal: options.signal }),
+    return this.http.get<InfoResponse>("/info", {
+      ...(options?.signal !== undefined && { signal: options.signal })
     });
   }
 
   /** Get MSP statistics */
   getStats(options?: { signal?: AbortSignal }): Promise<StatsResponse> {
-    return this.http.get<StatsResponse>('/stats', {
-      ...(options?.signal !== undefined && { signal: options.signal }),
+    return this.http.get<StatsResponse>("/stats", {
+      ...(options?.signal !== undefined && { signal: options.signal })
     });
   }
 
   /** Get available value propositions */
   getValuePropositions(options?: { signal?: AbortSignal }): Promise<ValueProp[]> {
-    return this.http.get<ValueProp[]>('/value-props', {
-      ...(options?.signal !== undefined && { signal: options.signal }),
+    return this.http.get<ValueProp[]>("/value-props", {
+      ...(options?.signal !== undefined && { signal: options.signal })
     });
   }
 
@@ -73,12 +73,12 @@ export class MspClient {
   getNonce(
     address: string,
     chainId: number,
-    options?: { signal?: AbortSignal },
+    options?: { signal?: AbortSignal }
   ): Promise<NonceResponse> {
-    return this.http.post<NonceResponse>('/auth/nonce', {
+    return this.http.post<NonceResponse>("/auth/nonce", {
       body: { address, chainId },
-      headers: { 'Content-Type': 'application/json' },
-      ...(options?.signal !== undefined && { signal: options.signal }),
+      headers: { "Content-Type": "application/json" },
+      ...(options?.signal !== undefined && { signal: options.signal })
     });
   }
 
@@ -86,12 +86,12 @@ export class MspClient {
   verify(
     message: string,
     signature: string,
-    options?: { signal?: AbortSignal },
+    options?: { signal?: AbortSignal }
   ): Promise<VerifyResponse> {
-    return this.http.post<VerifyResponse>('/auth/verify', {
+    return this.http.post<VerifyResponse>("/auth/verify", {
       body: { message, signature },
-      headers: { 'Content-Type': 'application/json' },
-      ...(options?.signal !== undefined && { signal: options.signal }),
+      headers: { "Content-Type": "application/json" },
+      ...(options?.signal !== undefined && { signal: options.signal })
     });
   }
 
@@ -111,9 +111,9 @@ export class MspClient {
   /** List all buckets for the current authenticateduser */
   listBuckets(options?: { signal?: AbortSignal }): Promise<Bucket[]> {
     const headers = this.withAuth();
-    return this.http.get<Bucket[]>('/buckets', {
+    return this.http.get<Bucket[]>("/buckets", {
       ...(headers ? { headers } : {}),
-      ...(options?.signal ? { signal: options.signal } : {}),
+      ...(options?.signal ? { signal: options.signal } : {})
     });
   }
 
@@ -123,7 +123,7 @@ export class MspClient {
     const path = `/buckets/${encodeURIComponent(bucketId)}`;
     return this.http.get<Bucket>(path, {
       ...(headers ? { headers } : {}),
-      ...(options?.signal ? { signal: options.signal } : {}),
+      ...(options?.signal ? { signal: options.signal } : {})
     });
   }
 
@@ -134,7 +134,7 @@ export class MspClient {
     return this.http.get<FileListResponse>(path, {
       ...(headers ? { headers } : {}),
       ...(options?.signal ? { signal: options.signal } : {}),
-      ...(options?.path ? { query: { path: options.path.replace(/^\/+/, '') } } : {}),
+      ...(options?.path ? { query: { path: options.path.replace(/^\/+/, "") } } : {})
     });
   }
 
@@ -142,15 +142,15 @@ export class MspClient {
   getFileInfo(
     bucketId: string,
     fileKey: string,
-    options?: { signal?: AbortSignal },
+    options?: { signal?: AbortSignal }
   ): Promise<FileInfo> {
     const headers = this.withAuth();
     const path = `/buckets/${encodeURIComponent(bucketId)}/info/${encodeURIComponent(fileKey)}`;
-    type FileInfoWire = Omit<FileInfo, 'uploadedAt'> & { uploadedAt: string };
+    type FileInfoWire = Omit<FileInfo, "uploadedAt"> & { uploadedAt: string };
     return this.http
       .get<FileInfoWire>(path, {
         ...(headers ? { headers } : {}),
-        ...(options?.signal ? { signal: options.signal } : {}),
+        ...(options?.signal ? { signal: options.signal } : {})
       })
       .then((wire): FileInfo => ({ ...wire, uploadedAt: new Date(wire.uploadedAt) }));
   }
@@ -170,7 +170,7 @@ export class MspClient {
     file: Blob | ArrayBuffer | Uint8Array | ReadableStream<Uint8Array> | unknown,
     owner: string,
     location: string,
-    _options?: UploadOptions,
+    _options?: UploadOptions
   ): Promise<UploadReceipt> {
     void _options;
 
@@ -195,7 +195,7 @@ export class MspClient {
       bucketId,
       location,
       fingerprint,
-      BigInt(fileSize),
+      BigInt(fileSize)
     );
 
     // Compute the file key and ensure it matches the provided file key
@@ -205,7 +205,9 @@ export class MspClient {
       computedFileKey.length !== expectedFileKeyBytes.length ||
       !computedFileKey.every((byte, index) => byte === expectedFileKeyBytes[index])
     ) {
-      throw new Error('Computed file key does not match provided file key');
+      throw new Error(
+        `Computed file key ${computedFileKey.toString()} does not match provided file key ${expectedFileKeyBytes.toString()}`
+      );
     }
 
     // Encode the file metadata
@@ -214,26 +216,26 @@ export class MspClient {
     // Create the multipart form with both the file and its metadata
     const form = new FormData();
     const fileMetadataBlob = new Blob([new Uint8Array(encodedMetadata)], {
-      type: 'application/octet-stream',
+      type: "application/octet-stream"
     });
-    form.append('file_metadata', fileMetadataBlob, 'file_metadata');
-    form.append('file', fileBlob, 'file');
+    form.append("file_metadata", fileMetadataBlob, "file_metadata");
+    form.append("file", fileBlob, "file");
 
     const res = await this.http.put<UploadReceipt>(
       backendPath,
       authHeaders
         ? { body: form as unknown as BodyInit, headers: authHeaders }
-        : { body: form as unknown as BodyInit },
+        : { body: form as unknown as BodyInit }
     );
     return res;
   }
 
   private async coerceToFormPart(
-    file: Blob | ArrayBuffer | Uint8Array | ReadableStream<Uint8Array> | unknown,
+    file: Blob | ArrayBuffer | Uint8Array | ReadableStream<Uint8Array> | unknown
   ): Promise<Blob> {
-    if (typeof Blob !== 'undefined' && file instanceof Blob) return file;
+    if (typeof Blob !== "undefined" && file instanceof Blob) return file;
     if (file instanceof Uint8Array) return new Blob([file.buffer as ArrayBuffer]);
-    if (typeof ArrayBuffer !== 'undefined' && file instanceof ArrayBuffer) return new Blob([file]);
+    if (typeof ArrayBuffer !== "undefined" && file instanceof ArrayBuffer) return new Blob([file]);
 
     // Handle ReadableStream by reading it into memory
     if (file instanceof ReadableStream) {
@@ -262,13 +264,13 @@ export class MspClient {
         offset += chunk.length;
       }
 
-      return new Blob([combined], { type: 'application/octet-stream' });
+      return new Blob([combined], { type: "application/octet-stream" });
     }
 
-    return new Blob([file as BlobPart], { type: 'application/octet-stream' });
+    return new Blob([file as BlobPart], { type: "application/octet-stream" });
   }
 
-  private async computeFileFingerprint(fileBlob: Blob): Promise<Uint8Array> {
+  async computeFileFingerprint(fileBlob: Blob): Promise<Uint8Array> {
     const trie = new FileTrie();
     const fileBytes = new Uint8Array(await fileBlob.arrayBuffer());
 
@@ -291,7 +293,7 @@ export class MspClient {
     bucketId: string,
     location: string,
     fingerprint: Uint8Array,
-    size: bigint,
+    size: bigint
   ): Promise<FileMetadata> {
     const ownerBytes = this.hexToBytes(owner);
     const bucketIdBytes = this.hexToBytes(bucketId);
@@ -302,17 +304,17 @@ export class MspClient {
 
   hexToBytes(hex: string): Uint8Array {
     if (!hex) {
-      throw new Error('hex string cannot be empty');
+      throw new Error("hex string cannot be empty");
     }
 
-    const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
+    const cleanHex = hex.startsWith("0x") ? hex.slice(2) : hex;
 
     if (cleanHex.length % 2 !== 0) {
-      throw new Error('hex string must have an even number of characters');
+      throw new Error("hex string must have an even number of characters");
     }
 
     if (!/^[0-9a-fA-F]*$/.test(cleanHex)) {
-      throw new Error('hex string contains invalid characters');
+      throw new Error("hex string contains invalid characters");
     }
 
     return new Uint8Array(cleanHex.match(/.{2}/g)?.map((byte) => Number.parseInt(byte, 16)) || []);
@@ -326,35 +328,35 @@ export class MspClient {
   /** Download a file by key. */
   async downloadByKey(fileKey: string, options?: DownloadOptions): Promise<DownloadResult> {
     const path = `/download/${encodeURIComponent(fileKey)}`;
-    const baseHeaders: Record<string, string> = { Accept: '*/*' };
+    const baseHeaders: Record<string, string> = { Accept: "*/*" };
     if (options?.range) {
       const { start, end } = options.range;
-      const rangeValue = `bytes=${start}-${end ?? ''}`;
+      const rangeValue = `bytes=${start}-${end ?? ""}`;
       baseHeaders.Range = rangeValue;
     }
     const headers = this.withAuth(baseHeaders);
     const res = await this.http.getRaw(path, {
       ...(headers ? { headers } : {}),
-      ...(options?.signal ? { signal: options.signal } : {}),
+      ...(options?.signal ? { signal: options.signal } : {})
     });
 
     if (!res.body) {
-      throw new Error('Response body is null - unable to create stream');
+      throw new Error("Response body is null - unable to create stream");
     }
 
-    const contentType = res.headers.get('content-type');
-    const contentRange = res.headers.get('content-range');
-    const contentLengthHeader = res.headers.get('content-length');
+    const contentType = res.headers.get("content-type");
+    const contentRange = res.headers.get("content-range");
+    const contentLengthHeader = res.headers.get("content-length");
     const parsedLength = contentLengthHeader !== null ? Number(contentLengthHeader) : undefined;
     const contentLength =
-      typeof parsedLength === 'number' && Number.isFinite(parsedLength) ? parsedLength : null;
+      typeof parsedLength === "number" && Number.isFinite(parsedLength) ? parsedLength : null;
 
     return {
       stream: res.body,
       status: res.status,
       contentType,
       contentRange,
-      contentLength,
+      contentLength
     };
   }
 
@@ -362,40 +364,40 @@ export class MspClient {
   async downloadByLocation(
     bucketId: string,
     filePath: string,
-    options?: DownloadOptions,
+    options?: DownloadOptions
   ): Promise<DownloadResult> {
-    const normalized = filePath.replace(/^\/+/, '');
-    const encodedPath = normalized.split('/').map(encodeURIComponent).join('/');
+    const normalized = filePath.replace(/^\/+/, "");
+    const encodedPath = normalized.split("/").map(encodeURIComponent).join("/");
     const path = `/buckets/${encodeURIComponent(bucketId)}/download/path/${encodedPath}`;
-    const baseHeaders: Record<string, string> = { Accept: '*/*' };
+    const baseHeaders: Record<string, string> = { Accept: "*/*" };
     if (options?.range) {
       const { start, end } = options.range;
-      const rangeValue = `bytes=${start}-${end ?? ''}`;
+      const rangeValue = `bytes=${start}-${end ?? ""}`;
       baseHeaders.Range = rangeValue;
     }
     const headers = this.withAuth(baseHeaders);
     const res = await this.http.getRaw(path, {
       ...(headers ? { headers } : {}),
-      ...(options?.signal ? { signal: options.signal } : {}),
+      ...(options?.signal ? { signal: options.signal } : {})
     });
 
     if (!res.body) {
-      throw new Error('Response body is null - unable to create stream');
+      throw new Error("Response body is null - unable to create stream");
     }
 
-    const contentType = res.headers.get('content-type');
-    const contentRange = res.headers.get('content-range');
-    const contentLengthHeader = res.headers.get('content-length');
+    const contentType = res.headers.get("content-type");
+    const contentRange = res.headers.get("content-range");
+    const contentLengthHeader = res.headers.get("content-length");
     const parsedLength = contentLengthHeader !== null ? Number(contentLengthHeader) : undefined;
     const contentLength =
-      typeof parsedLength === 'number' && Number.isFinite(parsedLength) ? parsedLength : null;
+      typeof parsedLength === "number" && Number.isFinite(parsedLength) ? parsedLength : null;
 
     return {
       stream: res.body,
       status: res.status,
       contentType,
       contentRange,
-      contentLength,
+      contentLength
     };
   }
 }

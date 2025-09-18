@@ -517,7 +517,7 @@ async fn process_upload_after_validation(
         status: "upload_successful".to_string(),
         file_key: file_key.to_string(),
         bucket_id: bucket_id.to_string(),
-        fingerprint: hex::encode(trie.get_root()),
+        fingerprint: format!("0x{}", hex::encode(trie.get_root())),
         location,
     };
 

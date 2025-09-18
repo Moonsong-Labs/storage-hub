@@ -1,14 +1,15 @@
-import { CHUNK_SIZE } from './constants';
-import { initWasm } from './init.js';
-import { FileMetadata, FileTrie } from './wasm.js';
-import { TypeRegistry } from '@polkadot/types';
-import type { AccountId, H256 } from '@polkadot/types/interfaces';
+import { TypeRegistry } from "@polkadot/types";
+import type { AccountId20, H256 } from "@polkadot/types/interfaces";
+import { CHUNK_SIZE } from "./constants";
+import { initWasm } from "./init.js";
+import { FileMetadata, FileTrie } from "./wasm.js";
 
 export class FileManager {
   constructor(private readonly file: { size: number; stream: () => ReadableStream<Uint8Array> }) {}
 
   private fingerprint?: H256;
   private fileKey?: H256;
+  private fileBlob?: Blob;
 
   /**
    * Stream the file's contents, feed every 1 kB chunk into a new FileTrie, and
@@ -41,6 +42,7 @@ export class FileManager {
     //    the next read.
     // ---
     const reader = stream.getReader();
+    const blobParts: BlobPart[] = [];
     let buffer = new Uint8Array();
     let bufferOffset = 0;
 
@@ -50,7 +52,9 @@ export class FileManager {
         const { done, value } = await reader.read();
         if (done) break; // EOF ⇒ exit outer loop
 
-        if (value && value.length) {
+        if (value?.length) {
+          // Accumulate raw bytes so we can build a Blob after streaming
+          blobParts.push(value.slice());
           /*
            * ── Step-2: concatenate the newly-read bytes **after** any leftover
            *            bytes we still haven’t consumed (bufferOffset marks the
@@ -88,10 +92,16 @@ export class FileManager {
 
     // Retrieve Merkle root from the trie and cache it
     const rootHash = trie.get_root();
-    const fingerprint = registry.createType('H256', rootHash) as H256;
+    const fingerprint = registry.createType("H256", rootHash) as H256;
 
     this.fingerprint = fingerprint;
+    // Build and cache the Blob for later reuse
+    this.fileBlob = new Blob(blobParts);
     return fingerprint;
+  }
+
+  getFileSize(): number {
+    return this.file.size;
   }
 
   /**
@@ -102,7 +112,7 @@ export class FileManager {
    *   • bucketId – 32-byte BucketId (Uint8Array or 0x-prefixed hex string)
    *   • location – path string (encoded to bytes as-is)
    */
-  async computeFileKey(owner: AccountId, bucketId: H256, location: string): Promise<H256> {
+  async computeFileKey(owner: AccountId20, bucketId: H256, location: string): Promise<H256> {
     if (this.fileKey) {
       return this.fileKey;
     }
@@ -114,12 +124,29 @@ export class FileManager {
       bucketId.toU8a(),
       new TextEncoder().encode(location),
       BigInt(this.file.size),
-      fp.toU8a(),
+      fp.toU8a()
     );
 
     const fileKey = metadata.getFileKey();
     const registry = new TypeRegistry();
-    this.fileKey = registry.createType('H256', fileKey) as H256;
+    this.fileKey = registry.createType("H256", fileKey) as H256;
     return this.fileKey;
+  }
+
+  /**
+   * Retrieve the file as a Blob. If not already available, this will
+   * compute it by streaming the file (also computing and caching the fingerprint).
+   */
+  async getFileBlob(): Promise<Blob> {
+    if (this.fileBlob) {
+      return this.fileBlob;
+    }
+    await this.getFingerprint();
+    if (!this.fileBlob) {
+      throw new Error(
+        "File blob is unavailable after streaming. The source stream may not be readable again."
+      );
+    }
+    return this.fileBlob;
   }
 }
