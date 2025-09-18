@@ -39,8 +39,7 @@ type FileSystemContract<TClient extends EvmClient> = GetContractReturnType<
  * Internal constant precompile address for FileSystem on StorageHub runtimes.
  * If a chain uses a different address, this constant should be updated accordingly.
  */
-const FILE_SYSTEM_PRECOMPILE_ADDRESS =
-  '0x0000000000000000000000000000000000000064' as Address;
+const FILE_SYSTEM_PRECOMPILE_ADDRESS = '0x0000000000000000000000000000000000000064' as Address;
 
 export class StorageHubClient {
   private readonly publicClient: PublicClient; // Internal for gas estimation
@@ -169,7 +168,8 @@ export class StorageHubClient {
     this.walletClient = opts.walletClient;
 
     // Store the filesystem contract address with default fallback
-    this.filesystemContractAddress = opts.filesystemContractAddress ?? FILE_SYSTEM_PRECOMPILE_ADDRESS;
+    this.filesystemContractAddress =
+      opts.filesystemContractAddress ?? FILE_SYSTEM_PRECOMPILE_ADDRESS;
   }
 
   // -------- Reads --------
