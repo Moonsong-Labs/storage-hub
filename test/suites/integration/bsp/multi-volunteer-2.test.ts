@@ -2,9 +2,7 @@ import { strictEqual } from "node:assert";
 import { isDeepStrictEqual } from "node:util";
 import {
   bspThreeKey,
-  bspThreeSeed,
   bspTwoKey,
-  bspTwoSeed,
   describeBspNet,
   type EnrichedBspApi,
   ShConsts
@@ -45,7 +43,6 @@ await describeBspNet("BSPNet: Mulitple BSP Volunteering - 2", ({ before, it, cre
     await api.docker.onboardBsp({
       bspSigner: bspTwoKey,
       name: "sh-bsp-two",
-      bspKeySeed: bspTwoSeed,
       bspId: ShConsts.BSP_TWO_ID,
       additionalArgs: ["--keystore-path=/keystore/bsp-two"],
       waitForIdle: true
@@ -54,7 +51,6 @@ await describeBspNet("BSPNet: Mulitple BSP Volunteering - 2", ({ before, it, cre
     await api.docker.onboardBsp({
       bspSigner: bspThreeKey,
       name: "sh-bsp-three",
-      bspKeySeed: bspThreeSeed,
       bspId: ShConsts.BSP_THREE_ID,
       additionalArgs: ["--keystore-path=/keystore/bsp-three"],
       waitForIdle: true

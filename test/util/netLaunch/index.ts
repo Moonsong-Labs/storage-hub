@@ -18,20 +18,6 @@ import {
 } from "../bspNet";
 import { DUMMY_MSP_ID } from "../bspNet/consts";
 import { MILLIUNIT, UNIT } from "../constants";
-import {
-  alice,
-  bspDownKey,
-  bspDownSeed,
-  bspKey,
-  bspThreeKey,
-  bspThreeSeed,
-  bspTwoKey,
-  bspTwoSeed,
-  mspDownKey,
-  mspKey,
-  mspTwoKey,
-  shUser
-} from "../pjsKeyring";
 import { sleep } from "../timer";
 
 export type ShEntity = {
@@ -121,6 +107,25 @@ export class NetworkLauncher {
       }
     } else {
       delete composeYaml.services.toxiproxy;
+    }
+
+    // If runtime is "parachain" there is no need to specify the runtime type, it's the default
+    if (this.config.runtimeType === "solochain") {
+      // Add the runtime type to the command for user and BSP nodes
+      composeYaml.services["sh-bsp"].command.push("--chain=solochain-evm-dev");
+      composeYaml.services["sh-user"].command.push("--chain=solochain-evm-dev");
+
+      // Add the runtime type to the command for MSP nodes if we're running fullnet
+      if (this.type === "fullnet") {
+        composeYaml.services["sh-msp-1"].command.push("--chain=solochain-evm-dev");
+        composeYaml.services["sh-msp-2"].command.push("--chain=solochain-evm-dev");
+      }
+
+      // Add the runtime type to the command for fisherman if we're running fullnet
+      // or simply fisherman is enabled
+      if (this.config.fisherman && this.type === "fullnet") {
+        composeYaml.services["sh-fisherman"].command.push("--chain=solochain-evm-dev");
+      }
     }
 
     // Remove fisherman service if not enabled
@@ -301,6 +306,15 @@ export class NetworkLauncher {
       });
 
       await this.runMigrations();
+
+      // Start backend only if backend flag is enabled (depends on msp-1 and postgres)
+      if (this.config.backend && this.type === "fullnet") {
+        await compose.upOne("sh-backend", {
+          cwd: cwd,
+          config: tmpFile,
+          log: verbose
+        });
+      }
     }
 
     await compose.upOne("sh-user", {
@@ -390,7 +404,10 @@ export class NetworkLauncher {
   }
 
   public async getApi(serviceName = "sh-user") {
-    return BspNetTestApi.create(`ws://127.0.0.1:${this.getPort(serviceName)}`);
+    return BspNetTestApi.create(
+      `ws://127.0.0.1:${this.getPort(serviceName)}`,
+      this.config.runtimeType ?? "parachain"
+    );
   }
 
   public async setupBsp(api: EnrichedBspApi, who: string, multiaddress: string, bspId?: string) {
@@ -405,41 +422,26 @@ export class NetworkLauncher {
     return this;
   }
 
-  public async setupGlobal(api: EnrichedBspApi) {
+  public async preFundAccounts(api: EnrichedBspApi) {
     const amount = 10000n * 10n ** 12n;
-    const maxReplicationTargetRuntimeParameter = {
-      RuntimeConfig: {
-        MaxReplicationTarget: [null, 10]
-      }
-    };
-    const tickRangeToMaximumThresholdRuntimeParameter = {
-      RuntimeConfig: {
-        TickRangeToMaximumThreshold: [null, 1]
-      }
-    };
 
+    const sudo = api.accounts.sudo;
     const signedCalls = [
       api.tx.sudo
-        .sudo(api.tx.balances.forceSetBalance(bspKey.address, amount))
-        .signAsync(alice, { nonce: 0 }),
+        .sudo(api.tx.balances.forceSetBalance(api.accounts.bspKey.address, amount))
+        .signAsync(sudo, { nonce: 0 }),
       api.tx.sudo
-        .sudo(api.tx.balances.forceSetBalance(shUser.address, amount))
-        .signAsync(alice, { nonce: 1 }),
+        .sudo(api.tx.balances.forceSetBalance(api.accounts.shUser.address, amount))
+        .signAsync(sudo, { nonce: 1 }),
       api.tx.sudo
-        .sudo(api.tx.balances.forceSetBalance(mspKey.address, amount))
-        .signAsync(alice, { nonce: 2 }),
+        .sudo(api.tx.balances.forceSetBalance(api.accounts.mspKey.address, amount))
+        .signAsync(sudo, { nonce: 2 }),
       api.tx.sudo
-        .sudo(api.tx.balances.forceSetBalance(mspTwoKey.address, amount))
-        .signAsync(alice, { nonce: 3 }),
+        .sudo(api.tx.balances.forceSetBalance(api.accounts.mspTwoKey.address, amount))
+        .signAsync(sudo, { nonce: 3 }),
       api.tx.sudo
-        .sudo(api.tx.balances.forceSetBalance(mspDownKey.address, amount))
-        .signAsync(alice, { nonce: 4 }),
-      api.tx.sudo
-        .sudo(api.tx.parameters.setParameter(maxReplicationTargetRuntimeParameter))
-        .signAsync(alice, { nonce: 5 }),
-      api.tx.sudo
-        .sudo(api.tx.parameters.setParameter(tickRangeToMaximumThresholdRuntimeParameter))
-        .signAsync(alice, { nonce: 6 })
+        .sudo(api.tx.balances.forceSetBalance(api.accounts.mspDownKey.address, amount))
+        .signAsync(sudo, { nonce: 4 })
     ];
 
     const sudoTxns = await Promise.all(signedCalls);
@@ -595,7 +597,7 @@ export class NetworkLauncher {
     });
   }
 
-  public async execDemoTransfer() {
+  public async execDemoStorageRequest() {
     await using api = await this.getApi("sh-user");
 
     const source = "res/whatsup.jpg";
@@ -607,7 +609,7 @@ export class NetworkLauncher {
       bucketName,
       null,
       DUMMY_MSP_ID,
-      shUser,
+      api.accounts.shUser,
       1
     );
 
@@ -655,33 +657,47 @@ export class NetworkLauncher {
 
     // Add more BSPs to the network.
     // One BSP will be down, two more will be up.
-    const { containerName: bspDownContainerName } = await addBsp(api, bspDownKey, {
-      name: "sh-bsp-down",
-      rocksdb: this.config.rocksdb,
-      bspKeySeed: bspDownSeed,
-      bspId: ShConsts.BSP_DOWN_ID,
-      bspStartingWeight: this.config.capacity,
-      extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
-      additionalArgs: ["--keystore-path=/keystore/bsp-down"]
-    });
-    const { rpcPort: bspTwoRpcPort } = await addBsp(api, bspTwoKey, {
-      name: "sh-bsp-two",
-      rocksdb: this.config.rocksdb,
-      bspKeySeed: bspTwoSeed,
-      bspId: ShConsts.BSP_TWO_ID,
-      bspStartingWeight: this.config.capacity,
-      extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
-      additionalArgs: ["--keystore-path=/keystore/bsp-two"]
-    });
-    const { rpcPort: bspThreeRpcPort } = await addBsp(api, bspThreeKey, {
-      name: "sh-bsp-three",
-      rocksdb: this.config.rocksdb,
-      bspKeySeed: bspThreeSeed,
-      bspId: ShConsts.BSP_THREE_ID,
-      bspStartingWeight: this.config.capacity,
-      extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
-      additionalArgs: ["--keystore-path=/keystore/bsp-three"]
-    });
+    const runtimeTypeArgs =
+      this.config.runtimeType === "solochain" ? ["--chain=solochain-evm-dev"] : [];
+    const { containerName: bspDownContainerName } = await addBsp(
+      api,
+      api.accounts.bspDownKey,
+      api.accounts.sudo,
+      {
+        name: "sh-bsp-down",
+        rocksdb: this.config.rocksdb,
+        bspId: ShConsts.BSP_DOWN_ID,
+        bspStartingWeight: this.config.capacity,
+        extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
+        additionalArgs: ["--keystore-path=/keystore/bsp-down", ...runtimeTypeArgs]
+      }
+    );
+    const { rpcPort: bspTwoRpcPort } = await addBsp(
+      api,
+      api.accounts.bspTwoKey,
+      api.accounts.sudo,
+      {
+        name: "sh-bsp-two",
+        rocksdb: this.config.rocksdb,
+        bspId: ShConsts.BSP_TWO_ID,
+        bspStartingWeight: this.config.capacity,
+        extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
+        additionalArgs: ["--keystore-path=/keystore/bsp-two", ...runtimeTypeArgs]
+      }
+    );
+    const { rpcPort: bspThreeRpcPort } = await addBsp(
+      api,
+      api.accounts.bspThreeKey,
+      api.accounts.sudo,
+      {
+        name: "sh-bsp-three",
+        rocksdb: this.config.rocksdb,
+        bspId: ShConsts.BSP_THREE_ID,
+        bspStartingWeight: this.config.capacity,
+        extrinsicRetryTimeout: this.config.extrinsicRetryTimeout,
+        additionalArgs: ["--keystore-path=/keystore/bsp-three", ...runtimeTypeArgs]
+      }
+    );
 
     const source = "res/whatsup.jpg";
     const location = "test/smile.jpg";
@@ -764,8 +780,8 @@ export class NetworkLauncher {
       timeout: 15000
     });
 
-    await launchedNetwork.setupGlobal(userApi);
-    await launchedNetwork.setupBsp(userApi, bspKey.address, multiAddressBsp);
+    await launchedNetwork.preFundAccounts(userApi);
+    await launchedNetwork.setupBsp(userApi, userApi.accounts.bspKey.address, multiAddressBsp);
     await launchedNetwork.setupRuntimeParams(userApi);
     await userApi.block.seal();
 
@@ -783,9 +799,9 @@ export class NetworkLauncher {
         // TODO: As we add more MSPs make this more dynamic
         const mspAddress =
           service === "sh-msp-1"
-            ? mspKey.address
+            ? userApi.accounts.mspKey.address
             : service === "sh-msp-2"
-              ? mspTwoKey.address
+              ? userApi.accounts.mspTwoKey.address
               : undefined;
         assert(
           mspAddress,
@@ -809,7 +825,7 @@ export class NetworkLauncher {
 
     if (launchedNetwork.type === "bspnet") {
       const mockMspMultiAddress = `/ip4/${bspIp}/tcp/30350/p2p/${ShConsts.DUMMY_MSP_PEER_ID}`;
-      await launchedNetwork.setupMsp(userApi, mspKey.address, mockMspMultiAddress);
+      await launchedNetwork.setupMsp(userApi, userApi.accounts.mspKey.address, mockMspMultiAddress);
     }
 
     if (launchedNetwork.config.initialised === "multi") {
@@ -817,7 +833,7 @@ export class NetworkLauncher {
     }
 
     if (launchedNetwork.config.initialised === true) {
-      return await launchedNetwork.execDemoTransfer();
+      return await launchedNetwork.execDemoStorageRequest();
     }
 
     // Attempt to debounce and stabilise
@@ -884,10 +900,23 @@ export type NetLaunchConfig = {
   fisherman?: boolean;
 
   /**
+   * Optional parameter to run the backend service.
+   * Requires indexer to be enabled.
+   */
+  backend?: boolean;
+
+  /**
    * Optional parameter to set the indexer mode when indexer is enabled.
    * 'full' - indexes all events (default)
    * 'lite' - indexes only essential events as defined in LITE_MODE_EVENTS.md
    * 'fishing' - indexes only events related to fishing (fisherman service)
    */
   indexerMode?: "full" | "lite" | "fishing";
+
+  /**
+   * Runtime type to use.
+   * 'parachain' - Polkadot parachain runtime (default)
+   * 'solochain' - Solochain EVM runtime
+   */
+  runtimeType?: "parachain" | "solochain";
 };

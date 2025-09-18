@@ -1,0 +1,22 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": "./",
+    "paths": {
+      "@storagehub/api-augment": ["../api-augment/src/solochain-evm/index.ts"],
+      "@storagehub/api-augment/solochain-evm": ["../api-augment/src/solochain-evm/index.ts"],
+      "@storagehub/api-augment/solochain-evm/*": ["../api-augment/src/solochain-evm/*"],
+      "@storagehub/api-augment/parachain": ["../api-augment/src/solochain-evm/index.ts"],
+      "@storagehub/api-augment/parachain/*": ["../api-augment/src/solochain-evm/*"],
+      "@storagehub/types-bundle": ["../types-bundle/src/index.ts"],
+      "@storagehub/types-bundle/*": ["../types-bundle/src/*"]
+    }
+  },
+  "include": [
+    "suites/solo-node/**/*.ts",
+    "suites/integration-evm/**/*.ts",
+    "util/evmNet/**/*.ts",
+    "util/netLaunch/evm.ts"
+  ],
+  "exclude": ["suites/integration/**"]
+}

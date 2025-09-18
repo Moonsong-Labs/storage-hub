@@ -2,11 +2,16 @@
 //!
 //! TODO(MOCK): many of methods of the MspService returns mocked data
 
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use chrono::Utc;
+use codec::Encode;
+use sc_network::PeerId;
 use serde::{Deserialize, Serialize};
+use shc_common::types::{ChunkId, FileKeyProof};
 use shc_rpc::SaveFileToDisk;
+use sp_core::{Blake2Hasher, H256};
+use tracing::{debug, info, warn};
 
 use shc_indexer_db::{models::Bucket as DBBucket, OnchainMspId};
 use shp_types::Hash;
@@ -77,8 +82,10 @@ impl MspService {
             client: "storagehub-node v1.0.0".to_string(),
             version: "StorageHub MSP v0.1.0".to_string(),
             msp_id: self.msp_id.to_string(),
+            // TODO: Until we have actual MSP info, we should at least get the multiaddress from an RPC.
+            // This way the backend can actually upload files to the MSP without having to change this code.
             multiaddresses: vec![
-                "/ip4/192.168.0.10/tcp/30333/p2p/12D3KooWJAgnKUrQkGsKxRxojxcFRhtH6ovWfJTPJjAkhmAz2yC8".to_string()
+                "/ip4/192.168.0.10/tcp/30333/p2p/12D3KooWSUvz8QM5X4tfAaSLErAZjR2puojo16pULBHyqTMGKtNV".to_string()
             ],
             owner_account: "0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac".to_string(),
             payment_account: "0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac".to_string(),
@@ -245,6 +252,16 @@ impl MspService {
             .map(|file| FileInfo::from_db(&file, bucket.is_public))
     }
 
+    /// Check via MSP RPC if this node is expecting to receive the given file key
+    pub async fn is_msp_expecting_file_key(&self, file_key: &str) -> Result<bool, Error> {
+        let expected: bool = self
+            .rpc
+            .call("storagehubclient_isFileKeyExpected", (file_key,))
+            .await
+            .map_err(|e| Error::BadRequest(e.to_string()))?;
+        Ok(expected)
+    }
+
     /// Distribute a file to BSPs
     pub async fn distribute_file(
         &self,
@@ -310,6 +327,167 @@ impl MspService {
                 })
             }
         }
+    }
+
+    /// Upload a batch of file chunks with their FileKeyProof to the MSP via its RPC.
+    ///
+    /// This implementation:
+    /// 1. Gets the MSP info to get its multiaddresses.
+    /// 2. Extracts the peer IDs from the multiaddresses.
+    /// 3. Sends the FileKeyProof with the batch of chunks to the MSP through the `receiveBackendFileChunks` RPC method.
+    ///
+    /// Note: obtaining the peer ID previous to sending the request is needed as this is the peer ID that the MSP
+    /// will send the file to. If it's different than its local one, it will probably fail.
+    pub async fn upload_to_msp(
+        &self,
+        chunk_ids: &HashSet<ChunkId>,
+        file_key_proof: &FileKeyProof,
+    ) -> Result<(), Error> {
+        // Ensure we are not incorrectly trying to upload an empty file.
+        if chunk_ids.is_empty() {
+            return Err(Error::BadRequest(
+                "Cannot upload file with no chunks".to_string(),
+            ));
+        }
+
+        // Get the MSP's info including its multiaddresses.
+        let msp_info = self.get_info().await?;
+
+        // Extract the peer IDs from the multiaddresses.
+        let peer_ids = self.extract_peer_ids_from_multiaddresses(&msp_info.multiaddresses)?;
+
+        // Try to send the chunks batch to each peer until one succeeds.
+        let mut last_err = None;
+        for peer_id in peer_ids {
+            match self
+                .send_upload_request_to_msp_peer(peer_id, file_key_proof.clone())
+                .await
+            {
+                Ok(()) => {
+                    info!(
+                        "Successfully uploaded {} chunks to MSP {} for file {} in bucket {}",
+                        chunk_ids.len(),
+                        msp_info.msp_id,
+                        hex::encode(file_key_proof.file_metadata.file_key::<Blake2Hasher>()),
+                        hex::encode(file_key_proof.file_metadata.bucket_id())
+                    );
+                    return Ok(());
+                }
+                Err(e) => {
+                    warn!("Failed to send chunks to peer {:?}: {:?}", peer_id, e);
+                    last_err = Some(e);
+                    continue;
+                }
+            }
+        }
+
+        Err(last_err.expect("At least one peer_id was tried, so last_err must be Some"))
+    }
+
+    /// Extract peer IDs from multiaddresses
+    fn extract_peer_ids_from_multiaddresses(
+        &self,
+        multiaddresses: &[String],
+    ) -> Result<Vec<PeerId>, Error> {
+        let mut peer_ids = Vec::new();
+
+        for multiaddr_str in multiaddresses {
+            // Parse multiaddress string to extract peer ID
+            // Format example: "/ip4/192.168.0.10/tcp/30333/p2p/12D3KooWJAgnKUrQkGsKxRxojxcFRhtH6ovWfJTPJjAkhmAz2yC8"
+            if let Some(p2p_part) = multiaddr_str.split("/p2p/").nth(1) {
+                // Extract the peer ID part (everything after /p2p/)
+                let peer_id_str = p2p_part.split('/').next().unwrap_or(p2p_part);
+
+                match peer_id_str.parse::<PeerId>() {
+                    Ok(peer_id) => {
+                        debug!(
+                            "Extracted peer ID {:?} from multiaddress {}",
+                            peer_id, multiaddr_str
+                        );
+                        peer_ids.push(peer_id);
+                    }
+                    Err(e) => {
+                        warn!(
+                            "Failed to parse peer ID from multiaddress {}: {:?}",
+                            multiaddr_str, e
+                        );
+                    }
+                }
+            } else {
+                warn!("No /p2p/ section found in multiaddress: {}", multiaddr_str);
+            }
+        }
+
+        if peer_ids.is_empty() {
+            return Err(Error::BadRequest(
+                "No valid peer IDs found in multiaddresses".to_string(),
+            ));
+        }
+
+        Ok(peer_ids)
+    }
+
+    /// Send an upload request to a specific peer ID of the MSP with retry logic.
+    /// TODO: Make the number of retries configurable.
+    async fn send_upload_request_to_msp_peer(
+        &self,
+        peer_id: PeerId,
+        file_key_proof: FileKeyProof,
+    ) -> Result<(), Error> {
+        debug!(
+            "Attempting to send upload request to MSP peer {:?} with file key proof",
+            peer_id
+        );
+
+        // Get fhe file metadata from the received FileKeyProof.
+        let file_metadata = file_key_proof.clone().file_metadata;
+
+        // Get the file key from the file metadata.
+        let file_key: H256 = file_metadata.file_key::<Blake2Hasher>();
+
+        // Encode the FileKeyProof as SCALE for transport
+        let encoded_proof = file_key_proof.encode();
+
+        // TODO: We should make these configurable.
+        let mut retry_attempts = 0;
+        let max_retries = 3;
+        let delay_between_retries_secs = 1;
+
+        while retry_attempts < max_retries {
+            let result: Result<Vec<u8>, _> = self
+                .rpc
+                .call(
+                    "storagehubclient_receiveBackendFileChunks",
+                    (file_key, encoded_proof.clone()),
+                )
+                .await;
+
+            match result {
+                Ok(_raw) => {
+                    info!("Successfully sent upload request to MSP peer {:?}", peer_id);
+                    return Ok(());
+                }
+                Err(e) => {
+                    retry_attempts += 1;
+                    if retry_attempts < max_retries {
+                        warn!(
+                            "Upload request to MSP peer {:?} failed via RPC, retrying... (attempt {}): {:?}",
+                            peer_id,
+                            retry_attempts,
+                            e
+                        );
+                        tokio::time::sleep(std::time::Duration::from_secs(
+                            delay_between_retries_secs,
+                        ))
+                        .await;
+                    } else {
+                        return Err(Error::Internal);
+                    }
+                }
+            }
+        }
+
+        Err(Error::Internal)
     }
 }
 
@@ -379,26 +557,18 @@ mod tests {
 
     impl MockMspServiceBuilder {
         /// Create a new builder with default empty mocks
-        fn new() -> Self {
-            let memory_storage = InMemoryStorage::new();
-            let storage = Arc::new(BoxedStorageWrapper::new(memory_storage));
-
-            let repo = Arc::new(MockRepository::new());
-            let postgres = Arc::new(DBClient::new(repo));
-
-            let mock_conn = MockConnection::new();
-            let rpc_conn = Arc::new(AnyRpcConnection::Mock(mock_conn));
-            let rpc = Arc::new(StorageHubRpcClient::new(rpc_conn));
-
+        pub fn new() -> Self {
             Self {
-                storage,
-                postgres,
-                rpc,
+                storage: Arc::new(BoxedStorageWrapper::new(InMemoryStorage::new())),
+                postgres: Arc::new(DBClient::new(Arc::new(MockRepository::new()))),
+                rpc: Arc::new(StorageHubRpcClient::new(Arc::new(AnyRpcConnection::Mock(
+                    MockConnection::new(),
+                )))),
             }
         }
 
         /// Initialize repository with custom test data
-        async fn init_repository_with<F>(self, init: F) -> Self
+        pub async fn init_repository_with<F>(self, init: F) -> Self
         where
             F: FnOnce(&DBClient) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + '_>>,
         {
@@ -406,8 +576,20 @@ mod tests {
             self
         }
 
+        /// Set RPC responses for the connection to use
+        pub async fn with_rpc_responses(mut self, responses: Vec<(&str, Value)>) -> Self {
+            let mock_conn = MockConnection::new();
+            for (method, value) in responses {
+                mock_conn.set_response(method, value).await;
+            }
+            self.rpc = Arc::new(StorageHubRpcClient::new(Arc::new(AnyRpcConnection::Mock(
+                mock_conn,
+            ))));
+            self
+        }
+
         /// Build the final MspService
-        fn build(self) -> MspService {
+        pub fn build(self) -> MspService {
             let cfg = Config::default();
 
             MspService::new(
@@ -485,6 +667,15 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_get_bucket() {
+        let service = MockMspServiceBuilder::new().build();
+        let bucket = service.get_bucket("test_bucket").await.unwrap();
+
+        assert_eq!(bucket.bucket_id, "test_bucket");
+        assert!(!bucket.name.is_empty());
+    }
+
+    #[tokio::test]
     async fn test_get_files_root() {
         use crate::constants::test::bucket::DEFAULT_BUCKET_ID;
 
@@ -521,5 +712,89 @@ mod tests {
             .unwrap();
 
         tree.entry.folder().expect("first entry to be a folder");
+    }
+
+    #[tokio::test]
+    async fn test_get_file_info() {
+        let service = MockMspServiceBuilder::new().build();
+        let bucket_id = "bucket123";
+        let file_key = "abc123";
+        let info = service
+            .get_file_info(bucket_id, file_key)
+            .await
+            .expect("get_file_info should succeed");
+
+        assert_eq!(info.bucket_id, bucket_id);
+        assert_eq!(info.file_key, file_key);
+        assert!(!info.name.is_empty());
+        assert!(info.size > 0);
+    }
+
+    #[tokio::test]
+    async fn test_distribute_file() {
+        let service = MockMspServiceBuilder::new().build();
+        let file_key = "abc123";
+        let resp = service
+            .distribute_file("bucket123", file_key)
+            .await
+            .expect("distribute_file should succeed");
+
+        assert_eq!(resp.status, "distribution_initiated");
+        assert_eq!(resp.file_key, file_key);
+        assert!(!resp.message.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_get_payment_stream() {
+        let service = MockMspServiceBuilder::new().build();
+        let ps = service
+            .get_payment_stream("0x123")
+            .await
+            .expect("get_payment_stream should succeed");
+
+        assert!(ps.tokens_per_block > 0);
+        assert!(ps.user_deposit > 0);
+    }
+
+    #[tokio::test]
+    async fn test_upload_to_msp() {
+        let service = MockMspServiceBuilder::new()
+            .with_rpc_responses(vec![(
+                "storagehubclient_receiveBackendFileChunks",
+                serde_json::json!([]),
+            )])
+            .await
+            .build();
+
+        // Provide at least one chunk id (upload_to_msp rejects empty sets)
+        let mut chunk_ids = HashSet::new();
+        chunk_ids.insert(ChunkId::new(0));
+
+        // Create test file metadata
+        let file_metadata = FileMetadata::new(
+            vec![0u8; 32],
+            vec![0u8; 32],
+            b"test_location".to_vec(),
+            1000,
+            [0u8; 32].into(),
+        )
+        .unwrap();
+
+        // Create test FileKeyProof
+        let file_key_proof = FileKeyProof::new(
+            file_metadata.owner().clone(),
+            file_metadata.bucket_id().clone(),
+            file_metadata.location().clone(),
+            file_metadata.file_size(),
+            *file_metadata.fingerprint(),
+            sp_trie::CompactProof {
+                encoded_nodes: vec![],
+            },
+        )
+        .unwrap();
+
+        let result = service.upload_to_msp(&chunk_ids, &file_key_proof).await;
+
+        assert!(result.is_ok());
     }
 }

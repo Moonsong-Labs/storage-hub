@@ -197,6 +197,44 @@
       <pre id="filesJson" class="mono" style="white-space: pre-wrap; word-break: break-word;"></pre>
     </section>
 
+    <!-- MSP Info section -->
+    <section class="card">
+      <h3>6) MSP Info</h3>
+      <div class="row">
+        <button id="get-info">Get Info</button>
+        <button id="get-stats">Get Stats</button>
+        <button id="get-value-props">Get Value Props</button>
+      </div>
+      <div class="row">
+        <div><strong>Info:</strong></div>
+      </div>
+      <pre id="infoJson" class="mono" style="white-space: pre-wrap; word-break: break-word;"></pre>
+      <div class="row">
+        <div><strong>Stats:</strong></div>
+      </div>
+      <pre id="statsJson" class="mono" style="white-space: pre-wrap; word-break: break-word;"></pre>
+      <div class="row">
+        <div><strong>Value Props:</strong></div>
+      </div>
+      <pre id="valuePropsJson" class="mono" style="white-space: pre-wrap; word-break: break-word;"></pre>
+    </section>
+
+    <!-- File Info section -->
+    <section class="card">
+      <h3>7) File Info</h3>
+      <div class="row">
+        <input id="bucketInfoIdInput" type="text" placeholder="bucket id"
+          value="d8793e4187f5642e96016a96fb33849a7e03eda91358b311bbd426ed38b26692" />
+        <input id="fileKeyInput" type="text" placeholder="file key"
+          value="e901c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f7" />
+        <button id="get-file-info">Get File Info</button>
+      </div>
+      <div class="row">
+        <div><strong>File Info:</strong></div>
+      </div>
+      <pre id="fileInfoJson" class="mono" style="white-space: pre-wrap; word-break: break-word;"></pre>
+    </section>
+
     <!-- Errors -->
     <section class="card">
       <h3>Errors</h3>
@@ -208,7 +246,7 @@
 
   <script>
     // Page state for Playwright assertions
-    window.__msp = { status: undefined, nonce: undefined, message: undefined, signature: undefined, token: undefined, user: undefined, uploadReceipt: undefined, downloadMeta: undefined, error: undefined, buckets: undefined, lastBucket: undefined, files: undefined };
+    window.__msp = { status: undefined, nonce: undefined, message: undefined, signature: undefined, token: undefined, user: undefined, uploadReceipt: undefined, downloadMeta: undefined, error: undefined, buckets: undefined, lastBucket: undefined, files: undefined, info: undefined, stats: undefined, valueProps: undefined, fileInfo: undefined };
 
     const statusEl = document.getElementById('status');
     const setStatus = (t) => { statusEl.textContent = t; };
@@ -386,15 +424,20 @@
       try {
         if (!client) throw new Error('Connect MSP first');
         setStatus('Uploading...');
-        const bucketId = 'e2e-bucket';
-        const fileKey = 'web-file';
+        const owner = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
+        const bucketId = '0x34eb5f637e05fc18f857ccb013250076534192189894d174ee3aa6d3525f6970';
+        const adolphusFingerprint = client.hexToBytes('0x34eb5f637e05fc18f857ccb013250076534192189894d174ee3aa6d3525f6970');
+        const location = 'files/e2e-bucket/adolphus.jpg';
+        const blob = await loadAdolphusBlob();
+        const metadata = await client.formFileMetadata(owner, bucketId, location, adolphusFingerprint, BigInt(blob.size));
+        const fileKey = '0x' + Array.from(await client.computeFileKey(metadata)).map(b => b.toString(16).padStart(2, '0')).join('');
+        
         // Use a valid-looking mock JWT for mocked backend
         const jwt = generateMockJwt();
         client.setToken(jwt);
         window.__msp.token = jwt;
         console.log('[TOKEN][AUTO]', window.__msp.token);
-        const blob = await loadAdolphusBlob();
-        const receipt = await client.uploadFile(bucketId, fileKey, blob);
+        const receipt = await client.uploadFile(bucketId, fileKey, blob, owner, location);
         window.__msp.uploadReceipt = receipt;
         console.log('[UPLOAD][RECEIPT]', receipt);
         setStatus('Upload done');
@@ -543,6 +586,80 @@
         setStatus('Get files failed');
         window.__msp.error = e?.message || String(e);
         console.error('[BUCKETS][FILES][ERROR]', e);
+      }
+    };
+
+    // MSP Info handlers
+    document.getElementById('get-info').onclick = async () => {
+      try {
+        await ensureConnected();
+        setStatus('Getting info...');
+        const info = await client.getInfo();
+        window.__msp.info = info;
+        document.getElementById('infoJson').textContent = JSON.stringify(info, null, 2);
+        console.log('[MSP][INFO]', info);
+        setStatus('Info loaded');
+      } catch (e) {
+        setStatus('Get info failed');
+        window.__msp.error = e?.message || String(e);
+        console.error('[MSP][INFO][ERROR]', e);
+      }
+    };
+
+    document.getElementById('get-stats').onclick = async () => {
+      try {
+        await ensureConnected();
+        setStatus('Getting stats...');
+        const stats = await client.getStats();
+        window.__msp.stats = stats;
+        document.getElementById('statsJson').textContent = JSON.stringify(stats, null, 2);
+        console.log('[MSP][STATS]', stats);
+        setStatus('Stats loaded');
+      } catch (e) {
+        setStatus('Get stats failed');
+        window.__msp.error = e?.message || String(e);
+        console.error('[MSP][STATS][ERROR]', e);
+      }
+    };
+
+    document.getElementById('get-value-props').onclick = async () => {
+      try {
+        await ensureConnected();
+        setStatus('Getting value props...');
+        const valueProps = await client.getValuePropositions();
+        window.__msp.valueProps = valueProps;
+        document.getElementById('valuePropsJson').textContent = JSON.stringify(valueProps, null, 2);
+        console.log('[MSP][VALUE-PROPS]', `count=${Array.isArray(valueProps) ? valueProps.length : 0}`, JSON.stringify(valueProps, null, 2));
+        setStatus('Value props loaded');
+      } catch (e) {
+        setStatus('Get value props failed');
+        window.__msp.error = e?.message || String(e);
+        console.error('[MSP][VALUE-PROPS][ERROR]', e);
+      }
+    };
+
+    document.getElementById('get-file-info').onclick = async () => {
+      try {
+        await ensureConnected();
+        setStatus('Getting file info...');
+        if (!window.__msp.token) {
+          const jwt = generateMockJwt();
+          client.setToken(jwt);
+          window.__msp.token = jwt;
+        }
+        const bucketEl = document.getElementById('bucketInfoIdInput');
+        const fileKeyEl = document.getElementById('fileKeyInput');
+        const bucketId = bucketEl && typeof bucketEl.value === 'string' && bucketEl.value.trim() ? bucketEl.value.trim() : 'd8793e4187f5642e96016a96fb33849a7e03eda91358b311bbd426ed38b26692';
+        const fileKey = fileKeyEl && typeof fileKeyEl.value === 'string' && fileKeyEl.value.trim() ? fileKeyEl.value.trim() : 'e901c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f7';
+        const info = await client.getFileInfo(bucketId, fileKey);
+        window.__msp.fileInfo = info;
+        document.getElementById('fileInfoJson').textContent = JSON.stringify(info, null, 2);
+        console.log('[MSP][FILE-INFO]', info);
+        setStatus('File info loaded');
+      } catch (e) {
+        setStatus('Get file info failed');
+        window.__msp.error = e?.message || String(e);
+        console.error('[MSP][FILE-INFO][ERROR]', e);
       }
     };
   </script>

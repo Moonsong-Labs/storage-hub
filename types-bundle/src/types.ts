@@ -1,6 +1,6 @@
 import type { RegistryTypes } from "@polkadot/types/types";
 
-export const ALL_TYPES: RegistryTypes = {
+export const SHARED_TYPES: RegistryTypes = {
   FileMetadata: {
     owner: "Vec<u8>",
     bucket_id: "Vec<u8>",
@@ -243,4 +243,17 @@ export const ALL_TYPES: RegistryTypes = {
       InternalError: null
     }
   }
+};
+
+// Parachain currently does not override base account types
+export const PARACHAIN_TYPES: RegistryTypes = {
+  ...SHARED_TYPES
+};
+
+// Solochain-EVM overrides base account-related types to Ethereum style
+export const SOLOCHAIN_EVM_TYPES: RegistryTypes = {
+  ...SHARED_TYPES,
+  AccountId: "EthereumAccountId",
+  Address: "AccountId",
+  LookupSource: "AccountId"
 };

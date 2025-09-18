@@ -1,14 +1,13 @@
-import assert, { strictEqual, notEqual } from "node:assert";
+import assert, { notEqual, strictEqual } from "node:assert";
 import {
+  assertEventPresent,
+  bspKey,
   describeMspNet,
   type EnrichedBspApi,
   type SqlClient,
   shUser,
-  bspKey,
-  waitFor,
-  assertEventPresent
+  waitFor
 } from "../../../util";
-import { createBucketAndSendNewStorageRequest } from "../../../util/bspNet/fileHelpers";
 import { waitForDeleteFileExtrinsic } from "../../../util/fisherman/fishermanHelpers";
 import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
 import {
@@ -88,8 +87,7 @@ await describeMspNet(
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
       const valuePropId = valueProps[0].id;
 
-      const fileMetadata = await createBucketAndSendNewStorageRequest(
-        userApi,
+      const fileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
         destination,
         bucketName,

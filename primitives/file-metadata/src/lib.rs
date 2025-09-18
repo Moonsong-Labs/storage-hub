@@ -401,6 +401,12 @@ pub struct ChunkWithId {
     pub data: Chunk,
 }
 
+impl ChunkWithId {
+    pub fn new(chunk_id: ChunkId, data: Chunk) -> Self {
+        Self { chunk_id, data }
+    }
+}
+
 /// A leaf in the in a trie.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Leaf<K, D: Debug> {

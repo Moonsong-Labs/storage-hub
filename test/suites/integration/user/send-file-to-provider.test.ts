@@ -2,7 +2,6 @@ import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
 import {
   addMspContainer,
-  createBucket,
   describeMspNet,
   type EnrichedBspApi,
   getContainerIp,
@@ -127,12 +126,11 @@ await describeMspNet("User: Send file to provider", ({ before, createUserApi, it
     );
 
     const localValuePropId = valueProps[0].id;
-    const newBucketEventEvent = await createBucket(
-      userApi,
+    const newBucketEventEvent = await userApi.file.newBucket(
       bucketName, // Bucket name
+      shUser, // Owner (the user)
       localValuePropId, // Value proposition ID from MSP
-      "0xc0647914b37034d861ddc3f0750ded6defec0823de5c782f3ca7c64ba29a4a2e", // We got with cyberchef
-      shUser // Owner (the user)
+      "0xc0647914b37034d861ddc3f0750ded6defec0823de5c782f3ca7c64ba29a4a2e" // We got with cyberchef
     );
     const newBucketEventDataBlob =
       userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;

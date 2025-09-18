@@ -1,20 +1,20 @@
-import type { ApiPromise } from "@polkadot/api";
-import type { KeyringPair } from "@polkadot/keyring/types";
+import assert from "node:assert";
 import * as child_process from "node:child_process";
 import { execSync } from "node:child_process";
 import crypto from "node:crypto";
-import Docker from "dockerode";
 import * as util from "node:util";
-import assert from "node:assert";
+import type { ApiPromise } from "@polkadot/api";
+import type { KeyringPair } from "@polkadot/keyring/types";
+import Docker from "dockerode";
+import { assertDockerLog } from "../asserts.ts";
+import { DOCKER_IMAGE } from "../constants.ts";
+import { cleanupEnvironment, printDockerStatus } from "../helpers.ts";
 import { sleep } from "../timer.ts";
 import { sealBlock } from "./block.ts";
 import { CAPACITY, MAX_STORAGE_CAPACITY } from "./consts";
 import * as ShConsts from "./consts.ts";
 import { addBspContainer, showContainers } from "./docker";
 import type { EnrichedBspApi } from "./test-api.ts";
-import { cleanupEnvironment, printDockerStatus } from "../helpers.ts";
-import { DOCKER_IMAGE } from "../constants.ts";
-import { assertDockerLog } from "../asserts.ts";
 
 const exec = util.promisify(child_process.exec);
 
@@ -115,7 +115,8 @@ export const cleardownTest = async (cleardownOptions: {
       (container) =>
         container.Image === DOCKER_IMAGE ||
         container.Names.some((name) => name.includes("toxiproxy")) ||
-        container.Names.some((name) => name.includes("storage-hub-sh-copyparty"))
+        container.Names.some((name) => name.includes("storage-hub-sh-copyparty")) ||
+        container.Names.some((name) => name.includes("storage-hub-sh-backend"))
     );
 
     if (relevantContainers.length > 0) {
@@ -166,10 +167,10 @@ export const createCheckBucket = async (api: EnrichedBspApi, bucketName: string)
 export const addBsp = async (
   api: ApiPromise,
   bspKey: KeyringPair,
+  sudoSigner: KeyringPair,
   options?: {
     name?: string;
     rocksdb?: boolean;
-    bspKeySeed?: string;
     bspId?: string;
     bspStartingWeight?: bigint;
     maxStorageCapacity?: number;
@@ -203,7 +204,11 @@ export const addBsp = async (
 
   //Give it some balance.
   const amount = 10000n * 10n ** 12n;
-  await sealBlock(api, api.tx.sudo.sudo(api.tx.balances.forceSetBalance(bspKey.address, amount)));
+  await sealBlock(
+    api,
+    api.tx.sudo.sudo(api.tx.balances.forceSetBalance(bspKey.address, amount)),
+    sudoSigner
+  );
 
   const bspIp = await getContainerIp(containerName);
   const multiAddressBsp = `/ip4/${bspIp}/tcp/${p2pPort}/p2p/${peerId}`;
@@ -220,7 +225,8 @@ export const addBsp = async (
         bspKey.address,
         options?.bspStartingWeight ?? null
       )
-    )
+    ),
+    sudoSigner
   );
 
   return { containerName, rpcPort, p2pPort, peerId };
