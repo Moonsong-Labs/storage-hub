@@ -535,18 +535,28 @@ impl MspService {
 
 #[cfg(all(test, feature = "mocks"))]
 mod tests {
+    use std::sync::Arc;
+
+    use serde_json::Value;
+
+    use shc_common::types::{FileKeyProof, FileMetadata};
+    use shp_types::Hash;
+
     use super::*;
     use crate::{
         config::Config,
-        constants::{mocks::MOCK_ADDRESS, rpc::DUMMY_MSP_ID, test::bucket},
+        constants::{
+            mocks::MOCK_ADDRESS,
+            rpc::DUMMY_MSP_ID,
+            test::{bucket::DEFAULT_BUCKET_NAME, file::DEFAULT_SIZE},
+        },
         data::{
             indexer_db::{client::DBClient, mock_repository::MockRepository},
             rpc::{AnyRpcConnection, MockConnection, StorageHubRpcClient},
             storage::{BoxedStorageWrapper, InMemoryStorage},
         },
+        test_utils::random_bytes_32,
     };
-    use shp_types::Hash;
-    use std::sync::Arc;
 
     /// Builder for creating MspService instances with mock dependencies for testing
     struct MockMspServiceBuilder {
@@ -641,13 +651,14 @@ mod tests {
                         )
                         .await
                         .expect("should create MSP");
+
                     // Create a test bucket for the mock user
                     client
                         .create_bucket(
                             MOCK_ADDRESS,
                             Some(msp.id),
-                            "test-bucket".as_bytes(),
-                            bucket::DEFAULT_BUCKET_ID.as_slice(),
+                            DEFAULT_BUCKET_NAME.as_bytes(),
+                            random_bytes_32().as_slice(),
                             false,
                         )
                         .await
@@ -668,16 +679,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_bucket() {
-        let service = MockMspServiceBuilder::new().build();
-        let bucket = service.get_bucket("test_bucket").await.unwrap();
-
-        assert_eq!(bucket.bucket_id, "test_bucket");
-        assert!(!bucket.name.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_get_files_root() {
-        use crate::constants::test::bucket::DEFAULT_BUCKET_ID;
+        let bucket_name = "my-bucket";
+        let bucket_id = random_bytes_32();
 
         let service = MockMspServiceBuilder::new()
             .init_repository_with(|client| {
@@ -690,24 +693,90 @@ mod tests {
                         )
                         .await
                         .expect("should create MSP");
+
                     // Create a test bucket for the mock user
-                    client
+                    let bucket = client
                         .create_bucket(
                             MOCK_ADDRESS,
                             Some(msp.id),
-                            "test-bucket".as_bytes(),
-                            DEFAULT_BUCKET_ID.as_slice(),
+                            bucket_name.as_bytes(),
+                            &bucket_id,
                             false,
                         )
                         .await
                         .expect("should create bucket");
+
+                    client
+                        .create_file(
+                            MOCK_ADDRESS.as_bytes(),
+                            random_bytes_32().as_slice(),
+                            bucket.id,
+                            &bucket_id,
+                            "sample-file.txt".as_bytes(),
+                            random_bytes_32().as_slice(),
+                            DEFAULT_SIZE,
+                        )
+                        .await
+                        .expect("should create file");
+                })
+            })
+            .await
+            .build();
+
+        let bucket_id = hex::encode(bucket_id);
+        let bucket = service.get_bucket(&bucket_id, MOCK_ADDRESS).await.unwrap();
+
+        assert_eq!(bucket.bucket_id, bucket_id);
+        assert_eq!(bucket.name, bucket_name);
+    }
+
+    #[tokio::test]
+    async fn test_get_files_root() {
+        let bucket_id = random_bytes_32();
+
+        let service = MockMspServiceBuilder::new()
+            .init_repository_with(|client| {
+                Box::pin(async move {
+                    // Create MSP with the ID that matches the default config
+                    let msp = client
+                        .create_msp(
+                            MOCK_ADDRESS,
+                            OnchainMspId::new(Hash::from_slice(&DUMMY_MSP_ID)),
+                        )
+                        .await
+                        .expect("should create MSP");
+
+                    // Create a test bucket for the mock user
+                    let bucket = client
+                        .create_bucket(
+                            MOCK_ADDRESS,
+                            Some(msp.id),
+                            DEFAULT_BUCKET_NAME.as_bytes(),
+                            &bucket_id,
+                            false,
+                        )
+                        .await
+                        .expect("should create bucket");
+
+                    client
+                        .create_file(
+                            MOCK_ADDRESS.as_bytes(),
+                            random_bytes_32().as_slice(),
+                            bucket.id,
+                            &bucket_id,
+                            "sample-file.txt".as_bytes(),
+                            random_bytes_32().as_slice(),
+                            DEFAULT_SIZE,
+                        )
+                        .await
+                        .expect("should create file");
                 })
             })
             .await
             .build();
 
         let tree = service
-            .get_file_tree(hex::encode(DEFAULT_BUCKET_ID).as_ref(), MOCK_ADDRESS, "/")
+            .get_file_tree(hex::encode(bucket_id).as_ref(), MOCK_ADDRESS, "/")
             .await
             .unwrap();
 
@@ -716,17 +785,61 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_file_info() {
-        let service = MockMspServiceBuilder::new().build();
-        let bucket_id = "bucket123";
-        let file_key = "abc123";
+        let file_key = random_bytes_32();
+        let bucket_id = random_bytes_32();
+
+        let service = MockMspServiceBuilder::new()
+            .init_repository_with(|client| {
+                Box::pin(async move {
+                    // Create MSP with the ID that matches the default config
+                    let msp = client
+                        .create_msp(
+                            MOCK_ADDRESS,
+                            OnchainMspId::new(Hash::from_slice(&DUMMY_MSP_ID)),
+                        )
+                        .await
+                        .expect("should create MSP");
+
+                    // Create a test bucket for the mock user
+                    let bucket = client
+                        .create_bucket(
+                            MOCK_ADDRESS,
+                            Some(msp.id),
+                            DEFAULT_BUCKET_NAME.as_bytes(),
+                            &bucket_id,
+                            false,
+                        )
+                        .await
+                        .expect("should create bucket");
+
+                    client
+                        .create_file(
+                            MOCK_ADDRESS.as_bytes(),
+                            &file_key,
+                            bucket.id,
+                            &bucket_id,
+                            "sample-file.txt".as_bytes(),
+                            random_bytes_32().as_slice(),
+                            DEFAULT_SIZE,
+                        )
+                        .await
+                        .expect("should create file");
+                })
+            })
+            .await
+            .build();
+
+        let bucket_id = hex::encode(bucket_id);
+        let file_key = hex::encode(file_key);
+
         let info = service
-            .get_file_info(bucket_id, file_key)
+            .get_file_info(&bucket_id, MOCK_ADDRESS, &file_key)
             .await
             .expect("get_file_info should succeed");
 
         assert_eq!(info.bucket_id, bucket_id);
         assert_eq!(info.file_key, file_key);
-        assert!(!info.name.is_empty());
+        assert!(!info.location.is_empty());
         assert!(info.size > 0);
     }
 
