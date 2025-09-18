@@ -77,6 +77,13 @@ await describeBspNet(
       assert(valueProps[0].id, "Value proposition ID is undefined");
       const valuePropId = valueProps[0].id.toHex();
 
+      // Store bucket ID for subsequent tests
+      bucketId = (await storageHubClient.deriveBucketId(account.address, bucketName)) as string;
+
+      // Verify bucket doesn't exist before creation
+      const bucketBeforeCreation = await userApi.query.providers.buckets(bucketId);
+      assert(bucketBeforeCreation.isEmpty, "Bucket should not exist before creation");
+
       // Create bucket using SDK
       const txHash = await storageHubClient.createBucket(
         userApi.shConsts.DUMMY_MSP_ID as `0x${string}`,
@@ -91,8 +98,18 @@ await describeBspNet(
       const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
       assert(receipt.status === "success", "Create bucket transaction failed");
 
-      // Store bucket ID for subsequent tests
-      bucketId = (await storageHubClient.deriveBucketId(account.address, bucketName)) as string;
+      // Verify bucket exists after creation
+      const bucketAfterCreation = await userApi.query.providers.buckets(bucketId);
+      assert(!bucketAfterCreation.isEmpty, "Bucket should exist after creation");
+      const bucketData = bucketAfterCreation.unwrap();
+      assert(
+        bucketData.userId.toString() === account.address,
+        "Bucket userId should match account address"
+      );
+      assert(
+        bucketData.mspId.toString() === userApi.shConsts.DUMMY_MSP_ID,
+        "Bucket mspId should match expected MSP ID"
+      );
     });
 
     // Issue storage request to upload file
