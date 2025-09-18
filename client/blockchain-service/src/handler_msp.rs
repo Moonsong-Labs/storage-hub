@@ -3,6 +3,7 @@ use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
 use sc_client_api::HeaderBackend;
+use sc_network_types::PeerId;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::TreeRoute;
 use sp_runtime::traits::Block as BlockT;
@@ -660,9 +661,19 @@ where
     ///   re-emit for already-confirmed BSPs.
     pub(crate) fn spawn_distribute_file_to_bsps_tasks(&mut self, block_hash: &Runtime::Hash) {
         let managed_msp_id = match &self.maybe_managed_provider {
-            Some(ManagedProvider::Msp(msp_handler)) => &msp_handler.msp_id,
+            Some(ManagedProvider::Msp(msp_handler)) => msp_handler.msp_id.clone(),
             _ => {
                 error!(target: LOG_TARGET, "`spawn_distribute_file_to_bsps_tasks` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
+                return;
+            }
+        };
+
+        // Exit early if the MSP node peer ID is not set, meaning it is not meant to be a distributor.
+        // Clone to avoid holding an immutable borrow of `self` across the loop below where we need `&mut self`.
+        let managed_msp_peer_id = match self.config.peer_id.clone() {
+            Some(peer_id) => peer_id,
+            None => {
+                trace!(target: LOG_TARGET, "MSP node peer ID is not set, meaning it is not meant to be a distributor. Skipping distribution of files.");
                 return;
             }
         };
@@ -671,7 +682,7 @@ where
         let pending_storage_requests_for_this_msp = match self
             .client
             .runtime_api()
-            .pending_storage_requests_by_msp(*block_hash, *managed_msp_id)
+            .pending_storage_requests_by_msp(*block_hash, managed_msp_id)
         {
             Ok(pending_storage_requests) => pending_storage_requests,
             Err(e) => {
@@ -682,6 +693,9 @@ where
 
         // Filter out storage requests that this MSP has not already accepted.
         // Cannot distribute files that this MSP doesn't have already.
+        // Also keep only those for which this MSP node is listed as one of
+        // the `user_peer_ids` of the storage request, meaning it is meant to
+        // be a distributor of the file.
         let storage_requests_to_distribute =
             pending_storage_requests_for_this_msp
                 .iter()
@@ -690,11 +704,28 @@ where
                     // this MSP is assigned to, we just have to check that it has already accepted
                     // the storage request, which is indicated by the second element of the tuple.
                     // See [`shc_common::types::StorageRequestMetadata`] for more details.
-                    if let Some(msp) = storage_request.msp {
+                    let msp_accepted = if let Some(msp) = storage_request.msp {
                         msp.1
                     } else {
                         false
-                    }
+                    };
+
+                    let msp_is_distributor = storage_request.user_peer_ids.iter().any(|peer_id| {
+                        let peer_id = match PeerId::from_bytes(peer_id.as_ref()) {
+                            Ok(peer_id) => peer_id,
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to convert peer ID from storage request to PeerId: {:?}", e);
+                                return false;
+                            }
+                        };
+
+                        log::info!(target: LOG_TARGET, "HELLO THERE: Peer ID from storage request: {:?}", peer_id);
+                        log::info!(target: LOG_TARGET, "HELLO THERE: Managed MSP peer ID: {:?}", managed_msp_peer_id);
+
+                        peer_id == managed_msp_peer_id
+                    });
+
+                    msp_accepted && msp_is_distributor
                 });
 
         // Distribute the files to the BSPs.

@@ -354,6 +354,13 @@ where
                 max_blocks_behind_to_catch_up_root_changes.saturated_into();
         }
 
+        if let Some(peer_id) = config.peer_id {
+            blockchain_service_config.peer_id = Some(
+                PeerId::from_bytes(&peer_id)
+                    .expect("Invalid peer ID when converting from bytes to PeerId"),
+            );
+        }
+
         self.blockchain_service_config = Some(blockchain_service_config);
         self
     }
@@ -784,8 +791,13 @@ impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
     for BlockchainServiceOptions
 {
     fn into(self) -> BlockchainServiceConfig<Runtime> {
-        let peer_id = PeerId::from_bytes(&self.peer_id.unwrap_or(vec![0; 32]))
-            .unwrap_or(PeerId::from_bytes(&[0; 32]).unwrap());
+        // let peer_id = self.peer_id.map(|peer_id| {
+        //     PeerId::from_bytes(&peer_id)
+        //         .expect("Invalid peer ID when converting from bytes to PeerId")
+        // });
+
+        let peer_id = None;
+
         BlockchainServiceConfig {
             extrinsic_retry_timeout: self.extrinsic_retry_timeout.unwrap_or_default(),
             sync_mode_min_blocks_behind: self

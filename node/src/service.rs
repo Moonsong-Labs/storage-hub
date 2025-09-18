@@ -381,7 +381,10 @@ where
             }
 
             if let Some(c) = blockchain_service {
-                storage_hub_builder.with_blockchain_service_config(c.clone());
+                let peer_id = network.local_peer_id().to_bytes();
+                let mut c = c.clone();
+                c.peer_id = Some(peer_id);
+                storage_hub_builder.with_blockchain_service_config(c);
             }
 
             // Get the RPC configuration to use for this StorageHub node client.

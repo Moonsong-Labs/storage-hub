@@ -138,7 +138,7 @@ where
     pub max_blocks_behind_to_catch_up_root_changes: BlockNumber<Runtime>,
 
     /// The peer ID of this node.
-    pub peer_id: PeerId,
+    pub peer_id: Option<PeerId>,
 }
 
 impl<Runtime> Default for BlockchainServiceConfig<Runtime>
@@ -151,7 +151,7 @@ where
             sync_mode_min_blocks_behind: 5u32.into(),
             check_for_pending_proofs_period: 4u32.into(),
             max_blocks_behind_to_catch_up_root_changes: 10u32.into(),
-            peer_id: PeerId::from_bytes(&[0; 32]).unwrap(),
+            peer_id: None,
         }
     }
 }
