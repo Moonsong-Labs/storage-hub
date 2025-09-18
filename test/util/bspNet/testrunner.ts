@@ -95,11 +95,6 @@ export async function describeBspNet<
         }
       });
 
-      // Add a final after hook to ensure all SQL clients are closed
-      after(async () => {
-        await closeAllSqlClients();
-      });
-
       const context = {
         it,
         createUserApi: () => userApiPromise,
@@ -208,11 +203,6 @@ export async function describeMspNet<
           console.log("ℹ️ Hint: close network with:   pnpm docker:stop:fullnet  ");
           process.exit(0);
         }
-      });
-
-      // Add a final after hook to ensure all SQL clients are closed
-      after(async () => {
-        await closeAllSqlClients();
       });
 
       const context = {
