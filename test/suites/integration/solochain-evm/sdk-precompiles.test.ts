@@ -28,9 +28,8 @@ await describeBspNet(
   "Solochain EVM SDK Precompiles Integration",
   {
     initialised: false,
-    networkConfig: "standard",
     runtimeType: "solochain",
-    keepAlive: true,
+    keepAlive: false,
     indexer: true /*backend: true*/
   },
   ({ before, it, createUserApi }) => {
