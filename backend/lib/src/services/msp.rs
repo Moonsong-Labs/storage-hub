@@ -551,7 +551,7 @@ mod tests {
     use super::*;
 
     use crate::{
-        constants::rpc::DEFAULT_MSP_CALLBACK_URL,
+        config::Config,
         data::{
             indexer_db::mock_repository::MockRepository,
             rpc::{AnyRpcConnection, MockConnection, StorageHubRpcClient},
