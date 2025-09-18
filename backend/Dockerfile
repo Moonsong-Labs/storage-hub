@@ -1,37 +1,29 @@
-# --- Builder ---
-FROM docker.io/library/rust:1.79-slim AS builder
-WORKDIR /app
+# BACKEND DOCKERFILE
+#
+# Requires to be run from the /test folder and to copy the binary in the build folder
+# (This can be done as part of the release workflow using `pnpm docker:build:backend` or manually)
 
-ARG LLVM_VERSION=15
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    clang-${LLVM_VERSION} \
-    llvm-${LLVM_VERSION}-dev \
-    libclang-${LLVM_VERSION}-dev \
-    build-essential \
-    pkg-config \
-    protobuf-compiler \
-    libpq-dev \
-    ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
+FROM ubuntu:noble
 
-ENV LIBCLANG_PATH=/usr/lib/llvm-${LLVM_VERSION}/lib
+LABEL version="0.1.0"
+LABEL description="Storage Hub MSP Backend"
 
-COPY . .
+ENV RUST_BACKTRACE=1
 
-RUN cargo build --release --locked -p sh-msp-backend --features mocks
+RUN apt-get update && \
+	DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+	ca-certificates curl sudo libpq-dev && \
+	apt-get autoremove -y && \
+	apt-get clean && \
+	find /var/lib/apt/lists/ -type f -not -name lock -delete && \
+	useradd -m -u 1337 -U -s /bin/sh -d /backend backend && \
+	echo "backend ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
-# --- Runtime ---
-FROM docker.io/library/debian:bookworm-slim
-WORKDIR /app
-ENV RUST_LOG=info
+USER backend
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    libpq5 \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY --from=builder /app/target/release/sh-msp-backend /usr/local/bin/sh-msp-backend
+COPY --chown=backend:backend build/sh-msp-backend /usr/local/bin/sh-msp-backend
+RUN chmod uog+x /usr/local/bin/sh-msp-backend
 
 EXPOSE 8080
 
-CMD ["/usr/local/bin/sh-msp-backend", "--host", "0.0.0.0", "--port", "8080"]
+ENTRYPOINT ["sh-msp-backend"]

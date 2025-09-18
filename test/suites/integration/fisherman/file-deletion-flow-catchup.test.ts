@@ -1,15 +1,14 @@
-import assert, { strictEqual, notEqual } from "node:assert";
+import assert, { notEqual, strictEqual } from "node:assert";
 import {
+  assertEventPresent,
+  bspKey,
   describeMspNet,
   type EnrichedBspApi,
   type SqlClient,
   shUser,
-  bspKey,
   sleep,
-  waitFor,
-  assertEventPresent
+  waitFor
 } from "../../../util";
-import { createBucketAndSendNewStorageRequest } from "../../../util/bspNet/fileHelpers";
 import {
   waitForDeleteFileExtrinsic,
   waitForFishermanProcessing
@@ -92,8 +91,7 @@ await describeMspNet(
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
       const valuePropId = valueProps[0].id;
 
-      const fileMetadata = await createBucketAndSendNewStorageRequest(
-        userApi,
+      const fileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
         destination,
         bucketName,
@@ -144,8 +142,7 @@ await describeMspNet(
         const source = "res/whatsup.jpg";
         const destination = `test/file-to-delete-catchup-${i}.txt`;
 
-        const fileMetadata = await createBucketAndSendNewStorageRequest(
-          userApi,
+        const fileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(
           source,
           destination,
           bucketName,

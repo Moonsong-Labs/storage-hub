@@ -1,14 +1,13 @@
-import assert, { strictEqual, notEqual } from "node:assert";
+import assert, { notEqual, strictEqual } from "node:assert";
 import {
+  assertEventPresent,
+  bspKey,
   describeMspNet,
   type EnrichedBspApi,
   type SqlClient,
   shUser,
-  bspKey,
-  waitFor,
-  assertEventPresent
+  waitFor
 } from "../../../util";
-import { createBucketAndSendNewStorageRequest } from "../../../util/bspNet/fileHelpers";
 import {
   waitForDeleteFileExtrinsic,
   waitForFishermanProcessing
@@ -88,8 +87,7 @@ await describeMspNet(
       const valuePropId = valueProps[0].id;
 
       const { fileKey, bucketId, location, fingerprint, fileSize } =
-        await createBucketAndSendNewStorageRequest(
-          userApi,
+        await userApi.file.createBucketAndSendNewStorageRequest(
           source,
           destination,
           bucketName,
@@ -237,8 +235,7 @@ await describeMspNet(
       await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
       await userApi.docker.pauseContainer("storage-hub-sh-bsp-1");
 
-      const { fileKey } = await createBucketAndSendNewStorageRequest(
-        userApi,
+      const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
         destination,
         bucketName,
@@ -293,8 +290,7 @@ await describeMspNet(
       await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
       await userApi.docker.pauseContainer("storage-hub-sh-bsp-1");
 
-      const { fileKey } = await createBucketAndSendNewStorageRequest(
-        userApi,
+      const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
         destination,
         bucketName,
@@ -349,8 +345,7 @@ await describeMspNet(
       const valuePropId = valueProps[0].id;
 
       const { fileKey, bucketId, location, fingerprint, fileSize } =
-        await createBucketAndSendNewStorageRequest(
-          userApi,
+        await userApi.file.createBucketAndSendNewStorageRequest(
           source,
           destination,
           bucketName,
@@ -500,8 +495,7 @@ await describeMspNet(
       await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
       await userApi.docker.pauseContainer("storage-hub-sh-bsp-1");
 
-      const { fileKey: _ } = await createBucketAndSendNewStorageRequest(
-        userApi,
+      const { fileKey: _ } = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
         destination,
         bucketName,

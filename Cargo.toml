@@ -72,6 +72,7 @@ hex-literal = { version = "0.4.1" }
 jsonrpsee = { version = "0.24.9" }
 jsonrpsee-core = { version = "0.24.9" }
 jsonwebtoken = "9"
+k256 = "0.13"
 kvdb = "0.13.0"
 kvdb-memorydb = "0.13.0"
 kvdb-rocksdb = "0.19.0"

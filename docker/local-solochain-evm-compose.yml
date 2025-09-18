@@ -1,0 +1,18 @@
+services:
+  storage-hub-node:
+    image: storage-hub:local
+    platform: linux/amd64
+    ports:
+      - '9944:9944'
+    command:
+      [
+        '--dev',
+        '--unsafe-rpc-external',
+        '--rpc-cors=all',
+        '--tmp',
+        '--provider',
+        '--provider-type=user',
+        '--no-hardware-benchmarks',
+        '--sealing=instant',
+        '--chain=solochain-evm-dev',
+      ]

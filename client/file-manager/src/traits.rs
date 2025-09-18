@@ -42,6 +42,12 @@ pub enum FileStorageWriteError {
     ChunkCountOverflow,
 }
 
+impl std::fmt::Display for FileStorageWriteError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
 #[derive(Debug)]
 pub enum FileStorageError {
     /// File already exists.
@@ -92,6 +98,12 @@ pub enum FileStorageError {
     ErrorParsingExcludeType,
     /// Failed to get file key proof from file metadata.
     FailedToConstructFileKeyProof,
+}
+
+impl std::fmt::Display for FileStorageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 #[derive(Debug)]
