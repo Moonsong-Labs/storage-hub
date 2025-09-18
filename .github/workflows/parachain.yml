@@ -155,6 +155,30 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=${{ github.event.repository.license.spdx_id }}
 
+  build_backend:
+    needs: [setup]
+    if: always()
+    name: 'Build backend binary'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1.8
+      - name: Install libpq-dev
+        run: sudo apt-get update && sudo apt-get install -y libpq-dev
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build backend
+        run: |
+          cargo build -p sh-msp-backend --release
+      - name: Upload backend binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-bin
+          path: target/release/sh-msp-backend
+          if-no-files-found: error
+
   # zombie_test_k8:
   #   needs: [build_image, setup]
   #   if: always()
@@ -492,6 +516,116 @@ jobs:
           retention-days: 5
           if-no-files-found: warn
 
+  backend_test:
+    needs: [build_image, build_backend, setup]
+    if: always()
+    name: 'Run Backend Integration Tests'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/workflow-templates/setup-pnpm
+        with:
+          node_version: 23
+      - uses: actions-rust-lang/setup-rust-toolchain@v1.8
+      - name: Install libpq-dev
+        run: sudo apt-get update && sudo apt-get install -y libpq-dev
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - run: mkdir -p target/release/
+      - name: Download backend binary
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-bin
+          path: target/release/
+      - name: Get Node Binary if changed
+        if: needs.setup.outputs.node_changed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: node
+          path: target/release/
+      - name: Get Latest Node Binary if not changed
+        if: needs.setup.outputs.node_changed == 'false'
+        run: |
+          docker pull moonsonglabs/storage-hub:latest
+          docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
+          docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
+          docker rm temp_storage_hub
+      - name: Build Local Docker Image (node)
+        run: |
+          chmod +x target/release/storage-hub-node
+          chmod -R 777 docker/dev-keystores
+          cd test
+          pnpm install
+          pnpm docker:build
+      - name: Build Backend Docker Image
+        run: |
+          cd test
+          pnpm docker:build:backend
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: diesel_cli
+      - name: Run Backend Tests
+        id: run_tests
+        run: |
+          cd test
+          pnpm i
+          node --import tsx                        \
+              --test                               \
+              --test-reporter=@reporters/github    \
+              --test-reporter-destination=stdout   \
+              --test-reporter=spec                 \
+              --test-reporter-destination=stdout   \
+              --test-concurrency=1                 \
+              --test-shard=${{ matrix.shard }}/1   \
+              ./suites/integration/backend/**.test.ts
+      - name: Collect Docker Logs on Failure
+        if: failure() && steps.run_tests.outcome == 'failure'
+        run: |
+          echo "::group::Docker Container Status"
+          docker ps -a
+          echo "::endgroup::"
+
+          mkdir -p test-logs
+
+          # Collect logs from Storage Hub images
+          for container in $(docker ps -a --filter "ancestor=moonsonglabs/storage-hub" --format "{{.Names}}"); do
+            echo "Collecting logs from $container"
+            docker logs $container > "test-logs/${container}.log" 2>&1
+          done
+
+          # Collect logs from Backend image
+          for container in $(docker ps -a --filter "ancestor=sh-msp-backend:local" --format "{{.Names}}"); do
+            echo "Collecting logs from $container"
+            docker logs $container > "test-logs/${container}.log" 2>&1
+          done
+
+          SP_LOGS_DIR=$(find /tmp -maxdepth 1 -type d -name "bsp-logs-*" -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" ")
+
+          if [ ! -z "$SP_LOGS_DIR" ]; then
+            echo "Found logs directory: $SP_LOGS_DIR"
+            cp -r $SP_LOGS_DIR/* test-logs/ || true
+          else
+            echo "No sp-logs directory found in /tmp"
+          fi
+
+          echo "Collected log files:"
+          ls -la test-logs/
+      - name: Upload logs as artifact
+        if: failure() && steps.run_tests.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-logs
+          path: test-logs/
+          retention-days: 5
+          if-no-files-found: warn
+
   user_net:
     needs: [build_image, setup]
     if: always()
@@ -709,6 +843,18 @@ jobs:
         run: |
           cd test
           pnpm typegen
+      - name: Setup Rust toolchain (for SDK wasm build)
+        uses: actions-rust-lang/setup-rust-toolchain@v1.8
+        with:
+          target: wasm32-unknown-unknown
+          cache: false
+      - name: Install wasm-pack (for SDK build)
+        run: curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
+      - name: Build SDK
+        run: |
+          cd sdk
+          pnpm install --frozen-lockfile
+          pnpm build
       - name: Run Solochain EVM Tests
         id: run_tests
         run: |

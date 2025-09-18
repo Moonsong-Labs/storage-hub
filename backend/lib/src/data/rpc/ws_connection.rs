@@ -6,9 +6,8 @@
 use std::{sync::Arc, time::Duration};
 
 use async_trait::async_trait;
-use jsonrpsee::core::traits::ToRpcParams;
 use jsonrpsee::{
-    core::client::ClientT,
+    core::{client::ClientT, traits::ToRpcParams},
     ws_client::{WsClient, WsClientBuilder},
 };
 use serde::de::DeserializeOwned;
@@ -100,7 +99,7 @@ impl WsConnection {
 impl RpcConnection for WsConnection {
     async fn call<P, R>(&self, method: &str, params: P) -> RpcResult<R>
     where
-        P: ToRpcParams + Send + Sync,
+        P: ToRpcParams + Send,
         R: DeserializeOwned,
     {
         let client = self.get_client().await?;

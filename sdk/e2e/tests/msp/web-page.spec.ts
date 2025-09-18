@@ -21,6 +21,10 @@ test.describe('MSP Web Page Flow', () => {
       if (text.startsWith('[BUCKETS][LIST]')) seen.add('buckets-list');
       if (text.startsWith('[BUCKETS][GET]')) seen.add('bucket-get');
       if (text.startsWith('[BUCKETS][FILES]')) seen.add('bucket-files');
+      if (text.startsWith('[MSP][INFO]')) seen.add('msp-info');
+      if (text.startsWith('[MSP][STATS]')) seen.add('msp-stats');
+      if (text.startsWith('[MSP][VALUE-PROPS]')) seen.add('msp-value-props');
+      if (text.startsWith('[MSP][FILE-INFO]')) seen.add('msp-file-info');
     });
 
     const waitForConsoleTag = async (tag: string, action: () => Promise<void>) => {
@@ -128,6 +132,45 @@ test.describe('MSP Web Page Flow', () => {
     filesJson = await page.locator('#filesJson').textContent();
     expect(filesJson && filesJson.includes('Q1-2024.pdf')).toBeTruthy();
     console.log('✅ Get Files (Reports)');
+
+    // MSP Info: Get Info
+    console.log('[TEST] click Get Info');
+    await waitForConsoleTag('msp-info', async () => {
+      await page.getByRole('button', { name: 'Get Info' }).click();
+    });
+    const infoJson = await page.locator('#infoJson').textContent();
+    expect(infoJson && infoJson.includes('mspId')).toBeTruthy();
+    expect(infoJson && infoJson.includes('client')).toBeTruthy();
+    console.log('✅ Get Info');
+
+    // MSP Info: Get Stats
+    console.log('[TEST] click Get Stats');
+    await waitForConsoleTag('msp-stats', async () => {
+      await page.getByRole('button', { name: 'Get Stats' }).click();
+    });
+    const statsJson = await page.locator('#statsJson').textContent();
+    expect(statsJson && statsJson.includes('capacity')).toBeTruthy();
+    expect(statsJson && statsJson.includes('totalBytes')).toBeTruthy();
+    console.log('✅ Get Stats');
+
+    // MSP Info: Get Value Props
+    console.log('[TEST] click Get Value Props');
+    await waitForConsoleTag('msp-value-props', async () => {
+      await page.getByRole('button', { name: 'Get Value Props' }).click();
+    });
+    const valuePropsJson = await page.locator('#valuePropsJson').textContent();
+    expect(valuePropsJson && valuePropsJson.includes('pricePerGbBlock')).toBeTruthy();
+    console.log('✅ Get Value Props');
+
+    // MSP File Info (uses defaults in page)
+    console.log('[TEST] click Get File Info');
+    await waitForConsoleTag('msp-file-info', async () => {
+      await page.getByRole('button', { name: 'Get File Info' }).click();
+    });
+    const fileInfoJson = await page.locator('#fileInfoJson').textContent();
+    expect(fileInfoJson && fileInfoJson.includes('fileKey')).toBeTruthy();
+    expect(fileInfoJson && fileInfoJson.includes('uploadedAt')).toBeTruthy();
+    console.log('✅ Get File Info');
   });
 });
 
