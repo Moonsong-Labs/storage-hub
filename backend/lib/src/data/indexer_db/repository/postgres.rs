@@ -288,7 +288,7 @@ mod tests {
                 },
             },
         },
-        test_utils::{random_bytes_32, random_hash},
+        mock_utils::{random_bytes_32, random_hash},
     };
 
     #[tokio::test]

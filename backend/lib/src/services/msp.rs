@@ -555,7 +555,7 @@ mod tests {
             rpc::{AnyRpcConnection, MockConnection, StorageHubRpcClient},
             storage::{BoxedStorageWrapper, InMemoryStorage},
         },
-        test_utils::random_bytes_32,
+        mock_utils::random_bytes_32,
     };
 
     /// Builder for creating MspService instances with mock dependencies for testing

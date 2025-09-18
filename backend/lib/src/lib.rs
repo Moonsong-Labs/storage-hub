@@ -8,5 +8,5 @@ pub mod error;
 pub mod models;
 pub mod services;
 
-#[cfg(test)]
-pub mod test_utils;
+#[cfg(any(feature = "mocks", test))]
+pub mod mock_utils;
