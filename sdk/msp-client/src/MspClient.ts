@@ -1,5 +1,3 @@
-import type { HttpClientConfig } from "@storagehub-sdk/core";
-import { FileMetadata, FileTrie, HttpClient, initWasm } from "@storagehub-sdk/core";
 import type {
   Bucket,
   DownloadOptions,
@@ -16,6 +14,8 @@ import type {
   ValueProp,
   VerifyResponse
 } from "./types.js";
+import type { HttpClientConfig } from "@storagehub-sdk/core";
+import { FileMetadata, FileTrie, HttpClient, initWasm } from "@storagehub-sdk/core";
 
 export class MspClient {
   public readonly config: HttpClientConfig;
