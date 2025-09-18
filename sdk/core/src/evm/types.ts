@@ -2,7 +2,7 @@
  * Type definitions for StorageHub EVM client
  */
 
-import type { Chain, WalletClient } from 'viem';
+import type { Address, Chain, WalletClient } from 'viem';
 
 /**
  * Configuration options for StorageHubClient
@@ -20,6 +20,10 @@ export type StorageHubClientOptions = {
    * Wallet client for transaction signing
    */
   walletClient: WalletClient;
+  /**
+   * Filesystem precompile contract address (optional, defaults to standard address)
+   */
+  filesystemContractAddress?: Address;
 };
 
 /**

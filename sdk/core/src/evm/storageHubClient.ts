@@ -8,17 +8,13 @@
  * Binary data (signatures) are passed as Uint8Array. Hex values are 0x-prefixed strings (32-byte IDs).
  */
 
-import {
-  FILE_SYSTEM_PRECOMPILE_ADDRESS,
-  filesystemAbi,
-  type FileSystemContract,
-  getFileSystemContract,
-} from './filesystem';
+import { filesystemAbi } from '../abi/filesystem';
 import type { EvmWriteOptions, StorageHubClientOptions } from './types';
 import { ReplicationLevel } from './types';
 import {
   type Address,
   createPublicClient,
+  getContract,
   http,
   parseGwei,
   type PublicClient,
@@ -26,15 +22,37 @@ import {
   stringToHex,
   toHex,
   type WalletClient,
+  type GetContractReturnType,
 } from 'viem';
+
+// Re-export filesystemAbi for external use
+export { filesystemAbi };
+
+// Internal type definitions for FileSystem contract
+type EvmClient = PublicClient | WalletClient;
+type FileSystemContract<TClient extends EvmClient> = GetContractReturnType<
+  typeof filesystemAbi,
+  TClient
+>;
+
+/**
+ * Internal constant precompile address for FileSystem on StorageHub runtimes.
+ * If a chain uses a different address, this constant should be updated accordingly.
+ */
+const FILE_SYSTEM_PRECOMPILE_ADDRESS =
+  '0x0000000000000000000000000000000000000064' as Address;
 
 export class StorageHubClient {
   private readonly publicClient: PublicClient; // Internal for gas estimation
   private readonly walletClient: WalletClient; // User-provided
-  private readonly contract: FileSystemContract<PublicClient>; // For reads
+  private readonly filesystemContractAddress: Address; // Contract address for filesystem precompile
+
+  // TODO: Make these constants retrievable from the precompile instead of hardcoded values
   private static readonly MAX_BUCKET_NAME_BYTES = 100;
   private static readonly MAX_LOCATION_BYTES = 512;
   private static readonly MAX_PEER_ID_BYTES = 100;
+
+  // TODO: Gas estimation defaults
   private static readonly DEFAULT_GAS_MULTIPLIER = 5;
   private static readonly DEFAULT_GAS_PRICE = parseGwei('1');
 
@@ -43,8 +61,12 @@ export class StorageHubClient {
    *
    * @returns Contract instance for write operations (transactions)
    */
-  private getWriteContract() {
-    return getFileSystemContract(this.walletClient);
+  private getWriteContract(): FileSystemContract<WalletClient> {
+    return getContract({
+      address: this.filesystemContractAddress,
+      abi: filesystemAbi,
+      client: this.walletClient,
+    });
   }
 
   /**
@@ -52,8 +74,12 @@ export class StorageHubClient {
    *
    * @returns Contract instance for read operations (view calls)
    */
-  private getReadContract() {
-    return getFileSystemContract(this.publicClient);
+  private getReadContract(): FileSystemContract<PublicClient> {
+    return getContract({
+      address: this.filesystemContractAddress,
+      abi: filesystemAbi,
+      client: this.publicClient,
+    });
   }
 
   /**
@@ -79,7 +105,7 @@ export class StorageHubClient {
 
     const accountAddr = this.walletClient.account?.address;
     const gasEstimation: bigint = await this.publicClient.estimateContractGas({
-      address: FILE_SYSTEM_PRECOMPILE_ADDRESS,
+      address: this.filesystemContractAddress,
       abi: filesystemAbi,
       functionName,
       args,
@@ -132,6 +158,7 @@ export class StorageHubClient {
    * @param opts.rpcUrl - RPC endpoint URL for the StorageHub chain
    * @param opts.chain - Viem chain configuration
    * @param opts.walletClient - Wallet client for transaction signing
+   * @param opts.filesystemContractAddress - Optional filesystem precompile address
    */
   constructor(opts: StorageHubClientOptions) {
     // Create internal PublicClient for gas estimation
@@ -141,8 +168,8 @@ export class StorageHubClient {
     });
     this.walletClient = opts.walletClient;
 
-    // Use PublicClient for the contract (reads only)
-    this.contract = getFileSystemContract(this.publicClient);
+    // Store the filesystem contract address with default fallback
+    this.filesystemContractAddress = opts.filesystemContractAddress ?? FILE_SYSTEM_PRECOMPILE_ADDRESS;
   }
 
   // -------- Reads --------
