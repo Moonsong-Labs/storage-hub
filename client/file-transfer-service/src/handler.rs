@@ -32,7 +32,7 @@ use std::{
 use tokio::time::{interval, Duration};
 
 use sc_network::{
-    request_responses::{IncomingRequest, OutgoingResponse},
+    request_responses::{IncomingRequest, OutgoingResponse, RequestFailure},
     service::traits::NetworkService,
     IfDisconnected, NetworkPeers, NetworkRequest, ProtocolName, ReputationChange,
 };
@@ -174,6 +174,52 @@ impl<Runtime: StorageEnableRuntime> Actor for FileTransferService<Runtime> {
                     );
 
                     match callback.send(rx) {
+                        Ok(()) => {}
+                        Err(_) => error!(
+                            target: LOG_TARGET,
+                            "Failed to send the response back. Looks like the requester task is gone."
+                        ),
+                    }
+                }
+                FileTransferServiceCommand::ReceiveBackendFileChunksRequest {
+                    file_key,
+                    file_key_proof,
+                    callback,
+                } => {
+                    let request = schema::v1::provider::request::Request::RemoteUploadDataRequest(
+                        schema::v1::provider::RemoteUploadDataRequest {
+                            file_key: file_key.encode(),
+                            file_key_proof: file_key_proof.encode(),
+                            bucket_id: None,
+                        },
+                    );
+
+                    // Serialize the request
+                    let mut request_data = Vec::new();
+                    request.encode(&mut request_data);
+
+                    // Directly handle the request locally, using the local peer ID
+                    let local_peer = self.network.local_peer_id();
+                    let (tx_local, rx_local) = futures::channel::oneshot::channel();
+                    self.handle_request(local_peer, request_data, tx_local)
+                        .await;
+
+                    // Map the local response to the expected result shape
+                    let (tx_net, rx_net) = futures::channel::oneshot::channel();
+                    let protocol = self.protocol_name.clone();
+                    tokio::spawn(async move {
+                        let mapped: Result<(Vec<u8>, ProtocolName), RequestFailure> =
+                            match rx_local.await {
+                                Ok(out) => match out.result {
+                                    Ok(bytes) => Ok((bytes, protocol)),
+                                    Err(()) => Err(RequestFailure::Refused),
+                                },
+                                Err(_) => Err(RequestFailure::NotConnected),
+                            };
+                        let _ = tx_net.send(mapped);
+                    });
+
+                    match callback.send(rx_net) {
                         Ok(()) => {}
                         Err(_) => error!(
                             target: LOG_TARGET,
@@ -400,6 +446,16 @@ impl<Runtime: StorageEnableRuntime> Actor for FileTransferService<Runtime> {
                         None => Err(RequestError::FileNotRegistered),
                     };
                     match callback.send(result) {
+                        Ok(()) => {}
+                        Err(_) => error!(
+                            target: LOG_TARGET,
+                            "Failed to send the response back. Looks like the requester task is gone."
+                        ),
+                    }
+                }
+                FileTransferServiceCommand::IsFileExpected { file_key, callback } => {
+                    let is_expected = self.peers_by_file.contains_key(&file_key);
+                    match callback.send(Ok(is_expected)) {
                         Ok(()) => {}
                         Err(_) => error!(
                             target: LOG_TARGET,
@@ -741,6 +797,11 @@ impl<Runtime: StorageEnableRuntime> FileTransferService<Runtime> {
         file_key: FileKey,
         bucket_id: Option<BucketId<Runtime>>,
     ) -> bool {
+        // Always accept local requests
+        if peer == self.network.local_peer_id() {
+            return true;
+        }
+
         if self.peer_file_allow_list.contains(&(peer, file_key)) {
             return true;
         }

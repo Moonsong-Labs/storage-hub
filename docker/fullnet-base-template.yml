@@ -151,6 +151,26 @@ services:
     ports:
       - '5432:5432'
 
+  sh-backend:
+    image: sh-msp-backend:local
+    container_name: storage-hub-sh-backend-1
+    platform: linux/amd64
+    environment:
+      - RUST_LOG=info
+    command:
+      [
+        '--host',
+        '0.0.0.0',
+        '--port',
+        '8080',
+        '--rpc-url',
+        'ws://storage-hub-sh-msp-1:9944',
+        '--database-url',
+        'postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub',
+      ]
+    ports:
+      - '8080:8080'
+
   toxiproxy:
     image: shopify/toxiproxy
     container_name: toxiproxy

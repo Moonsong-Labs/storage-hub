@@ -26,11 +26,22 @@ tokio = { workspace = true, features = ["full"] }
 tokio-util = { workspace = true }
 toml = { workspace = true }
 tower-http = { workspace = true }
+tracing = { workspace = true }
 
 # Workspace dependencies
+codec = { workspace = true }
+sc-network = { workspace = true }
+sc-network-types = { workspace = true }
+shc-common = { workspace = true, default-features = true }
+shc-file-manager = { workspace = true }
 shc-indexer-db = { workspace = true, default-features = true }
+shp-file-metadata = { workspace = true }
 shc-rpc = { workspace = true, features = ["std"] }
 shp-types = { workspace = true }
+sp-core = { workspace = true }
+sp-runtime = { workspace = true }
+sp-trie = { workspace = true }
+trie-db = { workspace = true }
 
 [dev-dependencies]
 axum-test = { workspace = true }
