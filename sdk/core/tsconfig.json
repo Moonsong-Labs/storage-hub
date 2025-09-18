@@ -1,26 +1,28 @@
 {
-    "extends": "../tsconfig.json",
-    "compilerOptions": {
-        "rootDir": "src",
-        "outDir": "dist",
-        "module": "ESNext",
-        "moduleResolution": "Bundler",
-        "declaration": true,
-        "declarationDir": "./dist",
-        "paths": {
-            "./wasm": [
-                "./src/wasm.ts"
-            ],
-            "@storagehub/wasm": [
-                "wasm/pkg"
-            ]
-        }
-    },
-    "include": [
-        "src/**/*",
-        "wasm/pkg/**/*"
-    ],
-    "exclude": [
-        "dist"
-    ]
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "declaration": true,
+    "declarationDir": "./dist",
+    "paths": {
+      "./wasm": [
+        "./src/wasm.ts"
+      ],
+      "@storagehub/wasm": [
+        "wasm/pkg"
+      ]
+    }
+  },
+  "include": [
+    "src/**/*",
+    "wasm/pkg/**/*"
+  ],
+  "exclude": [
+    "dist"
+  ]
 }
