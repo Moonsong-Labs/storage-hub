@@ -248,7 +248,7 @@ export const rpcDefinitions = {
       ],
       type: "()"
     },
-    paymentStreams_getCurrentPricePerGigaUnitPerTick: {
+    getCurrentPricePerGigaUnitPerTick: {
       description: "Get the current price per giga unit per tick from the payment streams pallet",
       params: [],
       type: "u128"
