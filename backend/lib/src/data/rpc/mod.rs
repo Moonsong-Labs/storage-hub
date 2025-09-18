@@ -26,7 +26,7 @@ pub trait RpcConnection: Send + Sync {
     /// Execute a JSON-RPC method call
     async fn call<P, R>(&self, method: &str, params: P) -> RpcResult<R>
     where
-        P: ToRpcParams + Send + Sync,
+        P: ToRpcParams + Send,
         R: DeserializeOwned;
 
     /// Execute a JSON-RPC method call without parameters

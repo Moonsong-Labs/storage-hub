@@ -110,6 +110,9 @@ importers:
       postgres:
         specifier: ^3.4.7
         version: 3.4.7
+      scale-codec:
+        specifier: ^0.13.0
+        version: 0.13.0
       strip-ansi:
         specifier: ^7.1.0
         version: 7.1.2
@@ -1969,6 +1972,9 @@ packages:
   saxes@6.0.0:
     resolution: {integrity: sha512-xAg7SOnEhrm5zI3puOOKyy1OMcMlIJZYNJY7xLBwSze0UjhPLnWfj2GF2EpT0jmzaJKIWKHLsaSSajf35bcYnA==}
     engines: {node: '>=v12.22.7'}
+
+  scale-codec@0.13.0:
+    resolution: {integrity: sha512-HxLaGxglkZP7SwjCLZPMsWGKN8Q/h5bjIH9YLFRcsG3Fmh+qsCOZYRLhntvTyP6B/Q7xHPBc2YKODOSfH0rH8g==}
 
   scale-ts@1.6.1:
     resolution: {integrity: sha512-PBMc2AWc6wSEqJYBDPcyCLUj9/tMKnLX70jLOSndMtcUoLQucP/DM0vnQo1wJAYjTrQiq8iG9rD0q6wFzgjH7g==}
@@ -4512,6 +4518,8 @@ snapshots:
   saxes@6.0.0:
     dependencies:
       xmlchars: 2.2.0
+
+  scale-codec@0.13.0: {}
 
   scale-ts@1.6.1:
     optional: true

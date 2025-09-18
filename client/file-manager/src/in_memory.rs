@@ -22,7 +22,7 @@ pub struct InMemoryFileDataTrie<T: TrieLayout + 'static> {
 }
 
 impl<T: TrieLayout + 'static> InMemoryFileDataTrie<T> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         let (memdb, root) = MemoryDB::<HashT<T>>::default_with_root();
 
         Self { root, memdb }

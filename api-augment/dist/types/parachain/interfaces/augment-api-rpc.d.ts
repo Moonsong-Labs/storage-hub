@@ -1195,6 +1195,10 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
         ) => Observable<bool>
       >;
       /**
+       * Check whether this node is currently expecting to receive the given file key
+       **/
+      isFileKeyExpected: AugmentedRpc<(file_key: H256 | string | Uint8Array) => Observable<bool>>;
+      /**
        * Load a file in the local storage. This is the first step when uploading a file.
        **/
       loadFileInStorage: AugmentedRpc<
@@ -1204,6 +1208,15 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
           owner_account_id_hex: Text | string,
           bucket_id: H256 | string | Uint8Array
         ) => Observable<LoadFileInStorageResult>
+      >;
+      /**
+       * Send a FileKeyProof with one or more chunks to be processed locally by the node
+       **/
+      receiveBackendFileChunks: AugmentedRpc<
+        (
+          file_key: H256 | string | Uint8Array,
+          file_key_proof: Bytes | string | Uint8Array
+        ) => Observable<Bytes>
       >;
       /**
        * Remove keys of BCSV type for the Blockchain Service.

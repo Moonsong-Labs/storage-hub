@@ -115,7 +115,8 @@ export const cleardownTest = async (cleardownOptions: {
       (container) =>
         container.Image === DOCKER_IMAGE ||
         container.Names.some((name) => name.includes("toxiproxy")) ||
-        container.Names.some((name) => name.includes("storage-hub-sh-copyparty"))
+        container.Names.some((name) => name.includes("storage-hub-sh-copyparty")) ||
+        container.Names.some((name) => name.includes("storage-hub-sh-backend"))
     );
 
     if (relevantContainers.length > 0) {
