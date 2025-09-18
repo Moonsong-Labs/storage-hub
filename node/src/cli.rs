@@ -631,7 +631,7 @@ pub struct Cli {
     /// Run the node in maintenance mode.
     /// In this mode, the node will not import blocks or participate in consensus,
     /// but will allow specific RPC calls for file and storage management.
-    #[arg(default_value = "false")]
+    #[arg(long, default_value = "false")]
     pub maintenance_mode: bool,
 
     /// Provider configurations
