@@ -21,10 +21,8 @@ await describeMspNet(
   {
     initialised: false,
     runtimeType: "solochain",
-    networkConfig: "standard",
     indexer: true,
-    backend: true,
-    only: true
+    backend: true
   },
   ({ before, it, createUserApi, createMsp1Api }) => {
     let userApi: EnrichedBspApi;
