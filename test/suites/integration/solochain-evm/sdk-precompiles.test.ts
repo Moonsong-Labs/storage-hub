@@ -70,8 +70,6 @@ await describeBspNet(
     it("should create bucket using StorageHubClient", async () => {
       bucketName = "sdk-precompiles-test-bucket";
 
-      console.log(`[TEST] Creating bucket: ${bucketName}`);
-
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
         userApi.shConsts.DUMMY_MSP_ID
       );
@@ -79,7 +77,6 @@ await describeBspNet(
       assert(valueProps.length > 0, "No value propositions found for MSP");
       assert(valueProps[0].id, "Value proposition ID is undefined");
       const valuePropId = valueProps[0].id.toHex();
-      console.log(`[TEST] Using Value Prop ID: ${valuePropId}`);
 
       // Create bucket using SDK
       const txHash = await storageHubClient.createBucket(
@@ -89,8 +86,6 @@ await describeBspNet(
         valuePropId as `0x${string}`
       );
 
-      console.log(`[TEST] Create bucket tx sent: ${txHash}`);
-
       // Manual sealing is enabled; mine a block so the tx gets included
       await userApi.block.seal();
 
@@ -99,16 +94,12 @@ await describeBspNet(
 
       // Store bucket ID for subsequent tests
       bucketId = (await storageHubClient.deriveBucketId(account.address, bucketName)) as string;
-
-      console.log(`[TEST] ✅ Bucket created successfully! TxHash: ${txHash}`);
-      console.log(`[TEST] ✅ Bucket ID: ${bucketId}`);
     });
 
     // Issue storage request to upload file
     it("should issue storage request for Adolphus.jpg using StorageHubClient", async () => {
       assert(bucketId, "Bucket must be created first");
 
-      console.log("[TEST] Computing fingerprint for Adolphus.jpg...");
       const testFilePath = new URL("../../../../docker/resource/adolphus.jpg", import.meta.url)
         .pathname;
       const fileLocation = "/test/adolphus.jpg";
@@ -117,12 +108,6 @@ await describeBspNet(
       const fileStats = statSync(testFilePath);
       const fileSize = BigInt(fileStats.size);
 
-      console.log("[TEST] ✅ Fingerprint computed successfully!");
-      console.log(`[TEST] File: ${testFilePath}`);
-      console.log(`[TEST] Fingerprint: ${fingerprint}`);
-      console.log(`[TEST] File size: ${fileSize} bytes`);
-
-      console.log("[TEST] Issuing storage request...");
       // TODO: if the owner of the file wants to perform the distribute, the peerId must be provided
       // At the moment, we rely on the MSP to distribute the file to BSPs
       const peerIds = [
@@ -143,15 +128,11 @@ await describeBspNet(
         replicas
       );
 
-      console.log(`[TEST] ✅ Storage request tx sent: ${txHash}`);
-
       // Manual sealing is enabled; mine a block so the tx gets included
       await userApi.block.seal();
 
       const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
       assert(receipt.status === "success", "Storage request transaction failed");
-
-      console.log(`[TEST] ✅ Storage request issued successfully! TxHash: ${txHash}`);
     });
   }
 );
