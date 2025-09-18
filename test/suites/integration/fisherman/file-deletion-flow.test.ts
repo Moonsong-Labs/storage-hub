@@ -15,6 +15,7 @@ import {
   waitForBspFileAssociation
 } from "../../../util/indexerHelpers";
 import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
+import { after } from "node:test";
 
 /**
  * FISHERMAN FILE DELETION FLOW - BASIC HAPPY PATH
@@ -76,6 +77,13 @@ await describeMspNet(
       await userApi.rpc.engine.createBlock(true, true);
 
       await waitForIndexing(userApi);
+    });
+
+    after(async () => {
+      // Ensure SQL client is properly closed
+      if (sql) {
+        await sql.end();
+      }
     });
 
     it("creates storage request, waits for MSP and BSP to accept and confirm, verifies indexer database", async () => {

@@ -18,6 +18,7 @@ import {
 } from "../../../util/indexerHelpers";
 import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
 import { waitForFishermanProcessing } from "../../../util/fisherman/fishermanHelpers";
+import { after } from "node:test";
 
 /**
  * FISHERMAN PROCESS FILE DELETION - COMPREHENSIVE EVENT PROCESSING
@@ -75,6 +76,13 @@ await describeMspNet(
       await userApi.rpc.engine.createBlock(true, true);
 
       await waitForIndexing(userApi);
+    });
+
+    after(async () => {
+      // Ensure SQL client is properly closed
+      if (sql) {
+        await sql.end();
+      }
     });
 
     it("processes FileDeletionRequested event and prepares delete_file extrinsic", async () => {
