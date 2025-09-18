@@ -250,6 +250,31 @@ export const rpcDefinitions: Record<string, Record<string, DefinitionRpc | Defin
       ],
       type: "()"
     },
+    isFileKeyExpected: {
+      description: "Check whether this node is currently expecting to receive the given file key",
+      params: [
+        {
+          name: "file_key",
+          type: "H256"
+        }
+      ],
+      type: "bool"
+    },
+    receiveBackendFileChunks: {
+      description:
+        "Send a FileKeyProof with one or more chunks to be processed locally by the node",
+      params: [
+        {
+          name: "file_key",
+          type: "H256"
+        },
+        {
+          name: "file_key_proof",
+          type: "Vec<u8>"
+        }
+      ],
+      type: "Vec<u8>"
+    },
     getCurrentPricePerGigaUnitPerTick: {
       description: "Get the current price per giga unit per tick from the payment streams pallet",
       params: [],

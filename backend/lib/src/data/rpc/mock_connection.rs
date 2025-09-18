@@ -137,7 +137,7 @@ impl MockConnection {
     /// Build mock JSON response for `storagehubclient_saveFileToDisk` and write mock file
     async fn mock_save_file_to_disk<P>(&self, params: P) -> Value
     where
-        P: ToRpcParams + Send + Sync,
+        P: ToRpcParams + Send,
     {
         // We assume params are [file_key, upload_url]
         let raw = params.to_rpc_params().unwrap().unwrap();
@@ -185,7 +185,7 @@ impl Default for MockConnection {
 impl RpcConnection for MockConnection {
     async fn call<P, R>(&self, method: &str, params: P) -> RpcResult<R>
     where
-        P: ToRpcParams + Send + Sync,
+        P: ToRpcParams + Send,
         R: DeserializeOwned,
     {
         // Global checks
@@ -206,6 +206,7 @@ impl RpcConnection for MockConnection {
         // Build JSON response by method
         let response: Value = match method {
             "storagehubclient_saveFileToDisk" => self.mock_save_file_to_disk(params).await,
+            "storagehubclient_isFileKeyExpected" => serde_json::json!(true),
             "storagehubclient_getCurrentPricePerUnitPerTick" => {
                 // Return a mock price value (e.g., 100 units)
                 serde_json::json!(PRICE_PER_GIGA_UNIT)

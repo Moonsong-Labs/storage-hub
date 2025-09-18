@@ -16,16 +16,20 @@ use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
 use pallet_payment_streams_runtime_api::PaymentStreamsApi as PaymentStreamsRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
 use sc_rpc_api::check_if_safe;
+use shc_actors_framework::actor::ActorHandle;
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
     traits::StorageEnableRuntime,
     types::{
-        BlockHash, ChunkId, FileMetadata, HashT, KeyProof, KeyProofs, OpaqueBlock, ParachainClient,
-        ProofsDealerProviderId, Proven, RandomnessOutput, StorageProof,
-        StorageProofsMerkleTrieLayout, BCSV_KEY_TYPE,
+        BlockHash, ChunkId, FileKey, FileKeyProof, FileMetadata, HashT, KeyProof, KeyProofs,
+        OpaqueBlock, ParachainClient, ProofsDealerProviderId, Proven, RandomnessOutput,
+        StorageProof, StorageProofsMerkleTrieLayout, BCSV_KEY_TYPE,
     },
 };
 use shc_file_manager::traits::{ExcludeType, FileDataTrie, FileStorage, FileStorageError};
+use shc_file_transfer_service::{
+    commands::FileTransferServiceCommandInterface, FileTransferService,
+};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shp_constants::FILE_CHUNK_SIZE;
 use sp_api::ProvideRuntimeApi;
@@ -59,21 +63,29 @@ pub struct RpcConfig {
     pub remote_file: RemoteFileConfig,
 }
 
-pub struct StorageHubClientRpcConfig<FL, FSH, Runtime> {
+pub struct StorageHubClientRpcConfig<FL, FSH, Runtime>
+where
+    Runtime: StorageEnableRuntime,
+{
     pub file_storage: Arc<RwLock<FL>>,
     pub forest_storage_handler: FSH,
     pub keystore: KeystorePtr,
     pub config: RpcConfig,
+    pub file_transfer: ActorHandle<FileTransferService<Runtime>>,
     _runtime: PhantomData<Runtime>,
 }
 
-impl<FL, FSH: Clone, Runtime> Clone for StorageHubClientRpcConfig<FL, FSH, Runtime> {
+impl<FL, FSH: Clone, Runtime> Clone for StorageHubClientRpcConfig<FL, FSH, Runtime>
+where
+    Runtime: StorageEnableRuntime,
+{
     fn clone(&self) -> Self {
         Self {
             file_storage: self.file_storage.clone(),
             forest_storage_handler: self.forest_storage_handler.clone(),
             keystore: self.keystore.clone(),
             config: self.config.clone(),
+            file_transfer: self.file_transfer.clone(),
             _runtime: PhantomData,
         }
     }
@@ -90,12 +102,14 @@ where
         forest_storage_handler: FSH,
         keystore: KeystorePtr,
         config: RpcConfig,
+        file_transfer: ActorHandle<FileTransferService<Runtime>>,
     ) -> Self {
         Self {
             file_storage,
             forest_storage_handler,
             keystore,
             config,
+            file_transfer,
             _runtime: PhantomData,
         }
     }
@@ -244,6 +258,10 @@ pub trait StorageHubClientApi {
         file_key: shp_types::Hash,
     ) -> RpcResult<Option<FileMetadata>>;
 
+    /// Check if this node is currently expecting to receive the given file key (i.e., it has been registered)
+    #[method(name = "isFileKeyExpected")]
+    async fn is_file_key_expected(&self, file_key: shp_types::Hash) -> RpcResult<bool>;
+
     // Note: this RPC method returns a Vec<u8> because the `ForestProof` struct is not serializable.
     // so we SCALE-encode it. The user of this RPC will have to decode it.
     #[method(name = "generateForestProof")]
@@ -308,6 +326,14 @@ pub trait StorageHubClientApi {
         exclude_type: String,
     ) -> RpcResult<()>;
 
+    /// Send a RemoteUploadDataRequest via the node's FileTransferService
+    #[method(name = "receiveBackendFileChunks", with_extensions)]
+    async fn receive_backend_file_chunks(
+        &self,
+        file_key: shp_types::Hash,
+        file_key_proof: Vec<u8>,
+    ) -> RpcResult<Vec<u8>>;
+
     /// Get the current price per giga unit per tick from the payment streams pallet.
     #[method(name = "getCurrentPricePerGigaUnitPerTick")]
     fn get_current_price_per_giga_unit_per_tick(&self) -> RpcResult<u128>;
@@ -323,6 +349,7 @@ where
     forest_storage_handler: FSH,
     keystore: KeystorePtr,
     config: RpcConfig,
+    file_transfer: ActorHandle<FileTransferService<Runtime>>,
     _block_marker: std::marker::PhantomData<Block>,
 }
 
@@ -342,6 +369,7 @@ where
             forest_storage_handler: storage_hub_client_rpc_config.forest_storage_handler,
             keystore: storage_hub_client_rpc_config.keystore,
             config: storage_hub_client_rpc_config.config,
+            file_transfer: storage_hub_client_rpc_config.file_transfer,
             _block_marker: Default::default(),
         }
     }
@@ -782,6 +810,15 @@ where
             .map_err(into_rpc_error)?)
     }
 
+    async fn is_file_key_expected(&self, file_key: shp_types::Hash) -> RpcResult<bool> {
+        let expected = self
+            .file_transfer
+            .is_file_expected(file_key.into())
+            .await
+            .map_err(into_rpc_error)?;
+        Ok(expected)
+    }
+
     async fn generate_forest_proof(
         &self,
         forest_key: Option<shp_types::Hash>,
@@ -1085,6 +1122,31 @@ where
         drop(write_file_storage);
 
         Ok(())
+    }
+
+    async fn receive_backend_file_chunks(
+        &self,
+        ext: &Extensions,
+        file_key: shp_types::Hash,
+        file_key_proof: Vec<u8>,
+    ) -> RpcResult<Vec<u8>> {
+        // Check if the execution is safe.
+        check_if_safe(ext)?;
+
+        // Parse inputs
+        let file_key: FileKey = file_key.into();
+        let proof: FileKeyProof = codec::Decode::decode(&mut &file_key_proof[..])
+            .map_err(|e| into_rpc_error(format!("Failed to decode FileKeyProof: {:?}", e)))?;
+
+        // Forward via FileTransferService's local `ReceiveBackendFileChunksRequest` command
+        let (raw, _proto) = self
+            .file_transfer
+            .receive_backend_file_chunks_request(file_key, proof)
+            .await
+            .map_err(into_rpc_error)?;
+
+        // Return the raw response
+        Ok(raw)
     }
 
     fn get_current_price_per_giga_unit_per_tick(&self) -> RpcResult<u128> {

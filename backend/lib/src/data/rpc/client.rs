@@ -22,10 +22,10 @@ impl StorageHubRpcClient {
         self.connection.is_connected().await
     }
 
-    /// Forward a JSON-RPC call to the underlying connection
+    /// Call a JSON-RPC method on the connected node
     pub async fn call<P, R>(&self, method: &str, params: P) -> RpcResult<R>
     where
-        P: ToRpcParams + Send + Sync,
+        P: ToRpcParams + Send,
         R: DeserializeOwned,
     {
         self.connection.call(method, params).await
