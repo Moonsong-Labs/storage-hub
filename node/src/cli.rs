@@ -628,10 +628,6 @@ pub struct Cli {
     #[arg(long)]
     pub no_hardware_benchmarks: bool,
 
-    /// Relay chain arguments
-    #[arg(raw = true)]
-    pub relay_chain_args: Vec<String>,
-
     /// Run the node in maintenance mode.
     /// In this mode, the node will not import blocks or participate in consensus,
     /// but will allow specific RPC calls for file and storage management.
@@ -663,6 +659,10 @@ pub struct Cli {
     /// Fisherman configurations
     #[command(flatten)]
     pub fisherman_config: FishermanConfigurations,
+
+    /// Relay chain arguments
+    #[arg(raw = true)]
+    pub relay_chain_args: Vec<String>,
 }
 
 #[derive(Debug, Parser)]

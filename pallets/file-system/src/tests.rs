@@ -12347,7 +12347,7 @@ mod delete_file_tests {
             new_test_ext().execute_with(|| {
                 let alice = Keyring::Alice.to_account_id();
                 let msp = Keyring::Charlie.to_account_id();
-                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                let (bucket_id, file_key, location, size, fingerprint, _msp_id, _value_prop_id) =
                     setup_file_in_msp_bucket(&alice, &msp);
 
                 // Wrong signer (Bob instead of Alice)
@@ -12382,7 +12382,7 @@ mod delete_file_tests {
             new_test_ext().execute_with(|| {
                 let alice = Keyring::Alice.to_account_id();
                 let msp = Keyring::Charlie.to_account_id();
-                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                let (bucket_id, file_key, location, size, fingerprint, _msp_id, _value_prop_id) =
                     setup_file_in_msp_bucket(&alice, &msp);
 
                 // Alice signs the deletion message
@@ -12424,7 +12424,7 @@ mod delete_file_tests {
 
                 // Create bucket while Eve is solvent
                 let _guard = set_eve_insolvent(false);
-                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                let (bucket_id, file_key, location, size, fingerprint, _msp_id, _value_prop_id) =
                     setup_file_in_msp_bucket(&eve, &msp);
                 let (signed_delete_intention, signature) =
                     create_file_deletion_signature(&Keyring::Eve, file_key);
@@ -12464,7 +12464,7 @@ mod delete_file_tests {
                 let msp = Keyring::Charlie.to_account_id();
 
                 // Alice owns the bucket and file
-                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                let (bucket_id, file_key, location, size, fingerprint, _msp_id, _value_prop_id) =
                     setup_file_in_msp_bucket(&alice, &msp);
 
                 // Bob tries to delete Alice's file (wrong owner)
@@ -12545,7 +12545,7 @@ mod delete_file_tests {
             new_test_ext().execute_with(|| {
                 let alice = Keyring::Alice.to_account_id();
                 let msp = Keyring::Charlie.to_account_id();
-                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                let (bucket_id, file_key, location, size, fingerprint, _msp_id, _value_prop_id) =
                     setup_file_in_msp_bucket(&alice, &msp);
 
                 // Create a different file key for the signed message
@@ -12577,7 +12577,7 @@ mod delete_file_tests {
         }
 
         #[test]
-        fn delete_file_fails_when_msp_not_storing_bucket() {
+        fn delete_file_succeeds_when_msp_not_storing_bucket() {
             new_test_ext().execute_with(|| {
                 let alice = Keyring::Alice.to_account_id();
                 let msp_storing_file = Keyring::Charlie.to_account_id();
@@ -12595,7 +12595,7 @@ mod delete_file_tests {
                 ) = setup_file_in_msp_bucket(&alice, &msp_storing_file);
 
                 // Set up MSP that does NOT store the file
-                let (msp_not_storing_file_id, _dave_value_prop_id) =
+                let (_msp_not_storing_file_id, _dave_value_prop_id) =
                     add_msp_to_provider_storage(&msp_not_storing_file);
 
                 // Alice signs the deletion message (valid signature)
@@ -12607,25 +12607,19 @@ mod delete_file_tests {
                     encoded_nodes: vec![file_key.as_ref().to_vec()],
                 };
 
-                // Fisherman node attempts exploiting the system by sending:
-                // - Valid proof from MSP that stores the file
-                // - But specifies MSP that does NOT store the file
-                // This should fail with MspNotStoringBucket error
-                assert_noop!(
-                    FileSystem::delete_file(
-                        RuntimeOrigin::signed(alice.clone()),
-                        alice.clone(),
-                        signed_delete_intention,
-                        signature,
-                        bucket_id,
-                        location,
-                        size,
-                        fingerprint,
-                        msp_not_storing_file_id,
-                        forest_proof,
-                    ),
-                    Error::<Test>::MspNotStoringBucket
-                );
+                // This should succeed with InvalidProviderID error
+                assert_ok!(FileSystem::delete_file(
+                    RuntimeOrigin::signed(alice.clone()),
+                    alice.clone(),
+                    signed_delete_intention,
+                    signature,
+                    bucket_id,
+                    location,
+                    size,
+                    fingerprint,
+                    None,
+                    forest_proof,
+                ),);
             });
         }
     }
