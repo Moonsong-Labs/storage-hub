@@ -1,4 +1,4 @@
-import { HttpError, NetworkError, TimeoutError } from "./errors.js";
+import { HttpError, NetworkError, TimeoutError } from './errors.js';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -33,17 +33,17 @@ export class HttpClient {
   private readonly fetchImpl: typeof fetch;
 
   constructor(options: HttpClientConfig) {
-    if (!options.baseUrl) throw new Error("HttpClient: baseUrl is required");
-    this.baseUrl = options.baseUrl.replace(/\/$/, "");
+    if (!options.baseUrl) throw new Error('HttpClient: baseUrl is required');
+    this.baseUrl = options.baseUrl.replace(/\/$/, '');
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    this.defaultHeaders = { Accept: "application/json", ...(options.defaultHeaders ?? {}) };
+    this.defaultHeaders = { Accept: 'application/json', ...(options.defaultHeaders ?? {}) };
     this.fetchImpl = options.fetchImpl ?? fetch;
   }
 
   async request<T>(
-    method: "GET" | "POST" | "PUT" | "DELETE",
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
     path: string,
-    options: RequestOptions = {}
+    options: RequestOptions = {},
   ): Promise<T | Response> {
     const url = this.buildUrl(path, options.query);
     const headers = { ...this.defaultHeaders, ...(options.headers ?? {}) };
@@ -59,7 +59,7 @@ export class HttpClient {
     try {
       // Auto-encode JSON bodies if caller passed a plain object and no Content-Type
       const hasExplicitContentType = Object.keys(headers).some(
-        (h) => h.toLowerCase() === "content-type"
+        (h) => h.toLowerCase() === 'content-type',
       );
       const candidate = options.body;
       let body: BodyInit | null = null;
@@ -68,7 +68,7 @@ export class HttpClient {
           body = candidate;
         } else {
           // For non-BodyInit payloads, send JSON
-          if (!hasExplicitContentType) headers["Content-Type"] = "application/json";
+          if (!hasExplicitContentType) headers['Content-Type'] = 'application/json';
           body = JSON.stringify(candidate);
         }
       }
@@ -77,10 +77,10 @@ export class HttpClient {
         method,
         headers,
         ...(signal ? { signal } : {}),
-        ...(body !== null ? { body } : {})
+        ...(body !== null ? { body } : {}),
       };
       const fetchFn =
-        typeof globalThis !== "undefined" &&
+        typeof globalThis !== 'undefined' &&
         this.fetchImpl === (globalThis as unknown as { fetch: typeof fetch }).fetch
           ? (globalThis as unknown as { fetch: typeof fetch }).fetch.bind(globalThis)
           : this.fetchImpl;
@@ -93,7 +93,7 @@ export class HttpClient {
         throw new HttpError(
           `HTTP ${res.status} for ${method} ${url}`,
           res.status,
-          maybeJson ?? text
+          maybeJson ?? text,
         );
       }
 
@@ -119,27 +119,27 @@ export class HttpClient {
   }
 
   get<T>(path: string, options?: RequestOptions): Promise<T> {
-    return this.request<T>("GET", path, options) as Promise<T>;
+    return this.request<T>('GET', path, options) as Promise<T>;
   }
 
   post<T>(path: string, options?: RequestOptions): Promise<T> {
-    return this.request<T>("POST", path, options ?? {}) as Promise<T>;
+    return this.request<T>('POST', path, options ?? {}) as Promise<T>;
   }
 
   put<T>(path: string, options?: RequestOptions): Promise<T> {
-    return this.request<T>("PUT", path, options ?? {}) as Promise<T>;
+    return this.request<T>('PUT', path, options ?? {}) as Promise<T>;
   }
 
   delete<T>(path: string, options?: RequestOptions): Promise<T> {
-    return this.request<T>("DELETE", path, options ?? {}) as Promise<T>;
+    return this.request<T>('DELETE', path, options ?? {}) as Promise<T>;
   }
 
   getRaw(path: string, options?: RequestOptions): Promise<Response> {
-    return this.request("GET", path, { ...options, raw: true }) as Promise<Response>;
+    return this.request('GET', path, { ...options, raw: true }) as Promise<Response>;
   }
 
   private buildUrl(path: string, query?: Record<string, string | number | boolean>): string {
-    const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
     const url = new URL(this.baseUrl + normalizedPath);
 
     if (query) {
@@ -162,30 +162,30 @@ export class HttpClient {
 
   private isBodyInit(value: unknown): value is BodyInit {
     return (
-      typeof value === "string" ||
+      typeof value === 'string' ||
       value instanceof Uint8Array ||
-      (typeof ArrayBuffer !== "undefined" && value instanceof ArrayBuffer) ||
-      (typeof Blob !== "undefined" && value instanceof Blob) ||
-      (typeof FormData !== "undefined" && value instanceof FormData) ||
-      (typeof ReadableStream !== "undefined" && value instanceof ReadableStream)
+      (typeof ArrayBuffer !== 'undefined' && value instanceof ArrayBuffer) ||
+      (typeof Blob !== 'undefined' && value instanceof Blob) ||
+      (typeof FormData !== 'undefined' && value instanceof FormData) ||
+      (typeof ReadableStream !== 'undefined' && value instanceof ReadableStream)
     );
   }
 
   private isAbortError(err: unknown): err is { name: string } {
     return (
-      typeof err === "object" &&
+      typeof err === 'object' &&
       err !== null &&
-      "name" in err &&
-      typeof (err as { name?: unknown }).name === "string" &&
-      (err as { name: string }).name === "AbortError"
+      'name' in err &&
+      typeof (err as { name?: unknown }).name === 'string' &&
+      (err as { name: string }).name === 'AbortError'
     );
   }
 
   private getErrorMessage(err: unknown): string | undefined {
-    if (typeof err === "string") return err;
-    if (typeof err === "object" && err !== null && "message" in err) {
+    if (typeof err === 'string') return err;
+    if (typeof err === 'object' && err !== null && 'message' in err) {
       const m = (err as { message?: unknown }).message;
-      if (typeof m === "string") return m;
+      if (typeof m === 'string') return m;
     }
     return undefined;
   }
