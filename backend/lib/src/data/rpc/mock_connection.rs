@@ -22,7 +22,7 @@ use crate::{
     },
     data::rpc::{
         connection::error::{RpcConnectionError, RpcResult},
-        RpcConnection,
+        methods, RpcConnection,
     },
 };
 
@@ -205,9 +205,9 @@ impl RpcConnection for MockConnection {
 
         // Build JSON response by method
         let response: Value = match method {
-            "storagehubclient_saveFileToDisk" => self.mock_save_file_to_disk(params).await,
-            "storagehubclient_isFileKeyExpected" => serde_json::json!(true),
-            "storagehubclient_getCurrentPricePerUnitPerTick" => {
+            methods::SAVE_FILE_TO_DISK => self.mock_save_file_to_disk(params).await,
+            methods::FILE_KEY_EXPECTED => serde_json::json!(true),
+            methods::CURRENT_PRICE => {
                 // Return a mock price value (e.g., 100 units)
                 serde_json::json!(PRICE_PER_GIGA_UNIT)
             }

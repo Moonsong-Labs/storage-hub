@@ -314,7 +314,7 @@ impl MspService {
     pub async fn is_msp_expecting_file_key(&self, file_key: &str) -> Result<bool, Error> {
         let expected: bool = self
             .rpc
-            .call("storagehubclient_isFileKeyExpected", (file_key,))
+            .is_file_key_expected(file_key)
             .await
             .map_err(|e| Error::BadRequest(e.to_string()))?;
         Ok(expected)
@@ -412,10 +412,7 @@ impl MspService {
         // Make the RPC call to download file and get metadata
         let rpc_response: SaveFileToDisk = self
             .rpc
-            .call(
-                "storagehubclient_saveFileToDisk",
-                (file_key, upload_url.as_str()),
-            )
+            .save_file_to_disk(file_key, upload_url.as_str())
             .await
             .map_err(|e| Error::BadRequest(e.to_string()))?;
 

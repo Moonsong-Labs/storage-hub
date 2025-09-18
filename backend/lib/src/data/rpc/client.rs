@@ -5,7 +5,9 @@ use std::sync::Arc;
 use jsonrpsee::core::traits::ToRpcParams;
 use serde::de::DeserializeOwned;
 
-use crate::data::rpc::{connection::error::RpcResult, AnyRpcConnection, RpcConnection};
+use shc_rpc::SaveFileToDisk;
+
+use crate::data::rpc::{connection::error::RpcResult, methods, AnyRpcConnection, RpcConnection};
 
 /// StorageHub RPC client that uses an RpcConnection
 pub struct StorageHubRpcClient {
@@ -31,15 +33,30 @@ impl StorageHubRpcClient {
         self.connection.call(method, params).await
     }
 
+    // TODO: use the storagehubrpc client trait directly
+
     /// Get the current price per giga unit per tick
     ///
     /// Returns the price value (u128) that represents the cost per giga unit per tick
     /// in the StorageHub network.
     pub async fn get_current_price_per_unit_per_tick(&self) -> RpcResult<u128> {
         self.connection
+            .call(methods::CURRENT_PRICE, jsonrpsee::rpc_params![])
+            .await
+    }
+
+    /// Returns whether the given file key is expected to be received by the MSP node
+    pub async fn is_file_key_expected(&self, file_key: &str) -> RpcResult<bool> {
+        self.connection
+            .call(methods::FILE_KEY_EXPECTED, jsonrpsee::rpc_params![file_key])
+            .await
+    }
+
+    pub async fn save_file_to_disk(&self, file_key: &str, path: &str) -> RpcResult<SaveFileToDisk> {
+        self.connection
             .call(
-                "storagehubclient_getCurrentPricePerUnitPerTick",
-                jsonrpsee::rpc_params![],
+                methods::SAVE_FILE_TO_DISK,
+                jsonrpsee::rpc_params![file_key, path],
             )
             .await
     }
