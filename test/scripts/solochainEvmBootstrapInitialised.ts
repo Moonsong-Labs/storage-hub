@@ -1,4 +1,5 @@
 import type { BspNetConfig } from "../util";
+import { BspNetTestApi, ShConsts, sleep } from "../util";
 import { NetworkLauncher } from "../util/netLaunch";
 
 const bspNetConfig: BspNetConfig = {
@@ -16,6 +17,23 @@ async function bootStrapNetwork() {
   });
 
   console.log("✅ Solochain EVM Bootstrap success");
+
+  await using api = await BspNetTestApi.create(
+    `ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`,
+    "solochain"
+  );
+
+  console.log("⛏️  Auto-sealing blocks every 6s. Press Ctrl+C to stop.");
+  // Keep sealing blocks every 6 seconds until the process is interrupted
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    try {
+      await api.block.seal();
+    } catch (e) {
+      console.error("Auto-seal error:", e);
+    }
+    await sleep(6000);
+  }
 }
 
 await bootStrapNetwork().catch((e) => {
