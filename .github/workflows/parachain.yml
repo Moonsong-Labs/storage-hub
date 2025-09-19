@@ -808,7 +808,7 @@ jobs:
           if-no-files-found: warn
 
   solochain_evm:
-    needs: [build_image, setup]
+    needs: [build_image, build_backend, setup]
     if: always()
     name: 'Run Solochain EVM Tests'
     runs-on: ubuntu-latest
@@ -818,7 +818,19 @@ jobs:
       - uses: ./.github/workflow-templates/setup-pnpm
         with:
           node_version: 23
+      - uses: actions-rust-lang/setup-rust-toolchain@v1.8
+      - name: Install libpq-dev
+        run: sudo apt-get update && sudo apt-get install -y libpq-dev
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - run: mkdir -p target/release/
+      - name: Download backend binary
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-bin
+          path: target/release/
       - name: Get Node Binary if changed
         if: needs.setup.outputs.node_changed == 'true'
         uses: actions/download-artifact@v4
@@ -839,6 +851,10 @@ jobs:
           cd test
           pnpm install
           pnpm docker:build
+      - name: Build Backend Docker Image
+        run: |
+          cd test
+          pnpm docker:build:backend
       - name: Run Typegen
         run: |
           cd test
@@ -881,6 +897,12 @@ jobs:
           mkdir -p test-logs
 
           for container in $(docker ps -a --filter "ancestor=moonsonglabs/storage-hub" --format "{{.Names}}"); do
+            echo "Collecting logs from $container"
+            docker logs $container > "test-logs/${container}.log" 2>&1
+          done
+
+          # Collect logs from Backend image
+          for container in $(docker ps -a --filter "ancestor=sh-msp-backend:local" --format "{{.Names}}"); do
             echo "Collecting logs from $container"
             docker logs $container > "test-logs/${container}.log" 2>&1
           done
