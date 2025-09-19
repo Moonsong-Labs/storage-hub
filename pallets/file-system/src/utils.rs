@@ -22,8 +22,9 @@ use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 
 use pallet_file_system_runtime_api::{
     GenericApplyDeltaEventInfoError, IsStorageRequestOpenToVolunteersError,
-    QueryBspConfirmChunksToProveForFileError, QueryConfirmChunksToProveForFileError,
-    QueryFileEarliestVolunteerTickError, QueryMspConfirmChunksToProveForFileError,
+    QueryBspConfirmChunksToProveForFileError, QueryBspsVolunteeredForFileError,
+    QueryConfirmChunksToProveForFileError, QueryFileEarliestVolunteerTickError,
+    QueryMspConfirmChunksToProveForFileError,
 };
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
 use shp_constants::GIGAUNIT;
@@ -341,6 +342,20 @@ where
 
         Self::query_confirm_chunks_to_prove_for_file(msp_id, storage_request_metadata, file_key)
             .map_err(|e| QueryMspConfirmChunksToProveForFileError::ConfirmChunks(e))
+    }
+
+    pub fn query_bsps_volunteered_for_file(
+        file_key: MerkleHash<T>,
+    ) -> Result<Vec<ProviderIdFor<T>>, QueryBspsVolunteeredForFileError> {
+        // Check that the storage request exists.
+        if !<StorageRequests<T>>::contains_key(&file_key) {
+            return Err(QueryBspsVolunteeredForFileError::StorageRequestNotFound);
+        }
+
+        let bsps_volunteered =
+            <StorageRequestBsps<T>>::iter_prefix(&file_key).map(|(bsp_id, _)| bsp_id);
+
+        Ok(bsps_volunteered.collect())
     }
 
     pub fn decode_generic_apply_delta_event_info(

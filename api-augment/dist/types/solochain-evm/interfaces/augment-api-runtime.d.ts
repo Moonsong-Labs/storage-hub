@@ -1,6 +1,7 @@
 import "@polkadot/api-base/types/calls";
 import type { ApiTypes, AugmentedCall, DecoratedCallBase } from "@polkadot/api-base/types";
 import type {
+  BTreeMap,
   Bytes,
   Null,
   Option,
@@ -78,6 +79,7 @@ import type {
   ProviderId,
   QueryAvailableStorageCapacityError,
   QueryBspConfirmChunksToProveForFileError,
+  QueryBspsVolunteeredForFileError,
   QueryBucketsForMspError,
   QueryBucketsOfUserStoredByMspError,
   QueryEarliestChangeCapacityBlockError,
@@ -89,6 +91,7 @@ import type {
   RandomnessOutput,
   StorageDataUnit,
   StorageProviderId,
+  StorageRequestMetadata,
   TrieRemoveMutation,
   ValuePropositionWithId
 } from "@storagehub/api-augment/solochain-evm/interfaces/storagehubclient";
@@ -440,6 +443,15 @@ declare module "@polkadot/api-base/types/calls" {
         ) => Observable<Result<bool, IsStorageRequestOpenToVolunteersError>>
       >;
       /**
+       * Get the pending storage requests for a given MSP.
+       **/
+      pendingStorageRequestByMsp: AugmentedCall<
+        ApiType,
+        (
+          mspId: MainStorageProviderId | string | Uint8Array
+        ) => Observable<BTreeMap<H256, StorageRequestMetadata>>
+      >;
+      /**
        * Query the chunks that a BSP needs to prove to confirm that it is storing a file.
        **/
       queryBspConfirmChunksToProveForFile: AugmentedCall<
@@ -448,6 +460,15 @@ declare module "@polkadot/api-base/types/calls" {
           bspId: BackupStorageProviderId | string | Uint8Array,
           fileKey: H256 | string | Uint8Array
         ) => Observable<Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>>
+      >;
+      /**
+       * Query the BSPs that volunteered for a file.
+       **/
+      queryBspsVolunteeredForFile: AugmentedCall<
+        ApiType,
+        (
+          fileKey: H256 | string | Uint8Array
+        ) => Observable<Result<Vec<BackupStorageProviderId>, QueryBspsVolunteeredForFileError>>
       >;
       /**
        * Query the earliest tick number that a BSP can volunteer for a file.

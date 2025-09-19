@@ -173,6 +173,12 @@ export const SHARED_TYPES: RegistryTypes = {
       InternalError: null
     }
   },
+  QueryBspsVolunteeredForFileError: {
+    _enum: {
+      StorageRequestNotFound: null,
+      InternalError: null
+    }
+  },
   GenericApplyDeltaEventInfoError: {
     _enum: {
       DecodeError: null

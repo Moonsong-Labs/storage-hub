@@ -41,6 +41,13 @@ pub enum QueryMspConfirmChunksToProveForFileError {
     InternalError,
 }
 
+/// Error type for the `query_bsps_volunteered_for_file` runtime API call.
+#[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
+pub enum QueryBspsVolunteeredForFileError {
+    StorageRequestNotFound,
+    InternalError,
+}
+
 /// Error type for the `query_confirm_chunks_to_prove_for_file`.
 #[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
 pub enum QueryConfirmChunksToProveForFileError {
@@ -77,6 +84,7 @@ sp_api::decl_runtime_apis! {
         fn query_earliest_file_volunteer_tick(bsp_id: BackupStorageProviderId, file_key: FileKey) -> Result<TickNumber, QueryFileEarliestVolunteerTickError>;
         fn query_bsp_confirm_chunks_to_prove_for_file(bsp_id: BackupStorageProviderId, file_key: FileKey) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>;
         fn query_msp_confirm_chunks_to_prove_for_file(msp_id: MainStorageProviderId, file_key: FileKey) -> Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>;
+        fn query_bsps_volunteered_for_file(file_key: FileKey) -> Result<Vec<BackupStorageProviderId>, QueryBspsVolunteeredForFileError>;
         fn decode_generic_apply_delta_event_info(encoded_event_info: Vec<u8>) -> Result<GenericApplyDeltaEventInfo, GenericApplyDeltaEventInfoError>;
         fn pending_storage_requests_by_msp(msp_id: MainStorageProviderId) -> BTreeMap<H256, StorageRequestMetadata>;
     }

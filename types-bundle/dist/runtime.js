@@ -51,6 +51,16 @@ const FILE_SYSTEM_V1 = {
     ],
     type: "Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>"
   },
+  query_bsps_volunteered_for_file: {
+    description: "Query the BSPs that volunteered for a file.",
+    params: [
+      {
+        name: "fileKey",
+        type: "H256"
+      }
+    ],
+    type: "Result<Vec<BackupStorageProviderId>, QueryBspsVolunteeredForFileError>"
+  },
   decode_generic_apply_delta_event_info: {
     description:
       "Decodes the BucketId expected to be found in the event info of a generic apply delta.",
@@ -61,6 +71,16 @@ const FILE_SYSTEM_V1 = {
       }
     ],
     type: "Result<BucketId, GenericApplyDeltaEventInfoError>"
+  },
+  pending_storage_request_by_msp: {
+    description: "Get the pending storage requests for a given MSP.",
+    params: [
+      {
+        name: "mspId",
+        type: "MainStorageProviderId"
+      }
+    ],
+    type: "BTreeMap<H256, StorageRequestMetadata>"
   }
 };
 const PROOFS_DEALER_V1 = {
