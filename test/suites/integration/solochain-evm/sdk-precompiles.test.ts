@@ -301,5 +301,23 @@ await describeMspNet(
       // Ensure the file is now stored in the MSP's file storage
       await msp1Api.wait.fileStorageComplete(hexFileKey);
     });
+
+    it("Should download the file from the MSP through the backend using the SDK's MspClient", async () => {
+      // Try to download the file from the MSP through the SDK's MspClient that uses the MSP backend
+      const downloadResponse = await mspClient.downloadByKey(fileKey.toHex());
+
+      // Check that the download was successful
+      strictEqual(downloadResponse.status, 200, "Download should return success");
+
+      // Get the download file and load it into memory as a blob
+      const downloadFileBlob = await new Response(downloadResponse.stream).blob();
+
+      // Check that the file is the same as the one uploaded, converting both to a comparable format
+      strictEqual(
+        downloadFileBlob.toString(),
+        (await fileManager.getFileBlob()).toString(),
+        "File should be the same as the one uploaded"
+      );
+    });
   }
 );

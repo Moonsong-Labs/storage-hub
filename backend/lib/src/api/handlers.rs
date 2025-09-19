@@ -182,7 +182,7 @@ pub async fn download_by_location(
     Ok(file_stream_resp.into_response())
 }
 
-// Used by the MSP RPC to upload a file to the backend
+// Internal endpoint used by the MSP RPC to upload a file to the backend
 // The file is only temporary and will be deleted after the stream is closed
 pub async fn internal_upload_by_key(
     State(_services): State<Services>,
@@ -192,7 +192,7 @@ pub async fn internal_upload_by_key(
     // TODO: re-add auth
     // FIXME: make this only callable by the rpc itself
     // let _auth = extract_bearer_token(&auth)?;
-    if let Err(e) = tokio::fs::create_dir_all("uploads").await {
+    if let Err(e) = tokio::fs::create_dir_all("/tmp/uploads").await {
         return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
     }
     // Validate file_key is a hex string
@@ -201,7 +201,8 @@ pub async fn internal_upload_by_key(
         return (StatusCode::BAD_REQUEST, "Invalid file key".to_string());
     }
 
-    match tokio::fs::write(format!("uploads/{}", file_key), body).await {
+    let file_path = format!("/tmp/uploads/{}", file_key);
+    match tokio::fs::write(&file_path, body).await {
         Ok(_) => (StatusCode::OK, "Upload successful".to_string()),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }
