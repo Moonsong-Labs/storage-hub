@@ -69,7 +69,7 @@ pub mod auth {
 
     /// Authentication JWT token expiration
     // TODO: make configurable
-    pub const JWT_EXPIRY_OFFSET: Duration = Duration::minutes(5);
+    pub const JWT_EXPIRY_OFFSET: Duration = Duration::minutes(60 * 5); // 5 hours
 
     // TODO(MOCK): retrieve ens from token?
     pub const MOCK_ENS: &str = "user.eth";
