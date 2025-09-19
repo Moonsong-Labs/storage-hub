@@ -214,7 +214,9 @@ await describeMspNet(
           body: form,
           headers: {
             Authorization: `Bearer ${mockJWT}`
-          }
+          },
+          // Add timeout to prevent hanging requests in CI
+          signal: AbortSignal.timeout(60000) // 60 seconds
         }
       );
 
