@@ -24,7 +24,7 @@ use crate::{
     },
 };
 
-/// Placeholder  
+/// Placeholder
 #[derive(Debug, Deserialize, Serialize)]
 pub struct FileDownloadResult {
     pub file_size: u64,
@@ -347,6 +347,8 @@ impl MspService {
     /// We provide an URL as saveFileToDisk RPC requires it to stream the file.
     /// We also implemented the internal_upload_by_key handler to handle this temporary file upload.
     pub async fn get_file_from_key(&self, file_key: &str) -> Result<FileDownloadResult, Error> {
+        // TODO: authenticate user
+
         // Create temp url for download
         let temp_path = format!("/tmp/uploads/{}", file_key);
         let upload_url = format!("{}/internal/uploads/{}", self.msp_callback_url, file_key);
@@ -549,7 +551,7 @@ mod tests {
     use super::*;
 
     use crate::{
-        constants::rpc::DEFAULT_MSP_CALLBACK_URL,
+        config::Config,
         data::{
             indexer_db::mock_repository::MockRepository,
             rpc::{AnyRpcConnection, MockConnection, StorageHubRpcClient},
@@ -565,7 +567,6 @@ mod tests {
         storage: Arc<BoxedStorageWrapper<InMemoryStorage>>,
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
-        msp_callback_url: String,
     }
 
     impl MockMspServiceBuilder {
@@ -576,7 +577,6 @@ mod tests {
                 rpc: Arc::new(StorageHubRpcClient::new(Arc::new(AnyRpcConnection::Mock(
                     MockConnection::new(),
                 )))),
-                msp_callback_url: String::from(DEFAULT_MSP_CALLBACK_URL),
             }
         }
 
@@ -592,7 +592,14 @@ mod tests {
         }
 
         pub fn build(self) -> MspService {
-            MspService::new(self.storage, self.postgres, self.rpc, self.msp_callback_url)
+            let cfg = Config::default();
+
+            MspService::new(
+                self.storage,
+                self.postgres,
+                self.rpc,
+                cfg.storage_hub.msp_callback_url,
+            )
         }
     }
 

@@ -11,12 +11,13 @@ use axum::{
 };
 use axum_extra::{
     extract::{multipart::Field, Multipart},
-    headers::{authorization::Bearer, Authorization},
     response::file_stream::FileStream,
-    TypedHeader,
 };
 use codec::Decode;
 use serde::Deserialize;
+use tokio::fs::File;
+use tokio_util::io::ReaderStream;
+
 use shc_common::types::FileMetadata;
 #[cfg(not(feature = "mocks"))]
 use shc_common::types::{
@@ -25,72 +26,14 @@ use shc_common::types::{
 #[cfg(not(feature = "mocks"))]
 use shc_file_manager::{in_memory::InMemoryFileDataTrie, traits::FileDataTrie};
 use shp_types::Hashing;
-use tokio::fs::File;
-use tokio_util::io::ReaderStream;
 
 use crate::{
-    api::validation::extract_bearer_token,
-    constants::mocks::MOCK_ADDRESS,
     error::Error,
-    models::{
-        auth::{NonceRequest, VerifyRequest},
-        files::{FileListResponse, FileUploadResponse},
-    },
-    services::Services,
+    models::files::{FileListResponse, FileUploadResponse},
+    services::{auth::AuthenticatedUser, Services},
 };
 
-// TODO: we could move from `TypedHeader` to axum-jwt (needs rust 1.88)
-
-// ==================== Auth Handlers ====================
-
-pub async fn nonce(
-    State(services): State<Services>,
-    Json(payload): Json<NonceRequest>,
-) -> Result<impl IntoResponse, Error> {
-    let response = services
-        .auth
-        .generate_nonce(&payload.address, payload.chain_id)
-        .await?;
-    Ok(Json(response))
-}
-
-pub async fn verify(
-    State(services): State<Services>,
-    Json(payload): Json<VerifyRequest>,
-) -> Result<impl IntoResponse, Error> {
-    let response = services
-        .auth
-        .verify_eth_signature(&payload.message, &payload.signature)
-        .await?;
-    Ok(Json(response))
-}
-
-pub async fn refresh(
-    State(services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
-) -> Result<impl IntoResponse, Error> {
-    let token = auth.token();
-    let response = services.auth.refresh_token(token).await?;
-    Ok(Json(response))
-}
-
-pub async fn logout(
-    State(services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
-) -> Result<impl IntoResponse, Error> {
-    let token = auth.token();
-    services.auth.logout(token).await?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
-pub async fn profile(
-    State(services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
-) -> Result<impl IntoResponse, Error> {
-    let token = auth.token();
-    let response = services.auth.get_profile(token).await?;
-    Ok(Json(response))
-}
+pub mod auth;
 
 // ==================== MSP Info Handlers ====================
 
@@ -118,25 +61,17 @@ pub async fn msp_health(State(services): State<Services>) -> Result<impl IntoRes
 
 pub async fn list_buckets(
     State(services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    AuthenticatedUser { address }: AuthenticatedUser,
 ) -> Result<impl IntoResponse, Error> {
-    let payload = extract_bearer_token(&auth)?;
-    let address = payload
-        .get("address")
-        .and_then(|a| a.as_str())
-        .unwrap_or(MOCK_ADDRESS);
-
-    let response = services.msp.list_user_buckets(address).await?;
+    let response = services.msp.list_user_buckets(&address).await?;
     Ok(Json(response))
 }
 
 pub async fn get_bucket(
     State(services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    AuthenticatedUser { address: _ }: AuthenticatedUser,
     Path(bucket_id): Path<String>,
 ) -> Result<impl IntoResponse, Error> {
-    let _auth = extract_bearer_token(&auth)?;
-
     let response = services.msp.get_bucket(&bucket_id).await?;
     Ok(Json(response))
 }
@@ -148,12 +83,10 @@ pub struct FilesQuery {
 
 pub async fn get_files(
     State(services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    AuthenticatedUser { address: _ }: AuthenticatedUser,
     Path(bucket_id): Path<String>,
     Query(query): Query<FilesQuery>,
 ) -> Result<impl IntoResponse, Error> {
-    let _auth = extract_bearer_token(&auth)?;
-
     let files = services
         .msp
         .get_files(&bucket_id, query.path.as_deref())
@@ -169,11 +102,9 @@ pub async fn get_files(
 
 pub async fn download_by_location(
     State(_services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    AuthenticatedUser { address: _ }: AuthenticatedUser,
     Path((_bucket_id, _file_location)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, Error> {
-    let _auth = extract_bearer_token(&auth)?;
-
     // TODO(MOCK): return proper data
     let file_data = b"Mock file content for download".to_vec();
     let stream = ReaderStream::new(Cursor::new(file_data));
@@ -210,17 +141,16 @@ pub async fn internal_upload_by_key(
 
 pub async fn download_by_key(
     State(services): State<Services>,
+    AuthenticatedUser { address: _ }: AuthenticatedUser,
     Path(file_key): Path<String>,
 ) -> Result<impl IntoResponse, Error> {
-    // TODO: re-add auth
-    // let _auth = extract_bearer_token(&auth)?;
-
     // Validate file_key is a hex string
     let key = file_key.trim_start_matches("0x");
     if hex::decode(key).is_err() {
         return Err(Error::BadRequest("Invalid file key".to_string()));
     }
 
+    // TODO: pass in authenticated user address for permission validation
     let download_result = services.msp.get_file_from_key(&file_key).await?;
 
     // Extract filename from location or use file_key as fallback
@@ -252,11 +182,9 @@ pub async fn download_by_key(
 
 pub async fn get_file_info(
     State(services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    AuthenticatedUser { address: _ }: AuthenticatedUser,
     Path((bucket_id, file_key)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, Error> {
-    let _auth = extract_bearer_token(&auth)?;
-
     let response = services.msp.get_file_info(&bucket_id, &file_key).await?;
     Ok(Json(response))
 }
@@ -282,12 +210,10 @@ pub async fn get_file_info(
 #[cfg_attr(feature = "mocks", allow(unused_variables))]
 pub async fn upload_file(
     State(services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    AuthenticatedUser { address: _ }: AuthenticatedUser,
     Path((bucket_id, file_key)): Path<(String, String)>,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, Error> {
-    let _auth = extract_bearer_token(&auth)?;
-
     // Pre-check with MSP whether this file key is expected before doing heavy processing
     let is_expected = services
         .msp
@@ -360,6 +286,7 @@ pub async fn upload_file(
         ));
     }
 
+    // TODO: verify user has the required permissions
     process_upload_after_validation(
         file_data_stream,
         file_metadata,
@@ -527,11 +454,9 @@ async fn process_upload_after_validation(
 
 pub async fn distribute_file(
     State(services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    AuthenticatedUser { address: _ }: AuthenticatedUser,
     Path((bucket_id, file_key)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, Error> {
-    let _auth = extract_bearer_token(&auth)?;
-
     let response = services.msp.distribute_file(&bucket_id, &file_key).await?;
     Ok(Json(response))
 }
@@ -540,14 +465,8 @@ pub async fn distribute_file(
 
 pub async fn payment_stream(
     State(services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    AuthenticatedUser { address }: AuthenticatedUser,
 ) -> Result<impl IntoResponse, Error> {
-    let auth = extract_bearer_token(&auth)?;
-
-    let address = auth
-        .get("address")
-        .and_then(|a| a.as_str())
-        .unwrap_or(MOCK_ADDRESS);
-    let response = services.msp.get_payment_stream(address).await?;
+    let response = services.msp.get_payment_stream(&address).await?;
     Ok(Json(response))
 }

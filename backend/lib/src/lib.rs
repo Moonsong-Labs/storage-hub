@@ -7,3 +7,6 @@ pub mod data;
 pub mod error;
 pub mod models;
 pub mod services;
+
+#[cfg(test)]
+pub mod test_utils;

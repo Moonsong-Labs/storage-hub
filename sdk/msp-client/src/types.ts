@@ -72,7 +72,6 @@ export interface UploadReceipt {
 // Auth
 export interface NonceResponse {
   message: string;
-  nonce: string;
 }
 
 export interface VerifyResponse {

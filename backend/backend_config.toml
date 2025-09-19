@@ -16,6 +16,9 @@ default_page_size = 20
 # Requests exceeding this limit will be capped to this value
 max_page_size = 100
 
+[auth]
+jwt_secret = "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+
 # StorageHub RPC configuration
 [storage_hub]
 # WebSocket RPC endpoint for the StorageHub node
