@@ -13,28 +13,52 @@ The quickest way is via their script: `curl -fsSL https://get.pnpm.io/install.sh
 > [!IMPORTANT]
 > This is required for `DEV` & `BSPNET` modes.
 
-#### 1. Build Node
+### 1. Build Node
 
-##### Linux
+#### Linux (Node)
 
 ```sh
 cargo build --release
 ```
 
-##### MacOS
+#### macOS (Node)
 
 > [!IMPORTANT]
-> If you are running this on a Mac, `zig` is a pre-requisite for crossbuilding the node. Instructions for installation can be found [here](https://ziglang.org/learn/getting-started/).
+> If you are running this on a Mac, `zig` is a pre-requisite for crossbuilding the node. See the [Zig installation guide](https://ziglang.org/learn/getting-started/).
 
 ```sh
 pnpm i
 pnpm crossbuild:mac
 ```
 
-#### 2. Build Docker Image
+### 2. Build Docker Image
 
 ```sh
 pnpm docker:build
+```
+
+### 3. Build Backend (required for Backend & Solochain-EVM tests)
+
+#### Linux (Backend)
+
+```sh
+cargo build --release -p sh-msp-backend
+```
+
+#### macOS (Backend)
+
+> [!IMPORTANT]
+> If you are running this on a Mac, `zig` is a pre-requisite for crossbuilding the backend. See the [Zig installation guide](https://ziglang.org/learn/getting-started/).
+
+```sh
+pnpm i
+pnpm crossbuild:mac:backend
+```
+
+### 4. Build Backend Docker Image
+
+```sh
+pnpm docker:build:backend
 ```
 
 ## Testing Types
@@ -84,6 +108,32 @@ pnpm zombie:setup:native
 pnpm test:full
 ```
 
+### Backend Integration Tests
+
+> [!IMPORTANT]
+> Requires both images: node (`pnpm docker:build`) and backend (`pnpm docker:build:backend`). On macOS, build the backend via `pnpm crossbuild:mac:backend`; on Linux, `cargo build --release -p sh-msp-backend`.
+
+```sh
+# In the /test directory
+pnpm i
+pnpm test:backend
+```
+
+Runs a local full network with indexer and the backend, then executes backend tests.
+
+### Solochain EVM Integration Tests
+
+> [!IMPORTANT]
+> Requires both images: node (`pnpm docker:build`) and backend (`pnpm docker:build:backend`). On macOS, build the backend via `pnpm crossbuild:mac:backend`; on Linux, `cargo build --release -p sh-msp-backend`.
+
+```sh
+# In the /test directory
+pnpm i
+pnpm test:solochain-evm
+```
+
+Launches Solochain EVM runtime with indexer and backend enabled and runs SDK precompile tests.
+
 ### ZombieNet
 
 This is the networking testing suite for topology and network stability. It is a suite of tests that run on a network of nodes, and is used to verify the network's stability and the nodes' ability to communicate with each other.
@@ -108,13 +158,21 @@ pnpm docker:start:bspnet
 
 This will start a BSPNet network with a BSP and a User node. As part of the setup it will force onboard a MSP and BSP, and then upload a file from user node.
 
-> [!NOTE]  
+### Spawning Solochain EVM (initialised fullnet)
+
+```sh
+pnpm docker:start:solochain-evm:initialised
+```
+
+Starts a full network on Solochain EVM runtime with indexer and backend, pre-initialised for demos.
+
+> [!NOTE]
 > The BSP id is chosen to be the fingerprint of a file that is uploaded by the user node. This is done to "game the system" to ensure that the BSP is guaranteed to be selected to store the file.
 
 ### Spawning NoisyNet
 
 - Docker launch (local): `pnpm docker:start:noisynet` / `pnpm docker:stop:noisynet`
- 
+
 ### Spawning ZombieNet Native
 
 > [!TIP]
@@ -156,4 +214,3 @@ pnpm typegen
 ### Why do we use Docker so much?
 
 ![docker](../resources/docker.jpg)
-********
