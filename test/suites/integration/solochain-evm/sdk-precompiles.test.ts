@@ -312,10 +312,11 @@ await describeMspNet(
       // Get the download file and load it into memory as a blob
       const downloadFileBlob = await new Response(downloadResponse.stream).blob();
 
-      // Check that the file is the same as the one uploaded, converting both to a comparable format
-      strictEqual(
-        downloadFileBlob.toString(),
-        (await fileManager.getFileBlob()).toString(),
+      // Check that the file is the same as the one uploaded, converting both blobs to a comparable format
+      assert(
+        Buffer.from(await downloadFileBlob.arrayBuffer()).equals(
+          Buffer.from(await (await fileManager.getFileBlob()).arrayBuffer())
+        ),
         "File should be the same as the one uploaded"
       );
     });
