@@ -167,6 +167,8 @@ services:
         'ws://storage-hub-sh-msp-1:9944',
         '--database-url',
         'postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub',
+        '--msp-callback-url',
+        'http://storage-hub-sh-backend-1:8080',
       ]
     ports:
       - '8080:8080'
