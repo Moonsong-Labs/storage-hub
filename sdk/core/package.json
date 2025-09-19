@@ -47,6 +47,12 @@
   "devDependencies": {
     "@eslint/eslintrc": "2.1.4",
     "@types/node": "^20.11.19",
+    "@typescript-eslint/eslint-plugin": "^8.37.0",
+    "@typescript-eslint/parser": "^8.37.0",
+    "eslint": "^9.31.0",
+    "eslint-config-prettier": "^10.1.5",
+    "eslint-plugin-simple-import-sort": "^12.1.1",
+    "prettier": "^3.6.2",
     "solc": "^0.8.26"
   },
   "engines": {
