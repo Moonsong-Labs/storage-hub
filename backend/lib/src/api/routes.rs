@@ -87,7 +87,7 @@ mod tests {
         let server = TestServer::new(app).unwrap();
 
         let file_key = "0xde4a17999bc1482ba71737367e5d858a133ed1e13327a29c495ab976004a138f";
-        let temp_path = format!("uploads/{}", file_key);
+        let temp_path = format!("/tmp/uploads/{}", file_key);
 
         let response = server.get(&format!("/download/{}", file_key)).await;
 

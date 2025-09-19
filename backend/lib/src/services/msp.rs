@@ -340,7 +340,7 @@ impl MspService {
         })
     }
 
-    /// Download a file by `file_key` via the MSP RPC into `uploads/<file_key>` and
+    /// Download a file by `file_key` via the MSP RPC into `/tmp/uploads/<file_key>` and
     /// return its size, UTF-8 location, fingerprint, and temp path.
     /// Returns BadRequest on RPC/parse errors.
     ///
