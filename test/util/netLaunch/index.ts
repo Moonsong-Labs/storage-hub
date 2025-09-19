@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { spawn, spawnSync } from "node:child_process";
+import { execSync, spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import * as compose from "docker-compose";
@@ -14,7 +14,8 @@ import {
   getContainerIp,
   getContainerPeerId,
   ShConsts,
-  type ToxicInfo
+  type ToxicInfo,
+  waitFor
 } from "../bspNet";
 import { DUMMY_MSP_ID } from "../bspNet/consts";
 import { MILLIUNIT, UNIT } from "../constants";
@@ -356,8 +357,22 @@ export class NetworkLauncher {
       dieselCheck.status === 0,
       "Error running Diesel CLI. Visit https://diesel.rs/guides/getting-started for install instructions."
     );
-    // TODO Poll this with a ping
-    await sleep(2000);
+
+    await waitFor({
+      lambda: async () => {
+        try {
+          execSync(
+            "docker exec storage-hub-sh-postgres-1 pg_isready -U postgres -h 127.0.0.1 -p 5432 -t 1",
+            {
+              stdio: "ignore"
+            }
+          );
+          return true; // exit code 0 => ready
+        } catch {
+          return false; // non-zero => not ready yet
+        }
+      }
+    });
 
     const cwd = path.resolve(process.cwd(), "..", "client", "indexer-db");
 
