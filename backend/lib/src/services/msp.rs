@@ -340,7 +340,7 @@ impl MspService {
         })
     }
 
-    /// Download a file by `file_key` via the MSP RPC into `uploads/<file_key>` and
+    /// Download a file by `file_key` via the MSP RPC into `/tmp/uploads/<file_key>` and
     /// return its size, UTF-8 location, fingerprint, and temp path.
     /// Returns BadRequest on RPC/parse errors.
     ///
@@ -350,8 +350,8 @@ impl MspService {
         // TODO: authenticate user
 
         // Create temp url for download
-        let temp_path = format!("uploads/{}", file_key);
-        let upload_url = format!("{}/{}", self.msp_callback_url, temp_path);
+        let temp_path = format!("/tmp/uploads/{}", file_key);
+        let upload_url = format!("{}/internal/uploads/{}", self.msp_callback_url, file_key);
 
         // Make the RPC call to download file and get metadata
         let rpc_response: SaveFileToDisk = self

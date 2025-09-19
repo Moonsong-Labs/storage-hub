@@ -1,4 +1,5 @@
 import { HttpError, NetworkError, TimeoutError } from './errors.js';
+
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 export type HttpClientConfig = {

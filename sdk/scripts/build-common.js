@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { build, context } from 'esbuild';
 import { join } from 'node:path';
-import { existsSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, rmSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, readdirSync } from 'node:fs';
 import { exec as _exec } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -98,11 +98,40 @@ async function runWasmBuildIfNeeded(packageRoot, { withWasm }) {
   }
 }
 
-export async function runBuild({ withWasm = false, watch = false } = {}) {
+function copyAbiFiles(packageRoot, isCorePackage) {
+  // Only copy ABI files for the core package
+  if (!isCorePackage) {
+    return; // Skip ABI copying for all other packages
+  }
+
+  const srcAbiDir = join(packageRoot, 'src', 'abi');
+  const distAbiDir = join(packageRoot, 'dist', 'abi');
+
+  if (existsSync(srcAbiDir)) {
+    const files = readdirSync(srcAbiDir, { withFileTypes: true })
+      .filter(dirent => dirent.isFile() && dirent.name.endsWith('.abi.json'))
+      .map(dirent => dirent.name);
+
+    if (files.length > 0) {
+      // Create dist/abi directory
+      mkdirSync(distAbiDir, { recursive: true });
+
+      // Copy all .abi.json files
+      for (const file of files) {
+        const srcPath = join(srcAbiDir, file);
+        const distPath = join(distAbiDir, file);
+        copyFileSync(srcPath, distPath);
+        console.log(`Copied ABI: ${file}`);
+      }
+    }
+  }
+}
+
+export async function runBuild({ isCorePackage = false, watch = false } = {}) {
   const packageRoot = process.cwd();
   const pkgJson = getPackageJson(packageRoot);
 
-  await runWasmBuildIfNeeded(packageRoot, { withWasm });
+  await runWasmBuildIfNeeded(packageRoot, { withWasm: isCorePackage });
 
   // Clean dist to avoid stale artifacts
   const distDir = join(packageRoot, 'dist');
@@ -118,7 +147,7 @@ export async function runBuild({ withWasm = false, watch = false } = {}) {
     ? join(packageRoot, 'src', 'entry.node.ts')
     : defaultEntry;
 
-  const external = computeExternalDeps(pkgJson, { withWasm });
+  const external = computeExternalDeps(pkgJson, { withWasm: isCorePackage });
 
   const common = {
     bundle: true,
@@ -163,4 +192,7 @@ export async function runBuild({ withWasm = false, watch = false } = {}) {
     });
     await Promise.all([nodeBuild, browserBuild]);
   }
+
+  // Copy ABI files to dist
+  copyAbiFiles(packageRoot, isCorePackage);
 }

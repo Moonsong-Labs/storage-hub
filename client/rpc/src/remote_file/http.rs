@@ -242,7 +242,10 @@ impl RemoteFileHandler for HttpFileHandler {
             request = request.basic_auth(self.base_url.username(), Some(password));
         }
 
-        let response = request.send().await.map_err(Self::map_request_error)?;
+        let response = request
+            .send()
+            .await
+            .map_err(|e| Self::map_request_error(e))?;
 
         match response.status() {
             status if status.is_success() => Ok(()),
