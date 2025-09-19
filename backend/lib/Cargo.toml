@@ -15,6 +15,7 @@ diesel = { workspace = true }
 diesel-async = { workspace = true }
 headers = { workspace = true }
 hex = { workspace = true }
+hex-literal = { workspace = true }
 jsonrpsee = { workspace = true, features = ["client", "ws-client"] }
 jsonwebtoken = { workspace = true }
 parking_lot = { workspace = true }
@@ -45,7 +46,10 @@ trie-db = { workspace = true }
 
 [dev-dependencies]
 axum-test = { workspace = true }
+diesel_migrations = { version = "2.2", features = ["postgres"] }
 futures = { workspace = true }
+testcontainers = "0.24"
+testcontainers-modules = { version = "0.12", features = ["postgres"] }
 
 [features]
 default = []

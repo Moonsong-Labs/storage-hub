@@ -267,11 +267,12 @@
     function generateMockJwt(address) {
       const header = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9'; // {"alg":"HS256","typ":"JWT"}
       const now = Math.floor(Date.now() / 1000);
+      const user = address || '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
       const payload = {
-        sub: address || '0x0123456789012345678901234567890123456789',
+        sub: user,
         iat: now,
         exp: now + 3600,
-        address: address || '0x0123456789012345678901234567890123456789'
+        address: user
       };
       const payloadB64 = toBase64Url(JSON.stringify(payload));
       const signatureB64 = toBase64Url('mock_signature');

@@ -62,7 +62,8 @@ async fn main() -> Result<()> {
 
     // Initialize services
     let config = load_config()?;
-    info!("Server will run on {}:{}", config.host, config.port);
+    let (host, port) = (config.host.clone(), config.port);
+    info!("Server will run on {}:{}", host, port);
 
     let memory_storage = InMemoryStorage::new();
     let storage = Arc::new(BoxedStorageWrapper::new(memory_storage));
@@ -73,11 +74,11 @@ async fn main() -> Result<()> {
 
     // Start server
     let app = create_app(services);
-    let listener = tokio::net::TcpListener::bind((config.host.as_str(), config.port))
+    let listener = tokio::net::TcpListener::bind((host.as_str(), port))
         .await
         .context("Failed to bind TCP listener")?;
 
-    info!("Server listening on http://{}:{}", config.host, config.port);
+    info!("Server listening on http://{}:{}", host, port);
 
     axum::serve(listener, app).await.context("Server error")?;
 
@@ -122,7 +123,7 @@ async fn create_postgres_client(config: &Config) -> Result<Arc<DBClient>> {
         if config.database.mock_mode {
             info!("Using mock repository (mock_mode enabled)");
 
-            let mock_repo = MockRepository::new();
+            let mock_repo = MockRepository::sample().await;
             let client = DBClient::new(Arc::new(mock_repo));
 
             // Test the connection (mock always succeeds)

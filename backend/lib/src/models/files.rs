@@ -1,7 +1,9 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
-use crate::models::buckets::FileEntry;
+use shc_indexer_db::models::File as DBFile;
+
+use crate::models::buckets::FileTree;
 
 #[derive(Debug, Serialize)]
 pub struct FileInfo {
@@ -10,13 +12,27 @@ pub struct FileInfo {
     pub fingerprint: String,
     #[serde(rename = "bucketId")]
     pub bucket_id: String,
-    pub name: String,
     pub location: String,
     pub size: u64,
     #[serde(rename = "isPublic")]
     pub is_public: bool,
     #[serde(rename = "uploadedAt")]
     pub uploaded_at: DateTime<Utc>,
+}
+
+impl FileInfo {
+    pub fn from_db(db: &DBFile, is_public: bool) -> Self {
+        Self {
+            file_key: hex::encode(&db.file_key),
+            fingerprint: hex::encode(&db.fingerprint),
+            bucket_id: hex::encode(&db.onchain_bucket_id),
+            // TODO: determine if lossy conversion is acceptable here
+            location: String::from_utf8_lossy(&db.location).into_owned(),
+            size: db.size as u64,
+            is_public,
+            uploaded_at: db.updated_at.and_utc(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -31,7 +47,8 @@ pub struct DistributeResponse {
 pub struct FileListResponse {
     #[serde(rename = "bucketId")]
     pub bucket_id: String,
-    pub files: Vec<FileEntry>,
+    // TODO: consider renaming to "tree" and removing the Vec
+    pub files: Vec<FileTree>,
 }
 
 #[derive(Debug, Serialize)]

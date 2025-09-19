@@ -16,7 +16,7 @@ pub struct OnchainBspId(H256);
 
 impl OnchainBspId {
     /// Create a new OnchainBspId from H256
-    pub fn new(id: H256) -> Self {
+    pub const fn new(id: H256) -> Self {
         Self(id)
     }
 
@@ -106,7 +106,7 @@ pub struct OnchainMspId(H256);
 
 impl OnchainMspId {
     /// Create a new OnchainMspId from H256
-    pub fn new(id: H256) -> Self {
+    pub const fn new(id: H256) -> Self {
         Self(id)
     }
 

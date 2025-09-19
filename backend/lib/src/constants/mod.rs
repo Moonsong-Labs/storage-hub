@@ -1,7 +1,7 @@
 //! Configuration constants for the StorageHub backend
 
 /// Test constants for use across all backend tests
-#[cfg(test)]
+#[cfg(any(feature = "mocks", test))]
 pub mod test;
 
 /// Default server configuration
@@ -15,6 +15,8 @@ pub mod server {
 
 /// RPC client configuration
 pub mod rpc {
+    use hex_literal::hex;
+
     /// Default RPC request timeout in seconds
     pub const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
@@ -23,6 +25,9 @@ pub mod rpc {
 
     /// Default RPC WebSocket URL
     pub const DEFAULT_RPC_URL: &str = "ws://localhost:9944";
+
+    pub const DUMMY_MSP_ID: [u8; 32] =
+        hex!("0000000000000000000000000000000000000000000000000000000000000300");
 
     /// Default MSP callback URL
     pub const DEFAULT_MSP_CALLBACK_URL: &str = "http://localhost:8080";
@@ -56,7 +61,16 @@ pub mod api {
 }
 
 pub mod mocks {
+    /// The user address to mock
     pub const MOCK_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+
+    // TODO: These are placeholder that are not indexed currently but we could compute.
+    // For example, we could retrieve all files in the DB by bucket and compute it that way
+    // using `File::get_by_onchain_bucket_id`
+
+    pub const PLACEHOLDER_BUCKET_SIZE_BYTES: u64 = 0;
+    pub const PLACEHOLDER_BUCKET_FILE_COUNT: u64 = 0;
+
     /// Shared mock file content used by tests and RPC mocks
     pub const DOWNLOAD_FILE_CONTENT: &str = "GoodFla mock file content for download";
 }
