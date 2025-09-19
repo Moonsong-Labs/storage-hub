@@ -537,7 +537,7 @@ pub async fn distribute_file(
 
 // ==================== Payment Handler ====================
 
-pub async fn payment_stream(
+pub async fn payment_streams(
     State(services): State<Services>,
     TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
 ) -> Result<impl IntoResponse, Error> {
@@ -547,6 +547,6 @@ pub async fn payment_stream(
         .get("address")
         .and_then(|a| a.as_str())
         .unwrap_or(MOCK_ADDRESS);
-    let response = services.msp.get_payment_stream(address).await?;
+    let response = services.msp.get_payment_streams(address).await?;
     Ok(Json(response))
 }

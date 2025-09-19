@@ -4,6 +4,8 @@ use async_trait::async_trait;
 use jsonrpsee::core::traits::ToRpcParams;
 use serde::de::DeserializeOwned;
 
+mod methods;
+
 pub mod client;
 pub mod connection;
 pub mod ws_connection;

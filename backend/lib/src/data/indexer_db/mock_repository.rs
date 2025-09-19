@@ -12,12 +12,14 @@ use std::{
 };
 
 use async_trait::async_trait;
-use shc_indexer_db::{models::Bsp, OnchainBspId};
+use bigdecimal::{BigDecimal, FromPrimitive};
 use tokio::sync::RwLock;
+
+use shc_indexer_db::{models::Bsp, OnchainBspId};
 
 use crate::data::indexer_db::repository::{
     error::{RepositoryError, RepositoryResult},
-    IndexerOps, IndexerOpsMut,
+    IndexerOps, IndexerOpsMut, PaymentStreamData, PaymentStreamKind,
 };
 
 /// Mock repository implementation using in-memory storage
@@ -62,6 +64,39 @@ impl IndexerOps for MockRepository {
             .take(limit as usize)
             .collect())
     }
+
+    // ============ Payment Stream Operations ============
+    async fn get_payment_streams_for_user(
+        &self,
+        _user_account: &str,
+    ) -> RepositoryResult<Vec<PaymentStreamData>> {
+        // TODO(MOCK): add mechanism to create this data in the mock repository and retrieve it here
+        Ok(vec![
+            PaymentStreamData {
+                provider: "0x1234567890abcdef1234567890abcdef12345678".to_string(),
+                total_amount_paid: BigDecimal::from_i64(500000).unwrap(),
+                kind: PaymentStreamKind::Fixed {
+                    rate: BigDecimal::from_i64(5).unwrap(),
+                },
+            },
+            PaymentStreamData {
+                provider: "0xabcdef1234567890abcdef1234567890abcdef12".to_string(),
+                total_amount_paid: BigDecimal::from_i64(200000).unwrap(),
+                kind: PaymentStreamKind::Dynamic {
+                    amount_provided: BigDecimal::from_i64(10).unwrap(),
+                },
+            },
+        ])
+    }
+
+    async fn calculate_msp_storage_for_user(
+        &self,
+        _msp_id: i64,
+        _user_account: &str,
+    ) -> RepositoryResult<BigDecimal> {
+        // TODO(MOCK): add mechanism to create this data in the mock repository and retrieve it here
+        Ok(BigDecimal::from(30))
+    }
 }
 
 #[async_trait]
@@ -85,7 +120,6 @@ impl IndexerOpsMut for MockRepository {
 
 #[cfg(test)]
 pub mod tests {
-    use bigdecimal::{BigDecimal, FromPrimitive};
     use chrono::Utc;
 
     use super::*;

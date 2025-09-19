@@ -59,4 +59,7 @@ pub mod mocks {
     pub const MOCK_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
     /// Shared mock file content used by tests and RPC mocks
     pub const DOWNLOAD_FILE_CONTENT: &str = "GoodFla mock file content for download";
+
+    /// Mock price per giga unit
+    pub const PRICE_PER_GIGA_UNIT: u128 = 100;
 }

@@ -274,6 +274,11 @@ export const rpcDefinitions: Record<string, Record<string, DefinitionRpc | Defin
         }
       ],
       type: "Vec<u8>"
+    },
+    getCurrentPricePerGigaUnitPerTick: {
+      description: "Get the current price per giga unit per tick from the payment streams pallet",
+      params: [],
+      type: "u128"
     }
   }
 };

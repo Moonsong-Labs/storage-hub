@@ -5,6 +5,7 @@ use log::{error, info};
 use std::sync::Arc;
 use thiserror::Error;
 
+use pallet_payment_streams::types::BalanceOf;
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use sc_client_api::{BlockBackend, BlockchainEvents};
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
@@ -540,25 +541,58 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             pallet_payment_streams::Event::DynamicRatePaymentStreamCreated {
                 provider_id,
                 user_account,
-                amount_provided: _amount_provided,
+                amount_provided,
             } => {
-                PaymentStream::create(conn, user_account.to_string(), provider_id.to_string())
-                    .await?;
+                // We can't convert Units to BigDecimal directly
+                // so instead we pass thru Balance
+                let amount_provided: BalanceOf<Runtime> = (*amount_provided).into();
+                PaymentStream::create_dynamic_rate(
+                    conn,
+                    user_account.to_string(),
+                    provider_id.to_string(),
+                    amount_provided.into(),
+                )
+                .await?;
             }
-            pallet_payment_streams::Event::DynamicRatePaymentStreamUpdated { .. } => {
-                // TODO: Currently we are not treating the info of dynamic rate update
+            pallet_payment_streams::Event::DynamicRatePaymentStreamUpdated {
+                provider_id,
+                user_account,
+                new_amount_provided,
+            } => {
+                let ps =
+                    PaymentStream::get(conn, user_account.to_string(), provider_id.to_string())
+                        .await?;
+
+                // We can't convert Units to BigDecimal directly
+                // so instead we pass thru Balance
+                let new_amount: BalanceOf<Runtime> = (*new_amount_provided).into();
+                PaymentStream::update_dynamic_rate(conn, ps.id, new_amount.into()).await?;
             }
             pallet_payment_streams::Event::DynamicRatePaymentStreamDeleted { .. } => {}
             pallet_payment_streams::Event::FixedRatePaymentStreamCreated {
                 provider_id,
                 user_account,
-                rate: _rate,
+                rate,
             } => {
-                PaymentStream::create(conn, user_account.to_string(), provider_id.to_string())
-                    .await?;
+                let rate_decimal: BigDecimal = (*rate).into();
+                PaymentStream::create_fixed_rate(
+                    conn,
+                    user_account.to_string(),
+                    provider_id.to_string(),
+                    rate_decimal,
+                )
+                .await?;
             }
-            pallet_payment_streams::Event::FixedRatePaymentStreamUpdated { .. } => {
-                // TODO: Currently we are not treating the info of fixed rate update
+            pallet_payment_streams::Event::FixedRatePaymentStreamUpdated {
+                provider_id,
+                user_account,
+                new_rate,
+            } => {
+                let ps =
+                    PaymentStream::get(conn, user_account.to_string(), provider_id.to_string())
+                        .await?;
+                let new_rate_decimal: BigDecimal = (*new_rate).into();
+                PaymentStream::update_fixed_rate(conn, ps.id, new_rate_decimal).await?;
             }
             pallet_payment_streams::Event::FixedRatePaymentStreamDeleted { .. } => {}
             pallet_payment_streams::Event::PaymentStreamCharged {

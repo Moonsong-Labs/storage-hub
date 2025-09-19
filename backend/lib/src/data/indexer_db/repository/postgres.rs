@@ -13,15 +13,23 @@
 //! - Comprehensive error handling
 
 use async_trait::async_trait;
+use bigdecimal::BigDecimal;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 #[cfg(test)]
 use shc_indexer_db::OnchainBspId;
-use shc_indexer_db::{models::Bsp, schema::bsp};
+use shc_indexer_db::{
+    models::{bucket::Bucket as DBBucket, payment_stream::PaymentStream, Bsp},
+    schema::bsp,
+};
 
 #[cfg(test)]
 use crate::data::indexer_db::repository::IndexerOpsMut;
-use crate::data::indexer_db::repository::{error::RepositoryResult, pool::SmartPool, IndexerOps};
+use crate::data::indexer_db::repository::{
+    error::{RepositoryError, RepositoryResult},
+    pool::SmartPool,
+    IndexerOps, PaymentStreamData, PaymentStreamKind,
+};
 
 /// PostgreSQL repository implementation.
 ///
@@ -60,6 +68,60 @@ impl IndexerOps for Repository {
             .await?;
 
         Ok(results)
+    }
+
+    // ============ Payment Stream Operations ============
+    async fn get_payment_streams_for_user(
+        &self,
+        user_account: &str,
+    ) -> RepositoryResult<Vec<PaymentStreamData>> {
+        let mut conn = self.pool.get().await?;
+
+        // Get all payment streams for the user from the database
+        let streams = PaymentStream::get_all_by_user(&mut conn, user_account.to_string()).await?;
+
+        // Convert to our PaymentStreamData format, preserving BigDecimal types
+        streams
+            .into_iter()
+            .map(|stream| {
+                let kind = match (stream.rate, stream.amount_provided) {
+                    (Some(rate), None) => Ok(PaymentStreamKind::Fixed { rate }),
+                    (None, Some(amount_provided)) => {
+                        Ok(PaymentStreamKind::Dynamic { amount_provided })
+                    }
+                    _ => Err(RepositoryError::configuration(
+                        "payment stream must be either fixed or dynamic",
+                    )),
+                }?;
+
+                Ok(PaymentStreamData {
+                    provider: stream.provider,
+                    total_amount_paid: stream.total_amount_paid,
+                    kind,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()
+    }
+
+    async fn calculate_msp_storage_for_user(
+        &self,
+        msp_id: i64,
+        user_account: &str,
+    ) -> RepositoryResult<BigDecimal> {
+        let mut conn = self.pool.get().await?;
+
+        // Get all buckets for this user with this MSP
+        let buckets =
+            DBBucket::get_user_buckets_by_msp(&mut conn, user_account.to_string(), msp_id).await?;
+
+        // Calculate total size across all buckets
+        let mut total_size = BigDecimal::from(0);
+        for bucket in buckets {
+            let bucket_size = DBBucket::calculate_size(&mut conn, bucket.id).await?;
+            total_size = total_size + bucket_size;
+        }
+
+        Ok(total_size)
     }
 }
 

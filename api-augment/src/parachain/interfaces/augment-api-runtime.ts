@@ -433,6 +433,10 @@ declare module "@polkadot/api-base/types/calls" {
     /** 0x1078d7ac24a07b0e/1 */
     paymentStreamsApi: {
       /**
+       * Get the current price per giga unit per tick
+       **/
+      getCurrentPricePerGigaUnitPerTick: AugmentedCall<ApiType, () => Observable<Balance>>;
+      /**
        * Get the Providers that have at least one payment stream with a specific user.
        **/
       getProvidersWithPaymentStreamsWithUser: AugmentedCall<
