@@ -251,102 +251,104 @@ await describeMspNet(
       // the expired block, the storage request will be moved to incomplete.
       await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
 
-      const tickRangeToMaximumThreshold = (
-        await userApi.query.parameters.parameters({
+      try {
+        const tickRangeToMaximumThreshold = (
+          await userApi.query.parameters.parameters({
+            RuntimeConfig: {
+              TickRangeToMaximumThreshold: null
+            }
+          })
+        )
+          .unwrap()
+          .asRuntimeConfig.asTickRangeToMaximumThreshold.toNumber();
+
+        const storageRequestTtlRuntimeParameter = {
           RuntimeConfig: {
-            TickRangeToMaximumThreshold: null
+            StorageRequestTtl: [null, tickRangeToMaximumThreshold]
           }
-        })
-      )
-        .unwrap()
-        .asRuntimeConfig.asTickRangeToMaximumThreshold.toNumber();
+        };
+        await userApi.block.seal({
+          calls: [
+            userApi.tx.sudo.sudo(
+              userApi.tx.parameters.setParameter(storageRequestTtlRuntimeParameter)
+            )
+          ]
+        });
 
-      const storageRequestTtlRuntimeParameter = {
-        RuntimeConfig: {
-          StorageRequestTtl: [null, tickRangeToMaximumThreshold]
-        }
-      };
-      await userApi.block.seal({
-        calls: [
-          userApi.tx.sudo.sudo(
-            userApi.tx.parameters.setParameter(storageRequestTtlRuntimeParameter)
-          )
-        ]
-      });
+        const { fileKey } = await createBucketAndSendNewStorageRequest(
+          userApi,
+          source,
+          destination,
+          bucketName,
+          null,
+          null,
+          null,
+          1,
+          true
+        );
 
-      const { fileKey } = await createBucketAndSendNewStorageRequest(
-        userApi,
-        source,
-        destination,
-        bucketName,
-        null,
-        null,
-        null,
-        1,
-        true
-      );
+        // Wait for BSP to volunteer and store
+        await userApi.wait.bspVolunteer();
+        await waitFor({
+          lambda: async () =>
+            (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
+        });
 
-      // Wait for BSP to volunteer and store
-      await userApi.wait.bspVolunteer();
-      await waitFor({
-        lambda: async () =>
-          (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
-      });
+        const bspAddress = userApi.createType("Address", bspKey.address);
+        await userApi.wait.bspStored({
+          expectedExts: 1,
+          sealBlock: true,
+          bspAccount: bspAddress
+        });
 
-      const bspAddress = userApi.createType("Address", bspKey.address);
-      await userApi.wait.bspStored({
-        expectedExts: 1,
-        sealBlock: true,
-        bspAccount: bspAddress
-      });
+        await waitForIndexing(userApi);
 
-      await waitForIndexing(userApi);
+        // Skip ahead to trigger expiration
+        const currentBlock = await userApi.rpc.chain.getBlock();
+        const currentBlockNumber = currentBlock.block.header.number.toNumber();
+        const storageRequestTtl = (
+          await userApi.query.parameters.parameters({
+            RuntimeConfig: {
+              StorageRequestTtl: null
+            }
+          })
+        )
+          .unwrap()
+          .asRuntimeConfig.asStorageRequestTtl.toNumber();
 
-      // Skip ahead to trigger expiration
-      const currentBlock = await userApi.rpc.chain.getBlock();
-      const currentBlockNumber = currentBlock.block.header.number.toNumber();
-      const storageRequestTtl = (
-        await userApi.query.parameters.parameters({
-          RuntimeConfig: {
-            StorageRequestTtl: null
-          }
-        })
-      )
-        .unwrap()
-        .asRuntimeConfig.asStorageRequestTtl.toNumber();
+        await userApi.block.skipTo(currentBlockNumber + storageRequestTtl);
 
-      await userApi.block.skipTo(currentBlockNumber + storageRequestTtl);
+        await waitForIndexing(userApi, false);
 
-      await waitForIndexing(userApi, false);
+        // Verify delete_file_for_incomplete_storage_request extrinsic is submitted
+        await waitFor({
+          lambda: async () => {
+            const deleteFileMatch = await userApi.assert.extrinsicPresent({
+              method: "deleteFileForIncompleteStorageRequest",
+              module: "fileSystem",
+              checkTxPool: true,
+              assertLength: 1
+            });
+            return deleteFileMatch.length >= 1;
+          },
+          iterations: 300,
+          delay: 100
+        });
 
-      // Verify delete_file_for_incomplete_storage_request extrinsic is submitted
-      await waitFor({
-        lambda: async () => {
-          const deleteFileMatch = await userApi.assert.extrinsicPresent({
-            method: "deleteFileForIncompleteStorageRequest",
-            module: "fileSystem",
-            checkTxPool: true,
-            assertLength: 1
-          });
-          return deleteFileMatch.length >= 1;
-        },
-        iterations: 300,
-        delay: 100
-      });
+        // Seal block to process the extrinsic
+        const deletionResult = await userApi.block.seal();
 
-      // Seal block to process the extrinsic
-      const deletionResult = await userApi.block.seal();
-
-      // Verify FileDeletedFromIncompleteStorageRequest event
-      assertEventPresent(
-        userApi,
-        "fileSystem",
-        "FileDeletedFromIncompleteStorageRequest",
-        deletionResult.events
-      );
-
-      // Resume containers for cleanup
-      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-msp-1" });
+        // Verify FileDeletedFromIncompleteStorageRequest event
+        assertEventPresent(
+          userApi,
+          "fileSystem",
+          "FileDeletedFromIncompleteStorageRequest",
+          deletionResult.events
+        );
+      } finally {
+        // Resume containers for cleanup - always execute
+        await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-msp-1" });
+      }
     });
 
     it("processes revoked storage request and prepares deletion", async () => {

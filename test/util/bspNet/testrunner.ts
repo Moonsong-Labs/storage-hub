@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { after, afterEach, before, beforeEach, describe, it } from "node:test";
-import { createSqlClient, verifyContainerFreshness } from "..";
+import { createSqlClient, verifyContainerFreshness, closeAllSqlClients } from "..";
 import { NetworkLauncher } from "../netLaunch";
 import * as ShConsts from "./consts";
 import { cleardownTest } from "./helpers";
@@ -8,6 +8,9 @@ import { BspNetTestApi, type EnrichedBspApi } from "./test-api";
 import type { BspNetContext, FullNetContext, TestOptions } from "./types";
 
 export const launchEventEmitter = new EventEmitter();
+
+// Track test execution count for debugging CI issues
+let testExecutionCount = 0;
 
 /**
  * Describes a set of BspNet tests.
@@ -76,10 +79,41 @@ export async function describeBspNet<
       });
 
       after(async () => {
-        await cleardownTest({
-          api: [await userApiPromise, await bspApiPromise],
-          keepNetworkAlive: options?.keepAlive
-        });
+        console.log("[TEST] Starting BSPNet test cleanup...");
+
+        // First close all SQL clients to free database connections
+        console.log("[TEST] Closing SQL clients...");
+        await closeAllSqlClients();
+
+        const apis: EnrichedBspApi[] = [];
+
+        // Only try to resolve APIs if they were actually created
+        try {
+          if (userApiPromise) {
+            const api = await userApiPromise;
+            if (api) apis.push(api);
+          }
+          if (bspApiPromise) {
+            const api = await bspApiPromise;
+            if (api) apis.push(api);
+          }
+        } catch (_e) {
+          console.log("[TEST] Some APIs were not initialized, skipping their cleanup");
+        }
+
+        if (apis.length > 0) {
+          console.log(`[TEST] Disconnecting ${apis.length} API(s) and cleaning up containers...`);
+          await cleardownTest({
+            api: apis,
+            keepNetworkAlive: options?.keepAlive
+          });
+        } else {
+          console.log("[TEST] No APIs to disconnect, cleaning up containers only...");
+          await cleardownTest({
+            api: [],
+            keepNetworkAlive: options?.keepAlive
+          });
+        }
 
         if (options?.keepAlive) {
           if (bspNetConfigCases.length > 1) {
@@ -93,6 +127,8 @@ export async function describeBspNet<
           console.log("ℹ️ Hint: close network with:   pnpm docker:stop:bspnet  ");
           process.exit(0);
         }
+
+        console.log("[TEST] BSPNet test cleanup complete");
       });
 
       const context = {
@@ -148,6 +184,18 @@ export async function describeMspNet<
       let responseListenerPromise: ReturnType<typeof NetworkLauncher.create>;
 
       before(async () => {
+        testExecutionCount++;
+        console.log(`[TEST-TRACKER] Starting test execution #${testExecutionCount}`);
+        console.log(`[TEST-TRACKER] Test suite: ${title}`);
+        console.log(
+          `[TEST-TRACKER] Config: ${JSON.stringify({
+            fisherman: fullNetConfig.fisherman,
+            indexer: fullNetConfig.indexer,
+            indexerMode: fullNetConfig.indexerMode,
+            rocksdb: fullNetConfig.rocksdb
+          })}`
+        );
+
         await verifyContainerFreshness();
 
         responseListenerPromise = new Promise((resolve) => {
@@ -161,35 +209,100 @@ export async function describeMspNet<
         });
         launchEventEmitter.emit("networkLaunched", launchResponse);
 
+        console.log("[TEST-SETUP] Creating API connections for test suite...");
+        console.log(
+          `[TEST-SETUP] Test configuration: indexer=${fullNetConfig.indexer}, fisherman=${fullNetConfig.fisherman}, indexerMode=${fullNetConfig.indexerMode}`
+        );
+
+        console.log("[TEST-SETUP] Creating user API connection...");
         userApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
+
+        console.log("[TEST-SETUP] Creating BSP API connection...");
         bspApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`);
+
+        console.log("[TEST-SETUP] Creating MSP-1 API connection...");
         msp1ApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.msp1.port}`);
+
+        console.log("[TEST-SETUP] Creating MSP-2 API connection...");
         msp2ApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.msp2.port}`);
 
         // Create fisherman API if fisherman is enabled
         if (fullNetConfig.fisherman) {
+          console.log("[TEST-SETUP] Creating Fisherman API connection...");
           fishermanApiPromise = BspNetTestApi.create(
             `ws://127.0.0.1:${ShConsts.NODE_INFOS.fisherman.port}`
           );
         }
+
+        console.log(
+          "[TEST-SETUP] All API connections initiated, waiting for connections to establish..."
+        );
       });
 
       after(async () => {
-        const apis = [
-          await userApiPromise,
-          await bspApiPromise,
-          await msp1ApiPromise,
-          await msp2ApiPromise
-        ];
+        console.log("[TEST] Starting FullNet test cleanup...");
 
-        if (fishermanApiPromise) {
-          apis.push(await fishermanApiPromise);
+        // First close all SQL clients to free database connections
+        console.log("[TEST] Closing SQL clients...");
+        await closeAllSqlClients();
+
+        // Add a small delay for CI to allow connections to close properly
+        if (process.env.CI === "true" && fullNetConfig.fisherman) {
+          console.log(
+            "[TEST-CLEANUP] CI environment detected with fisherman - adding cleanup delay..."
+          );
+          console.log("[TEST-CLEANUP] This helps prevent resource exhaustion in subsequent tests");
+          await new Promise((resolve) => setTimeout(resolve, 2000));
         }
 
-        await cleardownTest({
-          api: apis,
-          keepNetworkAlive: options?.keepAlive
-        });
+        const apis: EnrichedBspApi[] = [];
+
+        // Only try to resolve APIs if they were actually created
+        console.log("[TEST-CLEANUP] Collecting API connections for cleanup...");
+        try {
+          if (userApiPromise) {
+            console.log("[TEST-CLEANUP] Resolving user API...");
+            const api = await userApiPromise;
+            if (api) apis.push(api);
+          }
+          if (bspApiPromise) {
+            console.log("[TEST-CLEANUP] Resolving BSP API...");
+            const api = await bspApiPromise;
+            if (api) apis.push(api);
+          }
+          if (msp1ApiPromise) {
+            console.log("[TEST-CLEANUP] Resolving MSP-1 API...");
+            const api = await msp1ApiPromise;
+            if (api) apis.push(api);
+          }
+          if (msp2ApiPromise) {
+            console.log("[TEST-CLEANUP] Resolving MSP-2 API...");
+            const api = await msp2ApiPromise;
+            if (api) apis.push(api);
+          }
+          if (fishermanApiPromise) {
+            console.log("[TEST-CLEANUP] Resolving Fisherman API...");
+            const api = await fishermanApiPromise;
+            if (api) apis.push(api);
+          }
+          console.log(`[TEST-CLEANUP] Collected ${apis.length} API connection(s) for cleanup`);
+        } catch (_e) {
+          console.log("[TEST-CLEANUP] Some APIs were not initialized, skipping their cleanup");
+        }
+
+        if (apis.length > 0) {
+          console.log(`[TEST] Disconnecting ${apis.length} API(s) and cleaning up containers...`);
+          await cleardownTest({
+            api: apis,
+            keepNetworkAlive: options?.keepAlive
+          });
+        } else {
+          console.log("[TEST] No APIs to disconnect, cleaning up containers only...");
+          await cleardownTest({
+            api: [],
+            keepNetworkAlive: options?.keepAlive
+          });
+        }
 
         if (options?.keepAlive) {
           if (fullNetConfigCases.length > 1) {
@@ -203,6 +316,10 @@ export async function describeMspNet<
           console.log("ℹ️ Hint: close network with:   pnpm docker:stop:fullnet  ");
           process.exit(0);
         }
+
+        console.log("[TEST] FullNet test cleanup complete");
+        console.log(`[TEST-TRACKER] Completed test execution #${testExecutionCount}`);
+        console.log("[TEST-TRACKER] ==========================================\n");
       });
 
       const context = {

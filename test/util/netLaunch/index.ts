@@ -220,10 +220,12 @@ export class NetworkLauncher {
   }
 
   private async startNetwork(verbose = false) {
+    console.log("[NETWORK] Starting network bootstrap...");
     const cwd = path.resolve(process.cwd(), "..", "docker");
     const tmpFile = this.remapComposeYaml();
 
     if (this.config.noisy) {
+      console.log("[NETWORK] Starting toxiproxy container...");
       await compose.upOne("toxiproxy", {
         cwd: cwd,
         config: tmpFile,
@@ -231,6 +233,7 @@ export class NetworkLauncher {
       });
     }
 
+    console.log("[NETWORK] Starting sh-bsp container...");
     await compose.upOne("sh-bsp", {
       cwd: cwd,
       config: tmpFile,
@@ -284,6 +287,7 @@ export class NetworkLauncher {
           `Service ${mspService} not msp-1/2, either add to hardcoded list or make this dynamic`
         );
 
+        console.log(`[NETWORK] Starting MSP service: ${mspService}...`);
         await compose.upOne(mspService, {
           cwd: cwd,
           config: tmpFile,
@@ -296,17 +300,21 @@ export class NetworkLauncher {
             MSP_ID: mspId
           }
         });
+        console.log(`[NETWORK] MSP service ${mspService} started successfully`);
       }
     }
 
     if (this.config.indexer) {
+      console.log("[NETWORK] Starting PostgreSQL container...");
       await compose.upOne("sh-postgres", {
         cwd: cwd,
         config: tmpFile,
         log: verbose
       });
+      console.log("[NETWORK] PostgreSQL container started, running migrations...");
 
       await this.runMigrations();
+      console.log("[NETWORK] Database migrations completed successfully");
 
       // Start backend only if backend flag is enabled (depends on msp-1 and postgres)
       if (this.config.backend && this.type === "fullnet") {
@@ -318,6 +326,7 @@ export class NetworkLauncher {
       }
     }
 
+    console.log("[NETWORK] Starting sh-user container...");
     await compose.upOne("sh-user", {
       cwd: cwd,
       config: tmpFile,
@@ -328,9 +337,11 @@ export class NetworkLauncher {
         BSP_PEER_ID: bspPeerId
       }
     });
+    console.log("[NETWORK] sh-user container started successfully");
 
     // Only start fisherman service if it's enabled and we're using fullnet
     if (this.config.fisherman && this.type === "fullnet") {
+      console.log("[NETWORK] Starting sh-fisherman container...");
       await compose.upOne("sh-fisherman", {
         cwd: cwd,
         config: tmpFile,
@@ -339,8 +350,10 @@ export class NetworkLauncher {
           ...process.env
         }
       });
+      console.log("[NETWORK] sh-fisherman container started successfully");
     }
 
+    console.log("[NETWORK] Network bootstrap complete");
     return this;
   }
 
@@ -761,6 +774,19 @@ export class NetworkLauncher {
   > {
     console.log("\n=== Launching network config ===");
     console.table({ config });
+
+    // Memory diagnostics for CI
+    if (process.env.CI === "true") {
+      const memUsage = process.memoryUsage();
+      console.log("[MEMORY-DIAGNOSTICS] Process memory usage:");
+      console.log(`[MEMORY-DIAGNOSTICS] RSS: ${Math.round(memUsage.rss / 1024 / 1024)}MB`);
+      console.log(
+        `[MEMORY-DIAGNOSTICS] Heap Used: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`
+      );
+      console.log(
+        `[MEMORY-DIAGNOSTICS] Heap Total: ${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`
+      );
+    }
     const launchedNetwork = await new NetworkLauncher(type, config)
       .loadComposeFile()
       .populateEntities()
@@ -844,15 +870,19 @@ export class NetworkLauncher {
     }
 
     if (launchedNetwork.config.initialised === "multi") {
+      console.log("[NETWORK] Initialising multiple BSPs...");
       return await launchedNetwork.initExtraBsps();
     }
 
     if (launchedNetwork.config.initialised === true) {
+      console.log("[NETWORK] Executing demo storage request...");
       return await launchedNetwork.execDemoStorageRequest();
     }
 
     // Attempt to debounce and stabilise
+    console.log("[NETWORK] Network setup complete, waiting 1.5s for stabilization...");
     await sleep(1500);
+    console.log("[NETWORK] Network stabilization complete, ready for test execution");
     return undefined;
   }
 }

@@ -94,21 +94,40 @@ export const cleardownTest = async (cleardownOptions: {
   api: EnrichedBspApi | EnrichedBspApi[];
   keepNetworkAlive?: boolean;
 }) => {
+  console.log("[CLEANUP] Starting cleardownTest");
+
   try {
-    if (Array.isArray(cleardownOptions.api)) {
-      for (const api of cleardownOptions.api) {
-        await api.disconnect();
+    if (
+      cleardownOptions.api &&
+      (Array.isArray(cleardownOptions.api) ? cleardownOptions.api.length > 0 : true)
+    ) {
+      console.log("[CLEANUP] Disconnecting APIs...");
+      if (Array.isArray(cleardownOptions.api)) {
+        console.log(`[CLEANUP] Disconnecting ${cleardownOptions.api.length} API connection(s)`);
+        for (const api of cleardownOptions.api) {
+          if (api) {
+            await api.disconnect();
+          }
+        }
+      } else {
+        console.log("[CLEANUP] Disconnecting single API connection");
+        if (cleardownOptions.api) {
+          await cleardownOptions.api.disconnect();
+        }
       }
+      console.log("[CLEANUP] API disconnections complete");
     } else {
-      await cleardownOptions.api.disconnect();
+      console.log("[CLEANUP] No APIs to disconnect");
     }
   } catch (e) {
-    console.error("Error disconnecting APIs:", e);
+    console.error("[CLEANUP] Error disconnecting APIs:", e);
   }
 
   if (!cleardownOptions.keepNetworkAlive) {
+    console.log("[CLEANUP] Stopping containers and cleaning up environment...");
     await cleanupEnvironment();
 
+    console.log("[CLEANUP] Verifying cleanup...");
     const docker = new Docker();
     const remainingContainers = await docker.listContainers({ all: true });
     const relevantContainers = remainingContainers.filter(
@@ -120,11 +139,17 @@ export const cleardownTest = async (cleardownOptions: {
     );
 
     if (relevantContainers.length > 0) {
-      console.error("WARNING: Containers still present after cleanup!");
+      console.error("[CLEANUP] WARNING: Containers still present after cleanup!");
+      console.error(`[CLEANUP] Found ${relevantContainers.length} remaining container(s)`);
       await printDockerStatus();
       throw new Error("Failed to clean up test environment");
     }
+    console.log("[CLEANUP] Environment verified clean");
+  } else {
+    console.log("[CLEANUP] Keeping network alive as requested");
   }
+
+  console.log("[CLEANUP] cleardownTest complete");
 };
 
 export const forceSignupBsp = async (options: {

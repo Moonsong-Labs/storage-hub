@@ -61,80 +61,82 @@ await describeMspNet(
       // Pause MSP container to ensure only BSP accepts
       await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
 
-      const { fileKey } = await createBucketAndSendNewStorageRequest(
-        userApi,
-        source,
-        destination,
-        bucketName,
-        null,
-        null,
-        null,
-        1,
-        false
-      );
+      try {
+        const { fileKey } = await createBucketAndSendNewStorageRequest(
+          userApi,
+          source,
+          destination,
+          bucketName,
+          null,
+          null,
+          null,
+          1,
+          false
+        );
 
-      // Wait for BSP to volunteer and store
-      await userApi.wait.bspVolunteer(undefined, false);
-      await waitFor({
-        lambda: async () =>
-          (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
-      });
+        // Wait for BSP to volunteer and store
+        await userApi.wait.bspVolunteer(undefined, false);
+        await waitFor({
+          lambda: async () =>
+            (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
+        });
 
-      const bspAddress = userApi.createType("Address", bspKey.address);
-      await userApi.wait.bspStored({
-        expectedExts: 1,
-        bspAccount: bspAddress,
-        finalizeBlock: false
-      });
+        const bspAddress = userApi.createType("Address", bspKey.address);
+        await userApi.wait.bspStored({
+          expectedExts: 1,
+          bspAccount: bspAddress,
+          finalizeBlock: false
+        });
 
-      // Skip ahead to trigger expiration
-      const currentBlock = await userApi.rpc.chain.getBlock();
-      const currentBlockNumber = currentBlock.block.header.number.toNumber();
-      const storageRequestTtl = (
-        await userApi.query.parameters.parameters({
-          RuntimeConfig: {
-            StorageRequestTtl: null
-          }
-        })
-      )
-        .unwrap()
-        .asRuntimeConfig.asStorageRequestTtl.toNumber();
+        // Skip ahead to trigger expiration
+        const currentBlock = await userApi.rpc.chain.getBlock();
+        const currentBlockNumber = currentBlock.block.header.number.toNumber();
+        const storageRequestTtl = (
+          await userApi.query.parameters.parameters({
+            RuntimeConfig: {
+              StorageRequestTtl: null
+            }
+          })
+        )
+          .unwrap()
+          .asRuntimeConfig.asStorageRequestTtl.toNumber();
 
-      await userApi.block.skipTo(currentBlockNumber + storageRequestTtl, { finalised: false });
+        await userApi.block.skipTo(currentBlockNumber + storageRequestTtl, { finalised: false });
 
-      // Verify only one delete extrinsic is submitted (for the BSP)
-      await waitFor({
-        lambda: async () => {
-          const deleteFileMatch = await userApi.assert.extrinsicPresent({
-            method: "deleteFileForIncompleteStorageRequest",
-            module: "fileSystem",
-            checkTxPool: true,
-            assertLength: 1
-          });
-          return deleteFileMatch.length >= 1;
-        },
-        iterations: 300,
-        delay: 100
-      });
+        // Verify only one delete extrinsic is submitted (for the BSP)
+        await waitFor({
+          lambda: async () => {
+            const deleteFileMatch = await userApi.assert.extrinsicPresent({
+              method: "deleteFileForIncompleteStorageRequest",
+              module: "fileSystem",
+              checkTxPool: true,
+              assertLength: 1
+            });
+            return deleteFileMatch.length >= 1;
+          },
+          iterations: 300,
+          delay: 100
+        });
 
-      // Seal block to process the extrinsic
-      const deletionResult = await userApi.block.seal();
+        // Seal block to process the extrinsic
+        const deletionResult = await userApi.block.seal();
 
-      // Verify FileDeletedFromIncompleteStorageRequest event
-      assertEventPresent(
-        userApi,
-        "fileSystem",
-        "FileDeletedFromIncompleteStorageRequest",
-        deletionResult.events
-      );
-
-      // Resume MSP container
-      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-msp-1" });
-      await userApi.docker.waitForLog({
-        searchString: "💤 Idle",
-        containerName: "storage-hub-sh-msp-1"
-      });
-      await sleep(3000);
+        // Verify FileDeletedFromIncompleteStorageRequest event
+        assertEventPresent(
+          userApi,
+          "fileSystem",
+          "FileDeletedFromIncompleteStorageRequest",
+          deletionResult.events
+        );
+      } finally {
+        // Always resume MSP container even if test fails
+        await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-msp-1" });
+        await userApi.docker.waitForLog({
+          searchString: "💤 Idle",
+          containerName: "storage-hub-sh-msp-1"
+        });
+        await sleep(3000);
+      }
     });
 
     it("processes revoked request (MSP and BSP) in unfinalized block", async () => {

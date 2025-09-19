@@ -198,33 +198,36 @@ await describeMspNet(
       // Stop the other MSP so it doesn't accept the file before we revoke the storage request
       await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
 
-      const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
-        source,
-        destination,
-        bucketName,
-        null,
-        null,
-        null,
-        1
-      );
+      try {
+        const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
+          source,
+          destination,
+          bucketName,
+          null,
+          null,
+          null,
+          1
+        );
 
-      const revokeStorageRequestResult = await userApi.block.seal({
-        calls: [userApi.tx.fileSystem.revokeStorageRequest(fileKey)],
-        signer: shUser
-      });
+        const revokeStorageRequestResult = await userApi.block.seal({
+          calls: [userApi.tx.fileSystem.revokeStorageRequest(fileKey)],
+          signer: shUser
+        });
 
-      assertEventPresent(
-        userApi,
-        "fileSystem",
-        "StorageRequestRevoked",
-        revokeStorageRequestResult.events
-      );
+        assertEventPresent(
+          userApi,
+          "fileSystem",
+          "StorageRequestRevoked",
+          revokeStorageRequestResult.events
+        );
 
-      await waitForIndexing(userApi);
-      await waitForFileDeleted(sql, fileKey);
-
-      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-bsp-1" });
-      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-msp-1" });
+        await waitForIndexing(userApi);
+        await waitForFileDeleted(sql, fileKey);
+      } finally {
+        // Always resume containers even if the test fails
+        await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-bsp-1" });
+        await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-msp-1" });
+      }
     });
 
     it("indexes BspConfirmStoppedStoring events", async () => {
