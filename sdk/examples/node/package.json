@@ -16,7 +16,7 @@
   },
   "devDependencies": {
     "typescript": "~5.5.4",
-    "@polkadot/types": "^10.13.1",
+    "@polkadot/types": "^16.4.7",
     "tsx": "^4.19.0"
   },
   "engines": {

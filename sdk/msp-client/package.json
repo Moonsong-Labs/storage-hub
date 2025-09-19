@@ -39,7 +39,14 @@
     "@storagehub-sdk/core": ">=0.0.5"
   },
   "devDependencies": {
-    "@storagehub-sdk/core": "workspace:*"
+    "@eslint/eslintrc": "3.3.1",
+    "@storagehub-sdk/core": "workspace:*",
+    "@typescript-eslint/eslint-plugin": "^8.37.0",
+    "@typescript-eslint/parser": "^8.37.0",
+    "eslint": "^9.31.0",
+    "eslint-config-prettier": "^10.1.5",
+    "eslint-plugin-simple-import-sort": "^12.1.1",
+    "prettier": "^3.6.2"
   },
   "engines": {
     "node": ">=22"

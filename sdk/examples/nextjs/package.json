@@ -8,7 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
-    "@polkadot/types": "^10.13.1",
+    "@polkadot/types": "^16.4.7",
     "@storagehub-sdk/core": ">=0.0.5",
     "@storagehub-sdk/msp-client": ">=0.0.5",
     "ethers": "^6.15.0",
