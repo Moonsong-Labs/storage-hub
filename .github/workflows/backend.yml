@@ -16,7 +16,7 @@ on:
 jobs:
   check-backend-fmt:
     name: "Check backend format with rustfmt"
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
