@@ -1,5 +1,5 @@
 use log::{debug, error, info, trace, warn};
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, str, sync::Arc};
 use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
 use sc_client_api::HeaderBackend;
@@ -710,8 +710,21 @@ where
                         false
                     };
 
+                    if !msp_accepted {
+                        // Return early if the MSP has not accepted the storage request.
+                        return false;
+                    }
+
                     let msp_is_distributor = storage_request.user_peer_ids.iter().any(|peer_id| {
-                        let peer_id = match PeerId::from_bytes(peer_id.as_ref()) {
+                        let peer_id_str = match str::from_utf8(peer_id.as_ref()) {
+                            Ok(peer_id_str) => peer_id_str,
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to convert peer ID from storage request to string: {:?}", e);
+                                return false;
+                            }
+                        };
+
+                        let peer_id: PeerId = match peer_id_str.parse() {
                             Ok(peer_id) => peer_id,
                             Err(e) => {
                                 error!(target: LOG_TARGET, "Failed to convert peer ID from storage request to PeerId: {:?}", e);
@@ -719,13 +732,10 @@ where
                             }
                         };
 
-                        log::info!(target: LOG_TARGET, "HELLO THERE: Peer ID from storage request: {:?}", peer_id);
-                        log::info!(target: LOG_TARGET, "HELLO THERE: Managed MSP peer ID: {:?}", managed_msp_peer_id);
-
                         peer_id == managed_msp_peer_id
                     });
 
-                    msp_accepted && msp_is_distributor
+                    msp_is_distributor
                 });
 
         // Distribute the files to the BSPs.
