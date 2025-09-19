@@ -13,6 +13,7 @@
     "fmt": "biome format .",
     "fmt:fix": "biome format . --write",
     "lint": "biome lint .",
+    "lint:fix": "biome lint . --write",
     "typecheck:parachain": "tsc -p tsconfig.parachain.json --noEmit",
     "typecheck:solochain-evm": "tsc -p tsconfig.solochain-evm.json --noEmit",
     "typecheck:all": "pnpm typecheck:parachain && pnpm typecheck:solochain-evm",

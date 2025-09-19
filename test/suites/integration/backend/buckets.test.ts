@@ -17,18 +17,21 @@ interface Bucket {
 
 type FileTree = {
   name: string;
-} & ({
-  type: 'file';
-  sizeBytes: number;
-  fileKey: string;
-} | {
-  type: 'folder';
-  children: FileTree[]
-});
+} & (
+  | {
+      type: "file";
+      sizeBytes: number;
+      fileKey: string;
+    }
+  | {
+      type: "folder";
+      children: FileTree[];
+    }
+);
 
 interface FileListResponse {
   bucketId: string;
-  files: FileTree[]
+  files: FileTree[];
 }
 
 interface FileInfo {
@@ -45,7 +48,7 @@ await describeMspNet(
   "Backend bucket endpoints",
   {
     indexer: true,
-    backend: true,
+    backend: true
   },
   ({ before, createMsp1Api, createUserApi, it }) => {
     let userApi: EnrichedBspApi;
@@ -63,8 +66,6 @@ await describeMspNet(
       } else {
         throw new Error("MSP API for first MSP not available");
       }
-
-
     });
 
     it("Postgres DB is ready", async () => {
@@ -92,22 +93,19 @@ await describeMspNet(
     });
 
     it("Should succesfully list no buckets", async () => {
-      const response = await fetch(
-        `http://localhost:8080/buckets`,
-        {
-          headers: {
-            Authorization: `Bearer ${mockJWT}`
-          }
+      const response = await fetch("http://localhost:8080/buckets", {
+        headers: {
+          Authorization: `Bearer ${mockJWT}`
         }
-      );
+      });
 
       strictEqual(response.status, 200, "/buckets should return OK status");
 
       const buckets = (await response.json()) as Bucket[];
       console.log("/buckets :", buckets);
 
-      assert(buckets.length == 0);
-    })
+      strictEqual(buckets.length, 0);
+    });
 
     const bucketName = "backend-test-bucket";
     let bucketId: string;
@@ -136,7 +134,7 @@ await describeMspNet(
         source,
         fileLocation,
         ownerHex,
-        newBucketId,
+        newBucketId
       );
       file_key = result.file_key;
 
@@ -157,17 +155,14 @@ await describeMspNet(
         ],
         signer: shUser
       });
-    })
+    });
 
     it("Should succesfully get specific bucket info", async () => {
-      const response = await fetch(
-        `http://localhost:8080/buckets/${bucketId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${mockJWT}`
-          }
+      const response = await fetch(`http://localhost:8080/buckets/${bucketId}`, {
+        headers: {
+          Authorization: `Bearer ${mockJWT}`
         }
-      );
+      });
 
       strictEqual(response.status, 200, "/bucket/bucker_id should return OK status");
 
@@ -175,17 +170,14 @@ await describeMspNet(
       console.log("/buckets/bid :", bucket);
 
       strictEqual(bucket.bucketId, bucketId, "Returned bucket should match the one in the query");
-    })
+    });
 
     it("Should succesfully list buckets", async () => {
-      const response = await fetch(
-        `http://localhost:8080/buckets`,
-        {
-          headers: {
-            Authorization: `Bearer ${mockJWT}`
-          }
+      const response = await fetch("http://localhost:8080/buckets", {
+        headers: {
+          Authorization: `Bearer ${mockJWT}`
         }
-      );
+      });
 
       strictEqual(response.status, 200, "/buckets should return OK status");
 
@@ -194,19 +186,16 @@ await describeMspNet(
 
       assert(buckets.length > 0);
 
-      const sample_bucket = buckets.find((bucket) => bucket.bucketId == bucketId);
-      assert(sample_bucket, "list should include bucket added in initialization")
-    })
+      const sample_bucket = buckets.find((bucket) => bucket.bucketId === bucketId);
+      assert(sample_bucket, "list should include bucket added in initialization");
+    });
 
     it("Should succesfully get bucket files", async () => {
-      const response = await fetch(
-        `http://localhost:8080/buckets/${bucketId}/files`,
-        {
-          headers: {
-            Authorization: `Bearer ${mockJWT}`
-          }
+      const response = await fetch(`http://localhost:8080/buckets/${bucketId}/files`, {
+        headers: {
+          Authorization: `Bearer ${mockJWT}`
         }
-      );
+      });
 
       strictEqual(response.status, 200, "/bucket/bucket_id/files should return OK status");
 
@@ -218,27 +207,28 @@ await describeMspNet(
       strictEqual(fileList.files.length, 1, "File list should have exactly 1 entry");
 
       const files = fileList.files[0];
-      strictEqual(files.name, '/', "First entry of bucket should be root");
-      assert(files.type === 'folder', "Root entry should be a folder");
+      strictEqual(files.name, "/", "First entry of bucket should be root");
+      assert(files.type === "folder", "Root entry should be a folder");
 
       assert(files.children.length > 0, "At least one file in the root");
 
       const test = files.children.find((entry) => entry.name === "test");
       assert(test, "Should have a folder named 'test'");
-      assert(test.type === 'folder', "Child entry should be a folder")
-    })
+      assert(test.type === "folder", "Child entry should be a folder");
+    });
 
     it("Should succesfully get bucket files subpath", async () => {
-      const response = await fetch(
-        `http://localhost:8080/buckets/${bucketId}/files?path=test`,
-        {
-          headers: {
-            Authorization: `Bearer ${mockJWT}`
-          }
+      const response = await fetch(`http://localhost:8080/buckets/${bucketId}/files?path=test`, {
+        headers: {
+          Authorization: `Bearer ${mockJWT}`
         }
-      );
+      });
 
-      strictEqual(response.status, 200, "/bucket/bucket_id/files?path=path should return OK status");
+      strictEqual(
+        response.status,
+        200,
+        "/bucket/bucket_id/files?path=path should return OK status"
+      );
 
       const fileList = (await response.json()) as FileListResponse;
       console.log("/buckets/bid/files?path=path :", fileList);
@@ -248,17 +238,21 @@ await describeMspNet(
       strictEqual(fileList.files.length, 1, "File list should have exactly 1 entry");
 
       const files = fileList.files[0];
-      strictEqual(files.name, 'test', "First entry should be the folder of the path");
-      assert(files.type === 'folder', "First entry should be a folder");
+      strictEqual(files.name, "test", "First entry should be the folder of the path");
+      assert(files.type === "folder", "First entry should be a folder");
 
       assert(files.children.length > 0, "At least one file in the test folder");
 
       const whatsup = files.children.find((entry) => entry.name === "whatsup.jpg");
       assert(whatsup, "Should have a file named 'whatsup.jpg'");
 
-      assert(whatsup.type === 'file', "Child entry should be file");
-      strictEqual(whatsup.fileKey, file_key.toHex().slice(2), "Returned file key matches the one at time of creation");
-    })
+      assert(whatsup.type === "file", "Child entry should be file");
+      strictEqual(
+        whatsup.fileKey,
+        file_key.toHex().slice(2),
+        "Returned file key matches the one at time of creation"
+      );
+    });
 
     it("Should succesfully get file info by key", async () => {
       const response = await fetch(
@@ -279,6 +273,6 @@ await describeMspNet(
       strictEqual(file.bucketId, bucketId, "Should have same bucket id as queried");
 
       strictEqual(file.location, fileLocation, "Should have same location as creation");
-    })
+    });
   }
 );
