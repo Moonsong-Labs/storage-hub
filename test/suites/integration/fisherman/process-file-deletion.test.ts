@@ -19,7 +19,7 @@ import {
 import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
 import {
   waitForFishermanProcessing,
-  waitForFishermanReady
+  waitForFishermanSync
 } from "../../../util/fisherman/fishermanHelpers";
 
 /**
@@ -78,17 +78,17 @@ await describeMspNet(
       msp1Api = maybeMsp1Api;
       sql = createSqlClient();
 
-      // Ensure fisherman node is ready if available
-      if (createFishermanApi) {
-        fishermanApi = await createFishermanApi();
-        await waitForFishermanReady(userApi, fishermanApi);
-      }
-
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",
         containerName: "storage-hub-sh-user-1",
         timeout: 10000
       });
+
+      // Ensure fisherman node is ready if available
+      if (createFishermanApi) {
+        fishermanApi = await createFishermanApi();
+        await waitForFishermanSync(userApi, fishermanApi);
+      }
 
       await userApi.rpc.engine.createBlock(true, true);
 
@@ -331,6 +331,8 @@ await describeMspNet(
         await userApi.block.skipTo(currentBlockNumber + storageRequestTtl);
 
         await waitForIndexing(userApi, false);
+
+        await waitForFishermanSync(userApi, fishermanApi);
 
         // Verify delete_file_for_incomplete_storage_request extrinsic is submitted
         await userApi.assert.extrinsicPresent({

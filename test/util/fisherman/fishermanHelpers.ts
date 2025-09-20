@@ -33,7 +33,7 @@ export async function waitForFishermanProcessing(
  * @param maxInitialBlock - Maximum acceptable initial block number (default: 5)
  * @returns Promise<void>
  */
-export async function waitForFishermanReady(
+export async function waitForFishermanSync(
   userApi: EnrichedBspApi,
   fishermanApi: EnrichedBspApi
 ): Promise<void> {

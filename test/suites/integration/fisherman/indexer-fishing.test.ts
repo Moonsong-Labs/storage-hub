@@ -8,7 +8,6 @@ import {
   ShConsts,
   type SqlClient,
   shUser,
-  sleep,
   waitFor
 } from "../../../util";
 import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
@@ -26,7 +25,7 @@ import {
   waitForFileIndexed,
   waitForMspFileAssociation
 } from "../../../util/indexerHelpers";
-import { waitForFishermanReady } from "../../../util/fisherman/fishermanHelpers";
+import { waitForFishermanSync } from "../../../util/fisherman/fishermanHelpers";
 
 await describeMspNet(
   "Fisherman Indexer - Fishing Mode",
@@ -65,23 +64,20 @@ await describeMspNet(
       msp2Api = maybeMsp2Api;
       sql = createSqlClient();
 
-      // Ensure fisherman node is ready if available
-      if (createFishermanApi) {
-        fishermanApi = await createFishermanApi();
-        await waitForFishermanReady(userApi, fishermanApi);
-      }
-
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",
         containerName: "storage-hub-sh-user-1",
         timeout: 10000
       });
 
+      // Ensure fisherman node is ready if available
+      if (createFishermanApi) {
+        fishermanApi = await createFishermanApi();
+        await waitForFishermanSync(userApi, fishermanApi);
+      }
+
       await userApi.rpc.engine.createBlock(true, true);
 
-      await sleep(1000);
-
-      await waitForIndexing(userApi);
       await waitForIndexing(userApi);
     });
 
@@ -513,21 +509,13 @@ await describeMspNet(
         deletionRequestResult.events
       );
 
-      // Verify fisherman submits delete_file extrinsics
-      await waitFor({
-        lambda: async () => {
-          const deleteFileMatch = await userApi.assert.extrinsicPresent({
-            method: "deleteFile",
-            module: "fileSystem",
-            checkTxPool: true,
-            assertLength: 2
-          });
-          return deleteFileMatch.length >= 2;
-        },
-        iterations: 150,
-        delay: 100
+      await userApi.assert.extrinsicPresent({
+        method: "deleteFile",
+        module: "fileSystem",
+        checkTxPool: true,
+        assertLength: 2,
+        timeout: 30000
       });
-      assert(true, "Should find 2 delete_file extrinsics in transaction pool (BSP and MSP)");
 
       // Seal block to process the fisherman-submitted extrinsics
       const deletionResult = await userApi.block.seal();

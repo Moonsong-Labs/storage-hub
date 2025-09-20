@@ -11,7 +11,7 @@ import {
   sleep
 } from "../../../util";
 import { createBucketAndSendNewStorageRequest } from "../../../util/bspNet/fileHelpers";
-import { waitForFishermanReady } from "../../../util/fisherman/fishermanHelpers";
+import { waitForFishermanSync } from "../../../util/fisherman/fishermanHelpers";
 
 /**
  * FISHERMAN INCOMPLETE STORAGE REQUESTS WITH CATCHUP
@@ -45,18 +45,18 @@ await describeMspNet(
 
       assert(maybeMsp1Api, "MSP API not available");
 
-      // Ensure fisherman node is ready if available
-      if (createFishermanApi) {
-        fishermanApi = await createFishermanApi();
-        await waitForFishermanReady(userApi, fishermanApi);
-      }
-
       // Wait for user node to be ready
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",
         containerName: "storage-hub-sh-user-1",
         timeout: 10000
       });
+
+      // Ensure fisherman node is ready if available
+      if (createFishermanApi) {
+        fishermanApi = await createFishermanApi();
+        await waitForFishermanSync(userApi, fishermanApi);
+      }
 
       await userApi.rpc.engine.createBlock(true, true);
     });
@@ -110,6 +110,8 @@ await describeMspNet(
           .asRuntimeConfig.asStorageRequestTtl.toNumber();
 
         await userApi.block.skipTo(currentBlockNumber + storageRequestTtl, { finalised: false });
+
+        await waitForFishermanSync(userApi, fishermanApi);
 
         // No deletion should be sent for a bucket that has not been updated with this file key since the MSP did not accept it.
         // TODO: Add additional test case scenarios.
