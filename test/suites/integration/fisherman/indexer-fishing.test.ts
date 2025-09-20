@@ -26,6 +26,7 @@ import {
   waitForFileIndexed,
   waitForMspFileAssociation
 } from "../../../util/indexerHelpers";
+import { waitForFishermanReady } from "../../../util/fisherman/fishermanHelpers";
 
 await describeMspNet(
   "Fisherman Indexer - Fishing Mode",
@@ -35,11 +36,21 @@ await describeMspNet(
     fisherman: true,
     indexerMode: "fishing"
   },
-  ({ before, it, createUserApi, createBspApi, createMsp1Api, createMsp2Api, createSqlClient }) => {
+  ({
+    before,
+    it,
+    createUserApi,
+    createBspApi,
+    createMsp1Api,
+    createMsp2Api,
+    createSqlClient,
+    createFishermanApi
+  }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
     let msp1Api: EnrichedBspApi;
     let msp2Api: EnrichedBspApi;
+    let fishermanApi: EnrichedBspApi;
     let sql: SqlClient;
 
     before(async () => {
@@ -53,6 +64,12 @@ await describeMspNet(
       msp1Api = maybeMsp1Api;
       msp2Api = maybeMsp2Api;
       sql = createSqlClient();
+
+      // Ensure fisherman node is ready if available
+      if (createFishermanApi) {
+        fishermanApi = await createFishermanApi();
+        await waitForFishermanReady(userApi, fishermanApi);
+      }
 
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",

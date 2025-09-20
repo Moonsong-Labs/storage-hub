@@ -18,31 +18,6 @@ export const printDockerStatus = async (verbose = false) => {
     return;
   }
 
-  // Enhanced diagnostics for CI environment
-  if (process.env.CI === "true") {
-    const testContainers = containers.filter(
-      (container) =>
-        container.Image === DOCKER_IMAGE ||
-        container.Names.some((name) => name.includes("storage-hub-sh-")) ||
-        container.Names.some((name) => name.includes("toxiproxy")) ||
-        container.Names.some((name) => name.includes("postgres"))
-    );
-
-    console.log(`[DOCKER-DIAGNOSTICS] Total containers: ${containers.length}`);
-    console.log(`[DOCKER-DIAGNOSTICS] Test-related containers: ${testContainers.length}`);
-
-    // Breakdown by type
-    const breakdown = {
-      "storage-hub": containers.filter((c) => c.Image === DOCKER_IMAGE).length,
-      postgres: containers.filter((c) => c.Names.some((n) => n.includes("postgres"))).length,
-      fisherman: containers.filter((c) => c.Names.some((n) => n.includes("fisherman"))).length,
-      msp: containers.filter((c) => c.Names.some((n) => n.includes("msp"))).length,
-      bsp: containers.filter((c) => c.Names.some((n) => n.includes("sh-bsp"))).length,
-      user: containers.filter((c) => c.Names.some((n) => n.includes("sh-user"))).length
-    };
-    console.log("[DOCKER-DIAGNOSTICS] Container breakdown:", breakdown);
-  }
-
   if (verbose) {
     for (const container of containers) {
       console.log(`\nContainer: ${container.Names.join(", ")}`);
@@ -131,42 +106,29 @@ export const createSqlClient = () => {
   // Override the end method to remove from tracking
   const originalEnd = client.end.bind(client);
   client.end = async () => {
-    const id = clientIdMap.get(client) || "unknown";
-    console.log(`[SQL] Closing SQL client #${id}`);
     activeSqlClients.delete(client);
     clientIdMap.delete(client);
     return originalEnd();
   };
 
-  console.log(`[SQL] SQL client #${clientId} created, total active: ${activeSqlClients.size}`);
   return client;
 };
 
 export const closeAllSqlClients = async () => {
-  const count = activeSqlClients.size;
-  if (count === 0) {
-    console.log("[SQL] No SQL clients to close");
-    return;
-  }
-
-  console.log(`[SQL] Closing ${count} SQL client(s)...`);
   const clientsToClose = Array.from(activeSqlClients);
 
   await Promise.allSettled(
     clientsToClose.map(async (client) => {
       try {
-        const id = clientIdMap.get(client) || "unknown";
-        console.log(`[SQL] Attempting to close client #${id}`);
         await client.end();
       } catch (error) {
-        console.warn("[SQL] Error closing SQL client:", error);
+        console.error("Error closing SQL client:", error);
       }
     })
   );
 
   // Clear the set after attempting to close all
   activeSqlClients.clear();
-  console.log("[SQL] All SQL clients closed");
 };
 
 export const checkSHRunningContainers = async (docker: Docker) => {
@@ -175,7 +137,6 @@ export const checkSHRunningContainers = async (docker: Docker) => {
 };
 
 export const cleanupEnvironment = async (verbose = false) => {
-  console.log("[CLEANUP] Starting environment cleanup...");
   await printDockerStatus();
 
   const docker = new Docker();
@@ -236,17 +197,11 @@ export const cleanupEnvironment = async (verbose = false) => {
   });
 
   if (toxiproxyContainer) {
-    console.log("[CLEANUP] Removing toxiproxy container");
     promises.push(docker.getContainer(toxiproxyContainer.Id).remove({ force: true }));
-  } else {
-    verbose && console.log("[CLEANUP] No toxiproxy container found, skipping");
   }
 
   if (postgresContainer) {
-    console.log("[CLEANUP] Stopping postgres container");
     promises.push(docker.getContainer(postgresContainer.Id).remove({ force: true }));
-  } else {
-    verbose && console.log("[CLEANUP] No postgres container found, skipping");
   }
 
   if (copypartyContainers.length > 0) {
@@ -254,35 +209,27 @@ export const cleanupEnvironment = async (verbose = false) => {
     for (const container of copypartyContainers) {
       promises.push(docker.getContainer(container.Id).remove({ force: true }));
     }
-  } else {
-    verbose && console.log("No copyparty containers found, skipping");
   }
 
   if (backendContainer) {
     console.log("Stopping backend container");
     promises.push(docker.getContainer(backendContainer.Id).remove({ force: true }));
-  } else {
-    verbose && console.log("No backend container found, skipping");
   }
-
-  console.log(`[CLEANUP] Removing ${promises.length} container(s)...`);
 
   // Use allSettled to handle individual container removal failures
   const results = await Promise.allSettled(promises);
   const failedRemovals = results.filter((r) => r.status === "rejected");
 
   if (failedRemovals.length > 0) {
-    console.error(`[CLEANUP] ${failedRemovals.length} container removals failed`);
+    console.error(`${failedRemovals.length} container removals failed`);
     failedRemovals.forEach((failure: any) => {
-      console.error(`[CLEANUP] Removal error: ${failure.reason?.message || failure.reason}`);
+      console.error(`Removal error: ${failure.reason?.message || failure.reason}`);
     });
   }
 
-  console.log("[CLEANUP] Pruning containers and volumes...");
   await docker.pruneContainers();
   await docker.pruneVolumes();
 
-  console.log("[CLEANUP] Verifying all containers removed...");
   for (let i = 0; i < 10; i++) {
     allContainers = await docker.listContainers({ all: true });
 
@@ -303,15 +250,11 @@ export const cleanupEnvironment = async (verbose = false) => {
 
     if (remainingNodes.length === 0) {
       await printDockerStatus();
-      console.log("[CLEANUP] All nodes verified to be removed");
-      console.log("[CLEANUP] Environment cleanup complete");
       return;
     }
 
     if (i === 9) {
-      console.error(
-        `[CLEANUP] Failed after 10 attempts, ${remainingNodes.length} containers still present:`
-      );
+      console.error(`Failed after 10 attempts, ${remainingNodes.length} containers still present:`);
       remainingNodes.forEach((c) => {
         console.error(`  - ${c.Names.join(",")} (Image: ${c.Image}, State: ${c.State})`);
       });
@@ -324,7 +267,6 @@ export const cleanupEnvironment = async (verbose = false) => {
 };
 
 export const cleanupFishermanTestContainers = async () => {
-  console.log("[FISHERMAN-CLEANUP] Starting comprehensive fisherman test cleanup...");
   const docker = new Docker();
 
   // Get all containers
@@ -352,19 +294,9 @@ export const cleanupFishermanTestContainers = async () => {
     return nameMatch || imageMatch;
   });
 
-  if (testContainers.length === 0) {
-    console.log("[FISHERMAN-CLEANUP] No test containers found");
-    return;
-  }
-
-  console.log(`[FISHERMAN-CLEANUP] Found ${testContainers.length} test containers to remove`);
   testContainers.forEach((c) => {
     console.log(`  - ${c.Names.join(",")} (Image: ${c.Image}, State: ${c.State})`);
   });
-
-  // Process removals sequentially to avoid conflicts
-  let successCount = 0;
-  let failureCount = 0;
 
   for (const containerInfo of testContainers) {
     const container = docker.getContainer(containerInfo.Id);
@@ -373,33 +305,20 @@ export const cleanupFishermanTestContainers = async () => {
     try {
       // First try to stop if running or paused
       if (containerInfo.State === "running" || containerInfo.State === "paused") {
-        console.log(`[FISHERMAN-CLEANUP] Stopping ${containerName}...`);
         try {
           await container.stop({ t: 5 });
         } catch (stopError: any) {
           // Ignore stop errors, proceed to remove
           if (!stopError.message?.includes("not running")) {
-            console.warn(
-              `[FISHERMAN-CLEANUP] Stop warning for ${containerName}: ${stopError.message}`
-            );
+            console.warn(`Stop warning for ${containerName}: ${stopError.message}`);
           }
         }
       }
 
-      // Then remove the container
-      console.log(`[FISHERMAN-CLEANUP] Removing ${containerName}...`);
       await container.remove({ force: true });
-      successCount++;
     } catch (error: any) {
-      failureCount++;
-      console.error(`[FISHERMAN-CLEANUP] Failed to remove ${containerName}: ${error.message}`);
+      console.error(`Failed to remove ${containerName}: ${error.message}`);
     }
-  }
-
-  console.log(`[FISHERMAN-CLEANUP] Removed ${successCount}/${testContainers.length} containers`);
-
-  if (failureCount > 0) {
-    console.error(`[FISHERMAN-CLEANUP] Failed to remove ${failureCount} containers`);
   }
 
   // Verify cleanup
@@ -420,13 +339,9 @@ export const cleanupFishermanTestContainers = async () => {
   });
 
   if (stillPresent.length > 0) {
-    console.error(
-      `[FISHERMAN-CLEANUP] WARNING: ${stillPresent.length} containers still present after cleanup:`
-    );
     stillPresent.forEach((c) => {
       console.error(`  - ${c.Names.join(",")} (State: ${c.State})`);
     });
     throw new Error(`Fisherman test cleanup incomplete: ${stillPresent.length} containers remain`);
   }
-  console.log("[FISHERMAN-CLEANUP] Verified: All test containers successfully removed");
 };

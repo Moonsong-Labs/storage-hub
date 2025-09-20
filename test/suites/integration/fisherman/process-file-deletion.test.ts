@@ -17,7 +17,10 @@ import {
   waitForBspFileAssociation
 } from "../../../util/indexerHelpers";
 import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
-import { waitForFishermanProcessing } from "../../../util/fisherman/fishermanHelpers";
+import {
+  waitForFishermanProcessing,
+  waitForFishermanReady
+} from "../../../util/fisherman/fishermanHelpers";
 
 /**
  * FISHERMAN PROCESS FILE DELETION - COMPREHENSIVE EVENT PROCESSING
@@ -51,10 +54,19 @@ await describeMspNet(
     fisherman: true,
     indexerMode: "fishing"
   },
-  ({ before, it, createUserApi, createBspApi, createMsp1Api, createSqlClient }) => {
+  ({
+    before,
+    it,
+    createUserApi,
+    createBspApi,
+    createMsp1Api,
+    createSqlClient,
+    createFishermanApi
+  }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
     let msp1Api: EnrichedBspApi;
+    let fishermanApi: EnrichedBspApi;
     let sql: SqlClient;
 
     before(async () => {
@@ -65,6 +77,12 @@ await describeMspNet(
       assert(maybeMsp1Api, "MSP API not available");
       msp1Api = maybeMsp1Api;
       sql = createSqlClient();
+
+      // Ensure fisherman node is ready if available
+      if (createFishermanApi) {
+        fishermanApi = await createFishermanApi();
+        await waitForFishermanReady(userApi, fishermanApi);
+      }
 
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",

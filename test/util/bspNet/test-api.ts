@@ -127,7 +127,6 @@ export class BspNetTestApi implements AsyncDisposable {
   public static async connect(endpoint: `ws://${string}` | `wss://${string}`) {
     // Add timeout for CI environments to prevent indefinite hangs after multiple test runs
     const connectionTimeout = process.env.CI === "true" ? 30000 : 60000; // 30s in CI, 60s locally
-    const startTime = Date.now();
 
     const apiPromise = ApiPromise.create({
       provider: new WsProvider(endpoint),
@@ -142,14 +141,7 @@ export class BspNetTestApi implements AsyncDisposable {
     let timeoutId: NodeJS.Timeout | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutId = setTimeout(() => {
-        const elapsed = Date.now() - startTime;
-        console.error(`[API-CONNECT] ❌ Connection to ${endpoint} timed out after ${elapsed}ms`);
-        console.error("[API-CONNECT] This may indicate resource exhaustion in CI.");
-        reject(
-          new Error(
-            `Connection to ${endpoint} timed out after ${connectionTimeout}ms. This may indicate resource exhaustion in CI.`
-          )
-        );
+        reject(new Error(`Connection to ${endpoint} timed out after ${connectionTimeout}ms.`));
       }, connectionTimeout);
     });
 

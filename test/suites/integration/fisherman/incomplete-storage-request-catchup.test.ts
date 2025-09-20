@@ -11,6 +11,7 @@ import {
   sleep
 } from "../../../util";
 import { createBucketAndSendNewStorageRequest } from "../../../util/bspNet/fileHelpers";
+import { waitForFishermanReady } from "../../../util/fisherman/fishermanHelpers";
 
 /**
  * FISHERMAN INCOMPLETE STORAGE REQUESTS WITH CATCHUP
@@ -32,18 +33,25 @@ await describeMspNet(
     fisherman: true,
     indexerMode: "fishing"
   },
-  ({ before, it, createUserApi, createBspApi, createMsp1Api }) => {
+  ({ before, it, createUserApi, createBspApi, createMsp1Api, createFishermanApi }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
+    let fishermanApi: EnrichedBspApi;
 
     before(async () => {
       userApi = await createUserApi();
-
       bspApi = await createBspApi();
       const maybeMsp1Api = await createMsp1Api();
 
       assert(maybeMsp1Api, "MSP API not available");
 
+      // Ensure fisherman node is ready if available
+      if (createFishermanApi) {
+        fishermanApi = await createFishermanApi();
+        await waitForFishermanReady(userApi, fishermanApi);
+      }
+
+      // Wait for user node to be ready
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",
         containerName: "storage-hub-sh-user-1",
@@ -103,19 +111,13 @@ await describeMspNet(
 
         await userApi.block.skipTo(currentBlockNumber + storageRequestTtl, { finalised: false });
 
-        // Verify only one delete extrinsic is submitted (for the BSP)
-        await waitFor({
-          lambda: async () => {
-            const deleteFileMatch = await userApi.assert.extrinsicPresent({
-              method: "deleteFileForIncompleteStorageRequest",
-              module: "fileSystem",
-              checkTxPool: true,
-              assertLength: 1
-            });
-            return deleteFileMatch.length >= 1;
-          },
-          iterations: 300,
-          delay: 100
+        // No deletion should be sent for a bucket that has not been updated with this file key since the MSP did not accept it.
+        // TODO: Add additional test case scenarios.
+        await userApi.assert.extrinsicPresent({
+          method: "deleteFileForIncompleteStorageRequest",
+          module: "fileSystem",
+          checkTxPool: true,
+          assertLength: 1
         });
 
         // Seal block to process the extrinsic
