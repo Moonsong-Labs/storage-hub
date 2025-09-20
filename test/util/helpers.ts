@@ -80,9 +80,6 @@ const clientIdMap = new WeakMap<postgres.Sql<{}>, number>();
 
 export const createSqlClient = () => {
   const clientId = ++sqlClientCounter;
-  console.log(
-    `[SQL] Creating SQL client #${clientId}, active clients before: ${activeSqlClients.size}`
-  );
 
   const client = postgres({
     host: "localhost",
@@ -95,13 +92,6 @@ export const createSqlClient = () => {
   // Track the client for cleanup
   activeSqlClients.add(client);
   clientIdMap.set(client, clientId);
-
-  // Warn if too many connections
-  if (activeSqlClients.size > 5) {
-    console.warn(
-      `[SQL] WARNING: ${activeSqlClients.size} SQL connections are active! This may cause connection pool exhaustion.`
-    );
-  }
 
   // Override the end method to remove from tracking
   const originalEnd = client.end.bind(client);
@@ -162,12 +152,6 @@ export const cleanupEnvironment = async (verbose = false) => {
   );
 
   const tmpDir = tmp.dirSync({ prefix: "bsp-logs-", unsafeCleanup: true });
-
-  if (existingNodes.length > 0) {
-    console.log(
-      `[CLEANUP] Extracting logs from ${existingNodes.length} storage-hub container(s)...`
-    );
-  }
 
   const logPromises = existingNodes.map(async (node) => {
     const container = docker.getContainer(node.Id);
