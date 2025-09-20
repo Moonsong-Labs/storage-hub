@@ -184,18 +184,12 @@ await describeMspNet(
       await waitForIndexing(userApi, false);
 
       // Verify delete_file extrinsics are submitted
-      await waitFor({
-        lambda: async () => {
-          const deleteFileMatch = await userApi.assert.extrinsicPresent({
-            method: "deleteFile",
-            module: "fileSystem",
-            checkTxPool: true,
-            assertLength: 2
-          });
-          return deleteFileMatch.length >= 2;
-        },
-        iterations: 300,
-        delay: 100
+      await userApi.assert.extrinsicPresent({
+        method: "deleteFile",
+        module: "fileSystem",
+        checkTxPool: true,
+        assertLength: 2,
+        timeout: 30000
       });
 
       // Seal block to process the extrinsics
@@ -339,18 +333,12 @@ await describeMspNet(
         await waitForIndexing(userApi, false);
 
         // Verify delete_file_for_incomplete_storage_request extrinsic is submitted
-        await waitFor({
-          lambda: async () => {
-            const deleteFileMatch = await userApi.assert.extrinsicPresent({
-              method: "deleteFileForIncompleteStorageRequest",
-              module: "fileSystem",
-              checkTxPool: true,
-              assertLength: 1
-            });
-            return deleteFileMatch.length >= 1;
-          },
-          iterations: 300,
-          delay: 100
+        await userApi.assert.extrinsicPresent({
+          method: "deleteFileForIncompleteStorageRequest",
+          module: "fileSystem",
+          checkTxPool: true,
+          assertLength: 1,
+          timeout: 30000
         });
 
         // Seal block to process the extrinsic
@@ -427,18 +415,12 @@ await describeMspNet(
       assert(incompleteProcessingFound, "Should find fisherman processing incomplete storage");
 
       // Verify 2 extrsinsics submitted for each MSP and BSP
-      await waitFor({
-        lambda: async () => {
-          const deleteFileMatch = await userApi.assert.extrinsicPresent({
-            method: "deleteFileForIncompleteStorageRequest",
-            module: "fileSystem",
-            checkTxPool: true,
-            assertLength: 2
-          });
-          return deleteFileMatch.length >= 2;
-        },
-        iterations: 300,
-        delay: 100
+      await userApi.assert.extrinsicPresent({
+        method: "deleteFileForIncompleteStorageRequest",
+        module: "fileSystem",
+        checkTxPool: true,
+        assertLength: 2,
+        timeout: 30000
       });
 
       // Seal block to process the extrinsic
@@ -588,18 +570,12 @@ await describeMspNet(
       await waitForIndexing(userApi, false);
 
       // Verify TWO delete_file extrinsics are submitted (one for BSP and one for MSP)
-      await waitFor({
-        lambda: async () => {
-          const deleteFileMatch = await userApi.assert.extrinsicPresent({
-            method: "deleteFile",
-            module: "fileSystem",
-            checkTxPool: true,
-            assertLength: 2
-          });
-          return deleteFileMatch.length >= 2;
-        },
-        iterations: 300,
-        delay: 100
+      await userApi.assert.extrinsicPresent({
+        method: "deleteFile",
+        module: "fileSystem",
+        checkTxPool: true,
+        assertLength: 2,
+        timeout: 30000
       });
 
       // Seal block to process the extrinsics
@@ -758,18 +734,12 @@ await describeMspNet(
       await waitForIndexing(userApi, false);
 
       // Verify 2 delete extrinsics are submitted (bucket and BSP)
-      await waitFor({
-        lambda: async () => {
-          const deleteFileMatch = await userApi.assert.extrinsicPresent({
-            method: "deleteFileForIncompleteStorageRequest",
-            module: "fileSystem",
-            checkTxPool: true,
-            assertLength: 2
-          });
-          return deleteFileMatch.length >= 2;
-        },
-        iterations: 300,
-        delay: 100
+      await userApi.assert.extrinsicPresent({
+        method: "deleteFileForIncompleteStorageRequest",
+        module: "fileSystem",
+        checkTxPool: true,
+        assertLength: 2,
+        timeout: 30000
       });
 
       // Seal block to process the extrinsics
