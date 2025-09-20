@@ -9,7 +9,7 @@ import type postgres from "postgres";
 import type { NetworkLauncher } from "../netLaunch";
 import type { BspNetTestApi } from "./test-api";
 
-// biome-ignore lint/complexity/noBannedTypes: Good enough untill we integrate ORM
+// biome-ignore lint/complexity/noBannedTypes: Good enough until we integrate ORM
 export type SqlClient = postgres.Sql<{}>;
 
 /**
@@ -488,4 +488,10 @@ export type BspStoredOptions = {
    * Defaults to true if not specified.
    */
   sealBlock?: boolean;
+
+  /**
+   * Whether to finalize the block after sealing.
+   * Defaults to true if not specified.
+   */
+  finalizeBlock?: boolean;
 };

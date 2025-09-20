@@ -1,11 +1,12 @@
 use codec::Decode;
 use futures::stream::{self, StreamExt};
-use log::{debug, error, info, warn};
+use log::{debug, error, info, trace, warn};
 use pallet_file_system_runtime_api::FileSystemApi;
 use sc_client_api::{BlockImportNotification, BlockchainEvents, HeaderBackend};
 use shc_common::types::{FileOperation, OpaqueBlock, StorageEnableEvents};
 use shc_common::{blockchain_utils::get_events_at_block, traits::StorageEnableRuntime};
 use sp_api::ProvideRuntimeApi;
+use sp_core::H256;
 use sp_runtime::traits::{Header, One, SaturatedConversion, Saturating};
 use std::{collections::HashMap, sync::Arc};
 
@@ -62,6 +63,71 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
         }
     }
 
+    /// Query incomplete storage request metadata using runtime API
+    fn query_incomplete_storage_request(
+        &self,
+        file_key: H256,
+    ) -> Result<
+        pallet_file_system_runtime_api::IncompleteStorageRequestMetadataResponse<
+            Runtime::AccountId,
+            shc_common::types::BucketId<Runtime>,
+            shc_common::types::StorageDataUnit<Runtime>,
+            Runtime::Hash,
+            shc_common::types::BackupStorageProviderId<Runtime>,
+        >,
+        FishermanServiceError,
+    > {
+        trace!(
+            target: LOG_TARGET,
+            "🎣 Querying incomplete storage request for file key: {:?}",
+            file_key
+        );
+
+        // Get the best block hash
+        let best_block_hash = self.client.info().best_hash;
+        trace!(
+            target: LOG_TARGET,
+            "🎣 Using best block hash: {:?}",
+            best_block_hash
+        );
+
+        // Use runtime API to query the metadata (decoding happens in runtime context with externalities)
+        let metadata = self
+            .client
+            .runtime_api()
+            .query_incomplete_storage_request_metadata(best_block_hash, file_key)
+            .map_err(|e| {
+                trace!(
+                    target: LOG_TARGET,
+                    "🎣 Runtime API error: {:?}",
+                    e
+                );
+                FishermanServiceError::Client(format!("Runtime API error: {:?}", e))
+            })?
+            .map_err(|e| {
+                trace!(
+                    target: LOG_TARGET,
+                    "🎣 Failed to query incomplete storage request: {:?}",
+                    e
+                );
+                match e {
+                    pallet_file_system_runtime_api::QueryIncompleteStorageRequestMetadataError::StorageNotFound => {
+                        FishermanServiceError::StorageNotFound
+                    }
+                    _ => FishermanServiceError::Client(format!("Failed to query metadata: {:?}", e))
+                }
+            })?;
+
+        trace!(
+            target: LOG_TARGET,
+            "🎣 Successfully retrieved IncompleteStorageRequestMetadata: pending_bucket_removal={}, pending_bsp_removals count={}",
+            metadata.pending_bucket_removal,
+            metadata.pending_bsp_removals.len()
+        );
+
+        Ok(metadata)
+    }
+
     /// Monitor new blocks for file deletion request events
     async fn monitor_block(
         &mut self,
@@ -107,41 +173,11 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                     self.emit(event);
                 }
                 StorageEnableEvents::FileSystem(
-                    pallet_file_system::Event::StorageRequestExpired { file_key },
+                    pallet_file_system::Event::IncompleteStorageRequest { file_key },
                 ) => {
                     info!(
                         target: LOG_TARGET,
-                        "🎣 Found StorageRequestExpired event for file key: {:?}",
-                        file_key
-                    );
-
-                    let event = crate::events::ProcessIncompleteStorageRequest {
-                        file_key: file_key.into(),
-                    };
-
-                    self.emit(event);
-                }
-                StorageEnableEvents::FileSystem(
-                    pallet_file_system::Event::StorageRequestRevoked { file_key },
-                ) => {
-                    info!(
-                        target: LOG_TARGET,
-                        "🎣 Found StorageRequestRevoked event for file key: {:?}",
-                        file_key
-                    );
-
-                    let event = crate::events::ProcessIncompleteStorageRequest {
-                        file_key: file_key.into(),
-                    };
-
-                    self.emit(event);
-                }
-                StorageEnableEvents::FileSystem(
-                    pallet_file_system::Event::StorageRequestRejected { file_key, .. },
-                ) => {
-                    info!(
-                        target: LOG_TARGET,
-                        "🎣 Found StorageRequestRejected event for file key: {:?}",
+                        "🎣 Found IncompleteStorageRequest event for file key: {:?}",
                         file_key
                     );
 
@@ -237,7 +273,6 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                         FileDeletionTarget::BucketId(target_bucket_id),
                     ) => {
                         self.process_msp_bucket_mutations(
-                            &block_hash,
                             &mutations,
                             &target_bucket_id,
                             event_info,
@@ -261,7 +296,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
             })
             .collect();
 
-        info!(
+        trace!(
             target: LOG_TARGET,
             "🎣 Found {} file key changes for provider {:?} between blocks {} and {}",
             changes.len(),
@@ -314,7 +349,6 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
     /// Process MSP/bucket mutations from MutationsApplied events
     fn process_msp_bucket_mutations(
         &self,
-        block_hash: &Runtime::Hash,
         mutations: &[(Hash, shc_common::types::TrieMutation)],
         target_bucket_id: &shc_common::types::BucketId<Runtime>,
         event_info: Option<Vec<u8>>,
@@ -329,29 +363,17 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
             return;
         };
 
-        // Decode bucket ID from event info
-        let bucket_id = match self
-            .client
-            .runtime_api()
-            .decode_generic_apply_delta_event_info(*block_hash, event_info)
-            .map_err(|e| {
+        // Decode bucket ID directly from event info
+        let bucket_id = match shc_common::types::BucketId::<Runtime>::decode(&mut &event_info[..]) {
+            Ok(bucket_id) => bucket_id,
+            Err(e) => {
                 error!(
                     target: LOG_TARGET,
-                    "Error while calling runtime API to decode BucketId from event info: {:?}",
+                    "Failed to decode BucketId from event info: {:?}",
                     e
                 );
-            })
-            .and_then(|res| {
-                res.map_err(|e| {
-                    error!(
-                        target: LOG_TARGET,
-                        "Failed to decode BucketId from event info: {:?}",
-                        e
-                    );
-                })
-            }) {
-            Ok(bucket_id) => bucket_id,
-            Err(_) => return,
+                return;
+            }
         };
 
         // Check if bucket ID matches the target bucket
@@ -433,6 +455,23 @@ impl<Runtime: StorageEnableRuntime> Actor for FishermanService<Runtime> {
                         );
                     }
                 }
+                FishermanServiceCommand::QueryIncompleteStorageRequest { file_key, callback } => {
+                    debug!(
+                        target: LOG_TARGET,
+                        "🎣 QueryIncompleteStorageRequest for file key {:?}",
+                        file_key
+                    );
+
+                    let result = self.query_incomplete_storage_request(file_key);
+
+                    // Send the result back through the callback
+                    if let Err(_) = callback.send(result) {
+                        warn!(
+                            target: LOG_TARGET,
+                            "Failed to send QueryIncompleteStorageRequest response - receiver dropped"
+                        );
+                    }
+                }
             }
         }
     }
@@ -497,7 +536,7 @@ impl<Runtime: StorageEnableRuntime> ActorEventLoop<FishermanService<Runtime>>
 
                             // Only process new best blocks
                             if !notification.is_new_best {
-                                return;
+                                continue;
                             }
 
                             if let Err(e) = self

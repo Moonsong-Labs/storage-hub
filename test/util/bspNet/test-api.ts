@@ -45,7 +45,9 @@ import * as Waits from "./waits";
  * @param module - The module name of the event.
  * @param method - The method name of the event.
  * @param checkQuantity - Optional. The number of expected extrinsics.
+ * @param strictQuantity - Optional. Whether to strictly check the quantity of extrinsics.
  * @param shouldSeal - Optional. Whether to seal a block after waiting for the transaction.
+ * @param finalizeBlock - Optional. Whether to finalize a block after waiting for the transaction.
  * @param expectedEvent - Optional. The expected event to wait for.
  * @param iterations - Optional. The number of iterations to wait for the transaction.
  * @param delay - Optional. The delay between iterations.
@@ -57,6 +59,7 @@ export interface WaitForTxOptions {
   checkQuantity?: number;
   strictQuantity?: boolean;
   shouldSeal?: boolean;
+  finalizeBlock?: boolean;
   expectedEvent?: string;
   timeout?: number;
   verbose?: boolean;
@@ -122,7 +125,10 @@ export class BspNetTestApi implements AsyncDisposable {
    * @returns A promise that resolves to an ApiPromise with async disposal.
    */
   public static async connect(endpoint: `ws://${string}` | `wss://${string}`) {
-    const api = await ApiPromise.create({
+    // Add timeout for CI environments to prevent indefinite hangs after multiple test runs
+    const connectionTimeout = process.env.CI === "true" ? 30000 : 60000; // 30s in CI, 60s locally
+
+    const apiPromise = ApiPromise.create({
       provider: new WsProvider(endpoint),
       isPedantic: false,
       noInitWarn: true,
@@ -130,11 +136,35 @@ export class BspNetTestApi implements AsyncDisposable {
       throwOnUnknown: false,
       typesBundle: BundledTypes
     });
-    return Object.assign(api, {
-      [Symbol.asyncDispose]: async () => {
-        await api.disconnect();
-      }
+
+    // Create a timeout that we can cancel
+    let timeoutId: NodeJS.Timeout | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new Error(`Connection to ${endpoint} timed out after ${connectionTimeout}ms.`));
+      }, connectionTimeout);
     });
+
+    try {
+      const api = await Promise.race([apiPromise, timeoutPromise]);
+      // Clear the timeout since we succeeded
+      if (timeoutId) clearTimeout(timeoutId);
+      return Object.assign(api, {
+        [Symbol.asyncDispose]: async () => {
+          await api.disconnect();
+        }
+      });
+    } catch (error) {
+      // Clear timeout on error too
+      if (timeoutId) clearTimeout(timeoutId);
+      // If we created a connection but it timed out, clean it up
+      apiPromise
+        .then((api) => {
+          return api.disconnect();
+        })
+        .catch(() => {});
+      throw error;
+    }
   }
 
   private async disconnect() {
@@ -250,9 +280,11 @@ export class BspNetTestApi implements AsyncDisposable {
       /**
        * Waits for a BSP to volunteer for a storage request.
        * @param expectedExts - Optional param to specify the number of expected extrinsics.
+       * @param finalizeBlock - Optional param to specify whether to finalize the block after volunteering.
        * @returns A promise that resolves when a BSP has volunteered.
        */
-      bspVolunteer: (expectedExts?: number) => Waits.waitForBspVolunteer(this._api, expectedExts),
+      bspVolunteer: (expectedExts?: number, finalizeBlock?: boolean) =>
+        Waits.waitForBspVolunteer(this._api, expectedExts, finalizeBlock),
 
       /**
        * Waits for a BSP to submit to the tx pool the extrinsic to volunteer for a storage request.
@@ -275,7 +307,8 @@ export class BspNetTestApi implements AsyncDisposable {
           expectedExts: undefined,
           bspAccount: undefined,
           timeoutMs: undefined,
-          sealBlock: true
+          sealBlock: true,
+          finalizeBlock: true
         }
       ) =>
         Waits.waitForBspStored(
@@ -283,7 +316,8 @@ export class BspNetTestApi implements AsyncDisposable {
           options.expectedExts,
           options.bspAccount,
           options.timeoutMs,
-          options.sealBlock
+          options.sealBlock,
+          options.finalizeBlock
         ),
 
       /**
@@ -354,8 +388,8 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param expectedExts - Optional param to specify the number of expected extrinsics.
        * @returns A promise that resolves when a MSP has submitted to the tx pool the extrinsic to respond to storage requests.
        */
-      mspResponseInTxPool: (expectedExts?: number) =>
-        Waits.waitForMspResponseWithoutSealing(this._api, expectedExts),
+      mspResponseInTxPool: (expectedExts?: number, timeoutMs?: number) =>
+        Waits.waitForMspResponseWithoutSealing(this._api, expectedExts, timeoutMs),
 
       /**
        * Waits for a block where the given address has no pending extrinsics.

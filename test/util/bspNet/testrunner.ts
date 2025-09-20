@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { after, afterEach, before, beforeEach, describe, it } from "node:test";
-import { createSqlClient, verifyContainerFreshness } from "..";
+import { createSqlClient, verifyContainerFreshness, closeAllSqlClients } from "..";
 import { NetworkLauncher } from "../netLaunch";
 import * as ShConsts from "./consts";
 import { cleardownTest } from "./helpers";
@@ -76,8 +76,23 @@ export async function describeBspNet<
       });
 
       after(async () => {
+        // First close all SQL clients to free database connections
+        await closeAllSqlClients();
+
+        const apis: EnrichedBspApi[] = [];
+
+        // Only try to resolve APIs if they were actually created
+        if (userApiPromise) {
+          const api = await userApiPromise;
+          if (api) apis.push(api);
+        }
+        if (bspApiPromise) {
+          const api = await bspApiPromise;
+          if (api) apis.push(api);
+        }
+
         await cleardownTest({
-          api: [await userApiPromise, await bspApiPromise],
+          api: apis,
           keepNetworkAlive: options?.keepAlive
         });
 
@@ -172,18 +187,41 @@ export async function describeMspNet<
             `ws://127.0.0.1:${ShConsts.NODE_INFOS.fisherman.port}`
           );
         }
+
+        console.log();
       });
 
       after(async () => {
-        const apis = [
-          await userApiPromise,
-          await bspApiPromise,
-          await msp1ApiPromise,
-          await msp2ApiPromise
-        ];
+        // First close all SQL clients to free database connections
+        await closeAllSqlClients();
 
+        // Add a small delay for CI to allow connections to close properly
+        if (process.env.CI === "true" && fullNetConfig.fisherman) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+
+        const apis: EnrichedBspApi[] = [];
+
+        // Only try to resolve APIs if they were actually created
+        if (userApiPromise) {
+          const api = await userApiPromise;
+          if (api) apis.push(api);
+        }
+        if (bspApiPromise) {
+          const api = await bspApiPromise;
+          if (api) apis.push(api);
+        }
+        if (msp1ApiPromise) {
+          const api = await msp1ApiPromise;
+          if (api) apis.push(api);
+        }
+        if (msp2ApiPromise) {
+          const api = await msp2ApiPromise;
+          if (api) apis.push(api);
+        }
         if (fishermanApiPromise) {
-          apis.push(await fishermanApiPromise);
+          const api = await fishermanApiPromise;
+          if (api) apis.push(api);
         }
 
         await cleardownTest({

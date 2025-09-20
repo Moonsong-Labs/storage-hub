@@ -965,7 +965,7 @@ declare const _default: {
         signedDeleteIntention: string;
         signature: string;
       };
-      MspFileDeletionCompleted: {
+      BucketFileDeletionCompleted: {
         user: string;
         fileKey: string;
         fileSize: string;
@@ -984,7 +984,10 @@ declare const _default: {
       };
       FileDeletedFromIncompleteStorageRequest: {
         fileKey: string;
-        providerId: string;
+        bspId: string;
+      };
+      IncompleteStorageRequest: {
+        fileKey: string;
       };
     };
   };
@@ -2495,12 +2498,12 @@ declare const _default: {
         location: string;
         size_: string;
         fingerprint: string;
-        providerId: string;
+        bspId: string;
         forestProof: string;
       };
       delete_file_for_incomplete_storage_request: {
         fileKey: string;
-        providerId: string;
+        bspId: string;
         forestProof: string;
       };
     };
@@ -3167,16 +3170,13 @@ declare const _default: {
    * Lookup353: pallet_file_system::types::IncompleteStorageRequestMetadata<T>
    **/
   PalletFileSystemIncompleteStorageRequestMetadata: {
-    _alias: {
-      size_: string;
-    };
     owner: string;
     bucketId: string;
     location: string;
-    size_: string;
+    fileSize: string;
     fingerprint: string;
     pendingBspRemovals: string;
-    pendingMspRemoval: string;
+    pendingBucketRemoval: string;
   };
   /**
    * Lookup355: pallet_file_system::pallet::Error<T>

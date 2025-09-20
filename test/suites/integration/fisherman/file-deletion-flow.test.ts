@@ -1,20 +1,21 @@
-import assert, { notEqual, strictEqual } from "node:assert";
+import assert, { strictEqual, notEqual } from "node:assert";
 import {
-  assertEventPresent,
-  bspKey,
   describeMspNet,
   type EnrichedBspApi,
   type SqlClient,
   shUser,
-  waitFor
+  bspKey,
+  waitFor,
+  assertEventPresent
 } from "../../../util";
-import { waitForDeleteFileExtrinsic } from "../../../util/fisherman/fishermanHelpers";
-import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
+import { createBucketAndSendNewStorageRequest } from "../../../util/bspNet/fileHelpers";
 import {
-  waitForBspFileAssociation,
   waitForFileIndexed,
-  waitForMspFileAssociation
+  waitForMspFileAssociation,
+  waitForBspFileAssociation
 } from "../../../util/indexerHelpers";
+import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
+import { waitForFishermanSync } from "../../../util/fisherman/fishermanHelpers";
 
 /**
  * FISHERMAN FILE DELETION FLOW - BASIC HAPPY PATH
@@ -47,10 +48,19 @@ await describeMspNet(
     fisherman: true,
     indexerMode: "fishing"
   },
-  ({ before, it, createUserApi, createBspApi, createMsp1Api, createSqlClient }) => {
+  ({
+    before,
+    it,
+    createUserApi,
+    createBspApi,
+    createMsp1Api,
+    createSqlClient,
+    createFishermanApi
+  }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
     let msp1Api: EnrichedBspApi;
+    let fishermanApi: EnrichedBspApi;
     let sql: SqlClient;
     let fileKey: string;
     let bucketId: string;
@@ -73,6 +83,12 @@ await describeMspNet(
         timeout: 10000
       });
 
+      // Ensure fisherman node is ready if available
+      if (createFishermanApi) {
+        fishermanApi = await createFishermanApi();
+        await waitForFishermanSync(userApi, fishermanApi);
+      }
+
       await userApi.rpc.engine.createBlock(true, true);
 
       await waitForIndexing(userApi);
@@ -87,14 +103,16 @@ await describeMspNet(
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
       const valuePropId = valueProps[0].id;
 
-      const fileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(
+      const fileMetadata = await createBucketAndSendNewStorageRequest(
+        userApi,
         source,
         destination,
         bucketName,
+        null,
         valuePropId,
         mspId,
-        null,
-        1
+        1,
+        true
       );
 
       fileKey = fileMetadata.fileKey;
@@ -172,22 +190,35 @@ await describeMspNet(
       await waitForIndexing(userApi, false);
 
       // Verify delete_file extrinsics are submitted
-      const deleteFileFound = await waitForDeleteFileExtrinsic(userApi, 2, 30000);
-      assert(
-        deleteFileFound,
-        "Should find 2 delete_file extrinsics in transaction pool (BSP and MSP)"
-      );
+      await waitFor({
+        lambda: async () => {
+          const deleteFileMatch = await userApi.assert.extrinsicPresent({
+            method: "deleteFile",
+            module: "fileSystem",
+            checkTxPool: true,
+            assertLength: 2
+          });
+          return deleteFileMatch.length >= 2;
+        },
+        iterations: 300,
+        delay: 100
+      });
 
       // Seal block to process the extrinsics
       const deletionResult = await userApi.block.seal();
 
       // Verify both deletion completion events
-      assertEventPresent(userApi, "fileSystem", "MspFileDeletionCompleted", deletionResult.events);
+      assertEventPresent(
+        userApi,
+        "fileSystem",
+        "BucketFileDeletionCompleted",
+        deletionResult.events
+      );
       assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", deletionResult.events);
 
       // Extract deletion events to verify root changes
       const mspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.MspFileDeletionCompleted,
+        userApi.events.fileSystem.BucketFileDeletionCompleted,
         deletionResult.events
       );
       const bspDeletionEvent = userApi.assert.fetchEvent(

@@ -163,6 +163,17 @@ export interface IncompleteFileStatus extends Struct {
   readonly total_chunks: u64;
 }
 
+/** @name IncompleteStorageRequestMetadataResponse */
+export interface IncompleteStorageRequestMetadataResponse extends Struct {
+  readonly owner: AccountId;
+  readonly bucket_id: BucketId;
+  readonly location: Bytes;
+  readonly file_size: StorageDataUnit;
+  readonly fingerprint: H256;
+  readonly pending_bsp_removals: Vec<BackupStorageProviderId>;
+  readonly pending_bucket_removal: bool;
+}
+
 /** @name IsStorageRequestOpenToVolunteersError */
 export interface IsStorageRequestOpenToVolunteersError extends Enum {
   readonly isStorageRequestNotFound: boolean;
@@ -252,6 +263,13 @@ export interface QueryFileEarliestVolunteerBlockError extends Enum {
     | "ThresholdArithmeticError"
     | "StorageRequestNotFound"
     | "InternalError";
+}
+
+/** @name QueryIncompleteStorageRequestMetadataError */
+export interface QueryIncompleteStorageRequestMetadataError extends Enum {
+  readonly isStorageNotFound: boolean;
+  readonly isInternalError: boolean;
+  readonly type: "StorageNotFound" | "InternalError";
 }
 
 /** @name QueryMspConfirmChunksToProveForFileError */

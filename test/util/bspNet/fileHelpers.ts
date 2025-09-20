@@ -77,14 +77,14 @@ export const createBucketAndSendNewStorageRequest = async (
   source: string,
   location: string,
   bucketName: string,
-  owner: KeyringPair,
+  owner?: KeyringPair | null,
   valuePropId?: HexString | null,
   mspId?: HexString | null,
   replicationTarget?: number | null,
   finalizeBlock = true
 ): Promise<FileMetadata> => {
   let localValuePropId = valuePropId;
-  const localOwner = owner;
+  const localOwner = owner ?? shUser;
 
   if (!localValuePropId) {
     const valueProps = await api.call.storageProvidersApi.queryValuePropositionsForMsp(
@@ -138,7 +138,7 @@ export const createBucketAndSendNewStorageRequest = async (
       [ShConsts.NODE_INFOS.user.expectedPeerId],
       replicationTargetToUse
     ),
-    owner ?? shUser,
+    localOwner,
     undefined,
     undefined,
     finalizeBlock

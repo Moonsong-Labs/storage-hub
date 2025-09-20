@@ -1697,12 +1697,12 @@ export default {
         signedDeleteIntention: "PalletFileSystemFileOperationIntention",
         signature: "SpRuntimeMultiSignature"
       },
-      MspFileDeletionCompleted: {
+      BucketFileDeletionCompleted: {
         user: "AccountId32",
         fileKey: "H256",
         fileSize: "u64",
         bucketId: "H256",
-        mspId: "H256",
+        mspId: "Option<H256>",
         oldRoot: "H256",
         newRoot: "H256"
       },
@@ -1716,7 +1716,10 @@ export default {
       },
       FileDeletedFromIncompleteStorageRequest: {
         fileKey: "H256",
-        providerId: "H256"
+        bspId: "Option<H256>"
+      },
+      IncompleteStorageRequest: {
+        fileKey: "H256"
       }
     }
   },
@@ -3851,12 +3854,12 @@ export default {
         location: "Bytes",
         size_: "u64",
         fingerprint: "H256",
-        providerId: "H256",
+        bspId: "Option<H256>",
         forestProof: "SpTrieStorageProofCompactProof"
       },
       delete_file_for_incomplete_storage_request: {
         fileKey: "H256",
-        providerId: "H256",
+        bspId: "Option<H256>",
         forestProof: "SpTrieStorageProofCompactProof"
       }
     }
@@ -4800,16 +4803,13 @@ export default {
    * Lookup490: pallet_file_system::types::IncompleteStorageRequestMetadata<T>
    **/
   PalletFileSystemIncompleteStorageRequestMetadata: {
-    _alias: {
-      size_: "size"
-    },
     owner: "AccountId32",
     bucketId: "H256",
     location: "Bytes",
-    size_: "u64",
+    fileSize: "u64",
     fingerprint: "H256",
     pendingBspRemovals: "Vec<H256>",
-    pendingMspRemoval: "Option<H256>"
+    pendingBucketRemoval: "bool"
   },
   /**
    * Lookup492: pallet_file_system::pallet::Error<T>

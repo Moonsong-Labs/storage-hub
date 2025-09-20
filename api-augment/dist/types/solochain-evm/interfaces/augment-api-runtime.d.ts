@@ -1,6 +1,7 @@
 import "@polkadot/api-base/types/calls";
 import type { ApiTypes, AugmentedCall, DecoratedCallBase } from "@polkadot/api-base/types";
 import type {
+  BTreeMap,
   Bytes,
   Null,
   Option,
@@ -72,6 +73,7 @@ import type {
   GetProofSubmissionRecordError,
   GetStakeError,
   GetUsersWithDebtOverThresholdError,
+  IncompleteStorageRequestMetadataResponse,
   IsStorageRequestOpenToVolunteersError,
   MainStorageProviderId,
   Multiaddresses,
@@ -82,6 +84,7 @@ import type {
   QueryBucketsOfUserStoredByMspError,
   QueryEarliestChangeCapacityBlockError,
   QueryFileEarliestVolunteerBlockError,
+  QueryIncompleteStorageRequestMetadataError,
   QueryMspConfirmChunksToProveForFileError,
   QueryMspIdOfBucketIdError,
   QueryProviderMultiaddressesError,
@@ -89,6 +92,7 @@ import type {
   RandomnessOutput,
   StorageDataUnit,
   StorageProviderId,
+  StorageRequestMetadata,
   TrieRemoveMutation,
   ValuePropositionWithId
 } from "@storagehub/api-augment/solochain-evm/interfaces/storagehubclient";
@@ -440,6 +444,15 @@ declare module "@polkadot/api-base/types/calls" {
         ) => Observable<Result<bool, IsStorageRequestOpenToVolunteersError>>
       >;
       /**
+       * Get pending storage requests for a Main Storage Provider.
+       **/
+      pendingStorageRequestsByMsp: AugmentedCall<
+        ApiType,
+        (
+          mspId: MainStorageProviderId | string | Uint8Array
+        ) => Observable<BTreeMap<H256, StorageRequestMetadata>>
+      >;
+      /**
        * Query the chunks that a BSP needs to prove to confirm that it is storing a file.
        **/
       queryBspConfirmChunksToProveForFile: AugmentedCall<
@@ -458,6 +471,20 @@ declare module "@polkadot/api-base/types/calls" {
           bspId: BackupStorageProviderId | string | Uint8Array,
           fileKey: H256 | string | Uint8Array
         ) => Observable<Result<BlockNumber, QueryFileEarliestVolunteerBlockError>>
+      >;
+      /**
+       * Query incomplete storage request metadata for a file key.
+       **/
+      queryIncompleteStorageRequestMetadata: AugmentedCall<
+        ApiType,
+        (
+          fileKey: H256 | string | Uint8Array
+        ) => Observable<
+          Result<
+            IncompleteStorageRequestMetadataResponse,
+            QueryIncompleteStorageRequestMetadataError
+          >
+        >
       >;
       /**
        * Query the chunks that a MSP needs to prove to confirm that it is storing a file.

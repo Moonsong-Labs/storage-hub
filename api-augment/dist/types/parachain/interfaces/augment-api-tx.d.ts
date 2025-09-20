@@ -615,6 +615,9 @@ declare module "@polkadot/api-base/types/submittable" {
        * This extrinsic allows any actor to execute file deletion based on signed intentions
        * from the `FileDeletionRequested` event. It requires a valid forest proof showing that the
        * file exists in the specified provider's forest before allowing deletion.
+       *
+       * If `bsp_id` is `None`, the file will be deleted from the bucket forest.
+       * If `bsp_id` is `Some(id)`, the file will be deleted from the specified BSP's forest.
        **/
       deleteFile: AugmentedSubmittable<
         (
@@ -644,7 +647,7 @@ declare module "@polkadot/api-base/types/submittable" {
           location: Bytes | string | Uint8Array,
           size: u64 | AnyNumber | Uint8Array,
           fingerprint: H256 | string | Uint8Array,
-          providerId: H256 | string | Uint8Array,
+          bspId: Option<H256> | null | Uint8Array | H256 | string,
           forestProof:
             | SpTrieStorageProofCompactProof
             | {
@@ -661,7 +664,7 @@ declare module "@polkadot/api-base/types/submittable" {
           Bytes,
           u64,
           H256,
-          H256,
+          Option<H256>,
           SpTrieStorageProofCompactProof
         ]
       >;
@@ -675,7 +678,7 @@ declare module "@polkadot/api-base/types/submittable" {
       deleteFileForIncompleteStorageRequest: AugmentedSubmittable<
         (
           fileKey: H256 | string | Uint8Array,
-          providerId: H256 | string | Uint8Array,
+          bspId: Option<H256> | null | Uint8Array | H256 | string,
           forestProof:
             | SpTrieStorageProofCompactProof
             | {
@@ -684,7 +687,7 @@ declare module "@polkadot/api-base/types/submittable" {
             | string
             | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, H256, SpTrieStorageProofCompactProof]
+        [H256, Option<H256>, SpTrieStorageProofCompactProof]
       >;
       /**
        * Issue a new storage request for a file

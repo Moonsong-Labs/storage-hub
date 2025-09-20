@@ -1743,6 +1743,13 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
         Ok(bucket.msp_id)
     }
 
+    fn get_bucket_msp(
+        bucket_id: &Self::BucketId,
+    ) -> Result<Option<Self::ProviderId>, DispatchError> {
+        let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
+        Ok(bucket.msp_id)
+    }
+
     fn get_read_access_group_id_of_bucket(
         bucket_id: &Self::BucketId,
     ) -> Result<Option<Self::ReadAccessGroupId>, DispatchError> {
@@ -2191,8 +2198,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
             let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
 
-            // Get the MSP ID of the MSP that's currently storing the bucket. A bucket cannot decrease in size
-            // if it's not currently being stored by an MSP.
+            // Get the MSP ID of the MSP that's currently storing the bucket.
             let msp_id = bucket
                 .msp_id
                 .ok_or(Error::<T>::BucketMustHaveMspForOperation)?;
@@ -2208,6 +2214,53 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
 
             // Then, if that was successful, update the bucket size
             bucket.size = bucket.size.saturating_sub(delta);
+
+            Ok(())
+        })
+    }
+
+    fn decrease_bucket_size_without_msp(
+        bucket_id: &Self::BucketId,
+        delta: Self::StorageDataUnit,
+    ) -> DispatchResult {
+        Buckets::<T>::try_mutate(bucket_id, |maybe_bucket| {
+            let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
+
+            // Ensure the bucket is not currently stored by a MSP.
+            ensure!(
+                bucket.msp_id.is_none(),
+                Error::<T>::MspAlreadyAssignedToBucket
+            );
+
+            // Then, update the bucket size
+            bucket.size = bucket.size.saturating_sub(delta);
+
+            Ok(())
+        })
+    }
+
+    fn change_root_bucket_without_msp(
+        bucket_id: Self::BucketId,
+        new_root: Self::MerkleHash,
+    ) -> DispatchResult {
+        Buckets::<T>::try_mutate(&bucket_id, |bucket| {
+            let bucket = bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
+
+            // Ensure the bucket is NOT currently stored by a MSP.
+            ensure!(
+                bucket.msp_id.is_none(),
+                Error::<T>::MspAlreadyAssignedToBucket
+            );
+
+            // Emit an event to signal the change of the bucket's root.
+            Self::deposit_event(Event::BucketRootChanged {
+                bucket_id,
+                old_root: bucket.root,
+                new_root,
+            });
+
+            // Update the bucket's root to the new one.
+            bucket.root = new_root;
 
             Ok(())
         })

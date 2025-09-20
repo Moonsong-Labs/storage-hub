@@ -593,6 +593,30 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
+       * Notifies that a file deletion has been completed successfully for a Bucket.
+       **/
+      BucketFileDeletionCompleted: AugmentedEvent<
+        ApiType,
+        [
+          user: AccountId32,
+          fileKey: H256,
+          fileSize: u64,
+          bucketId: H256,
+          mspId: Option<H256>,
+          oldRoot: H256,
+          newRoot: H256
+        ],
+        {
+          user: AccountId32;
+          fileKey: H256;
+          fileSize: u64;
+          bucketId: H256;
+          mspId: Option<H256>;
+          oldRoot: H256;
+          newRoot: H256;
+        }
+      >;
+      /**
        * Notifies that a bucket's privacy has been updated.
        **/
       BucketPrivacyUpdated: AugmentedEvent<
@@ -690,10 +714,10 @@ declare module "@polkadot/api-base/types/events" {
        **/
       FileDeletedFromIncompleteStorageRequest: AugmentedEvent<
         ApiType,
-        [fileKey: H256, providerId: H256],
+        [fileKey: H256, bspId: Option<H256>],
         {
           fileKey: H256;
-          providerId: H256;
+          bspId: Option<H256>;
         }
       >;
       /**
@@ -731,6 +755,19 @@ declare module "@polkadot/api-base/types/events" {
         {
           signedDeleteIntention: PalletFileSystemFileOperationIntention;
           signature: SpRuntimeMultiSignature;
+        }
+      >;
+      /**
+       * Notifies that a storage request was marked as incomplete.
+       *
+       * This is important for fisherman nodes to listen and react to, to delete
+       * the file key from the BSPs and/or Bucket storing that file from their forest.
+       **/
+      IncompleteStorageRequest: AugmentedEvent<
+        ApiType,
+        [fileKey: H256],
+        {
+          fileKey: H256;
         }
       >;
       /**
@@ -798,30 +835,6 @@ declare module "@polkadot/api-base/types/events" {
         {
           fileKey: H256;
           fileMetadata: ShpFileMetadataFileMetadata;
-        }
-      >;
-      /**
-       * Notifies that a file deletion has been completed successfully for an MSP.
-       **/
-      MspFileDeletionCompleted: AugmentedEvent<
-        ApiType,
-        [
-          user: AccountId32,
-          fileKey: H256,
-          fileSize: u64,
-          bucketId: H256,
-          mspId: H256,
-          oldRoot: H256,
-          newRoot: H256
-        ],
-        {
-          user: AccountId32;
-          fileKey: H256;
-          fileSize: u64;
-          bucketId: H256;
-          mspId: H256;
-          oldRoot: H256;
-          newRoot: H256;
         }
       >;
       /**
