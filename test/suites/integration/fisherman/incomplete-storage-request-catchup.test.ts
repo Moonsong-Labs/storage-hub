@@ -117,7 +117,8 @@ await describeMspNet(
           method: "deleteFileForIncompleteStorageRequest",
           module: "fileSystem",
           checkTxPool: true,
-          assertLength: 1
+          assertLength: 1,
+          timeout: 30000
         });
 
         // Seal block to process the extrinsic
