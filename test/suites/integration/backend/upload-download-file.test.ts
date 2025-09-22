@@ -274,6 +274,10 @@ await describeMspNet(
     });
 
     it("Should successfully download a file via the backend API", async () => {
+      // Ensure the upload test completed successfully
+      assert(uploadedFileKeyHex, "Upload test must complete successfully before download test");
+      assert(originalFileBuffer, "Original file buffer must be available from upload test");
+
       const response = await fetch(`http://localhost:8080/download/${uploadedFileKeyHex}`);
       strictEqual(response.status, 200, "Download endpoint should return 200 OK");
 
