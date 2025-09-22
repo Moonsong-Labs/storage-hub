@@ -15,7 +15,6 @@ import {
   waitForBspFileAssociation
 } from "../../../util/indexerHelpers";
 import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
-import { waitForFishermanSync } from "../../../util/fisherman/fishermanHelpers";
 
 /**
  * FISHERMAN FILE DELETION FLOW - BASIC HAPPY PATH
@@ -48,19 +47,10 @@ await describeMspNet(
     fisherman: true,
     indexerMode: "fishing"
   },
-  ({
-    before,
-    it,
-    createUserApi,
-    createBspApi,
-    createMsp1Api,
-    createSqlClient,
-    createFishermanApi
-  }) => {
+  ({ before, it, createUserApi, createBspApi, createMsp1Api, createSqlClient }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
     let msp1Api: EnrichedBspApi;
-    let fishermanApi: EnrichedBspApi;
     let sql: SqlClient;
     let fileKey: string;
     let bucketId: string;
@@ -82,12 +72,6 @@ await describeMspNet(
         containerName: "storage-hub-sh-user-1",
         timeout: 10000
       });
-
-      // Ensure fisherman node is ready if available
-      if (createFishermanApi) {
-        fishermanApi = await createFishermanApi();
-        await waitForFishermanSync(userApi, fishermanApi);
-      }
 
       await userApi.rpc.engine.createBlock(true, true);
 

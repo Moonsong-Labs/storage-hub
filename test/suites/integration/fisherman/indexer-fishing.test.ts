@@ -25,7 +25,6 @@ import {
   waitForFileIndexed,
   waitForMspFileAssociation
 } from "../../../util/indexerHelpers";
-import { waitForFishermanSync } from "../../../util/fisherman/fishermanHelpers";
 
 await describeMspNet(
   "Fisherman Indexer - Fishing Mode",
@@ -35,21 +34,11 @@ await describeMspNet(
     fisherman: true,
     indexerMode: "fishing"
   },
-  ({
-    before,
-    it,
-    createUserApi,
-    createBspApi,
-    createMsp1Api,
-    createMsp2Api,
-    createSqlClient,
-    createFishermanApi
-  }) => {
+  ({ before, it, createUserApi, createBspApi, createMsp1Api, createMsp2Api, createSqlClient }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
     let msp1Api: EnrichedBspApi;
     let msp2Api: EnrichedBspApi;
-    let fishermanApi: EnrichedBspApi;
     let sql: SqlClient;
 
     before(async () => {
@@ -69,12 +58,6 @@ await describeMspNet(
         containerName: "storage-hub-sh-user-1",
         timeout: 10000
       });
-
-      // Ensure fisherman node is ready if available
-      if (createFishermanApi) {
-        fishermanApi = await createFishermanApi();
-        await waitForFishermanSync(userApi, fishermanApi);
-      }
 
       await userApi.rpc.engine.createBlock(true, true);
 

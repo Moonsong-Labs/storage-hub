@@ -52,11 +52,9 @@ await describeMspNet(
         timeout: 10000
       });
 
-      // Ensure fisherman node is ready if available
-      if (createFishermanApi) {
-        fishermanApi = await createFishermanApi();
-        await waitForFishermanSync(userApi, fishermanApi);
-      }
+      // Ensure fisherman node is ready
+      assert(createFishermanApi, "Fisherman API not available for fisherman test");
+      fishermanApi = await createFishermanApi();
 
       await userApi.rpc.engine.createBlock(true, true);
     });
