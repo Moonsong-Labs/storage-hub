@@ -330,10 +330,6 @@ await describeMspNet(
 
         await userApi.block.skipTo(currentBlockNumber + storageRequestTtl);
 
-        await waitForIndexing(userApi, false);
-
-        await waitForFishermanSync(userApi, fishermanApi);
-
         const incompleteStorageRequests =
           await userApi.query.fileSystem.incompleteStorageRequests.entries();
         const maybeIncompleteStorageRequest = incompleteStorageRequests[0];
@@ -342,6 +338,9 @@ await describeMspNet(
         const incompleteStorageRequest = maybeIncompleteStorageRequest[1].unwrap();
         assert(incompleteStorageRequest.pendingBspRemovals.length === 1);
         assert(incompleteStorageRequest.pendingBucketRemoval.isFalse);
+
+        await waitForIndexing(userApi, false);
+        await waitForFishermanSync(userApi, fishermanApi);
 
         // Verify delete_file_for_incomplete_storage_request extrinsic is submitted
         await userApi.assert.extrinsicPresent({

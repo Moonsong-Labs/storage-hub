@@ -37,20 +37,6 @@ export async function waitForFishermanSync(
   userApi: EnrichedBspApi,
   fishermanApi: EnrichedBspApi
 ): Promise<void> {
-  // Wait for the fisherman service to be fully initialized
-  await userApi.docker.waitForLog({
-    searchString: "🎣 Fisherman service started",
-    containerName: "storage-hub-sh-fisherman-1",
-    timeout: 30000
-  });
-
-  // Wait for fisherman node to report idle state
-  await userApi.docker.waitForLog({
-    searchString: "💤 Idle",
-    containerName: "storage-hub-sh-fisherman-1",
-    timeout: 30000
-  });
-
   const syncCurrentBlock = await userApi.rpc.chain.getBlock();
   const syncBlockNumber = syncCurrentBlock.block.header.number.toNumber();
 
