@@ -299,18 +299,9 @@ await describeMspNet(
           true
         );
 
-        // Skip ahead to trigger expiration
-        const currentBlock = await userApi.rpc.chain.getBlock();
-        const currentBlockNumber = currentBlock.block.header.number.toNumber();
-        const storageRequestTtl = (
-          await userApi.query.parameters.parameters({
-            RuntimeConfig: {
-              StorageRequestTtl: null
-            }
-          })
-        )
-          .unwrap()
-          .asRuntimeConfig.asStorageRequestTtl.toNumber();
+        const storageRequest = await userApi.query.fileSystem.storageRequests(fileKey);
+        assert(storageRequest.isSome);
+        const expiresAt = storageRequest.unwrap().expiresAt.toNumber();
 
         // Wait for BSP to volunteer and store
         await userApi.wait.bspVolunteer();
@@ -326,9 +317,7 @@ await describeMspNet(
           bspAccount: bspAddress
         });
 
-        const incompleteStorageRequestResult = await userApi.block.skipTo(
-          currentBlockNumber + storageRequestTtl
-        );
+        const incompleteStorageRequestResult = await userApi.block.skipTo(expiresAt);
 
         assertEventPresent(
           userApi,
@@ -798,12 +787,17 @@ await describeMspNet(
       );
 
       // Verify current BSP root matches event
-      const currentBspRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
-      strictEqual(
-        currentBspRoot.toString(),
-        bspDeletionEvent.data.newRoot.toString(),
-        "Current BSP forest root should match the new root from deletion event"
-      );
+      await waitFor({
+        lambda: async () => {
+          const currentBspRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
+          strictEqual(
+            currentBspRoot.toString(),
+            bspDeletionEvent.data.newRoot.toString(),
+            "Current BSP forest root should match the new root from deletion event"
+          );
+          return true;
+        }
+      });
 
       // Verify the incomplete storage request has been fully processed
       const incompleteRequest = await userApi.query.fileSystem.incompleteStorageRequests(fileKey);

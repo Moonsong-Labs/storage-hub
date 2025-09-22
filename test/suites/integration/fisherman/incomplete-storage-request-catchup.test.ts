@@ -82,18 +82,9 @@ await describeMspNet(
           false
         );
 
-        // Skip ahead to trigger expiration
-        const currentBlock = await userApi.rpc.chain.getBlock();
-        const currentBlockNumber = currentBlock.block.header.number.toNumber();
-        const storageRequestTtl = (
-          await userApi.query.parameters.parameters({
-            RuntimeConfig: {
-              StorageRequestTtl: null
-            }
-          })
-        )
-          .unwrap()
-          .asRuntimeConfig.asStorageRequestTtl.toNumber();
+        const storageRequest = await userApi.query.fileSystem.storageRequests(fileKey);
+        assert(storageRequest.isSome);
+        const expiresAt = storageRequest.unwrap().expiresAt.toNumber();
 
         // Wait for BSP to volunteer and store
         await userApi.wait.bspVolunteer(undefined, false);
@@ -109,10 +100,9 @@ await describeMspNet(
           finalizeBlock: false
         });
 
-        const incompleteStorageRequestResult = await userApi.block.skipTo(
-          currentBlockNumber + storageRequestTtl,
-          { finalised: false }
-        );
+        const incompleteStorageRequestResult = await userApi.block.skipTo(expiresAt, {
+          finalised: false
+        });
 
         assertEventPresent(
           userApi,
