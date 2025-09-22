@@ -12,10 +12,11 @@ use shc_actors_framework::{
 use shc_blockchain_service::{
     capacity_manager::CapacityConfig,
     events::{
-        AcceptedBspVolunteer, FinalisedBucketMovedAway, FinalisedMspStopStoringBucketInsolventUser,
-        FinalisedMspStoppedStoringBucket, LastChargeableInfoUpdated, MoveBucketAccepted,
-        MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MoveBucketRequestedForMsp,
-        MultipleNewChallengeSeeds, NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
+        AcceptedBspVolunteer, DistributeFileToBsp, FinalisedBucketMovedAway,
+        FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
+        LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
+        MoveBucketRequested, MoveBucketRequestedForMsp, MultipleNewChallengeSeeds,
+        NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
         ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
         ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser,
         StartMovedBucketDownload, UserWithoutFunds,
@@ -46,6 +47,7 @@ use crate::{
         },
         msp_charge_fees::{MspChargeFeesConfig, MspChargeFeesTask},
         msp_delete_bucket::MspDeleteBucketTask,
+        msp_distribute_file::MspDistributeFileTask,
         msp_move_bucket::{MspMoveBucketConfig, MspRespondMoveBucketTask},
         msp_retry_bucket_move::MspRetryBucketMoveTask,
         msp_stop_storing_insolvent_user::MspStopStoringInsolventUserTask,
@@ -310,6 +312,7 @@ where
                 FinalisedMspStopStoringBucketInsolventUser<Runtime> =>
                     MspStopStoringInsolventUserTask,
                 NotifyPeriod => MspChargeFeesTask,
+                DistributeFileToBsp<Runtime> => MspDistributeFileTask,
             ]
         );
     }
