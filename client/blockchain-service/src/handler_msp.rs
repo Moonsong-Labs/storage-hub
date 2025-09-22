@@ -682,7 +682,7 @@ where
         let pending_storage_requests_for_this_msp = match self
             .client
             .runtime_api()
-            .pending_storage_requests_by_msp(*block_hash, managed_msp_id)
+            .storage_requests_by_msp(*block_hash, managed_msp_id)
         {
             Ok(pending_storage_requests) => pending_storage_requests,
             Err(e) => {
