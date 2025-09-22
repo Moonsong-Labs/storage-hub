@@ -29,7 +29,8 @@ process.on("SIGTERM", () => void tearDownNetwork());
 const bspNetConfig: BspNetConfig = {
   noisy: process.env.NOISY === "1",
   rocksdb: process.env.ROCKSDB === "1",
-  indexer: process.env.INDEXER === "1"
+  indexer: process.env.INDEXER === "1",
+  backend: process.env.BACKEND === "1"
 };
 
 async function bootStrapNetwork() {
