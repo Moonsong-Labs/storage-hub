@@ -277,10 +277,14 @@ await describeMspNet(
       const response = await fetch(`http://localhost:8080/download/${uploadedFileKeyHex}`);
       strictEqual(response.status, 200, "Download endpoint should return 200 OK");
 
-      const contentDisposition = response.headers.get('content-disposition');
+      const contentDisposition = response.headers.get("content-disposition");
       assert(contentDisposition, "Content disposition should be present");
       // Filename is preserved from the upload request
-      strictEqual(contentDisposition, 'attachment; filename="whatsup.jpg"', "Content disposition should match");
+      strictEqual(
+        contentDisposition,
+        'attachment; filename="whatsup.jpg"',
+        "Content disposition should match"
+      );
 
       const arrayBuffer = await response.arrayBuffer();
       const downloadedBuffer = Buffer.from(arrayBuffer);
