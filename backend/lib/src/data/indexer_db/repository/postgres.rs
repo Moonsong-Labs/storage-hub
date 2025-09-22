@@ -13,13 +13,13 @@
 //! - Comprehensive error handling
 
 use async_trait::async_trait;
-use bigdecimal::BigDecimal;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
+
 #[cfg(test)]
 use shc_indexer_db::OnchainBspId;
 use shc_indexer_db::{
-    models::{bucket::Bucket as DBBucket, payment_stream::PaymentStream, Bsp},
+    models::{payment_stream::PaymentStream, Bsp},
     schema::bsp,
 };
 
@@ -101,27 +101,6 @@ impl IndexerOps for Repository {
                 })
             })
             .collect::<Result<Vec<_>, _>>()
-    }
-
-    async fn calculate_msp_storage_for_user(
-        &self,
-        msp_id: i64,
-        user_account: &str,
-    ) -> RepositoryResult<BigDecimal> {
-        let mut conn = self.pool.get().await?;
-
-        // Get all buckets for this user with this MSP
-        let buckets =
-            DBBucket::get_user_buckets_by_msp(&mut conn, user_account.to_string(), msp_id).await?;
-
-        // Calculate total size across all buckets
-        let mut total_size = BigDecimal::from(0);
-        for bucket in buckets {
-            let bucket_size = DBBucket::calculate_size(&mut conn, bucket.id).await?;
-            total_size = total_size + bucket_size;
-        }
-
-        Ok(total_size)
     }
 }
 

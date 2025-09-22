@@ -6,8 +6,6 @@
 
 use std::sync::Arc;
 
-use bigdecimal::BigDecimal;
-
 use shc_indexer_db::models::Bsp;
 
 use crate::{
@@ -75,18 +73,6 @@ impl DBClient {
     ) -> Result<Vec<PaymentStreamData>> {
         self.repository
             .get_payment_streams_for_user(user_account)
-            .await
-            .map_err(Into::into)
-    }
-
-    /// Calculate total storage provided by an MSP for a user
-    pub async fn calculate_msp_storage_for_user(
-        &self,
-        msp_id: i64,
-        user_account: &str,
-    ) -> Result<BigDecimal> {
-        self.repository
-            .calculate_msp_storage_for_user(msp_id, user_account)
             .await
             .map_err(Into::into)
     }

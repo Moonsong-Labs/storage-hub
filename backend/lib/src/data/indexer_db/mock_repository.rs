@@ -88,15 +88,6 @@ impl IndexerOps for MockRepository {
             },
         ])
     }
-
-    async fn calculate_msp_storage_for_user(
-        &self,
-        _msp_id: i64,
-        _user_account: &str,
-    ) -> RepositoryResult<BigDecimal> {
-        // TODO(MOCK): add mechanism to create this data in the mock repository and retrieve it here
-        Ok(BigDecimal::from(30))
-    }
 }
 
 #[async_trait]

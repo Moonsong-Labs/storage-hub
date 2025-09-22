@@ -86,20 +86,6 @@ pub trait IndexerOps: Send + Sync {
         &self,
         user_account: &str,
     ) -> RepositoryResult<Vec<PaymentStreamData>>;
-
-    /// Calculate total storage provided by an MSP for a user
-    ///
-    /// # Arguments
-    /// * `msp_id` - The MSP database ID
-    /// * `user_account` - The user's account address
-    ///
-    /// # Returns
-    /// * Total storage in bytes as BigDecimal
-    async fn calculate_msp_storage_for_user(
-        &self,
-        msp_id: i64,
-        user_account: &str,
-    ) -> RepositoryResult<BigDecimal>;
 }
 
 /// Mutable operations for test environments.

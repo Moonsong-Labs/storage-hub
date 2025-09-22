@@ -358,22 +358,7 @@ impl MspService {
             let (provider_type, cost_per_tick) = match stream_data.kind {
                 PaymentStreamKind::Fixed { rate } => {
                     // This is an MSP (fixed rate payment stream)
-                    // Cost per tick = total storage * rate
-
-                    // TODO(MOCK): obtain MSP db ID by doing a lookup on the MSP Onchain ID
-                    let msp_id = 1i64; // Mock MSP database ID
-
-                    // Calculate total storage for this MSP and user
-                    let total_storage = self
-                        .postgres
-                        .calculate_msp_storage_for_user(msp_id, user_address)
-                        .await?;
-
-                    // Calculate cost per tick using BigDecimal for precision
-                    // Cost = total_storage * rate
-                    let cost = total_storage * rate;
-
-                    ("msp".to_string(), cost.to_string())
+                    ("msp".to_string(), rate.to_string())
                 }
                 PaymentStreamKind::Dynamic { amount_provided } => {
                     // This is a BSP (dynamic rate payment stream)
