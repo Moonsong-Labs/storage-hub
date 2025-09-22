@@ -299,6 +299,19 @@ await describeMspNet(
           true
         );
 
+        // Skip ahead to trigger expiration
+        const currentBlock = await userApi.rpc.chain.getBlock();
+        const currentBlockNumber = currentBlock.block.header.number.toNumber();
+        const storageRequestTtl = (
+          await userApi.query.parameters.parameters({
+            RuntimeConfig: {
+              StorageRequestTtl: null
+            }
+          })
+        )
+          .unwrap()
+          .asRuntimeConfig.asStorageRequestTtl.toNumber();
+
         // Wait for BSP to volunteer and store
         await userApi.wait.bspVolunteer();
         await waitFor({
@@ -315,20 +328,16 @@ await describeMspNet(
 
         await waitForIndexing(userApi);
 
-        // Skip ahead to trigger expiration
-        const currentBlock = await userApi.rpc.chain.getBlock();
-        const currentBlockNumber = currentBlock.block.header.number.toNumber();
-        const storageRequestTtl = (
-          await userApi.query.parameters.parameters({
-            RuntimeConfig: {
-              StorageRequestTtl: null
-            }
-          })
-        )
-          .unwrap()
-          .asRuntimeConfig.asStorageRequestTtl.toNumber();
+        const incompleteStorageRequestResult = await userApi.block.skipTo(
+          currentBlockNumber + storageRequestTtl
+        );
 
-        await userApi.block.skipTo(currentBlockNumber + storageRequestTtl);
+        assertEventPresent(
+          userApi,
+          "fileSystem",
+          "IncompleteStorageRequest",
+          incompleteStorageRequestResult.events
+        );
 
         const incompleteStorageRequests =
           await userApi.query.fileSystem.incompleteStorageRequests.entries();
