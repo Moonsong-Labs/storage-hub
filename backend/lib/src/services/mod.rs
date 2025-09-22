@@ -24,6 +24,7 @@ use msp::MspService;
 /// Container for all backend services
 #[derive(Clone)]
 pub struct Services {
+    pub config: Config,
     pub auth: Arc<AuthService>,
     pub health: Arc<HealthService>,
     pub msp: Arc<MspService>,
@@ -46,13 +47,16 @@ impl Services {
             postgres.clone(),
             rpc.clone(),
         ));
+
         let msp = Arc::new(MspService::new(
             storage.clone(),
             postgres.clone(),
             rpc.clone(),
             config.storage_hub.msp_callback_url.clone(),
         ));
+
         Self {
+            config,
             auth,
             health,
             msp,
@@ -70,8 +74,6 @@ impl Services {
         // Create in-memory storage
         let memory_storage = InMemoryStorage::new();
         let storage = Arc::new(BoxedStorageWrapper::new(memory_storage));
-        let mut cfg = crate::config::Config::default();
-        cfg.storage_hub.msp_callback_url = String::from("http://localhost:8080");
 
         // Create mock database client
         let repo = MockRepository::new();
@@ -82,6 +84,6 @@ impl Services {
         let rpc_conn = Arc::new(AnyRpcConnection::Mock(mock_conn));
         let rpc = Arc::new(StorageHubRpcClient::new(rpc_conn));
 
-        Self::new(storage, postgres, rpc, cfg)
+        Self::new(storage, postgres, rpc, Config::default())
     }
 }
