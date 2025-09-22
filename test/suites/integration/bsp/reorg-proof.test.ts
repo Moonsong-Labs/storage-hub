@@ -391,7 +391,7 @@ await describeBspNet(
 
       // Wait for the BSP to send the confirm storage extrinsic, and then seal a block,
       // without finalising it, to be able to reorg it out.
-      await userApi.wait.bspStored({ sealBlock: false, timeoutMs: 30000 });
+      await userApi.wait.bspStored({ sealBlock: false });
       await userApi.block.seal({ finaliseBlock: false });
 
       // Check that the BSP confirm storing extrinsic is successfully included in the block.
@@ -452,7 +452,7 @@ await describeBspNet(
       // Then build a block with it, on top of the above finalised block.
       // Still, this won't trigger a reorg in the BSP. This block will be at the same height
       // of the current best block for the BSP.
-      await userApi.wait.bspStored({ sealBlock: false, timeoutMs: 30000 });
+      await userApi.wait.bspStored({ sealBlock: false });
       await userApi.block.seal({ finaliseBlock: false });
 
       // Seal another block with the confirm deletion transaction.

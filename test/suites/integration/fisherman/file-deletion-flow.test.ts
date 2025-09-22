@@ -189,18 +189,11 @@ await describeMspNet(
       await waitForIndexing(userApi, false);
 
       // Verify delete_file extrinsics are submitted
-      await waitFor({
-        lambda: async () => {
-          const deleteFileMatch = await userApi.assert.extrinsicPresent({
-            method: "deleteFile",
-            module: "fileSystem",
-            checkTxPool: true,
-            assertLength: 2
-          });
-          return deleteFileMatch.length >= 2;
-        },
-        iterations: 300,
-        delay: 100
+      await userApi.assert.extrinsicPresent({
+        method: "deleteFile",
+        module: "fileSystem",
+        checkTxPool: true,
+        assertLength: 2
       });
 
       // Seal block to process the extrinsics

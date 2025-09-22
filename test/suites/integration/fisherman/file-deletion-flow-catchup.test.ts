@@ -296,18 +296,11 @@ await describeMspNet(
       assert(processingFound, "Should find fisherman processing log even from unfinalized blocks");
 
       // Verify delete_file extrinsics are submitted (should be 2: one for BSP and one for MSP)
-      await waitFor({
-        lambda: async () => {
-          const deleteFileMatch = await userApi.assert.extrinsicPresent({
-            method: "deleteFile",
-            module: "fileSystem",
-            checkTxPool: true,
-            assertLength: 2
-          });
-          return deleteFileMatch.length >= 2;
-        },
-        iterations: 300,
-        delay: 100
+      await userApi.assert.extrinsicPresent({
+        method: "deleteFile",
+        module: "fileSystem",
+        checkTxPool: true,
+        assertLength: 2
       });
 
       // Now finalize the blocks to process the extrinsics

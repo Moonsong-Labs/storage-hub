@@ -761,7 +761,6 @@ export class NetworkLauncher {
   > {
     console.log("\n=== Launching network config ===");
     console.table({ config });
-
     const launchedNetwork = await new NetworkLauncher(type, config)
       .loadComposeFile()
       .populateEntities()
