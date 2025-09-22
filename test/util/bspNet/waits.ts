@@ -88,11 +88,7 @@ export const waitForTxInPool = async (api: ApiPromise, options: WaitForTxOptions
  *
  * @throws Will throw an error if the expected extrinsic or event is not found.
  */
-export const waitForBspVolunteer = async (
-  api: ApiPromise,
-  checkQuantity?: number,
-  finalizeBlock = true
-) => {
+export const waitForBspVolunteer = async (api: ApiPromise, checkQuantity?: number) => {
   await waitForTxInPool(api, {
     module: "fileSystem",
     method: "bspVolunteer",
@@ -100,7 +96,7 @@ export const waitForBspVolunteer = async (
     strictQuantity: (checkQuantity ?? 0) > 0,
     shouldSeal: true,
     expectedEvent: "AcceptedBspVolunteer",
-    finalizeBlock
+    finalizeBlock: true
   });
 };
 

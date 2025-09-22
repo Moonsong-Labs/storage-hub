@@ -256,8 +256,7 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param finalizeBlock - Optional param to specify whether to finalize the block after volunteering.
        * @returns A promise that resolves when a BSP has volunteered.
        */
-      bspVolunteer: (expectedExts?: number, finalizeBlock?: boolean) =>
-        Waits.waitForBspVolunteer(this._api, expectedExts, finalizeBlock),
+      bspVolunteer: (expectedExts?: number) => Waits.waitForBspVolunteer(this._api, expectedExts),
 
       /**
        * Waits for a BSP to submit to the tx pool the extrinsic to volunteer for a storage request.

@@ -83,7 +83,10 @@ await describeMspNet(
         const expiresAt = storageRequest.unwrap().expiresAt.toNumber();
 
         // Wait for BSP to volunteer and store
-        await userApi.wait.bspVolunteer(undefined, false);
+        await userApi.wait.bspVolunteerInTxPool(undefined);
+        // Seal unfinalized block
+        await userApi.block.seal({ finaliseBlock: false });
+
         await waitFor({
           lambda: async () =>
             (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
@@ -168,7 +171,10 @@ await describeMspNet(
       await userApi.wait.mspResponseInTxPool(1);
 
       // Wait for BSP to volunteer and store
-      await userApi.wait.bspVolunteer(undefined, false);
+      await userApi.wait.bspVolunteerInTxPool(undefined);
+      // Seal unfinalized block
+      await userApi.block.seal({ finaliseBlock: false });
+
       await waitFor({
         lambda: async () =>
           (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
@@ -240,7 +246,10 @@ await describeMspNet(
       await userApi.wait.mspResponseInTxPool(1);
 
       // Wait for BSP to volunteer and store
-      await userApi.wait.bspVolunteer(undefined, false);
+      await userApi.wait.bspVolunteerInTxPool(undefined);
+      // Seal unfinalized block
+      await userApi.block.seal({ finaliseBlock: false });
+
       await waitFor({
         lambda: async () =>
           (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
