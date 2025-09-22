@@ -2682,6 +2682,20 @@ where
         BucketIdFor::<T>::decode(&mut encoded_event_info)
     }
 
+    pub fn storage_requests_by_msp(
+        msp_id: ProviderIdFor<T>,
+    ) -> BTreeMap<MerkleHash<T>, StorageRequestMetadata<T>> {
+        StorageRequests::<T>::iter()
+            .filter(|(_, metadata)| {
+                if let Some(msp) = metadata.msp {
+                    msp.0 == msp_id
+                } else {
+                    false
+                }
+            })
+            .collect()
+    }
+
     pub fn pending_storage_requests_by_msp(
         msp_id: ProviderIdFor<T>,
     ) -> BTreeMap<MerkleHash<T>, StorageRequestMetadata<T>> {

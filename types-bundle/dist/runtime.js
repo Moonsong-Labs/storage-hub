@@ -72,8 +72,18 @@ const FILE_SYSTEM_V1 = {
     ],
     type: "Result<BucketId, GenericApplyDeltaEventInfoError>"
   },
-  pending_storage_request_by_msp: {
+  pending_storage_requests_by_msp: {
     description: "Get the pending storage requests for a given MSP.",
+    params: [
+      {
+        name: "mspId",
+        type: "MainStorageProviderId"
+      }
+    ],
+    type: "BTreeMap<H256, StorageRequestMetadata>"
+  },
+  storage_requests_by_msp: {
+    description: "Get the storage requests for a given MSP.",
     params: [
       {
         name: "mspId",

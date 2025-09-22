@@ -370,7 +370,7 @@ declare module "@polkadot/api-base/types/calls" {
       /**
        * Get the pending storage requests for a given MSP.
        **/
-      pendingStorageRequestByMsp: AugmentedCall<
+      pendingStorageRequestsByMsp: AugmentedCall<
         ApiType,
         (
           mspId: MainStorageProviderId | string | Uint8Array
@@ -414,6 +414,15 @@ declare module "@polkadot/api-base/types/calls" {
           mspId: MainStorageProviderId | string | Uint8Array,
           fileKey: H256 | string | Uint8Array
         ) => Observable<Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>>
+      >;
+      /**
+       * Get the storage requests for a given MSP.
+       **/
+      storageRequestsByMsp: AugmentedCall<
+        ApiType,
+        (
+          mspId: MainStorageProviderId | string | Uint8Array
+        ) => Observable<BTreeMap<H256, StorageRequestMetadata>>
       >;
       /**
        * Generic call
