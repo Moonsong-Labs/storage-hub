@@ -493,9 +493,8 @@ impl<T: Config> From<(&StorageRequestMetadata<T>, &MerkleHash<T>)>
             }
         }
 
-        // Check if MSP has accepted the storage request or if there was no MSP required for the storage request
-        // since this would require a fisherman to delete the file from the bucket to update its forest root back.
-        let pending_bucket_removal = matches!(storage_request.msp, Some((_, true)) | None);
+        // Check if MSP has accepted the storage request since this would require a fisherman to delete the file from the bucket to update its forest root back.
+        let pending_bucket_removal = matches!(storage_request.msp, Some((_, true)));
 
         let bounded_bsps = BoundedVec::truncate_from(confirmed_bsps);
 

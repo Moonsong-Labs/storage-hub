@@ -334,6 +334,15 @@ await describeMspNet(
 
         await waitForFishermanSync(userApi, fishermanApi);
 
+        const incompleteStorageRequests =
+          await userApi.query.fileSystem.incompleteStorageRequests.entries();
+        const maybeIncompleteStorageRequest = incompleteStorageRequests[0];
+        assert(maybeIncompleteStorageRequest !== undefined);
+        assert(maybeIncompleteStorageRequest[1].isSome);
+        const incompleteStorageRequest = maybeIncompleteStorageRequest[1].unwrap();
+        assert(incompleteStorageRequest.pendingBspRemovals.length === 1);
+        assert(incompleteStorageRequest.pendingBucketRemoval.isFalse);
+
         // Verify delete_file_for_incomplete_storage_request extrinsic is submitted
         await userApi.assert.extrinsicPresent({
           method: "deleteFileForIncompleteStorageRequest",
