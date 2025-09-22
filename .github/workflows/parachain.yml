@@ -34,9 +34,11 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       node_changed: ${{ steps.node_check.outputs.changed }}
+      backend_changed: ${{ steps.backend_check.outputs.changed }}
       image-tag: ${{ steps.set-tag.outputs.tag }}
     env:
       SKIP_BUILD_LABEL_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'skip-node-build') }}
+      SKIP_BACKEND_BUILD_LABEL_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'skip-backend-build') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -54,11 +56,22 @@ jobs:
             echo "Comparing changes from $BASE_SHA to $HEAD_SHA"
             echo "changed=false" >> $GITHUB_OUTPUT
           fi
-      # TODO: Add backend_check to check if backend needs to be rebuilt
+      - name: Check if Backend needs rebuild
+        id: backend_check
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha || github.event.before }}"
+          HEAD_SHA="${{ github.sha }}"
+
+          if [[ "${{ env.SKIP_BACKEND_BUILD_LABEL_PRESENT }}" != "true" ]] && git diff --name-only $BASE_SHA $HEAD_SHA | grep -E '^backend/|^Cargo\.toml$'; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "Comparing changes from $BASE_SHA to $HEAD_SHA"
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
       - name: Set tag name
         id: set-tag
         run: |
-          if [[ "${{ env.SKIP_BUILD_LABEL_PRESENT }}" == "true" || "${{ steps.node_check.outputs.changed }}" == 'false' || "${{ github.ref }}" == 'refs/heads/main' ]]; then
+          if [[ "${{ env.SKIP_BUILD_LABEL_PRESENT }}" == "true" && "${{ env.SKIP_BACKEND_BUILD_LABEL_PRESENT }}" == "true" ]] || [[ "${{ steps.node_check.outputs.changed }}" == 'false' && "${{ steps.backend_check.outputs.changed }}" == 'false' ]] || "${{ github.ref }}" == 'refs/heads/main'; then
             echo "tag=latest" >> $GITHUB_OUTPUT
           else
             echo "tag=sha-$(git log -1 --format='%H' | cut -c1-8)" >> $GITHUB_OUTPUT
@@ -113,6 +126,7 @@ jobs:
         if: needs.setup.outputs.node_changed == 'true'
         run: readelf -p .comment target/release/storage-hub-node
       - name: Check Backend Built By Mold
+        if: needs.setup.outputs.backend_changed == 'true'
         run: readelf -p .comment target/release/sh-msp-backend
       - name: Prepare artefacts
         run: |
@@ -184,6 +198,7 @@ jobs:
   
   push_backend_image:
     needs: [build_binaries, setup]
+    if: needs.setup.outputs.backend_changed == 'true'
     name: 'Push backend Docker image'
     runs-on: ubuntu-latest
     steps:
