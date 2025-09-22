@@ -119,7 +119,8 @@ jobs:
         if: needs.setup.outputs.node_changed == 'true'
         run: cargo build -p storage-hub-node --release --locked
       - name: Build backend with mocks
-        run: cargo build -p sh-msp-backend --release --locked --features mocks
+        # TODO: Consider compiling with mocks feature for end users
+        run: cargo build -p sh-msp-backend --release --locked
       - name: Build Stats
         run: sccache --show-stats || true
       - name: Check Node Built By Mold
