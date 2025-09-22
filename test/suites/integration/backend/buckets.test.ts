@@ -1,48 +1,9 @@
 import assert, { strictEqual } from "node:assert";
-import { type EnrichedBspApi, describeMspNet, shUser } from "../../../util";
-import { generateMockJWT } from "./util";
+import { type EnrichedBspApi, describeMspNet, shUser, generateMockJWT } from "../../../util";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
 import type { Hash } from "@polkadot/types/interfaces";
-
-interface Bucket {
-  bucketId: string;
-  name: string;
-  root: string;
-  is_public: boolean;
-  size_bytes: number;
-  value_prop_id: string;
-  file_count: number;
-}
-
-type FileTree = {
-  name: string;
-} & (
-  | {
-      type: "file";
-      sizeBytes: number;
-      fileKey: string;
-    }
-  | {
-      type: "folder";
-      children: FileTree[];
-    }
-);
-
-interface FileListResponse {
-  bucketId: string;
-  files: FileTree[];
-}
-
-interface FileInfo {
-  fileKey: string;
-  fingerprint: string;
-  bucketId: string;
-  location: string;
-  size: number;
-  isPublic: boolean;
-  uploadedAt: string;
-}
+import type { Bucket, FileListResponse, FileInfo } from "./types";
 
 await describeMspNet(
   "Backend bucket endpoints",
@@ -54,6 +15,12 @@ await describeMspNet(
     let userApi: EnrichedBspApi;
     let msp1Api: EnrichedBspApi;
     let mockJWT: string;
+
+    const bucketName = "backend-test-bucket";
+    let bucketId: string;
+
+    let file_key: Hash;
+    const fileLocation = "test/whatsup.jpg";
 
     before(async () => {
       userApi = await createUserApi();
@@ -102,16 +69,9 @@ await describeMspNet(
       strictEqual(response.status, 200, "/buckets should return OK status");
 
       const buckets = (await response.json()) as Bucket[];
-      console.log("/buckets :", buckets);
 
       strictEqual(buckets.length, 0);
     });
-
-    const bucketName = "backend-test-bucket";
-    let bucketId: string;
-
-    let file_key: Hash;
-    const fileLocation = "test/whatsup.jpg";
 
     it("Should create a bucket with a file", async () => {
       const newBucketEvent = await userApi.createBucket(bucketName);
@@ -123,12 +83,10 @@ await describeMspNet(
       }
       const newBucketId = newBucketEventDataBlob.bucketId.toString();
       bucketId = newBucketId.slice(2);
-      console.log(`bucketId: ${bucketId}`);
 
       const source = "res/whatsup.jpg";
 
       const ownerHex = u8aToHex(decodeAddress(userApi.accounts.shUser.address)).slice(2);
-      console.log(`owner: ${ownerHex}`);
 
       const result = await userApi.rpc.storagehubclient.loadFileInStorage(
         source,
@@ -167,9 +125,9 @@ await describeMspNet(
       strictEqual(response.status, 200, "/bucket/bucker_id should return OK status");
 
       const bucket = (await response.json()) as Bucket;
-      console.log("/buckets/bid :", bucket);
 
       strictEqual(bucket.bucketId, bucketId, "Returned bucket should match the one in the query");
+      strictEqual(bucket.name, bucketName, "Should have same name as creation");
     });
 
     it("Should succesfully list buckets", async () => {
@@ -182,7 +140,6 @@ await describeMspNet(
       strictEqual(response.status, 200, "/buckets should return OK status");
 
       const buckets = (await response.json()) as Bucket[];
-      console.log("/buckets :", buckets);
 
       assert(buckets.length > 0);
 
@@ -200,7 +157,6 @@ await describeMspNet(
       strictEqual(response.status, 200, "/bucket/bucket_id/files should return OK status");
 
       const fileList = (await response.json()) as FileListResponse;
-      console.log("/buckets/bid/files :", fileList);
 
       strictEqual(fileList.bucketId, bucketId, "file list's bucket id should match queried");
 
@@ -231,7 +187,6 @@ await describeMspNet(
       );
 
       const fileList = (await response.json()) as FileListResponse;
-      console.log("/buckets/bid/files?path=path :", fileList);
 
       strictEqual(fileList.bucketId, bucketId, "file list's bucket id should match queried");
 
@@ -267,7 +222,6 @@ await describeMspNet(
       strictEqual(response.status, 200, "/bucket/bucket_id/info/file_key should return OK status");
 
       const file = (await response.json()) as FileInfo;
-      console.log("/buckets/bid/info/fid:", file);
 
       strictEqual(file.fileKey, file_key.toHex().slice(2), "Should have same file key as queried");
       strictEqual(file.bucketId, bucketId, "Should have same bucket id as queried");

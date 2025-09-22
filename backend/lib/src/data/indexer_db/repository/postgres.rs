@@ -195,6 +195,7 @@ impl IndexerOpsMut for Repository {
     async fn delete_bsp(&self, onchain_bsp_id: &OnchainBspId) -> RepositoryResult<()> {
         let mut conn = self.pool.get().await?;
 
+        // TODO: also clear related associations, like bsp_file
         Bsp::delete(&mut conn, onchain_bsp_id.clone()).await?;
         Ok(())
     }
@@ -227,6 +228,7 @@ impl IndexerOpsMut for Repository {
     async fn delete_bucket(&self, onchain_bucket_id: &Hash) -> RepositoryResult<()> {
         let mut conn = self.pool.get().await?;
 
+        // TODO: also clear related associations
         Bucket::delete(&mut conn, onchain_bucket_id.as_bytes().to_vec()).await?;
         Ok(())
     }
@@ -263,6 +265,7 @@ impl IndexerOpsMut for Repository {
     async fn delete_file(&self, file_key: &Hash) -> RepositoryResult<()> {
         let mut conn = self.pool.get().await?;
 
+        // TODO: also clear related associations, like bsp_file
         File::delete(&mut conn, file_key.as_bytes()).await?;
         Ok(())
     }

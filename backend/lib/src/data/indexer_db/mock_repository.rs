@@ -57,6 +57,8 @@ impl MockRepository {
     }
 
     /// Create a new mock repository with some sample data loaded in
+    // TODO: take advantage of this in the tests below instead of doing separate (duplicated) setups
+    // see: https://github.com/Moonsong-Labs/storage-hub/pull/459/files#r2369522861
     pub async fn sample() -> Self {
         let this = Self::new();
 

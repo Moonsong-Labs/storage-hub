@@ -15,14 +15,14 @@ pub fn routes(services: Services) -> Router {
     let file_upload = Router::new()
         .route(
             "/buckets/{bucket_id}/upload/{file_key}",
-            put(handlers::upload_file),
+            put(handlers::files::upload_file),
         )
         .route_layer(DefaultBodyLimit::disable());
 
     let internal_file_upload = Router::new()
         .route(
             "/internal/uploads/{file_key}",
-            put(handlers::internal_upload_by_key),
+            put(handlers::files::internal_upload_by_key),
         )
         .route_layer(DefaultBodyLimit::disable());
 
@@ -54,9 +54,12 @@ pub fn routes(services: Services) -> Router {
         .merge(internal_file_upload)
         .route(
             "/buckets/{bucket_id}/distribute/{file_key}",
-            post(handlers::distribute_file),
+            post(handlers::files::distribute_file),
         )
-        .route("/download/{file_key}", get(handlers::download_by_key))
+        .route(
+            "/download/{file_key}",
+            get(handlers::files::download_by_key),
+        )
         // Payment streams routes
         .route("/payment_stream", get(handlers::payment_stream))
         // Add state to all routes

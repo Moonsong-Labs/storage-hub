@@ -72,6 +72,8 @@ impl MspService {
             storage,
             postgres,
             rpc,
+            // TODO: dedicated config struct
+            // see: https://github.com/Moonsong-Labs/storage-hub/pull/459/files#r2369596519
             msp_callback_url,
         }
     }
