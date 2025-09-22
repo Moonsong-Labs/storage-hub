@@ -67,7 +67,7 @@ jobs:
     needs: [setup]
     if: needs.setup.outputs.node_changed == 'true'
     name: 'Build node image'
-    runs-on: blacksmith-8vcpu-ubuntu-2404-arm
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     env:
       SCCACHE_GHA_ENABLED: 'true'
       RUSTC_WRAPPER: 'sccache'
@@ -721,7 +721,7 @@ jobs:
     needs: [build_image, setup]
     if: always()
     name: 'Run Fisherman Tests'
-    runs-on: blacksmith-4vcpu-ubuntu-2404-arm
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
