@@ -56,8 +56,7 @@ await describeMspNet(
   {
     initialised: false,
     indexer: true,
-    backend: true,
-    only: true,
+    backend: true
   },
   ({ before, createMsp1Api, createUserApi, it }) => {
     let userApi: EnrichedBspApi;
