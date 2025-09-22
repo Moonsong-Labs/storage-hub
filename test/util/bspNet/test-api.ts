@@ -333,12 +333,12 @@ export class BspNetTestApi implements AsyncDisposable {
         Waits.waitForMspBucketDeletionComplete(this._api, bucketId),
 
       /**
-       * Waits for a BSP to catch up to the tip of the chain
-       * @param bspBehindApi - The Api object of the BSP that is behind
-       * @returns A promise that resolves when a BSP has caught up to the tip of the chain
+       * Waits for a node to catch up to the tip of the chain
+       * @param nodeBehindApi - The Api object of the node that is behind
+       * @returns A promise that resolves when a node has caught up to the tip of the chain
        */
-      bspCatchUpToChainTip: (bspBehindApi: ApiPromise) =>
-        Waits.waitForBspToCatchUpToChainTip(this._api, bspBehindApi),
+      nodeCatchUpToChainTip: (nodeBehindApi: ApiPromise) =>
+        Waits.waitForNodeToCatchUpToChainTip(this._api, nodeBehindApi),
 
       /**
        * Waits for a node to have imported a block.

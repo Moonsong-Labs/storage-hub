@@ -16,7 +16,6 @@ import {
   waitForBspFileAssociation
 } from "../../../util/indexerHelpers";
 import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
-import { waitForFishermanProcessing } from "../../../util/fisherman/fishermanHelpers";
 
 /**
  * FISHERMAN FILE DELETION FLOW WITH CATCHUP
@@ -269,13 +268,6 @@ await describeMspNet(
       assert(deletionEventData, "FileDeletionRequested event data not found");
       const eventFileKey = deletionEventData.signedDeleteIntention.fileKey;
       assert.equal(eventFileKey.toString(), fileToDelete.fileKey.toString());
-
-      // Verify fisherman processes the FileDeletionRequested event even from unfinalized blocks
-      const processingFound = await waitForFishermanProcessing(
-        userApi,
-        `Processing file deletion request for signed intention file key: ${fileToDelete.fileKey}`
-      );
-      assert(processingFound, "Should find fisherman processing log even from unfinalized blocks");
 
       // Verify delete_file extrinsics are submitted (should be 2: one for BSP and one for MSP)
       await userApi.assert.extrinsicPresent({

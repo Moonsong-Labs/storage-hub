@@ -6,7 +6,6 @@ import * as ShConsts from "./consts";
 import { cleardownTest } from "./helpers";
 import { BspNetTestApi, type EnrichedBspApi } from "./test-api";
 import type { BspNetContext, FullNetContext, TestOptions } from "./types";
-import { waitForFishermanSync } from "../fisherman/fishermanHelpers";
 
 export const launchEventEmitter = new EventEmitter();
 
@@ -176,7 +175,7 @@ export async function describeMspNet<
           // Ensure fisherman node is ready and synced
           const userApi = await userApiPromise;
           const fishermanApi = await fishermanApiPromise;
-          await waitForFishermanSync(userApi, fishermanApi);
+          await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
         }
       });
 

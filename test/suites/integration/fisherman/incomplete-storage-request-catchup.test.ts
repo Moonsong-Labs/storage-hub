@@ -11,7 +11,6 @@ import {
   sleep,
   ShConsts
 } from "../../../util";
-import { waitForFishermanSync } from "../../../util/fisherman/fishermanHelpers";
 
 /**
  * FISHERMAN INCOMPLETE STORAGE REQUESTS WITH CATCHUP
@@ -117,7 +116,7 @@ await describeMspNet(
         assert(incompleteStorageRequest.pendingBspRemovals.length === 1);
         assert(incompleteStorageRequest.pendingBucketRemoval.isFalse);
 
-        await waitForFishermanSync(userApi, fishermanApi);
+        await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
 
         // No deletion should be sent for a bucket that has not been updated with this file key since the MSP did not accept it.
         // TODO: Add additional test case scenarios.

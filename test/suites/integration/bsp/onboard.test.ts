@@ -44,7 +44,7 @@ await describeBspNet("BSPNet: Adding new BSPs", ({ before, createUserApi, create
 
       await it("is synced with current block", async () => {
         // Give some time to the BSP to catch up
-        await userApi.wait.bspCatchUpToChainTip(newApi);
+        await userApi.wait.nodeCatchUpToChainTip(newApi);
 
         const syncHeight = (await newApi.rpc.chain.getHeader()).number.toNumber();
         const currentHeight = (await userApi.rpc.chain.getHeader()).number.toNumber();

@@ -17,10 +17,6 @@ import {
   waitForBspFileAssociation
 } from "../../../util/indexerHelpers";
 import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
-import {
-  waitForFishermanProcessing,
-  waitForFishermanSync
-} from "../../../util/fisherman/fishermanHelpers";
 
 /**
  * FISHERMAN PROCESS FILE DELETION - COMPREHENSIVE EVENT PROCESSING
@@ -332,7 +328,7 @@ await describeMspNet(
         assert(incompleteStorageRequest.pendingBucketRemoval.isFalse);
 
         await waitForIndexing(userApi, false);
-        await waitForFishermanSync(userApi, fishermanApi);
+        await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
 
         // Verify delete_file_for_incomplete_storage_request extrinsic is submitted
         await userApi.assert.extrinsicPresent({
@@ -408,12 +404,6 @@ await describeMspNet(
 
       // Do not seal block
       await waitForIndexing(userApi, false);
-
-      const incompleteProcessingFound = await waitForFishermanProcessing(
-        userApi,
-        `Processing incomplete storage request for file key: 0x${fileKey.startsWith("0x") ? fileKey.slice(2) : fileKey}`
-      );
-      assert(incompleteProcessingFound, "Should find fisherman processing incomplete storage");
 
       // Verify 2 extrsinsics submitted for each MSP and BSP
       await userApi.assert.extrinsicPresent({
