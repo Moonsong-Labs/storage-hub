@@ -134,8 +134,6 @@ export const cleardownTest = async (cleardownOptions: {
       await printDockerStatus();
       throw new Error("Failed to clean up test environment");
     }
-  } else {
-    console.log("Keeping containers alive.");
   }
 };
 

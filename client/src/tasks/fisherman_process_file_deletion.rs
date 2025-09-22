@@ -254,7 +254,7 @@ where
         let event_ref = &event;
         let file_metadata_ref = &deletion_data.file_metadata;
 
-        // Process bucket deletion only if MSP association exists
+        // Clone self before moving into async blocks
         let self_clone = self.clone();
 
         deletion_futures.push(Box::pin(async move {

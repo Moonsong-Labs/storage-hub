@@ -7,9 +7,9 @@ import {
   bspKey,
   sleep,
   waitFor,
-  assertEventPresent
+  assertEventPresent,
+  ShConsts
 } from "../../../util";
-import { createBucketAndSendNewStorageRequest } from "../../../util/bspNet/fileHelpers";
 import {
   waitForFileIndexed,
   waitForMspFileAssociation,
@@ -107,14 +107,13 @@ await describeMspNet(
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
       const valuePropId = valueProps[0].id;
 
-      const fileMetadata = await createBucketAndSendNewStorageRequest(
-        userApi,
+      const fileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
         destination,
         bucketName,
-        null,
         valuePropId,
-        mspId,
+        ShConsts.DUMMY_MSP_ID,
+        shUser,
         1,
         true
       );
@@ -160,14 +159,13 @@ await describeMspNet(
         const source = "res/whatsup.jpg";
         const destination = `test/file-to-delete-catchup-${i}.txt`;
 
-        const fileMetadata = await createBucketAndSendNewStorageRequest(
-          userApi,
+        const fileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(
           source,
           destination,
           bucketName,
-          null,
           valuePropId,
-          mspId,
+          ShConsts.DUMMY_MSP_ID,
+          shUser,
           1,
           false
         );

@@ -424,7 +424,7 @@ pub fn run() -> Result<()> {
                 role_options = Some(RoleOptions::Fisherman(
                     cli.fisherman_config
                         .fisherman_options(cli.maintenance_mode)
-                        .unwrap(),
+                        .expect("Clap/TOML configurations should prevent this from ever failing"),
                 ));
             };
 

@@ -125,10 +125,7 @@ export class BspNetTestApi implements AsyncDisposable {
    * @returns A promise that resolves to an ApiPromise with async disposal.
    */
   public static async connect(endpoint: `ws://${string}` | `wss://${string}`) {
-    // Add timeout for CI environments to prevent indefinite hangs after multiple test runs
-    const connectionTimeout = process.env.CI === "true" ? 30000 : 60000; // 30s in CI, 60s locally
-
-    const apiPromise = ApiPromise.create({
+    const api = await ApiPromise.create({
       provider: new WsProvider(endpoint),
       isPedantic: false,
       noInitWarn: true,
@@ -136,35 +133,11 @@ export class BspNetTestApi implements AsyncDisposable {
       throwOnUnknown: false,
       typesBundle: BundledTypes
     });
-
-    // Create a timeout that we can cancel
-    let timeoutId: NodeJS.Timeout | undefined;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => {
-        reject(new Error(`Connection to ${endpoint} timed out after ${connectionTimeout}ms.`));
-      }, connectionTimeout);
+    return Object.assign(api, {
+      [Symbol.asyncDispose]: async () => {
+        await api.disconnect();
+      }
     });
-
-    try {
-      const api = await Promise.race([apiPromise, timeoutPromise]);
-      // Clear the timeout since we succeeded
-      if (timeoutId) clearTimeout(timeoutId);
-      return Object.assign(api, {
-        [Symbol.asyncDispose]: async () => {
-          await api.disconnect();
-        }
-      });
-    } catch (error) {
-      // Clear timeout on error too
-      if (timeoutId) clearTimeout(timeoutId);
-      // If we created a connection but it timed out, clean it up
-      apiPromise
-        .then((api) => {
-          return api.disconnect();
-        })
-        .catch(() => {});
-      throw error;
-    }
   }
 
   private async disconnect() {

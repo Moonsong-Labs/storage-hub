@@ -62,10 +62,9 @@ use fc_storage::{self, StorageOverride, StorageOverrideHandler};
 use sc_client_api::BlockchainEvents;
 use sc_consensus_babe::ImportQueueParams as BabeImportQueueParams;
 
-use crate::command::RoleOptions;
 use crate::{
     cli::{self, ProviderType, StorageLayer},
-    command::ProviderOptions,
+    command::{ProviderOptions, RoleOptions},
 };
 
 // StorageHub Imports
@@ -703,6 +702,15 @@ pub fn new_partial_parachain(
             .spawn("telemetry", None, worker.run());
         telemetry
     });
+
+    // FIXME: The `config.transaction_pool.options` field is private, so for now use its default value
+    // let transaction_pool = Arc::from(BasicPool::new_full(
+    //     Default::default(),
+    //     config.role.is_authority().into(),
+    //     config.prometheus_registry(),
+    //     task_manager.spawn_essential_handle(),
+    //     client.clone(),
+    // ));
 
     let transaction_pool = Arc::from(
         sc_transaction_pool::Builder::new(

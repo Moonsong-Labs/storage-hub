@@ -14,7 +14,7 @@ env:
 jobs:
   e2e-wallet-metamask:
     name: E2E Wallet Tests (MetaMask)
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -67,7 +67,7 @@ jobs:
 
   e2e-backend-msp:
     name: E2E Backend Tests (MSP Client)
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     env:
       HEADLESS: 'false'
       RUST_LOG: info

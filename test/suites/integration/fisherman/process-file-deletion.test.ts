@@ -8,9 +8,9 @@ import {
   waitFor,
   assertEventPresent,
   assertEventMany,
-  mspKey
+  mspKey,
+  ShConsts
 } from "../../../util";
-import { createBucketAndSendNewStorageRequest } from "../../../util/bspNet/fileHelpers";
 import {
   waitForFileIndexed,
   waitForMspFileAssociation,
@@ -105,14 +105,13 @@ await describeMspNet(
       const valuePropId = valueProps[0].id;
 
       const { fileKey, bucketId, location, fingerprint, fileSize } =
-        await createBucketAndSendNewStorageRequest(
-          userApi,
+        await userApi.file.createBucketAndSendNewStorageRequest(
           source,
           destination,
           bucketName,
-          null,
           valuePropId,
-          mspId,
+          ShConsts.DUMMY_MSP_ID,
+          shUser,
           1,
           true
         );
@@ -287,14 +286,13 @@ await describeMspNet(
           ]
         });
 
-        const { fileKey } = await createBucketAndSendNewStorageRequest(
-          userApi,
+        const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
           source,
           destination,
           bucketName,
           null,
-          null,
-          null,
+          ShConsts.DUMMY_MSP_ID,
+          shUser,
           1,
           true
         );
@@ -368,14 +366,13 @@ await describeMspNet(
       const source = "res/smile.jpg";
       const destination = "test/revoked.txt";
 
-      const { fileKey } = await createBucketAndSendNewStorageRequest(
-        userApi,
+      const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
         destination,
         bucketName,
         null,
-        null,
-        null,
+        ShConsts.DUMMY_MSP_ID,
+        shUser,
         2, // Keep the storage request opened to be able to revoke
         true
       );
@@ -499,14 +496,13 @@ await describeMspNet(
       const valuePropId = valueProps[0].id;
 
       const { fileKey, bucketId, location, fingerprint, fileSize } =
-        await createBucketAndSendNewStorageRequest(
-          userApi,
+        await userApi.file.createBucketAndSendNewStorageRequest(
           source,
           destination,
           bucketName,
-          null,
           valuePropId,
-          mspId,
+          ShConsts.DUMMY_MSP_ID,
+          shUser,
           1,
           true
         );
@@ -655,14 +651,13 @@ await describeMspNet(
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
       const valuePropId = valueProps[0].id;
 
-      const { fileKey, bucketId } = await createBucketAndSendNewStorageRequest(
-        userApi,
+      const { fileKey, bucketId } = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
         destination,
         bucketName,
-        null,
         valuePropId,
-        mspId,
+        ShConsts.DUMMY_MSP_ID,
+        shUser,
         2, // Keep the storage request opened to be able to revoke
         true
       );

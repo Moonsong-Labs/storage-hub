@@ -8,9 +8,9 @@ import {
   assertEventPresent,
   assertEventMany,
   mspKey,
-  sleep
+  sleep,
+  ShConsts
 } from "../../../util";
-import { createBucketAndSendNewStorageRequest } from "../../../util/bspNet/fileHelpers";
 import { waitForFishermanSync } from "../../../util/fisherman/fishermanHelpers";
 
 /**
@@ -70,14 +70,13 @@ await describeMspNet(
       await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
 
       try {
-        const { fileKey } = await createBucketAndSendNewStorageRequest(
-          userApi,
+        const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
           source,
           destination,
           bucketName,
           null,
-          null,
-          null,
+          ShConsts.DUMMY_MSP_ID,
+          shUser,
           1,
           false
         );
@@ -158,14 +157,13 @@ await describeMspNet(
       const source = "res/smile.jpg";
       const destination = "test/revoked-catchup.txt";
 
-      const { fileKey } = await createBucketAndSendNewStorageRequest(
-        userApi,
+      const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
         destination,
         bucketName,
         null,
-        null,
-        null,
+        ShConsts.DUMMY_MSP_ID,
+        shUser,
         2, // Keep the storage request opened to be able to revoke
         false
       );
@@ -237,14 +235,13 @@ await describeMspNet(
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
       const valuePropId = valueProps[0].id;
 
-      const { fileKey, bucketId } = await createBucketAndSendNewStorageRequest(
-        userApi,
+      const { fileKey, bucketId } = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
         destination,
         bucketName,
-        null,
         valuePropId,
-        mspId,
+        ShConsts.DUMMY_MSP_ID,
+        shUser,
         2, // Keep the storage request opened to be able to revoke
         false
       );
@@ -294,18 +291,11 @@ await describeMspNet(
       // Verify two delete extrinsics are submitted:
       // 1. For the bucket (no MSP present)
       // 2. For the BSP
-      await waitFor({
-        lambda: async () => {
-          const deleteFileMatch = await userApi.assert.extrinsicPresent({
-            method: "deleteFileForIncompleteStorageRequest",
-            module: "fileSystem",
-            checkTxPool: true,
-            assertLength: 2
-          });
-          return deleteFileMatch.length >= 2;
-        },
-        iterations: 300,
-        delay: 100
+      await userApi.assert.extrinsicPresent({
+        method: "deleteFileForIncompleteStorageRequest",
+        module: "fileSystem",
+        checkTxPool: true,
+        assertLength: 2
       });
 
       // Seal block to process the extrinsics
