@@ -633,7 +633,7 @@ where
         handler
             .upload_file(boxed_reader, file_size, None)
             .await
-            .map_err(remote_file_error_to_rpc_error)?;
+            .map_err(|e| remote_file_error_to_rpc_error(e))?;
 
         Ok(SaveFileToDisk::Success(file_metadata))
     }

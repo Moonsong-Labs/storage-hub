@@ -34,6 +34,8 @@ jobs:
       - name: Install libpq-dev
         run: sudo apt-get update && sudo apt-get install -y libpq-dev
       - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build All
         run: cargo build --release
       - name: Check Built By Mold
@@ -47,9 +49,9 @@ jobs:
         uses: peter-evans/create-pull-request@v6
         with:
           base: master
-          branch: "typescript-api-${{ github.event.inputs.sha }}"
+          branch: 'typescript-api-${{ github.event.inputs.sha }}'
           commit-message: typescript API v0.${{ github.event.inputs.sha }}.0
           draft: true
-          title: "Upgrade TypeScript API for runtime-${{ github.event.inputs.sha }}"
-          reviewers: "moonsong-coredev"
-          labels: "B0-silent,D2-notlive"
+          title: 'Upgrade TypeScript API for runtime-${{ github.event.inputs.sha }}'
+          reviewers: 'moonsong-coredev'
+          labels: 'B0-silent,D2-notlive'

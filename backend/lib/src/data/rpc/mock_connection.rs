@@ -149,10 +149,10 @@ impl MockConnection {
             .next()
             .unwrap_or_else(|| file_key.as_str())
             .to_string();
-        let local_path = format!("uploads/{}", file_name);
+        let local_path = format!("/tmp/uploads/{}", file_name);
 
         // Create mock file content
-        let _ = fs::create_dir_all("uploads").await;
+        let _ = fs::create_dir_all("/tmp/uploads").await;
         let content = DOWNLOAD_FILE_CONTENT.as_bytes();
         let _ = fs::write(&local_path, content).await;
 

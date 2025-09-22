@@ -25,24 +25,35 @@
   ],
   "scripts": {
     "build": "node ./build.js && pnpm run build:types",
+    "build:abi": "node scripts/compile-abi.js",
     "build:types": "tsc --emitDeclarationOnly -p tsconfig.json",
-    "clean": "rm -rf dist node_modules wasm/pkg/*",
+    "clean": "rm -rf dist node_modules wasm/pkg/* src/abi/*.abi.json",
     "coverage": "vitest run --coverage",
     "dev": "node ./build.js --watch",
     "format": "prettier --write \"{src/**/*.ts,src/**/*.tsx}\"",
     "format:check": "prettier --check \"{src/**/*.ts,src/**/*.tsx}\"",
     "lint": "eslint \"{src/**/*.ts,src/**/*.tsx}\"",
     "lint:fix": "eslint \"{src/**/*.ts,src/**/*.tsx}\" --fix",
+    "prebuild": "pnpm run build:abi",
     "test": "vitest",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@polkadot/types": "^10.10.3",
-    "ethers": "^6.15.0"
+    "@polkadot/types": "^16.4.7",
+    "abitype": "^1.0.0",
+    "ethers": "^6.15.0",
+    "viem": "^2.9.20"
   },
   "devDependencies": {
     "@eslint/eslintrc": "2.1.4",
-    "@types/node": "^20.11.19"
+    "@types/node": "^20.11.19",
+    "@typescript-eslint/eslint-plugin": "^8.37.0",
+    "@typescript-eslint/parser": "^8.37.0",
+    "eslint": "^9.31.0",
+    "eslint-config-prettier": "^10.1.5",
+    "eslint-plugin-simple-import-sort": "^12.1.1",
+    "prettier": "^3.6.2",
+    "solc": "^0.8.26"
   },
   "engines": {
     "node": ">=22"

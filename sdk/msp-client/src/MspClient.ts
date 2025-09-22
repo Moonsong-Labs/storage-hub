@@ -205,7 +205,9 @@ export class MspClient {
       computedFileKey.length !== expectedFileKeyBytes.length ||
       !computedFileKey.every((byte, index) => byte === expectedFileKeyBytes[index])
     ) {
-      throw new Error('Computed file key does not match provided file key');
+      throw new Error(
+        `Computed file key ${computedFileKey.toString()} does not match provided file key ${expectedFileKeyBytes.toString()}`,
+      );
     }
 
     // Encode the file metadata
