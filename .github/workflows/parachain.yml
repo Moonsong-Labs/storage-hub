@@ -54,6 +54,7 @@ jobs:
             echo "Comparing changes from $BASE_SHA to $HEAD_SHA"
             echo "changed=false" >> $GITHUB_OUTPUT
           fi
+      # TODO: Add backend_check to check if backend needs to be rebuilt
       - name: Set tag name
         id: set-tag
         run: |
