@@ -65,7 +65,6 @@ jobs:
 
   build_binaries:
     needs: [setup]
-    if: always()
     name: 'Build node and backend binaries'
     runs-on: ubuntu-latest
     env:
@@ -183,7 +182,6 @@ jobs:
   
   push_backend_image:
     needs: [build_binaries, setup]
-    if: needs.setup.outputs.node_changed == 'true'
     name: 'Push backend Docker image'
     runs-on: ubuntu-latest
     steps:
@@ -230,7 +228,6 @@ jobs:
 
   # zombie_test_k8:
   #   needs: [build_binaries, setup]
-  #   if: always()
   #   name: "Test Simple Network"
   #   runs-on: ubuntu-latest
   #   env:
@@ -257,7 +254,6 @@ jobs:
 
   network_test:
     needs: [build_binaries, setup]
-    if: always()
     name: 'Run Para & Relay Network Test'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -298,7 +294,6 @@ jobs:
 
   zombie_test:
     needs: [build_binaries, setup]
-    if: always()
     name: 'Run Zombienet Tests'
     timeout-minutes: 30
     runs-on: ubuntu-latest
@@ -334,7 +329,6 @@ jobs:
   dev_node_test:
     needs: [build_binaries, setup]
     timeout-minutes: 30
-    if: always()
     name: 'Run Dev Node Tests'
     runs-on: ubuntu-latest
     strategy:
@@ -384,7 +378,6 @@ jobs:
 
   full_net:
     needs: [build_binaries, setup]
-    if: always()
     name: 'Run FullNet Tests'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -477,7 +470,6 @@ jobs:
 
   bsp_net:
     needs: [build_binaries, setup]
-    if: always()
     name: 'Run BSPNet Tests'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -567,7 +559,6 @@ jobs:
 
   backend_test:
     needs: [build_binaries, setup]
-    if: always()
     name: 'Run Backend Integration Tests'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -677,7 +668,6 @@ jobs:
 
   user_net:
     needs: [build_binaries, setup]
-    if: always()
     name: 'Run User Tests'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -770,7 +760,6 @@ jobs:
 
   fisherman_test:
     needs: [build_binaries, setup]
-    if: always()
     name: 'Run Fisherman Tests'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -858,7 +847,6 @@ jobs:
 
   solochain_evm:
     needs: [build_binaries, setup]
-    if: always()
     name: 'Run Solochain EVM Tests'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -978,7 +966,6 @@ jobs:
 
   typegen_check:
     needs: [build_binaries, setup]
-    if: always()
     name: 'Check Rust/TS bindings are up to date'
     runs-on: ubuntu-latest
     steps:
