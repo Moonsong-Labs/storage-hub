@@ -7,7 +7,6 @@ import { u8aToHex } from "@polkadot/util";
 import type { HexString } from "@polkadot/util/types";
 import { decodeAddress } from "@polkadot/util-crypto";
 import { assertEventPresent } from "../asserts";
-import { shUser } from "../pjsKeyring";
 import { sealBlock } from "./block";
 import * as ShConsts from "./consts";
 import type { FileMetadata } from "./types";
@@ -77,14 +76,14 @@ export const createBucketAndSendNewStorageRequest = async (
   source: string,
   location: string,
   bucketName: string,
-  owner?: KeyringPair | null,
+  owner: KeyringPair,
   valuePropId?: HexString | null,
   mspId?: HexString | null,
   replicationTarget?: number | null,
   finalizeBlock = true
 ): Promise<FileMetadata> => {
   let localValuePropId = valuePropId;
-  const localOwner = owner ?? shUser;
+  const localOwner = owner;
 
   if (!localValuePropId) {
     const valueProps = await api.call.storageProvidersApi.queryValuePropositionsForMsp(
