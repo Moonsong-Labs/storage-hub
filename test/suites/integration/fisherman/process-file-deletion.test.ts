@@ -326,8 +326,6 @@ await describeMspNet(
           bspAccount: bspAddress
         });
 
-        await waitForIndexing(userApi);
-
         const incompleteStorageRequestResult = await userApi.block.skipTo(
           currentBlockNumber + storageRequestTtl
         );
