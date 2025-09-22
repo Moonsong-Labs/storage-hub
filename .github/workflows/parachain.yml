@@ -63,10 +63,10 @@ jobs:
             echo "tag=sha-$(git log -1 --format='%H' | cut -c1-8)" >> $GITHUB_OUTPUT
           fi
 
-  build_image:
+  build_binaries:
     needs: [setup]
     if: needs.setup.outputs.node_changed == 'true'
-    name: 'Build node image'
+    name: 'Build node and backend binaries'
     runs-on: ubuntu-latest
     env:
       SCCACHE_GHA_ENABLED: 'true'
@@ -102,25 +102,47 @@ jobs:
         uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build All
-        # TODO: Make this only build the parachain node project
-        run: cargo build --release --locked
+      - name: Build node and backend
+        run: |
+          cargo build -p storage-hub-node --release --locked
+          cargo build -p sh-msp-backend --release --locked --features mocks
       - name: Build Stats
         run: sccache --show-stats || true
       - name: Check Built By Mold
-        run: readelf -p .comment target/release/storage-hub-node
+        run: |
+          readelf -p .comment target/release/storage-hub-node
+          readelf -p .comment target/release/sh-msp-backend
       - name: Prepare artefacts
         run: |
           mkdir -p runtimes
           mkdir -p build
           cp target/release/storage-hub-node build/
+          cp target/release/sh-msp-backend build/
           cp target/release/wbuild/sh-*/sh*_runtime.compact.compressed.wasm runtimes/
       - uses: actions/upload-artifact@v4
         with:
           name: node
           path: build/storage-hub-node
           if-no-files-found: error
-      - name: Prepare
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend
+          path: build/sh-msp-backend
+          if-no-files-found: error
+  
+  push_node_image:
+    needs: [build_binaries, setup]
+    if: needs.setup.outputs.node_changed == 'true'
+    name: 'Push node Docker image'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download node binary
+        uses: actions/download-artifact@v4
+        with:
+          name: node
+          path: build/
+      - name: Prepare Docker tags
         id: prep
         run: |
           DOCKER_IMAGE=moonsonglabs/storage-hub
@@ -131,7 +153,6 @@ jobs:
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      # Use GitHub Actions cache storage for Docker Buildx layers
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -154,33 +175,56 @@ jobs:
             org.opencontainers.image.source=${{ github.event.repository.clone_url }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=${{ github.event.repository.license.spdx_id }}
-
-  build_backend:
-    needs: [setup]
-    if: always()
-    name: 'Build backend binary'
+  
+  push_backend_image:
+    needs: [build_binaries, setup]
+    if: needs.setup.outputs.node_changed == 'true'
+    name: 'Push backend Docker image'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1.8
-      - name: Install libpq-dev
-        run: sudo apt-get update && sudo apt-get install -y libpq-dev
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v3
+      - name: Download backend binary
+        uses: actions/download-artifact@v4
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build backend
+          name: backend
+          path: build/
+      - name: Prepare Docker tags
+        id: prep
         run: |
-          cargo build -p sh-msp-backend --release
-      - name: Upload backend binary
-        uses: actions/upload-artifact@v4
+          DOCKER_IMAGE=moonsonglabs/storage-hub-msp-backend
+          TAGS="${DOCKER_IMAGE}:${{ needs.setup.outputs.image-tag }}"
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
         with:
-          name: backend-bin
-          path: target/release/sh-msp-backend
-          if-no-files-found: error
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/storage-hub-msp-backend.Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.prep.outputs.tags }}
+          cache-from: type=gha,scope=storage-hub-msp-backend-build
+          cache-to: type=gha,mode=max,scope=storage-hub-msp-backend-build
+          labels: |
+            org.opencontainers.image.title=${{ github.event.repository.name }}-msp-backend
+            org.opencontainers.image.description=Storage Hub MSP Backend with mocks
+            org.opencontainers.image.url=${{ github.event.repository.html_url }}
+            org.opencontainers.image.source=${{ github.event.repository.clone_url }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=${{ github.event.repository.license.spdx_id }}
+
 
   # zombie_test_k8:
-  #   needs: [build_image, setup]
+  #   needs: [build_binaries, setup]
   #   if: always()
   #   name: "Test Simple Network"
   #   runs-on: ubuntu-latest
@@ -207,7 +251,7 @@ jobs:
   #         pnpm  zombienet test configs/simple.zndsl
 
   network_test:
-    needs: [build_image, setup]
+    needs: [build_binaries, setup]
     if: always()
     name: 'Run Para & Relay Network Test'
     runs-on: ubuntu-latest
@@ -248,7 +292,7 @@ jobs:
           pnpm test:full
 
   zombie_test:
-    needs: [build_image, setup]
+    needs: [build_binaries, setup]
     if: always()
     name: 'Run Zombienet Tests'
     timeout-minutes: 30
@@ -283,7 +327,7 @@ jobs:
           pnpm  zombienet test --provider native configs/simpleNative.zndsl
 
   dev_node_test:
-    needs: [build_image, setup]
+    needs: [build_binaries, setup]
     timeout-minutes: 30
     if: always()
     name: 'Run Dev Node Tests'
@@ -334,7 +378,7 @@ jobs:
                ./suites/solo-node/**/**.test.ts
 
   full_net:
-    needs: [build_image, setup]
+    needs: [build_binaries, setup]
     if: always()
     name: 'Run FullNet Tests'
     runs-on: ubuntu-latest
@@ -427,7 +471,7 @@ jobs:
           if-no-files-found: warn
 
   bsp_net:
-    needs: [build_image, setup]
+    needs: [build_binaries, setup]
     if: always()
     name: 'Run BSPNet Tests'
     runs-on: ubuntu-latest
@@ -517,7 +561,7 @@ jobs:
           if-no-files-found: warn
 
   backend_test:
-    needs: [build_image, build_backend, setup]
+    needs: [build_binaries, setup]
     if: always()
     name: 'Run Backend Integration Tests'
     runs-on: ubuntu-latest
@@ -542,7 +586,7 @@ jobs:
       - name: Download backend binary
         uses: actions/download-artifact@v4
         with:
-          name: backend-bin
+          name: backend
           path: target/release/
       - name: Get Node Binary if changed
         if: needs.setup.outputs.node_changed == 'true'
@@ -627,7 +671,7 @@ jobs:
           if-no-files-found: warn
 
   user_net:
-    needs: [build_image, setup]
+    needs: [build_binaries, setup]
     if: always()
     name: 'Run User Tests'
     runs-on: ubuntu-latest
@@ -720,7 +764,7 @@ jobs:
           if-no-files-found: warn
 
   fisherman_test:
-    needs: [build_image, setup]
+    needs: [build_binaries, setup]
     if: always()
     name: 'Run Fisherman Tests'
     runs-on: ubuntu-latest
@@ -808,7 +852,7 @@ jobs:
           if-no-files-found: warn
 
   solochain_evm:
-    needs: [build_image, build_backend, setup]
+    needs: [build_binaries, setup]
     if: always()
     name: 'Run Solochain EVM Tests'
     runs-on: ubuntu-latest
@@ -829,7 +873,7 @@ jobs:
       - name: Download backend binary
         uses: actions/download-artifact@v4
         with:
-          name: backend-bin
+          name: backend
           path: target/release/
       - name: Get Node Binary if changed
         if: needs.setup.outputs.node_changed == 'true'
@@ -928,7 +972,7 @@ jobs:
           if-no-files-found: warn
 
   typegen_check:
-    needs: [build_image, setup]
+    needs: [build_binaries, setup]
     if: always()
     name: 'Check Rust/TS bindings are up to date'
     runs-on: ubuntu-latest
