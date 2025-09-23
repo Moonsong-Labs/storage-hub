@@ -4,7 +4,7 @@ import path from "node:path";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
 import * as $ from "scale-codec";
-import { type EnrichedBspApi, describeMspNet, shUser, waitFor } from "../../../util";
+import { bspKey, describeMspNet, type EnrichedBspApi, shUser, waitFor } from "../../../util";
 
 /**
  * Mock JWT generator that matches the backend's generate_mock_jwt function
@@ -168,7 +168,7 @@ await describeMspNet(
             file_metadata.fingerprint,
             file_metadata.file_size,
             userApi.shConsts.DUMMY_MSP_ID,
-            [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+            [userApi.shConsts.NODE_INFOS.msp1.expectedPeerId],
             { Custom: 2 }
           )
         ],
@@ -267,6 +267,14 @@ await describeMspNet(
         localBucketRoot.toString() !== bucketRoot.toString(),
         "Root of bucket should have changed"
       );
+    });
+
+    it("MSP should successfully distribute the file to BSPs who have volunteered to store it", async () => {
+      const bspAddress = userApi.createType("Address", bspKey.address);
+      await userApi.wait.bspStored({
+        expectedExts: 1,
+        bspAccount: bspAddress
+      });
     });
   }
 );
