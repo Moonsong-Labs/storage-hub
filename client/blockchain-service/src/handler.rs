@@ -47,7 +47,7 @@ use crate::{
     },
     transaction::SubmittedTransaction,
     types::{
-        ManagedProvider, MinimalBlockInfo, NewBlockNotificationKind,
+        FileDistributionInfo, ManagedProvider, MinimalBlockInfo, NewBlockNotificationKind,
         StopStoringForInsolventUserRequest,
     },
 };
@@ -1093,6 +1093,36 @@ where
                         Ok(_) => {}
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send back buckets: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::RegisterBspDistributing {
+                    file_key,
+                    bsp_id,
+                    callback,
+                } => {
+                    if let Some(ManagedProvider::Msp(msp_handler)) =
+                        &mut self.maybe_managed_provider
+                    {
+                        let entry = msp_handler
+                            .files_to_distribute
+                            .entry(file_key.clone())
+                            .or_insert(FileDistributionInfo::new());
+                        entry.bsps_distributing.insert(bsp_id);
+
+                        match callback.send(Ok(())) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                            }
+                        }
+                    } else {
+                        error!(target: LOG_TARGET, "Received a RegisterBspDistributing command while not managing a MSP. This should never happen. Please report it to the StorageHub team.");
+                        match callback.send(Err(anyhow!("Received a RegisterBspDistributing command while not managing a MSP. This should never happen. Please report it to the StorageHub team."))) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                            }
                         }
                     }
                 }

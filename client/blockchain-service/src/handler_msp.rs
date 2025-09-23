@@ -797,14 +797,15 @@ where
             }
         };
 
-        // Get the BSPs for which there are tasks currently distributing the file.
-        // If there is no entry for the file key, create a new one.
         let to_emit = {
+            // Get the BSPs for which there are tasks currently distributing the file.
+            // If there is no entry for the file key, create a new one.
             let file_distribution_info = managed_msp
                 .files_to_distribute
                 .entry(file_key.clone().into())
                 .or_insert(FileDistributionInfo::new());
 
+            // Filter out BSPs that are already distributing the file or have already confirmed to store it.
             bsps_volunteered
                 .into_iter()
                 .filter(|bsp_id| {
