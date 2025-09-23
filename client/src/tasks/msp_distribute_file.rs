@@ -9,8 +9,8 @@ use shc_blockchain_service::{
 use shc_common::{
     traits::StorageEnableRuntime,
     types::{
-        ChunkId, FileMetadata, HashT, StorageProofsMerkleTrieLayout,
-        BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
+        BackupStorageProviderId, ChunkId, FileKey, FileMetadata, HashT,
+        StorageProofsMerkleTrieLayout, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
     },
 };
 use shc_file_manager::traits::FileStorage;
@@ -76,16 +76,32 @@ where
             "Distributing file to BSP",
         );
 
+        let file_key = event.file_key;
+        let bsp_id = event.bsp_id;
+
         // This function handles the whole process of distributing the file to the BSP.
         // If anything fails, we unregister the BSP as distributing file, thus allowing
         // for a retry.
-        self.handle_distribute_file_to_bsp(event)
-            .await
-            .map_err(|e| {
-                // TODO: Unregister BSP as distributing file.
-                error!(target: LOG_TARGET, "Failed to distribute file to BSP: {:?}", e);
-                e
-            })
+        if let Err(e) = self.handle_distribute_file_to_bsp(file_key, bsp_id).await {
+            error!(target: LOG_TARGET, "Failed to distribute file to BSP: {:?}", e);
+
+            // Unregister BSP as distributing file.
+            // This in itself can fail. If it does, we have no other choice but to
+            // just log the error and return, and this BSP will not be able to get
+            // the file from this MSP at least.
+            if let Err(e) = self
+                .storage_hub_handler
+                .blockchain
+                .unregister_bsp_distributing(file_key, bsp_id)
+                .await
+            {
+                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to unregister BSP as distributing file. This means that this BSP will not be able to get the file from this MSP at least. {:?}", e);
+            }
+
+            return Err(e);
+        }
+
+        Ok(())
     }
 }
 
@@ -97,25 +113,47 @@ where
 {
     async fn handle_distribute_file_to_bsp(
         &mut self,
-        event: DistributeFileToBsp<Runtime>,
+        file_key: FileKey,
+        bsp_id: BackupStorageProviderId<Runtime>,
     ) -> anyhow::Result<()> {
-        let file_key = event.file_key;
-        let bsp_id = event.bsp_id;
-
+        // Register BSP as distributing file.
+        // This avoids a second instance of this task from being spawned.
         self.storage_hub_handler
             .blockchain
             .register_bsp_distributing(file_key, bsp_id)
             .await?;
 
-        // TODO: Get file metadata from local file storage.
+        // Get file metadata from local file storage.
+        let file_metadata = self
+            .storage_hub_handler
+            .file_storage
+            .read()
+            .await
+            .get_metadata(&file_key.into())
+            .map_err(|e| anyhow::anyhow!("Failed to get metadata from file storage: {:?}", e))?;
+        let file_metadata = file_metadata.ok_or(anyhow::anyhow!("File metadata not found"))?;
 
-        // TODO: Get MSP multiaddresses from BSP from runtime.
+        // Get MSP multiaddresses from BSP from runtime.
+        let msp_multiaddresses = self
+            .storage_hub_handler
+            .blockchain
+            .query_provider_multiaddresses(bsp_id)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to get MSP multiaddresses from BSP: {:?}", e))?;
 
-        // TODO: Get peer ids from multiaddresses and register them as known addresses.
+        // Get peer ids from multiaddresses and register them as known addresses.
+        let peer_ids = self
+            .storage_hub_handler
+            .file_transfer
+            .extract_peer_ids_and_register_known_addresses(msp_multiaddresses)
+            .await;
 
-        // TODO: Send chunks to provider.
+        // Send chunks to provider.
+        self.send_chunks_to_provider(peer_ids, &file_metadata)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to send chunks to provider: {:?}", e))?;
 
-        // TODO: Implement this.
+        info!(target: LOG_TARGET, "Successfully distributed file {:?} to BSP {:?}", file_key, bsp_id);
         Ok(())
     }
 
