@@ -154,7 +154,7 @@ services:
     container_name: storage-hub-sh-backend-1
     platform: linux/amd64
     environment:
-      - RUST_LOG=debug
+      - RUST_LOG=trace
     command:
       [
         '--host',
