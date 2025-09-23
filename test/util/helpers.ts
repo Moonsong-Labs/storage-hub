@@ -86,7 +86,12 @@ export const checkSHRunningContainers = async (docker: Docker) => {
   return allContainers.filter((container) => container.Image === DOCKER_IMAGE);
 };
 
-const exportLogsOf = async (docker: Docker, logsDir: string, containers: Docker.ContainerInfo[], verbose = false) => {
+const exportLogsOf = async (
+  docker: Docker,
+  logsDir: string,
+  containers: Docker.ContainerInfo[],
+  verbose = false
+) => {
   const logsPromises = containers.map(async (info) => {
     const container = docker.getContainer(info.Id);
     try {
@@ -104,10 +109,10 @@ const exportLogsOf = async (docker: Docker, logsDir: string, containers: Docker.
     } catch (e) {
       console.warn(`Failed to extract logs for container ${info.Names[0]}:`, e);
     }
-  })
+  });
 
   await Promise.all(logsPromises);
-}
+};
 
 export const cleanupEnvironment = async (verbose = false) => {
   await printDockerStatus();
