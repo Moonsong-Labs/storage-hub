@@ -108,7 +108,7 @@ where
 
     /// Processes new block imported events that are only relevant for an MSP.
     pub(crate) fn msp_process_block_import_events(
-        &self,
+        &mut self,
         _block_hash: &Runtime::Hash,
         event: StorageEnableEvents<Runtime>,
     ) {
@@ -156,6 +156,30 @@ where
                         msp_id,
                         proof_of_inclusion,
                     });
+                }
+            }
+            StorageEnableEvents::FileSystem(pallet_file_system::Event::BspConfirmedStoring {
+                who: _,
+                bsp_id,
+                confirmed_file_keys,
+                skipped_file_keys: _,
+                new_root: _,
+            }) => {
+                for (file_key, _file_metadata) in confirmed_file_keys {
+                    // If this is a BSP confirming a file that this MSP distributed, remove it from
+                    // the list of BSPs distributing, and move it into the list of BSPs confirmed.
+                    if let Some(ManagedProvider::Msp(msp_handler)) =
+                        &mut self.maybe_managed_provider
+                    {
+                        if let Some(file_distribution_info) =
+                            msp_handler.files_to_distribute.get_mut(&file_key.into())
+                        {
+                            file_distribution_info.bsps_distributing.remove(&bsp_id);
+                            file_distribution_info.bsps_confirmed.insert(bsp_id);
+
+                            debug!(target: LOG_TARGET, "BSP [{:?}] confirmed storing file [{:?}]", bsp_id, file_key);
+                        }
+                    }
                 }
             }
             // Ignore all other events.
