@@ -289,7 +289,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=storage-hub-msp-backend-build
           labels: |
             org.opencontainers.image.title=${{ github.event.repository.name }}-msp-backend
-            org.opencontainers.image.description=Storage Hub MSP Backend with mocks
+            org.opencontainers.image.description=Storage Hub MSP Backend
             org.opencontainers.image.url=${{ github.event.repository.html_url }}
             org.opencontainers.image.source=${{ github.event.repository.clone_url }}
             org.opencontainers.image.revision=${{ github.sha }}
