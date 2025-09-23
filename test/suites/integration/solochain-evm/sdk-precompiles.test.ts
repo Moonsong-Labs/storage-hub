@@ -6,6 +6,7 @@ import { TypeRegistry } from "@polkadot/types";
 import type { AccountId20, H256 } from "@polkadot/types/interfaces";
 import {
   FileManager,
+  type FileInfo,
   type HttpClientConfig,
   ReplicationLevel,
   StorageHubClient
@@ -23,7 +24,9 @@ await describeMspNet(
     initialised: false,
     runtimeType: "solochain",
     indexer: true,
-    backend: true
+    backend: true,
+    networkConfig: "standard",
+    keepAlive: false,
   },
   ({ before, it, createUserApi, createMsp1Api }) => {
     let userApi: EnrichedBspApi;
@@ -302,6 +305,7 @@ await describeMspNet(
     });
 
     it("Should download the file from the MSP through the backend using the SDK's MspClient", async () => {
+
       // Try to download the file from the MSP through the SDK's MspClient that uses the MSP backend
       const downloadResponse = await mspClient.downloadByKey(fileKey.toHex());
 
@@ -328,7 +332,6 @@ await describeMspNet(
       const fingerprint = await fileManager.getFingerprint();
       const fileSize = BigInt(fileManager.getFileSize());
 
-      // Create FileInfo object with all required data
       const fileInfo: FileInfo = {
         fileKey: fileKey.toHex() as `0x${string}`,
         bucketId: bucketIdH256.toHex() as `0x${string}`,
@@ -337,9 +340,7 @@ await describeMspNet(
         fingerprint: fingerprint.toHex() as `0x${string}`
       };
 
-      // Use the new FileInfo-based API
       const txHash = await storageHubClient.requestDeleteFile(fileInfo);
-
       await userApi.wait.waitForTxInPool({
         module: "ethereum",
         method: "transact"
