@@ -47,7 +47,7 @@ jobs:
     needs: [setup]
     if: needs.setup.outputs.node_changed == 'true'
     name: Prepare artifacts
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     env:
       SCCACHE_GHA_ENABLED: 'true'
       RUSTC_WRAPPER: 'sccache'

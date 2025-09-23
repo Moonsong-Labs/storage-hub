@@ -28,7 +28,7 @@ use pallet_file_system::types::StorageRequestMetadata;
 use pallet_file_system_runtime_api::{
     GenericApplyDeltaEventInfoError, IsStorageRequestOpenToVolunteersError,
     QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerTickError,
-    QueryMspConfirmChunksToProveForFileError,
+    QueryIncompleteStorageRequestMetadataError, QueryMspConfirmChunksToProveForFileError,
 };
 use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
 use pallet_proofs_dealer::types::{
@@ -706,7 +706,7 @@ impl_runtime_apis! {
         }
     }
 
-    impl pallet_file_system_runtime_api::FileSystemApi<Block, BackupStorageProviderId<Runtime>, MainStorageProviderId<Runtime>, H256, BlockNumber, ChunkId, BucketId<Runtime>, StorageRequestMetadata<Runtime>> for Runtime {
+    impl pallet_file_system_runtime_api::FileSystemApi<Block, AccountId, BackupStorageProviderId<Runtime>, MainStorageProviderId<Runtime>, H256, BlockNumber, ChunkId, BucketId<Runtime>, StorageRequestMetadata<Runtime>, BucketId<Runtime>, StorageDataUnit<Runtime>, H256> for Runtime {
         fn is_storage_request_open_to_volunteers(file_key: H256) -> Result<bool, IsStorageRequestOpenToVolunteersError> {
             FileSystem::is_storage_request_open_to_volunteers(file_key)
         }
@@ -723,12 +723,15 @@ impl_runtime_apis! {
             FileSystem::query_msp_confirm_chunks_to_prove_for_file(msp_id, file_key)
         }
 
-       fn decode_generic_apply_delta_event_info(encoded_event_info: Vec<u8>) -> Result<BucketId<Runtime>, GenericApplyDeltaEventInfoError> {
+        fn decode_generic_apply_delta_event_info(encoded_event_info: Vec<u8>) -> Result<BucketId<Runtime>, GenericApplyDeltaEventInfoError> {
             FileSystem::decode_generic_apply_delta_event_info(encoded_event_info)
         }
 
         fn pending_storage_requests_by_msp(msp_id: MainStorageProviderId<Runtime>) -> BTreeMap<H256, StorageRequestMetadata<Runtime>> {
             FileSystem::pending_storage_requests_by_msp(msp_id)
+        }
+        fn query_incomplete_storage_request_metadata(file_key: H256) -> Result<pallet_file_system_runtime_api::IncompleteStorageRequestMetadataResponse<AccountId, BucketId<Runtime>, StorageDataUnit<Runtime>, H256, BackupStorageProviderId<Runtime>>, QueryIncompleteStorageRequestMetadataError> {
+            FileSystem::query_incomplete_storage_request_metadata(file_key)
         }
     }
 

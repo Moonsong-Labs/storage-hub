@@ -34,9 +34,15 @@ jobs:
     runs-on: blacksmith-16vcpu-ubuntu-2404
     outputs:
       node_changed: ${{ steps.node_check.outputs.changed }}
+      backend_changed: ${{ steps.backend_check.outputs.changed }}
       image-tag: ${{ steps.set-tag.outputs.tag }}
+      force_node: ${{ steps.flags.outputs.force_node }}
+      force_backend: ${{ steps.flags.outputs.force_backend }}
     env:
       SKIP_BUILD_LABEL_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'skip-node-build') }}
+      SKIP_BACKEND_BUILD_LABEL_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'skip-backend-build') }}
+      FORCE_NODE_PUBLISH_LABEL_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'force-node-publish') }}
+      FORCE_BACKEND_PUBLISH_LABEL_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'force-backend-publish') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -54,19 +60,39 @@ jobs:
             echo "Comparing changes from $BASE_SHA to $HEAD_SHA"
             echo "changed=false" >> $GITHUB_OUTPUT
           fi
+      - name: Check if Backend needs rebuild
+        id: backend_check
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha || github.event.before }}"
+          HEAD_SHA="${{ github.sha }}"
+
+          if [[ "${{ env.SKIP_BACKEND_BUILD_LABEL_PRESENT }}" != "true" ]] && git diff --name-only $BASE_SHA $HEAD_SHA | grep -E '^backend/|^Cargo\.toml$'; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "Comparing changes from $BASE_SHA to $HEAD_SHA"
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
       - name: Set tag name
         id: set-tag
         run: |
-          if [[ "${{ env.SKIP_BUILD_LABEL_PRESENT }}" == "true" || "${{ steps.node_check.outputs.changed }}" == 'false' || "${{ github.ref }}" == 'refs/heads/main' ]]; then
+          if [[ "${{ github.ref }}" == 'refs/heads/main' ]]; then
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          elif [[ "${{ env.SKIP_BUILD_LABEL_PRESENT }}" == "true" && "${{ env.SKIP_BACKEND_BUILD_LABEL_PRESENT }}" == "true" ]]; then
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          elif [[ "${{ steps.node_check.outputs.changed }}" == 'false' && "${{ steps.backend_check.outputs.changed }}" == 'false' && "${{ env.FORCE_NODE_PUBLISH_LABEL_PRESENT }}" != "true" && "${{ env.FORCE_BACKEND_PUBLISH_LABEL_PRESENT }}" != "true" ]]; then
             echo "tag=latest" >> $GITHUB_OUTPUT
           else
             echo "tag=sha-$(git log -1 --format='%H' | cut -c1-8)" >> $GITHUB_OUTPUT
           fi
+      - name: Set flags
+        id: flags
+        run: |
+          echo "force_node=${{ env.FORCE_NODE_PUBLISH_LABEL_PRESENT }}" >> $GITHUB_OUTPUT
+          echo "force_backend=${{ env.FORCE_BACKEND_PUBLISH_LABEL_PRESENT }}" >> $GITHUB_OUTPUT
 
-  build_image:
+  build_node:
     needs: [setup]
-    if: needs.setup.outputs.node_changed == 'true'
-    name: 'Build node image'
+    name: 'Build node binary'
     runs-on: blacksmith-16vcpu-ubuntu-2404
     env:
       SCCACHE_GHA_ENABLED: 'true'
@@ -95,32 +121,105 @@ jobs:
       - name: Set build flags (use mold linker)
         run: echo "RUSTFLAGS=${{ env.RUSTFLAGS }} -C linker=clang -C link-arg=-fuse-ld=mold" >> $GITHUB_ENV
       - uses: ./.github/workflow-templates/setup-pnpm
-      # Install libpq-dev
+      # Install required build dependencies (incl. binutils for readelf)
+      - name: Install build deps
+        run: sudo apt-get update && sudo apt-get install -y libpq-dev libclang-dev binutils
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build node
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
+        run: cargo build -p storage-hub-node --release --locked
+      - name: Build Stats
+        run: sccache --show-stats || true
+      - name: Check Node Built By Mold
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
+        run: readelf -p .comment target/release/storage-hub-node
+      - name: Prepare artefacts (node)
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
+        run: |
+          mkdir -p build
+          mkdir -p runtimes
+          cp target/release/storage-hub-node build/
+          cp target/release/wbuild/sh-*/sh*_runtime.compact.compressed.wasm runtimes/
+      - uses: actions/upload-artifact@v4
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
+        with:
+          name: node
+          path: build/storage-hub-node
+          if-no-files-found: error
+
+  build_backend:
+    needs: [setup]
+    name: 'Build backend binary'
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: 'sccache'
+      CARGO_INCREMENTAL: '0'
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: actions-rust-lang/setup-rust-toolchain@v1.8
+        with:
+          cache: true
+      - name: Cache cargo registry and git index
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+      - uses: rui314/setup-mold@v1
+      - name: Set build flags (use mold linker)
+        run: echo "RUSTFLAGS=${{ env.RUSTFLAGS }} -C linker=clang -C link-arg=-fuse-ld=mold" >> $GITHUB_ENV
+      - uses: ./.github/workflow-templates/setup-pnpm
       - name: Install libpq-dev
         run: sudo apt-get update && sudo apt-get install -y libpq-dev libclang-dev
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build All
-        # TODO: Make this only build the parachain node project
-        run: cargo build --release --locked
+      - name: Build backend
+        if: needs.setup.outputs.backend_changed == 'true' || needs.setup.outputs.force_backend == 'true'
+        run: cargo build -p sh-msp-backend --release --locked
       - name: Build Stats
         run: sccache --show-stats || true
-      - name: Check Built By Mold
-        run: readelf -p .comment target/release/storage-hub-node
-      - name: Prepare artefacts
+      - name: Check Backend Built By Mold
+        if: needs.setup.outputs.backend_changed == 'true' || needs.setup.outputs.force_backend == 'true'
+        run: readelf -p .comment target/release/sh-msp-backend
+      - name: Prepare artefacts (backend)
+        if: needs.setup.outputs.backend_changed == 'true' || needs.setup.outputs.force_backend == 'true'
         run: |
-          mkdir -p runtimes
           mkdir -p build
-          cp target/release/storage-hub-node build/
-          cp target/release/wbuild/sh-*/sh*_runtime.compact.compressed.wasm runtimes/
+          cp target/release/sh-msp-backend build/
       - uses: actions/upload-artifact@v4
+        if: needs.setup.outputs.backend_changed == 'true' || needs.setup.outputs.force_backend == 'true'
+        with:
+          name: backend
+          path: build/sh-msp-backend
+          if-no-files-found: error
+  
+  push_node_image:
+    needs: [build_node, setup]
+    if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
+    name: 'Push node Docker image'
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download node binary
+        uses: actions/download-artifact@v4
         with:
           name: node
-          path: build/storage-hub-node
-          if-no-files-found: error
-      - name: Prepare
+          path: build/
+      - name: Prepare Docker tags
         id: prep
         run: |
           DOCKER_IMAGE=moonsonglabs/storage-hub
@@ -131,7 +230,6 @@ jobs:
         uses: docker/setup-qemu-action@v3
       - name: Setup Blacksmith Builder
         uses: useblacksmith/setup-docker-builder@v1
-      # Use GitHub Actions cache storage for Docker Buildx layers
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -152,36 +250,56 @@ jobs:
             org.opencontainers.image.source=${{ github.event.repository.clone_url }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=${{ github.event.repository.license.spdx_id }}
-
-  build_backend:
-    needs: [setup]
-    if: always()
-    name: 'Build backend binary'
+  
+  push_backend_image:
+    needs: [build_backend, setup]
+    if: needs.setup.outputs.backend_changed == 'true' || needs.setup.outputs.force_backend == 'true'
+    name: 'Push backend Docker image'
     runs-on: blacksmith-16vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1.8
-      - name: Install libpq-dev
-        run: sudo apt-get update && sudo apt-get install -y libpq-dev
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v3
+      - name: Download backend binary
+        uses: actions/download-artifact@v4
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build backend
+          name: backend
+          path: build/
+      - name: Prepare Docker tags
+        id: prep
         run: |
-          cargo build -p sh-msp-backend --release
-      - name: Upload backend binary
-        uses: actions/upload-artifact@v4
+          DOCKER_IMAGE=moonsonglabs/storage-hub-msp-backend
+          TAGS="${DOCKER_IMAGE}:${{ needs.setup.outputs.image-tag }}"
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Blacksmith Builder
+        uses: useblacksmith/setup-docker-builder@v1
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
         with:
-          name: backend-bin
-          path: target/release/sh-msp-backend
-          if-no-files-found: error
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+      - name: Build and push
+        uses: useblacksmith/build-push-action@v2
+        with:
+          context: .
+          file: ./docker/storage-hub-msp-backend.Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.prep.outputs.tags }}
+          labels: |
+            org.opencontainers.image.title=${{ github.event.repository.name }}-msp-backend
+            org.opencontainers.image.description=Storage Hub MSP Backend
+            org.opencontainers.image.url=${{ github.event.repository.html_url }}
+            org.opencontainers.image.source=${{ github.event.repository.clone_url }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=${{ github.event.repository.license.spdx_id }}
+
 
   # zombie_test_k8:
-  #   needs: [build_image, setup]
-  #   if: always()
+  #   needs: [build_node, setup]
   #   name: "Test Simple Network"
-  #   runs-on: ubuntu-latest
+  #   runs-on: blacksmith-16vcpu-ubuntu-2404
   #   env:
   #     SH_IMAGE: ${{ needs.setup.outputs.image-tag }}
   #   defaults:
@@ -205,8 +323,7 @@ jobs:
   #         pnpm  zombienet test configs/simple.zndsl
 
   network_test:
-    needs: [build_image, setup]
-    if: always()
+    needs: [build_node, setup]
     name: 'Run Para & Relay Network Test'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
@@ -215,13 +332,13 @@ jobs:
       - uses: ./.github/workflow-templates/setup-pnpm
       - run: mkdir -p target/release/
       - name: Get Node Binary if changed
-        if: needs.setup.outputs.node_changed == 'true'
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
         uses: actions/download-artifact@v4
         with:
           name: node
           path: target/release/
       - name: Get Latest Node Binary if not changed
-        if: needs.setup.outputs.node_changed == 'false'
+        if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
           docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
@@ -246,8 +363,7 @@ jobs:
           pnpm test:full
 
   zombie_test:
-    needs: [build_image, setup]
-    if: always()
+    needs: [build_node, setup]
     name: 'Run Zombienet Tests'
     timeout-minutes: 30
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -256,13 +372,13 @@ jobs:
       - uses: ./.github/workflow-templates/setup-pnpm
       - run: mkdir -p target/release/
       - name: Get Node Binary if changed
-        if: needs.setup.outputs.node_changed == 'true'
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
         uses: actions/download-artifact@v4
         with:
           name: node
           path: target/release/
       - name: Get Latest Node Binary if not changed
-        if: needs.setup.outputs.node_changed == 'false'
+        if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
           docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
@@ -281,9 +397,8 @@ jobs:
           pnpm  zombienet test --provider native configs/simpleNative.zndsl
 
   dev_node_test:
-    needs: [build_image, setup]
+    needs: [build_node, setup]
     timeout-minutes: 30
-    if: always()
     name: 'Run Dev Node Tests'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
@@ -295,13 +410,13 @@ jobs:
       - uses: ./.github/workflow-templates/setup-pnpm
       - run: mkdir -p target/release/
       - name: Get Node Binary if changed
-        if: needs.setup.outputs.node_changed == 'true'
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
         uses: actions/download-artifact@v4
         with:
           name: node
           path: target/release/
       - name: Get Latest Node Binary if not changed
-        if: needs.setup.outputs.node_changed == 'false'
+        if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
           docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
@@ -332,8 +447,7 @@ jobs:
                ./suites/solo-node/**/**.test.ts
 
   full_net:
-    needs: [build_image, setup]
-    if: always()
+    needs: [build_node, setup]
     name: 'Run FullNet Tests'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
@@ -348,13 +462,13 @@ jobs:
           node_version: 23
       - run: mkdir -p target/release/
       - name: Get Node Binary if changed
-        if: needs.setup.outputs.node_changed == 'true'
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
         uses: actions/download-artifact@v4
         with:
           name: node
           path: target/release/
       - name: Get Latest Node Binary if not changed
-        if: needs.setup.outputs.node_changed == 'false'
+        if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
           docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
@@ -425,8 +539,7 @@ jobs:
           if-no-files-found: warn
 
   bsp_net:
-    needs: [build_image, setup]
-    if: always()
+    needs: [build_node, setup]
     name: 'Run BSPNet Tests'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
@@ -441,13 +554,13 @@ jobs:
           node_version: 23
       - run: mkdir -p target/release/
       - name: Get Node Binary if changed
-        if: needs.setup.outputs.node_changed == 'true'
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
         uses: actions/download-artifact@v4
         with:
           name: node
           path: target/release/
       - name: Get Latest Node Binary if not changed
-        if: needs.setup.outputs.node_changed == 'false'
+        if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
           docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
@@ -515,8 +628,7 @@ jobs:
           if-no-files-found: warn
 
   backend_test:
-    needs: [build_image, build_backend, setup]
-    if: always()
+    needs: [build_node, build_backend, setup]
     name: 'Run Backend Integration Tests'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
@@ -538,18 +650,26 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - run: mkdir -p target/release/
       - name: Download backend binary
+        if: needs.setup.outputs.backend_changed == 'true' || needs.setup.outputs.force_backend == 'true'
         uses: actions/download-artifact@v4
         with:
-          name: backend-bin
+          name: backend
           path: target/release/
+      - name: Get Latest Backend Binary if not changed
+        if: needs.setup.outputs.backend_changed == 'false' && needs.setup.outputs.force_backend == 'false'
+        run: |
+          docker pull moonsonglabs/storage-hub-msp-backend:latest
+          docker create --name temp_msp moonsonglabs/storage-hub-msp-backend:latest
+          docker cp temp_msp:/usr/local/bin/sh-msp-backend target/release/sh-msp-backend
+          docker rm temp_msp
       - name: Get Node Binary if changed
-        if: needs.setup.outputs.node_changed == 'true'
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
         uses: actions/download-artifact@v4
         with:
           name: node
           path: target/release/
       - name: Get Latest Node Binary if not changed
-        if: needs.setup.outputs.node_changed == 'false'
+        if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
           docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
@@ -625,8 +745,7 @@ jobs:
           if-no-files-found: warn
 
   user_net:
-    needs: [build_image, setup]
-    if: always()
+    needs: [build_node, setup]
     name: 'Run User Tests'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
@@ -641,13 +760,13 @@ jobs:
           node_version: 23
       - run: mkdir -p target/release/
       - name: Get Node Binary if changed
-        if: needs.setup.outputs.node_changed == 'true'
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
         uses: actions/download-artifact@v4
         with:
           name: node
           path: target/release/
       - name: Get Latest Node Binary if not changed
-        if: needs.setup.outputs.node_changed == 'false'
+        if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
           docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
@@ -718,8 +837,7 @@ jobs:
           if-no-files-found: warn
 
   fisherman_test:
-    needs: [build_image, setup]
-    if: always()
+    needs: [build_node, setup]
     name: 'Run Fisherman Tests'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
@@ -730,13 +848,13 @@ jobs:
           node_version: 23
       - run: mkdir -p target/release/
       - name: Get Node Binary if changed
-        if: needs.setup.outputs.node_changed == 'true'
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
         uses: actions/download-artifact@v4
         with:
           name: node
           path: target/release/
       - name: Get Latest Node Binary if not changed
-        if: needs.setup.outputs.node_changed == 'false'
+        if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
           docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
@@ -806,8 +924,7 @@ jobs:
           if-no-files-found: warn
 
   solochain_evm:
-    needs: [build_image, build_backend, setup]
-    if: always()
+    needs: [build_node, build_backend, setup]
     name: 'Run Solochain EVM Tests'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
@@ -825,18 +942,19 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - run: mkdir -p target/release/
       - name: Download backend binary
+        if: needs.setup.outputs.backend_changed == 'true' || needs.setup.outputs.force_backend == 'true'
         uses: actions/download-artifact@v4
         with:
-          name: backend-bin
+          name: backend
           path: target/release/
       - name: Get Node Binary if changed
-        if: needs.setup.outputs.node_changed == 'true'
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
         uses: actions/download-artifact@v4
         with:
           name: node
           path: target/release/
       - name: Get Latest Node Binary if not changed
-        if: needs.setup.outputs.node_changed == 'false'
+        if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
           docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
@@ -926,8 +1044,7 @@ jobs:
           if-no-files-found: warn
 
   typegen_check:
-    needs: [build_image, setup]
-    if: always()
+    needs: [build_node, setup]
     name: 'Check Rust/TS bindings are up to date'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
@@ -937,13 +1054,13 @@ jobs:
           node_version: 22
       - run: mkdir -p target/release/
       - name: Get Node Binary if changed
-        if: needs.setup.outputs.node_changed == 'true'
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
         uses: actions/download-artifact@v4
         with:
           name: node
           path: target/release/
       - name: Get Latest Node Binary if not changed
-        if: needs.setup.outputs.node_changed == 'false'
+        if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
           docker create --name temp_storage_hub moonsonglabs/storage-hub:latest

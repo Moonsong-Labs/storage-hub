@@ -114,12 +114,6 @@ pub struct ProviderConfigurations {
     #[arg(long)]
     pub provider: bool,
 
-    /// Run the node in maintenance mode.
-    /// In this mode, the node will not import blocks or participate in consensus,
-    /// but will allow specific RPC calls for file and storage management.
-    #[arg(long, default_value = "false")]
-    pub maintenance_mode: bool,
-
     /// Type of StorageHub provider.
     #[arg(
         long,
@@ -354,7 +348,7 @@ pub struct ProviderConfigurations {
 }
 
 impl ProviderConfigurations {
-    pub fn provider_options(&self) -> ProviderOptions {
+    pub fn provider_options(&self, maintenance_mode: bool) -> ProviderOptions {
         // Configure RPC options for Provider
         let mut rpc_config = RpcConfig::default();
         if let Some(max_file_size) = self.max_file_size {
@@ -490,7 +484,7 @@ impl ProviderConfigurations {
             bsp_charge_fees,
             bsp_submit_proof,
             blockchain_service,
-            maintenance_mode: self.maintenance_mode,
+            maintenance_mode,
         }
     }
 }
@@ -540,7 +534,7 @@ impl IndexerConfigurations {
 #[derive(Debug, Parser, Clone)]
 pub struct FishermanConfigurations {
     /// Enable the fisherman service.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "provider")]
     pub fisherman: bool,
 
     /// Postgres database URL for the fisherman service.
@@ -556,13 +550,14 @@ pub struct FishermanConfigurations {
 }
 
 impl FishermanConfigurations {
-    pub fn fisherman_options(&self) -> Option<FishermanOptions> {
+    pub fn fisherman_options(&self, maintenance_mode: bool) -> Option<FishermanOptions> {
         if self.fisherman {
             Some(FishermanOptions {
                 database_url: self
                     .fisherman_database_url
                     .clone()
                     .expect("Fisherman database URL is required"),
+                maintenance_mode,
             })
         } else {
             None
@@ -633,9 +628,11 @@ pub struct Cli {
     #[arg(long)]
     pub no_hardware_benchmarks: bool,
 
-    /// Relay chain arguments
-    #[arg(raw = true)]
-    pub relay_chain_args: Vec<String>,
+    /// Run the node in maintenance mode.
+    /// In this mode, the node will not import blocks or participate in consensus,
+    /// but will allow specific RPC calls for file and storage management.
+    #[arg(long, default_value = "false")]
+    pub maintenance_mode: bool,
 
     /// Provider configurations
     #[command(flatten)]
@@ -662,6 +659,10 @@ pub struct Cli {
     /// Fisherman configurations
     #[command(flatten)]
     pub fisherman_config: FishermanConfigurations,
+
+    /// Relay chain arguments
+    #[arg(raw = true)]
+    pub relay_chain_args: Vec<String>,
 }
 
 #[derive(Debug, Parser)]
