@@ -18,14 +18,14 @@ use shc_indexer_db::{models::Bucket as DBBucket, OnchainMspId};
 use shp_types::Hash;
 
 use crate::{
+    constants::{
+        mocks::{PLACEHOLDER_BUCKET_FILE_COUNT, PLACEHOLDER_BUCKET_SIZE_BYTES},
+        rpc::DUMMY_MSP_ID,
+    },
     data::{
         indexer_db::{client::DBClient, repository::PaymentStreamKind},
         rpc::StorageHubRpcClient,
         storage::BoxedStorage,
-    },
-    constants::{
-        mocks::{PLACEHOLDER_BUCKET_FILE_COUNT, PLACEHOLDER_BUCKET_SIZE_BYTES},
-        rpc::DUMMY_MSP_ID,
     },
     error::Error,
     models::{
@@ -588,8 +588,8 @@ mod tests {
     use crate::{
         config::Config,
         constants::{
-            mocks::{PRICE_PER_GIGA_UNIT, MOCK_ADDRESS},
-            rpc::{DEFAULT_MSP_CALLBACK_URL, DUMMY_MSP_ID},
+            mocks::{MOCK_ADDRESS, PRICE_PER_GIGA_UNIT},
+            rpc::DUMMY_MSP_ID,
             test::{bucket::DEFAULT_BUCKET_NAME, file::DEFAULT_SIZE},
         },
         data::{

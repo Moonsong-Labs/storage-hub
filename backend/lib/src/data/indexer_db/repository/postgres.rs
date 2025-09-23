@@ -21,15 +21,19 @@ use bigdecimal::BigDecimal;
 #[cfg(test)]
 use shc_indexer_db::{models::FileStorageRequestStep, OnchainBspId};
 use shc_indexer_db::{
-    models::{Bsp, Bucket, File, Msp, payment_stream::PaymentStream},
+    models::{payment_stream::PaymentStream, Bsp, Bucket, File, Msp},
     schema::{bsp, bucket, file},
     OnchainMspId,
 };
 use shp_types::Hash;
 
-use crate::data::indexer_db::repository::{error::RepositoryResult, pool::SmartPool, IndexerOps};
+use crate::data::indexer_db::repository::{
+    error::{RepositoryError, RepositoryResult},
+    pool::SmartPool,
+    IndexerOps, PaymentStreamData, PaymentStreamKind,
+};
 #[cfg(test)]
-use crate::{constants::test, data::indexer_db::repository::{IndexerOpsMut, error::RepositoryError, PaymentStreamData, PaymentStreamKind}};
+use crate::{constants::test, data::indexer_db::repository::IndexerOpsMut};
 
 /// PostgreSQL repository implementation.
 ///

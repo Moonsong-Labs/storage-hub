@@ -12,7 +12,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use bigdecimal::{BigDecimal, FromPrivitive};
+use bigdecimal::{BigDecimal, FromPrimitive};
 use chrono::Utc;
 use hex_literal::hex;
 use tokio::sync::RwLock;
@@ -494,7 +494,6 @@ impl IndexerOpsMut for MockRepository {
 
 #[cfg(test)]
 pub mod tests {
-    use chrono::Utc;
     use shp_types::Hash;
 
     use super::*;
