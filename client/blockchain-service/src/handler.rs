@@ -1126,6 +1126,34 @@ where
                         }
                     }
                 }
+                BlockchainServiceCommand::UnregisterBspDistributing {
+                    file_key,
+                    bsp_id,
+                    callback,
+                } => {
+                    if let Some(ManagedProvider::Msp(msp_handler)) =
+                        &mut self.maybe_managed_provider
+                    {
+                        if let Some(entry) = msp_handler.files_to_distribute.get_mut(&file_key) {
+                            entry.bsps_distributing.remove(&bsp_id);
+                        }
+
+                        match callback.send(Ok(())) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                            }
+                        }
+                    } else {
+                        error!(target: LOG_TARGET, "Received an UnregisterBspDistributing command while not managing an MSP. This should never happen. Please report it to the StorageHub team.");
+                        match callback.send(Err(anyhow!("Received an UnregisterBspDistributing command while not managing an MSP. This should never happen. Please report it to the StorageHub team."))) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                            }
+                        }
+                    }
+                }
                 BlockchainServiceCommand::ReleaseForestRootWriteLock {
                     forest_root_write_tx,
                     callback,

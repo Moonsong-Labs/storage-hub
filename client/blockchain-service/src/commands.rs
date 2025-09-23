@@ -200,6 +200,11 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
         file_key: FileKey,
         bsp_id: BackupStorageProviderId<Runtime>,
     },
+    #[command(success_type = ())]
+    UnregisterBspDistributing {
+        file_key: FileKey,
+        bsp_id: BackupStorageProviderId<Runtime>,
+    },
 }
 
 /// Interface for interacting with the BlockchainService actor.
