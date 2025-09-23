@@ -75,7 +75,11 @@ jobs:
       - name: Set tag name
         id: set-tag
         run: |
-          if [[ "${{ env.SKIP_BUILD_LABEL_PRESENT }}" == "true" && "${{ env.SKIP_BACKEND_BUILD_LABEL_PRESENT }}" == "true" ]] || [[ "${{ steps.node_check.outputs.changed }}" == 'false' && "${{ steps.backend_check.outputs.changed }}" == 'false' ]] || "${{ github.ref }}" == 'refs/heads/main'; then
+          if [[ "${{ github.ref }}" == 'refs/heads/main' ]]; then
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          elif [[ "${{ env.SKIP_BUILD_LABEL_PRESENT }}" == "true" && "${{ env.SKIP_BACKEND_BUILD_LABEL_PRESENT }}" == "true" ]]; then
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          elif [[ "${{ steps.node_check.outputs.changed }}" == 'false' && "${{ steps.backend_check.outputs.changed }}" == 'false' && "${{ env.FORCE_NODE_PUBLISH_LABEL_PRESENT }}" != "true" && "${{ env.FORCE_BACKEND_PUBLISH_LABEL_PRESENT }}" != "true" ]]; then
             echo "tag=latest" >> $GITHUB_OUTPUT
           else
             echo "tag=sha-$(git log -1 --format='%H' | cut -c1-8)" >> $GITHUB_OUTPUT
@@ -328,13 +332,13 @@ jobs:
       - uses: ./.github/workflow-templates/setup-pnpm
       - run: mkdir -p target/release/
       - name: Get Node Binary if changed
-        if: needs.setup.outputs.node_changed == 'true'
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
         uses: actions/download-artifact@v4
         with:
           name: node
           path: target/release/
       - name: Get Latest Node Binary if not changed
-        if: needs.setup.outputs.node_changed == 'false'
+        if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
           docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
@@ -368,13 +372,13 @@ jobs:
       - uses: ./.github/workflow-templates/setup-pnpm
       - run: mkdir -p target/release/
       - name: Get Node Binary if changed
-        if: needs.setup.outputs.node_changed == 'true'
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
         uses: actions/download-artifact@v4
         with:
           name: node
           path: target/release/
       - name: Get Latest Node Binary if not changed
-        if: needs.setup.outputs.node_changed == 'false'
+        if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
           docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
@@ -406,13 +410,13 @@ jobs:
       - uses: ./.github/workflow-templates/setup-pnpm
       - run: mkdir -p target/release/
       - name: Get Node Binary if changed
-        if: needs.setup.outputs.node_changed == 'true'
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
         uses: actions/download-artifact@v4
         with:
           name: node
           path: target/release/
       - name: Get Latest Node Binary if not changed
-        if: needs.setup.outputs.node_changed == 'false'
+        if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
           docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
@@ -458,13 +462,13 @@ jobs:
           node_version: 23
       - run: mkdir -p target/release/
       - name: Get Node Binary if changed
-        if: needs.setup.outputs.node_changed == 'true'
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
         uses: actions/download-artifact@v4
         with:
           name: node
           path: target/release/
       - name: Get Latest Node Binary if not changed
-        if: needs.setup.outputs.node_changed == 'false'
+        if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
           docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
@@ -550,13 +554,13 @@ jobs:
           node_version: 23
       - run: mkdir -p target/release/
       - name: Get Node Binary if changed
-        if: needs.setup.outputs.node_changed == 'true'
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
         uses: actions/download-artifact@v4
         with:
           name: node
           path: target/release/
       - name: Get Latest Node Binary if not changed
-        if: needs.setup.outputs.node_changed == 'false'
+        if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
           docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
@@ -646,18 +650,26 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - run: mkdir -p target/release/
       - name: Download backend binary
+        if: needs.setup.outputs.backend_changed == 'true' || needs.setup.outputs.force_backend == 'true'
         uses: actions/download-artifact@v4
         with:
           name: backend
           path: target/release/
+      - name: Get Latest Backend Binary if not changed
+        if: needs.setup.outputs.backend_changed == 'false' && needs.setup.outputs.force_backend == 'false'
+        run: |
+          docker pull moonsonglabs/storage-hub-msp-backend:latest
+          docker create --name temp_msp moonsonglabs/storage-hub-msp-backend:latest
+          docker cp temp_msp:/usr/local/bin/sh-msp-backend target/release/sh-msp-backend
+          docker rm temp_msp
       - name: Get Node Binary if changed
-        if: needs.setup.outputs.node_changed == 'true'
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
         uses: actions/download-artifact@v4
         with:
           name: node
           path: target/release/
       - name: Get Latest Node Binary if not changed
-        if: needs.setup.outputs.node_changed == 'false'
+        if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
           docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
@@ -748,13 +760,13 @@ jobs:
           node_version: 23
       - run: mkdir -p target/release/
       - name: Get Node Binary if changed
-        if: needs.setup.outputs.node_changed == 'true'
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
         uses: actions/download-artifact@v4
         with:
           name: node
           path: target/release/
       - name: Get Latest Node Binary if not changed
-        if: needs.setup.outputs.node_changed == 'false'
+        if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
           docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
@@ -836,13 +848,13 @@ jobs:
           node_version: 23
       - run: mkdir -p target/release/
       - name: Get Node Binary if changed
-        if: needs.setup.outputs.node_changed == 'true'
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
         uses: actions/download-artifact@v4
         with:
           name: node
           path: target/release/
       - name: Get Latest Node Binary if not changed
-        if: needs.setup.outputs.node_changed == 'false'
+        if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
           docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
@@ -930,18 +942,19 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - run: mkdir -p target/release/
       - name: Download backend binary
+        if: needs.setup.outputs.backend_changed == 'true' || needs.setup.outputs.force_backend == 'true'
         uses: actions/download-artifact@v4
         with:
           name: backend
           path: target/release/
       - name: Get Node Binary if changed
-        if: needs.setup.outputs.node_changed == 'true'
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
         uses: actions/download-artifact@v4
         with:
           name: node
           path: target/release/
       - name: Get Latest Node Binary if not changed
-        if: needs.setup.outputs.node_changed == 'false'
+        if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
           docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
@@ -1041,13 +1054,13 @@ jobs:
           node_version: 22
       - run: mkdir -p target/release/
       - name: Get Node Binary if changed
-        if: needs.setup.outputs.node_changed == 'true'
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
         uses: actions/download-artifact@v4
         with:
           name: node
           path: target/release/
       - name: Get Latest Node Binary if not changed
-        if: needs.setup.outputs.node_changed == 'false'
+        if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
           docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
