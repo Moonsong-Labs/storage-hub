@@ -11409,6 +11409,201 @@ mod msp_stop_storing_bucket {
                 );
             });
         }
+
+        #[test]
+        fn msp_stop_storing_bucket_with_incomplete_storage_request_allows_bucket_deletion() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                let bsp_account = Keyring::Bob.to_account_id();
+
+                // Setup MSP and bucket
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                    setup_file_in_msp_bucket(&owner, &msp);
+
+                // Setup BSP
+                let bsp_signed = RuntimeOrigin::signed(bsp_account.clone());
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), size * 2));
+                let bsp_id = Providers::get_provider_id(&bsp_account).unwrap();
+
+                // Issue storage request
+                assert_ok!(FileSystem::issue_storage_request(
+                    RuntimeOrigin::signed(owner.clone()),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    PeerIds::<Test>::try_from(vec![]).unwrap(),
+                    ReplicationTarget::Basic,
+                ));
+
+                // BSP volunteers and confirms storing
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
+                let file_key_with_proof = FileKeyWithProof {
+                    file_key,
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
+                };
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                };
+
+                assert_ok!(FileSystem::bsp_confirm_storing(
+                    bsp_signed,
+                    forest_proof,
+                    BoundedVec::try_from(vec![file_key_with_proof]).unwrap(),
+                ));
+
+                // MSP accepts storage request
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
+                    RuntimeOrigin::signed(msp.clone()),
+                    vec![StorageRequestMspBucketResponse {
+                        bucket_id,
+                        accept: Some(StorageRequestMspAcceptedFileKeys {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_key,
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                }
+                            }],
+                            forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
+                        }),
+                        reject: vec![],
+                    }],
+                ));
+
+                // Verify both BSP and MSP have confirmed storing
+                let storage_request = StorageRequests::<Test>::get(&file_key).unwrap();
+                assert_eq!(storage_request.bsps_confirmed, 1);
+                assert_eq!(storage_request.msp, Some((msp_id, true)));
+
+                // Owner revokes storage request
+                assert_ok!(FileSystem::revoke_storage_request(
+                    RuntimeOrigin::signed(owner.clone()),
+                    file_key
+                ));
+
+                // Verify incomplete storage request was created
+                assert!(
+                    crate::IncompleteStorageRequests::<Test>::get(&file_key).is_some(),
+                    "Incomplete storage request should be created"
+                );
+                let incomplete_storage_request =
+                    crate::IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
+                assert_eq!(
+                    incomplete_storage_request.pending_bsp_removals,
+                    vec![bsp_id]
+                );
+                assert_eq!(incomplete_storage_request.pending_bucket_removal, true);
+
+                // Get initial bucket state
+                let initial_bucket_size = Providers::get_bucket_size(&bucket_id).unwrap();
+                let initial_bucket_root = Providers::get_root_bucket(&bucket_id).unwrap();
+
+                // MSP stops storing the bucket
+                assert_ok!(FileSystem::msp_stop_storing_bucket(
+                    RuntimeOrigin::signed(msp.clone()),
+                    bucket_id
+                ));
+
+                // Verify bucket is no longer stored by MSP
+                assert_eq!(
+                    Providers::get_msp_of_bucket(&bucket_id).unwrap(),
+                    None,
+                    "Bucket should not have an MSP after stop storing"
+                );
+
+                // Verify incomplete storage request still exists
+                assert!(
+                    crate::IncompleteStorageRequests::<Test>::get(&file_key).is_some(),
+                    "Incomplete storage request should still exist"
+                );
+
+                // Delete file from bucket (no MSP provided)
+                // Create an inclusion proof for the file in the bucket
+                // The mock verifier returns encoded_nodes as proven keys
+                let bucket_forest_proof_delete = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                assert_ok!(FileSystem::delete_file_for_incomplete_storage_request(
+                    RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()),
+                    file_key,
+                    None, // No MSP ID provided since bucket has no MSP
+                    bucket_forest_proof_delete,
+                ));
+
+                // Verify bucket size decreased
+                let final_bucket_size = Providers::get_bucket_size(&bucket_id).unwrap();
+                assert_eq!(
+                    final_bucket_size,
+                    initial_bucket_size - size,
+                    "Bucket size should decrease by file size"
+                );
+
+                // Verify bucket root changed (in mock, it becomes the file_key)
+                let final_bucket_root = Providers::get_root_bucket(&bucket_id).unwrap();
+                // In the mock implementation, apply_delta returns the last mutation key
+                // which is the file_key for both add and remove operations
+                assert_eq!(
+                    final_bucket_root, file_key,
+                    "Bucket root should be the file_key in mock implementation"
+                );
+
+                // Verify incomplete storage request still exists (BSP still pending)
+                assert!(
+                    crate::IncompleteStorageRequests::<Test>::get(&file_key).is_some(),
+                    "Incomplete storage request should still exist after bucket deletion"
+                );
+                let incomplete_storage_request =
+                    crate::IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
+                assert_eq!(
+                    incomplete_storage_request.pending_bsp_removals,
+                    vec![bsp_id],
+                    "BSP should still be pending removal"
+                );
+                assert!(
+                    !incomplete_storage_request.pending_bucket_removal,
+                    "Bucket removal should be marked as complete"
+                );
+
+                // Verify event was emitted
+                System::assert_has_event(
+                    Event::BucketFileDeletionCompleted {
+                        user: owner.clone(),
+                        file_key,
+                        file_size: size,
+                        bucket_id,
+                        msp_id: None, // No MSP since bucket has no MSP
+                        old_root: initial_bucket_root,
+                        new_root: final_bucket_root,
+                    }
+                    .into(),
+                );
+
+                // Delete file from BSP to complete cleanup
+                let bsp_forest_proof_delete = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                assert_ok!(FileSystem::delete_file_for_incomplete_storage_request(
+                    RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()),
+                    file_key,
+                    Some(bsp_id),
+                    bsp_forest_proof_delete,
+                ));
+
+                // Verify incomplete storage request was completely removed
+                assert!(
+                    crate::IncompleteStorageRequests::<Test>::get(&file_key).is_none(),
+                    "Incomplete storage request should be removed after all providers deleted"
+                );
+            });
+        }
     }
 }
 
@@ -11762,14 +11957,14 @@ mod delete_file_tests {
                 let expected_initial_payment_stream_rate = (initial_bucket_size_in_giga_units as u128) * price_per_giga_unit_of_data_per_block + zero_sized_bucket_rate;
 
                 assert_eq!(initial_payment_stream_value, Some(expected_initial_payment_stream_rate));
-                // Create signature 
+                // Create signature
                 let (signed_delete_intention, signature) =
                     create_file_deletion_signature(&Keyring::Alice, file_key);
 
                 // Get the current bucket root before deletion
                 let old_bucket_root = <<Test as crate::Config>::Providers as ReadBucketsInterface>::get_root_bucket(&bucket_id).unwrap();
 
-                // Create forest proof 
+                // Create forest proof
                 let forest_proof = CompactProof {
                     encoded_nodes: vec![file_key.as_ref().to_vec()],
                 };
@@ -11782,7 +11977,7 @@ mod delete_file_tests {
                     Some(bucket_id.encode()),
                 ).unwrap();
 
-                // This is incorrect behaviour given that apply_delta returns the mutation provided (in our case, the value we pass as `file_key` 
+                // This is incorrect behaviour given that apply_delta returns the mutation provided (in our case, the value we pass as `file_key`
                 // to `delete_file_for_incomplete_storage_request`) instead of the new root calculated after the mutation.
                 // TODO: Consider using the real `apply_delta` from the `file_system` pallet to enable correct testing.
                 assert_eq!(expected_new_root, file_key);
@@ -11796,18 +11991,18 @@ mod delete_file_tests {
                     location,
                     size,
                     fingerprint,
-                    msp_id,
+                    None,
                     forest_proof,
                 ));
 
-                // Verify MspFileDeletionCompleted event was emitted
+                // Verify BucketFileDeletionCompleted event was emitted
                 System::assert_last_event(
-                    Event::MspFileDeletionCompleted {
+                    Event::BucketFileDeletionCompleted {
                         user: alice.clone(),
                         file_key,
                         file_size: size,
                         bucket_id,
-                        msp_id,
+                        msp_id: Some(msp_id),
                         old_root: old_bucket_root,
                         new_root: expected_new_root,
                     }
@@ -11889,7 +12084,7 @@ mod delete_file_tests {
                     Some(bsp_id.encode()),
                 ).unwrap();
 
-                // This is incorrect behaviour given that apply_delta returns the mutation provided (in our case, the value we pass as `file_key` 
+                // This is incorrect behaviour given that apply_delta returns the mutation provided (in our case, the value we pass as `file_key`
                 // to `delete_file_for_incomplete_storage_request`) instead of the new root calculated after the mutation.
                 // TODO: Consider using the real `apply_delta` from the `file_system` pallet to enable correct testing.
                 assert_eq!(expected_new_root, file_key);
@@ -11903,7 +12098,7 @@ mod delete_file_tests {
                     location,
                     size,
                     fingerprint,
-                    bsp_id,
+                    Some(bsp_id),
                     forest_proof,
                 ));
 
@@ -12007,7 +12202,7 @@ mod delete_file_tests {
                     Some(bsp_id.encode()),
                 ).unwrap();
 
-                // This is incorrect behaivour given that apply_delta returns the mutation provided (in our case, the value we pass as `file_key` 
+                // This is incorrect behaivour given that apply_delta returns the mutation provided (in our case, the value we pass as `file_key`
                 // to `delete_file_for_incomplete_storage_request`) instead of the new root calculated after the mutation.
                 // TODO: Consider using the real `apply_delta` from the `file_system` pallet to enable correct testing.
                 assert_eq!(expected_new_root, file_key);
@@ -12021,7 +12216,7 @@ mod delete_file_tests {
                     location,
                     size,
                     fingerprint,
-                    bsp_id,
+                    Some(bsp_id),
                     forest_proof,
                 ));
 
@@ -12102,7 +12297,7 @@ mod delete_file_tests {
                     Some(bucket_id.encode()),
                 ).unwrap();
 
-                // This is incorrect behaviour given that apply_delta returns the mutation provided (in our case, the value we pass as `file_key` 
+                // This is incorrect behaviour given that apply_delta returns the mutation provided (in our case, the value we pass as `file_key`
                 // to `delete_file_for_incomplete_storage_request`) instead of the new root calculated after the mutation.
                 // TODO: Consider using the real `apply_delta` from the `file_system` pallet to enable correct testing.
                 assert_eq!(expected_new_root, file_key);
@@ -12116,18 +12311,18 @@ mod delete_file_tests {
                     location,
                     size,
                     fingerprint,
-                    msp_id,
+                    None,
                     forest_proof,
                 ));
 
                 // Verify event shows Alice as the user
                 System::assert_last_event(
-                    Event::MspFileDeletionCompleted {
+                    Event::BucketFileDeletionCompleted {
                         user: alice.clone(),
                         file_key,
                         file_size: size,
                         bucket_id,
-                        msp_id,
+                        msp_id: Some(msp_id),
                         old_root: old_bucket_root,
                         new_root: expected_new_root,
                     }
@@ -12152,7 +12347,7 @@ mod delete_file_tests {
             new_test_ext().execute_with(|| {
                 let alice = Keyring::Alice.to_account_id();
                 let msp = Keyring::Charlie.to_account_id();
-                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                let (bucket_id, file_key, location, size, fingerprint, _msp_id, _value_prop_id) =
                     setup_file_in_msp_bucket(&alice, &msp);
 
                 // Wrong signer (Bob instead of Alice)
@@ -12174,7 +12369,7 @@ mod delete_file_tests {
                         location,
                         size,
                         fingerprint,
-                        msp_id,
+                        None,
                         forest_proof,
                     ),
                     Error::<Test>::InvalidSignature
@@ -12187,7 +12382,7 @@ mod delete_file_tests {
             new_test_ext().execute_with(|| {
                 let alice = Keyring::Alice.to_account_id();
                 let msp = Keyring::Charlie.to_account_id();
-                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                let (bucket_id, file_key, location, size, fingerprint, _msp_id, _value_prop_id) =
                     setup_file_in_msp_bucket(&alice, &msp);
 
                 // Alice signs the deletion message
@@ -12212,7 +12407,7 @@ mod delete_file_tests {
                         location,
                         size,
                         fingerprint,
-                        msp_id,
+                        None,
                         invalid_forest_proof,
                     ),
                     Error::<Test>::ExpectedInclusionProof
@@ -12229,7 +12424,7 @@ mod delete_file_tests {
 
                 // Create bucket while Eve is solvent
                 let _guard = set_eve_insolvent(false);
-                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                let (bucket_id, file_key, location, size, fingerprint, _msp_id, _value_prop_id) =
                     setup_file_in_msp_bucket(&eve, &msp);
                 let (signed_delete_intention, signature) =
                     create_file_deletion_signature(&Keyring::Eve, file_key);
@@ -12253,7 +12448,7 @@ mod delete_file_tests {
                         location,
                         size,
                         fingerprint,
-                        msp_id,
+                        None,
                         forest_proof,
                     ),
                     Error::<Test>::OperationNotAllowedWithInsolventUser
@@ -12269,7 +12464,7 @@ mod delete_file_tests {
                 let msp = Keyring::Charlie.to_account_id();
 
                 // Alice owns the bucket and file
-                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                let (bucket_id, file_key, location, size, fingerprint, _msp_id, _value_prop_id) =
                     setup_file_in_msp_bucket(&alice, &msp);
 
                 // Bob tries to delete Alice's file (wrong owner)
@@ -12300,7 +12495,7 @@ mod delete_file_tests {
                         location,
                         size,
                         fingerprint,
-                        msp_id,
+                        None,
                         forest_proof,
                     ),
                     Error::<Test>::InvalidFileKeyMetadata
@@ -12337,7 +12532,7 @@ mod delete_file_tests {
                         location,
                         size,
                         fingerprint,
-                        invalid_provider_id,
+                        Some(invalid_provider_id), // Invalid BSP ID
                         forest_proof,
                     ),
                     Error::<Test>::InvalidProviderID
@@ -12350,7 +12545,7 @@ mod delete_file_tests {
             new_test_ext().execute_with(|| {
                 let alice = Keyring::Alice.to_account_id();
                 let msp = Keyring::Charlie.to_account_id();
-                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                let (bucket_id, file_key, location, size, fingerprint, _msp_id, _value_prop_id) =
                     setup_file_in_msp_bucket(&alice, &msp);
 
                 // Create a different file key for the signed message
@@ -12373,7 +12568,7 @@ mod delete_file_tests {
                         location,
                         size,
                         fingerprint,
-                        msp_id,
+                        None,
                         forest_proof,
                     ),
                     Error::<Test>::InvalidFileKeyMetadata
@@ -12382,7 +12577,7 @@ mod delete_file_tests {
         }
 
         #[test]
-        fn delete_file_fails_when_msp_not_storing_bucket() {
+        fn delete_file_succeeds_when_msp_not_storing_bucket() {
             new_test_ext().execute_with(|| {
                 let alice = Keyring::Alice.to_account_id();
                 let msp_storing_file = Keyring::Charlie.to_account_id();
@@ -12400,7 +12595,7 @@ mod delete_file_tests {
                 ) = setup_file_in_msp_bucket(&alice, &msp_storing_file);
 
                 // Set up MSP that does NOT store the file
-                let (msp_not_storing_file_id, _dave_value_prop_id) =
+                let (_msp_not_storing_file_id, _dave_value_prop_id) =
                     add_msp_to_provider_storage(&msp_not_storing_file);
 
                 // Alice signs the deletion message (valid signature)
@@ -12412,25 +12607,19 @@ mod delete_file_tests {
                     encoded_nodes: vec![file_key.as_ref().to_vec()],
                 };
 
-                // Fisherman node attempts exploiting the system by sending:
-                // - Valid proof from MSP that stores the file
-                // - But specifies MSP that does NOT store the file
-                // This should fail with MspNotStoringBucket error
-                assert_noop!(
-                    FileSystem::delete_file(
-                        RuntimeOrigin::signed(alice.clone()),
-                        alice.clone(),
-                        signed_delete_intention,
-                        signature,
-                        bucket_id,
-                        location,
-                        size,
-                        fingerprint,
-                        msp_not_storing_file_id,
-                        forest_proof,
-                    ),
-                    Error::<Test>::MspNotStoringBucket
-                );
+                // This should succeed with InvalidProviderID error
+                assert_ok!(FileSystem::delete_file(
+                    RuntimeOrigin::signed(alice.clone()),
+                    alice.clone(),
+                    signed_delete_intention,
+                    signature,
+                    bucket_id,
+                    location,
+                    size,
+                    fingerprint,
+                    None,
+                    forest_proof,
+                ),);
             });
         }
     }
@@ -12547,7 +12736,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 // Verify the incomplete storage request has the correct BSPs
                 let incomplete_storage_request = IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
                 assert_eq!(incomplete_storage_request.pending_bsp_removals, vec![bsp_id]);
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
 
                 // Create forest proof showing BSP stores the file
                 let forest_proof = CompactProof {
@@ -12558,14 +12747,14 @@ mod delete_file_for_incomplete_storage_request_tests {
                 assert_ok!(FileSystem::delete_file_for_incomplete_storage_request(
                     RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()), // Any caller
                     file_key,
-                    bsp_id,
+                    Some(bsp_id),
                     forest_proof,
                 ));
 
                 // Warning
-                // We can't perform this check that after deleting the only file that a BSP is storing, the root 
-                // should revert to the default root, because the `apply_delta` function defined in the mock runtime 
-                // returns the mutation provided (in our case, the value we pass as `file_key` to 
+                // We can't perform this check that after deleting the only file that a BSP is storing, the root
+                // should revert to the default root, because the `apply_delta` function defined in the mock runtime
+                // returns the mutation provided (in our case, the value we pass as `file_key` to
                 // `delete_file_for_incomplete_storage_request`) instead of the new root calculated after the mutation.
                 // Reference: https://github.com/Moonsong-Labs/storage-hub/blob/main/pallets/file-system/src/mock.rs#L568C5-L586
                 //
@@ -12573,8 +12762,8 @@ mod delete_file_for_incomplete_storage_request_tests {
                 // let bsp_root_after_deleting = <<Test as crate::Config>::Providers as ReadProvidersInterface>::get_root(bsp_id).unwrap();
                 // assert_eq!(bsp_root_after_deleting, default_root);
                 //
-                // A similar issue exists in the `bsp_confirm_stop_storing` test. There, the `default_root` is passed 
-                // to the extrinsic (and a custom `PendingStopStoringRequests` is injected). We can’t do that here, 
+                // A similar issue exists in the `bsp_confirm_stop_storing` test. There, the `default_root` is passed
+                // to the extrinsic (and a custom `PendingStopStoringRequests` is injected). We can’t do that here,
                 // since we check the integrity of the `file_key` against the `StorageRequest`.
                 //
                 // This limitation means we can’t test whether the challenge cycles stop.
@@ -12597,7 +12786,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::FileDeletedFromIncompleteStorageRequest {
                         file_key,
-                        provider_id: bsp_id,
+                        bsp_id: Some(bsp_id),
                     }
                     .into(),
                 );
@@ -12794,7 +12983,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
 
                 assert!(
                     IncompleteStorageRequests::<Test>::get(&file_key2).is_some(),
@@ -12806,7 +12995,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
 
                 // Verify second storage request was marked as rejected
                 System::assert_has_event(
@@ -12825,7 +13014,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 assert_ok!(FileSystem::delete_file_for_incomplete_storage_request(
                     RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()),
                     file_key2,
-                    bsp_id,
+                    Some(bsp_id),
                     forest_proof_delete,
                 ));
 
@@ -12851,7 +13040,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::FileDeletedFromIncompleteStorageRequest {
                         file_key: file_key2,
-                        provider_id: bsp_id,
+                        bsp_id: Some(bsp_id),
                     }
                     .into(),
                 );
@@ -13022,7 +13211,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp2_id, bsp1_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
 
                 // Storage request was marked as rejected
                 System::assert_has_event(
@@ -13041,7 +13230,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 assert_ok!(FileSystem::delete_file_for_incomplete_storage_request(
                     RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()),
                     file_key,
-                    bsp1_id,
+                    Some(bsp1_id),
                     forest_proof_delete1,
                 ));
 
@@ -13049,7 +13238,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::FileDeletedFromIncompleteStorageRequest {
                         file_key,
-                        provider_id: bsp1_id,
+                        bsp_id: Some(bsp1_id),
                     }
                     .into(),
                 );
@@ -13075,7 +13264,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp2_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
 
                 // Second BSP deletion - this should trigger full cleanup
                 let forest_proof_delete2 = CompactProof {
@@ -13085,7 +13274,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 assert_ok!(FileSystem::delete_file_for_incomplete_storage_request(
                     RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()),
                     file_key,
-                    bsp2_id,
+                    Some(bsp2_id),
                     forest_proof_delete2,
                 ));
 
@@ -13093,7 +13282,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::FileDeletedFromIncompleteStorageRequest {
                         file_key,
-                        provider_id: bsp2_id,
+                        bsp_id: Some(bsp2_id),
                     }
                     .into(),
                 );
@@ -13199,7 +13388,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
 
                 // Verify can successfully cleanup with delete_file_for_incomplete_storage_request
                 let forest_proof_delete = CompactProof {
@@ -13209,7 +13398,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 assert_ok!(FileSystem::delete_file_for_incomplete_storage_request(
                     RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()),
                     file_key,
-                    bsp_id,
+                    Some(bsp_id),
                     forest_proof_delete,
                 ));
 
@@ -13224,7 +13413,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::FileDeletedFromIncompleteStorageRequest {
                         file_key,
-                        provider_id: bsp_id,
+                        bsp_id: Some(bsp_id),
                     }
                     .into(),
                 );
@@ -13304,7 +13493,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 let incomplete_storage_request =
                     IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
                 assert!(incomplete_storage_request.pending_bsp_removals.is_empty());
-                assert_eq!(incomplete_storage_request.pending_msp_removal, Some(msp_id));
+                assert_eq!(incomplete_storage_request.pending_bucket_removal, true);
 
                 // Verify can successfully cleanup with delete_file_for_incomplete_storage_request
                 let forest_proof_delete = CompactProof {
@@ -13314,7 +13503,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 assert_ok!(FileSystem::delete_file_for_incomplete_storage_request(
                     RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()),
                     file_key,
-                    msp_id,
+                    None,
                     forest_proof_delete,
                 ));
 
@@ -13329,7 +13518,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::FileDeletedFromIncompleteStorageRequest {
                         file_key,
-                        provider_id: msp_id,
+                        bsp_id: None,
                     }
                     .into(),
                 );
@@ -13436,7 +13625,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp_id]
                 );
-                assert_eq!(incomplete_storage_request.pending_msp_removal, Some(msp_id));
+                assert_eq!(incomplete_storage_request.pending_bucket_removal, true);
 
                 // Delete file from MSP first
                 let msp_forest_proof_delete = CompactProof {
@@ -13446,7 +13635,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 assert_ok!(FileSystem::delete_file_for_incomplete_storage_request(
                     RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()),
                     file_key,
-                    msp_id,
+                    None,
                     msp_forest_proof_delete,
                 ));
 
@@ -13461,7 +13650,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
 
                 // Delete file from BSP (last provider)
                 let bsp_forest_proof_delete = CompactProof {
@@ -13471,7 +13660,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 assert_ok!(FileSystem::delete_file_for_incomplete_storage_request(
                     RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()),
                     file_key,
-                    bsp_id,
+                    Some(bsp_id),
                     bsp_forest_proof_delete,
                 ));
 
@@ -13486,14 +13675,14 @@ mod delete_file_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::FileDeletedFromIncompleteStorageRequest {
                         file_key,
-                        provider_id: msp_id,
+                        bsp_id: None,
                     }
                     .into(),
                 );
                 System::assert_has_event(
                     Event::FileDeletedFromIncompleteStorageRequest {
                         file_key,
-                        provider_id: bsp_id,
+                        bsp_id: Some(bsp_id),
                     }
                     .into(),
                 );
@@ -13601,7 +13790,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp_id]
                 );
-                assert_eq!(incomplete_storage_request.pending_msp_removal, Some(msp_id));
+                assert_eq!(incomplete_storage_request.pending_bucket_removal, true);
 
                 // Delete file from BSP first
                 let bsp_forest_proof_delete = CompactProof {
@@ -13611,7 +13800,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 assert_ok!(FileSystem::delete_file_for_incomplete_storage_request(
                     RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()),
                     file_key,
-                    bsp_id,
+                    Some(bsp_id),
                     bsp_forest_proof_delete,
                 ));
 
@@ -13623,7 +13812,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 let incomplete_storage_request =
                     IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
                 assert!(incomplete_storage_request.pending_bsp_removals.is_empty());
-                assert_eq!(incomplete_storage_request.pending_msp_removal, Some(msp_id));
+                assert_eq!(incomplete_storage_request.pending_bucket_removal, true);
 
                 // Delete file from MSP (last provider)
                 let msp_forest_proof_delete = CompactProof {
@@ -13633,7 +13822,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 assert_ok!(FileSystem::delete_file_for_incomplete_storage_request(
                     RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()),
                     file_key,
-                    msp_id,
+                    None,
                     msp_forest_proof_delete,
                 ));
 
@@ -13648,14 +13837,14 @@ mod delete_file_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::FileDeletedFromIncompleteStorageRequest {
                         file_key,
-                        provider_id: bsp_id,
+                        bsp_id: Some(bsp_id),
                     }
                     .into(),
                 );
                 System::assert_has_event(
                     Event::FileDeletedFromIncompleteStorageRequest {
                         file_key,
-                        provider_id: msp_id,
+                        bsp_id: None,
                     }
                     .into(),
                 );
@@ -13748,7 +13937,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
 
                 // Verify can successfully cleanup with delete_file_for_incomplete_storage_request
                 let forest_proof_delete = CompactProof {
@@ -13758,7 +13947,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 assert_ok!(FileSystem::delete_file_for_incomplete_storage_request(
                     RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()),
                     file_key,
-                    bsp_id,
+                    Some(bsp_id),
                     forest_proof_delete,
                 ));
 
@@ -13779,7 +13968,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::FileDeletedFromIncompleteStorageRequest {
                         file_key,
-                        provider_id: bsp_id,
+                        bsp_id: Some(bsp_id),
                     }
                     .into(),
                 );
@@ -14127,7 +14316,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     FileSystem::delete_file_for_incomplete_storage_request(
                         RuntimeOrigin::signed(Keyring::Alice.to_account_id()),
                         non_existent_file_key,
-                        bsp_id,
+                        Some(bsp_id),
                         forest_proof,
                     ),
                     Error::<Test>::IncompleteStorageRequestNotFound
@@ -14190,7 +14379,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     FileSystem::delete_file_for_incomplete_storage_request(
                         RuntimeOrigin::signed(Keyring::Alice.to_account_id()),
                         file_key,
-                        bsp_id,
+                        Some(bsp_id),
                         forest_proof,
                     ),
                     Error::<Test>::IncompleteStorageRequestNotFound
@@ -14268,7 +14457,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp1_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
 
                 // Try to delete from BSP2
                 let forest_proof_delete = CompactProof {
@@ -14279,7 +14468,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     FileSystem::delete_file_for_incomplete_storage_request(
                         RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()),
                         file_key,
-                        bsp2_id, // BSP2 never volunteered
+                        Some(bsp2_id), // BSP2 never volunteered
                         forest_proof_delete,
                     ),
                     Error::<Test>::ProviderNotStoringFile
@@ -14296,7 +14485,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp1_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
             });
         }
 
@@ -14358,10 +14547,10 @@ mod delete_file_for_incomplete_storage_request_tests {
                     FileSystem::delete_file_for_incomplete_storage_request(
                         RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()),
                         file_key,
-                        non_existent_provider_id, // Non-existent provider
+                        Some(non_existent_provider_id), // Non-existent provider
                         forest_proof_delete,
                     ),
-                    Error::<Test>::InvalidProviderID
+                    Error::<Test>::ProviderNotStoringFile
                 );
 
                 // Verify incomplete storage request was not impacted
@@ -14375,7 +14564,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
             });
         }
 
@@ -14456,7 +14645,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp2_id, bsp_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
 
                 // First deletion succeeds
                 let forest_proof_delete = CompactProof {
@@ -14466,7 +14655,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 assert_ok!(FileSystem::delete_file_for_incomplete_storage_request(
                     RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()),
                     file_key,
-                    bsp_id,
+                    Some(bsp_id),
                     forest_proof_delete.clone(),
                 ));
 
@@ -14481,14 +14670,14 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp2_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
 
                 // Try to delete again - should fail because this BSP no longer stores the file
                 assert_noop!(
                     FileSystem::delete_file_for_incomplete_storage_request(
                         RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()),
                         file_key,
-                        bsp_id, // Same BSP, same file
+                        Some(bsp_id), // Same BSP, same file
                         forest_proof_delete,
                     ),
                     Error::<Test>::ProviderNotStoringFile
@@ -14555,7 +14744,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
 
                 // Try to delete with invalid forest proof
                 let invalid_forest_proof = CompactProof {
@@ -14566,7 +14755,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     FileSystem::delete_file_for_incomplete_storage_request(
                         RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()),
                         file_key,
-                        bsp_id,
+                        Some(bsp_id),
                         invalid_forest_proof,
                     ),
                     Error::<Test>::ExpectedInclusionProof
@@ -14583,7 +14772,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     incomplete_storage_request.pending_bsp_removals,
                     vec![bsp_id]
                 );
-                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+                assert!(!incomplete_storage_request.pending_bucket_removal);
             });
         }
 
@@ -14620,9 +14809,9 @@ mod delete_file_for_incomplete_storage_request_tests {
                         bucket_id,
                         location: location.clone(),
                         fingerprint,
-                        size,
+                        file_size: size,
                         pending_bsp_removals: BoundedVec::try_from(vec![bsp_id]).unwrap(),
-                        pending_msp_removal: None,
+                        pending_bucket_removal: false,
                     },
                 );
 
@@ -14635,7 +14824,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                     FileSystem::delete_file_for_incomplete_storage_request(
                         RuntimeOrigin::signed(Keyring::Alice.to_account_id()),
                         wrong_file_key,
-                        bsp_id,
+                        Some(bsp_id),
                         forest_proof,
                     ),
                     Error::<Test>::FileKeyMismatch

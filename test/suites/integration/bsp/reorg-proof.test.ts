@@ -296,7 +296,7 @@ await describeBspNet(
       // Check that reorg was processed both by the User and BSP nodes.
       const bestBlockHash = (await userApi.rpc.chain.getHeader()).hash.toString();
       assert(bestBlockHash === reorgBlockHash.toString());
-      await userApi.wait.bspCatchUpToChainTip(bspApi);
+      await userApi.wait.nodeCatchUpToChainTip(bspApi);
 
       // Check that the file is included in the BSP's local Forest, and that the
       // Forest root is back to being the one including the file.

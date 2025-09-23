@@ -12,7 +12,7 @@ on:
 
 jobs:
   prepare:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       version: ${{ steps.determine_version.outputs.version }}
       is_published_event: ${{ steps.set_is_published.outputs.is_published_event }}
@@ -48,7 +48,7 @@ jobs:
   publish:
     needs: prepare
     if: needs.prepare.outputs.is_published_event == 'true'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     defaults:
       run:
         working-directory: sdk

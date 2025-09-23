@@ -94,6 +94,7 @@ pub trait StorageEnableApiCollection<Runtime>:
         CustomChallenge<Runtime>,
     > + FileSystemRuntimeApi<
         Block,
+        AccountId<Runtime>,
         BackupStorageProviderId<Runtime>,
         MainStorageProviderId<Runtime>,
         Runtime::Hash,
@@ -101,6 +102,9 @@ pub trait StorageEnableApiCollection<Runtime>:
         ChunkId,
         BucketId<Runtime>,
         StorageRequestMetadata<Runtime>,
+        BucketId<Runtime>,
+        StorageDataUnit<Runtime>,
+        Runtime::Hash,
     > + StorageProvidersRuntimeApi<
         Block,
         BlockNumber<Runtime>,
@@ -139,6 +143,7 @@ where
             CustomChallenge<Runtime>,
         > + FileSystemRuntimeApi<
             Block,
+            AccountId<Runtime>,
             BackupStorageProviderId<Runtime>,
             MainStorageProviderId<Runtime>,
             Runtime::Hash,
@@ -146,6 +151,9 @@ where
             ChunkId,
             BucketId<Runtime>,
             StorageRequestMetadata<Runtime>,
+            BucketId<Runtime>,
+            StorageDataUnit<Runtime>,
+            Runtime::Hash,
         > + StorageProvidersRuntimeApi<
             Block,
             BlockNumber<Runtime>,
@@ -247,6 +255,7 @@ pub trait StorageEnableRuntime:
             MaxFilePathSize: Send + Sync,
             MaxNumberOfPeerIds: Send + Sync,
             MaxPeerIdSize: Send + Sync,
+            MaxReplicationTarget: Send + Sync,
         >
         + pallet_transaction_payment::Config
         + pallet_balances::Config<Balance: Into<BigDecimal> + Into<NumberOrHex> + MaybeDisplay>
@@ -449,9 +458,9 @@ pub trait KeyTypeOperations: Sized {
 ///         nonce: self.nonce,
 ///         tip: self.tip,
 ///     });
-///     
+///
 ///     let implicit = E::implicit(self.genesis_hash, self.block_hash);
-///     
+///
 ///     generic::UncheckedExtrinsic::new_signed(
 ///         function,
 ///         address,

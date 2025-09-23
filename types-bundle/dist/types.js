@@ -182,6 +182,21 @@ export const SHARED_TYPES = {
       DecodeError: null
     }
   },
+  QueryIncompleteStorageRequestMetadataError: {
+    _enum: {
+      StorageNotFound: null,
+      InternalError: null
+    }
+  },
+  IncompleteStorageRequestMetadataResponse: {
+    owner: "AccountId",
+    bucket_id: "BucketId",
+    location: "Vec<u8>",
+    file_size: "StorageDataUnit",
+    fingerprint: "H256",
+    pending_bsp_removals: "Vec<BackupStorageProviderId>",
+    pending_bucket_removal: "bool"
+  },
   QueryProviderMultiaddressesError: {
     _enum: {
       ProviderNotRegistered: null,

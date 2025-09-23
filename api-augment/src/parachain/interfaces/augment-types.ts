@@ -1395,6 +1395,7 @@ import type {
   GetStakeError,
   GetUsersWithDebtOverThresholdError,
   IncompleteFileStatus,
+  IncompleteStorageRequestMetadataResponse,
   IsStorageRequestOpenToVolunteersError,
   LoadFileInStorageResult,
   MainStorageProviderId,
@@ -1409,6 +1410,7 @@ import type {
   QueryConfirmChunksToProveForFileError,
   QueryEarliestChangeCapacityBlockError,
   QueryFileEarliestVolunteerBlockError,
+  QueryIncompleteStorageRequestMetadataError,
   QueryMspConfirmChunksToProveForFileError,
   QueryMspIdOfBucketIdError,
   QueryProviderMultiaddressesError,
@@ -2005,6 +2007,7 @@ declare module "@polkadot/types/types/registry" {
     IncomingParachainDeploy: IncomingParachainDeploy;
     IncomingParachainFixed: IncomingParachainFixed;
     IncompleteFileStatus: IncompleteFileStatus;
+    IncompleteStorageRequestMetadataResponse: IncompleteStorageRequestMetadataResponse;
     Index: Index;
     IndicesLookupSource: IndicesLookupSource;
     IndividualExposure: IndividualExposure;
@@ -2330,6 +2333,7 @@ declare module "@polkadot/types/types/registry" {
     QueryEarliestChangeCapacityBlockError: QueryEarliestChangeCapacityBlockError;
     QueryFileEarliestVolunteerBlockError: QueryFileEarliestVolunteerBlockError;
     QueryId: QueryId;
+    QueryIncompleteStorageRequestMetadataError: QueryIncompleteStorageRequestMetadataError;
     QueryMspConfirmChunksToProveForFileError: QueryMspConfirmChunksToProveForFileError;
     QueryMspIdOfBucketIdError: QueryMspIdOfBucketIdError;
     QueryProviderMultiaddressesError: QueryProviderMultiaddressesError;

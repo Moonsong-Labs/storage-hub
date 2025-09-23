@@ -1,20 +1,6 @@
 import "@polkadot/api-base/types/calls";
 import type { ApiTypes, AugmentedCall, DecoratedCallBase } from "@polkadot/api-base/types";
 import type {
-  BTreeMap,
-  Bytes,
-  Null,
-  Option,
-  Result,
-  U256,
-  Vec,
-  bool,
-  u256,
-  u32,
-  u64
-} from "@polkadot/types-codec";
-import type { AnyNumber, IMethod, ITuple } from "@polkadot/types-codec/types";
-import type {
   BabeEquivocationProof,
   BabeGenesisConfiguration,
   Epoch,
@@ -60,6 +46,20 @@ import type { ApplyExtrinsicResult, DispatchError, Key } from "@polkadot/types/i
 import type { TransactionSource, TransactionValidity } from "@polkadot/types/interfaces/txqueue";
 import type { IExtrinsic, Observable } from "@polkadot/types/types";
 import type {
+  BTreeMap,
+  Bytes,
+  bool,
+  Null,
+  Option,
+  Result,
+  U256,
+  u32,
+  u64,
+  u256,
+  Vec
+} from "@polkadot/types-codec";
+import type { AnyNumber, IMethod, ITuple } from "@polkadot/types-codec/types";
+import type {
   BackupStorageProvider,
   BackupStorageProviderId,
   BucketId,
@@ -73,6 +73,7 @@ import type {
   GetProofSubmissionRecordError,
   GetStakeError,
   GetUsersWithDebtOverThresholdError,
+  IncompleteStorageRequestMetadataResponse,
   IsStorageRequestOpenToVolunteersError,
   MainStorageProviderId,
   Multiaddresses,
@@ -84,6 +85,7 @@ import type {
   QueryBucketsOfUserStoredByMspError,
   QueryEarliestChangeCapacityBlockError,
   QueryFileEarliestVolunteerBlockError,
+  QueryIncompleteStorageRequestMetadataError,
   QueryMspConfirmChunksToProveForFileError,
   QueryMspIdOfBucketIdError,
   QueryProviderMultiaddressesError,
@@ -479,6 +481,20 @@ declare module "@polkadot/api-base/types/calls" {
           bspId: BackupStorageProviderId | string | Uint8Array,
           fileKey: H256 | string | Uint8Array
         ) => Observable<Result<BlockNumber, QueryFileEarliestVolunteerBlockError>>
+      >;
+      /**
+       * Query incomplete storage request metadata for a file key.
+       **/
+      queryIncompleteStorageRequestMetadata: AugmentedCall<
+        ApiType,
+        (
+          fileKey: H256 | string | Uint8Array
+        ) => Observable<
+          Result<
+            IncompleteStorageRequestMetadataResponse,
+            QueryIncompleteStorageRequestMetadataError
+          >
+        >
       >;
       /**
        * Query the chunks that a MSP needs to prove to confirm that it is storing a file.

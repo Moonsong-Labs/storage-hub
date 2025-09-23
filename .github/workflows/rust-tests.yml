@@ -20,7 +20,7 @@ on:
 
 jobs:
   setup:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       node_changed: ${{ steps.node_check.outputs.changed }}
     env:
@@ -47,7 +47,7 @@ jobs:
     needs: [setup]
     if: needs.setup.outputs.node_changed == 'true'
     name: Prepare artifacts
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     env:
       SCCACHE_GHA_ENABLED: 'true'
       RUSTC_WRAPPER: 'sccache'
@@ -101,7 +101,7 @@ jobs:
     needs: [setup, prepare]
     if: needs.setup.outputs.node_changed == 'true'
     name: Run all tests (/w partitioning)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:

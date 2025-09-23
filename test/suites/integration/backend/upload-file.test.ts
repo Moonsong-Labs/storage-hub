@@ -4,52 +4,15 @@ import path from "node:path";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
 import * as $ from "scale-codec";
-import { bspKey, describeMspNet, type EnrichedBspApi, shUser, waitFor } from "../../../util";
-
-/**
- * Mock JWT generator that matches the backend's generate_mock_jwt function
- */
-function generateMockJWT(): string {
-  // Header: {"alg":"HS256","typ":"JWT"} already encoded
-  const header = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9";
-
-  // Create a mock payload with proper structure
-  const payload = {
-    // Standard JWT claims
-    sub: "0x1234567890123456789012345678901234567890", // Subject: user's ETH address
-    exp: 9999999999, // Expiration: far into the future for mock
-    iat: 1704067200 // Issued at: 2024-01-01
-  };
-
-  // Encode payload using base64url (no padding)
-  const payloadJson = JSON.stringify(payload);
-  const payloadB64 = Buffer.from(payloadJson).toString("base64url");
-
-  // Mock signature (base64url encoded)
-  const signature = Buffer.from("mock_signature").toString("base64url");
-
-  return `${header}.${payloadB64}.${signature}`;
-}
-
-// Backend API Types
-// TODO: Add a script in the backend to generate these types instead.
-interface ComponentHealth {
-  status: string;
-  message?: string;
-}
-
-interface HealthComponents {
-  storage: ComponentHealth;
-  postgres: ComponentHealth;
-  rpc: ComponentHealth;
-}
-
-interface HealthResponse {
-  status: string;
-  version: string;
-  service: string;
-  components: HealthComponents;
-}
+import {
+  bspKey,
+  describeMspNet,
+  type EnrichedBspApi,
+  generateMockJWT,
+  shUser,
+  waitFor
+} from "../../../util";
+import type { HealthResponse } from "./types";
 
 await describeMspNet(
   "Backend file upload integration",
