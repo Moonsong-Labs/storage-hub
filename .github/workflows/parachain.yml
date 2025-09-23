@@ -36,9 +36,13 @@ jobs:
       node_changed: ${{ steps.node_check.outputs.changed }}
       backend_changed: ${{ steps.backend_check.outputs.changed }}
       image-tag: ${{ steps.set-tag.outputs.tag }}
+      force_node: ${{ steps.flags.outputs.force_node }}
+      force_backend: ${{ steps.flags.outputs.force_backend }}
     env:
       SKIP_BUILD_LABEL_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'skip-node-build') }}
       SKIP_BACKEND_BUILD_LABEL_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'skip-backend-build') }}
+      FORCE_NODE_PUBLISH_LABEL_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'force-node-publish') }}
+      FORCE_BACKEND_PUBLISH_LABEL_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'force-backend-publish') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -76,10 +80,16 @@ jobs:
           else
             echo "tag=sha-$(git log -1 --format='%H' | cut -c1-8)" >> $GITHUB_OUTPUT
           fi
+      - name: Set flags
+        id: flags
+        run: |
+          echo "force_node=${{ env.FORCE_NODE_PUBLISH_LABEL_PRESENT }}" >> $GITHUB_OUTPUT
+          echo "force_backend=${{ env.FORCE_BACKEND_PUBLISH_LABEL_PRESENT }}" >> $GITHUB_OUTPUT
 
-  build_binaries:
+  build_node:
     needs: [setup]
-    name: 'Build node and backend binaries'
+    if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
+    name: 'Build node binary'
     runs-on: ubuntu-latest
     env:
       SCCACHE_GHA_ENABLED: 'true'
@@ -116,35 +126,70 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build node
-        if: needs.setup.outputs.node_changed == 'true'
         run: cargo build -p storage-hub-node --release --locked
-      - name: Build backend with mocks
-        # TODO: Consider compiling with mocks feature for end users
-        run: cargo build -p sh-msp-backend --release --locked
       - name: Build Stats
         run: sccache --show-stats || true
       - name: Check Node Built By Mold
-        if: needs.setup.outputs.node_changed == 'true'
         run: readelf -p .comment target/release/storage-hub-node
-      - name: Check Backend Built By Mold
-        if: needs.setup.outputs.backend_changed == 'true'
-        run: readelf -p .comment target/release/sh-msp-backend
-      - name: Prepare artefacts
+      - name: Prepare artefacts (node)
         run: |
-          mkdir -p runtimes
           mkdir -p build
-          if [[ "${{ needs.setup.outputs.node_changed }}" == 'true' ]]; then
-            cp target/release/storage-hub-node build/
-            cp target/release/wbuild/sh-*/sh*_runtime.compact.compressed.wasm runtimes/
-            ls -la runtimes/sh*_runtime.compact.compressed.wasm
-          fi
-          cp target/release/sh-msp-backend build/
+          cp target/release/storage-hub-node build/
+          cp target/release/wbuild/sh-*/sh*_runtime.compact.compressed.wasm runtimes/
       - uses: actions/upload-artifact@v4
-        if: needs.setup.outputs.node_changed == 'true'
         with:
           name: node
           path: build/storage-hub-node
           if-no-files-found: error
+
+  build_backend:
+    needs: [setup]
+    if: needs.setup.outputs.backend_changed == 'true' || needs.setup.outputs.force_backend == 'true'
+    name: 'Build backend binary'
+    runs-on: ubuntu-latest
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: 'sccache'
+      CARGO_INCREMENTAL: '0'
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: actions-rust-lang/setup-rust-toolchain@v1.8
+        with:
+          cache: true
+      - name: Cache cargo registry and git index
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+      - uses: rui314/setup-mold@v1
+      - name: Set build flags (use mold linker)
+        run: echo "RUSTFLAGS=${{ env.RUSTFLAGS }} -C linker=clang -C link-arg=-fuse-ld=mold" >> $GITHUB_ENV
+      - uses: ./.github/workflow-templates/setup-pnpm
+      - name: Install libpq-dev
+        run: sudo apt-get update && sudo apt-get install -y libpq-dev libclang-dev
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build backend
+        run: cargo build -p sh-msp-backend --release --locked
+      - name: Build Stats
+        run: sccache --show-stats || true
+      - name: Check Backend Built By Mold
+        run: readelf -p .comment target/release/sh-msp-backend
+      - name: Prepare artefacts (backend)
+        run: |
+          mkdir -p build
+          cp target/release/sh-msp-backend build/
       - uses: actions/upload-artifact@v4
         with:
           name: backend
@@ -152,8 +197,8 @@ jobs:
           if-no-files-found: error
   
   push_node_image:
-    needs: [build_binaries, setup]
-    if: needs.setup.outputs.node_changed == 'true'
+    needs: [build_node, setup]
+    if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
     name: 'Push node Docker image'
     runs-on: ubuntu-latest
     steps:
@@ -198,8 +243,8 @@ jobs:
             org.opencontainers.image.licenses=${{ github.event.repository.license.spdx_id }}
   
   push_backend_image:
-    needs: [build_binaries, setup]
-    if: needs.setup.outputs.backend_changed == 'true'
+    needs: [build_backend, setup]
+    if: needs.setup.outputs.backend_changed == 'true' || needs.setup.outputs.force_backend == 'true'
     name: 'Push backend Docker image'
     runs-on: ubuntu-latest
     steps:
@@ -245,7 +290,7 @@ jobs:
 
 
   # zombie_test_k8:
-  #   needs: [build_binaries, setup]
+  #   needs: [build_node, setup]
   #   name: "Test Simple Network"
   #   runs-on: ubuntu-latest
   #   env:
@@ -271,7 +316,7 @@ jobs:
   #         pnpm  zombienet test configs/simple.zndsl
 
   network_test:
-    needs: [build_binaries, setup]
+    needs: [build_node, setup]
     name: 'Run Para & Relay Network Test'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -311,7 +356,7 @@ jobs:
           pnpm test:full
 
   zombie_test:
-    needs: [build_binaries, setup]
+    needs: [build_node, setup]
     name: 'Run Zombienet Tests'
     timeout-minutes: 30
     runs-on: ubuntu-latest
@@ -345,7 +390,7 @@ jobs:
           pnpm  zombienet test --provider native configs/simpleNative.zndsl
 
   dev_node_test:
-    needs: [build_binaries, setup]
+    needs: [build_node, setup]
     timeout-minutes: 30
     name: 'Run Dev Node Tests'
     runs-on: ubuntu-latest
@@ -395,7 +440,7 @@ jobs:
                ./suites/solo-node/**/**.test.ts
 
   full_net:
-    needs: [build_binaries, setup]
+    needs: [build_node, setup]
     name: 'Run FullNet Tests'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -487,7 +532,7 @@ jobs:
           if-no-files-found: warn
 
   bsp_net:
-    needs: [build_binaries, setup]
+    needs: [build_node, setup]
     name: 'Run BSPNet Tests'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -576,7 +621,7 @@ jobs:
           if-no-files-found: warn
 
   backend_test:
-    needs: [build_binaries, setup]
+    needs: [build_node, build_backend, setup]
     name: 'Run Backend Integration Tests'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -685,7 +730,7 @@ jobs:
           if-no-files-found: warn
 
   user_net:
-    needs: [build_binaries, setup]
+    needs: [build_node, setup]
     name: 'Run User Tests'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -777,7 +822,7 @@ jobs:
           if-no-files-found: warn
 
   fisherman_test:
-    needs: [build_binaries, setup]
+    needs: [build_node, setup]
     name: 'Run Fisherman Tests'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -864,7 +909,7 @@ jobs:
           if-no-files-found: warn
 
   solochain_evm:
-    needs: [build_binaries, setup]
+    needs: [build_node, build_backend, setup]
     name: 'Run Solochain EVM Tests'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -983,7 +1028,7 @@ jobs:
           if-no-files-found: warn
 
   typegen_check:
-    needs: [build_binaries, setup]
+    needs: [build_node, setup]
     name: 'Check Rust/TS bindings are up to date'
     runs-on: ubuntu-latest
     steps:
