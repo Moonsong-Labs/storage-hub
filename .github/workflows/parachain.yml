@@ -149,7 +149,7 @@ jobs:
   build_backend:
     needs: [setup]
     name: 'Build backend binary'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     env:
       SCCACHE_GHA_ENABLED: 'true'
       RUSTC_WRAPPER: 'sccache'
@@ -207,7 +207,7 @@ jobs:
     needs: [build_node, setup]
     if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
     name: 'Push node Docker image'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
       - name: Download node binary
@@ -297,7 +297,7 @@ jobs:
   # zombie_test_k8:
   #   needs: [build_node, setup]
   #   name: "Test Simple Network"
-  #   runs-on: ubuntu-latest
+  #   runs-on: blacksmith-16vcpu-ubuntu-2404
   #   env:
   #     SH_IMAGE: ${{ needs.setup.outputs.image-tag }}
   #   defaults:
