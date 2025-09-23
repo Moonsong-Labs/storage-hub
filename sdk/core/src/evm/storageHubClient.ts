@@ -8,9 +8,13 @@
  * Binary data (signatures) are passed as Uint8Array. Hex values are 0x-prefixed strings (32-byte IDs).
  */
 
-import { filesystemAbi } from "../abi/filesystem";
-import type { EvmWriteOptions, StorageHubClientOptions } from "./types";
-import type { ReplicationLevel } from "./types";
+import { filesystemAbi } from '../abi/filesystem';
+import type {
+  EvmWriteOptions,
+  StorageHubClientOptions
+} from './types';
+import { ReplicationLevel, FileOperation } from './types';
+import type { FileInfo } from '../types';
 import {
   type Address,
   createPublicClient,
@@ -365,31 +369,21 @@ export class StorageHubClient {
   }
 
   /**
-   * Request deletion of a file using a signed intention.
-   * @param signedIntention - tuple [fileKey: 0x32, operation: number] where operation must be 0 (Delete)
-   * @param signature - 65-byte secp256k1 signature over the SCALE-encoded intention
-   * @param bucketId - 32-byte bucket ID
-   * @param location - file path as string (max 512 UTF-8 bytes)
-   * @param size - file size as bigint (storage units)
-   * @param fingerprint - 32-byte file fingerprint
-   * @param options - optional gas and fee overrides
+   * Request deletion of a file from the network.
+   * @param fileInfo File information containing all required data
+   * @param operation File operation to perform (defaults to Delete)
+   * @param options Optional transaction options
+   * @returns Transaction hash
    */
   async requestDeleteFile(
-    signedIntention: readonly [`0x${string}`, number],
-    signature: Uint8Array,
-    bucketId: `0x${string}`,
-    location: string,
-    size: bigint,
-    fingerprint: `0x${string}`,
-    options?: EvmWriteOptions
-  ) {
-    const signatureHex = toHex(signature);
-    const locationHex = this.validateStringLength(
-      location,
-      StorageHubClient.MAX_LOCATION_BYTES,
-      "File location"
-    );
-    const args = [signedIntention, signatureHex, bucketId, locationHex, size, fingerprint] as const;
+    fileInfo: FileInfo,
+    operation: FileOperation = FileOperation.Delete,
+    options?: EvmWriteOptions,
+  ): Promise<`0x${string}`> {
+    // Create signed intention and execute transaction
+    const { signedIntention, signature } = await this.signIntention(fileInfo.fileKey, operation);
+    const locationHex = this.validateStringLength(fileInfo.location, StorageHubClient.MAX_LOCATION_BYTES, 'File location');
+    const args = [signedIntention, signature, fileInfo.bucketId, locationHex, fileInfo.size, fileInfo.fingerprint] as const;
 
     const gasLimit = await this.estimateGas("requestDeleteFile", args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
