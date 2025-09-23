@@ -19,6 +19,9 @@ pub struct Bucket {
     /// The ID of the MSP (column in the database) that the bucket belongs to.
     pub msp_id: Option<i64>,
     pub account: String,
+    /// The onchain Bucket ID
+    ///
+    /// Generally, the bucket ID is a H256
     pub onchain_bucket_id: Vec<u8>,
     pub name: Vec<u8>,
     pub collection_id: Option<String>,

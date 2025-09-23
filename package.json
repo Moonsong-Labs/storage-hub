@@ -10,6 +10,7 @@
   ],
   "scripts": {
     "lint": "pnpm -r lint",
+    "lint:fix": "pnpm -r lint:fix",
     "fmt": "pnpm -r fmt",
     "fmt:fix": "pnpm -r fmt:fix"
   },

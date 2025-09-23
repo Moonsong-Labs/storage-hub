@@ -4,28 +4,14 @@ import path from "node:path";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
 import * as $ from "scale-codec";
-import { type EnrichedBspApi, describeMspNet, shUser, waitFor } from "../../../util";
-import { generateMockJWT } from "./util";
-
-// Backend API Types
-// TODO: Add a script in the backend to generate these types instead.
-interface ComponentHealth {
-  status: string;
-  message?: string;
-}
-
-interface HealthComponents {
-  storage: ComponentHealth;
-  postgres: ComponentHealth;
-  rpc: ComponentHealth;
-}
-
-interface HealthResponse {
-  status: string;
-  version: string;
-  service: string;
-  components: HealthComponents;
-}
+import {
+  type EnrichedBspApi,
+  describeMspNet,
+  shUser,
+  waitFor,
+  generateMockJWT
+} from "../../../util";
+import type { HealthResponse } from "./types";
 
 await describeMspNet(
   "Backend file upload integration",
