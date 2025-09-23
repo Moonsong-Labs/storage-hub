@@ -3,14 +3,13 @@ use std::str::FromStr;
 use alloy_core::primitives::{eip191_hash_message, PrimitiveSignature};
 use alloy_signer::utils::public_key_to_address;
 use axum_jwt::{
-    jsonwebtoken::{self, DecodingKey, EncodingKey, Header, TokenData},
+    jsonwebtoken::{self, DecodingKey, EncodingKey, Header},
     Decoder,
 };
 use chrono::{Duration, Utc};
 
 use crate::{
     api::validation::validate_eth_address,
-    constants::mocks::MOCK_ADDRESS,
     error::Error,
     models::auth::{
         JwtClaims, NonceResponse, ProfileResponse, TokenResponse, User, VerifyResponse,

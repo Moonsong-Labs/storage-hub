@@ -9,7 +9,10 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use axum_extra::{extract::Multipart, response::file_stream::FileStream};
+use axum_extra::{
+    extract::{multipart::Field, Multipart},
+    response::file_stream::FileStream,
+};
 use codec::Decode;
 use serde::Deserialize;
 use tokio::fs::File;
