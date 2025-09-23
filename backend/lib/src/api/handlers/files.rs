@@ -1,10 +1,14 @@
+//! This module contains the handlers for the file management endpoints
+//!
+//! TODO: move the rest of the endpoints as they are implemented
+
 #[cfg(not(feature = "mocks"))]
 use std::collections::HashSet;
 use std::io::Cursor;
 
 use axum::{
     body::Bytes,
-    extract::{Path, Query, State},
+    extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -14,7 +18,6 @@ use axum_extra::{
     response::file_stream::FileStream,
 };
 use codec::Decode;
-use serde::Deserialize;
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
 
@@ -28,81 +31,9 @@ use shc_file_manager::{in_memory::InMemoryFileDataTrie, traits::FileDataTrie};
 use shp_types::Hashing;
 
 use crate::{
-    error::Error,
-    models::files::{FileListResponse, FileUploadResponse},
+    api::handlers::auth::AuthenticatedUser, error::Error, models::files::FileUploadResponse,
     services::Services,
 };
-
-pub mod auth;
-
-use auth::AuthenticatedUser;
-
-// TODO: we could move from `TypedHeader` to axum-jwt (needs rust 1.88)
-
-// ==================== MSP Info Handlers ====================
-
-pub async fn info(State(services): State<Services>) -> Result<impl IntoResponse, Error> {
-    let response = services.msp.get_info().await?;
-    Ok(Json(response))
-}
-
-pub async fn stats(State(services): State<Services>) -> Result<impl IntoResponse, Error> {
-    let response = services.msp.get_stats().await?;
-    Ok(Json(response))
-}
-
-pub async fn value_props(State(services): State<Services>) -> Result<impl IntoResponse, Error> {
-    let response = services.msp.get_value_props().await?;
-    Ok(Json(response))
-}
-
-pub async fn msp_health(State(services): State<Services>) -> Result<impl IntoResponse, Error> {
-    let response = services.health.check_health().await;
-    Ok(Json(response))
-}
-
-// ==================== Bucket Handlers ====================
-
-pub async fn list_buckets(
-    State(services): State<Services>,
-    AuthenticatedUser { address }: AuthenticatedUser,
-) -> Result<impl IntoResponse, Error> {
-    let response = services.msp.list_user_buckets(&address).await?;
-    Ok(Json(response))
-}
-
-pub async fn get_bucket(
-    State(services): State<Services>,
-    AuthenticatedUser { address: _ }: AuthenticatedUser,
-    Path(bucket_id): Path<String>,
-) -> Result<impl IntoResponse, Error> {
-    let response = services.msp.get_bucket(&bucket_id).await?;
-    Ok(Json(response))
-}
-
-#[derive(Debug, Deserialize)]
-pub struct FilesQuery {
-    pub path: Option<String>,
-}
-
-pub async fn get_files(
-    State(services): State<Services>,
-    AuthenticatedUser { address: _ }: AuthenticatedUser,
-    Path(bucket_id): Path<String>,
-    Query(query): Query<FilesQuery>,
-) -> Result<impl IntoResponse, Error> {
-    let files = services
-        .msp
-        .get_files(&bucket_id, query.path.as_deref())
-        .await?;
-    let response = FileListResponse {
-        bucket_id: bucket_id.clone(),
-        files,
-    };
-    Ok(Json(response))
-}
-
-// ==================== File Handlers ====================
 
 pub async fn download_by_location(
     State(_services): State<Services>,
@@ -154,6 +85,7 @@ pub async fn download_by_key(
         return Err(Error::BadRequest("Invalid file key".to_string()));
     }
 
+    // TODO: validate user has accessn to file
     let download_result = services.msp.get_file_from_key(&file_key).await?;
 
     // Extract filename from location or use file_key as fallback
@@ -185,10 +117,13 @@ pub async fn download_by_key(
 
 pub async fn get_file_info(
     State(services): State<Services>,
-    AuthenticatedUser { address: _ }: AuthenticatedUser,
+    AuthenticatedUser { address }: AuthenticatedUser,
     Path((bucket_id, file_key)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, Error> {
-    let response = services.msp.get_file_info(&bucket_id, &file_key).await?;
+    let response = services
+        .msp
+        .get_file_info(&bucket_id, &file_key, &address)
+        .await?;
     Ok(Json(response))
 }
 
@@ -308,6 +243,7 @@ async fn process_upload_after_validation(
     _services: &Services,
 ) -> Result<impl IntoResponse, Error> {
     // Consume the file field to ensure it is correct
+
     let _file_bytes = file_data_stream
         .bytes()
         .await
@@ -460,15 +396,5 @@ pub async fn distribute_file(
     Path((bucket_id, file_key)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, Error> {
     let response = services.msp.distribute_file(&bucket_id, &file_key).await?;
-    Ok(Json(response))
-}
-
-// ==================== Payment Handler ====================
-
-pub async fn payment_stream(
-    State(services): State<Services>,
-    AuthenticatedUser { address }: AuthenticatedUser,
-) -> Result<impl IntoResponse, Error> {
-    let response = services.msp.get_payment_stream(&address).await?;
     Ok(Json(response))
 }

@@ -14,7 +14,7 @@ on:
 jobs:
   check-rust-fmt:
     name: "Check format with rustfmt"
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
@@ -23,7 +23,7 @@ jobs:
 
   check-rust-lint:
     name: "Check lint with clippy"
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
@@ -42,7 +42,7 @@ jobs:
 
   check-ts-fmt:
     name: "Check format with biome"
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/workflow-templates/setup-pnpm
@@ -51,7 +51,7 @@ jobs:
 
   check-ts-lint:
     name: "Check lint with biome"
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/workflow-templates/setup-pnpm
@@ -60,7 +60,7 @@ jobs:
 
   typecheck-ts:
     name: "Typecheck with tsc"
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/workflow-templates/setup-pnpm
