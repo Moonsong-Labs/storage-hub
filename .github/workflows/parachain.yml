@@ -594,6 +594,8 @@ jobs:
 
           mkdir -p test-logs
 
+          echo "Containers used: $(docker ps -a)"
+
           # Collect logs from Storage Hub images
           for container in $(docker ps -a --filter "ancestor=moonsonglabs/storage-hub" --format "{{.Names}}"); do
             echo "Collecting logs from $container"
