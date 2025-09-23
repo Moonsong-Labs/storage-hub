@@ -111,7 +111,7 @@ pnpm test:full
 ### Backend Integration Tests
 
 > [!IMPORTANT]
-> Requires both images: node (`pnpm docker:build`) and backend (`pnpm docker:build:backend`). On macOS, build the backend via `pnpm crossbuild:mac:backend`; on Linux, `cargo build --release -p sh-msp-backend`.
+> Requires both images: node (`pnpm docker:build`) and backend (`pnpm docker:build:backend`). On macOS, build the backend via `pnpm crossbuild:mac:backend`; on Linux, `cargo build --release -p sh-msp-backend`. The backend Docker build uses `docker/storage-hub-msp-backend.Dockerfile`.
 
 ```sh
 # In the /test directory
@@ -124,7 +124,7 @@ Runs a local full network with indexer and the backend, then executes backend te
 ### Solochain EVM Integration Tests
 
 > [!IMPORTANT]
-> Requires both images: node (`pnpm docker:build`) and backend (`pnpm docker:build:backend`). On macOS, build the backend via `pnpm crossbuild:mac:backend`; on Linux, `cargo build --release -p sh-msp-backend`.
+> Requires both images: node (`pnpm docker:build`) and backend (`pnpm docker:build:backend`). On macOS, build the backend via `pnpm crossbuild:mac:backend`; on Linux, `cargo build --release -p sh-msp-backend`. The backend Docker build uses `docker/storage-hub-msp-backend.Dockerfile`.
 
 ```sh
 # In the /test directory
