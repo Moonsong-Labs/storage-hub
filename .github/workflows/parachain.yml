@@ -88,7 +88,6 @@ jobs:
 
   build_node:
     needs: [setup]
-    if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
     name: 'Build node binary'
     runs-on: ubuntu-latest
     env:
@@ -126,17 +125,22 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build node
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
         run: cargo build -p storage-hub-node --release --locked
       - name: Build Stats
         run: sccache --show-stats || true
       - name: Check Node Built By Mold
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
         run: readelf -p .comment target/release/storage-hub-node
       - name: Prepare artefacts (node)
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
         run: |
           mkdir -p build
+          mkdir -p runtimes
           cp target/release/storage-hub-node build/
           cp target/release/wbuild/sh-*/sh*_runtime.compact.compressed.wasm runtimes/
       - uses: actions/upload-artifact@v4
+        if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
         with:
           name: node
           path: build/storage-hub-node
@@ -144,7 +148,6 @@ jobs:
 
   build_backend:
     needs: [setup]
-    if: needs.setup.outputs.backend_changed == 'true' || needs.setup.outputs.force_backend == 'true'
     name: 'Build backend binary'
     runs-on: ubuntu-latest
     env:
@@ -181,16 +184,20 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build backend
+        if: needs.setup.outputs.backend_changed == 'true' || needs.setup.outputs.force_backend == 'true'
         run: cargo build -p sh-msp-backend --release --locked
       - name: Build Stats
         run: sccache --show-stats || true
       - name: Check Backend Built By Mold
+        if: needs.setup.outputs.backend_changed == 'true' || needs.setup.outputs.force_backend == 'true'
         run: readelf -p .comment target/release/sh-msp-backend
       - name: Prepare artefacts (backend)
+        if: needs.setup.outputs.backend_changed == 'true' || needs.setup.outputs.force_backend == 'true'
         run: |
           mkdir -p build
           cp target/release/sh-msp-backend build/
       - uses: actions/upload-artifact@v4
+        if: needs.setup.outputs.backend_changed == 'true' || needs.setup.outputs.force_backend == 'true'
         with:
           name: backend
           path: build/sh-msp-backend
