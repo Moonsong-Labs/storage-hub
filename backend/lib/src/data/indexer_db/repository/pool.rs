@@ -124,15 +124,13 @@ impl SmartPool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::constants::test::DEFAULT_TEST_DATABASE_URL;
+    use crate::data::indexer_db::test_helpers::setup_test_db;
 
     #[tokio::test]
-    // TODO: should NOT panic when we add testcontainers
-    #[should_panic]
     async fn create_and_get_connection() {
-        let pool = SmartPool::new(DEFAULT_TEST_DATABASE_URL)
-            .await
-            .expect("able to create pool");
+        let (_container, url) = setup_test_db(vec![], vec![]).await;
+
+        let pool = SmartPool::new(&url).await.expect("able to create pool");
 
         pool.get().await.expect("able to get connection");
 

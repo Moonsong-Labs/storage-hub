@@ -5,6 +5,8 @@ use axum::{
 };
 use serde_json::json;
 
+use crate::data::indexer_db::repository::error::RepositoryError;
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Configuration error: {0}")]
@@ -63,5 +65,20 @@ impl IntoResponse for Error {
         }));
 
         (status, body).into_response()
+    }
+}
+
+impl From<RepositoryError> for Error {
+    fn from(value: RepositoryError) -> Self {
+        match value {
+            database @ RepositoryError::Database(_) => Self::Database(database.to_string()),
+            RepositoryError::Configuration(err)
+            | RepositoryError::Transaction(err)
+            | RepositoryError::Pool(err) => Self::Database(err.to_string()),
+            invalid_input @ RepositoryError::InvalidInput(_) => {
+                Self::BadRequest(invalid_input.to_string())
+            }
+            not_found @ RepositoryError::NotFound { .. } => Self::NotFound(not_found.to_string()),
+        }
     }
 }
