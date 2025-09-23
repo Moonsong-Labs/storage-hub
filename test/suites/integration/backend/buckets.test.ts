@@ -1,5 +1,5 @@
 import assert, { strictEqual } from "node:assert";
-import { type EnrichedBspApi, describeMspNet, shUser, generateMockJWT } from "../../../util";
+import { type EnrichedBspApi, describeMspNet, shUser } from "../../../util";
 import {
   generateMockJWT,
   type Bucket,

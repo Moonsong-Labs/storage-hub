@@ -1,10 +1,6 @@
 import assert, { strictEqual } from "node:assert";
 import { type EnrichedBspApi, describeMspNet } from "../../../util";
-import {
-  generateMockJWT,
-  type PaymentStream,
-  type PaymentStreamResponse
-} from "../../../util/backend";
+import { generateMockJWT, type PaymentStreamsResponse } from "../../../util/backend";
 
 await describeMspNet(
   "Backend Payment Streams retrieval",

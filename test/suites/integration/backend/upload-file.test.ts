@@ -4,13 +4,7 @@ import path from "node:path";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
 import * as $ from "scale-codec";
-import {
-  type EnrichedBspApi,
-  describeMspNet,
-  shUser,
-  waitFor,
-  generateMockJWT
-} from "../../../util";
+import { type EnrichedBspApi, describeMspNet, shUser, waitFor } from "../../../util";
 import { generateMockJWT, type HealthResponse } from "../../../util/backend";
 
 await describeMspNet(
