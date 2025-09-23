@@ -1,6 +1,20 @@
 import "@polkadot/api-base/types/calls";
 import type { ApiTypes, AugmentedCall, DecoratedCallBase } from "@polkadot/api-base/types";
 import type {
+  BTreeMap,
+  Bytes,
+  Null,
+  Option,
+  Result,
+  U256,
+  Vec,
+  bool,
+  u256,
+  u32,
+  u64
+} from "@polkadot/types-codec";
+import type { AnyNumber, IMethod, ITuple } from "@polkadot/types-codec/types";
+import type {
   BabeEquivocationProof,
   BabeGenesisConfiguration,
   Epoch,
@@ -45,20 +59,6 @@ import type { RuntimeVersion } from "@polkadot/types/interfaces/state";
 import type { ApplyExtrinsicResult, DispatchError, Key } from "@polkadot/types/interfaces/system";
 import type { TransactionSource, TransactionValidity } from "@polkadot/types/interfaces/txqueue";
 import type { IExtrinsic, Observable } from "@polkadot/types/types";
-import type {
-  BTreeMap,
-  Bytes,
-  bool,
-  Null,
-  Option,
-  Result,
-  U256,
-  u32,
-  u64,
-  u256,
-  Vec
-} from "@polkadot/types-codec";
-import type { AnyNumber, IMethod, ITuple } from "@polkadot/types-codec/types";
 import type {
   BackupStorageProvider,
   BackupStorageProviderId,
@@ -445,7 +445,7 @@ declare module "@polkadot/api-base/types/calls" {
         ) => Observable<Result<bool, IsStorageRequestOpenToVolunteersError>>
       >;
       /**
-       * Get the pending storage requests for a given MSP.
+       * Get pending storage requests for a Main Storage Provider.
        **/
       pendingStorageRequestsByMsp: AugmentedCall<
         ApiType,
