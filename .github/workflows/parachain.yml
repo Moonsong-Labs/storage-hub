@@ -95,9 +95,9 @@ jobs:
       - name: Set build flags (use mold linker)
         run: echo "RUSTFLAGS=${{ env.RUSTFLAGS }} -C linker=clang -C link-arg=-fuse-ld=mold" >> $GITHUB_ENV
       - uses: ./.github/workflow-templates/setup-pnpm
-      # Install libpq-dev
-      - name: Install libpq-dev
-        run: sudo apt-get update && sudo apt-get install -y libpq-dev libclang-dev
+      # Install required build dependencies (incl. binutils for readelf)
+      - name: Install build deps
+        run: sudo apt-get update && sudo apt-get install -y libpq-dev libclang-dev binutils
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
         with:

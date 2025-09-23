@@ -61,7 +61,7 @@ await describeBspNet(
       await userApi.docker.resumeContainer({
         containerName: "sh-bsp-three"
       });
-      await userApi.wait.bspCatchUpToChainTip(bspThreeApi);
+      await userApi.wait.nodeCatchUpToChainTip(bspThreeApi);
 
       // TODO: create an RPC to automatically execute everything below
       // TODO: everything below should be removed and replaced with other testing logic

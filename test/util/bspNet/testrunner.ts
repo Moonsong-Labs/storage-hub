@@ -171,6 +171,11 @@ export async function describeMspNet<
           fishermanApiPromise = BspNetTestApi.create(
             `ws://127.0.0.1:${ShConsts.NODE_INFOS.fisherman.port}`
           );
+
+          // Ensure fisherman node is ready and synced
+          const userApi = await userApiPromise;
+          const fishermanApi = await fishermanApiPromise;
+          await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
         }
       });
 
