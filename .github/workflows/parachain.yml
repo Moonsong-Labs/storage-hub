@@ -724,22 +724,34 @@ jobs:
             docker logs $container > "test-logs/${container}.log" 2>&1
           done
 
-          SP_LOGS_DIR=$(find /tmp -maxdepth 1 -type d -name "bsp-logs-*" -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" ")
+          # Collect all bsp-logs directories
+          BSP_LOGS_DIRS=$(find /tmp -maxdepth 1 -type d -name "bsp-logs-*" 2>/dev/null || true)
 
-          if [ ! -z "$SP_LOGS_DIR" ]; then
-            echo "Found logs directory: $SP_LOGS_DIR"
-            cp -r $SP_LOGS_DIR/* test-logs/ || true
+          if [ ! -z "$BSP_LOGS_DIRS" ]; then
+            echo "Found bsp-logs directories:"
+            echo "$BSP_LOGS_DIRS"
+            for log_dir in $BSP_LOGS_DIRS; do
+              dir_name=$(basename "$log_dir")
+              echo "Copying $log_dir to test-logs/$dir_name"
+              cp -r "$log_dir" "test-logs/$dir_name" || true
+            done
           else
-            echo "No sp-logs directory found in /tmp"
+            echo "No bsp-logs directories found in /tmp"
           fi
 
-          AUX_LOGS_DIR=$(find /tmp -maxdepth 1 -type d -name "aux-logs-*" -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" ")
+          # Collect all aux-logs directories
+          AUX_LOGS_DIRS=$(find /tmp -maxdepth 1 -type d -name "aux-logs-*" 2>/dev/null || true)
 
-          if [ ! -z "$AUX_LOGS_DIR" ]; then
-            echo "Found logs directory: $AUX_LOGS_DIR"
-            cp -r $AUX_LOGS_DIR/* test-logs/ || true
+          if [ ! -z "$AUX_LOGS_DIRS" ]; then
+            echo "Found aux-logs directories:"
+            echo "$AUX_LOGS_DIRS"
+            for log_dir in $AUX_LOGS_DIRS; do
+              dir_name=$(basename "$log_dir")
+              echo "Copying $log_dir to test-logs/$dir_name"
+              cp -r "$log_dir" "test-logs/$dir_name" || true
+            done
           else
-            echo "No aux-logs directory found in /tmp"
+            echo "No aux-logs directories found in /tmp"
           fi
 
           echo "Collected log files:"
