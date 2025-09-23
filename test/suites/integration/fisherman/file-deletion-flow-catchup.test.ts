@@ -1,24 +1,21 @@
-import assert, { notEqual, strictEqual } from "node:assert";
+import assert, { strictEqual, notEqual } from "node:assert";
 import {
-  assertEventPresent,
-  bspKey,
   describeMspNet,
   type EnrichedBspApi,
   type SqlClient,
   shUser,
+  bspKey,
   sleep,
-  waitFor
+  waitFor,
+  assertEventPresent,
+  ShConsts
 } from "../../../util";
 import {
-  waitForDeleteFileExtrinsic,
-  waitForFishermanProcessing
-} from "../../../util/fisherman/fishermanHelpers";
-import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
-import {
-  waitForBspFileAssociation,
   waitForFileIndexed,
-  waitForMspFileAssociation
+  waitForMspFileAssociation,
+  waitForBspFileAssociation
 } from "../../../util/indexerHelpers";
+import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
 
 /**
  * FISHERMAN FILE DELETION FLOW WITH CATCHUP
@@ -96,9 +93,10 @@ await describeMspNet(
         destination,
         bucketName,
         valuePropId,
-        mspId,
-        null,
-        1
+        ShConsts.DUMMY_MSP_ID,
+        shUser,
+        1,
+        true
       );
 
       fileKey = fileMetadata.fileKey;
@@ -147,8 +145,8 @@ await describeMspNet(
           destination,
           bucketName,
           valuePropId,
-          mspId,
-          null,
+          ShConsts.DUMMY_MSP_ID,
+          shUser,
           1,
           false
         );
@@ -271,29 +269,23 @@ await describeMspNet(
       const eventFileKey = deletionEventData.signedDeleteIntention.fileKey;
       assert.equal(eventFileKey.toString(), fileToDelete.fileKey.toString());
 
-      // Verify fisherman processes the FileDeletionRequested event even from unfinalized blocks
-      const processingFound = await waitForFishermanProcessing(
-        userApi,
-        `Processing file deletion request for signed intention file key: ${fileToDelete.fileKey}`
-      );
-      assert(processingFound, "Should find fisherman processing log even from unfinalized blocks");
-
       // Verify delete_file extrinsics are submitted (should be 2: one for BSP and one for MSP)
-      const deleteFileFound = await waitForDeleteFileExtrinsic(userApi, 2, 30000);
-      assert(
-        deleteFileFound,
-        "Should find 2 delete_file extrinsics in transaction pool (BSP and MSP)"
-      );
+      await userApi.assert.extrinsicPresent({
+        method: "deleteFile",
+        module: "fileSystem",
+        checkTxPool: true,
+        assertLength: 2
+      });
 
       // Now finalize the blocks to process the extrinsics
       const { events } = await userApi.block.seal();
 
-      assertEventPresent(userApi, "fileSystem", "MspFileDeletionCompleted", events);
+      assertEventPresent(userApi, "fileSystem", "BucketFileDeletionCompleted", events);
       assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", events);
 
       // Extract deletion events to verify root changes
       const mspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.MspFileDeletionCompleted,
+        userApi.events.fileSystem.BucketFileDeletionCompleted,
         events
       );
       const bspDeletionEvent = userApi.assert.fetchEvent(

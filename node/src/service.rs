@@ -27,6 +27,7 @@ use sc_service::{Configuration, PartialComponents, RpcHandlers, TFullBackend, Ta
 use sc_telemetry::{Telemetry, TelemetryHandle, TelemetryWorker, TelemetryWorkerHandle};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sc_transaction_pool_api::TransactionPool;
+use shc_client::types::FishermanRole;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use sp_consensus_aura::Slot;
@@ -34,7 +35,6 @@ use sp_core::H256;
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::traits::SaturatedConversion;
 use substrate_prometheus_endpoint::Registry;
-
 // Cumulus Imports
 use cumulus_client_cli::CollatorOptions;
 use cumulus_client_collator::service::CollatorService;
@@ -64,7 +64,7 @@ use sc_consensus_babe::ImportQueueParams as BabeImportQueueParams;
 
 use crate::{
     cli::{self, ProviderType, StorageLayer},
-    command::ProviderOptions,
+    command::{ProviderOptions, RoleOptions},
 };
 
 // StorageHub Imports
@@ -75,15 +75,15 @@ use shc_client::{
     builder::{Buildable, StorageHubBuilder, StorageLayerBuilder},
     handler::{RunnableTasks, StorageHubHandler},
     types::{
-        BspProvider, FishermanRole, InMemoryStorageLayer, MspProvider, NoStorageLayer,
-        RocksDbStorageLayer, ShNodeType, ShRole, ShStorageLayer, UserRole,
+        BspProvider, InMemoryStorageLayer, MspProvider, NoStorageLayer, RocksDbStorageLayer,
+        ShNodeType, ShRole, ShStorageLayer, UserRole,
     },
 };
 use shc_common::{traits::StorageEnableRuntime, types::*};
 use shc_file_transfer_service::{configure_file_transfer_network, fetch_genesis_hash};
 use shc_indexer_db::DbPool;
 use shc_indexer_service::spawn_indexer_service;
-use shc_rpc::StorageHubClientRpcConfig;
+use shc_rpc::{RpcConfig, StorageHubClientRpcConfig};
 use shp_opaque::{Block, Hash};
 
 // Local Runtime Types
@@ -95,7 +95,6 @@ use sh_solochain_evm_runtime::{
 //╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
 //║                                        Generic Types over Runtime                                             ║
 //╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
-
 // Generic client type over Runtime
 pub(crate) type StorageEnableClient<Runtime> =
     shc_common::types::ParachainClient<<Runtime as StorageEnableRuntime>::RuntimeApi>;
@@ -216,88 +215,14 @@ async fn configure_and_spawn_indexer<Runtime: StorageEnableRuntime>(
     Ok(Some(db_pool))
 }
 
-async fn configure_and_spawn_fisherman<Runtime: StorageEnableRuntime>(
-    fisherman_options: &Option<FishermanOptions>,
-    indexer_config: &Option<IndexerOptions>,
-    task_manager: &TaskManager,
-    client: Arc<StorageEnableClient<Runtime>>,
-    keystore: KeystorePtr,
-    rpc_handlers: Arc<RpcHandlers>,
-    rocksdb_root_path: impl Into<PathBuf>,
-    network: Arc<dyn NetworkService>,
-) -> Result<Option<DbPool>, sc_service::Error> {
-    let fisherman_options = match fisherman_options {
-        Some(fc) => fc,
-        None => return Ok(None),
-    };
-
-    // Validate configuration compatibility with indexer if both are enabled
-    if let Some(indexer_cfg) = indexer_config {
-        if indexer_cfg.indexer_mode == shc_indexer_service::IndexerMode::Lite {
-            return Err(sc_service::Error::Other(
-                "Fisherman service cannot run with 'lite' indexer mode. Please use either 'full' or 'fishing' mode."
-                    .to_string(),
-            ));
-        }
-    }
-
-    // Setup database pool for fisherman
-    let db_pool = setup_database_pool(fisherman_options.database_url.clone()).await?;
-
-    // Build StorageHubHandler for fisherman tasks
-    let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "fisherman-service");
-    let mut fisherman_builder =
-        StorageHubBuilder::<FishermanRole, NoStorageLayer, Runtime>::new(task_spawner.clone());
-
-    // Convert rocksdb_root_path to PathBuf first
-    let rocksdb_path: PathBuf = rocksdb_root_path.into();
-
-    // Set the indexer db pool
-    fisherman_builder.with_indexer_db_pool(Some(db_pool.clone()));
-
-    // Spawn the fisherman service
-    fisherman_builder.with_fisherman(client.clone()).await;
-
-    // All variables below are not needed for the fisherman service to operate but required by the StorageHubHandler
-    // TODO: Refactor this once we have a proper setup to support role based StorageHubHandler builder
-    fisherman_builder.setup_storage_layer(None);
-
-    // Setup blockchain service
-    fisherman_builder
-        .with_blockchain(
-            client.clone(),
-            keystore,
-            rpc_handlers,
-            rocksdb_path.clone(),
-            false, // Not in maintenance mode
-        )
-        .await;
-
-    fisherman_builder.with_peer_manager(rocksdb_path);
-    let (_sender, receiver) = async_channel::bounded(1);
-    let protocol_name = ProtocolName::from("/storage-hub/file-transfer/1");
-    fisherman_builder
-        .with_file_transfer(receiver, protocol_name, network)
-        .await;
-
-    // Build the handler
-    let mut fisherman_handler = fisherman_builder.build();
-
-    // Run fisherman tasks
-    fisherman_handler.run_tasks().await;
-
-    Ok(Some(db_pool))
-}
-
-/// Initialize the StorageHubBuilder for the StorageHub node.
 async fn init_sh_builder<R, S, Runtime: StorageEnableRuntime>(
-    provider_options: &Option<ProviderOptions>,
+    role_options: &Option<RoleOptions>,
+    indexer_options: &Option<IndexerOptions>,
     task_manager: &TaskManager,
     file_transfer_request_protocol: Option<(ProtocolName, Receiver<IncomingRequest>)>,
     network: Arc<dyn NetworkService>,
     keystore: KeystorePtr,
     client: Arc<StorageEnableClient<Runtime>>,
-    indexer_options: Option<IndexerOptions>,
 ) -> Result<
     Option<(
         StorageHubBuilder<R, S, Runtime>,
@@ -315,12 +240,50 @@ where
     (R, S): ShNodeType<Runtime>,
     StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder,
 {
+    let role_options = match role_options {
+        Some(role) => role,
+        None => return Ok(None),
+    };
+
+    // Configure indexer if enabled
     let maybe_indexer_db_pool =
         configure_and_spawn_indexer::<Runtime>(&indexer_options, &task_manager, client.clone())
             .await?;
 
-    match provider_options {
-        Some(ProviderOptions {
+    let task_spawner_name = match role_options {
+        RoleOptions::Provider(ProviderOptions {
+            provider_type: ProviderType::Msp,
+            ..
+        }) => "msp-service",
+        RoleOptions::Provider(ProviderOptions {
+            provider_type: ProviderType::Bsp,
+            ..
+        }) => "bsp-service",
+        RoleOptions::Provider(ProviderOptions {
+            provider_type: ProviderType::User,
+            ..
+        }) => "user-service",
+        RoleOptions::Fisherman(_) => "fisherman-service",
+    };
+    let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), task_spawner_name);
+    let mut builder = StorageHubBuilder::<R, S, Runtime>::new(task_spawner);
+
+    // Setup file transfer service (common to all roles)
+    let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
+        file_transfer_request_protocol
+            .expect("FileTransfer request protocol should already be initialised.");
+
+    builder
+        .with_file_transfer(
+            file_transfer_request_receiver,
+            file_transfer_request_protocol_name,
+            network.clone(),
+        )
+        .await;
+
+    // Role-specific configuration
+    let rpc_config = match role_options {
+        RoleOptions::Provider(ProviderOptions {
             rpc_config,
             provider_type,
             storage_path,
@@ -341,57 +304,71 @@ where
                 storage_path, max_storage_capacity, jump_capacity, msp_charging_period,
             );
 
-            // Start building the StorageHubHandler, if running as a provider.
-            let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "sh-builder");
-            let mut storage_hub_builder = StorageHubBuilder::<R, S, Runtime>::new(task_spawner);
-
-            // Setup and spawn the File Transfer Service.
-            let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
-                file_transfer_request_protocol
-                    .expect("FileTransfer request protocol should already be initialised.");
-
-            storage_hub_builder
-                .with_file_transfer(
-                    file_transfer_request_receiver,
-                    file_transfer_request_protocol_name,
-                    network.clone(),
-                )
-                .await;
-
-            // Setup the `ShStorageLayer` and additional configuration parameters.
-            storage_hub_builder
+            // Setup the storage layer and capacity config
+            builder
                 .setup_storage_layer(storage_path.clone())
                 .with_capacity_config(Some(CapacityConfig::new(
                     max_storage_capacity.unwrap_or_default().saturated_into(),
                     jump_capacity.unwrap_or_default().saturated_into(),
                 )));
 
-            storage_hub_builder.with_msp_charge_fees_config(msp_charge_fees.clone());
-            storage_hub_builder.with_msp_move_bucket_config(msp_move_bucket.clone());
-            storage_hub_builder.with_bsp_upload_file_config(bsp_upload_file.clone());
-            storage_hub_builder.with_bsp_move_bucket_config(bsp_move_bucket.clone());
-            storage_hub_builder.with_bsp_charge_fees_config(bsp_charge_fees.clone());
-            storage_hub_builder.with_bsp_submit_proof_config(bsp_submit_proof.clone());
+            // Configure provider-specific options
+            builder.with_msp_charge_fees_config(msp_charge_fees.clone());
+            builder.with_msp_move_bucket_config(msp_move_bucket.clone());
+            builder.with_bsp_upload_file_config(bsp_upload_file.clone());
+            builder.with_bsp_move_bucket_config(bsp_move_bucket.clone());
+            builder.with_bsp_charge_fees_config(bsp_charge_fees.clone());
+            builder.with_bsp_submit_proof_config(bsp_submit_proof.clone());
 
-            // Setup specific configuration for the MSP node.
+            // MSP-specific configuration
             if *provider_type == ProviderType::Msp {
-                storage_hub_builder
+                builder
                     .with_notify_period(*msp_charging_period)
                     .with_indexer_db_pool(maybe_indexer_db_pool);
             }
 
             if let Some(c) = blockchain_service {
-                storage_hub_builder.with_blockchain_service_config(c.clone());
+                builder.with_blockchain_service_config(c.clone());
             }
 
-            // Get the RPC configuration to use for this StorageHub node client.
-            let storage_hub_client_rpc_config =
-                storage_hub_builder.create_rpc_config(keystore, rpc_config.clone());
-
-            Ok(Some((storage_hub_builder, storage_hub_client_rpc_config)))
+            rpc_config.clone()
         }
-        None => Ok(None),
-    }
+        RoleOptions::Fisherman(fisherman_options) => {
+            // Validate configuration compatibility with indexer
+            if let Some(indexer_cfg) = indexer_options {
+                if indexer_cfg.indexer_mode == shc_indexer_service::IndexerMode::Lite {
+                    return Err(sc_service::Error::Other(
+                        "Fisherman service cannot run with 'lite' indexer mode. Please use either 'full' or 'fishing' mode."
+                            .to_string(),
+                    ));
+                }
+            }
+
+            // Setup database pool for fisherman
+            let db_pool = setup_database_pool(fisherman_options.database_url.clone()).await?;
+
+            info!(
+                "🎣 Starting as a Fisherman. Database URL: {}",
+                fisherman_options.database_url
+            );
+
+            // Setup the storage layer (ephemeral for fisherman)
+            builder.setup_storage_layer(None);
+
+            // Set the indexer db pool
+            builder.with_indexer_db_pool(Some(db_pool));
+
+            // Spawn the fisherman service
+            builder.with_fisherman(client.clone()).await;
+
+            RpcConfig::default()
+        }
+    };
+
+    // Create RPC configuration
+    let storage_hub_client_rpc_config = builder.create_rpc_config(keystore, rpc_config);
+
+    Ok(Some((builder, storage_hub_client_rpc_config)))
 }
 
 /// Finish the StorageHubBuilder and run the tasks.
@@ -445,72 +422,93 @@ where
 /// when running in development mode.
 pub async fn start_dev_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
     config: Configuration,
-    provider_options: Option<ProviderOptions>,
+    role_options: Option<RoleOptions>,
     indexer_options: Option<IndexerOptions>,
-    fisherman_options: Option<FishermanOptions>,
     hwbench: Option<sc_sysinfo::HwBench>,
     para_id: ParaId,
     sealing: cli::Sealing,
 ) -> sc_service::error::Result<TaskManager> {
-    if let Some(provider_options) = provider_options {
-        match (
-            &provider_options.provider_type,
-            &provider_options.storage_layer,
-        ) {
-            (&ProviderType::Bsp, &StorageLayer::Memory) => {
+    if let Some(role_options) = role_options {
+        match role_options {
+            RoleOptions::Provider(ProviderOptions {
+                provider_type: ProviderType::Bsp,
+                storage_layer: StorageLayer::Memory,
+                ..
+            }) => {
                 start_dev_parachain_impl::<BspProvider, InMemoryStorageLayer, Network>(
                     config,
-                    Some(provider_options),
+                    Some(role_options),
                     indexer_options,
-                    fisherman_options,
                     hwbench,
                     para_id,
                     sealing,
                 )
                 .await
             }
-            (&ProviderType::Bsp, &StorageLayer::RocksDB) => {
+            RoleOptions::Provider(ProviderOptions {
+                provider_type: ProviderType::Bsp,
+                storage_layer: StorageLayer::RocksDB,
+                ..
+            }) => {
                 start_dev_parachain_impl::<BspProvider, RocksDbStorageLayer, Network>(
                     config,
-                    Some(provider_options),
+                    Some(role_options),
                     indexer_options,
-                    fisherman_options,
                     hwbench,
                     para_id,
                     sealing,
                 )
                 .await
             }
-            (&ProviderType::Msp, &StorageLayer::Memory) => {
+            RoleOptions::Provider(ProviderOptions {
+                provider_type: ProviderType::Msp,
+                storage_layer: StorageLayer::Memory,
+                ..
+            }) => {
                 start_dev_parachain_impl::<MspProvider, InMemoryStorageLayer, Network>(
                     config,
-                    Some(provider_options),
+                    Some(role_options),
                     indexer_options,
-                    fisherman_options,
                     hwbench,
                     para_id,
                     sealing,
                 )
                 .await
             }
-            (&ProviderType::Msp, &StorageLayer::RocksDB) => {
+            RoleOptions::Provider(ProviderOptions {
+                provider_type: ProviderType::Msp,
+                storage_layer: StorageLayer::RocksDB,
+                ..
+            }) => {
                 start_dev_parachain_impl::<MspProvider, RocksDbStorageLayer, Network>(
                     config,
-                    Some(provider_options),
+                    Some(role_options),
                     indexer_options,
-                    fisherman_options,
                     hwbench,
                     para_id,
                     sealing,
                 )
                 .await
             }
-            (&ProviderType::User, _) => {
+            RoleOptions::Provider(ProviderOptions {
+                provider_type: ProviderType::User,
+                ..
+            }) => {
                 start_dev_parachain_impl::<UserRole, NoStorageLayer, Network>(
                     config,
-                    Some(provider_options),
+                    Some(role_options),
                     indexer_options,
-                    fisherman_options,
+                    hwbench,
+                    para_id,
+                    sealing,
+                )
+                .await
+            }
+            RoleOptions::Fisherman(FishermanOptions { .. }) => {
+                start_dev_parachain_impl::<FishermanRole, NoStorageLayer, Network>(
+                    config,
+                    Some(role_options),
+                    indexer_options,
                     hwbench,
                     para_id,
                     sealing,
@@ -524,7 +522,6 @@ pub async fn start_dev_parachain_node<Network: NetworkBackend<OpaqueBlock, Block
             config,
             None,
             indexer_options,
-            fisherman_options,
             hwbench,
             para_id,
             sealing,
@@ -540,77 +537,99 @@ pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash
     parachain_config: Configuration,
     polkadot_config: Configuration,
     collator_options: CollatorOptions,
-    provider_options: Option<ProviderOptions>,
+    role_options: Option<RoleOptions>,
     indexer_options: Option<IndexerOptions>,
-    fisherman_options: Option<FishermanOptions>,
     para_id: ParaId,
     hwbench: Option<sc_sysinfo::HwBench>,
 ) -> sc_service::error::Result<(TaskManager, Arc<StorageEnableClient<ParachainRuntime>>)> {
-    if let Some(provider_options) = provider_options {
-        match (
-            &provider_options.provider_type,
-            &provider_options.storage_layer,
-        ) {
-            (&ProviderType::Bsp, &StorageLayer::Memory) => {
+    if let Some(role_options) = role_options {
+        match role_options {
+            RoleOptions::Provider(ProviderOptions {
+                provider_type: ProviderType::Bsp,
+                storage_layer: StorageLayer::Memory,
+                ..
+            }) => {
                 start_parachain_node_impl::<BspProvider, InMemoryStorageLayer, Network>(
                     parachain_config,
                     polkadot_config,
                     collator_options,
-                    Some(provider_options),
+                    Some(role_options),
                     indexer_options,
-                    fisherman_options,
                     para_id,
                     hwbench,
                 )
                 .await
             }
-            (&ProviderType::Bsp, &StorageLayer::RocksDB) => {
+            RoleOptions::Provider(ProviderOptions {
+                provider_type: ProviderType::Bsp,
+                storage_layer: StorageLayer::RocksDB,
+                ..
+            }) => {
                 start_parachain_node_impl::<BspProvider, RocksDbStorageLayer, Network>(
                     parachain_config,
                     polkadot_config,
                     collator_options,
-                    Some(provider_options),
+                    Some(role_options),
                     indexer_options,
-                    fisherman_options,
                     para_id,
                     hwbench,
                 )
                 .await
             }
-            (&ProviderType::Msp, &StorageLayer::Memory) => {
+            RoleOptions::Provider(ProviderOptions {
+                provider_type: ProviderType::Msp,
+                storage_layer: StorageLayer::Memory,
+                ..
+            }) => {
                 start_parachain_node_impl::<MspProvider, InMemoryStorageLayer, Network>(
                     parachain_config,
                     polkadot_config,
                     collator_options,
-                    Some(provider_options),
+                    Some(role_options),
                     indexer_options,
-                    fisherman_options,
                     para_id,
                     hwbench,
                 )
                 .await
             }
-            (&ProviderType::Msp, &StorageLayer::RocksDB) => {
+            RoleOptions::Provider(ProviderOptions {
+                provider_type: ProviderType::Msp,
+                storage_layer: StorageLayer::RocksDB,
+                ..
+            }) => {
                 start_parachain_node_impl::<MspProvider, RocksDbStorageLayer, Network>(
                     parachain_config,
                     polkadot_config,
                     collator_options,
-                    Some(provider_options),
+                    Some(role_options),
                     indexer_options,
-                    fisherman_options,
                     para_id,
                     hwbench,
                 )
                 .await
             }
-            (&ProviderType::User, _) => {
+            RoleOptions::Provider(ProviderOptions {
+                provider_type: ProviderType::User,
+                ..
+            }) => {
                 start_parachain_node_impl::<UserRole, NoStorageLayer, Network>(
                     parachain_config,
                     polkadot_config,
                     collator_options,
-                    Some(provider_options),
+                    Some(role_options),
                     indexer_options,
-                    fisherman_options,
+                    para_id,
+                    hwbench,
+                )
+                .await
+            }
+            RoleOptions::Fisherman(FishermanOptions { .. }) => {
+                start_parachain_node_impl::<FishermanRole, NoStorageLayer, Network>(
+                    parachain_config,
+                    polkadot_config,
+                    collator_options,
+                    Some(role_options),
+                    indexer_options,
                     para_id,
                     hwbench,
                 )
@@ -625,7 +644,6 @@ pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash
             collator_options,
             None,
             indexer_options,
-            fisherman_options,
             para_id,
             hwbench,
         )
@@ -744,9 +762,8 @@ pub fn new_partial_parachain(
 /// Start a development node with the given solo chain `Configuration`.
 async fn start_dev_parachain_impl<R, S, Network>(
     config: Configuration,
-    provider_options: Option<ProviderOptions>,
+    role_options: Option<RoleOptions>,
     indexer_options: Option<IndexerOptions>,
-    fisherman_options: Option<FishermanOptions>,
     hwbench: Option<sc_sysinfo::HwBench>,
     para_id: ParaId,
     sealing: cli::Sealing,
@@ -764,18 +781,18 @@ where
     use sc_consensus_manual_seal::{run_manual_seal, EngineCommand, ManualSealParams};
 
     // Check if we're in maintenance mode and build the dev node in maintenance mode if so
-    let maintenance_mode = provider_options
-        .as_ref()
-        .map_or(false, |opts| opts.maintenance_mode);
+    let maintenance_mode = role_options.as_ref().map_or(false, |opts| match opts {
+        RoleOptions::Provider(p) => p.maintenance_mode,
+        RoleOptions::Fisherman(f) => f.maintenance_mode,
+    });
     if maintenance_mode {
         log::info!("🛠️  Running dev node in maintenance mode");
         log::info!("🛠️  Network participation is disabled");
         log::info!("🛠️  Only storage management RPC methods are available");
         return start_dev_parachain_in_maintenance_mode::<R, S, Network>(
             config,
-            provider_options,
+            role_options,
             indexer_options,
-            fisherman_options,
             hwbench,
         )
         .await;
@@ -818,7 +835,7 @@ where
 
     // If we are a provider or fisherman we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
-    if provider_options.is_some() || fisherman_options.is_some() {
+    if role_options.is_some() {
         file_transfer_request_protocol =
             Some(configure_file_transfer_network::<_, ParachainRuntime>(
                 fetch_genesis_hash(client.clone()),
@@ -913,13 +930,13 @@ where
     // If node is running as a Storage Provider, start building the StorageHubHandler using the StorageHubBuilder.
     let (sh_builder, maybe_storage_hub_client_rpc_config) =
         match init_sh_builder::<R, S, ParachainRuntime>(
-            &provider_options,
+            &role_options,
+            &indexer_options,
             &task_manager,
             file_transfer_request_protocol,
             network.clone(),
             keystore.clone(),
             client.clone(),
-            indexer_options.clone(),
         )
         .await?
         {
@@ -961,7 +978,7 @@ where
     })?;
 
     // Finish building the StorageHubBuilder if node is running as a Storage Provider.
-    if let Some(_) = provider_options {
+    if let Some(_) = role_options {
         finish_sh_builder_and_run_tasks(
             sh_builder.expect("StorageHubBuilder should already be initialised."),
             client.clone(),
@@ -972,18 +989,6 @@ where
         )
         .await?;
     }
-
-    configure_and_spawn_fisherman::<ParachainRuntime>(
-        &fisherman_options,
-        &indexer_options,
-        &task_manager,
-        client.clone(),
-        keystore.clone(),
-        Arc::new(rpc_handlers.clone()),
-        base_path,
-        network.clone(),
-    )
-    .await?;
 
     if let Some(hwbench) = hwbench {
         sc_sysinfo::print_hwbench(&hwbench);
@@ -1168,9 +1173,8 @@ where
 
 async fn start_dev_parachain_in_maintenance_mode<R, S, Network>(
     config: Configuration,
-    provider_options: Option<ProviderOptions>,
+    role_options: Option<RoleOptions>,
     indexer_options: Option<IndexerOptions>,
-    fisherman_options: Option<FishermanOptions>,
     hwbench: Option<sc_sysinfo::HwBench>,
 ) -> sc_service::error::Result<TaskManager>
 where
@@ -1215,7 +1219,7 @@ where
 
     // If we are a provider or fisherman we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
-    if provider_options.is_some() || fisherman_options.is_some() {
+    if role_options.is_some() {
         file_transfer_request_protocol =
             Some(configure_file_transfer_network::<_, ParachainRuntime>(
                 fetch_genesis_hash(client.clone()),
@@ -1250,13 +1254,13 @@ where
     // If node is running as a Storage Provider, start building the StorageHubHandler using the StorageHubBuilder.
     let (sh_builder, maybe_storage_hub_client_rpc_config) =
         match init_sh_builder::<R, S, ParachainRuntime>(
-            &provider_options,
+            &role_options,
+            &indexer_options,
             &task_manager,
             file_transfer_request_protocol,
             network.clone(),
             keystore.clone(),
             client.clone(),
-            indexer_options.clone(),
         )
         .await?
         {
@@ -1298,7 +1302,7 @@ where
     })?;
 
     // Finish building the StorageHubBuilder if node is running as a Storage Provider.
-    if let Some(_) = provider_options {
+    if let Some(_) = role_options {
         finish_sh_builder_and_run_tasks(
             sh_builder.expect("StorageHubBuilder should already be initialised."),
             client.clone(),
@@ -1340,9 +1344,8 @@ async fn start_parachain_node_impl<R, S, Network>(
     parachain_config: Configuration,
     polkadot_config: Configuration,
     collator_options: CollatorOptions,
-    provider_options: Option<ProviderOptions>,
+    role_options: Option<RoleOptions>,
     indexer_options: Option<IndexerOptions>,
-    fisherman_options: Option<FishermanOptions>,
     para_id: ParaId,
     hwbench: Option<sc_sysinfo::HwBench>,
 ) -> sc_service::error::Result<(TaskManager, Arc<StorageEnableClient<ParachainRuntime>>)>
@@ -1356,9 +1359,10 @@ where
     Network: NetworkBackend<OpaqueBlock, BlockHash>,
 {
     // Check if we're in maintenance mode and build the node in maintenance mode if so
-    let maintenance_mode = provider_options
-        .as_ref()
-        .map_or(false, |opts| opts.maintenance_mode);
+    let maintenance_mode = role_options.as_ref().map_or(false, |opts| match opts {
+        RoleOptions::Provider(p) => p.maintenance_mode,
+        RoleOptions::Fisherman(f) => f.maintenance_mode,
+    });
     if maintenance_mode {
         log::info!("🛠️  Running dev node in maintenance mode");
         log::info!("🛠️  Network participation is disabled");
@@ -1367,9 +1371,8 @@ where
             parachain_config,
             polkadot_config,
             collator_options,
-            provider_options,
+            role_options,
             indexer_options,
-            fisherman_options,
             para_id,
             hwbench,
         )
@@ -1395,7 +1398,7 @@ where
 
     // If we are a provider we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
-    if provider_options.is_some() || fisherman_options.is_some() {
+    if role_options.is_some() {
         file_transfer_request_protocol =
             Some(configure_file_transfer_network::<_, ParachainRuntime>(
                 fetch_genesis_hash(client.clone()),
@@ -1460,13 +1463,13 @@ where
     // If node is running as a Storage Provider, start building the StorageHubHandler using the StorageHubBuilder.
     let (sh_builder, maybe_storage_hub_client_rpc_config) =
         match init_sh_builder::<R, S, ParachainRuntime>(
-            &provider_options,
+            &role_options,
+            &indexer_options,
             &task_manager,
             file_transfer_request_protocol,
             network.clone(),
             keystore.clone(),
             client.clone(),
-            indexer_options.clone(),
         )
         .await?
         {
@@ -1508,7 +1511,7 @@ where
     })?;
 
     // Finish building the StorageHubBuilder if node is running as a Storage Provider.
-    if let Some(_) = provider_options {
+    if let Some(_) = role_options {
         finish_sh_builder_and_run_tasks(
             sh_builder.expect("StorageHubBuilder should already be initialised."),
             client.clone(),
@@ -1519,18 +1522,6 @@ where
         )
         .await?;
     }
-
-    configure_and_spawn_fisherman::<ParachainRuntime>(
-        &fisherman_options,
-        &indexer_options,
-        &task_manager,
-        client.clone(),
-        keystore.clone(),
-        Arc::new(rpc_handlers.clone()),
-        base_path,
-        network.clone(),
-    )
-    .await?;
 
     if let Some(hwbench) = hwbench {
         sc_sysinfo::print_hwbench(&hwbench);
@@ -1610,9 +1601,8 @@ async fn start_parachain_node_in_maintenance_mode<R, S, Network>(
     parachain_config: Configuration,
     polkadot_config: Configuration,
     collator_options: CollatorOptions,
-    provider_options: Option<ProviderOptions>,
+    role_options: Option<RoleOptions>,
     indexer_options: Option<IndexerOptions>,
-    fisherman_options: Option<FishermanOptions>,
     para_id: ParaId,
     hwbench: Option<sc_sysinfo::HwBench>,
 ) -> sc_service::error::Result<(TaskManager, Arc<StorageEnableClient<ParachainRuntime>>)>
@@ -1646,7 +1636,7 @@ where
 
     // If we are a provider we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
-    if provider_options.is_some() {
+    if role_options.is_some() {
         file_transfer_request_protocol =
             Some(configure_file_transfer_network::<_, ParachainRuntime>(
                 fetch_genesis_hash(client.clone()),
@@ -1688,13 +1678,13 @@ where
     // If node is running as a Storage Provider, start building the StorageHubHandler using the StorageHubBuilder.
     let (sh_builder, maybe_storage_hub_client_rpc_config) =
         match init_sh_builder::<R, S, ParachainRuntime>(
-            &provider_options,
+            &role_options,
+            &indexer_options,
             &task_manager,
             file_transfer_request_protocol,
             network.clone(),
             keystore.clone(),
             client.clone(),
-            indexer_options.clone(),
         )
         .await?
         {
@@ -1736,7 +1726,7 @@ where
     })?;
 
     // Finish building the StorageHubBuilder if node is running as a Storage Provider.
-    if let Some(_) = provider_options {
+    if let Some(_) = role_options {
         finish_sh_builder_and_run_tasks(
             sh_builder.expect("StorageHubBuilder should already be initialised."),
             client.clone(),
@@ -1747,18 +1737,6 @@ where
         )
         .await?;
     }
-
-    configure_and_spawn_fisherman::<ParachainRuntime>(
-        &fisherman_options,
-        &indexer_options,
-        &task_manager,
-        client.clone(),
-        keystore.clone(),
-        Arc::new(rpc_handlers.clone()),
-        base_path,
-        network.clone(),
-    )
-    .await?;
 
     if let Some(hwbench) = hwbench {
         sc_sysinfo::print_hwbench(&hwbench);
@@ -1894,67 +1872,87 @@ fn start_parachain_consensus(
 /// when running in development mode.
 pub async fn start_dev_solochain_evm_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
     config: Configuration,
-    provider_options: Option<ProviderOptions>,
+    role_options: Option<RoleOptions>,
     indexer_options: Option<IndexerOptions>,
-    fisherman_options: Option<FishermanOptions>,
     hwbench: Option<sc_sysinfo::HwBench>,
     sealing: cli::Sealing,
 ) -> sc_service::error::Result<TaskManager> {
-    if let Some(provider_options) = provider_options {
-        match (
-            &provider_options.provider_type,
-            &provider_options.storage_layer,
-        ) {
-            (&ProviderType::Bsp, &StorageLayer::Memory) => {
+    if let Some(role_options) = role_options {
+        match role_options {
+            RoleOptions::Provider(ProviderOptions {
+                provider_type: ProviderType::Bsp,
+                storage_layer: StorageLayer::Memory,
+                ..
+            }) => {
                 start_dev_solochain_evm_node_impl::<BspProvider, InMemoryStorageLayer, Network>(
                     config,
-                    Some(provider_options),
+                    Some(role_options),
                     indexer_options,
-                    fisherman_options,
                     hwbench,
                     sealing,
                 )
                 .await
             }
-            (&ProviderType::Bsp, &StorageLayer::RocksDB) => {
+            RoleOptions::Provider(ProviderOptions {
+                provider_type: ProviderType::Bsp,
+                storage_layer: StorageLayer::RocksDB,
+                ..
+            }) => {
                 start_dev_solochain_evm_node_impl::<BspProvider, RocksDbStorageLayer, Network>(
                     config,
-                    Some(provider_options),
+                    Some(role_options),
                     indexer_options,
-                    fisherman_options,
                     hwbench,
                     sealing,
                 )
                 .await
             }
-            (&ProviderType::Msp, &StorageLayer::Memory) => {
+            RoleOptions::Provider(ProviderOptions {
+                provider_type: ProviderType::Msp,
+                storage_layer: StorageLayer::Memory,
+                ..
+            }) => {
                 start_dev_solochain_evm_node_impl::<MspProvider, InMemoryStorageLayer, Network>(
                     config,
-                    Some(provider_options),
+                    Some(role_options),
                     indexer_options,
-                    fisherman_options,
                     hwbench,
                     sealing,
                 )
                 .await
             }
-            (&ProviderType::Msp, &StorageLayer::RocksDB) => {
+            RoleOptions::Provider(ProviderOptions {
+                provider_type: ProviderType::Msp,
+                storage_layer: StorageLayer::RocksDB,
+                ..
+            }) => {
                 start_dev_solochain_evm_node_impl::<MspProvider, RocksDbStorageLayer, Network>(
                     config,
-                    Some(provider_options),
+                    Some(role_options),
                     indexer_options,
-                    fisherman_options,
                     hwbench,
                     sealing,
                 )
                 .await
             }
-            (&ProviderType::User, _) => {
+            RoleOptions::Provider(ProviderOptions {
+                provider_type: ProviderType::User,
+                ..
+            }) => {
                 start_dev_solochain_evm_node_impl::<UserRole, NoStorageLayer, Network>(
                     config,
-                    Some(provider_options),
+                    Some(role_options),
                     indexer_options,
-                    fisherman_options,
+                    hwbench,
+                    sealing,
+                )
+                .await
+            }
+            RoleOptions::Fisherman(FishermanOptions { .. }) => {
+                start_dev_solochain_evm_node_impl::<FishermanRole, NoStorageLayer, Network>(
+                    config,
+                    Some(role_options),
+                    indexer_options,
                     hwbench,
                     sealing,
                 )
@@ -1966,7 +1964,6 @@ pub async fn start_dev_solochain_evm_node<Network: NetworkBackend<OpaqueBlock, B
             config,
             None,
             indexer_options,
-            fisherman_options,
             hwbench,
             sealing,
         )
@@ -1976,9 +1973,8 @@ pub async fn start_dev_solochain_evm_node<Network: NetworkBackend<OpaqueBlock, B
 
 async fn start_dev_solochain_evm_node_impl<R, S, Network>(
     config: Configuration,
-    provider_options: Option<ProviderOptions>,
+    role_options: Option<RoleOptions>,
     indexer_options: Option<IndexerOptions>,
-    fisherman_options: Option<FishermanOptions>,
     hwbench: Option<sc_sysinfo::HwBench>,
     sealing: cli::Sealing,
 ) -> sc_service::error::Result<TaskManager>
@@ -2022,14 +2018,15 @@ where
     }
 
     // Maintenance mode: reuse non-dev maintenance path but drop client result
-    let maintenance_mode = provider_options
-        .as_ref()
-        .map_or(false, |opts| opts.maintenance_mode);
+    let maintenance_mode = role_options.as_ref().map_or(false, |opts| match opts {
+        RoleOptions::Provider(p) => p.maintenance_mode,
+        RoleOptions::Fisherman(f) => f.maintenance_mode,
+    });
     if maintenance_mode {
         let (task_manager, _client) =
             start_solochain_evm_node_in_maintenance_mode::<R, S, Network>(
                 config,
-                provider_options,
+                role_options,
                 indexer_options,
             )
             .await?;
@@ -2070,7 +2067,7 @@ where
 
     // Optional file-transfer protocol (providers only)
     let mut file_transfer_request_protocol = None;
-    if provider_options.is_some() {
+    if role_options.is_some() {
         file_transfer_request_protocol = Some(
             shc_file_transfer_service::configure_file_transfer_network::<_, SolochainEvmRuntime>(
                 fetch_genesis_hash(client.clone()),
@@ -2138,13 +2135,13 @@ where
     // Build StorageHub services if provider
     let (sh_builder, maybe_storage_hub_client_rpc_config) =
         match init_sh_builder::<R, S, SolochainEvmRuntime>(
-            &provider_options,
+            &role_options,
+            &indexer_options,
             &task_manager,
             file_transfer_request_protocol,
             network.clone(),
             keystore_container.keystore(),
             client.clone(),
-            indexer_options.clone(),
         )
         .await?
         {
@@ -2402,7 +2399,7 @@ where
         }
     }
 
-    if let Some(_) = provider_options {
+    if let Some(_) = role_options {
         finish_sh_builder_and_run_tasks(
             sh_builder.expect("StorageHubBuilder should already be initialised."),
             client.clone(),
@@ -2414,18 +2411,6 @@ where
         .await?;
     }
 
-    configure_and_spawn_fisherman::<SolochainEvmRuntime>(
-        &fisherman_options,
-        &indexer_options,
-        &task_manager,
-        client.clone(),
-        keystore_container.keystore(),
-        Arc::new(rpc_handlers.clone()),
-        base_path,
-        network.clone(),
-    )
-    .await?;
-
     network_starter.start_network();
     Ok(task_manager)
 }
@@ -2435,62 +2420,81 @@ where
 /// This is the entrypoint function to launch a StorageHub Solochain EVM node.
 pub async fn start_solochain_evm_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
     config: Configuration,
-    provider_options: Option<ProviderOptions>,
+    role_options: Option<RoleOptions>,
     indexer_options: Option<IndexerOptions>,
-    fisherman_options: Option<FishermanOptions>,
     hwbench: Option<sc_sysinfo::HwBench>,
 ) -> sc_service::error::Result<(TaskManager, Arc<StorageEnableClient<SolochainEvmRuntime>>)> {
-    if let Some(provider_options) = provider_options {
-        match (
-            &provider_options.provider_type,
-            &provider_options.storage_layer,
-        ) {
-            (&ProviderType::Bsp, &StorageLayer::Memory) => {
+    if let Some(role_options) = role_options {
+        match role_options {
+            RoleOptions::Provider(ProviderOptions {
+                provider_type: ProviderType::Bsp,
+                storage_layer: StorageLayer::Memory,
+                ..
+            }) => {
                 start_solochain_evm_node_impl::<BspProvider, InMemoryStorageLayer, Network>(
                     config,
-                    Some(provider_options),
+                    Some(role_options),
                     indexer_options,
-                    fisherman_options,
                     hwbench,
                 )
                 .await
             }
-            (&ProviderType::Bsp, &StorageLayer::RocksDB) => {
+            RoleOptions::Provider(ProviderOptions {
+                provider_type: ProviderType::Bsp,
+                storage_layer: StorageLayer::RocksDB,
+                ..
+            }) => {
                 start_solochain_evm_node_impl::<BspProvider, RocksDbStorageLayer, Network>(
                     config,
-                    Some(provider_options),
+                    Some(role_options),
                     indexer_options,
-                    fisherman_options,
                     hwbench,
                 )
                 .await
             }
-            (&ProviderType::Msp, &StorageLayer::Memory) => {
+            RoleOptions::Provider(ProviderOptions {
+                provider_type: ProviderType::Msp,
+                storage_layer: StorageLayer::Memory,
+                ..
+            }) => {
                 start_solochain_evm_node_impl::<MspProvider, InMemoryStorageLayer, Network>(
                     config,
-                    Some(provider_options),
+                    Some(role_options),
                     indexer_options,
-                    fisherman_options,
                     hwbench,
                 )
                 .await
             }
-            (&ProviderType::Msp, &StorageLayer::RocksDB) => {
+            RoleOptions::Provider(ProviderOptions {
+                provider_type: ProviderType::Msp,
+                storage_layer: StorageLayer::RocksDB,
+                ..
+            }) => {
                 start_solochain_evm_node_impl::<MspProvider, RocksDbStorageLayer, Network>(
                     config,
-                    Some(provider_options),
+                    Some(role_options),
                     indexer_options,
-                    fisherman_options,
                     hwbench,
                 )
                 .await
             }
-            (&ProviderType::User, _) => {
+            RoleOptions::Provider(ProviderOptions {
+                provider_type: ProviderType::User,
+                ..
+            }) => {
                 start_solochain_evm_node_impl::<UserRole, NoStorageLayer, Network>(
                     config,
-                    Some(provider_options),
+                    Some(role_options),
                     indexer_options,
-                    fisherman_options,
+                    hwbench,
+                )
+                .await
+            }
+            RoleOptions::Fisherman(FishermanOptions { .. }) => {
+                start_solochain_evm_node_impl::<FishermanRole, NoStorageLayer, Network>(
+                    config,
+                    Some(role_options),
+                    indexer_options,
                     hwbench,
                 )
                 .await
@@ -2501,7 +2505,6 @@ pub async fn start_solochain_evm_node<Network: NetworkBackend<OpaqueBlock, Block
             config,
             None,
             indexer_options,
-            fisherman_options,
             hwbench,
         )
         .await
@@ -2685,9 +2688,8 @@ pub fn new_partial_solochain_evm(
 
 async fn start_solochain_evm_node_impl<R, S, Network>(
     config: Configuration,
-    provider_options: Option<ProviderOptions>,
+    role_options: Option<RoleOptions>,
     indexer_options: Option<IndexerOptions>,
-    fisherman_options: Option<FishermanOptions>,
     hwbench: Option<sc_sysinfo::HwBench>,
 ) -> sc_service::error::Result<(TaskManager, Arc<StorageEnableClient<SolochainEvmRuntime>>)>
 where
@@ -2699,13 +2701,14 @@ where
     StorageHubHandler<(R, S), SolochainEvmRuntime>: RunnableTasks,
     Network: NetworkBackend<OpaqueBlock, BlockHash>,
 {
-    let maintenance_mode = provider_options
-        .as_ref()
-        .map_or(false, |opts| opts.maintenance_mode);
+    let maintenance_mode = role_options.as_ref().map_or(false, |opts| match opts {
+        RoleOptions::Provider(p) => p.maintenance_mode,
+        RoleOptions::Fisherman(f) => f.maintenance_mode,
+    });
     if maintenance_mode {
         return start_solochain_evm_node_in_maintenance_mode::<R, S, Network>(
             config,
-            provider_options,
+            role_options,
             indexer_options,
         )
         .await;
@@ -2732,7 +2735,7 @@ where
     >::new(&config.network, config.prometheus_registry().cloned());
 
     let mut file_transfer_request_protocol = None;
-    if provider_options.is_some() {
+    if role_options.is_some() {
         file_transfer_request_protocol = Some(
             shc_file_transfer_service::configure_file_transfer_network::<_, SolochainEvmRuntime>(
                 fetch_genesis_hash(client.clone()),
@@ -2799,13 +2802,13 @@ where
 
     let (sh_builder, maybe_storage_hub_client_rpc_config) =
         match init_sh_builder::<R, S, SolochainEvmRuntime>(
-            &provider_options,
+            &role_options,
+            &indexer_options,
             &task_manager,
             file_transfer_request_protocol,
             network.clone(),
             keystore_container.keystore(),
             client.clone(),
-            indexer_options.clone(),
         )
         .await?
         {
@@ -3045,7 +3048,7 @@ where
         }
     }
 
-    if let Some(_) = provider_options {
+    if let Some(_) = role_options {
         finish_sh_builder_and_run_tasks(
             sh_builder.expect("StorageHubBuilder should already be initialised."),
             client.clone(),
@@ -3057,25 +3060,13 @@ where
         .await?;
     }
 
-    configure_and_spawn_fisherman::<SolochainEvmRuntime>(
-        &fisherman_options,
-        &indexer_options,
-        &task_manager,
-        client.clone(),
-        keystore_container.keystore(),
-        Arc::new(rpc_handlers.clone()),
-        base_path,
-        network.clone(),
-    )
-    .await?;
-
     network_starter.start_network();
     Ok((task_manager, client))
 }
 
 async fn start_solochain_evm_node_in_maintenance_mode<R, S, Network>(
     config: Configuration,
-    provider_options: Option<ProviderOptions>,
+    role_options: Option<RoleOptions>,
     indexer_options: Option<IndexerOptions>,
 ) -> sc_service::error::Result<(TaskManager, Arc<StorageEnableClient<SolochainEvmRuntime>>)>
 where
@@ -3119,7 +3110,7 @@ where
     >::new(&config.network, config.prometheus_registry().cloned());
 
     let mut file_transfer_request_protocol = None;
-    if provider_options.is_some() {
+    if role_options.is_some() {
         file_transfer_request_protocol = Some(
             shc_file_transfer_service::configure_file_transfer_network::<_, SolochainEvmRuntime>(
                 fetch_genesis_hash(client.clone()),
@@ -3146,13 +3137,13 @@ where
 
     let (sh_builder, maybe_storage_hub_client_rpc_config) =
         match init_sh_builder::<R, S, SolochainEvmRuntime>(
-            &provider_options,
+            &role_options,
+            &indexer_options,
             &task_manager,
             file_transfer_request_protocol,
             network.clone(),
             keystore_container.keystore(),
             client.clone(),
-            indexer_options.clone(),
         )
         .await?
         {
@@ -3217,7 +3208,7 @@ where
         telemetry: telemetry.as_mut(),
     })?;
 
-    if let Some(_) = provider_options {
+    if let Some(_) = role_options {
         finish_sh_builder_and_run_tasks(
             sh_builder.expect("StorageHubBuilder should already be initialised."),
             client.clone(),

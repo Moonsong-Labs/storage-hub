@@ -1,23 +1,22 @@
-import assert, { notEqual, strictEqual } from "node:assert";
+import assert, { strictEqual, notEqual } from "node:assert";
 import {
-  assertEventPresent,
-  bspKey,
   describeMspNet,
   type EnrichedBspApi,
   type SqlClient,
   shUser,
-  waitFor
+  bspKey,
+  waitFor,
+  assertEventPresent,
+  assertEventMany,
+  mspKey,
+  ShConsts
 } from "../../../util";
 import {
-  waitForDeleteFileExtrinsic,
-  waitForFishermanProcessing
-} from "../../../util/fisherman/fishermanHelpers";
-import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
-import {
-  waitForBspFileAssociation,
   waitForFileIndexed,
-  waitForMspFileAssociation
+  waitForMspFileAssociation,
+  waitForBspFileAssociation
 } from "../../../util/indexerHelpers";
+import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
 
 /**
  * FISHERMAN PROCESS FILE DELETION - COMPREHENSIVE EVENT PROCESSING
@@ -51,10 +50,19 @@ await describeMspNet(
     fisherman: true,
     indexerMode: "fishing"
   },
-  ({ before, it, createUserApi, createBspApi, createMsp1Api, createSqlClient }) => {
+  ({
+    before,
+    it,
+    createUserApi,
+    createBspApi,
+    createMsp1Api,
+    createSqlClient,
+    createFishermanApi
+  }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
     let msp1Api: EnrichedBspApi;
+    let fishermanApi: EnrichedBspApi;
     let sql: SqlClient;
 
     before(async () => {
@@ -71,6 +79,10 @@ await describeMspNet(
         containerName: "storage-hub-sh-user-1",
         timeout: 10000
       });
+
+      // Ensure fisherman node is ready
+      assert(createFishermanApi, "Fisherman API not available for fisherman test");
+      fishermanApi = await createFishermanApi();
 
       await userApi.rpc.engine.createBlock(true, true);
 
@@ -92,9 +104,10 @@ await describeMspNet(
           destination,
           bucketName,
           valuePropId,
-          mspId,
-          null,
-          1
+          ShConsts.DUMMY_MSP_ID,
+          shUser,
+          1,
+          true
         );
 
       // Wait for MSP to store the file
@@ -164,22 +177,29 @@ await describeMspNet(
       await waitForIndexing(userApi, false);
 
       // Verify delete_file extrinsics are submitted
-      const deleteFileFound = await waitForDeleteFileExtrinsic(userApi, 2, 30000);
-      assert(
-        deleteFileFound,
-        "Should find 2 delete_file extrinsics in transaction pool (BSP and MSP)"
-      );
+      await userApi.assert.extrinsicPresent({
+        method: "deleteFile",
+        module: "fileSystem",
+        checkTxPool: true,
+        assertLength: 2,
+        timeout: 30000
+      });
 
       // Seal block to process the extrinsics
       const deletionResult = await userApi.block.seal();
 
       // Verify both deletion completion events
-      assertEventPresent(userApi, "fileSystem", "MspFileDeletionCompleted", deletionResult.events);
+      assertEventPresent(
+        userApi,
+        "fileSystem",
+        "BucketFileDeletionCompleted",
+        deletionResult.events
+      );
       assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", deletionResult.events);
 
       // Extract deletion events to verify root changes
       const mspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.MspFileDeletionCompleted,
+        userApi.events.fileSystem.BucketFileDeletionCompleted,
         deletionResult.events
       );
       const bspDeletionEvent = userApi.assert.fetchEvent(
@@ -226,79 +246,148 @@ await describeMspNet(
       });
     });
 
-    it("processes StorageRequestRejected event when MSP doesn't accept in time", async () => {
+    it("processes expired storage request when MSP doesn't accept in time", async () => {
       const bucketName = "test-fisherman-expired";
       const source = "res/whatsup.jpg";
       const destination = "test/expired.txt";
 
-      // Pause MSP and BSP containers to prevent them from accepting the storage request
+      // Pause MSP containers to prevent them from accepting the storage request
+      // We don't pause the BSP so that it confirms the storage request so that when we reach
+      // the expired block, the storage request will be moved to incomplete.
       await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
-      await userApi.docker.pauseContainer("storage-hub-sh-bsp-1");
 
-      const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
-        source,
-        destination,
-        bucketName,
-        null,
-        null,
-        null,
-        1
-      );
+      try {
+        const tickRangeToMaximumThreshold = (
+          await userApi.query.parameters.parameters({
+            RuntimeConfig: {
+              TickRangeToMaximumThreshold: null
+            }
+          })
+        )
+          .unwrap()
+          .asRuntimeConfig.asTickRangeToMaximumThreshold.toNumber();
 
-      // Skip ahead to trigger expiration
-      const currentBlock = await userApi.rpc.chain.getBlock();
-      const currentBlockNumber = currentBlock.block.header.number.toNumber();
-      const storageRequestTtl = (
-        await userApi.query.parameters.parameters({
+        const storageRequestTtlRuntimeParameter = {
           RuntimeConfig: {
-            StorageRequestTtl: null
+            StorageRequestTtl: [null, tickRangeToMaximumThreshold]
           }
-        })
-      )
-        .unwrap()
-        .asRuntimeConfig.asStorageRequestTtl.toNumber();
-      await userApi.block.skipTo(currentBlockNumber + storageRequestTtl);
+        };
+        await userApi.block.seal({
+          calls: [
+            userApi.tx.sudo.sudo(
+              userApi.tx.parameters.setParameter(storageRequestTtlRuntimeParameter)
+            )
+          ]
+        });
 
-      await waitForIndexing(userApi);
+        const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
+          source,
+          destination,
+          bucketName,
+          null,
+          ShConsts.DUMMY_MSP_ID,
+          shUser,
+          1,
+          true
+        );
 
-      // Wait for StorageRequestRejected event to be processed by fisherman
-      const rejectedProcessingFound = await waitForFishermanProcessing(
-        userApi,
-        `Found StorageRequestRejected event for file key: 0x${fileKey.startsWith("0x") ? fileKey.slice(2) : fileKey}`
-      );
-      assert(rejectedProcessingFound, "Should find fisherman processing rejected storage request");
+        const storageRequest = await userApi.query.fileSystem.storageRequests(fileKey);
+        assert(storageRequest.isSome);
+        const expiresAt = storageRequest.unwrap().expiresAt.toNumber();
 
-      const incompleteProcessingFound = await waitForFishermanProcessing(
-        userApi,
-        `Processing incomplete storage request for file key: 0x${fileKey.startsWith("0x") ? fileKey.slice(2) : fileKey}`
-      );
-      assert(incompleteProcessingFound, "Should find fisherman processing incomplete storage");
+        // Wait for BSP to volunteer and store
+        await userApi.wait.bspVolunteer();
+        await waitFor({
+          lambda: async () =>
+            (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
+        });
 
-      // Resume containers for cleanup
-      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-msp-1" });
-      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-bsp-1" });
+        const bspAddress = userApi.createType("Address", bspKey.address);
+        await userApi.wait.bspStored({
+          expectedExts: 1,
+          sealBlock: true,
+          bspAccount: bspAddress
+        });
 
-      // TODO: Verify extrinsic submission once implementation is complete
+        const incompleteStorageRequestResult = await userApi.block.skipTo(expiresAt);
+
+        assertEventPresent(
+          userApi,
+          "fileSystem",
+          "IncompleteStorageRequest",
+          incompleteStorageRequestResult.events
+        );
+
+        const incompleteStorageRequests =
+          await userApi.query.fileSystem.incompleteStorageRequests.entries();
+        const maybeIncompleteStorageRequest = incompleteStorageRequests[0];
+        assert(maybeIncompleteStorageRequest !== undefined);
+        assert(maybeIncompleteStorageRequest[1].isSome);
+        const incompleteStorageRequest = maybeIncompleteStorageRequest[1].unwrap();
+        assert(incompleteStorageRequest.pendingBspRemovals.length === 1);
+        assert(incompleteStorageRequest.pendingBucketRemoval.isFalse);
+
+        await waitForIndexing(userApi, false);
+        await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
+
+        // Verify delete_file_for_incomplete_storage_request extrinsic is submitted
+        await userApi.assert.extrinsicPresent({
+          method: "deleteFileForIncompleteStorageRequest",
+          module: "fileSystem",
+          checkTxPool: true,
+          assertLength: 1,
+          timeout: 30000
+        });
+
+        // Seal block to process the extrinsic
+        const deletionResult = await userApi.block.seal();
+
+        // Verify FileDeletedFromIncompleteStorageRequest event
+        assertEventPresent(
+          userApi,
+          "fileSystem",
+          "FileDeletedFromIncompleteStorageRequest",
+          deletionResult.events
+        );
+      } finally {
+        // Resume containers for cleanup - always execute
+        await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-msp-1" });
+      }
     });
 
-    it("processes StorageRequestRevoked event and prepares deletion", async () => {
+    it("processes revoked storage request and prepares deletion", async () => {
       const bucketName = "test-fisherman-revoked";
       const source = "res/smile.jpg";
       const destination = "test/revoked.txt";
 
-      // Pause MSP and BSP to prevent acceptance before revocation
-      await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
-      await userApi.docker.pauseContainer("storage-hub-sh-bsp-1");
-
       const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
         destination,
         bucketName,
         null,
-        null,
-        null,
-        1
+        ShConsts.DUMMY_MSP_ID,
+        shUser,
+        2, // Keep the storage request opened to be able to revoke
+        true
       );
+
+      await userApi.wait.mspResponseInTxPool();
+
+      // Wait for BSP to volunteer and store
+      await userApi.wait.bspVolunteer();
+      await waitFor({
+        lambda: async () =>
+          (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
+      });
+
+      const bspAddress = userApi.createType("Address", bspKey.address);
+      await userApi.wait.bspStored({
+        expectedExts: 1,
+        sealBlock: true,
+        bspAccount: bspAddress
+      });
+
+      await waitForIndexing(userApi);
 
       // Revoke the storage request
       const revokeStorageRequestResult = await userApi.block.seal({
@@ -313,26 +402,76 @@ await describeMspNet(
         revokeStorageRequestResult.events
       );
 
-      await waitForIndexing(userApi);
+      // Do not seal block
+      await waitForIndexing(userApi, false);
 
-      // Wait for fisherman to process the revocation
-      const revokedProcessingFound = await waitForFishermanProcessing(
+      // Verify 2 extrsinsics submitted for each MSP and BSP
+      await userApi.assert.extrinsicPresent({
+        method: "deleteFileForIncompleteStorageRequest",
+        module: "fileSystem",
+        checkTxPool: true,
+        assertLength: 2,
+        timeout: 30000
+      });
+
+      // Seal block to process the extrinsic
+      const deletionResult = await userApi.block.seal();
+
+      // Verify FileDeletedFromIncompleteStorageRequest event
+      assertEventMany(
         userApi,
-        `Found StorageRequestRevoked event for file key: 0x${fileKey.startsWith("0x") ? fileKey.slice(2) : fileKey}`
+        "fileSystem",
+        "FileDeletedFromIncompleteStorageRequest",
+        deletionResult.events
       );
-      assert(revokedProcessingFound, "Should find fisherman processing revoked storage request");
 
-      const incompleteProcessingFound = await waitForFishermanProcessing(
-        userApi,
-        `Processing incomplete storage request for file key: 0x${fileKey.startsWith("0x") ? fileKey.slice(2) : fileKey}`
+      // Extract deletion events to verify root changes
+      const mspDeletionEvent = userApi.assert.fetchEvent(
+        userApi.events.fileSystem.BucketFileDeletionCompleted,
+        deletionResult.events
       );
-      assert(incompleteProcessingFound, "Should find fisherman processing incomplete storage");
+      const bspDeletionEvent = userApi.assert.fetchEvent(
+        userApi.events.fileSystem.BspFileDeletionCompleted,
+        deletionResult.events
+      );
 
-      // Resume containers
-      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-msp-1" });
-      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-bsp-1" });
+      // Verify MSP root changed
+      await waitFor({
+        lambda: async () => {
+          notEqual(
+            mspDeletionEvent.data.oldRoot.toString(),
+            mspDeletionEvent.data.newRoot.toString(),
+            "MSP forest root should have changed after file deletion"
+          );
+          const currentBucketRoot = await msp1Api.rpc.storagehubclient.getForestRoot(
+            mspDeletionEvent.data.bucketId.toString()
+          );
+          strictEqual(
+            currentBucketRoot.toString(),
+            mspDeletionEvent.data.newRoot.toString(),
+            "Current bucket forest root should match the new root from deletion event"
+          );
+          return true;
+        }
+      });
 
-      // TODO: Verify extrinsic submission once implementation is complete
+      // Verify BSP root changed
+      await waitFor({
+        lambda: async () => {
+          notEqual(
+            bspDeletionEvent.data.oldRoot.toString(),
+            bspDeletionEvent.data.newRoot.toString(),
+            "BSP forest root should have changed after file deletion"
+          );
+          const currentBspRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
+          strictEqual(
+            currentBspRoot.toString(),
+            bspDeletionEvent.data.newRoot.toString(),
+            "Current BSP forest root should match the new root from deletion event"
+          );
+          return true;
+        }
+      });
     });
 
     it("processes multiple providers for same file deletion", async () => {
@@ -350,9 +489,10 @@ await describeMspNet(
           destination,
           bucketName,
           valuePropId,
-          mspId,
-          null,
-          1
+          ShConsts.DUMMY_MSP_ID,
+          shUser,
+          1,
+          true
         );
 
       // Wait for both MSP and BSP to store the file
@@ -420,22 +560,29 @@ await describeMspNet(
       await waitForIndexing(userApi, false);
 
       // Verify TWO delete_file extrinsics are submitted (one for BSP and one for MSP)
-      const deleteFileFound = await waitForDeleteFileExtrinsic(userApi, 2);
-      assert(
-        deleteFileFound,
-        "Should find 2 delete_file extrinsics in transaction pool (BSP and MSP)"
-      );
+      await userApi.assert.extrinsicPresent({
+        method: "deleteFile",
+        module: "fileSystem",
+        checkTxPool: true,
+        assertLength: 2,
+        timeout: 30000
+      });
 
       // Seal block to process the extrinsics
       const deletionResult = await userApi.block.seal();
 
       // Verify both deletion completion events
-      assertEventPresent(userApi, "fileSystem", "MspFileDeletionCompleted", deletionResult.events);
+      assertEventPresent(
+        userApi,
+        "fileSystem",
+        "BucketFileDeletionCompleted",
+        deletionResult.events
+      );
       assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", deletionResult.events);
 
       // Extract deletion events to verify root changes
       const mspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.MspFileDeletionCompleted,
+        userApi.events.fileSystem.BucketFileDeletionCompleted,
         deletionResult.events
       );
       const bspDeletionEvent = userApi.assert.fetchEvent(
@@ -482,40 +629,165 @@ await describeMspNet(
       });
     });
 
-    it("handles StorageRequestRejected event processing", async () => {
-      const bucketName = "test-fisherman-rejected";
+    it("processes MSP stop storing bucket during incomplete storage request", async () => {
+      const bucketName = "test-msp-stop-incomplete";
       const source = "res/smile.jpg";
-      const destination = "test/rejected.txt";
+      const destination = "test/msp-stop-incomplete.txt";
+      const mspId = userApi.shConsts.DUMMY_MSP_ID;
 
-      // This test simulates a rejection scenario
-      // In practice, rejection might happen due to various validation failures
-      // For now, we'll create a request and manually trigger a rejection-like scenario
+      // Get value proposition for MSP
+      const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
+      const valuePropId = valueProps[0].id;
 
-      // Pause containers to prevent normal processing
-      await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
-      await userApi.docker.pauseContainer("storage-hub-sh-bsp-1");
-
-      const { fileKey: _ } = await userApi.file.createBucketAndSendNewStorageRequest(
+      const { fileKey, bucketId } = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
         destination,
         bucketName,
-        null,
-        null,
-        null,
-        1
+        valuePropId,
+        ShConsts.DUMMY_MSP_ID,
+        shUser,
+        2, // Keep the storage request opened to be able to revoke
+        true
       );
 
-      // Skip some blocks and then resume to potentially trigger rejection-like behavior
-      await userApi.block.seal();
-      await userApi.block.seal();
+      // Wait for MSP to store the file
+      await waitFor({
+        lambda: async () =>
+          (await msp1Api.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
+      });
 
-      // Resume containers
-      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-msp-1" });
-      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-bsp-1" });
+      await userApi.wait.mspResponseInTxPool();
+
+      // Wait for BSP to volunteer and store
+      await userApi.wait.bspVolunteer();
+      await waitFor({
+        lambda: async () =>
+          (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
+      });
+
+      const bspAddress = userApi.createType("Address", bspKey.address);
+      await userApi.wait.bspStored({
+        expectedExts: 1,
+        sealBlock: true,
+        bspAccount: bspAddress
+      });
 
       await waitForIndexing(userApi);
+      await waitForFileIndexed(sql, fileKey);
+      await waitForMspFileAssociation(sql, fileKey);
+      await waitForBspFileAssociation(sql, fileKey);
 
-      // TODO: Verify extrinsic submission once implementation is complete
+      // Get initial bucket root for comparison
+      const initialBucketRoot = await msp1Api.rpc.storagehubclient.getForestRoot(
+        bucketId.toString()
+      );
+      assert(initialBucketRoot.isSome, "Initial bucket root should exist");
+
+      // MSP stops storing the bucket (while incomplete request exists)
+      const stopStoringResult = await userApi.block.seal({
+        calls: [userApi.tx.fileSystem.mspStopStoringBucket(bucketId)],
+        signer: mspKey
+      });
+
+      assertEventPresent(
+        userApi,
+        "fileSystem",
+        "MspStoppedStoringBucket",
+        stopStoringResult.events
+      );
+
+      // Revoke the storage request to create incomplete state
+      const revokeStorageRequestResult = await userApi.block.seal({
+        calls: [userApi.tx.fileSystem.revokeStorageRequest(fileKey)],
+        signer: shUser
+      });
+
+      assertEventPresent(
+        userApi,
+        "fileSystem",
+        "StorageRequestRevoked",
+        revokeStorageRequestResult.events
+      );
+
+      assertEventPresent(
+        userApi,
+        "fileSystem",
+        "IncompleteStorageRequest",
+        revokeStorageRequestResult.events
+      );
+
+      // Check that the bucket no longer has an MSP
+      const bucketMsp = (await userApi.query.providers.buckets(bucketId)).unwrap().mspId;
+      assert(bucketMsp.isNone, "Bucket should have no MSP after stop storing");
+
+      await waitForIndexing(userApi, false);
+
+      // Verify 2 delete extrinsics are submitted (bucket and BSP)
+      await userApi.assert.extrinsicPresent({
+        method: "deleteFileForIncompleteStorageRequest",
+        module: "fileSystem",
+        checkTxPool: true,
+        assertLength: 2,
+        timeout: 30000
+      });
+
+      // Seal block to process the extrinsics
+      const deletionResult = await userApi.block.seal();
+
+      // Verify FileDeletedFromIncompleteStorageRequest events
+      assertEventMany(
+        userApi,
+        "fileSystem",
+        "FileDeletedFromIncompleteStorageRequest",
+        deletionResult.events
+      );
+
+      // Extract deletion events to verify root changes
+      const mspDeletionEvent = userApi.assert.fetchEvent(
+        userApi.events.fileSystem.BucketFileDeletionCompleted,
+        deletionResult.events
+      );
+      const bspDeletionEvent = userApi.assert.fetchEvent(
+        userApi.events.fileSystem.BspFileDeletionCompleted,
+        deletionResult.events
+      );
+
+      // Verify MSP deletion event has no MSP ID
+      assert(mspDeletionEvent.data.mspId.isNone, "MSP ID should be None since bucket has no MSP");
+
+      // Verify bucket root changed (even without MSP)
+      notEqual(
+        mspDeletionEvent.data.oldRoot.toString(),
+        mspDeletionEvent.data.newRoot.toString(),
+        "Bucket forest root should have changed after file deletion"
+      );
+
+      // Verify BSP root changed
+      notEqual(
+        bspDeletionEvent.data.oldRoot.toString(),
+        bspDeletionEvent.data.newRoot.toString(),
+        "BSP forest root should have changed after file deletion"
+      );
+
+      // Verify current BSP root matches event
+      await waitFor({
+        lambda: async () => {
+          const currentBspRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
+          strictEqual(
+            currentBspRoot.toString(),
+            bspDeletionEvent.data.newRoot.toString(),
+            "Current BSP forest root should match the new root from deletion event"
+          );
+          return true;
+        }
+      });
+
+      // Verify the incomplete storage request has been fully processed
+      const incompleteRequest = await userApi.query.fileSystem.incompleteStorageRequests(fileKey);
+      assert(
+        incompleteRequest.isNone,
+        "Incomplete storage request should be removed after all providers deleted"
+      );
     });
   }
 );
