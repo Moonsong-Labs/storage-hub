@@ -86,6 +86,29 @@ export const checkSHRunningContainers = async (docker: Docker) => {
   return allContainers.filter((container) => container.Image === DOCKER_IMAGE);
 };
 
+const exportLogsOf = async (docker: Docker, logsDir: string, containers: Docker.ContainerInfo[], verbose = false) => {
+  const logsPromises = containers.map(async (info) => {
+    const container = docker.getContainer(info.Id);
+    try {
+      const logs = await container.logs({
+        stdout: true,
+        stderr: true,
+        timestamps: true
+      });
+      verbose && console.log(`Extracting logs for container ${info.Names[0]}`);
+      const containerName = info.Names[0].replace("/", "");
+
+      await fs.writeFile(`${logsDir}/${containerName}.log`, stripAnsi(logs.toString()), {
+        encoding: "utf8"
+      });
+    } catch (e) {
+      console.warn(`Failed to extract logs for container ${info.Names[0]}:`, e);
+    }
+  })
+
+  await Promise.all(logsPromises);
+}
+
 export const cleanupEnvironment = async (verbose = false) => {
   await printDockerStatus();
 
@@ -111,29 +134,16 @@ export const cleanupEnvironment = async (verbose = false) => {
     container.Names.some((name) => name.includes("storage-hub-sh-backend"))
   );
 
-  const tmpDir = tmp.dirSync({ prefix: "bsp-logs-", unsafeCleanup: true });
+  const auxiliaryLogsDir = tmp.dirSync({ prefix: "aux-logs-", unsafeCleanup: true });
+  await exportLogsOf(docker, auxiliaryLogsDir.name, backendContainer ? [backendContainer] : []);
+  await exportLogsOf(docker, auxiliaryLogsDir.name, postgresContainer ? [postgresContainer] : []);
+  await exportLogsOf(docker, auxiliaryLogsDir.name, toxiproxyContainer ? [toxiproxyContainer] : []);
+  await exportLogsOf(docker, auxiliaryLogsDir.name, copypartyContainers);
+  console.log(`Auxiliary services logs saved to ${auxiliaryLogsDir.name}`);
 
-  const logPromises = existingNodes.map(async (node) => {
-    const container = docker.getContainer(node.Id);
-    try {
-      const logs = await container.logs({
-        stdout: true,
-        stderr: true,
-        timestamps: true
-      });
-      verbose && console.log(`Extracting logs for container ${node.Names[0]}`);
-      const containerName = node.Names[0].replace("/", "");
-
-      await fs.writeFile(`${tmpDir.name}/${containerName}.log`, stripAnsi(logs.toString()), {
-        encoding: "utf8"
-      });
-    } catch (e) {
-      console.warn(`Failed to extract logs for container ${node.Names[0]}:`, e);
-    }
-  });
-
-  await Promise.all(logPromises);
-  console.log(`Container logs saved to ${tmpDir.name}`);
+  const nodeLogsDir = tmp.dirSync({ prefix: "bsp-logs-", unsafeCleanup: true });
+  await exportLogsOf(docker, nodeLogsDir.name, existingNodes);
+  console.log(`Node logs saved to ${nodeLogsDir.name}`);
 
   const promises = existingNodes.map(async (node) => {
     const container = docker.getContainer(node.Id);

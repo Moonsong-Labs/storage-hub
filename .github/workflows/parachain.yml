@@ -592,8 +592,6 @@ jobs:
 
           mkdir -p test-logs
 
-          echo "Containers used: $(docker ps -a)"
-
           # Collect logs from Storage Hub images
           for container in $(docker ps -a --filter "ancestor=moonsonglabs/storage-hub" --format "{{.Names}}"); do
             echo "Collecting logs from $container"
@@ -613,6 +611,15 @@ jobs:
             cp -r $SP_LOGS_DIR/* test-logs/ || true
           else
             echo "No sp-logs directory found in /tmp"
+          fi
+
+          AUX_LOGS_DIR=$(find /tmp -maxdepth 1 -type d -name "aux-logs-*" -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" ")
+
+          if [ ! -z "$AUX_LOGS_DIR" ]; then
+            echo "Found logs directory: $AUX_LOGS_DIR"
+            cp -r $AUX_LOGS_DIR/* test-logs/ || true
+          else
+            echo "No aux-logs directory found in /tmp"
           fi
 
           echo "Collected log files:"
