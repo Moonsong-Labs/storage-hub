@@ -1,19 +1,10 @@
 import assert, { strictEqual } from "node:assert";
 import { type EnrichedBspApi, describeMspNet } from "../../../util";
-import { generateMockJWT } from "./util";
-
-// Backend API Types
-// TODO: Add a script in the backend to generate these types instead.
-interface PaymentStream {
-  provider: string;
-  provider_type: "msp" | "bsp";
-  total_amount_paid: string;
-  cost_per_tick: string;
-}
-
-interface PaymentStreamsResponse {
-  streams: PaymentStream[];
-}
+import {
+  generateMockJWT,
+  type PaymentStream,
+  type PaymentStreamResponse
+} from "../../../util/backend";
 
 await describeMspNet(
   "Backend Payment Streams retrieval",

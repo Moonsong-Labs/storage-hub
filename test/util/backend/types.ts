@@ -57,3 +57,14 @@ export interface FileInfo {
   isPublic: boolean;
   uploadedAt: string;
 }
+
+export interface PaymentStream {
+  provider: string;
+  provider_type: "msp" | "bsp";
+  total_amount_paid: string;
+  cost_per_tick: string;
+}
+
+export interface PaymentStreamsResponse {
+  streams: PaymentStream[];
+}

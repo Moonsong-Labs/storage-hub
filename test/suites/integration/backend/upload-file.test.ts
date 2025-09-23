@@ -11,7 +11,7 @@ import {
   waitFor,
   generateMockJWT
 } from "../../../util";
-import type { HealthResponse } from "./types";
+import { generateMockJWT, type HealthResponse } from "../../../util/backend";
 
 await describeMspNet(
   "Backend file upload integration",

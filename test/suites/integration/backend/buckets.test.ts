@@ -1,9 +1,14 @@
 import assert, { strictEqual } from "node:assert";
 import { type EnrichedBspApi, describeMspNet, shUser, generateMockJWT } from "../../../util";
+import {
+  generateMockJWT,
+  type Bucket,
+  type FileListResponse,
+  type FileInfo
+} from "../../../util/backend";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
 import type { Hash } from "@polkadot/types/interfaces";
-import type { Bucket, FileListResponse, FileInfo } from "./types";
 
 await describeMspNet(
   "Backend bucket endpoints",
