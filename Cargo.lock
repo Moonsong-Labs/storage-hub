@@ -9999,6 +9999,7 @@ dependencies = [
  "scale-info",
  "sp-api 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-runtime 40.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
+ "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
 ]
 
 [[package]]

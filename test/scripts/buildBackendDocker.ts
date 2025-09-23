@@ -38,9 +38,12 @@ async function main() {
 
   try {
     // TODO: Replace with dockerode
-    execSync("docker build -t sh-msp-backend:local -f backend/Dockerfile .", {
-      stdio: "inherit"
-    });
+    execSync(
+      "docker build -t sh-msp-backend:local -f docker/storage-hub-msp-backend.Dockerfile .",
+      {
+        stdio: "inherit"
+      }
+    );
     console.log("Docker image built successfully.");
   } catch (error) {
     console.error("Docker build failed.", error);
