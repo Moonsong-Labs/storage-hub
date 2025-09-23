@@ -58,12 +58,21 @@ where
     NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, _event: DistributeFileToBsp<Runtime>) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: DistributeFileToBsp<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Distributing file to BSP",
         );
 
-        todo!("HELLO THERE. Implement this.");
+        let file_key = event.file_key;
+        let bsp_id = event.bsp_id;
+
+        self.storage_hub_handler
+            .blockchain
+            .register_bsp_distributing(file_key, bsp_id)
+            .await?;
+
+        // TODO: Implement this.
+        Ok(())
     }
 }

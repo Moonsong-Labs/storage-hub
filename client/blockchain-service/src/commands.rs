@@ -195,6 +195,7 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
         msp_id: ProviderId<Runtime>,
         user: AccountId<Runtime>,
     },
+    #[command(success_type = ())]
     RegisterBspDistributing {
         file_key: FileKey,
         bsp_id: BackupStorageProviderId<Runtime>,
