@@ -20,14 +20,15 @@ import {
   createPublicClient,
   getContract,
   type GetContractReturnType,
+  hexToBytes,
   http,
+  keccak256,
   parseGwei,
   type PublicClient,
   stringToBytes,
   stringToHex,
-  toHex,
-  type WalletClient
-} from "viem";
+  type WalletClient,
+} from 'viem';
 
 // Re-export filesystemAbi for external use
 export { filesystemAbi };
@@ -153,6 +154,30 @@ export class StorageHubClient {
       throw new Error(`${label} exceeds maximum length of ${maxBytes} bytes (got ${bytes.length})`);
     }
     return stringToHex(str);
+  }
+
+  /**
+   * Serialize FileOperationIntention and sign it
+   */
+  private async signIntention(fileKey: `0x${string}`, operation: FileOperation): Promise<{
+    signedIntention: readonly [`0x${string}`, number];
+    signature: `0x${string}`;
+  }> {
+    const fileKeyBytes = hexToBytes(fileKey);
+    if (fileKeyBytes.length !== 32) {
+      throw new Error(`Invalid file key: expected 32 bytes, got ${fileKeyBytes.length} bytes`);
+    }
+
+    const serialized = new Uint8Array([...fileKeyBytes, operation]);
+    // TODO: we need to replace this with signMessage or EIP-712 (sign structure data)
+    // we cannot sign this raw message/bytes with Metamask or any other EIP1193 wallet
+    const hash = keccak256(serialized);
+    const signature = await this.walletClient.account!.sign!({ hash });
+
+    return {
+      signedIntention: [fileKey, operation],
+      signature,
+    };
   }
 
   /**
@@ -391,4 +416,5 @@ export class StorageHubClient {
     const contract = this.getWriteContract();
     return await contract.write.requestDeleteFile?.(args, txOpts);
   }
+
 }
