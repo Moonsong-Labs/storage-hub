@@ -107,7 +107,10 @@ impl PaymentStream {
     ) -> Result<(), diesel::result::Error> {
         diesel::update(paymentstream::table)
             .filter(paymentstream::id.eq(ps_id))
-            .set(paymentstream::rate.eq(Some(new_rate)))
+            .set((
+                paymentstream::rate.eq(Some(new_rate)),
+                paymentstream::amount_provided.eq(None::<BigDecimal>),
+            ))
             .execute(conn)
             .await?;
         Ok(())
@@ -120,7 +123,10 @@ impl PaymentStream {
     ) -> Result<(), diesel::result::Error> {
         diesel::update(paymentstream::table)
             .filter(paymentstream::id.eq(ps_id))
-            .set(paymentstream::amount_provided.eq(Some(new_amount_provided)))
+            .set((
+                paymentstream::amount_provided.eq(Some(new_amount_provided)),
+                paymentstream::rate.eq(None::<BigDecimal>),
+            ))
             .execute(conn)
             .await?;
         Ok(())
