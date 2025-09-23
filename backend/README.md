@@ -219,7 +219,7 @@ Artifacts:
   - `cd test`
   - `pnpm docker:build:backend`
 
-This uses the prebuilt backend artifact (via cross-build on macOS or cargo build on Linux) and `backend/Dockerfile` to produce the backend image.
+This uses the prebuilt backend artifact (via cross-build on macOS or cargo build on Linux) and `docker/storage-hub-msp-backend.Dockerfile` to produce the backend image.
 
 ## Testing
 
@@ -238,4 +238,4 @@ Coverage (mocked):
 - `backend/lib/src/data/*` — storage/DB/RPC abstractions
 - `backend/lib/src/models/*` — API models
 - `backend/lib/src/lib.rs` — library entry
-- `backend/Dockerfile` — container build
+- `docker/storage-hub-msp-backend.Dockerfile` — container build

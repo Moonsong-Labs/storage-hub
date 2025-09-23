@@ -5,6 +5,7 @@ use shc_actors_derive::actor_command;
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::BlockNumber;
+use sp_core::H256;
 
 use crate::{events::FileDeletionTarget, handler::FishermanService, FileKeyChange};
 
@@ -17,6 +18,10 @@ pub enum FishermanServiceError {
     Client(String),
     #[error("Events retrieval error: {0}")]
     EventsRetrieval(#[from] shc_common::blockchain_utils::EventsRetrievalError),
+    #[error("Storage not found")]
+    StorageNotFound,
+    #[error("Decoding error: {0}")]
+    DecodingError(String),
 }
 
 /// Commands that can be sent to the FishermanService actor
@@ -33,6 +38,18 @@ pub enum FishermanServiceCommand<Runtime: StorageEnableRuntime> {
         from_block: BlockNumber<Runtime>,
         /// The provider to track changes for (BSP ID or Bucket ID)
         provider: FileDeletionTarget<Runtime>,
+    },
+    /// Query incomplete storage request metadata for a file key
+    #[command(success_type = pallet_file_system_runtime_api::IncompleteStorageRequestMetadataResponse<
+        Runtime::AccountId,
+        shc_common::types::BucketId<Runtime>,
+        shc_common::types::StorageDataUnit<Runtime>,
+        Runtime::Hash,
+        shc_common::types::BackupStorageProviderId<Runtime>,
+    >)]
+    QueryIncompleteStorageRequest {
+        /// The file key to query
+        file_key: H256,
     },
 }
 

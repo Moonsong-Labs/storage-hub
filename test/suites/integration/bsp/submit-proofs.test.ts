@@ -168,7 +168,7 @@ await describeBspNet(
 
     it("BSP three stops storing last file", async () => {
       // Wait for BSP-Three to catch up to the tip of the chain
-      await userApi.wait.bspCatchUpToChainTip(bspThreeApi);
+      await userApi.wait.nodeCatchUpToChainTip(bspThreeApi);
 
       // Build transaction for BSP-Three to stop storing the only file it has.
       const inclusionForestProof = await bspThreeApi.rpc.storagehubclient.generateForestProof(
@@ -372,8 +372,8 @@ await describeBspNet(
       });
 
       // Wait for BSPs to resync.
-      await userApi.wait.bspCatchUpToChainTip(bspTwoApi);
-      await userApi.wait.bspCatchUpToChainTip(bspThreeApi);
+      await userApi.wait.nodeCatchUpToChainTip(bspTwoApi);
+      await userApi.wait.nodeCatchUpToChainTip(bspThreeApi);
 
       // There shouldn't be any pending volunteer transactions.
       await assert.rejects(
