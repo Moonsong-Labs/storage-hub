@@ -139,6 +139,12 @@ where
 
     /// The peer ID of this node.
     pub peer_id: Option<PeerId>,
+
+    /// Whether MSP nodes should distribute files to BSPs.
+    ///
+    /// If set to `false`, MSP distribution tasks will be disabled even if the node
+    /// is otherwise configured as a distributor (e.g. has a peer_id).
+    pub enable_msp_distribute_files: bool,
 }
 
 impl<Runtime> Default for BlockchainServiceConfig<Runtime>
@@ -152,6 +158,7 @@ where
             check_for_pending_proofs_period: 4u32.into(),
             max_blocks_behind_to_catch_up_root_changes: 10u32.into(),
             peer_id: None,
+            enable_msp_distribute_files: false,
         }
     }
 }

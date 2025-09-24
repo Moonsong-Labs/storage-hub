@@ -366,6 +366,10 @@ where
             );
         }
 
+        if let Some(enable_msp_distribute_files) = config.enable_msp_distribute_files {
+            blockchain_service_config.enable_msp_distribute_files = enable_msp_distribute_files;
+        }
+
         self.blockchain_service_config = Some(blockchain_service_config);
         self
     }
@@ -790,6 +794,10 @@ pub struct BlockchainServiceOptions {
     pub max_blocks_behind_to_catch_up_root_changes: Option<u32>,
     /// The peer ID of this node.
     pub peer_id: Option<Vec<u8>>,
+
+    /// Whether MSP nodes should distribute files to BSPs.
+    #[serde(default)]
+    pub enable_msp_distribute_files: Option<bool>,
 }
 
 impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
@@ -816,6 +824,7 @@ impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
                 .unwrap_or_default()
                 .saturated_into(),
             peer_id,
+            enable_msp_distribute_files: self.enable_msp_distribute_files.unwrap_or(false),
         }
     }
 }

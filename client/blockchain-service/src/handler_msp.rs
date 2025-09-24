@@ -696,6 +696,12 @@ where
     ///   the in-memory `files_to_distribute` state to not spawn duplicate tasks or
     ///   re-emit for already-confirmed BSPs.
     pub(crate) fn spawn_distribute_file_to_bsps_tasks(&mut self, block_hash: &Runtime::Hash) {
+        // Only distribute files to BSPs when explicitly enabled via configuration.
+        if !self.config.enable_msp_distribute_files {
+            trace!(target: LOG_TARGET, "MSP file distribution disabled by configuration. Skipping distribution scan.");
+            return;
+        }
+
         let managed_msp_id = match &self.maybe_managed_provider {
             Some(ManagedProvider::Msp(msp_handler)) => msp_handler.msp_id.clone(),
             _ => {
