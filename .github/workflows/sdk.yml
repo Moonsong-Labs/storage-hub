@@ -99,7 +99,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
       - name: Cache wasm-pack
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.cargo/bin/wasm-pack
           key: wasm-pack-v0.12.1
@@ -128,6 +128,7 @@ jobs:
           name: sdk-dist
           path: |
             sdk/core/dist
+            sdk/core/wasm/pkg
             sdk/msp-client/dist
 
 
