@@ -230,7 +230,7 @@ await describeBspNet(
       const bspDownApi = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
 
       // Wait for it to catch up to the tip of the chain
-      await userApi.wait.bspCatchUpToChainTip(bspDownApi);
+      await userApi.wait.nodeCatchUpToChainTip(bspDownApi);
 
       const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
         "res/whatsup.jpg",
@@ -324,7 +324,7 @@ await describeBspNet(
       const bspTwoApi = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
 
       // Wait for it to catch up to the tip of the chain
-      await userApi.wait.bspCatchUpToChainTip(bspTwoApi);
+      await userApi.wait.nodeCatchUpToChainTip(bspTwoApi);
 
       // Create a new storage request
       const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
@@ -381,7 +381,7 @@ await describeBspNet(
       const bspThreeApi = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
 
       // Wait for it to catch up to the top of the chain
-      await userApi.wait.bspCatchUpToChainTip(bspThreeApi);
+      await userApi.wait.nodeCatchUpToChainTip(bspThreeApi);
 
       // Set max replication target and tick to maximum threshold to small numbers
       const maxReplicationTargetRuntimeParameter = {

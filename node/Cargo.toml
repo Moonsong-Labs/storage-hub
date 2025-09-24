@@ -152,7 +152,7 @@ pallet-ethereum = { workspace = true }
 substrate-build-script-utils = { workspace = true }
 
 [features]
-default = []
+default = ["std"]
 runtime-benchmarks = [
     "cumulus-primitives-core/runtime-benchmarks",
     "frame-benchmarking-cli/runtime-benchmarks",
@@ -163,6 +163,46 @@ runtime-benchmarks = [
     "sp-runtime/runtime-benchmarks",
     "sh-parachain-runtime/runtime-benchmarks",
     "sh-solochain-evm-runtime/runtime-benchmarks",
+]
+std = [
+    "codec/std",
+    "fp-rpc/std",
+    "frame-support/std",
+    "frame-system/std",
+    "log/std",
+    "pallet-ethereum/std",
+    "pallet-file-system/std",
+    "pallet-file-system-runtime-api/std",
+    "pallet-payment-streams/std",
+    "pallet-payment-streams-runtime-api/std",
+    "pallet-proofs-dealer/std",
+    "pallet-proofs-dealer-runtime-api/std",
+    "pallet-storage-providers/std",
+    "pallet-storage-providers-runtime-api/std",
+    "serde_json/std",
+    "sh-parachain-runtime/std",
+    "sh-solochain-evm-runtime/std",
+    "shc-common/std",
+    "shp-constants/std",
+    "shp-file-key-verifier/std",
+    "shp-file-metadata/std",
+    "shp-opaque/std",
+    "shp-traits/std",
+    "shp-types/std",
+    "sp-api/std",
+    "sp-block-builder/std",
+    "sp-consensus-aura/std",
+    "sp-consensus-babe/std",
+    "sp-core/std",
+    "sp-genesis-builder/std",
+    "sp-inherents/std",
+    "sp-io/std",
+    "sp-keystore/std",
+    "sp-keyring/std",
+    "sp-runtime/std",
+    "sp-timestamp/std",
+    "sp-trie/std",
+    "xcm/std",
 ]
 try-runtime = [
     "polkadot-cli/try-runtime",

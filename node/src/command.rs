@@ -21,7 +21,7 @@ use crate::{
 
 use shc_client::builder::{
     BlockchainServiceOptions, BspChargeFeesOptions, BspMoveBucketOptions, BspSubmitProofOptions,
-    BspUploadFileOptions, MspChargeFeesOptions, MspMoveBucketOptions,
+    BspUploadFileOptions, FishermanOptions, MspChargeFeesOptions, MspMoveBucketOptions,
 };
 use shc_rpc::RpcConfig;
 
@@ -66,7 +66,17 @@ pub struct ProviderOptions {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blockchain_service: Option<BlockchainServiceOptions>,
     /// Whether the node is running in maintenance mode.
+    #[serde(default)]
     pub maintenance_mode: bool,
+}
+
+/// Role configuration enum that ensures mutual exclusivity between Provider and Fisherman roles.
+#[derive(Debug, Clone)]
+pub enum RoleOptions {
+    /// Storage Provider configuration
+    Provider(ProviderOptions),
+    /// Fisherman configuration
+    Fisherman(FishermanOptions),
 }
 
 fn load_spec(id: &str) -> std::result::Result<Box<dyn ChainSpec>, String> {
@@ -360,24 +370,50 @@ pub fn run() -> Result<()> {
             }
         }
         None => {
-            let mut provider_options = None;
+            let mut role_options = None;
             let mut indexer_options = None;
-            let mut fisherman_options = None;
             let runner = cli.create_runner(&cli.run.normalize())?;
 
             // If we have a provider config file
             if let Some(provider_config_file) = cli.provider_config_file {
                 let config = config::read_config(&provider_config_file);
                 if let Some(c) = config {
-                    provider_options = Some(c.provider);
+                    // Check for mutual exclusivity in config file
+                    let has_provider = matches!(
+                        c.provider.provider_type,
+                        ProviderType::Bsp | ProviderType::Msp
+                    );
+                    let has_fisherman = !c.fisherman.database_url.is_empty();
+
+                    if has_provider && has_fisherman {
+                        return Err("Cannot configure both provider and fisherman in the same config file. Please choose one role.".into());
+                    }
+
+                    if has_provider {
+                        let mut provider = c.provider;
+                        provider.maintenance_mode = cli.maintenance_mode;
+                        role_options = Some(RoleOptions::Provider(provider));
+                    } else if has_fisherman {
+                        let mut fisherman = c.fisherman;
+                        fisherman.maintenance_mode = cli.maintenance_mode;
+                        role_options = Some(RoleOptions::Fisherman(fisherman));
+                    }
+
                     indexer_options = Some(c.indexer);
-                    fisherman_options = Some(c.fisherman);
                 };
             };
 
-            // We then check cli (the cli doesn't allow to have both cli parameters and a config file so we should not have overlap here)
+            if cli.provider_config.provider && cli.fisherman_config.fisherman {
+                return Err(
+                    "Cannot run as a fisherman and a provider at the same time. Please choose one role."
+                        .into(),
+                );
+            }
+
             if cli.provider_config.provider {
-                provider_options = Some(cli.provider_config.provider_options());
+                role_options = Some(RoleOptions::Provider(
+                    cli.provider_config.provider_options(cli.maintenance_mode),
+                ));
             };
 
             if cli.indexer_config.indexer {
@@ -385,7 +421,11 @@ pub fn run() -> Result<()> {
             };
 
             if cli.fisherman_config.fisherman {
-                fisherman_options = cli.fisherman_config.fisherman_options();
+                role_options = Some(RoleOptions::Fisherman(
+                    cli.fisherman_config
+                        .fisherman_options(cli.maintenance_mode)
+                        .expect("Clap/TOML configurations should prevent this from ever failing"),
+                ));
             };
 
             runner.run_node_until_exit(|config| async move {
@@ -425,9 +465,8 @@ pub fn run() -> Result<()> {
                                     sc_network::NetworkWorker<_, _>,
                                 >(
                                     config,
-                                    provider_options,
+                                    role_options,
                                     indexer_options,
-                                    fisherman_options.clone(),
                                     hwbench,
                                     id,
                                     cli.run.sealing,
@@ -439,9 +478,8 @@ pub fn run() -> Result<()> {
                                     sc_network::NetworkWorker<_, _>,
                                 >(
                                     config,
-                                    provider_options,
+                                    role_options,
                                     indexer_options,
-                                    fisherman_options.clone(),
                                     hwbench,
                                     cli.run.sealing,
                                 )
@@ -479,9 +517,8 @@ pub fn run() -> Result<()> {
                                     config,
                                     polkadot_config,
                                     collator_options,
-                                    provider_options,
+                                    role_options,
                                     indexer_options,
-                                    fisherman_options.clone(),
                                     id,
                                     hwbench,
                                 )
@@ -492,11 +529,7 @@ pub fn run() -> Result<()> {
                                 crate::service::start_solochain_evm_node::<
                                     sc_network::NetworkWorker<_, _>,
                                 >(
-                                    config,
-                                    provider_options,
-                                    indexer_options,
-                                    fisherman_options.clone(),
-                                    hwbench,
+                                    config, role_options, indexer_options, hwbench
                                 )
                                 .await
                                 .map(|r| r.0)
@@ -519,9 +552,8 @@ pub fn run() -> Result<()> {
                                     sc_network::Litep2pNetworkBackend,
                                 >(
                                     config,
-                                    provider_options,
+                                    role_options,
                                     indexer_options,
-                                    fisherman_options.clone(),
                                     hwbench,
                                     id,
                                     cli.run.sealing,
@@ -533,9 +565,8 @@ pub fn run() -> Result<()> {
                                     sc_network::Litep2pNetworkBackend,
                                 >(
                                     config,
-                                    provider_options,
+                                    role_options,
                                     indexer_options,
-                                    fisherman_options.clone(),
                                     hwbench,
                                     cli.run.sealing,
                                 )
@@ -573,9 +604,8 @@ pub fn run() -> Result<()> {
                                     config,
                                     polkadot_config,
                                     collator_options,
-                                    provider_options,
+                                    role_options,
                                     indexer_options,
-                                    fisherman_options.clone(),
                                     id,
                                     hwbench,
                                 )
@@ -586,11 +616,7 @@ pub fn run() -> Result<()> {
                                 crate::service::start_solochain_evm_node::<
                                     sc_network::Litep2pNetworkBackend,
                                 >(
-                                    config,
-                                    provider_options,
-                                    indexer_options,
-                                    fisherman_options.clone(),
-                                    hwbench,
+                                    config, role_options, indexer_options, hwbench
                                 )
                                 .await
                                 .map(|r| r.0)

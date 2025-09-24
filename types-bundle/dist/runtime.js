@@ -61,6 +61,26 @@ const FILE_SYSTEM_V1 = {
       }
     ],
     type: "Result<BucketId, GenericApplyDeltaEventInfoError>"
+  },
+  pending_storage_requests_by_msp: {
+    description: "Get pending storage requests for a Main Storage Provider.",
+    params: [
+      {
+        name: "mspId",
+        type: "MainStorageProviderId"
+      }
+    ],
+    type: "BTreeMap<H256, StorageRequestMetadata>"
+  },
+  query_incomplete_storage_request_metadata: {
+    description: "Query incomplete storage request metadata for a file key.",
+    params: [
+      {
+        name: "fileKey",
+        type: "H256"
+      }
+    ],
+    type: "Result<IncompleteStorageRequestMetadataResponse, QueryIncompleteStorageRequestMetadataError>"
   }
 };
 const PROOFS_DEALER_V1 = {

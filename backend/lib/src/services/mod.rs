@@ -27,6 +27,7 @@ use msp::MspService;
 /// Container for all backend services
 #[derive(Clone)]
 pub struct Services {
+    pub config: Config,
     pub auth: Arc<AuthService>,
     pub health: Arc<HealthService>,
     pub msp: Arc<MspService>,
@@ -83,13 +84,16 @@ impl Services {
             postgres.clone(),
             rpc.clone(),
         ));
+
         let msp = Arc::new(MspService::new(
             storage.clone(),
             postgres.clone(),
             rpc.clone(),
             config.storage_hub.msp_callback_url.clone(),
         ));
+
         Self {
+            config,
             auth,
             health,
             msp,

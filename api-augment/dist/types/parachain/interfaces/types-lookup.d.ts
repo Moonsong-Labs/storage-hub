@@ -2132,13 +2132,13 @@ declare module "@polkadot/types/lookup" {
       readonly signedDeleteIntention: PalletFileSystemFileOperationIntention;
       readonly signature: SpRuntimeMultiSignature;
     } & Struct;
-    readonly isMspFileDeletionCompleted: boolean;
-    readonly asMspFileDeletionCompleted: {
+    readonly isBucketFileDeletionCompleted: boolean;
+    readonly asBucketFileDeletionCompleted: {
       readonly user: AccountId32;
       readonly fileKey: H256;
       readonly fileSize: u64;
       readonly bucketId: H256;
-      readonly mspId: H256;
+      readonly mspId: Option<H256>;
       readonly oldRoot: H256;
       readonly newRoot: H256;
     } & Struct;
@@ -2154,7 +2154,11 @@ declare module "@polkadot/types/lookup" {
     readonly isFileDeletedFromIncompleteStorageRequest: boolean;
     readonly asFileDeletedFromIncompleteStorageRequest: {
       readonly fileKey: H256;
-      readonly providerId: H256;
+      readonly bspId: Option<H256>;
+    } & Struct;
+    readonly isIncompleteStorageRequest: boolean;
+    readonly asIncompleteStorageRequest: {
+      readonly fileKey: H256;
     } & Struct;
     readonly type:
       | "NewBucket"
@@ -2189,9 +2193,10 @@ declare module "@polkadot/types/lookup" {
       | "FailedToReleaseStorageRequestCreationDeposit"
       | "FailedToTransferDepositFundsToBsp"
       | "FileDeletionRequested"
-      | "MspFileDeletionCompleted"
+      | "BucketFileDeletionCompleted"
       | "BspFileDeletionCompleted"
-      | "FileDeletedFromIncompleteStorageRequest";
+      | "FileDeletedFromIncompleteStorageRequest"
+      | "IncompleteStorageRequest";
   }
   /** @name ShpFileMetadataFileMetadata (153) */
   interface ShpFileMetadataFileMetadata extends Struct {
@@ -4635,13 +4640,13 @@ declare module "@polkadot/types/lookup" {
       readonly location: Bytes;
       readonly size_: u64;
       readonly fingerprint: H256;
-      readonly providerId: H256;
+      readonly bspId: Option<H256>;
       readonly forestProof: SpTrieStorageProofCompactProof;
     } & Struct;
     readonly isDeleteFileForIncompleteStorageRequest: boolean;
     readonly asDeleteFileForIncompleteStorageRequest: {
       readonly fileKey: H256;
-      readonly providerId: H256;
+      readonly bspId: Option<H256>;
       readonly forestProof: SpTrieStorageProofCompactProof;
     } & Struct;
     readonly type:
@@ -5881,10 +5886,10 @@ declare module "@polkadot/types/lookup" {
     readonly owner: AccountId32;
     readonly bucketId: H256;
     readonly location: Bytes;
-    readonly size_: u64;
+    readonly fileSize: u64;
     readonly fingerprint: H256;
     readonly pendingBspRemovals: Vec<H256>;
-    readonly pendingMspRemoval: Option<H256>;
+    readonly pendingBucketRemoval: bool;
   }
   /** @name PalletFileSystemError (492) */
   interface PalletFileSystemError extends Enum {

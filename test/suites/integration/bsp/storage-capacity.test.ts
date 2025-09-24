@@ -343,7 +343,7 @@ await describeBspNet("BSPNet: Change capacity tests.", ({ before, it, createUser
 
     // Wait until the new BSP catches up to the chain tip.
     const bspTwoApi = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
-    await userApi.wait.bspCatchUpToChainTip(bspTwoApi);
+    await userApi.wait.nodeCatchUpToChainTip(bspTwoApi);
 
     // Stop the other BSP so it doesn't volunteer for the files.
     await userApi.docker.pauseContainer("storage-hub-sh-bsp-1");

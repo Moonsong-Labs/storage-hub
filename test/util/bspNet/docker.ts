@@ -7,6 +7,7 @@ import Docker from "dockerode";
 import { DOCKER_IMAGE } from "../constants";
 import { sendCustomRpc } from "../rpc";
 import { sleep } from "../timer";
+import { waitFor } from "./waits";
 import * as NodeBspNet from "./node";
 import { BspNetTestApi } from "./test-api";
 
@@ -387,17 +388,32 @@ const addContainer = async (
 
   await container.start();
 
-  let peerId: string | undefined;
-  for (let i = 0; i < 200; i++) {
-    try {
-      peerId = await sendCustomRpc(`http://127.0.0.1:${rpcPort}`, "system_localPeerId");
-      break;
-    } catch {
-      await sleep(50);
-    }
-  }
+  // Wait for container to be truly ready using deterministic checks
+  await waitFor({
+    lambda: async () => {
+      try {
+        // Check if container is still running
+        const containerInfo = await container.inspect();
+        if (!containerInfo.State.Running) {
+          console.log(`Container not running: ${containerInfo.State.Status}`);
+          return false;
+        }
 
-  assert(peerId, "Failed to connect after 10s. Exiting...");
+        // Check if RPC endpoint is responding
+        const peerId = await sendCustomRpc(`http://127.0.0.1:${rpcPort}`, "system_localPeerId");
+        return !!peerId;
+      } catch (_error) {
+        // RPC not ready yet, continue waiting
+        return false;
+      }
+    },
+    iterations: 150, // 30 seconds total (150 * 200ms)
+    delay: 200
+  });
+
+  // Get peerId from the now-ready container
+  const peerId = await sendCustomRpc(`http://127.0.0.1:${rpcPort}`, "system_localPeerId");
+  assert(peerId, `Failed to get peerId from container on port ${rpcPort}`);
 
   const api = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
   const chainName = api.consts.system.version.specName.toString();
@@ -426,12 +442,37 @@ export const pauseContainer = async (containerName: string) => {
 
 export const stopContainer = async (containerName: string) => {
   const docker = new Docker();
-  const containersToStop = await docker.listContainers({
-    filters: { name: [containerName] }
-  });
 
-  await docker.getContainer(containersToStop[0].Id).stop();
-  await docker.getContainer(containersToStop[0].Id).remove({ force: true });
+  try {
+    const containersToStop = await docker.listContainers({
+      filters: { name: [containerName] }
+    });
+
+    if (containersToStop.length === 0) {
+      console.log(`Container ${containerName} not found, already stopped/removed`);
+      return;
+    }
+
+    const container = docker.getContainer(containersToStop[0].Id);
+
+    // Stop the container
+    try {
+      await container.stop({ t: 10 }); // 10 second timeout
+    } catch (e) {
+      console.log(`Container ${containerName} already stopped or error stopping: ${e}`);
+    }
+
+    // Remove the container
+    await container.remove({ force: true });
+
+    // Give the system time to release ports
+    await sleep(100);
+
+    console.log(`Container ${containerName} stopped and removed successfully`);
+  } catch (e) {
+    console.error(`Error stopping container ${containerName}:`, e);
+    throw e;
+  }
 };
 
 export const startContainer = async (options: { containerName: string }) => {

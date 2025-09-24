@@ -18,6 +18,7 @@ alloy-core = "0.8"
 alloy-signer = "0.8"
 headers = { workspace = true }
 hex = { workspace = true }
+hex-literal = { workspace = true }
 jsonrpsee = { workspace = true, features = ["client", "ws-client"] }
 jsonwebtoken = { workspace = true }
 parking_lot = { workspace = true }
@@ -49,8 +50,11 @@ trie-db = { workspace = true }
 [dev-dependencies]
 alloy-signer = "0.8"
 axum-test = { workspace = true }
+diesel_migrations = { version = "2.2", features = ["postgres"] }
 futures = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
+testcontainers = "0.24"
+testcontainers-modules = { version = "0.12", features = ["postgres"] }
 
 [features]
 default = []

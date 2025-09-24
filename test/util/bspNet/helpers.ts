@@ -95,12 +95,21 @@ export const cleardownTest = async (cleardownOptions: {
   keepNetworkAlive?: boolean;
 }) => {
   try {
-    if (Array.isArray(cleardownOptions.api)) {
-      for (const api of cleardownOptions.api) {
-        await api.disconnect();
+    if (
+      cleardownOptions.api &&
+      (Array.isArray(cleardownOptions.api) ? cleardownOptions.api.length > 0 : true)
+    ) {
+      if (Array.isArray(cleardownOptions.api)) {
+        for (const api of cleardownOptions.api) {
+          if (api) {
+            await api.disconnect();
+          }
+        }
+      } else {
+        if (cleardownOptions.api) {
+          await cleardownOptions.api.disconnect();
+        }
       }
-    } else {
-      await cleardownOptions.api.disconnect();
     }
   } catch (e) {
     console.error("Error disconnecting APIs:", e);
@@ -121,6 +130,7 @@ export const cleardownTest = async (cleardownOptions: {
 
     if (relevantContainers.length > 0) {
       console.error("WARNING: Containers still present after cleanup!");
+      console.error(`Found ${relevantContainers.length} remaining container(s)`);
       await printDockerStatus();
       throw new Error("Failed to clean up test environment");
     }

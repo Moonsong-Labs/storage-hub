@@ -4,22 +4,23 @@ description: Installs pnpm and caches the pnpm store
 inputs:
   node_version:
     description: "Node.js version"
-    default: "23"
+    default: "23.5.0"
     required: false
 
 runs:
   using: composite
   steps:
-    - name: Install Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ inputs.node_version }}
-
     - name: Install pnpm
       uses: pnpm/action-setup@v4
       with:
         version: 9
         run_install: false
+
+    - name: Install Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node_version }}
+        cache: 'pnpm'
 
     - name: Get pnpm store directory
       id: get_pnpm_store
@@ -41,5 +42,6 @@ runs:
         node-version: ${{ inputs.node_version }}
         registry-url: https://registry.npmjs.org/
         always-auth: true
+        cache: 'pnpm'
       env:
         NODE_AUTH_TOKEN: ${{ env.NODE_AUTH_TOKEN }}

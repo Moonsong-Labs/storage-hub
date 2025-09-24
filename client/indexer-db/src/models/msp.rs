@@ -12,7 +12,7 @@ use crate::{
 
 /// Table that holds the MSPs.
 // TODO: Consider using UUIDs instead of i64
-#[derive(Debug, Queryable, Insertable, Selectable)]
+#[derive(Debug, Clone, Queryable, Insertable, Selectable)]
 #[diesel(table_name = msp)]
 pub struct Msp {
     /// The ID of the MSP as stored in the database. For the runtime id, use `onchain_msp_id`.

@@ -7,32 +7,18 @@ import { describeMspNet, type EnrichedBspApi, waitFor } from "../../../util";
 import { fetchJwtToken } from "../../../util/backend/jwt";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import {
+  type EnrichedBspApi,
+  describeMspNet,
+  waitFor,
+} from "../../../util";
+import type { HealthResponse } from "./types";
+import {
   ETH_SH_USER_ADDRESS,
   ETH_SH_USER_PRIVATE_KEY,
   ethShUser,
   BALTATHAR_PRIVATE_KEY,
 } from "../../../util/evmNet/keyring";
 import type { H256 } from "@polkadot/types/interfaces";
-
-// Backend API Types
-// TODO: Add a script in the backend to generate these types instead.
-interface ComponentHealth {
-  status: string;
-  message?: string;
-}
-
-interface HealthComponents {
-  storage: ComponentHealth;
-  postgres: ComponentHealth;
-  rpc: ComponentHealth;
-}
-
-interface HealthResponse {
-  status: string;
-  version: string;
-  service: string;
-  components: HealthComponents;
-}
 
 await describeMspNet(
   "Backend file upload integration",
