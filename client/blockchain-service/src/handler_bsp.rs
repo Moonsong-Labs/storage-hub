@@ -15,7 +15,7 @@ use pallet_proofs_dealer_runtime_api::{
 use shc_actors_framework::actor::Actor;
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
-    typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
+    typed_store::CFDequeAPI,
     types::{BlockNumber, MaxBatchConfirmStorageRequests, StorageEnableEvents},
 };
 use shc_forest_manager::traits::ForestStorageHandler;
@@ -30,9 +30,6 @@ use crate::{
         ProcessSubmitProofRequest, ProcessSubmitProofRequestData,
     },
     handler::LOG_TARGET,
-    state::{
-        OngoingProcessConfirmStoringRequestCf, OngoingProcessStopStoringForInsolventUserRequestCf,
-    },
     types::ManagedProvider,
     BlockchainService,
 };
@@ -269,21 +266,6 @@ where
                         error!(target: LOG_TARGET, "Forest root write task channel closed unexpectedly. Lock is released anyway!");
                     }
                 }
-
-                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                state_store_context
-                    .access_value(&OngoingProcessConfirmStoringRequestCf::<Runtime> {
-                        phantom: Default::default(),
-                    })
-                    .delete();
-                state_store_context
-                    .access_value(
-                        &OngoingProcessStopStoringForInsolventUserRequestCf::<Runtime> {
-                            phantom: Default::default(),
-                        },
-                    )
-                    .delete();
-                state_store_context.commit();
             } else {
                 info!(target: LOG_TARGET, "Forest root write lock not assigned to any task");
             }
@@ -576,48 +558,12 @@ where
         let (tx, rx) = tokio::sync::oneshot::channel();
         *forest_root_write_lock = Some(rx);
 
-        // If this is a confirm storing request or a stop storing for insolvent user request,
-        // we need to store it in the state store.
-        let data = data.into();
-        match &data {
-            ForestWriteLockTaskData::ConfirmStoringRequest(data) => {
-                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                state_store_context
-                    .access_value(&OngoingProcessConfirmStoringRequestCf::<Runtime> {
-                        phantom: Default::default(),
-                    })
-                    .write(data);
-                state_store_context.commit();
-            }
-            ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
-                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                state_store_context
-                    .access_value(
-                        &OngoingProcessStopStoringForInsolventUserRequestCf::<Runtime> {
-                            phantom: Default::default(),
-                        },
-                    )
-                    .write(data);
-                state_store_context.commit();
-            }
-            ForestWriteLockTaskData::MspRespondStorageRequest(_) => {
-                unreachable!("BSPs do not respond to storage requests as MSPs do.")
-            }
-            ForestWriteLockTaskData::FileDeletionRequest(_) => {
-                unreachable!("BSPs do not respond to file deletions as MSPs do.")
-            }
-            ForestWriteLockTaskData::SubmitProofRequest(_) => {
-                // We don't need to store anything in the state store for submit proof requests.
-                // They are periodically checked by the BSP's block processing loop.
-            }
-        }
-
         // This is an [`Arc<Mutex<Option<T>>>`] (in this case [`oneshot::Sender<()>`]) instead of just
         // T so that we can keep using the current actors event bus (emit) which requires Clone on the
         // event. Clone is required because there is no constraint on the number of listeners that can
         // subscribe to the event (and each is guaranteed to receive all emitted events).
         let forest_root_write_tx = Arc::new(Mutex::new(Some(tx)));
-        match data {
+        match data.into() {
             ForestWriteLockTaskData::SubmitProofRequest(data) => {
                 self.emit(ProcessSubmitProofRequest {
                     data,
