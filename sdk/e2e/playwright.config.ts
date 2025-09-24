@@ -1,43 +1,44 @@
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
-  testDir: './tests',
+  testDir: "./tests",
   timeout: 120000,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  reporter: [['html', { outputFolder: '/tmp/playwright-report', open: 'never' }], ['list']],
+  reporter: [["html", { outputFolder: "/tmp/playwright-report", open: "never" }], ["list"]],
   use: {
-    trace: 'on-first-retry',
-    video: 'retain-on-failure',
-    screenshot: 'only-on-failure',
+    trace: "on-first-retry",
+    video: "retain-on-failure",
+    screenshot: "only-on-failure",
     headless: false,
-    storageState: undefined,
+    storageState: undefined
   },
-  outputDir: '/tmp/test-results',
+  outputDir: "/tmp/test-results",
   webServer: {
-    command: "/bin/bash -lc 'PIDS=\"$(lsof -ti tcp:3000 || true)\"; if [ -n \"$PIDS\" ]; then kill -9 $PIDS || true; fi; python3 -m http.server 3000 --directory ..'",
-    url: process.env.E2E_BASE_URL || 'http://localhost:3000',
+    command:
+      '/bin/bash -lc \'PIDS="$(lsof -ti tcp:3000 || true)"; if [ -n "$PIDS" ]; then kill -9 $PIDS || true; fi; python3 -m http.server 3000 --directory ..\'',
+    url: process.env.E2E_BASE_URL || "http://localhost:3000",
     timeout: 120000,
-    reuseExistingServer: true,
+    reuseExistingServer: true
   },
   projects: [
     {
-      name: 'metamask',
-      testMatch: ['wallet/**/metamask-sdk-sign.spec.ts'],
+      name: "metamask",
+      testMatch: ["wallet/**/metamask-sdk-sign.spec.ts"],
       use: {
-        ...devices['Desktop Chrome'],
-        baseURL: process.env.E2E_BASE_URL || 'http://localhost:3000',
+        ...devices["Desktop Chrome"],
+        baseURL: process.env.E2E_BASE_URL || "http://localhost:3000"
       },
-      workers: 1,
+      workers: 1
     },
     {
-      name: 'msp',
-      testMatch: ['msp/**/*.spec.ts'],
+      name: "msp",
+      testMatch: ["msp/**/*.spec.ts"],
       use: {
-        ...devices['Desktop Chrome'],
-        baseURL: process.env.E2E_BASE_URL || 'http://localhost:3000',
-      },
-    },
-  ],
+        ...devices["Desktop Chrome"],
+        baseURL: process.env.E2E_BASE_URL || "http://localhost:3000"
+      }
+    }
+  ]
 });
