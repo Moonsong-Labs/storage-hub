@@ -250,8 +250,12 @@ await describeMspNet(
       strictEqual(uploadResponse.status, 201, "Upload should return CREATED status");
       const responseBody = await uploadResponse.text();
       const uploadResult = JSON.parse(responseBody);
-      const uploadedFileKeyHex = u8aToHex(fileKey);
-      strictEqual(uploadResult.fileKey, uploadedFileKeyHex, "Response should contain correct file key");
+      uploadedFileKeyHex = u8aToHex(fileKey);
+      strictEqual(
+        uploadResult.fileKey,
+        uploadedFileKeyHex,
+        "Response should contain correct file key"
+      );
       strictEqual(uploadResult.bucketId, bucketId, "Response should contain correct bucket ID");
 
       // Wait until the MSP has received and stored the file

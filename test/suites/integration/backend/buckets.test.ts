@@ -6,17 +6,14 @@ import { decodeAddress } from "@polkadot/util-crypto";
 import type { Hash } from "@polkadot/types/interfaces";
 import type { Bucket, FileListResponse, FileInfo } from "./types";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
-import {
-  ETH_SH_USER_ADDRESS,
-  ETH_SH_USER_PRIVATE_KEY,
-} from "../../../util/evmNet/keyring";
+import { ETH_SH_USER_PRIVATE_KEY } from "../../../util/evmNet/keyring";
 
 await describeMspNet(
   "Backend bucket endpoints",
   {
     indexer: true,
     backend: true,
-    runtimeType: "solochain",
+    runtimeType: "solochain"
   },
   ({ before, createMsp1Api, createUserApi, it }) => {
     let userApi: EnrichedBspApi;
@@ -57,7 +54,7 @@ await describeMspNet(
         timeout: 10000
       });
 
-      userJWT = await fetchJwtToken(ETH_SH_USER_PRIVATE_KEY, SH_EVM_SOLOCHAIN_CHAIN_ID):
+      userJWT = await fetchJwtToken(ETH_SH_USER_PRIVATE_KEY, SH_EVM_SOLOCHAIN_CHAIN_ID);
     });
 
     it("Network launches and can be queried", async () => {
@@ -199,11 +196,14 @@ await describeMspNet(
       assert(userJWT, "User token is initialized");
       assert(bucketId, "Bucket should have been created");
 
-      const response = await fetch(`http://localhost:8080/buckets/${bucketId}/files?path=${fileLocationSubPath}`, {
-        headers: {
-          Authorization: `Bearer ${userJWT}`
+      const response = await fetch(
+        `http://localhost:8080/buckets/${bucketId}/files?path=${fileLocationSubPath}`,
+        {
+          headers: {
+            Authorization: `Bearer ${userJWT}`
+          }
         }
-      });
+      );
 
       strictEqual(
         response.status,
