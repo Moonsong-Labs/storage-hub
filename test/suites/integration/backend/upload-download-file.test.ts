@@ -24,6 +24,9 @@ await describeMspNet(
   ({ before, createMsp1Api, createUserApi, it }) => {
     let userApi: EnrichedBspApi;
     let msp1Api: EnrichedBspApi;
+    let uploadedFileKeyHex: string;
+    let originalFileBuffer: Buffer;
+    const TEST_FILE_NAME = "whatsup.jpg";
 
     before(async () => {
       userApi = await createUserApi();
@@ -89,9 +92,9 @@ await describeMspNet(
     });
 
     it("Should successfully upload a file via the backend API", async () => {
-      const source = "res/whatsup.jpg";
-      const localSource = "docker/resource/whatsup.jpg";
-      const destination = "test/whatsup.jpg";
+      const source = `res/${TEST_FILE_NAME}`;
+      const localSource = `docker/resource/${TEST_FILE_NAME}`;
+      const destination = `test/${TEST_FILE_NAME}`;
       const bucketName = "backend-test-bucket";
 
       // Create a new bucket with the MSP
@@ -145,6 +148,7 @@ await describeMspNet(
 
       // Prepare a multipart HTTP request to send to the backend's upload endpoint
       const fileBuffer = fs.readFileSync(path.join("..", localSource));
+      originalFileBuffer = fileBuffer;
       const form = new FormData();
 
       // SCALE-encode the file metadata and add it to the multipart form
@@ -188,6 +192,7 @@ await describeMspNet(
       const hexFileKey = u8aToHex(file_key);
       strictEqual(uploadResult.fileKey, hexFileKey, "Response should contain correct file key");
       strictEqual(uploadResult.bucketId, bucketId, "Response should contain correct bucket ID");
+      uploadedFileKeyHex = hexFileKey;
 
       // Wait until the MSP has received and stored the file
       await msp1Api.wait.fileStorageComplete(file_key);
@@ -238,6 +243,42 @@ await describeMspNet(
         expectedExts: 1,
         bspAccount: bspAddress
       });
+    });
+
+    it("Should successfully download a file via the backend API", async () => {
+      // Ensure the upload test completed successfully
+      assert(uploadedFileKeyHex, "Upload test must complete successfully before download test");
+      assert(originalFileBuffer, "Original file buffer must be available from upload test");
+
+      const mockJWT = generateMockJWT();
+      const response = await fetch(`http://localhost:8080/download/${uploadedFileKeyHex}`, {
+        headers: {
+          Authorization: `Bearer ${mockJWT}`
+        }
+      });
+      strictEqual(response.status, 200, "Download endpoint should return 200 OK");
+
+      const contentDisposition = response.headers.get("content-disposition");
+      assert(contentDisposition, "Content disposition should be present");
+      // Filename is preserved from the upload request
+      strictEqual(
+        contentDisposition,
+        `attachment; filename="${TEST_FILE_NAME}"`,
+        "Content disposition should match"
+      );
+
+      const arrayBuffer = await response.arrayBuffer();
+      const downloadedBuffer = Buffer.from(arrayBuffer);
+
+      strictEqual(
+        downloadedBuffer.length,
+        originalFileBuffer.length,
+        "Downloaded file length should match uploaded file length"
+      );
+      assert(
+        downloadedBuffer.equals(originalFileBuffer),
+        "Downloaded file contents should match the uploaded file"
+      );
     });
   }
 );
