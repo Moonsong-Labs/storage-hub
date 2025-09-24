@@ -56,11 +56,11 @@ jobs:
           NAME=$(node -p "require('./types-bundle/package.json').name")
           PUBLISHED=$(npm view "$NAME" version 2>/dev/null || echo "0.0.0")
           echo "types-bundle npm: $PUBLISHED"
-          CURR="$CURR" PUBLISHED="$PUBLISHED" node -e "
-           const semver=require('semver');
-           const curr=process.env.CURR; const pub=process.env.PUBLISHED;
-           if(!semver.gt(curr,pub)){console.error(`::error title=Version not greater than npm::Current ${curr} must be greater than published ${pub}`);process.exit(1)}
-          "
+          CURR="$CURR" PUBLISHED="$PUBLISHED" node -e '
+           const semver = require("semver");
+           const curr = process.env.CURR; const pub = process.env.PUBLISHED;
+           if (!semver.gt(curr, pub)) { console.log("::error title=Version not greater than npm::Current " + curr + " must be greater than published " + pub); process.exit(1); }
+          '
 
       - name: Verify api-augment version bumped
         if: steps.changes.outputs.check_api_augment == 'true'
@@ -78,9 +78,9 @@ jobs:
           NAME=$(node -p "require('./api-augment/package.json').name")
           PUBLISHED=$(npm view "$NAME" version 2>/dev/null || echo "0.0.0")
           echo "api-augment npm: $PUBLISHED"
-          CURR="$CURR" PUBLISHED="$PUBLISHED" node -e "
-            const semver=require('semver');
-            const curr=process.env.CURR; const pub=process.env.PUBLISHED;
-            if(!semver.gt(curr,pub)){console.error(`::error title=Version not greater than npm::Current ${curr} must be greater than published ${pub}`);process.exit(1)}
-          "
+          CURR="$CURR" PUBLISHED="$PUBLISHED" node -e '
+            const semver = require("semver");
+            const curr = process.env.CURR; const pub = process.env.PUBLISHED;
+            if (!semver.gt(curr, pub)) { console.log("::error title=Version not greater than npm::Current " + curr + " must be greater than published " + pub); process.exit(1); }
+          '
 
