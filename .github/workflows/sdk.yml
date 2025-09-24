@@ -106,7 +106,11 @@ jobs:
         run: curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Build
+      - name: Build core
+        working-directory: sdk/core
+        run: pnpm build
+      - name: Build msp-client
+        working-directory: sdk/msp-client
         run: pnpm build
       - name: Lint
         run: pnpm lint
@@ -125,8 +129,8 @@ jobs:
         with:
           name: sdk-dist
           path: |
-            ${{ github.workspace }}/sdk/core/dist
-            ${{ github.workspace }}/sdk/msp-client/dist
+            sdk/core/dist
+            sdk/msp-client/dist
 
 
   e2e-wallet-metamask:
