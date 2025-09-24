@@ -132,7 +132,7 @@ mod tests {
         // Verify new token is different but valid
         assert_ne!(token_response.token, verify_response.token);
 
-        let decoded_new = decode::<JwtClaims>(&verify_response.token, jwt_key, jwt_validation)
+        let decoded_new = decode::<JwtClaims>(&token_response.token, jwt_key, jwt_validation)
             .expect("Failed to decode JWT");
         assert_eq!(decoded_new.claims.address, address.to_lowercase());
         assert!(decoded_new.claims.iat >= decoded.claims.iat);

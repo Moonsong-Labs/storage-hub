@@ -7,18 +7,13 @@ import { describeMspNet, type EnrichedBspApi, waitFor } from "../../../util";
 import { fetchJwtToken } from "../../../util/backend/jwt";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import {
-  type EnrichedBspApi,
-  describeMspNet,
-  waitFor,
-} from "../../../util";
-import type { HealthResponse } from "./types";
-import {
   ETH_SH_USER_ADDRESS,
   ETH_SH_USER_PRIVATE_KEY,
   ethShUser,
-  BALTATHAR_PRIVATE_KEY,
+  BALTATHAR_PRIVATE_KEY
 } from "../../../util/evmNet/keyring";
 import type { H256 } from "@polkadot/types/interfaces";
+import type { HealthResponse } from "./types";
 
 await describeMspNet(
   "Backend file upload integration",
@@ -156,7 +151,7 @@ await describeMspNet(
       await waitFor({
         lambda: async () => (await msp1Api.rpc.storagehubclient.isFileKeyExpected(fileKey)).isTrue
       });
-    })
+    });
 
     it("Prepare upload form", async () => {
       const localSource = "docker/resource/whatsup.jpg";
@@ -182,29 +177,40 @@ await describeMspNet(
       // Add the file data stream to the multipart form
       const fileBlob = new Blob([fileBuffer], { type: "image/jpeg" });
       form.append("file", fileBlob, path.basename(source));
-    })
+    });
 
-    it.skip("Should not upload file as other user", {todo: "when backend checks user permissions"}, async () => {
-      // TODO: Once the upload endpoint checks auth, uncomment this as this is the expected behavior
-      // Generatea a JWT token for Baltathar using the backend's auth endpoints
-      // Trying to upload this file with it should fail
-      const baltatharToken = await fetchJwtToken(BALTATHAR_PRIVATE_KEY, SH_EVM_SOLOCHAIN_CHAIN_ID);
+    it.skip(
+      "Should not upload file as other user",
+      { todo: "when backend checks user permissions" },
+      async () => {
+        // TODO: Once the upload endpoint checks auth, uncomment this as this is the expected behavior
+        // Generatea a JWT token for Baltathar using the backend's auth endpoints
+        // Trying to upload this file with it should fail
+        const baltatharToken = await fetchJwtToken(
+          BALTATHAR_PRIVATE_KEY,
+          SH_EVM_SOLOCHAIN_CHAIN_ID
+        );
 
-      // Send the HTTP request to backend upload endpoint
-      const baltatharUploadResponse = await fetch(
-        `http://localhost:8080/buckets/${bucketId}/upload/${fileKey}`,
-        {
-          method: "PUT",
-          body: form,
-          headers: {
-            Authorization: `Bearer ${baltatharToken}`
+        // Send the HTTP request to backend upload endpoint
+        const baltatharUploadResponse = await fetch(
+          `http://localhost:8080/buckets/${bucketId}/upload/${fileKey}`,
+          {
+            method: "PUT",
+            body: form,
+            headers: {
+              Authorization: `Bearer ${baltatharToken}`
+            }
           }
-        }
-      );
+        );
 
-      // Verify that the backend upload failed
-      strictEqual(baltatharUploadResponse.status, 401, "Upload should return UNAUTHORIZED status");
-    })
+        // Verify that the backend upload failed
+        strictEqual(
+          baltatharUploadResponse.status,
+          401,
+          "Upload should return UNAUTHORIZED status"
+        );
+      }
+    );
 
     it("Should successfully upload file via the backend API", async () => {
       // Generate a JWT token using the backend's auth endpoints
