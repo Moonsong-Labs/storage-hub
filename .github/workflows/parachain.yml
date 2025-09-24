@@ -944,7 +944,7 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - run: mkdir -p target/release/
-      - name: Download backend binary
+      - name: Download backend binary if changed
         if: needs.setup.outputs.backend_changed == 'true' || needs.setup.outputs.force_backend == 'true'
         uses: actions/download-artifact@v4
         with:
