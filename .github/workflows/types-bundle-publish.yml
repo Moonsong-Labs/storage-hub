@@ -1,5 +1,9 @@
 name: Publish types-bundle to npm.js
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'types-bundle/**'
   workflow_dispatch:
     inputs:
       sha:
@@ -15,32 +19,55 @@ jobs:
   publish-types-bundle:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - name: Checkout
+      - name: Checkout (manual)
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.sha }}
 
+      - name: Checkout (push)
+        if: github.event_name != 'workflow_dispatch'
+        uses: actions/checkout@v4
+
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 23
+          registry-url: https://registry.npmjs.org/
+          cache: pnpm
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 9
 
-      - name: Build types-bundle
+      - name: Install and build types-bundle
         run: |
           cd types-bundle
-          pnpm install
+          pnpm install --no-frozen-lockfile
           pnpm run build
 
-      - name: Publish types-bundle
-        uses: JS-DevTools/npm-publish@v3
-        with:
-          token: ${{ secrets.NPM_TOKEN }}
-          package: types-bundle/package.json
-          registry: https://registry.npmjs.org/
-          access: public
-          dry-run: ${{ github.event.inputs.dry_run }}
+      - name: Publish to npm
+        if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true') }}
+        working-directory: types-bundle
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          PKG_NAME=$(node -p "require('./package.json').name")
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          echo "Publishing $PKG_NAME v$PKG_VERSION"
+          pnpm publish --access public --no-git-checks || {
+            echo "Publish failed (possibly already published). Checking registry...";
+            CURR=$(npm view "$PKG_NAME" version || echo "");
+            if [ "$CURR" = "$PKG_VERSION" ]; then
+              echo "Version already published. Skipping.";
+              exit 0;
+            else
+              echo "Unexpected publish error.";
+              exit 1;
+            fi
+          }
+
+      - name: Dry run note
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' }}
+        run: echo "Dry run enabled; skipped npm publish."

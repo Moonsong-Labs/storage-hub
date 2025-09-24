@@ -1,0 +1,83 @@
+name: Version Guard (api-augment, types-bundle)
+
+on:
+  pull_request:
+    paths:
+      - 'api-augment/**'
+      - 'types-bundle/**'
+
+jobs:
+  check-version-bumps:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - name: Checkout PR and fetch base
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine changed package paths
+        id: changes
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.sha }}"
+          echo "Comparing $BASE_SHA..$HEAD_SHA"
+          CHANGED_FILES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          echo "$CHANGED_FILES" | sed 's/^/ - /'
+          NEED_CHECK_TYPES_BUNDLE=$(echo "$CHANGED_FILES" | grep -E '^types-bundle/' >/dev/null && echo true || echo false)
+          NEED_CHECK_API_AUGMENT=$(echo "$CHANGED_FILES" | grep -E '^api-augment/' >/dev/null && echo true || echo false)
+          echo "check_types_bundle=$NEED_CHECK_TYPES_BUNDLE" >> $GITHUB_OUTPUT
+          echo "check_api_augment=$NEED_CHECK_API_AUGMENT" >> $GITHUB_OUTPUT
+
+      - name: Use Node.js
+        if: steps.changes.outputs.check_types_bundle == 'true' || steps.changes.outputs.check_api_augment == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 23
+
+      - name: Verify types-bundle version bumped
+        if: steps.changes.outputs.check_types_bundle == 'true'
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          CURR=$(node -p "require('./types-bundle/package.json').version")
+          BASE_VER=$(git show "$BASE_SHA:types-bundle/package.json" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{console.log(JSON.parse(s).version)})")
+          echo "types-bundle base: $BASE_VER, current: $CURR"
+          if [ "$CURR" = "$BASE_VER" ]; then
+            echo "::error title=Version not bumped::types-bundle version is unchanged ($CURR). Please bump package.json version."
+            exit 1
+          fi
+
+          # Ensure current > npm published
+          NAME=$(node -p "require('./types-bundle/package.json').name")
+          PUBLISHED=$(npm view "$NAME" version 2>/dev/null || echo "0.0.0")
+          echo "types-bundle npm: $PUBLISHED"
+          node -e "
+            const a=require('child_process');
+            const curr=process.env.CURR; const pub=process.env.PUBLISHED;
+            function parse(v){return v.split('-')[0].split('.').map(Number)}
+            function cmp(x,y){const X=parse(x),Y=parse(y);for(let i=0;i<3;i++){if((X[i]||0)>(Y[i]||0))return 1;if((X[i]||0)<(Y[i]||0))return -1}return 0}
+            if(cmp(curr,pub)<=0){console.error(`::error title=Version not greater than npm::Current ${curr} must be greater than published ${pub}`);process.exit(1)}
+          "
+
+      - name: Verify api-augment version bumped
+        if: steps.changes.outputs.check_api_augment == 'true'
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          CURR=$(node -p "require('./api-augment/package.json').version")
+          BASE_VER=$(git show "$BASE_SHA:api-augment/package.json" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{console.log(JSON.parse(s).version)})")
+          echo "api-augment base: $BASE_VER, current: $CURR"
+          if [ "$CURR" = "$BASE_VER" ]; then
+            echo "::error title=Version not bumped::api-augment version is unchanged ($CURR). Please bump package.json version."
+            exit 1
+          fi
+
+          # Ensure current > npm published
+          NAME=$(node -p "require('./api-augment/package.json').name")
+          PUBLISHED=$(npm view "$NAME" version 2>/dev/null || echo "0.0.0")
+          echo "api-augment npm: $PUBLISHED"
+          node -e "
+            const curr=process.env.CURR; const pub=process.env.PUBLISHED;
+            function parse(v){return v.split('-')[0].split('.').map(Number)}
+            function cmp(x,y){const X=parse(x),Y=parse(y);for(let i=0;i<3;i++){if((X[i]||0)>(Y[i]||0))return 1;if((X[i]||0)<(Y[i]||0))return -1}return 0}
+            if(cmp(curr,pub)<=0){console.error(`::error title=Version not greater than npm::Current ${curr} must be greater than published ${pub}`);process.exit(1)}
+          "
+
