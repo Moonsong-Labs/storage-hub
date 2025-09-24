@@ -160,6 +160,10 @@ where
             .map_err(|e| anyhow::anyhow!("Failed to send chunks to provider: {:?}", e))?;
 
         info!(target: LOG_TARGET, "Successfully distributed file {:?} to BSP {:?}", file_key, bsp_id);
+
+        // BSP will be moved from the "distributing" set to the "confirmed" set
+        // when the BSP confirms to store the file. This is done by processing
+        // the `BspConfirmedStoring` event in `handler_msp.rs`.
         Ok(())
     }
 }
