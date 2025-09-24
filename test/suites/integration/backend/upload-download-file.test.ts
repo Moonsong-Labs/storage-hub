@@ -26,11 +26,14 @@ await describeMspNet(
   ({ before, createMsp1Api, createUserApi, it }) => {
     let userApi: EnrichedBspApi;
     let msp1Api: EnrichedBspApi;
+    let uploadedFileKeyHex: string;
+    let originalFileBuffer: Buffer;
+    const TEST_FILE_NAME = "whatsup.jpg";
 
     let bucketId: string;
     let freshBucketRoot: H256;
-    const fileLocation = "test/whatsup.jpg";
-    const source = "res/whatsup.jpg";
+    const fileLocation = `test/${TEST_FILE_NAME}`;
+    const source = `res/${TEST_FILE_NAME}`;
     let fileKey: H256;
     let fileMetadata: any; // util/FileMetadata is not the same type returned by the RPC
     let form: FormData;
@@ -129,6 +132,7 @@ await describeMspNet(
       );
       fileKey = file.file_key;
       fileMetadata = file.file_metadata;
+
       await userApi.rpc.storagehubclient.removeFilesFromFileStorage([fileKey]);
 
       // Issue the storage request
@@ -154,10 +158,14 @@ await describeMspNet(
     });
 
     it("Prepare upload form", async () => {
+      // Ensure prerequisite data is present
+      assert(fileMetadata, "Should have some file metadata from bucket and file creation");
+
       const localSource = "docker/resource/whatsup.jpg";
 
       // Prepare a multipart HTTP request to send to the backend's upload endpoint
       const fileBuffer = fs.readFileSync(path.join("..", localSource));
+      originalFileBuffer = fileBuffer;
       form = new FormData();
 
       // SCALE-encode the file metadata and add it to the multipart form
@@ -176,14 +184,18 @@ await describeMspNet(
 
       // Add the file data stream to the multipart form
       const fileBlob = new Blob([fileBuffer], { type: "image/jpeg" });
-      form.append("file", fileBlob, path.basename(source));
+      form.append("file", fileBlob, path.basename(fileLocation));
     });
 
     it.skip(
       "Should not upload file as other user",
       { todo: "when backend checks user permissions" },
       async () => {
-        // TODO: Once the upload endpoint checks auth, uncomment this as this is the expected behavior
+        // Ensure prerequisite data is present
+        assert(bucketId, "Bucket should have been created");
+        assert(fileKey, "File should have been created");
+        assert(form, "Upload form should be ready");
+
         // Generatea a JWT token for Baltathar using the backend's auth endpoints
         // Trying to upload this file with it should fail
         const baltatharToken = await fetchJwtToken(
@@ -213,6 +225,12 @@ await describeMspNet(
     );
 
     it("Should successfully upload file via the backend API", async () => {
+      // Ensure prerequisite data is present
+      assert(bucketId, "Bucket should have been created");
+      assert(freshBucketRoot, "Bucket should have been created");
+      assert(fileKey, "File should have been created");
+      assert(form, "Upload form should be ready");
+
       // Generate a JWT token using the backend's auth endpoints
       const token = await fetchJwtToken(ETH_SH_USER_PRIVATE_KEY, SH_EVM_SOLOCHAIN_CHAIN_ID);
 
@@ -232,8 +250,8 @@ await describeMspNet(
       strictEqual(uploadResponse.status, 201, "Upload should return CREATED status");
       const responseBody = await uploadResponse.text();
       const uploadResult = JSON.parse(responseBody);
-      const hexFileKey = u8aToHex(fileKey);
-      strictEqual(uploadResult.fileKey, hexFileKey, "Response should contain correct file key");
+      const uploadedFileKeyHex = u8aToHex(fileKey);
+      strictEqual(uploadResult.fileKey, uploadedFileKeyHex, "Response should contain correct file key");
       strictEqual(uploadResult.bucketId, bucketId, "Response should contain correct bucket ID");
 
       // Wait until the MSP has received and stored the file
@@ -264,7 +282,7 @@ await describeMspNet(
 
       // The file key accepted by the MSP should be the same as the one uploaded
       assert(
-        hexFileKey === acceptedFileKey,
+        uploadedFileKeyHex === acceptedFileKey,
         "File key accepted by the MSP should be the same as the one uploaded"
       );
 
@@ -276,6 +294,42 @@ await describeMspNet(
       assert(
         localBucketRoot.toString() !== freshBucketRoot.toString(),
         "Root of bucket should have changed"
+      );
+    });
+
+    it("Should successfully download a file via the backend API", async () => {
+      // Ensure the upload test completed successfully
+      assert(uploadedFileKeyHex, "Upload test must complete successfully before download test");
+      assert(originalFileBuffer, "Original file buffer must be available from upload test");
+
+      const token = await fetchJwtToken(ETH_SH_USER_PRIVATE_KEY, SH_EVM_SOLOCHAIN_CHAIN_ID);
+      const response = await fetch(`http://localhost:8080/download/${uploadedFileKeyHex}`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      strictEqual(response.status, 200, "Download endpoint should return 200 OK");
+
+      const contentDisposition = response.headers.get("content-disposition");
+      assert(contentDisposition, "Content disposition should be present");
+      // Filename is preserved from the upload request
+      strictEqual(
+        contentDisposition,
+        `attachment; filename="${TEST_FILE_NAME}"`,
+        "Content disposition should match"
+      );
+
+      const arrayBuffer = await response.arrayBuffer();
+      const downloadedBuffer = Buffer.from(arrayBuffer);
+
+      strictEqual(
+        downloadedBuffer.length,
+        originalFileBuffer.length,
+        "Downloaded file length should match uploaded file length"
+      );
+      assert(
+        downloadedBuffer.equals(originalFileBuffer),
+        "Downloaded file contents should match the uploaded file"
       );
     });
   }
