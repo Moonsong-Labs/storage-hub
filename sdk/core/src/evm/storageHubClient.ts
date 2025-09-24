@@ -9,12 +9,9 @@
  */
 
 import { filesystemAbi } from '../abi/filesystem';
-import type {
-  EvmWriteOptions,
-  StorageHubClientOptions
-} from './types';
-import { ReplicationLevel, FileOperation } from './types';
 import type { FileInfo } from '../types';
+import type { EvmWriteOptions, StorageHubClientOptions } from './types';
+import { FileOperation, ReplicationLevel } from './types';
 import {
   type Address,
   createPublicClient,
@@ -159,7 +156,10 @@ export class StorageHubClient {
   /**
    * Serialize FileOperationIntention and sign it
    */
-  private async signIntention(fileKey: `0x${string}`, operation: FileOperation): Promise<{
+  private async signIntention(
+    fileKey: `0x${string}`,
+    operation: FileOperation,
+  ): Promise<{
     signedIntention: readonly [`0x${string}`, number];
     signature: `0x${string}`;
   }> {
@@ -407,8 +407,19 @@ export class StorageHubClient {
   ): Promise<`0x${string}`> {
     // Create signed intention and execute transaction
     const { signedIntention, signature } = await this.signIntention(fileInfo.fileKey, operation);
-    const locationHex = this.validateStringLength(fileInfo.location, StorageHubClient.MAX_LOCATION_BYTES, 'File location');
-    const args = [signedIntention, signature, fileInfo.bucketId, locationHex, fileInfo.size, fileInfo.fingerprint] as const;
+    const locationHex = this.validateStringLength(
+      fileInfo.location,
+      StorageHubClient.MAX_LOCATION_BYTES,
+      'File location',
+    );
+    const args = [
+      signedIntention,
+      signature,
+      fileInfo.bucketId,
+      locationHex,
+      fileInfo.size,
+      fileInfo.fingerprint,
+    ] as const;
 
     const gasLimit = await this.estimateGas("requestDeleteFile", args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
@@ -416,5 +427,4 @@ export class StorageHubClient {
     const contract = this.getWriteContract();
     return await contract.write.requestDeleteFile?.(args, txOpts);
   }
-
 }

@@ -24,9 +24,7 @@ await describeMspNet(
     initialised: false,
     runtimeType: "solochain",
     indexer: true,
-    backend: true,
-    networkConfig: "standard",
-    keepAlive: false,
+    backend: true
   },
   ({ before, it, createUserApi, createMsp1Api }) => {
     let userApi: EnrichedBspApi;
@@ -305,7 +303,6 @@ await describeMspNet(
     });
 
     it("Should download the file from the MSP through the backend using the SDK's MspClient", async () => {
-
       // Try to download the file from the MSP through the SDK's MspClient that uses the MSP backend
       const downloadResponse = await mspClient.downloadByKey(fileKey.toHex());
 
@@ -369,7 +366,10 @@ await describeMspNet(
       assert(valueProps[0].id, "Value proposition ID is undefined");
       const valuePropId = valueProps[0].id.toHex();
 
-      const testBucketId = (await storageHubClient.deriveBucketId(account.address, testBucketName)) as string;
+      const testBucketId = (await storageHubClient.deriveBucketId(
+        account.address,
+        testBucketName
+      )) as string;
 
       const bucketBeforeCreation = await userApi.query.providers.buckets(testBucketId);
       assert(bucketBeforeCreation.isEmpty, "Test bucket should not exist before creation");
