@@ -161,15 +161,28 @@ export async function describeMspNet<
         });
         launchEventEmitter.emit("networkLaunched", launchResponse);
 
-        userApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
-        bspApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`);
-        msp1ApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.msp1.port}`);
-        msp2ApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.msp2.port}`);
+        userApiPromise = BspNetTestApi.create(
+          `ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`,
+          options?.runtimeType
+        );
+        bspApiPromise = BspNetTestApi.create(
+          `ws://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`,
+          options?.runtimeType
+        );
+        msp1ApiPromise = BspNetTestApi.create(
+          `ws://127.0.0.1:${ShConsts.NODE_INFOS.msp1.port}`,
+          options?.runtimeType
+        );
+        msp2ApiPromise = BspNetTestApi.create(
+          `ws://127.0.0.1:${ShConsts.NODE_INFOS.msp2.port}`,
+          options?.runtimeType
+        );
 
         // Create fisherman API if fisherman is enabled
         if (fullNetConfig.fisherman) {
           fishermanApiPromise = BspNetTestApi.create(
-            `ws://127.0.0.1:${ShConsts.NODE_INFOS.fisherman.port}`
+            `ws://127.0.0.1:${ShConsts.NODE_INFOS.fisherman.port}`,
+            options?.runtimeType
           );
         }
       });
@@ -214,7 +227,7 @@ export async function describeMspNet<
         createFishermanApi: fullNetConfig.fisherman
           ? () => fishermanApiPromise as Promise<EnrichedBspApi>
           : undefined,
-        createApi: (endpoint) => BspNetTestApi.create(endpoint),
+        createApi: (endpoint) => BspNetTestApi.create(endpoint, options?.runtimeType),
         createSqlClient: () => createSqlClient(),
         bspNetConfig: fullNetConfig,
         before,

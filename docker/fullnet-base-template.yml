@@ -157,6 +157,7 @@ services:
     platform: linux/amd64
     environment:
       - RUST_LOG=info
+      - JWT_SECRET
     command:
       [
         '--host',
