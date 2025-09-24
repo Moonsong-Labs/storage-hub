@@ -206,7 +206,7 @@ jobs:
           name: backend
           path: build/sh-msp-backend
           if-no-files-found: error
-  
+
   push_node_image:
     needs: [build_node, setup]
     if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
@@ -250,7 +250,7 @@ jobs:
             org.opencontainers.image.source=${{ github.event.repository.clone_url }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=${{ github.event.repository.license.spdx_id }}
-  
+
   push_backend_image:
     needs: [build_backend, setup]
     if: needs.setup.outputs.backend_changed == 'true' || needs.setup.outputs.force_backend == 'true'
@@ -295,7 +295,6 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=${{ github.event.repository.license.spdx_id }}
 
-
   # zombie_test_k8:
   #   needs: [build_node, setup]
   #   name: "Test Simple Network"
@@ -337,7 +336,7 @@ jobs:
         with:
           name: node
           path: target/release/
-      - name: Get Latest Node Binary if not changed
+      - name: Get Latest Node Image if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
@@ -377,7 +376,7 @@ jobs:
         with:
           name: node
           path: target/release/
-      - name: Get Latest Node Binary if not changed
+      - name: Get Latest Node Image if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
@@ -415,7 +414,7 @@ jobs:
         with:
           name: node
           path: target/release/
-      - name: Get Latest Node Binary if not changed
+      - name: Get Latest Node Image if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
@@ -467,7 +466,7 @@ jobs:
         with:
           name: node
           path: target/release/
-      - name: Get Latest Node Binary if not changed
+      - name: Get Latest Node Image if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
@@ -559,7 +558,7 @@ jobs:
         with:
           name: node
           path: target/release/
-      - name: Get Latest Node Binary if not changed
+      - name: Get Latest Node Image if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
@@ -655,7 +654,7 @@ jobs:
         with:
           name: backend
           path: target/release/
-      - name: Get Latest Backend Binary if not changed
+      - name: Get Latest Backend Image if not changed
         if: needs.setup.outputs.backend_changed == 'false' && needs.setup.outputs.force_backend == 'false'
         run: |
           docker pull moonsonglabs/storage-hub-msp-backend:latest
@@ -668,7 +667,7 @@ jobs:
         with:
           name: node
           path: target/release/
-      - name: Get Latest Node Binary if not changed
+      - name: Get Latest Node Image if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
@@ -765,7 +764,7 @@ jobs:
         with:
           name: node
           path: target/release/
-      - name: Get Latest Node Binary if not changed
+      - name: Get Latest Node Image if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
@@ -853,7 +852,7 @@ jobs:
         with:
           name: node
           path: target/release/
-      - name: Get Latest Node Binary if not changed
+      - name: Get Latest Node Image if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
@@ -928,6 +927,10 @@ jobs:
     name: 'Run Solochain EVM Tests'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/workflow-templates/setup-pnpm
@@ -947,20 +950,27 @@ jobs:
         with:
           name: backend
           path: target/release/
+      - name: Get Latest Backend Image if not changed
+        if: needs.setup.outputs.backend_changed == 'false' && needs.setup.outputs.force_backend == 'false'
+        run: |
+          docker pull moonsonglabs/storage-hub-msp-backend:latest
+          docker create --name temp_msp moonsonglabs/storage-hub-msp-backend:latest
+          docker cp temp_msp:/usr/local/bin/sh-msp-backend target/release/sh-msp-backend
+          docker rm temp_msp
       - name: Get Node Binary if changed
         if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
         uses: actions/download-artifact@v4
         with:
           name: node
           path: target/release/
-      - name: Get Latest Node Binary if not changed
+      - name: Get Latest Node Image if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
           docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
           docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
           docker rm temp_storage_hub
-      - name: Build Local Docker Image
+      - name: Build Local Docker Image (node)
         run: |
           chmod +x target/release/storage-hub-node
           chmod -R 777 docker/dev-keystores
@@ -1059,7 +1069,7 @@ jobs:
         with:
           name: node
           path: target/release/
-      - name: Get Latest Node Binary if not changed
+      - name: Get Latest Node Image if not changed
         if: needs.setup.outputs.node_changed == 'false' && needs.setup.outputs.force_node == 'false'
         run: |
           docker pull moonsonglabs/storage-hub:latest
