@@ -23,7 +23,8 @@ use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 use pallet_file_system_runtime_api::{
     GenericApplyDeltaEventInfoError, IsStorageRequestOpenToVolunteersError,
     QueryBspConfirmChunksToProveForFileError, QueryConfirmChunksToProveForFileError,
-    QueryFileEarliestVolunteerTickError, QueryMspConfirmChunksToProveForFileError,
+    QueryFileEarliestVolunteerTickError, QueryIncompleteStorageRequestMetadataError,
+    QueryMspConfirmChunksToProveForFileError,
 };
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
 use shp_constants::GIGAUNIT;
@@ -348,6 +349,38 @@ where
     ) -> Result<BucketIdFor<T>, GenericApplyDeltaEventInfoError> {
         Self::do_decode_generic_apply_delta_event_info(encoded_event_info.as_ref())
             .map_err(|_| GenericApplyDeltaEventInfoError::DecodeError)
+    }
+
+    pub fn query_incomplete_storage_request_metadata(
+        file_key: MerkleHash<T>,
+    ) -> Result<
+        pallet_file_system_runtime_api::IncompleteStorageRequestMetadataResponse<
+            T::AccountId,
+            BucketIdFor<T>,
+            StorageDataUnit<T>,
+            Fingerprint<T>,
+            ProviderIdFor<T>,
+        >,
+        QueryIncompleteStorageRequestMetadataError,
+    > {
+        let metadata = IncompleteStorageRequests::<T>::get(&file_key)
+            .ok_or(QueryIncompleteStorageRequestMetadataError::StorageNotFound)?;
+
+        // Convert to response type
+        let pending_bsp_removals: Vec<ProviderIdFor<T>> =
+            metadata.pending_bsp_removals.into_iter().collect();
+
+        Ok(
+            pallet_file_system_runtime_api::IncompleteStorageRequestMetadataResponse {
+                owner: metadata.owner,
+                bucket_id: metadata.bucket_id,
+                location: metadata.location.to_vec(),
+                file_size: metadata.file_size,
+                fingerprint: metadata.fingerprint,
+                pending_bsp_removals,
+                pending_bucket_removal: metadata.pending_bucket_removal,
+            },
+        )
     }
 
     fn query_confirm_chunks_to_prove_for_file(
@@ -1029,8 +1062,9 @@ where
                     // We create the incomplete storage request metadata and insert it into the incomplete storage requests
                     let incomplete_storage_request_metadata: IncompleteStorageRequestMetadata<T> =
                         (&storage_request_metadata, &file_key).into();
-                    <IncompleteStorageRequests<T>>::insert(
-                        &file_key,
+
+                    Self::add_incomplete_storage_request(
+                        file_key,
                         incomplete_storage_request_metadata,
                     );
                 }
@@ -1231,6 +1265,8 @@ where
     /// 4. Validating the signature against the encoded intention
     /// 5. Computing the file key from provided metadata and verifying it matches the signed intention
     /// 6. Verifying the forest proof and updating the provider's root
+    ///
+    /// Passing `None` for `bsp_id` will treat this as a Bucket Forest deletion and a BSP Forest deletion otherwise.
     pub(crate) fn do_delete_file(
         file_owner: T::AccountId,
         signed_intention: FileOperationIntention<T>,
@@ -1239,7 +1275,7 @@ where
         location: FileLocation<T>,
         size: StorageDataUnit<T>,
         fingerprint: Fingerprint<T>,
-        provider_id: ProviderIdFor<T>,
+        bsp_id: Option<ProviderIdFor<T>>,
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
         // Check that the file owner is not currently insolvent.
@@ -1277,39 +1313,37 @@ where
         );
 
         // Forest proof verification and file deletion
-        if <T::Providers as ReadStorageProvidersInterface>::is_msp(&provider_id) {
-            Self::delete_file_from_msp(
+        if let Some(bsp_id) = bsp_id {
+            // Ensure the provided ID is actually a BSP
+            ensure!(
+                <T::Providers as ReadStorageProvidersInterface>::is_bsp(&bsp_id),
+                Error::<T>::InvalidProviderID
+            );
+
+            Self::delete_file_from_bsp(file_owner, computed_file_key, size, bsp_id, forest_proof)?;
+        } else {
+            // Delete from bucket forest - no MSP requirement
+            Self::delete_file_from_bucket(
                 file_owner,
                 computed_file_key,
                 size,
                 bucket_id,
-                provider_id,
                 forest_proof,
             )?;
-        } else if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&provider_id) {
-            Self::delete_file_from_bsp(
-                file_owner,
-                computed_file_key,
-                size,
-                provider_id,
-                forest_proof,
-            )?;
-        } else {
-            // Entity provided an incorrect provider ID
-            return Err(Error::<T>::InvalidProviderID.into());
         }
 
         // TODO: Reward the caller
         Ok(())
     }
 
+    /// Delete a file associated to an incomplete storage request from a Bucket or BSP.
+    ///
+    /// Passing `None` for `bsp_id` will treat this as a Bucket Forest deletion and a BSP Forest deletion otherwise.
     pub(crate) fn do_delete_file_for_incomplete_storage_request(
         file_key: MerkleHash<T>,
-        provider_id: ProviderIdFor<T>,
+        bsp_id: Option<ProviderIdFor<T>>,
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
-        // Fetch incomplete storage request metadata
-        // If there is no entry for the file key, return an error.
         let mut incomplete_storage_request_metadata =
             IncompleteStorageRequests::<T>::get(&file_key)
                 .ok_or(Error::<T>::IncompleteStorageRequestNotFound)?;
@@ -1319,57 +1353,56 @@ where
             incomplete_storage_request_metadata.owner.clone(),
             incomplete_storage_request_metadata.bucket_id,
             incomplete_storage_request_metadata.location.clone(),
-            incomplete_storage_request_metadata.size,
+            incomplete_storage_request_metadata.file_size,
             incomplete_storage_request_metadata.fingerprint,
         )
         .map_err(|_| Error::<T>::FailedToComputeFileKey)?;
 
         ensure!(computed_file_key == file_key, Error::<T>::FileKeyMismatch);
 
-        // Perform deletion based on provider type
-        if <T::Providers as ReadStorageProvidersInterface>::is_msp(&provider_id) {
-            // Check that the provider_id is the msp that is storing the file in the incomplete storage request metadata
-            ensure!(
-                incomplete_storage_request_metadata.pending_msp_removal == Some(provider_id),
-                Error::<T>::ProviderNotStoringFile
-            );
+        if let Some(bsp_id) = bsp_id {
+            let is_bsp = incomplete_storage_request_metadata
+                .pending_bsp_removals
+                .contains(&bsp_id);
 
-            Self::delete_file_from_msp(
-                incomplete_storage_request_metadata.owner.clone(),
-                file_key,
-                incomplete_storage_request_metadata.size,
-                incomplete_storage_request_metadata.bucket_id,
-                provider_id,
-                forest_proof,
-            )?;
-        } else if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&provider_id) {
-            // Check that the provider_id is in the pending removal lists
-            ensure!(
-                incomplete_storage_request_metadata
-                    .pending_bsp_removals
-                    .contains(&provider_id),
-                Error::<T>::ProviderNotStoringFile
-            );
+            // Ensure the BSP is actually in the pending removals list
+            ensure!(is_bsp, Error::<T>::ProviderNotStoringFile);
 
             Self::delete_file_from_bsp(
                 incomplete_storage_request_metadata.owner.clone(),
                 file_key,
-                incomplete_storage_request_metadata.size,
-                provider_id,
+                incomplete_storage_request_metadata.file_size,
+                bsp_id,
                 forest_proof,
             )?;
+            incomplete_storage_request_metadata
+                .pending_bsp_removals
+                .retain(|&id| id != bsp_id);
         } else {
-            return Err(Error::<T>::InvalidProviderID.into());
+            ensure!(
+                incomplete_storage_request_metadata.pending_bucket_removal,
+                Error::<T>::ProviderNotStoringFile
+            );
+
+            Self::delete_file_from_bucket(
+                incomplete_storage_request_metadata.owner.clone(),
+                file_key,
+                incomplete_storage_request_metadata.file_size,
+                incomplete_storage_request_metadata.bucket_id,
+                forest_proof,
+            )?;
+            incomplete_storage_request_metadata.pending_bucket_removal = false;
         }
 
-        // Remove provider from pending lists
-        incomplete_storage_request_metadata.remove_provider(provider_id);
-
         // Check if all providers have removed their files
-        if incomplete_storage_request_metadata.is_fully_cleaned() {
+        if incomplete_storage_request_metadata
+            .pending_bsp_removals
+            .is_empty()
+            && !incomplete_storage_request_metadata.pending_bucket_removal
+        {
             IncompleteStorageRequests::<T>::remove(&file_key);
         } else {
-            IncompleteStorageRequests::<T>::insert(&file_key, incomplete_storage_request_metadata);
+            Self::add_incomplete_storage_request(file_key, incomplete_storage_request_metadata);
         }
 
         Ok(())
@@ -2105,7 +2138,7 @@ where
             // We create the incomplete storage request metadata and insert it into the incomplete storage requests
             let incomplete_storage_request_metadata: IncompleteStorageRequestMetadata<T> =
                 (&storage_request_metadata, &file_key).into();
-            <IncompleteStorageRequests<T>>::insert(&file_key, incomplete_storage_request_metadata);
+            Self::add_incomplete_storage_request(file_key, incomplete_storage_request_metadata);
         }
 
         // We cleanup the storage request
@@ -2683,23 +2716,19 @@ where
     }
 
     /// Removes file key from the bucket's forest, updating the bucket's root.
-    pub(crate) fn delete_file_from_msp(
+    ///
+    /// Does not enforce the presense of an MSP storing the bucket. If no MSP is found to be
+    /// storing the bucket, no payment stream is updated.
+    ///
+    /// This is to support the case where an MSP stops storing a bucket while there still exists
+    /// incomplete storage requests for that bucket.
+    pub(crate) fn delete_file_from_bucket(
         file_owner: T::AccountId,
         file_key: MerkleHash<T>,
         size: StorageDataUnit<T>,
         bucket_id: BucketIdFor<T>,
-        provider_id: ProviderIdFor<T>,
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
-        // Ensure that the provider_id is the owner of the bucket
-        ensure!(
-            <T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(
-                &provider_id,
-                &bucket_id
-            ),
-            Error::<T>::MspNotStoringBucket
-        );
-
         // Get current bucket root
         let old_bucket_root = <T::Providers as ReadBucketsInterface>::get_root_bucket(&bucket_id)
             .ok_or(Error::<T>::BucketNotFound)?;
@@ -2725,27 +2754,37 @@ where
             Some(bucket_id.encode()),
         )?;
 
-        // Update root of the bucket
-        <T::Providers as MutateBucketsInterface>::change_root_bucket(bucket_id, new_root)?;
+        // Check if there's an MSP storing the bucket
+        let maybe_msp_id = <T::Providers as ReadBucketsInterface>::get_bucket_msp(&bucket_id)?;
 
-        // Decrease capacity used of the MSP
-        <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
-            &provider_id,
-            size,
-        )?;
+        if let Some(msp_id) = maybe_msp_id {
+            <T::Providers as MutateBucketsInterface>::change_root_bucket(bucket_id, new_root)?;
+            // Decrease capacity used of the MSP
+            <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
+                &msp_id, size,
+            )?;
 
-        // Decrease bucket size of the MSP
-        // This function also updates the fixed rate payment stream between the user and the MSP.
-        // via apply_delta_fixed_rate_payment_stream function in providers pallet.
-        <T::Providers as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, size)?;
+            // Decrease bucket size
+            // This function also updates the fixed rate payment stream between the user and the MSP.
+            // via apply_delta_fixed_rate_payment_stream function in providers pallet.
+            <T::Providers as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, size)?;
+        } else {
+            <T::Providers as MutateBucketsInterface>::change_root_bucket_without_msp(
+                bucket_id, new_root,
+            )?;
+            // Decrease bucket size
+            <T::Providers as MutateBucketsInterface>::decrease_bucket_size_without_msp(
+                &bucket_id, size,
+            )?;
+        }
 
         // Emit the MSP file deletion completed event
-        Self::deposit_event(Event::MspFileDeletionCompleted {
+        Self::deposit_event(Event::BucketFileDeletionCompleted {
             user: file_owner,
             file_key,
             file_size: size,
             bucket_id,
-            msp_id: provider_id,
+            msp_id: maybe_msp_id,
             old_root: old_bucket_root,
             new_root,
         });
@@ -2859,6 +2898,15 @@ where
 
         Ok(())
     }
+
+    /// Add storage request to [`IncompleteStorageRequests`] storage and emit `IncompleteStorageRequest` event
+    fn add_incomplete_storage_request(
+        file_key: MerkleHash<T>,
+        metadata: IncompleteStorageRequestMetadata<T>,
+    ) {
+        IncompleteStorageRequests::<T>::insert(&file_key, metadata);
+        Self::deposit_event(Event::IncompleteStorageRequest { file_key });
+    }
 }
 
 mod hooks {
@@ -2869,9 +2917,8 @@ mod hooks {
         },
         utils::BucketIdFor,
         weights::WeightInfo,
-        Event, IncompleteStorageRequests, MoveBucketRequestExpirations, NextStartingTickToCleanUp,
-        Pallet, PendingMoveBucketRequests, StorageRequestBsps, StorageRequestExpirations,
-        StorageRequests,
+        Event, MoveBucketRequestExpirations, NextStartingTickToCleanUp, Pallet,
+        PendingMoveBucketRequests, StorageRequestBsps, StorageRequestExpirations, StorageRequests,
     };
     use sp_runtime::{
         traits::{Get, One, Zero},
@@ -3073,9 +3120,9 @@ mod hooks {
                             // This will allow the fisherman node to delete the file from the confirmed BSPs.
                             let incomplete_storage_request_metadata: IncompleteStorageRequestMetadata<T> =
                                 (&storage_request_metadata, &file_key).into();
-                            // Add to storage mapping
-                            IncompleteStorageRequests::<T>::insert(
-                                &file_key,
+
+                            Self::add_incomplete_storage_request(
+                                file_key,
                                 incomplete_storage_request_metadata,
                             );
                         }
