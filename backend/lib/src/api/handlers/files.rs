@@ -4,7 +4,6 @@
 
 #[cfg(not(feature = "mocks"))]
 use std::collections::HashSet;
-use std::io::Cursor;
 
 use axum::{
     body::Bytes,
@@ -16,10 +15,8 @@ use axum::{
 use axum_extra::{
     extract::{multipart::Field, Multipart},
     response::FileStream,
-    TypedHeader,
 };
 use codec::Decode;
-use headers::{authorization::Bearer, Authorization};
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
 
@@ -45,22 +42,9 @@ pub async fn get_file_info(
 ) -> Result<impl IntoResponse, Error> {
     let response = services
         .msp
-        .get_file_info(&bucket_id, address, &file_key)
+        .get_file_info(&bucket_id, &address, &file_key)
         .await?;
     Ok(Json(response))
-}
-
-pub async fn download_by_location(
-    State(_services): State<Services>,
-    AuthenticatedUser { address: _ }: AuthenticatedUser,
-    Path((_bucket_id, _file_location)): Path<(String, String)>,
-) -> Result<impl IntoResponse, Error> {
-    // TODO(MOCK): return proper data
-    let file_data = b"Mock file content for download".to_vec();
-    let stream = ReaderStream::new(Cursor::new(file_data));
-    let file_stream_resp = FileStream::new(stream).file_name("by_location.txt");
-
-    Ok(file_stream_resp.into_response())
 }
 
 // Internal endpoint used by the MSP RPC to upload a file to the backend

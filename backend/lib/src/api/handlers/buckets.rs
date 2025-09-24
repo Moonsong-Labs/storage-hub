@@ -5,13 +5,11 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use axum_extra::TypedHeader;
-use headers::{authorization::Bearer, Authorization};
 use serde::Deserialize;
 
 use crate::{
-    api::validation::extract_bearer_token, constants::mocks::MOCK_ADDRESS, error::Error,
-    models::files::FileListResponse, services::Services,
+    error::Error, models::files::FileListResponse, services::auth::AuthenticatedUser,
+    services::Services,
 };
 
 pub async fn list_buckets(
@@ -20,7 +18,7 @@ pub async fn list_buckets(
 ) -> Result<impl IntoResponse, Error> {
     let response = services
         .msp
-        .list_user_buckets(address)
+        .list_user_buckets(&address)
         .await?
         .collect::<Vec<_>>();
     Ok(Json(response))
@@ -31,7 +29,7 @@ pub async fn get_bucket(
     AuthenticatedUser { address }: AuthenticatedUser,
     Path(bucket_id): Path<String>,
 ) -> Result<impl IntoResponse, Error> {
-    let response = services.msp.get_bucket(&bucket_id, address).await?;
+    let response = services.msp.get_bucket(&bucket_id, &address).await?;
 
     Ok(Json(response))
 }
@@ -49,7 +47,7 @@ pub async fn get_files(
 ) -> Result<impl IntoResponse, Error> {
     let file_tree = services
         .msp
-        .get_file_tree(&bucket_id, address, query.path.as_deref().unwrap_or("/"))
+        .get_file_tree(&bucket_id, &address, query.path.as_deref().unwrap_or("/"))
         .await?;
 
     let response = FileListResponse {
