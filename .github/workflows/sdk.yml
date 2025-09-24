@@ -1,0 +1,343 @@
+name: SDK CI/CD
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish for packages (e.g., 0.1.0)"
+        required: false
+        type: string
+  release:
+    types: [published, edited]
+
+env:
+  FORCE_COLOR: 1
+  HEADLESS: 'false'
+
+jobs:
+  setup:
+    name: Setup SDK CI/CD
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    outputs:
+      version: ${{ steps.determine_version.outputs.version }}
+      is_published_event: ${{ steps.set_is_published.outputs.is_published_event }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Determine version (for publish)
+        id: determine_version
+        run: |
+          EVENT_NAME="${{ github.event_name }}"
+          INPUT_VERSION="${{ github.event.inputs.version }}"
+          if [ "$EVENT_NAME" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+            VERSION="${TAG#sdk-v}"
+          else
+            VERSION="$INPUT_VERSION"
+          fi
+          if [ -n "$VERSION" ] && ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-.*)?$ ]]; then
+            echo "Invalid version: $VERSION"; exit 1
+          fi
+          echo "Using version: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Set published event flag
+        id: set_is_published
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "is_published_event=true" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.action }}" = "published" ]; then
+            echo "is_published_event=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_published_event=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  sdk-build-and-test:
+    name: SDK Build and Test
+    needs: [setup]
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    defaults:
+      run:
+        working-directory: sdk
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: 'sccache'
+      CARGO_INCREMENTAL: '0'
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup pnpm & cache
+        uses: ./.github/workflow-templates/setup-pnpm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Setup Rust toolchain (for wasm)
+        uses: actions-rust-lang/setup-rust-toolchain@v1.8
+        with:
+          target: wasm32-unknown-unknown
+          cache: false
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.9
+      - name: Cache cargo registry and git index
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+      - name: Cache wasm-pack
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/wasm-pack
+          key: wasm-pack-v0.12.1
+      - name: Install wasm-pack
+        run: curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        working-directory: sdk
+        run: pnpm build
+      - name: Lint
+        run: pnpm lint
+      - name: Prettier check
+        run: pnpm run format:check
+      - name: Type check
+        run: pnpm typecheck
+      - name: Run tests (core)
+        run: pnpm test:core -- --run
+      - name: Run tests (msp-client)
+        run: pnpm test:msp-client -- --run
+      - name: Coverage
+        run: pnpm run coverage -- --run
+      - name: Upload SDK dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-dist
+          path: |
+            sdk/core/dist
+            sdk/core/wasm/pkg
+            sdk/msp-client/dist
+
+
+  e2e-wallet-metamask:
+    needs: [sdk-build-and-test]
+    name: E2E Wallet Tests (MetaMask)
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup pnpm & cache
+        uses: ./.github/workflow-templates/setup-pnpm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Install dependencies (sdk)
+        working-directory: sdk
+        run: pnpm install --frozen-lockfile
+      - name: Download SDK dist
+        uses: actions/download-artifact@v4
+        with:
+          name: sdk-dist
+          path: sdk
+      - name: Place SDK dist
+        run: |
+          ls -la sdk/core || true
+          ls -la sdk/msp-client || true
+          test -d sdk/core/dist && test -d sdk/msp-client/dist
+      - name: Install e2e deps (sdk/e2e)
+        working-directory: sdk/e2e
+        run: pnpm install --frozen-lockfile
+      - name: Install Playwright Chromium with system deps (sdk/e2e)
+        working-directory: sdk/e2e
+        run: |
+          pnpm exec playwright install --with-deps chromium
+      - name: Run Playwright tests (headless via xvfb) (sdk/e2e)
+        working-directory: sdk/e2e
+        run: |
+          xvfb-run -a pnpm exec playwright test --project metamask
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-wallet-metamask
+          path: /tmp/playwright-report/
+          retention-days: 14
+
+  e2e-backend-msp:
+    needs: [sdk-build-and-test]
+    name: E2E Backend Tests (MSP Client)
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    env:
+      HEADLESS: 'false'
+      RUST_LOG: info
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: 'sccache'
+      CARGO_INCREMENTAL: '0'
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup pnpm & cache
+        uses: ./.github/workflow-templates/setup-pnpm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Setup Protobuf (protoc)
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Setup Rust toolchain (for backend build)
+        uses: actions-rust-lang/setup-rust-toolchain@v1.8
+        with:
+          cache: true
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.9
+      - name: Cache cargo registry and git index
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+      - uses: rui314/setup-mold@v1
+      - name: Set build flags (use mold linker)
+        run: echo "RUSTFLAGS=${{ env.RUSTFLAGS }} -C linker=clang -C link-arg=-fuse-ld=mold" >> $GITHUB_ENV
+      - name: Install system deps (libpq-dev, libclang-dev)
+        run: sudo apt-get update && sudo apt-get install -y libpq-dev libclang-dev
+      - name: Install dependencies (sdk workspace, no scripts)
+        working-directory: sdk
+        run: pnpm install --frozen-lockfile
+      - name: Download SDK dist
+        uses: actions/download-artifact@v4
+        with:
+          name: sdk-dist
+          path: sdk
+      - name: Place SDK dist
+        run: |
+          ls -la sdk/core || true
+          ls -la sdk/msp-client || true
+          test -d sdk/core/dist && test -d sdk/msp-client/dist
+      - name: Build backend (mocks)
+        run: cargo build --bin sh-msp-backend --features mocks
+      - name: Build Stats
+        run: sccache --show-stats || true
+      - name: Run backend (mocks)
+        run: |
+          nohup bash -lc "./target/debug/sh-msp-backend --host 127.0.0.1 --port 8080 > /dev/null 2>&1 &"
+          sleep 5
+      - name: Install e2e deps (sdk/e2e)
+        working-directory: sdk/e2e
+        run: pnpm install --frozen-lockfile
+      - name: Install Playwright Chromium with system deps (sdk/e2e)
+        working-directory: sdk/e2e
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Run MSP E2E (web)
+        working-directory: sdk/e2e
+        run: xvfb-run -a pnpm exec playwright test --project msp
+      - name: Upload Playwright report (Backend MSP)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-backend-msp
+          path: /tmp/playwright-report/
+          retention-days: 14
+
+  check-published-install:
+    name: Check published install (Next.js)
+    needs: [sdk-build-and-test]
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    env:
+      CI: "true"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup pnpm & cache
+        uses: ./.github/workflow-templates/setup-pnpm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Create Next.js app in /tmp
+        run: |
+          rm -rf /tmp/hello_world_nextjs
+          pnpm dlx create-next-app@latest /tmp/hello_world_nextjs --yes --ts --eslint --app --tailwind false --use-pnpm
+      - name: Install SDK packages
+        working-directory: /tmp/hello_world_nextjs
+        run: pnpm add @storagehub-sdk/core @storagehub-sdk/msp-client
+      - name: Smoke build
+        working-directory: /tmp/hello_world_nextjs
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: pnpm build
+
+  publish:
+    name: Publish SDK (core + msp-client)
+    needs: [setup]
+    if: needs.setup.outputs.is_published_event == 'true'
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    defaults:
+      run:
+        working-directory: sdk
+    env:
+      VERSION: ${{ needs.setup.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup pnpm & cache
+        uses: ./.github/workflow-templates/setup-pnpm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.SH_SDK_PUBLISH_TOKEN }}
+      - name: Setup Rust toolchain (for wasm)
+        uses: actions-rust-lang/setup-rust-toolchain@v1.8
+        with:
+          target: wasm32-unknown-unknown
+          cache: false
+      - name: Cache wasm-pack
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/bin/wasm-pack
+          key: wasm-pack-v0.12.1
+      - name: Install wasm-pack
+        run: curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
+      - name: Build core
+        working-directory: sdk/core
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
+      - name: Build msp-client
+        working-directory: sdk/msp-client
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
+      - name: Set versions (no commit)
+        run: |
+          jq --arg v "$VERSION" '.version=$v' core/package.json > core/package.json.tmp && mv core/package.json.tmp core/package.json
+          jq --arg v "$VERSION" '.version=$v' msp-client/package.json > msp-client/package.json.tmp && mv msp-client/package.json.tmp msp-client/package.json
+      - name: Pack and publish core
+        working-directory: sdk/core
+        run: |
+          pnpm pack
+          pnpm publish --access public --no-git-checks
+      - name: Pack and publish msp-client
+        working-directory: sdk/msp-client
+        run: |
+          pnpm pack
+          pnpm publish --access public --no-git-checks
+
+
+
