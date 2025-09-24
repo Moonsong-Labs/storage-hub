@@ -164,7 +164,7 @@ where
                 confirmed_file_keys,
                 skipped_file_keys: _,
                 new_root: _,
-            }) => {
+            }) if self.config.enable_msp_distribute_files => {
                 for (file_key, _file_metadata) in confirmed_file_keys {
                     // If this is a BSP confirming a file that this MSP distributed, remove it from
                     // the list of BSPs distributing, and move it into the list of BSPs confirmed.
@@ -187,11 +187,13 @@ where
                 | pallet_file_system::Event::StorageRequestExpired { file_key }
                 | pallet_file_system::Event::StorageRequestRevoked { file_key }
                 | pallet_file_system::Event::StorageRequestRejected { file_key, .. },
-            ) => {
+            ) if self.config.enable_msp_distribute_files => {
                 // Any of these events means that the storage request has finished its
                 // lifecycle, so we can remove it from the list of files to distribute.
                 if let Some(ManagedProvider::Msp(msp_handler)) = &mut self.maybe_managed_provider {
                     msp_handler.files_to_distribute.remove(&file_key.into());
+
+                    debug!(target: LOG_TARGET, "Storage request [{:?}] finished its lifecycle", file_key);
                 }
             }
             // Ignore all other events.
