@@ -30,10 +30,9 @@
     "clean": "rm -rf dist node_modules wasm/pkg/* src/abi/*.abi.json",
     "coverage": "vitest run --coverage",
     "dev": "node ./build.js --watch",
-    "format": "prettier --write \"{src/**/*.ts,src/**/*.tsx}\"",
-    "format:check": "prettier --check \"{src/**/*.ts,src/**/*.tsx}\"",
-    "lint": "eslint \"{src/**/*.ts,src/**/*.tsx}\"",
-    "lint:fix": "eslint \"{src/**/*.ts,src/**/*.tsx}\" --fix",
+    "fmt": "../../node_modules/.bin/biome format . --write",
+    "lint": "../../node_modules/.bin/biome lint .",
+    "lint:fix": "../../node_modules/.bin/biome lint . --write",
     "prebuild": "pnpm run build:abi",
     "test": "vitest",
     "typecheck": "tsc --noEmit"
@@ -45,14 +44,7 @@
     "viem": "^2.9.20"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "2.1.4",
     "@types/node": "^20.11.19",
-    "@typescript-eslint/eslint-plugin": "^8.37.0",
-    "@typescript-eslint/parser": "^8.37.0",
-    "eslint": "^9.31.0",
-    "eslint-config-prettier": "^10.1.5",
-    "eslint-plugin-simple-import-sort": "^12.1.1",
-    "prettier": "^3.6.2",
     "solc": "^0.8.26"
   },
   "engines": {

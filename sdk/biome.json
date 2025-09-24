@@ -1,0 +1,18 @@
+{
+  "extends": [
+    "../biome.json"
+  ],
+  "files": {
+    "includes": [
+      "**/*.ts",
+      "**/*.tsx",
+      "**/*.js",
+      "**/*.jsx",
+      "**/*.json",
+      "!**/node_modules",
+      "!**/dist",
+      "!**/wasm/pkg",
+      "!**/examples/nextjs/.next"
+    ]
+  }
+}

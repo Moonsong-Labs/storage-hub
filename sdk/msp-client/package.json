@@ -28,10 +28,9 @@
     "clean": "rm -rf dist node_modules",
     "coverage": "vitest run --coverage",
     "dev": "node ./build.js --watch",
-    "format": "prettier --write \"{src/**/*.ts,src/**/*.tsx}\"",
-    "format:check": "prettier --check \"{src/**/*.ts,src/**/*.tsx}\"",
-    "lint": "eslint \"{src/**/*.ts,src/**/*.tsx}\"",
-    "lint:fix": "eslint \"{src/**/*.ts,src/**/*.tsx}\" --fix",
+    "fmt": "../../node_modules/.bin/biome format . --write",
+    "lint": "../../node_modules/.bin/biome lint .",
+    "lint:fix": "../../node_modules/.bin/biome lint . --write",
     "test": "vitest",
     "typecheck": "tsc --noEmit"
   },
@@ -39,14 +38,7 @@
     "@storagehub-sdk/core": ">=0.0.5"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "3.3.1",
-    "@storagehub-sdk/core": "workspace:*",
-    "@typescript-eslint/eslint-plugin": "^8.37.0",
-    "@typescript-eslint/parser": "^8.37.0",
-    "eslint": "^9.31.0",
-    "eslint-config-prettier": "^10.1.5",
-    "eslint-plugin-simple-import-sort": "^12.1.1",
-    "prettier": "^3.6.2"
+    "@storagehub-sdk/core": "workspace:*"
   },
   "engines": {
     "node": ">=22"
