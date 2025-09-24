@@ -34,9 +34,11 @@ jobs:
         with:
           node-version: 23
 
-      - name: Install semver
+      - name: Install semver globally
         if: steps.changes.outputs.check_types_bundle == 'true' || steps.changes.outputs.check_api_augment == 'true'
-        run: npm i semver --no-save
+        run: |
+          npm i -g semver@7
+          echo "NODE_PATH=$(npm root -g)" >> $GITHUB_ENV
 
       - name: Verify types-bundle version bumped
         if: steps.changes.outputs.check_types_bundle == 'true'
