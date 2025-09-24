@@ -87,7 +87,7 @@ jobs:
 
   build_node:
     needs: [setup]
-    name: 'Build node binary'
+    name: 'Build node binary if changed'
     runs-on: blacksmith-16vcpu-ubuntu-2404
     env:
       SCCACHE_GHA_ENABLED: 'true'
@@ -147,7 +147,7 @@ jobs:
 
   build_backend:
     needs: [setup]
-    name: 'Build backend binary'
+    name: 'Build backend binary if changed'
     runs-on: blacksmith-16vcpu-ubuntu-2404
     env:
       SCCACHE_GHA_ENABLED: 'true'
