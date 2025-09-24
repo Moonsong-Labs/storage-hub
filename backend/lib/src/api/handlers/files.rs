@@ -148,7 +148,7 @@ pub async fn get_file_info(
 #[cfg_attr(feature = "mocks", allow(unused_variables))]
 pub async fn upload_file(
     State(services): State<Services>,
-    AuthenticatedUser { address: _ }: AuthenticatedUser,
+    // AuthenticatedUser { address: _ }: AuthenticatedUser,
     Path((bucket_id, file_key)): Path<(String, String)>,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, Error> {
