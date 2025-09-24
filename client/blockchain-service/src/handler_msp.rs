@@ -182,6 +182,18 @@ where
                     }
                 }
             }
+            StorageEnableEvents::FileSystem(
+                pallet_file_system::Event::StorageRequestFulfilled { file_key }
+                | pallet_file_system::Event::StorageRequestExpired { file_key }
+                | pallet_file_system::Event::StorageRequestRevoked { file_key }
+                | pallet_file_system::Event::StorageRequestRejected { file_key, .. },
+            ) => {
+                // Any of these events means that the storage request has finished its
+                // lifecycle, so we can remove it from the list of files to distribute.
+                if let Some(ManagedProvider::Msp(msp_handler)) = &mut self.maybe_managed_provider {
+                    msp_handler.files_to_distribute.remove(&file_key.into());
+                }
+            }
             // Ignore all other events.
             _ => {}
         }
