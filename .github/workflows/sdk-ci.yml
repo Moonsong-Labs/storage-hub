@@ -46,8 +46,11 @@ jobs:
       - name: Install wasm-pack
         run: curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
 
-      # Install dependencies
-      - name: Install dependencies
+      - name: Install root dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: .
+
+      - name: Install SDK dependencies
         run: pnpm install --frozen-lockfile
 
       # Build packages
@@ -58,8 +61,8 @@ jobs:
       - name: Lint
         run: pnpm lint
 
-      - name: Prettier check
-        run: pnpm run format:check
+      - name: Format check
+        run: pnpm fmt
 
       # TypeScript type-check
       - name: Type check
