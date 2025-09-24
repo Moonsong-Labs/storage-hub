@@ -1,4 +1,4 @@
-name: SDK (CI, E2E, Publish)
+name: SDK CI/CD
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
@@ -24,9 +24,8 @@ env:
 
 jobs:
   setup:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     outputs:
-      sdk_changed: ${{ steps.sdk_check.outputs.changed }}
       version: ${{ steps.determine_version.outputs.version }}
       is_published_event: ${{ steps.set_is_published.outputs.is_published_event }}
     steps:
@@ -34,17 +33,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Check if SDK changed
-        id: sdk_check
-        run: |
-          BASE_SHA="${{ github.event.pull_request.base.sha || github.event.before }}"
-          HEAD_SHA="${{ github.sha }}"
-          if git diff --name-only $BASE_SHA $HEAD_SHA | grep -E '^sdk/|^\.github/workflows/sdk(.*)\.yml$'; then
-            echo "changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "Comparing changes from $BASE_SHA to $HEAD_SHA"
-            echo "changed=false" >> $GITHUB_OUTPUT
-          fi
       - name: Determine version (for publish)
         id: determine_version
         run: |
@@ -72,14 +60,18 @@ jobs:
             echo "is_published_event=false" >> "$GITHUB_OUTPUT"
           fi
 
-  sdk-ci:
-    name: SDK CI
+  sdk-build-and-test:
+    name: SDK Build and Test
     needs: [setup]
-    if: needs.setup.outputs.sdk_changed == 'true' || github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     defaults:
       run:
         working-directory: sdk
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: 'sccache'
+      CARGO_INCREMENTAL: '0'
+      CARGO_TERM_COLOR: always
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -88,51 +80,6 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Setup Rust toolchain (for wasm)
-        uses: actions-rust-lang/setup-rust-toolchain@v1.8
-        with:
-          target: wasm32-unknown-unknown
-          cache: false
-      - name: Cache wasm-pack
-        uses: actions/cache@v3
-        with:
-          path: ~/.cargo/bin/wasm-pack
-          key: wasm-pack-v0.12.1
-      - name: Install wasm-pack
-        run: curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Build
-        run: pnpm build
-      - name: Lint
-        run: pnpm lint
-      - name: Prettier check
-        run: pnpm run format:check
-      - name: Type check
-        run: pnpm typecheck
-      - name: Run tests (core)
-        run: pnpm test:core -- --run
-      - name: Run tests (msp-client)
-        run: pnpm test:msp-client -- --run
-      - name: Coverage
-        run: pnpm run coverage -- --run
-
-  prepare-sdk:
-    name: Prepare SDK build artifacts
-    needs: [setup]
-    runs-on: ubuntu-latest
-    env:
-      SCCACHE_GHA_ENABLED: 'true'
-      RUSTC_WRAPPER: 'sccache'
-      CARGO_INCREMENTAL: '0'
-      CARGO_TERM_COLOR: always
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup pnpm & cache
-        uses: ./.github/workflow-templates/setup-pnpm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - name: Install Rust toolchain (for wasm)
         uses: actions-rust-lang/setup-rust-toolchain@v1.8
         with:
           target: wasm32-unknown-unknown
@@ -157,26 +104,35 @@ jobs:
           key: wasm-pack-v0.12.1
       - name: Install wasm-pack
         run: curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
-      - name: Install dependencies (sdk)
-        working-directory: sdk
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Build SDK (core + msp-client)
-        working-directory: sdk
+      - name: Build
         run: pnpm build
-      - name: Build Stats
-        run: sccache --show-stats || true
+      - name: Lint
+        run: pnpm lint
+      - name: Prettier check
+        run: pnpm run format:check
+      - name: Type check
+        run: pnpm typecheck
+      - name: Run tests (core)
+        run: pnpm test:core -- --run
+      - name: Run tests (msp-client)
+        run: pnpm test:msp-client -- --run
+      - name: Coverage
+        run: pnpm run coverage -- --run
       - name: Upload SDK dist
         uses: actions/upload-artifact@v4
         with:
           name: sdk-dist
           path: |
-            sdk/core/dist
-            sdk/msp-client/dist
+            ${{ github.workspace }}/sdk/core/dist
+            ${{ github.workspace }}/sdk/msp-client/dist
+
 
   e2e-wallet-metamask:
-    needs: [prepare-sdk]
+    needs: [sdk-build-and-test]
     name: E2E Wallet Tests (MetaMask)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -219,9 +175,9 @@ jobs:
           retention-days: 14
 
   e2e-backend-msp:
-    needs: [prepare-sdk]
+    needs: [sdk-build-and-test]
     name: E2E Backend Tests (MSP Client)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     env:
       HEADLESS: 'false'
       RUST_LOG: info
@@ -304,7 +260,7 @@ jobs:
     name: Publish SDK (core + msp-client)
     needs: [setup]
     if: needs.setup.outputs.is_published_event == 'true'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     defaults:
       run:
         working-directory: sdk
