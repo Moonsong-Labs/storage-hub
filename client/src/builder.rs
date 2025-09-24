@@ -796,12 +796,10 @@ impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
     for BlockchainServiceOptions
 {
     fn into(self) -> BlockchainServiceConfig<Runtime> {
-        // let peer_id = self.peer_id.map(|peer_id| {
-        //     PeerId::from_bytes(&peer_id)
-        //         .expect("Invalid peer ID when converting from bytes to PeerId")
-        // });
-
-        let peer_id = None;
+        let peer_id = self.peer_id.map(|peer_id| {
+            PeerId::from_bytes(&peer_id)
+                .expect("Invalid peer ID when converting from bytes to PeerId")
+        });
 
         BlockchainServiceConfig {
             extrinsic_retry_timeout: self.extrinsic_retry_timeout.unwrap_or_default(),
