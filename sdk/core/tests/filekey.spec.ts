@@ -26,7 +26,7 @@ describe("FileKey generation (wasm wrapper)", () => {
       fingerprint.toU8a()
     );
 
-    const fileKey = "0x" + Buffer.from(metadata.getFileKey()).toString("hex");
+    const fileKey = `0x${Buffer.from(metadata.getFileKey()).toString("hex")}`;
     expect(fileKey).toBe(EXPECTED_FILEKEY);
   });
 });

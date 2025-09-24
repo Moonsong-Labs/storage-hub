@@ -8,7 +8,7 @@ export const useSDK = (): string => {
   const [status, setStatus] = useState<string>("Initializing SDK...");
 
   useEffect(() => {
-    (async () => {
+    void (async () => {
       const msgs: string[] = [];
       const baseUrl = "http://127.0.0.1:8080";
 

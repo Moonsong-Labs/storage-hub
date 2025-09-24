@@ -187,7 +187,7 @@ export class StorageHubClient {
       "Bucket name"
     );
     const contract = this.getReadContract();
-    return contract.read.deriveBucketId!([owner, nameHex]);
+    return contract.read.deriveBucketId?.([owner, nameHex]);
   }
 
   /**
@@ -197,7 +197,7 @@ export class StorageHubClient {
    */
   getPendingFileDeletionRequestsCount(user: Address) {
     const contract = this.getReadContract();
-    return contract.read.getPendingFileDeletionRequestsCount!([user]);
+    return contract.read.getPendingFileDeletionRequestsCount?.([user]);
   }
 
   // -------- Writes --------
@@ -227,7 +227,7 @@ export class StorageHubClient {
     const txOpts = this.buildTxOptions(gasLimit, options);
 
     const contract = this.getWriteContract();
-    return await contract.write.createBucket!(args, txOpts);
+    return await contract.write.createBucket?.(args, txOpts);
   }
 
   /**
@@ -248,7 +248,7 @@ export class StorageHubClient {
     const txOpts = this.buildTxOptions(gasLimit, options);
 
     const contract = this.getWriteContract();
-    return await contract.write.requestMoveBucket!(args, txOpts);
+    return await contract.write.requestMoveBucket?.(args, txOpts);
   }
 
   /**
@@ -267,7 +267,7 @@ export class StorageHubClient {
     const txOpts = this.buildTxOptions(gasLimit, options);
 
     const contract = this.getWriteContract();
-    return await contract.write.updateBucketPrivacy!(args, txOpts);
+    return await contract.write.updateBucketPrivacy?.(args, txOpts);
   }
 
   /**
@@ -285,7 +285,7 @@ export class StorageHubClient {
     const txOpts = this.buildTxOptions(gasLimit, options);
 
     const contract = this.getWriteContract();
-    return await contract.write.createAndAssociateCollectionWithBucket!(args, txOpts);
+    return await contract.write.createAndAssociateCollectionWithBucket?.(args, txOpts);
   }
 
   /**
@@ -299,7 +299,7 @@ export class StorageHubClient {
     const txOpts = this.buildTxOptions(gasLimit, options);
 
     const contract = this.getWriteContract();
-    return await contract.write.deleteBucket!(args, txOpts);
+    return await contract.write.deleteBucket?.(args, txOpts);
   }
 
   /**
@@ -347,7 +347,7 @@ export class StorageHubClient {
     const txOpts = this.buildTxOptions(gasLimit, options);
 
     const contract = this.getWriteContract();
-    return await contract.write.issueStorageRequest!(args, txOpts);
+    return await contract.write.issueStorageRequest?.(args, txOpts);
   }
 
   /**
@@ -361,7 +361,7 @@ export class StorageHubClient {
     const txOpts = this.buildTxOptions(gasLimit, options);
 
     const contract = this.getWriteContract();
-    return await contract.write.revokeStorageRequest!(args, txOpts);
+    return await contract.write.revokeStorageRequest?.(args, txOpts);
   }
 
   /**
@@ -395,6 +395,6 @@ export class StorageHubClient {
     const txOpts = this.buildTxOptions(gasLimit, options);
 
     const contract = this.getWriteContract();
-    return await contract.write.requestDeleteFile!(args, txOpts);
+    return await contract.write.requestDeleteFile?.(args, txOpts);
   }
 }

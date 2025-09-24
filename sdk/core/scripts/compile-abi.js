@@ -55,7 +55,7 @@ function compileAbi({ name, sourcePath }) {
 
   // Compile and parse the Standard JSON output
   const output = JSON.parse(solc.compile(JSON.stringify(input)));
-  if (output.errors && output.errors.some((e) => e.severity === "error")) {
+  if (output.errors?.some((e) => e.severity === "error")) {
     console.error(`[compile-abi] solc errors for ${name}:\n`, output.errors);
     process.exit(1);
   }

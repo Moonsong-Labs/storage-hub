@@ -52,7 +52,7 @@ describe("LocalWallet", () => {
 
     it("should throw WalletError InvalidPrivateKey for a private key with invalid length (long)", () => {
       expect.assertions(2);
-      const longKey = TEST_PRIVATE_KEY_12 + "ff";
+      const longKey = `${TEST_PRIVATE_KEY_12}ff`;
       try {
         LocalWallet.fromPrivateKey(longKey);
       } catch (e) {

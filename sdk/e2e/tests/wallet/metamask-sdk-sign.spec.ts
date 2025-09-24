@@ -13,7 +13,7 @@ export const test = baseTest.extend<{
   wallet: Dappwright;
   page: Page;
 }>({
-  context: async ({}, use) => {
+  context: async (_, use) => {
     if (!sharedBrowserContext) {
       console.log("🚀 Launching browser with MetaMask...");
       const { browserContext } = await dappwright.launch("", {
@@ -51,7 +51,7 @@ export const test = baseTest.extend<{
   }
 });
 
-test("MetaMask + SDK", async ({ page, wallet, context }) => {
+test("MetaMask + SDK", async ({ page, wallet, context: _context }) => {
   console.log("🎯 Starting test...");
 
   // Ensure provider is injected

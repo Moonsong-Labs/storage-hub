@@ -110,7 +110,7 @@ test.describe("MSP Web Page Flow", () => {
       await page.getByRole("button", { name: "Get Files" }).click();
     });
     let filesJson = await page.locator("#filesJson").textContent();
-    expect(filesJson && filesJson.includes("Thesis")).toBeTruthy();
+    expect(filesJson?.includes("Thesis")).toBeTruthy();
     console.log("✅ Get Files (root)");
 
     // Get files of a bucket at path `/Thesis/`
@@ -120,7 +120,7 @@ test.describe("MSP Web Page Flow", () => {
       await page.getByRole("button", { name: "Get Files" }).click();
     });
     filesJson = await page.locator("#filesJson").textContent();
-    expect(filesJson && filesJson.includes("chapter1.pdf")).toBeTruthy();
+    expect(filesJson?.includes("chapter1.pdf")).toBeTruthy();
     console.log("✅ Get Files (Thesis)");
 
     // Get files of a bucket at path `/Reports/`
@@ -130,7 +130,7 @@ test.describe("MSP Web Page Flow", () => {
       await page.getByRole("button", { name: "Get Files" }).click();
     });
     filesJson = await page.locator("#filesJson").textContent();
-    expect(filesJson && filesJson.includes("Q1-2024.pdf")).toBeTruthy();
+    expect(filesJson?.includes("Q1-2024.pdf")).toBeTruthy();
     console.log("✅ Get Files (Reports)");
 
     // MSP Info: Get Info
@@ -139,8 +139,8 @@ test.describe("MSP Web Page Flow", () => {
       await page.getByRole("button", { name: "Get Info" }).click();
     });
     const infoJson = await page.locator("#infoJson").textContent();
-    expect(infoJson && infoJson.includes("mspId")).toBeTruthy();
-    expect(infoJson && infoJson.includes("client")).toBeTruthy();
+    expect(infoJson?.includes("mspId")).toBeTruthy();
+    expect(infoJson?.includes("client")).toBeTruthy();
     console.log("✅ Get Info");
 
     // MSP Info: Get Stats
@@ -149,8 +149,8 @@ test.describe("MSP Web Page Flow", () => {
       await page.getByRole("button", { name: "Get Stats" }).click();
     });
     const statsJson = await page.locator("#statsJson").textContent();
-    expect(statsJson && statsJson.includes("capacity")).toBeTruthy();
-    expect(statsJson && statsJson.includes("totalBytes")).toBeTruthy();
+    expect(statsJson?.includes("capacity")).toBeTruthy();
+    expect(statsJson?.includes("totalBytes")).toBeTruthy();
     console.log("✅ Get Stats");
 
     // MSP Info: Get Value Props
@@ -159,7 +159,7 @@ test.describe("MSP Web Page Flow", () => {
       await page.getByRole("button", { name: "Get Value Props" }).click();
     });
     const valuePropsJson = await page.locator("#valuePropsJson").textContent();
-    expect(valuePropsJson && valuePropsJson.includes("pricePerGbBlock")).toBeTruthy();
+    expect(valuePropsJson?.includes("pricePerGbBlock")).toBeTruthy();
     console.log("✅ Get Value Props");
 
     // MSP File Info (uses defaults in page)
@@ -168,8 +168,8 @@ test.describe("MSP Web Page Flow", () => {
       await page.getByRole("button", { name: "Get File Info" }).click();
     });
     const fileInfoJson = await page.locator("#fileInfoJson").textContent();
-    expect(fileInfoJson && fileInfoJson.includes("fileKey")).toBeTruthy();
-    expect(fileInfoJson && fileInfoJson.includes("uploadedAt")).toBeTruthy();
+    expect(fileInfoJson?.includes("fileKey")).toBeTruthy();
+    expect(fileInfoJson?.includes("uploadedAt")).toBeTruthy();
     console.log("✅ Get File Info");
   });
 });
