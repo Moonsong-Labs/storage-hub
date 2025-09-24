@@ -56,9 +56,14 @@ jobs:
           NAME=$(node -p "require('./types-bundle/package.json').name")
           PUBLISHED=$(npm view "$NAME" version 2>/dev/null || echo "0.0.0")
           echo "types-bundle npm: $PUBLISHED"
-          CURR="$CURR" PUBLISHED="$PUBLISHED" node -e '
+          CURR="$CURR" PUBLISHED="$PUBLISHED" BASE_VER="$BASE_VER" node -e '
            const semver = require("semver");
-           const curr = process.env.CURR; const pub = process.env.PUBLISHED;
+           const curr = process.env.CURR; const pub = process.env.PUBLISHED; const base = process.env.BASE_VER;
+           if (semver.eq(curr, pub)) {
+             if (semver.gt(curr, base)) { process.exit(0); }
+             console.log("::error title=Version not greater than npm::Current " + curr + " equals published " + pub + " and is not greater than base " + base);
+             process.exit(1);
+           }
            if (!semver.gt(curr, pub)) { console.log("::error title=Version not greater than npm::Current " + curr + " must be greater than published " + pub); process.exit(1); }
           '
 
@@ -78,9 +83,14 @@ jobs:
           NAME=$(node -p "require('./api-augment/package.json').name")
           PUBLISHED=$(npm view "$NAME" version 2>/dev/null || echo "0.0.0")
           echo "api-augment npm: $PUBLISHED"
-          CURR="$CURR" PUBLISHED="$PUBLISHED" node -e '
+          CURR="$CURR" PUBLISHED="$PUBLISHED" BASE_VER="$BASE_VER" node -e '
             const semver = require("semver");
-            const curr = process.env.CURR; const pub = process.env.PUBLISHED;
+            const curr = process.env.CURR; const pub = process.env.PUBLISHED; const base = process.env.BASE_VER;
+            if (semver.eq(curr, pub)) {
+              if (semver.gt(curr, base)) { process.exit(0); }
+              console.log("::error title=Version not greater than npm::Current " + curr + " equals published " + pub + " and is not greater than base " + base);
+              process.exit(1);
+            }
             if (!semver.gt(curr, pub)) { console.log("::error title=Version not greater than npm::Current " + curr + " must be greater than published " + pub); process.exit(1); }
           '
 
