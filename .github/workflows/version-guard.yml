@@ -51,11 +51,9 @@ jobs:
           PUBLISHED=$(npm view "$NAME" version 2>/dev/null || echo "0.0.0")
           echo "types-bundle npm: $PUBLISHED"
           node -e "
-            const a=require('child_process');
-            const curr=process.env.CURR; const pub=process.env.PUBLISHED;
-            function parse(v){return v.split('-')[0].split('.').map(Number)}
-            function cmp(x,y){const X=parse(x),Y=parse(y);for(let i=0;i<3;i++){if((X[i]||0)>(Y[i]||0))return 1;if((X[i]||0)<(Y[i]||0))return -1}return 0}
-            if(cmp(curr,pub)<=0){console.error(`::error title=Version not greater than npm::Current ${curr} must be greater than published ${pub}`);process.exit(1)}
+           const semver=require('semver');
+           const curr=process.env.CURR; const pub=process.env.PUBLISHED;
+           if(!semver.gt(curr,pub)){console.error(`::error title=Version not greater than npm::Current ${curr} must be greater than published ${pub}`);process.exit(1)}
           "
 
       - name: Verify api-augment version bumped
@@ -75,9 +73,8 @@ jobs:
           PUBLISHED=$(npm view "$NAME" version 2>/dev/null || echo "0.0.0")
           echo "api-augment npm: $PUBLISHED"
           node -e "
+            const semver=require('semver');
             const curr=process.env.CURR; const pub=process.env.PUBLISHED;
-            function parse(v){return v.split('-')[0].split('.').map(Number)}
-            function cmp(x,y){const X=parse(x),Y=parse(y);for(let i=0;i<3;i++){if((X[i]||0)>(Y[i]||0))return 1;if((X[i]||0)<(Y[i]||0))return -1}return 0}
-            if(cmp(curr,pub)<=0){console.error(`::error title=Version not greater than npm::Current ${curr} must be greater than published ${pub}`);process.exit(1)}
+            if(!semver.gt(curr,pub)){console.error(`::error title=Version not greater than npm::Current ${curr} must be greater than published ${pub}`);process.exit(1)}
           "
 
