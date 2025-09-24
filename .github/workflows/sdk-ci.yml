@@ -3,7 +3,7 @@ name: sdk-ci
 on:
   push:
     branches:
-      - '**'
+      - main
     paths:
       - 'sdk/**'
   pull_request:

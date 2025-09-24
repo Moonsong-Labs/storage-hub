@@ -2,34 +2,15 @@ import assert, { strictEqual } from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
 import { u8aToHex } from "@polkadot/util";
-import { decodeAddress } from "@polkadot/util-crypto";
 import * as $ from "scale-codec";
-import { type EnrichedBspApi, describeMspNet, shUser, waitFor } from "../../../util";
-
-/**
- * Mock JWT generator that matches the backend's generate_mock_jwt function
- */
-function generateMockJWT(): string {
-  // Header: {"alg":"HS256","typ":"JWT"} already encoded
-  const header = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9";
-
-  // Create a mock payload with proper structure
-  const payload = {
-    // Standard JWT claims
-    sub: "0x1234567890123456789012345678901234567890", // Subject: user's ETH address
-    exp: 9999999999, // Expiration: far into the future for mock
-    iat: 1704067200 // Issued at: 2024-01-01
-  };
-
-  // Encode payload using base64url (no padding)
-  const payloadJson = JSON.stringify(payload);
-  const payloadB64 = Buffer.from(payloadJson).toString("base64url");
-
-  // Mock signature (base64url encoded)
-  const signature = Buffer.from("mock_signature").toString("base64url");
-
-  return `${header}.${payloadB64}.${signature}`;
-}
+import { describeMspNet, type EnrichedBspApi, waitFor } from "../../../util";
+import { fetchJwtToken } from "../../../util/backend/jwt";
+import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
+import {
+  ETH_SH_USER_ADDRESS,
+  ETH_SH_USER_PRIVATE_KEY,
+  ethShUser
+} from "../../../util/evmNet/keyring";
 
 // Backend API Types
 // TODO: Add a script in the backend to generate these types instead.
@@ -55,6 +36,7 @@ await describeMspNet(
   "Backend file upload integration",
   {
     initialised: false,
+    runtimeType: "solochain",
     indexer: true,
     backend: true
   },
@@ -150,11 +132,11 @@ await describeMspNet(
       const bucketRoot = (await userApi.rpc.storagehubclient.getForestRoot(bucketId)).unwrap();
 
       // Load a file into storage to get its metadata, then remove it from the user's node storage so it doesn't get sent to the MSP automatically.
-      const ownerHex = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
+      const userAddress = ETH_SH_USER_ADDRESS.slice(2);
       const { file_key, file_metadata } = await userApi.rpc.storagehubclient.loadFileInStorage(
         source,
         destination,
-        ownerHex,
+        userAddress,
         bucketId
       );
       await userApi.rpc.storagehubclient.removeFilesFromFileStorage([file_key]);
@@ -172,7 +154,7 @@ await describeMspNet(
             { Custom: 2 }
           )
         ],
-        signer: shUser
+        signer: ethShUser
       });
 
       // Poll until the file is expected
@@ -202,9 +184,28 @@ await describeMspNet(
       const fileBlob = new Blob([fileBuffer], { type: "image/jpeg" });
       form.append("file", fileBlob, path.basename(source));
 
-      // Generate a mock JWT token that matches the backend's mock
-      // TODO: Once the backend has proper auth, we will have to update this (if the mock is removed)
-      const mockJWT = generateMockJWT();
+      // TODO: Once the upload endpoint checks auth, uncomment this as this is the expected behavior
+      /* // Generatea a JWT token for Baltathar using the backend's auth endpoints
+      // Trying to upload this file with it should fail
+      const baltatharToken = await fetchJwtToken(BALTATHAR_PRIVATE_KEY, SH_EVM_SOLOCHAIN_CHAIN_ID);
+
+      // Send the HTTP request to backend upload endpoint
+      const baltatharUploadResponse = await fetch(
+        `http://localhost:8080/buckets/${bucketId}/upload/${file_key}`,
+        {
+          method: "PUT",
+          body: form,
+          headers: {
+            Authorization: `Bearer ${baltatharToken}`
+          }
+        }
+      );
+
+      // Verify that the backend upload failed
+      strictEqual(baltatharUploadResponse.status, 401, "Upload should return UNAUTHORIZED status"); */
+
+      // Generate a JWT token using the backend's auth endpoints
+      const token = await fetchJwtToken(ETH_SH_USER_PRIVATE_KEY, SH_EVM_SOLOCHAIN_CHAIN_ID);
 
       // Send the HTTP request to backend upload endpoint
       const uploadResponse = await fetch(
@@ -213,7 +214,7 @@ await describeMspNet(
           method: "PUT",
           body: form,
           headers: {
-            Authorization: `Bearer ${mockJWT}`
+            Authorization: `Bearer ${token}`
           }
         }
       );
