@@ -1,6 +1,7 @@
 use async_channel::Receiver;
 use log::*;
 use sc_network::{config::IncomingRequest, service::traits::NetworkService, ProtocolName};
+use sc_network_types::PeerId;
 use sc_service::RpcHandlers;
 use serde::Deserialize;
 use shc_indexer_db::DbPool;
@@ -356,6 +357,13 @@ where
         {
             blockchain_service_config.max_blocks_behind_to_catch_up_root_changes =
                 max_blocks_behind_to_catch_up_root_changes.saturated_into();
+        }
+
+        if let Some(peer_id) = config.peer_id {
+            blockchain_service_config.peer_id = Some(
+                PeerId::from_bytes(&peer_id)
+                    .expect("Invalid peer ID when converting from bytes to PeerId"),
+            );
         }
 
         self.blockchain_service_config = Some(blockchain_service_config);
@@ -780,12 +788,19 @@ pub struct BlockchainServiceOptions {
     pub check_for_pending_proofs_period: Option<u32>,
     /// The maximum number of blocks from the past that will be processed for catching up the root changes.
     pub max_blocks_behind_to_catch_up_root_changes: Option<u32>,
+    /// The peer ID of this node.
+    pub peer_id: Option<Vec<u8>>,
 }
 
 impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
     for BlockchainServiceOptions
 {
     fn into(self) -> BlockchainServiceConfig<Runtime> {
+        let peer_id = self.peer_id.map(|peer_id| {
+            PeerId::from_bytes(&peer_id)
+                .expect("Invalid peer ID when converting from bytes to PeerId")
+        });
+
         BlockchainServiceConfig {
             extrinsic_retry_timeout: self.extrinsic_retry_timeout.unwrap_or_default(),
             sync_mode_min_blocks_behind: self
@@ -800,6 +815,7 @@ impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
                 .max_blocks_behind_to_catch_up_root_changes
                 .unwrap_or_default()
                 .saturated_into(),
+            peer_id,
         }
     }
 }

@@ -161,6 +161,20 @@ where
         }
     }
 
+    /// Runs at the end of every block import for a BSP.
+    ///
+    /// Steps:
+    pub(crate) async fn bsp_end_block_processing<Block>(
+        &self,
+        _block_hash: &Runtime::Hash,
+        _block_number: &BlockNumber<Runtime>,
+        _tree_route: TreeRoute<Block>,
+    ) where
+        Block: BlockT<Hash = Runtime::Hash>,
+    {
+        // Nothing to do here so far.
+    }
+
     /// Processes finality events that are only relevant for a BSP.
     pub(crate) fn bsp_process_finality_events(
         &self,

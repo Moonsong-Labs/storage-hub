@@ -5,9 +5,9 @@ use std::{collections::BTreeMap, marker::PhantomData, path::PathBuf, sync::Arc};
 use sc_client_api::{
     BlockImportNotification, BlockchainEvents, FinalityNotification, HeaderBackend,
 };
+use sc_network_types::PeerId;
 use sc_service::RpcHandlers;
 use sc_tracing::tracing::{debug, error, info, trace, warn};
-use serde::Deserialize;
 use shc_common::traits::StorageEnableRuntime;
 use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_blockchain::TreeRoute;
@@ -42,7 +42,10 @@ use crate::{
     events::BlockchainServiceEventBusProvider,
     state::{BlockchainServiceStateStore, LastProcessedBlockNumberCf},
     transaction::SubmittedTransaction,
-    types::{ManagedProvider, MinimalBlockInfo, NewBlockNotificationKind},
+    types::{
+        FileDistributionInfo, ManagedProvider, MinimalBlockInfo, NewBlockNotificationKind,
+        StopStoringForInsolventUserRequest,
+    },
 };
 
 pub(crate) const LOG_TARGET: &str = "blockchain-service";
@@ -107,7 +110,7 @@ where
     _runtime: PhantomData<Runtime>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct BlockchainServiceConfig<Runtime>
 where
     Runtime: StorageEnableRuntime,
@@ -129,6 +132,9 @@ where
     /// the maximum size of the `tree_route` in the [`NewBlockNotificationKind::NewBestBlock`] enum
     /// variant.
     pub max_blocks_behind_to_catch_up_root_changes: BlockNumber<Runtime>,
+
+    /// The peer ID of this node.
+    pub peer_id: Option<PeerId>,
 }
 
 impl<Runtime> Default for BlockchainServiceConfig<Runtime>
@@ -141,6 +147,7 @@ where
             sync_mode_min_blocks_behind: 5u32.into(),
             check_for_pending_proofs_period: 4u32.into(),
             max_blocks_behind_to_catch_up_root_changes: 10u32.into(),
+            peer_id: None,
         }
     }
 }
@@ -1085,6 +1092,64 @@ where
                         }
                     }
                 }
+                BlockchainServiceCommand::RegisterBspDistributing {
+                    file_key,
+                    bsp_id,
+                    callback,
+                } => {
+                    if let Some(ManagedProvider::Msp(msp_handler)) =
+                        &mut self.maybe_managed_provider
+                    {
+                        let entry = msp_handler
+                            .files_to_distribute
+                            .entry(file_key.clone())
+                            .or_insert(FileDistributionInfo::new());
+                        entry.bsps_distributing.insert(bsp_id);
+
+                        match callback.send(Ok(())) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                            }
+                        }
+                    } else {
+                        error!(target: LOG_TARGET, "Received a RegisterBspDistributing command while not managing a MSP. This should never happen. Please report it to the StorageHub team.");
+                        match callback.send(Err(anyhow!("Received a RegisterBspDistributing command while not managing a MSP. This should never happen. Please report it to the StorageHub team."))) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                            }
+                        }
+                    }
+                }
+                BlockchainServiceCommand::UnregisterBspDistributing {
+                    file_key,
+                    bsp_id,
+                    callback,
+                } => {
+                    if let Some(ManagedProvider::Msp(msp_handler)) =
+                        &mut self.maybe_managed_provider
+                    {
+                        if let Some(entry) = msp_handler.files_to_distribute.get_mut(&file_key) {
+                            entry.bsps_distributing.remove(&bsp_id);
+                        }
+
+                        match callback.send(Ok(())) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                            }
+                        }
+                    } else {
+                        error!(target: LOG_TARGET, "Received an UnregisterBspDistributing command while not managing an MSP. This should never happen. Please report it to the StorageHub team.");
+                        match callback.send(Err(anyhow!("Received an UnregisterBspDistributing command while not managing an MSP. This should never happen. Please report it to the StorageHub team."))) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                            }
+                        }
+                    }
+                }
                 BlockchainServiceCommand::ReleaseForestRootWriteLock {
                     forest_root_write_tx,
                     callback,
@@ -1287,14 +1352,14 @@ where
     ) {
         trace!(target: LOG_TARGET, "📠 Processing block import #{}: {}", block_number, block_hash);
 
-        // Provider-specific code to run on every block import.
+        // Provider-specific code to run at the start of every block import.
         match self.maybe_managed_provider {
             Some(ManagedProvider::Bsp(_)) => {
-                self.bsp_init_block_processing(block_hash, block_number, tree_route)
+                self.bsp_init_block_processing(block_hash, block_number, tree_route.clone())
                     .await;
             }
             Some(ManagedProvider::Msp(_)) => {
-                self.msp_init_block_processing(block_hash, block_number, tree_route)
+                self.msp_init_block_processing(block_hash, block_number, tree_route.clone())
                     .await;
             }
             None => {
@@ -1363,6 +1428,21 @@ where
                 // TODO: a node that has a newer version of the runtime, therefore the EventsVec type is different.
                 // TODO: Consider using runtime APIs for getting old data of previous blocks, and this just for current blocks.
                 error!(target: LOG_TARGET, "Failed to get events storage element: {:?}", e);
+            }
+        }
+
+        // Provider-specific code to run at the end of every block import.
+        match self.maybe_managed_provider {
+            Some(ManagedProvider::Bsp(_)) => {
+                self.bsp_end_block_processing(block_hash, block_number, tree_route)
+                    .await;
+            }
+            Some(ManagedProvider::Msp(_)) => {
+                self.msp_end_block_processing(block_hash, block_number, tree_route)
+                    .await;
+            }
+            None => {
+                trace!(target: LOG_TARGET, "No Provider ID found. This node is not managing a Provider.");
             }
         }
 

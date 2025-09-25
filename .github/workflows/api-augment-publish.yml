@@ -1,41 +1,66 @@
 name: Publish api-augment to npm.js
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'api-augment/**'
   workflow_dispatch:
     inputs:
       sha:
         description: Full SHA to build the pnpm package from
         required: true
+      dry_run:
+        description: Perform a dry run (no actual publish)
+        type: boolean
+        required: false
+        default: false
 
 jobs:
   publish-api-augment:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - name: Checkout
+      - name: Checkout (manual)
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.sha }}
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
+      - name: Checkout (push)
+        if: github.event_name != 'workflow_dispatch'
+        uses: actions/checkout@v4
 
-      - name: Use Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-          registry-url: https://registry.npmjs.org/
+      - name: Setup pnpm & cache
+        uses: ./.github/workflow-templates/setup-pnpm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Build API Augment
+      - name: Install and build API Augment
         run: |
           cd api-augment
-          pnpm i --frozen-lockfile
+          pnpm i --no-frozen-lockfile
           pnpm run build
 
       - name: Publish API Augment
-        run: |
-          cd api-augment
-          pnpm publish ${{ github.event.inputs.DryRun && '--dry-run' || ''  }} --access public --no-git-checks
+        if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true') }}
+        working-directory: api-augment
         env:
           NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
+        run: |
+          PKG_NAME=$(node -p "require('./package.json').name")
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          echo "Publishing $PKG_NAME v$PKG_VERSION"
+          pnpm publish --access public --no-git-checks || {
+            echo "Publish failed (possibly already published). Checking registry...";
+            CURR=$(npm view "$PKG_NAME" version || echo "");
+            if [ "$CURR" = "$PKG_VERSION" ]; then
+              echo "Version already published. Skipping.";
+              exit 0;
+            else
+              echo "Unexpected publish error.";
+              exit 1;
+            fi
+          }
+
+      - name: Dry run note
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' }}
+        run: echo "Dry run enabled; skipped npm publish."
