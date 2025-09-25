@@ -13,7 +13,7 @@ use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use shc_actors_framework::actor::Actor;
 use shc_common::{
     traits::StorageEnableRuntime,
-    typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
+    typed_store::CFDequeAPI,
     types::{
         BackupStorageProviderId, BlockHash, BlockNumber, Fingerprint, ProviderId,
         StorageEnableEvents, StorageRequestMetadata,
@@ -32,10 +32,6 @@ use crate::{
         ProcessStopStoringForInsolventUserRequestData, StartMovedBucketDownload,
     },
     handler::LOG_TARGET,
-    state::{
-        OngoingProcessFileDeletionRequestCf, OngoingProcessMspRespondStorageRequestCf,
-        OngoingProcessStopStoringForInsolventUserRequestCf,
-    },
     types::{FileDistributionInfo, ManagedProvider},
     BlockchainService,
 };
@@ -164,7 +160,7 @@ where
                 confirmed_file_keys,
                 skipped_file_keys: _,
                 new_root: _,
-            }) => {
+            }) if self.config.enable_msp_distribute_files => {
                 for (file_key, _file_metadata) in confirmed_file_keys {
                     // If this is a BSP confirming a file that this MSP distributed, remove it from
                     // the list of BSPs distributing, and move it into the list of BSPs confirmed.
@@ -187,11 +183,13 @@ where
                 | pallet_file_system::Event::StorageRequestExpired { file_key }
                 | pallet_file_system::Event::StorageRequestRevoked { file_key }
                 | pallet_file_system::Event::StorageRequestRejected { file_key, .. },
-            ) => {
+            ) if self.config.enable_msp_distribute_files => {
                 // Any of these events means that the storage request has finished its
                 // lifecycle, so we can remove it from the list of files to distribute.
                 if let Some(ManagedProvider::Msp(msp_handler)) = &mut self.maybe_managed_provider {
                     msp_handler.files_to_distribute.remove(&file_key.into());
+
+                    debug!(target: LOG_TARGET, "Storage request [{:?}] finished its lifecycle, removing it from the list of files to distribute", file_key);
                 }
             }
             // Ignore all other events.
@@ -373,26 +371,6 @@ where
                         error!(target: LOG_TARGET, "Forest root write task channel closed unexpectedly. Lock is released anyway!");
                     }
                 }
-
-                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                state_store_context
-                    .access_value(&OngoingProcessFileDeletionRequestCf::<Runtime> {
-                        phantom: Default::default(),
-                    })
-                    .delete();
-                state_store_context
-                    .access_value(&OngoingProcessMspRespondStorageRequestCf::<Runtime> {
-                        phantom: Default::default(),
-                    })
-                    .delete();
-                state_store_context
-                    .access_value(
-                        &OngoingProcessStopStoringForInsolventUserRequestCf::<Runtime> {
-                            phantom: Default::default(),
-                        },
-                    )
-                    .delete();
-                state_store_context.commit();
             }
         }
 
@@ -605,53 +583,12 @@ where
         let (tx, rx) = tokio::sync::oneshot::channel();
         *forest_root_write_lock = Some(rx);
 
-        // If this is a respond storage request, stop storing for insolvent user request, or
-        // file deletion request, we need to store it in the state store.
-        let data = data.into();
-        match &data {
-            ForestWriteLockTaskData::MspRespondStorageRequest(data) => {
-                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                state_store_context
-                    .access_value(&OngoingProcessMspRespondStorageRequestCf::<Runtime> {
-                        phantom: Default::default(),
-                    })
-                    .write(data);
-                state_store_context.commit();
-            }
-            ForestWriteLockTaskData::FileDeletionRequest(data) => {
-                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                state_store_context
-                    .access_value(&OngoingProcessFileDeletionRequestCf::<Runtime> {
-                        phantom: Default::default(),
-                    })
-                    .write(data);
-                state_store_context.commit();
-            }
-            ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
-                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                state_store_context
-                    .access_value(
-                        &OngoingProcessStopStoringForInsolventUserRequestCf::<Runtime> {
-                            phantom: Default::default(),
-                        },
-                    )
-                    .write(data);
-                state_store_context.commit();
-            }
-            ForestWriteLockTaskData::ConfirmStoringRequest(_) => {
-                unreachable!("MSPs do not confirm storing requests the way BSPs do.")
-            }
-            ForestWriteLockTaskData::SubmitProofRequest(_) => {
-                unreachable!("MSPs do not submit proofs.")
-            }
-        }
-
         // This is an [`Arc<Mutex<Option<T>>>`] (in this case [`oneshot::Sender<()>`]) instead of just
         // T so that we can keep using the current actors event bus (emit) which requires Clone on the
         // event. Clone is required because there is no constraint on the number of listeners that can
         // subscribe to the event (and each is guaranteed to receive all emitted events).
         let forest_root_write_tx = Arc::new(Mutex::new(Some(tx)));
-        match data {
+        match data.into() {
             ForestWriteLockTaskData::MspRespondStorageRequest(data) => {
                 self.emit(ProcessMspRespondStoringRequest {
                     data,
@@ -696,6 +633,12 @@ where
     ///   the in-memory `files_to_distribute` state to not spawn duplicate tasks or
     ///   re-emit for already-confirmed BSPs.
     pub(crate) fn spawn_distribute_file_to_bsps_tasks(&mut self, block_hash: &Runtime::Hash) {
+        // Only distribute files to BSPs when explicitly enabled via configuration.
+        if !self.config.enable_msp_distribute_files {
+            trace!(target: LOG_TARGET, "MSP file distribution disabled by configuration. Skipping distribution scan.");
+            return;
+        }
+
         let managed_msp_id = match &self.maybe_managed_provider {
             Some(ManagedProvider::Msp(msp_handler)) => msp_handler.msp_id.clone(),
             _ => {
