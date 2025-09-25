@@ -138,14 +138,27 @@ export function OnePageDemo() {
       // Create MSP client
       const mspClient = await MspClient.connect({ baseUrl: config.mspUrl });
 
-      // SIWE authentication
+      // SIWE authentication (exact same pattern as sdk-precompiles line 93-94)
+      console.log('🔐 MSP Authentication Step 1: Getting nonce...');
+      console.log('- Address:', walletAddress);
+      console.log('- Chain ID:', config.chainId);
+      
       const { message } = await mspClient.getNonce(walletAddress, config.chainId);
+      console.log('✅ Nonce received, message:', message);
+      
+      console.log('🔐 MSP Authentication Step 2: Signing message...');
       const signature = await walletClient.signMessage({ 
-        message, 
-        account: walletAddress as `0x${string}` 
+        account: walletClient.account!, // Use account object, not address string
+        message 
       });
+      console.log('✅ Message signed:', signature);
+      
+      console.log('🔐 MSP Authentication Step 3: Verifying signature...');
       const verified = await mspClient.verify(message, signature);
+      console.log('✅ Signature verified, token received');
+      
       mspClient.setToken(verified.token);
+      console.log('✅ MSP client authenticated successfully');
 
       // Create StorageHub client
       const storageHubClient = new StorageHubClient({
