@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Upload, Download, File, Folder, Hash, Info, X, CheckCircle, AlertCircle, Plus, Database } from 'lucide-react';
 import { type WalletClient, type PublicClient, formatEther } from 'viem';
 import { FileManager as StorageHubFileManager, initWasm, StorageHubClient, ReplicationLevel } from '@storagehub-sdk/core';
-import { MspClient, type UploadReceipt, type DownloadResult, type Bucket, type FileListResponse, type FileEntry } from '@storagehub-sdk/msp-client';
+import { MspClient, type UploadReceipt, type DownloadResult, type Bucket, type FileListResponse, type FileEntry, type DownloadOptions } from '@storagehub-sdk/msp-client';
 import { TypeRegistry } from '@polkadot/types';
 import type { AccountId20, H256 } from '@polkadot/types/interfaces';
 
@@ -44,6 +44,11 @@ interface FileBrowserState {
   selectedFile: FileEntry | null;
 }
 
+interface FileDownloadState {
+  downloadingFiles: Set<string>; // Track which files are being downloaded by fileKey
+  downloadError: string | null;
+}
+
 export function FileManager({ walletClient, publicClient, walletAddress, mspClient, storageHubClient }: FileManagerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -79,6 +84,12 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
     isLoading: false,
     error: null,
     selectedFile: null,
+  });
+
+  // File Download State
+  const [downloadState, setDownloadState] = useState<FileDownloadState>({
+    downloadingFiles: new Set(),
+    downloadError: null,
   });
 
   // Get wallet balance
@@ -912,6 +923,100 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
     }
   };
 
+  // File download function
+  const downloadFile = async (file: FileEntry) => {
+    if (!mspClient || !file.fileKey) {
+      console.error('Cannot download: missing MSP client or file key');
+      return;
+    }
+
+    const fileKey = file.fileKey;
+    console.log('🔄 Starting download for file:', file.name, 'with key:', fileKey);
+
+    // Add file to downloading set
+    setDownloadState(prev => ({
+      ...prev,
+      downloadingFiles: new Set([...prev.downloadingFiles, fileKey]),
+      downloadError: null
+    }));
+
+    try {
+      // Download file using MSP SDK
+      console.log('📥 Calling mspClient.downloadByKey...');
+      const downloadResult = await mspClient.downloadByKey(fileKey);
+      
+      console.log('✅ Download response received:', {
+        status: downloadResult.status,
+        contentType: downloadResult.contentType,
+        contentLength: downloadResult.contentLength
+      });
+
+      if (downloadResult.status !== 200) {
+        throw new Error(`Download failed with status: ${downloadResult.status}`);
+      }
+
+      // Convert stream to blob
+      console.log('🔄 Converting stream to blob...');
+      const reader = downloadResult.stream.getReader();
+      const chunks: Uint8Array[] = [];
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+
+      // Calculate total length and create combined array
+      const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
+      const combinedArray = new Uint8Array(totalLength);
+      let offset = 0;
+      
+      for (const chunk of chunks) {
+        combinedArray.set(chunk, offset);
+        offset += chunk.length;
+      }
+
+      // Create blob and download URL
+      const blob = new Blob([combinedArray], { 
+        type: downloadResult.contentType || 'application/octet-stream' 
+      });
+      
+      console.log('📁 Created blob:', {
+        size: blob.size,
+        type: blob.type
+      });
+
+      // Create download link and trigger download
+      const downloadUrl = URL.createObjectURL(blob);
+      const downloadLink = document.createElement('a');
+      downloadLink.href = downloadUrl;
+      downloadLink.download = file.name;
+      
+      // Append to body, click, and remove
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      
+      // Clean up the URL object
+      URL.revokeObjectURL(downloadUrl);
+      
+      console.log('✅ File download completed:', file.name);
+
+    } catch (error: any) {
+      console.error('❌ Download failed:', error);
+      setDownloadState(prev => ({
+        ...prev,
+        downloadError: error instanceof Error ? error.message : 'Download failed'
+      }));
+    } finally {
+      // Remove file from downloading set
+      setDownloadState(prev => ({
+        ...prev,
+        downloadingFiles: new Set([...prev.downloadingFiles].filter(key => key !== fileKey))
+      }));
+    }
+  };
+
   const clearUpload = () => {
     setUploadState({
       file: null,
@@ -1254,13 +1359,22 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                // TODO: Implement download
-                                console.log('Download file:', file);
+                                downloadFile(file);
                               }}
-                              className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                              disabled={downloadState.downloadingFiles.has(file.fileKey || '')}
+                              className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
                             >
-                              <Download className="h-3 w-3 inline mr-1" />
-                              Download
+                              {downloadState.downloadingFiles.has(file.fileKey || '') ? (
+                                <>
+                                  <div className="animate-spin h-3 w-3 border border-white border-t-transparent rounded-full inline mr-1"></div>
+                                  Downloading...
+                                </>
+                              ) : (
+                                <>
+                                  <Download className="h-3 w-3 inline mr-1" />
+                                  Download
+                                </>
+                              )}
                             </button>
                           )}
                           {file.type === 'folder' && (
@@ -1286,22 +1400,39 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
             </div>
           )}
 
-          {/* Selected File Info */}
-          {fileBrowserState.selectedFile && (
-            <div className="p-4 bg-gray-800 rounded-lg border border-gray-700">
-              <h4 className="text-sm font-medium text-gray-200 mb-2">File Information</h4>
-              <div className="space-y-1 text-xs text-gray-400">
-                <div><strong>Name:</strong> {fileBrowserState.selectedFile.name}</div>
-                <div><strong>Type:</strong> {fileBrowserState.selectedFile.type}</div>
-                {fileBrowserState.selectedFile.sizeBytes && (
-                  <div><strong>Size:</strong> {(fileBrowserState.selectedFile.sizeBytes / 1024).toFixed(2)} KB</div>
-                )}
-                {fileBrowserState.selectedFile.fileKey && (
-                  <div><strong>File Key:</strong> {fileBrowserState.selectedFile.fileKey}</div>
-                )}
+            {/* Download Error */}
+            {downloadState.downloadError && (
+              <div className="p-4 bg-red-900/20 border border-red-900/50 rounded-lg">
+                <div className="flex items-center gap-2 text-red-400">
+                  <AlertCircle className="h-4 w-4" />
+                  <span className="text-sm font-medium">Download Failed</span>
+                  <button
+                    onClick={() => setDownloadState(prev => ({ ...prev, downloadError: null }))}
+                    className="ml-auto text-red-400 hover:text-red-300"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <p className="text-sm text-red-300 mt-2">{downloadState.downloadError}</p>
               </div>
-            </div>
-          )}
+            )}
+
+            {/* Selected File Info */}
+            {fileBrowserState.selectedFile && (
+              <div className="p-4 bg-gray-800 rounded-lg border border-gray-700">
+                <h4 className="text-sm font-medium text-gray-200 mb-2">File Information</h4>
+                <div className="space-y-1 text-xs text-gray-400">
+                  <div><strong>Name:</strong> {fileBrowserState.selectedFile.name}</div>
+                  <div><strong>Type:</strong> {fileBrowserState.selectedFile.type}</div>
+                  {fileBrowserState.selectedFile.sizeBytes && (
+                    <div><strong>Size:</strong> {(fileBrowserState.selectedFile.sizeBytes / 1024).toFixed(2)} KB</div>
+                  )}
+                  {fileBrowserState.selectedFile.fileKey && (
+                    <div><strong>File Key:</strong> {fileBrowserState.selectedFile.fileKey}</div>
+                  )}
+                </div>
+              </div>
+            )}
         </div>
       </div>
     </div>
