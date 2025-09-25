@@ -17,10 +17,7 @@ use shc_indexer_db::{models::Bucket as DBBucket, OnchainMspId};
 use shp_types::Hash;
 
 use crate::{
-    constants::{
-        mocks::{PLACEHOLDER_BUCKET_FILE_COUNT, PLACEHOLDER_BUCKET_SIZE_BYTES},
-        rpc::DUMMY_MSP_ID,
-    },
+    constants::mocks::{PLACEHOLDER_BUCKET_FILE_COUNT, PLACEHOLDER_BUCKET_SIZE_BYTES},
     data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage},
     error::Error,
     models::{
@@ -613,6 +610,7 @@ mod tests {
             storage::{BoxedStorageWrapper, InMemoryStorage},
         },
         mock_utils::random_bytes_32,
+        models::msp_info::{ValueProposition, ValuePropositionWithId},
     };
 
     /// Builder for creating MspService instances with mock dependencies for testing
@@ -656,7 +654,7 @@ mod tests {
         }
 
         /// Build the final MspService
-        pub fn build(self) -> MspService {
+        pub async fn build(self) -> MspService {
             let cfg = Config::default();
 
             MspService::new(
@@ -665,12 +663,14 @@ mod tests {
                 self.rpc,
                 cfg.storage_hub.msp_callback_url,
             )
+            .await
+            .expect("Mocked MSP service builder should succeed")
         }
     }
 
     #[tokio::test]
     async fn test_get_info() {
-        let service = MockMspServiceBuilder::new().build();
+        let service = MockMspServiceBuilder::new().build().await;
         let info = service.get_info().await.unwrap();
 
         assert_eq!(info.status, "active");
@@ -679,7 +679,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_stats() {
-        let service = MockMspServiceBuilder::new().build();
+        let service = MockMspServiceBuilder::new().build().await;
         let stats = service.get_stats().await.unwrap();
 
         assert!(stats.capacity.total_bytes > 0);
@@ -688,11 +688,28 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_value_props() {
-        let service = MockMspServiceBuilder::new().build();
+        let service = MockMspServiceBuilder::new()
+            .with_rpc_responses(vec![(
+                "storagehubclient_getValuePropositions",
+                serde_json::json!(GetValuePropositionsResult::Success(vec![{
+                    let mut value_prop_with_id = ValuePropositionWithId::default();
+                    value_prop_with_id.id = H256::from_slice(&random_bytes_32());
+                    value_prop_with_id.value_prop = ValueProposition::default();
+                    value_prop_with_id
+                        .value_prop
+                        .price_per_giga_unit_of_data_per_block = 100;
+                    value_prop_with_id.value_prop.bucket_data_limit = 100;
+                    value_prop_with_id.value_prop.available = true;
+                    value_prop_with_id.encode()
+                },])),
+            )])
+            .await
+            .build()
+            .await;
         let props = service.get_value_props().await.unwrap();
 
         assert!(!props.is_empty());
-        assert!(props.iter().any(|p| p.is_available));
+        assert!(props.iter().any(|p| p.value_prop.available));
     }
 
     #[tokio::test]
@@ -723,7 +740,8 @@ mod tests {
                 })
             })
             .await
-            .build();
+            .build()
+            .await;
 
         let buckets = service
             .list_user_buckets(MOCK_ADDRESS)
@@ -778,7 +796,8 @@ mod tests {
                 })
             })
             .await
-            .build();
+            .build()
+            .await;
 
         let bucket_id = hex::encode(bucket_id);
         let bucket = service.get_bucket(&bucket_id, MOCK_ADDRESS).await.unwrap();
@@ -830,7 +849,8 @@ mod tests {
                 })
             })
             .await
-            .build();
+            .build()
+            .await;
 
         let tree = service
             .get_file_tree(hex::encode(bucket_id).as_ref(), MOCK_ADDRESS, "/")
@@ -884,7 +904,8 @@ mod tests {
                 })
             })
             .await
-            .build();
+            .build()
+            .await;
 
         let bucket_id = hex::encode(bucket_id);
         let file_key = hex::encode(file_key);
@@ -902,7 +923,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_distribute_file() {
-        let service = MockMspServiceBuilder::new().build();
+        let service = MockMspServiceBuilder::new().build().await;
         let file_key = "abc123";
         let resp = service
             .distribute_file("bucket123", file_key)
@@ -916,7 +937,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_payment_stream() {
-        let service = MockMspServiceBuilder::new().build();
+        let service = MockMspServiceBuilder::new().build().await;
         let ps = service
             .get_payment_stream("0x123")
             .await
@@ -934,7 +955,8 @@ mod tests {
                 serde_json::json!([]),
             )])
             .await
-            .build();
+            .build()
+            .await;
 
         // Provide at least one chunk id (upload_to_msp rejects empty sets)
         let mut chunk_ids = HashSet::new();

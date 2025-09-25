@@ -77,7 +77,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_health_route() {
-        let app = crate::api::mock_app();
+        let app = crate::api::mock_app().await;
         let server = TestServer::new(app).unwrap();
 
         let response = server.get("/health").await;
@@ -89,7 +89,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_download_by_key_streams_and_cleans_temp() {
-        let app = crate::api::mock_app();
+        let app = crate::api::mock_app().await;
         let server = TestServer::new(app).unwrap();
 
         let file_key = "0xde4a17999bc1482ba71737367e5d858a133ed1e13327a29c495ab976004a138f";

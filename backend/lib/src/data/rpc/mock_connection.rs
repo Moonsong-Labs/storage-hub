@@ -15,8 +15,10 @@ use tokio::{
     time::sleep,
 };
 
+use shc_rpc::RpcProviderId;
+
 use crate::{
-    constants::{mocks::DOWNLOAD_FILE_CONTENT, rpc::TIMEOUT_MULTIPLIER},
+    constants::{mocks::DOWNLOAD_FILE_CONTENT, rpc::DUMMY_MSP_ID, rpc::TIMEOUT_MULTIPLIER},
     data::rpc::{
         connection::error::{RpcConnectionError, RpcResult},
         RpcConnection,

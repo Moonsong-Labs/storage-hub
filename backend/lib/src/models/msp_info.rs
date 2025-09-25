@@ -46,7 +46,7 @@ pub struct Capacity {
 
 // TODO: We should update this to somehow use the types configured in the runtime.
 // For now, I hardcoded them to match
-#[derive(Debug, Serialize, Encode, Decode)]
+#[derive(Debug, Serialize, Encode, Decode, Default)]
 pub struct ValueProposition {
     #[serde(rename = "pricePerGbPerBlock")]
     pub price_per_giga_unit_of_data_per_block: u128,
@@ -58,10 +58,32 @@ pub struct ValueProposition {
     pub available: bool,
 }
 
-#[derive(Debug, Serialize, Encode, Decode)]
+#[derive(Debug, Serialize, Encode, Decode, Default)]
 pub struct ValuePropositionWithId {
     pub id: H256,
     pub value_prop: ValueProposition,
+}
+
+impl ValuePropositionWithId {
+    pub fn new(id: H256, value_prop: ValueProposition) -> Self {
+        Self { id, value_prop }
+    }
+}
+
+impl ValueProposition {
+    pub fn new(
+        price_per_giga_unit_of_data_per_block: u128,
+        commitment: BoundedVec<u8, ConstU32<1000>>,
+        bucket_data_limit: u64,
+        available: bool,
+    ) -> Self {
+        Self {
+            price_per_giga_unit_of_data_per_block,
+            commitment,
+            bucket_data_limit,
+            available,
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
