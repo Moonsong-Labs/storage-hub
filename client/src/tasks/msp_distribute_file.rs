@@ -55,7 +55,20 @@ where
 
 /// Handles the [`DistributeFileToBsp`] event.
 ///
-/// TODO: Document this
+/// This event is emitted when this node is an MSP and it was selected by the
+/// user to distribute the file from a storage request to the BSPs who volunteer.
+/// The MSP has to support this feature via configuration.
+///
+/// This handler will:
+/// 1. Register the BSP as "distributing" for the given `file_key` to prevent
+///    duplicate concurrent distributions.
+/// 2. Load the file metadata from the local file storage.
+/// 3. Query the BSP's multiaddresses from the runtime and resolve their peer IDs,
+///    registering them as known addresses in the File Transfer Service.
+/// 4. Upload the file chunks to the BSP using the shared chunk uploader.
+///
+/// If any step fails, the BSP is unregistered from the "distributing" set so
+/// the operation can be retried later.
 impl<NT, Runtime> EventHandler<DistributeFileToBsp<Runtime>> for MspDistributeFileTask<NT, Runtime>
 where
     NT: ShNodeType<Runtime> + 'static,
@@ -147,6 +160,10 @@ where
             .map_err(|e| anyhow::anyhow!("Failed to send chunks to provider: {:?}", e))?;
 
         info!(target: LOG_TARGET, "Successfully distributed file {:?} to BSP {:?}", file_key, bsp_id);
+
+        // BSP will be moved from the "distributing" set to the "confirmed" set
+        // when the BSP confirms to store the file. This is done by processing
+        // the `BspConfirmedStoring` event in `handler_msp.rs`.
         Ok(())
     }
 }

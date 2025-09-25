@@ -28,6 +28,23 @@ where
 {
     fn as_handler(&self) -> &StorageHubHandler<NT, Runtime>;
 
+    /// Attempts to upload `file_metadata` to the first peer in `peer_ids` that
+    /// successfully accepts its chunks.
+    ///
+    /// Behaviour:
+    /// - Computes the file key and total chunk count from `file_metadata`.
+    /// - Iterates peers in the provided order, delegating to [`send_chunks`].
+    /// - Returns `Ok(())` immediately on the first successful upload to a peer
+    ///   (including the case where the peer already has the full file),
+    ///   otherwise tries the next peer.
+    /// - If all peers fail, returns an error referencing the file fingerprint.
+    ///
+    /// Notes:
+    /// - Peer order matters; the first successful peer short‑circuits the loop.
+    /// - Transient errors are logged and the next peer is attempted.
+    ///
+    /// Returns a future that resolves when either an upload succeeds or all
+    /// peers have been attempted.
     fn upload_file_to_peer_ids<'a>(
         &'a self,
         peer_ids: Vec<PeerId>,
@@ -57,6 +74,26 @@ where
         }
     }
 
+    /// Sends the chunks of a single file to a specific `peer_id` in bounded
+    /// batches, generating Merkle proofs per batch and retrying on transient
+    /// failures.
+    ///
+    /// Behaviour:
+    /// - Reads chunks from local storage and accumulates them into batches not
+    ///   exceeding `BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE`.
+    /// - For each batch, generates a proof and calls the file‑transfer upload
+    ///   request. Parses the remote response to detect whether the peer already
+    ///   has the entire file (short‑circuit success).
+    /// - Implements limited retries:
+    ///   - `RequestFailure::Refused`: up to 3 retries with short sleep.
+    ///   - `RequestFailure::Network(_) | NotConnected`: up to 10 retries,
+    ///     waiting for several blocks between attempts.
+    /// - On the final batch, logs completion if the remote reports that the
+    ///   file is complete.
+    ///
+    /// Returns a future that resolves to `Ok(())` if the peer accepts all
+    /// batches (or already has the file), or an error if persistent failures
+    /// occur.
     fn send_chunks<'a>(
         &'a self,
         peer_id: PeerId,
