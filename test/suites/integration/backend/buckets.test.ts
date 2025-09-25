@@ -1,12 +1,10 @@
 import assert, { strictEqual } from "node:assert";
-import { type EnrichedBspApi, describeMspNet, shUser } from "../../../util";
+import { type EnrichedBspApi, describeMspNet } from "../../../util";
 import { fetchJwtToken } from "../../../util/backend/jwt";
-import { u8aToHex } from "@polkadot/util";
-import { decodeAddress } from "@polkadot/util-crypto";
 import type { Hash } from "@polkadot/types/interfaces";
 import type { Bucket, FileListResponse, FileInfo } from "./types";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
-import { ETH_SH_USER_PRIVATE_KEY } from "../../../util/evmNet/keyring";
+import { ETH_SH_USER_ADDRESS, ethShUser, ETH_SH_USER_PRIVATE_KEY } from "../../../util/evmNet/keyring";
 
 await describeMspNet(
   "Backend bucket endpoints",
@@ -84,7 +82,13 @@ await describeMspNet(
     it("Should create a bucket with a file", async () => {
       assert(userJWT, "User token is initialized");
 
-      const newBucketEvent = await userApi.createBucket(bucketName);
+      // Create a new bucket with the MSP
+      const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
+        userApi.shConsts.DUMMY_MSP_ID
+      );
+      const valuePropId = valueProps[0].id;
+
+      const newBucketEvent = await userApi.createBucket(bucketName, valuePropId);
       const newBucketEventDataBlob =
         userApi.events.fileSystem.NewBucket.is(newBucketEvent) && newBucketEvent.data;
 
@@ -96,17 +100,14 @@ await describeMspNet(
 
       const source = "res/whatsup.jpg";
 
-      const ownerHex = u8aToHex(decodeAddress(userApi.accounts.shUser.address)).slice(2);
-
-      const result = await userApi.rpc.storagehubclient.loadFileInStorage(
+      const userAddress = ETH_SH_USER_ADDRESS.slice(2);
+      const {file_key, file_metadata} = await userApi.rpc.storagehubclient.loadFileInStorage(
         source,
         fileLocation,
-        ownerHex,
+        userAddress,
         newBucketId
       );
-      fileKey = result.fileKey;
-
-      const file_metadata = result.file_metadata;
+      fileKey = file_key;
 
       // Issue the storage request
       await userApi.block.seal({
@@ -121,7 +122,7 @@ await describeMspNet(
             { Custom: 2 }
           )
         ],
-        signer: shUser
+        signer: ethShUser
       });
     });
 
@@ -157,7 +158,7 @@ await describeMspNet(
 
       const buckets = (await response.json()) as Bucket[];
 
-      assert(buckets.length > 0);
+      assert(buckets.length > 0, "should contain at least the bucket added during init");
 
       const sample_bucket = buckets.find((bucket) => bucket.bucketId === bucketId);
       assert(sample_bucket, "list should include bucket added in initialization");
