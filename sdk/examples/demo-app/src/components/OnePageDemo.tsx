@@ -502,9 +502,14 @@ export function OnePageDemo() {
                         if (mspClient && (mspClient as any).token) {
                           const token = (mspClient as any).token;
                           console.log('🔑 JWT TOKEN (for curl):', token);
-                          console.log('📋 Copy this curl command:');
+                          console.log('📋 Copy these curl commands:');
                           console.log(`curl -X GET "http://127.0.0.1:8080/buckets" -H "Authorization: Bearer ${token}" -H "Content-Type: application/json"`);
                           console.log(`curl -X GET "http://127.0.0.1:8080/value-props" -H "Content-Type: application/json"`);
+                          // Add file listing commands for each bucket
+                          const bucketIds = ['your-bucket-id-here']; // Replace with actual bucket IDs
+                          bucketIds.forEach(bucketId => {
+                            console.log(`curl -X GET "http://127.0.0.1:8080/buckets/${bucketId}/files" -H "Authorization: Bearer ${token}" -H "Content-Type: application/json"`);
+                          });
                         }
                       }}
                       className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"

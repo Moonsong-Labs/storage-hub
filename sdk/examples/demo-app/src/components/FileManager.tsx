@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Upload, Download, File, Folder, Hash, Info, X, CheckCircle, AlertCircle, Plus, Database } from 'lucide-react';
 import { type WalletClient, type PublicClient, formatEther } from 'viem';
 import { FileManager as StorageHubFileManager, initWasm, StorageHubClient, ReplicationLevel } from '@storagehub-sdk/core';
-import { MspClient, type UploadReceipt, type DownloadResult, type Bucket, type FileListResponse } from '@storagehub-sdk/msp-client';
+import { MspClient, type UploadReceipt, type DownloadResult, type Bucket, type FileListResponse, type FileEntry } from '@storagehub-sdk/msp-client';
 import { TypeRegistry } from '@polkadot/types';
 import type { AccountId20, H256 } from '@polkadot/types/interfaces';
 
@@ -35,6 +35,15 @@ interface BucketCreationState {
   createdBucketId: string | null;
 }
 
+interface FileBrowserState {
+  selectedBucketId: string | null;
+  currentPath: string;
+  files: FileEntry[];
+  isLoading: boolean;
+  error: string | null;
+  selectedFile: FileEntry | null;
+}
+
 export function FileManager({ walletClient, publicClient, walletAddress, mspClient, storageHubClient }: FileManagerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -61,6 +70,16 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
   const [selectedBucketId, setSelectedBucketId] = useState<string>('');
   const [walletBalance, setWalletBalance] = useState<string | null>(null);
   const [isLoadingBuckets, setIsLoadingBuckets] = useState<boolean>(false);
+
+  // File Browser State
+  const [fileBrowserState, setFileBrowserState] = useState<FileBrowserState>({
+    selectedBucketId: null,
+    currentPath: '',
+    files: [],
+    isLoading: false,
+    error: null,
+    selectedFile: null,
+  });
 
   // Get wallet balance
   useEffect(() => {
@@ -397,6 +416,247 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
 
   // Note: loadBuckets is only called manually via refresh button or after bucket creation
   // No automatic loading to avoid excessive API calls
+
+  // Load files from selected bucket
+  const loadFiles = async (bucketId: string, path: string = '') => {
+    if (!mspClient) {
+      console.warn('⚠️ MSP client not available, cannot load files');
+      return;
+    }
+
+    setFileBrowserState(prev => ({ ...prev, isLoading: true, error: null }));
+
+    try {
+      console.log('🔄 Loading files from bucket:', bucketId, 'path:', path);
+      console.log('🔍 DEBUG: getFiles call parameters:', { bucketId, options: path ? { path } : undefined });
+      
+      // COMPARISON TEST: Call both SDK and direct API to compare
+      const token = (mspClient as any).token;
+      console.log('🔍 COMPARISON: JWT token exists:', !!token);
+      console.log('🔍 COMPARISON: JWT token preview:', token ? token.substring(0, 50) + '...' : 'NO TOKEN');
+      
+      // Check SDK internal state
+      console.log('🔍 SDK DEBUG: MspClient internal state:');
+      console.log('- baseUrl:', (mspClient as any).config?.baseUrl || (mspClient as any).http?.baseUrl);
+      console.log('- http client exists:', !!(mspClient as any).http);
+      console.log('- token set:', !!(mspClient as any).token);
+      
+      // Test the withAuth method directly
+      const authHeaders = (mspClient as any).withAuth();
+      console.log('🔍 SDK DEBUG: withAuth() returns:', authHeaders);
+      console.log('🔍 SDK DEBUG: Authorization header from withAuth:', authHeaders?.Authorization?.substring(0, 30) + '...');
+      
+      // First, make the SDK call
+      console.log('🔍 COMPARISON: Making SDK call...');
+      console.log('🔍 SDK CALL: URL will be:', `/buckets/${encodeURIComponent(bucketId)}/files`);
+      console.log('🔍 SDK CALL: Options:', path ? { path } : undefined);
+      
+      let fileListResponse;
+      try {
+        fileListResponse = await mspClient.getFiles(bucketId, path ? { path } : undefined);
+        console.log('✅ SDK call succeeded');
+      } catch (sdkError) {
+        console.error('❌ SDK call failed:', sdkError);
+        throw sdkError; // Re-throw to see the full error
+      }
+      console.log('✅ SDK Files loaded - Full response:', fileListResponse);
+      console.log('🔍 SDK DEBUG: Response type:', typeof fileListResponse);
+      console.log('🔍 SDK DEBUG: Response keys:', Object.keys(fileListResponse || {}));
+      console.log('🔍 SDK DEBUG: Files array:', fileListResponse?.files);
+      console.log('🔍 SDK DEBUG: Files array type:', typeof fileListResponse?.files);
+      console.log('🔍 SDK DEBUG: Files array length:', fileListResponse?.files?.length);
+      console.log('🔍 SDK DEBUG: Raw JSON:', JSON.stringify(fileListResponse, null, 2));
+      
+      // Now make the direct API call for comparison
+      console.log('🔍 COMPARISON: Making direct API call...');
+      console.log('🔍 DIRECT CALL: URL:', `http://127.0.0.1:8080/buckets/${bucketId}/files`);
+      console.log('🔍 DIRECT CALL: Headers:', {
+        'Authorization': `Bearer ${token ? token.substring(0, 20) + '...' : 'NO TOKEN'}`,
+        'Content-Type': 'application/json'
+      });
+      
+      let directApiResponse = null;
+      try {
+        const directResponse = await fetch(`http://127.0.0.1:8080/buckets/${bucketId}/files`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (directResponse.ok) {
+          directApiResponse = await directResponse.json();
+          console.log('✅ DIRECT API Response:', directApiResponse);
+          console.log('🔍 DIRECT API Raw JSON:', JSON.stringify(directApiResponse, null, 2));
+        } else {
+          console.error('❌ DIRECT API Error:', directResponse.status, await directResponse.text());
+        }
+      } catch (directError) {
+        console.error('❌ DIRECT API Failed:', directError);
+      }
+      
+      // Compare the two responses
+      console.log('🔍 COMPARISON RESULTS:');
+      console.log('- SDK Response:', fileListResponse);
+      console.log('- Direct API Response:', directApiResponse);
+      console.log('- SDK files count:', fileListResponse?.files?.length || 0);
+      console.log('- Direct API files count:', directApiResponse?.files?.length || 0);
+      console.log('- Responses match:', JSON.stringify(fileListResponse) === JSON.stringify(directApiResponse));
+
+      // Extract files from the hierarchical tree structure
+      let extractedFiles: FileEntry[] = [];
+      
+      if (fileListResponse?.files && fileListResponse.files.length > 0) {
+        const rootTree = fileListResponse.files[0]; // First element is the root folder
+        console.log('🔍 SDK DEBUG: Root tree:', rootTree);
+        console.log('🔍 SDK DEBUG: Root tree type:', typeof rootTree);
+        console.log('🔍 SDK DEBUG: Root tree keys:', Object.keys(rootTree || {}));
+        console.log('🔍 SDK DEBUG: Has entry property:', 'entry' in (rootTree || {}));
+        
+        if (rootTree && typeof rootTree === 'object') {
+          // Check if it's the new format (direct children) or old format (nested entry)
+          const hasDirectChildren = 'children' in rootTree && rootTree.type === 'folder';
+          const hasNestedEntry = 'entry' in rootTree;
+          
+          console.log('🔍 SDK DEBUG: hasDirectChildren:', hasDirectChildren);
+          console.log('🔍 SDK DEBUG: hasNestedEntry:', hasNestedEntry);
+          
+          let children = null;
+          
+          if (hasDirectChildren) {
+            // NEW FORMAT: Direct children in the root object
+            console.log('🔍 SDK DEBUG: Using new format - direct children');
+            children = (rootTree as any).children;
+          } else if (hasNestedEntry) {
+            // OLD FORMAT: Children nested in entry object
+            console.log('🔍 SDK DEBUG: Using old format - nested entry');
+            const entry = (rootTree as any).entry;
+            children = entry?.children;
+          }
+          
+          console.log('🔍 SDK DEBUG: Found children:', children);
+          console.log('🔍 SDK DEBUG: Children length:', children?.length);
+          
+          if (children && Array.isArray(children)) {
+            console.log('🔍 SDK DEBUG: Processing children array:', children);
+            
+            // CRITICAL FIX: Filter out the root folder itself, only process its children
+            const childrenToProcess = children.filter((child: any) => child.name !== '/');
+            console.log('🔍 SDK DEBUG: Children after filtering root:', childrenToProcess);
+            
+            extractedFiles = childrenToProcess.map((child: any, index: number) => {
+              console.log(`🔍 SDK DEBUG: Processing child ${index}:`, child);
+              console.log(`🔍 SDK DEBUG: Child keys:`, Object.keys(child || {}));
+              console.log(`🔍 SDK DEBUG: Child.entry:`, child?.entry);
+              
+              // Handle both new format (direct properties) and old format (nested entry)
+              const isDirectFormat = child.type && !child.entry;
+              const isNestedFormat = child.entry;
+              
+              console.log(`🔍 SDK DEBUG: Child ${index} - isDirectFormat:`, isDirectFormat, 'isNestedFormat:', isNestedFormat);
+              
+              if (isDirectFormat && child.type === 'file') {
+                // NEW FORMAT: Direct file properties
+                const fileEntry = {
+                  name: child.name,
+                  type: 'file' as const,
+                  sizeBytes: child.sizeBytes,
+                  fileKey: child.fileKey
+                };
+                console.log(`🔍 SDK DEBUG: Created file entry (direct):`, fileEntry);
+                return fileEntry;
+              } else if (isDirectFormat && child.type === 'folder') {
+                // NEW FORMAT: Direct folder properties
+                const folderEntry = {
+                  name: child.name,
+                  type: 'folder' as const
+                };
+                console.log(`🔍 SDK DEBUG: Created folder entry (direct):`, folderEntry);
+                return folderEntry;
+              } else if (isNestedFormat && child.entry.type === 'file') {
+                // OLD FORMAT: Nested file properties
+                const fileEntry = {
+                  name: child.name,
+                  type: 'file' as const,
+                  sizeBytes: child.entry.sizeBytes,
+                  fileKey: child.entry.fileKey
+                };
+                console.log(`🔍 SDK DEBUG: Created file entry (nested):`, fileEntry);
+                return fileEntry;
+              } else if (isNestedFormat && child.entry.type === 'folder') {
+                // OLD FORMAT: Nested folder properties
+                const folderEntry = {
+                  name: child.name,
+                  type: 'folder' as const
+                };
+                console.log(`🔍 SDK DEBUG: Created folder entry (nested):`, folderEntry);
+                return folderEntry;
+              } else {
+                // Fallback for unexpected structure
+                const fallbackEntry = {
+                  name: child.name || 'Unknown',
+                  type: (child.type || 'file') as const,
+                  sizeBytes: child.sizeBytes,
+                  fileKey: child.fileKey
+                };
+                console.log(`🔍 SDK DEBUG: Created fallback entry:`, fallbackEntry);
+                return fallbackEntry;
+              }
+            });
+          } else {
+            console.log('🔍 SDK DEBUG: No valid children found');
+            console.log('🔍 SDK DEBUG: children type:', typeof children);
+            console.log('🔍 SDK DEBUG: children isArray:', Array.isArray(children));
+          }
+        } else {
+          // Fallback: treat as flat FileEntry array (in case backend changes)
+          console.log('🔍 SDK DEBUG: Treating as flat FileEntry array');
+          console.log('🔍 SDK DEBUG: fileListResponse.files:', fileListResponse.files);
+          extractedFiles = fileListResponse.files as FileEntry[];
+        }
+      } else {
+        console.log('🔍 SDK DEBUG: No files in response or empty files array');
+        console.log('🔍 SDK DEBUG: fileListResponse?.files exists:', !!fileListResponse?.files);
+        console.log('🔍 SDK DEBUG: files length:', fileListResponse?.files?.length);
+      }
+
+      console.log('🔍 DEBUG: Extracted files:', extractedFiles);
+      extractedFiles.forEach((file, index) => {
+        console.log(`🔍 DEBUG: Extracted file ${index}:`, file);
+        console.log(`  - Name: ${file.name}`);
+        console.log(`  - Type: ${file.type}`);
+        console.log(`  - Size: ${file.sizeBytes}`);
+        console.log(`  - FileKey: ${file.fileKey}`);
+      });
+
+      setFileBrowserState(prev => ({
+        ...prev,
+        selectedBucketId: bucketId,
+        currentPath: path,
+        files: extractedFiles,
+        isLoading: false,
+        error: null,
+      }));
+
+      console.log(`📁 Loaded ${fileListResponse?.files?.length || 0} raw files from backend`);
+      console.log(`📁 Extracted ${extractedFiles.length} files for UI`);
+      console.log(`📁 Final extracted files:`, extractedFiles);
+      
+      // CRITICAL DEBUG: Log what will be set in state
+      console.log('🔍 FINAL STATE DEBUG: Setting fileBrowserState.files to:', extractedFiles);
+      console.log('🔍 FINAL STATE DEBUG: extractedFiles.length:', extractedFiles.length);
+      console.log('🔍 FINAL STATE DEBUG: extractedFiles[0]:', extractedFiles[0]);
+      
+    } catch (error: any) {
+      console.error('❌ Failed to load files:', error);
+      setFileBrowserState(prev => ({
+        ...prev,
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to load files',
+      }));
+    }
+  };
 
   // File upload function
   const uploadFile = async () => {
@@ -840,6 +1100,206 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
             <div className="flex items-center gap-2 rounded-md bg-green-900/20 border border-green-900/50 p-3 text-green-400">
               <CheckCircle className="h-4 w-4" />
               <span className="text-sm">File uploaded successfully!</span>
+            </div>
+          )}
+        </div>
+
+        {/* File Browser Section */}
+        <div className="mt-8 space-y-4">
+          <div className="flex items-center gap-2">
+            <Folder className="h-5 w-5 text-blue-400" />
+            <h3 className="text-lg font-medium">Browse Files</h3>
+          </div>
+
+          {/* Browser Controls */}
+              <div className="flex gap-4 items-center">
+                <select
+                  value={fileBrowserState.selectedBucketId || ''}
+                  onChange={(e) => {
+                    const bucketId = e.target.value;
+                    if (bucketId) {
+                      loadFiles(bucketId);
+                    }
+                  }}
+                  className="flex-1 rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="">Select bucket to browse...</option>
+                  {buckets.map((bucket) => (
+                    <option key={bucket.bucketId} value={bucket.bucketId}>
+                      {bucket.name} ({bucket.fileCount} files)
+                    </option>
+                  ))}
+                </select>
+                
+                {fileBrowserState.selectedBucketId && (
+                  <>
+                    <button
+                      onClick={() => loadFiles(fileBrowserState.selectedBucketId!, fileBrowserState.currentPath)}
+                      disabled={fileBrowserState.isLoading}
+                      className="px-4 py-2 text-sm bg-gray-700 text-gray-300 rounded-md hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {fileBrowserState.isLoading ? 'Loading...' : 'Refresh'}
+                    </button>
+                    
+                    {/* Debug button to test API directly */}
+                    <button
+                      onClick={async () => {
+                        if (!mspClient) return;
+                        const token = (mspClient as any).token;
+                        if (!token) return;
+                        
+                        console.log('🧪 Testing API directly with curl-like fetch...');
+                        try {
+                          const response = await fetch(`http://127.0.0.1:8080/buckets/${fileBrowserState.selectedBucketId}/files`, {
+                            method: 'GET',
+                            headers: {
+                              'Authorization': `Bearer ${token}`,
+                              'Content-Type': 'application/json'
+                            }
+                          });
+                          
+                          if (response.ok) {
+                            const data = await response.json();
+                            console.log('🧪 Direct API Response:', data);
+                            console.log('🧪 Response Structure:', JSON.stringify(data, null, 2));
+                          } else {
+                            console.error('🧪 Direct API Error:', response.status, await response.text());
+                          }
+                        } catch (error) {
+                          console.error('🧪 Direct API Failed:', error);
+                        }
+                      }}
+                      className="px-3 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
+                    >
+                      🧪 Test API
+                    </button>
+                  </>
+                )}
+              </div>
+
+          {/* Path Breadcrumb */}
+          {fileBrowserState.selectedBucketId && (
+            <div className="flex items-center gap-2 text-sm text-gray-400">
+              <Folder className="h-4 w-4" />
+              <span>
+                {buckets.find(b => b.bucketId === fileBrowserState.selectedBucketId)?.name || 'Unknown Bucket'}
+              </span>
+              {fileBrowserState.currentPath && (
+                <>
+                  <span>/</span>
+                  <span>{fileBrowserState.currentPath}</span>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* File List */}
+          {fileBrowserState.selectedBucketId && (
+            <div className="border border-gray-700 rounded-lg overflow-hidden">
+              {fileBrowserState.isLoading ? (
+                <div className="p-8 text-center text-gray-500">
+                  <div className="animate-spin h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2"></div>
+                  Loading files...
+                </div>
+              ) : fileBrowserState.error ? (
+                <div className="p-4 bg-red-900/20 border-red-900/50 text-red-400 text-sm">
+                  <AlertCircle className="h-4 w-4 inline mr-2" />
+                  {fileBrowserState.error}
+                </div>
+              ) : fileBrowserState.files.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">
+                  <Folder className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No files found in this bucket</p>
+                  <p className="text-sm mt-1">Upload some files to see them here</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-700">
+                  {fileBrowserState.files.map((file, index) => (
+                    <div
+                      key={`${file.name}-${index}`}
+                      className={`p-4 hover:bg-gray-800 cursor-pointer transition-colors ${
+                        fileBrowserState.selectedFile === file ? 'bg-blue-900/20 border-l-4 border-blue-500' : ''
+                      }`}
+                      onClick={() => setFileBrowserState(prev => ({ 
+                        ...prev, 
+                        selectedFile: prev.selectedFile === file ? null : file 
+                      }))}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          {file.type === 'folder' ? (
+                            <Folder className="h-5 w-5 text-blue-400" />
+                          ) : (
+                            <File className="h-5 w-5 text-gray-400" />
+                          )}
+                          <div>
+                            <div className="text-sm font-medium text-gray-200">{file.name}</div>
+                            <div className="text-xs text-gray-500">
+                              {file.type === 'file' ? (
+                                <>
+                                  {file.sizeBytes ? `${(file.sizeBytes / 1024).toFixed(1)} KB` : 'Unknown size'}
+                                  {file.fileKey && (
+                                    <span className="ml-2">• Key: {file.fileKey.slice(0, 8)}...</span>
+                                  )}
+                                </>
+                              ) : (
+                                'Folder'
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                          {file.type === 'file' && file.fileKey && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // TODO: Implement download
+                                console.log('Download file:', file);
+                              }}
+                              className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                            >
+                              <Download className="h-3 w-3 inline mr-1" />
+                              Download
+                            </button>
+                          )}
+                          {file.type === 'folder' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const newPath = fileBrowserState.currentPath 
+                                  ? `${fileBrowserState.currentPath}/${file.name}`
+                                  : file.name;
+                                loadFiles(fileBrowserState.selectedBucketId!, newPath);
+                              }}
+                              className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                            >
+                              Open
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Selected File Info */}
+          {fileBrowserState.selectedFile && (
+            <div className="p-4 bg-gray-800 rounded-lg border border-gray-700">
+              <h4 className="text-sm font-medium text-gray-200 mb-2">File Information</h4>
+              <div className="space-y-1 text-xs text-gray-400">
+                <div><strong>Name:</strong> {fileBrowserState.selectedFile.name}</div>
+                <div><strong>Type:</strong> {fileBrowserState.selectedFile.type}</div>
+                {fileBrowserState.selectedFile.sizeBytes && (
+                  <div><strong>Size:</strong> {(fileBrowserState.selectedFile.sizeBytes / 1024).toFixed(2)} KB</div>
+                )}
+                {fileBrowserState.selectedFile.fileKey && (
+                  <div><strong>File Key:</strong> {fileBrowserState.selectedFile.fileKey}</div>
+                )}
+              </div>
             </div>
           )}
         </div>
