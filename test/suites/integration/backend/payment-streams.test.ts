@@ -54,7 +54,7 @@ await describeMspNet(
       const current_price_rpc =
         await msp1Api.rpc.storagehubclient.getCurrentPricePerGigaUnitPerTick();
 
-      assert(current_price === current_price_rpc);
+      strictEqual(current_price.toString(), current_price_rpc.toString(), "Runtime API and RPC should have the same value");
     });
 
     it("Should return payment stream information user", async () => {
@@ -73,8 +73,8 @@ await describeMspNet(
       assert(data.streams.length === 2, "Should have exactly 2 payment streams");
 
       // Find the MSP and BSP streams
-      const mspStream = data.streams.find((s) => s.provider_type === "msp");
-      const bspStream = data.streams.find((s) => s.provider_type === "bsp");
+      const mspStream = data.streams.find((s) => s.providerType === "msp");
+      const bspStream = data.streams.find((s) => s.providerType === "bsp");
 
       // Verify both stream types exist
       assert(mspStream, "Should have an MSP stream");
