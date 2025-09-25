@@ -158,9 +158,8 @@ impl AuthService {
             Error::Unauthorized("Failed to recover public key from signature".to_string())
         })?;
 
-        let recovered_address = public_key_to_address(&recovered_pubkey)
-            .to_string()
-            .to_lowercase();
+        // NOTE: we avoid lowercasing the address and instead use the canonical encoding
+        let recovered_address = public_key_to_address(&recovered_pubkey).to_string();
 
         Ok(recovered_address)
     }
@@ -178,8 +177,7 @@ impl AuthService {
             .get_nonce(message)
             .await
             .map_err(|_| Error::Internal)?
-            .ok_or_else(|| Error::Unauthorized("Invalid or expired nonce".to_string()))?
-            .to_lowercase();
+            .ok_or_else(|| Error::Unauthorized("Invalid or expired nonce".to_string()))?;
 
         if self.validate_signature {
             let recovered_address = Self::verify_eth_signature(message, signature)?;
@@ -417,7 +415,7 @@ mod tests {
 
         // Test with correct signature
         let recovered = AuthService::verify_eth_signature(message, &sig_str).unwrap();
-        assert_eq!(recovered, address.to_string().to_lowercase());
+        assert_eq!(recovered, address.to_string());
     }
 
     #[test]
@@ -439,7 +437,7 @@ mod tests {
         );
         assert_ne!(
             result.unwrap(),
-            address.to_string().to_lowercase(),
+            address.to_string(),
             "Recovered address should not match"
         );
     }

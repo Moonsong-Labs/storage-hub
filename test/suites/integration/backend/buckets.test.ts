@@ -144,7 +144,7 @@ await describeMspNet(
       strictEqual(bucket.name, bucketName, "Should have same name as creation");
     });
 
-    it("Should succesfully list buckets", async () => {
+    it("Should succesfully list user buckets", async () => {
       assert(userJWT, "User token is initialized");
       assert(bucketId, "Bucket should have been created");
 

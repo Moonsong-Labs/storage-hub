@@ -105,7 +105,7 @@ mod tests {
 
         assert_eq!(response.status_code(), StatusCode::OK);
         let verify_response: VerifyResponse = response.json();
-        assert_eq!(verify_response.user.address, address.to_lowercase());
+        assert_eq!(verify_response.user.address, address);
         assert!(!verify_response.token.is_empty());
 
         // Decode and verify the JWT
@@ -114,7 +114,7 @@ mod tests {
 
         let decoded = decode::<JwtClaims>(&verify_response.token, jwt_key, jwt_validation)
             .expect("Failed to decode JWT");
-        assert_eq!(decoded.claims.address, address.to_lowercase());
+        assert_eq!(decoded.claims.address, address);
 
         // inject delay to receive different timestamp
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
@@ -134,7 +134,7 @@ mod tests {
 
         let decoded_new = decode::<JwtClaims>(&token_response.token, jwt_key, jwt_validation)
             .expect("Failed to decode JWT");
-        assert_eq!(decoded_new.claims.address, address.to_lowercase());
+        assert_eq!(decoded_new.claims.address, address);
         assert!(decoded_new.claims.iat >= decoded.claims.iat);
 
         // Step 4: Get profile with JWT
@@ -145,7 +145,7 @@ mod tests {
 
         assert_eq!(response.status_code(), StatusCode::OK);
         let user: User = response.json();
-        assert_eq!(user.address, address.to_lowercase());
+        assert_eq!(user.address, address);
         assert_eq!(user.ens, MOCK_ENS);
     }
 
@@ -389,7 +389,7 @@ mod tests {
             .await;
 
         let user1: User = response.json();
-        assert_eq!(user1.address, address1.to_lowercase());
+        assert_eq!(user1.address, address1);
 
         let response = server
             .get("/auth/profile")
@@ -400,6 +400,6 @@ mod tests {
             .await;
 
         let user2: User = response.json();
-        assert_eq!(user2.address, address2.to_lowercase());
+        assert_eq!(user2.address, address2);
     }
 }
