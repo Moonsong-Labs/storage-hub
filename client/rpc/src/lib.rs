@@ -14,15 +14,17 @@ use tokio::{fs, io::AsyncReadExt, sync::RwLock};
 
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
+use pallet_storage_providers_runtime_api::StorageProvidersApi as StorageProvidersRuntimeApi;
 use sc_rpc_api::check_if_safe;
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::{
+    blockchain_utils::get_provider_id_from_keystore,
     consts::CURRENT_FOREST_KEY,
     traits::StorageEnableRuntime,
     types::{
         BlockHash, ChunkId, FileKey, FileKeyProof, FileMetadata, HashT, KeyProof, KeyProofs,
         OpaqueBlock, ParachainClient, ProofsDealerProviderId, Proven, RandomnessOutput,
-        StorageProof, StorageProofsMerkleTrieLayout, BCSV_KEY_TYPE,
+        StorageProof, StorageProofsMerkleTrieLayout, StorageProviderId, BCSV_KEY_TYPE,
     },
 };
 use shc_file_manager::traits::{ExcludeType, FileDataTrie, FileStorage, FileStorageError};
@@ -153,6 +155,23 @@ pub enum AddFilesToForestStorageResult {
 pub enum RemoveFilesFromForestStorageResult {
     ForestNotFound,
     Success,
+}
+
+/// Result of getting the provider ID of the node.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum RpcProviderId {
+    NotAProvider,
+    Bsp(shp_types::Hash),
+    Msp(shp_types::Hash),
+}
+
+/// Result of getting the value propositions of the node.
+/// It returns a vector of the SCALE-encoded `ValuePropositionWithId`s.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum GetValuePropositionsResult {
+    Success(Vec<Vec<u8>>),
+    NotAnMsp,
+    ErrorRetrievingValuePropositions,
 }
 
 /// Provides an interface with the desired RPC method.
@@ -332,6 +351,14 @@ pub trait StorageHubClientApi {
         file_key: shp_types::Hash,
         file_key_proof: Vec<u8>,
     ) -> RpcResult<Vec<u8>>;
+
+    /// Get the provider ID of the current node, if any
+    #[method(name = "getProviderId", with_extensions)]
+    async fn get_provider_id(&self) -> RpcResult<RpcProviderId>;
+
+    /// Get the value propositions of the node if it's an MSP, or None if it's a BSP
+    #[method(name = "getValuePropositions", with_extensions)]
+    async fn get_value_propositions(&self) -> RpcResult<GetValuePropositionsResult>;
 }
 
 /// Stores the required objects to be used in our RPC method.
@@ -1142,6 +1169,58 @@ where
 
         // Return the raw response
         Ok(raw)
+    }
+
+    async fn get_provider_id(&self, ext: &Extensions) -> RpcResult<RpcProviderId> {
+        // Check if the execution is safe.
+        check_if_safe(ext)?;
+
+        // Derive the provider ID from the keystore.
+        let at_hash = self.client.info().best_hash;
+        let provider =
+            get_provider_id_from_keystore::<Runtime>(&self.client, &self.keystore, &at_hash)
+                .map_err(into_rpc_error)?;
+
+        // Convert the provider ID to the expected format.
+        let result = match provider {
+            None => RpcProviderId::NotAProvider,
+            Some(StorageProviderId::BackupStorageProvider(id)) => RpcProviderId::Bsp(id.into()),
+            Some(StorageProviderId::MainStorageProvider(id)) => RpcProviderId::Msp(id.into()),
+        };
+
+        Ok(result)
+    }
+
+    async fn get_value_propositions(
+        &self,
+        ext: &Extensions,
+    ) -> RpcResult<GetValuePropositionsResult> {
+        // Check if the execution is safe.
+        check_if_safe(ext)?;
+
+        // Get the node's provider ID.
+        let provider_id = self.get_provider_id(ext).await?;
+
+        // Check if the node is an MSP, and extract its provider ID.
+        if let RpcProviderId::Msp(msp_id) = provider_id {
+            // If the node is indeed an MSP, get its value propositions.
+
+            // First, get the runtime APIs.
+            let api = self.client.runtime_api();
+            let at_hash = self.client.info().best_hash;
+
+            // Then, get the value propositions for the MSP and encode them.
+            let value_propositions = api
+                .query_value_propositions_for_msp(at_hash, &msp_id)
+                .map_err(into_rpc_error)?
+                .into_iter()
+                .map(|vp| vp.encode())
+                .collect::<Vec<_>>();
+
+            Ok(GetValuePropositionsResult::Success(value_propositions))
+        } else {
+            Ok(GetValuePropositionsResult::NotAnMsp)
+        }
     }
 }
 

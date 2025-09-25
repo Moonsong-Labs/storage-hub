@@ -1,6 +1,6 @@
 {
   "name": "@storagehub/types-bundle",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Bundle definitions for Polkadot{.js} app & api",
   "private": false,
   "type": "module",
