@@ -42,10 +42,7 @@ use crate::{
     events::BlockchainServiceEventBusProvider,
     state::{BlockchainServiceStateStore, LastProcessedBlockNumberCf},
     transaction::SubmittedTransaction,
-    types::{
-        FileDistributionInfo, ManagedProvider, MinimalBlockInfo, NewBlockNotificationKind,
-        StopStoringForInsolventUserRequest,
-    },
+    types::{FileDistributionInfo, ManagedProvider, MinimalBlockInfo, NewBlockNotificationKind},
 };
 
 pub(crate) const LOG_TARGET: &str = "blockchain-service";
