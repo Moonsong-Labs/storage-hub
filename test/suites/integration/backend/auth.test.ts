@@ -105,16 +105,19 @@ await describeMspNet(
     it("Should be able to refresh a token", async () => {
       assert(token, "Should have token from previous test");
 
+      // sleep 2 seconds to ensure timestamp changes
+      await sleep(2000);
+
       const refreshResp = await fetch("http://localhost:8080/auth/refresh", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
-          "content-type": "application/json"
         }
       });
 
       assert(refreshResp.ok, `Refresh request failed: ${refreshResp.status}`);
       const refreshJson = (await refreshResp.json()) as { token: string };
+
       assert(refreshJson.token, "Should receive a new JWT token");
       assert(refreshJson.token !== token, "New token should be different");
     });
