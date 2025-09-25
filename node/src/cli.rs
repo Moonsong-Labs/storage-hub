@@ -175,7 +175,10 @@ pub struct ProviderConfigurations {
 
     /// Enable MSP file distribution to BSPs (disabled by default unless set via config/CLI).
     /// Only applicable when running as an MSP provider.
-    #[arg(long, value_name = "BOOLEAN")]
+    #[arg(long, value_name = "BOOLEAN", required_if_eq_all([
+        ("provider", "true"),
+        ("provider_type", "msp"),
+    ]))]
     pub msp_distribute_files: bool,
 
     // ============== Provider RPC options ==============
@@ -444,6 +447,7 @@ impl ProviderConfigurations {
         }
 
         let mut blockchain_service = None;
+
         // Accumulate blockchain service options so multiple flags combine instead of overwriting.
         let mut bs_options = BlockchainServiceOptions::default();
         let mut bs_changed = false;

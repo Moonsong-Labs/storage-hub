@@ -794,7 +794,6 @@ pub struct BlockchainServiceOptions {
     pub max_blocks_behind_to_catch_up_root_changes: Option<u32>,
     /// The peer ID of this node.
     pub peer_id: Option<Vec<u8>>,
-
     /// Whether MSP nodes should distribute files to BSPs.
     #[serde(default)]
     pub enable_msp_distribute_files: Option<bool>,

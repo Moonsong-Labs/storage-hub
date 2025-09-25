@@ -189,7 +189,7 @@ where
                 if let Some(ManagedProvider::Msp(msp_handler)) = &mut self.maybe_managed_provider {
                     msp_handler.files_to_distribute.remove(&file_key.into());
 
-                    debug!(target: LOG_TARGET, "Storage request [{:?}] finished its lifecycle", file_key);
+                    debug!(target: LOG_TARGET, "Storage request [{:?}] finished its lifecycle, removing it from the list of files to distribute", file_key);
                 }
             }
             // Ignore all other events.
