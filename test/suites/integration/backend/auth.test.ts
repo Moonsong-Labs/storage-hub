@@ -111,7 +111,7 @@ await describeMspNet(
       const refreshResp = await fetch("http://localhost:8080/auth/refresh", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${token}`
         }
       });
 

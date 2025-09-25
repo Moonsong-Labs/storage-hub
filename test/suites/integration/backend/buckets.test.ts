@@ -4,7 +4,11 @@ import { fetchJwtToken } from "../../../util/backend/jwt";
 import type { Hash } from "@polkadot/types/interfaces";
 import type { Bucket, FileListResponse, FileInfo } from "./types";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
-import { ETH_SH_USER_ADDRESS, ethShUser, ETH_SH_USER_PRIVATE_KEY } from "../../../util/evmNet/keyring";
+import {
+  ETH_SH_USER_ADDRESS,
+  ethShUser,
+  ETH_SH_USER_PRIVATE_KEY
+} from "../../../util/evmNet/keyring";
 
 await describeMspNet(
   "Backend bucket endpoints",
@@ -101,7 +105,7 @@ await describeMspNet(
       const source = "res/whatsup.jpg";
 
       const userAddress = ETH_SH_USER_ADDRESS.slice(2);
-      const {file_key, file_metadata} = await userApi.rpc.storagehubclient.loadFileInStorage(
+      const { file_key, file_metadata } = await userApi.rpc.storagehubclient.loadFileInStorage(
         source,
         fileLocation,
         userAddress,
