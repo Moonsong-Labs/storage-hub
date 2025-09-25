@@ -54,7 +54,11 @@ await describeMspNet(
       const current_price_rpc =
         await msp1Api.rpc.storagehubclient.getCurrentPricePerGigaUnitPerTick();
 
-      strictEqual(current_price.toString(), current_price_rpc.toString(), "Runtime API and RPC should have the same value");
+      strictEqual(
+        current_price.toString(),
+        current_price_rpc.toString(),
+        "Runtime API and RPC should have the same value"
+      );
     });
 
     it("Should return payment stream information user", async () => {
