@@ -40,16 +40,9 @@ use crate::{
     capacity_manager::{CapacityRequest, CapacityRequestQueue},
     commands::BlockchainServiceCommand,
     events::BlockchainServiceEventBusProvider,
-    state::{
-        BlockchainServiceStateStore, LastProcessedBlockNumberCf,
-        OngoingProcessConfirmStoringRequestCf, OngoingProcessMspRespondStorageRequestCf,
-        OngoingProcessStopStoringForInsolventUserRequestCf,
-    },
+    state::{BlockchainServiceStateStore, LastProcessedBlockNumberCf},
     transaction::SubmittedTransaction,
-    types::{
-        FileDistributionInfo, ManagedProvider, MinimalBlockInfo, NewBlockNotificationKind,
-        StopStoringForInsolventUserRequest,
-    },
+    types::{FileDistributionInfo, ManagedProvider, MinimalBlockInfo, NewBlockNotificationKind},
 };
 
 pub(crate) const LOG_TARGET: &str = "blockchain-service";
@@ -1340,68 +1333,6 @@ where
 
         // If this is the first block import notification, we might need to catch up.
         info!(target: LOG_TARGET, "🥱 Handling coming out of sync mode (synced to #{}: {})", block_number, block_hash);
-
-        // Check if there was an ongoing process confirm storing task.
-        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-
-        // Check if there was an ongoing process confirm storing task.
-        // Note: This would only exist if the node was running as a BSP.
-        let maybe_ongoing_process_confirm_storing_request = state_store_context
-            .access_value(&OngoingProcessConfirmStoringRequestCf::<Runtime> {
-                phantom: Default::default(),
-            })
-            .read();
-
-        // If there was an ongoing process confirm storing task, we need to re-queue the requests.
-        if let Some(process_confirm_storing_request) = maybe_ongoing_process_confirm_storing_request
-        {
-            for request in process_confirm_storing_request.confirm_storing_requests {
-                state_store_context
-                    .pending_confirm_storing_request_deque::<Runtime>()
-                    .push_back(request);
-            }
-        }
-
-        // Check if there was an ongoing process msp respond storage request task.
-        // Note: This would only exist if the node was running as an MSP.
-        let maybe_ongoing_process_msp_respond_storage_request = state_store_context
-            .access_value(&OngoingProcessMspRespondStorageRequestCf::<Runtime> {
-                phantom: Default::default(),
-            })
-            .read();
-
-        // If there was an ongoing process msp respond storage request task, we need to re-queue the requests.
-        if let Some(process_msp_respond_storage_request) =
-            maybe_ongoing_process_msp_respond_storage_request
-        {
-            for request in process_msp_respond_storage_request.respond_storing_requests {
-                state_store_context
-                    .pending_msp_respond_storage_request_deque()
-                    .push_back(request);
-            }
-        }
-
-        // Check if there was an ongoing process stop storing task.
-        let maybe_ongoing_process_stop_storing_for_insolvent_user_request = state_store_context
-            .access_value(
-                &OngoingProcessStopStoringForInsolventUserRequestCf::<Runtime> {
-                    phantom: Default::default(),
-                },
-            )
-            .read();
-
-        // If there was an ongoing process stop storing task, we need to re-queue the requests.
-        if let Some(process_stop_storing_for_insolvent_user_request) =
-            maybe_ongoing_process_stop_storing_for_insolvent_user_request
-        {
-            state_store_context
-                .pending_stop_storing_for_insolvent_user_request_deque::<Runtime>()
-                .push_back(StopStoringForInsolventUserRequest::new(
-                    process_stop_storing_for_insolvent_user_request.who,
-                ));
-        }
-
-        state_store_context.commit();
 
         // Initialise the Provider.
         match &self.maybe_managed_provider {
