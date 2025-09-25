@@ -578,7 +578,6 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
       // Get file info from FileManager (like sdk-precompiles)
       const fingerprint = await fileManager.getFingerprint();
       const fileSizeNumber = fileManager.getFileSize();
-      console.log('🔍 File size from FileManager:', fileSizeNumber);
       
       if (fileSizeNumber === undefined || fileSizeNumber === null) {
         throw new Error(`FileManager.getFileSize() returned ${fileSizeNumber}`);
@@ -609,21 +608,7 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
       const bucketIdH256 = registry.createType("H256", bucketIdForH256) as H256;
       const fileKey = await fileManager.computeFileKey(owner, bucketIdH256, fileLocation);
 
-      console.log('📋 File metadata computed:', {
-        owner: walletAddress,
-        bucketId: selectedBucketId,
-        location: fileLocation,
-        fingerprint: fingerprint.toHex(),
-        fileKey: fileKey.toHex(),
-        fileSize: fileSize.toString()
-      });
 
-      // Additional debugging for MSP upload
-      console.log('🔍 Upload parameters for MSP:');
-      console.log('- selectedBucketId:', selectedBucketId);
-      console.log('- fileKey.toHex():', fileKey.toHex());
-      console.log('- walletAddress:', walletAddress);
-      console.log('- fileLocation:', fileLocation);
 
       setUploadState(prev => ({ ...prev, uploadProgress: 25 }));
 
@@ -631,50 +616,12 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
       const TEST_MSP_ID = '0x0000000000000000000000000000000000000000000000000000000000000300';
       const MSP_PEER_ID = '12D3KooWSUvz8QM5X4tfAaSLErAZjR2puojo16pULBHyqTMGKtNV'; // MSP1 peer ID from consts (hardcoded)
 
-      // EXTENSIVE DEBUGGING - Check every single parameter
-      console.log('🔍 DEBUGGING ALL PARAMETERS:');
-      console.log('selectedBucketId:', selectedBucketId, typeof selectedBucketId);
-      console.log('fileLocation:', fileLocation, typeof fileLocation);
-      console.log('fingerprint object:', fingerprint);
-      console.log('fingerprint.toHex():', fingerprint.toHex(), typeof fingerprint.toHex());
-      console.log('fileSize BigInt:', fileSize, typeof fileSize);
-      console.log('TEST_MSP_ID:', TEST_MSP_ID, typeof TEST_MSP_ID);
-      console.log('MSP_PEER_ID:', MSP_PEER_ID, typeof MSP_PEER_ID);
-      console.log('MSP_PEER_ID length:', MSP_PEER_ID.length);
-      console.log('MSP_PEER_ID starts with 12D3Koo:', MSP_PEER_ID.startsWith('12D3Koo'));
-      console.log('ReplicationLevel.Basic:', ReplicationLevel.Basic, typeof ReplicationLevel.Basic);
-      
-      // Check if any are undefined
-      const params: Array<{ name: string; value: any }> = [
-        { name: 'selectedBucketId', value: selectedBucketId },
-        { name: 'fileLocation', value: fileLocation },
-        { name: 'fingerprint.toHex()', value: fingerprint.toHex() },
-        { name: 'fileSize', value: fileSize },
-        { name: 'TEST_MSP_ID', value: TEST_MSP_ID },
-        { name: 'MSP_PEER_ID', value: MSP_PEER_ID },
-        { name: 'ReplicationLevel.Basic', value: ReplicationLevel.Basic }
-      ];
-      
-      params.forEach(param => {
-        if (param.value === undefined) {
-          console.error(`❌ FOUND UNDEFINED PARAMETER: ${param.name}`);
-        }
-      });
 
-      console.log('🔧 Letting StorageHub client estimate gas automatically (like sdk-precompiles)');
-
+      // Ensure bucket ID has 0x prefix for storage request
+      const bucketIdForStorageRequest = selectedBucketId.startsWith('0x') ? selectedBucketId : `0x${selectedBucketId}`;
+      
       let storageRequestTxHash;
       try {
-        console.log('🚀 STEP 1: Issuing storage request...');
-        
-        // DEBUGGING: Check bucket ID format for storage request
-        console.log('🔍 DEBUG: selectedBucketId for storage request:', selectedBucketId);
-        console.log('🔍 DEBUG: selectedBucketId length:', selectedBucketId.length);
-        
-        // Ensure bucket ID has 0x prefix for storage request
-        const bucketIdForStorageRequest = selectedBucketId.startsWith('0x') ? selectedBucketId : `0x${selectedBucketId}`;
-        console.log('🔍 DEBUG: bucketIdForStorageRequest:', bucketIdForStorageRequest);
-        console.log('🔍 DEBUG: bucketIdForStorageRequest length:', bucketIdForStorageRequest.length);
         
         storageRequestTxHash = await storageHubClient.issueStorageRequest(
           bucketIdForStorageRequest as `0x${string}`,
@@ -687,93 +634,49 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
           0 // replicas (used only when ReplicationLevel = Custom, like sdk-precompiles)
           // No gas options - let it estimate naturally like sdk-precompiles
         );
-        
-        console.log('✅ STEP 1 SUCCESS: Storage request submitted:', storageRequestTxHash);
       } catch (error: any) {
-        console.error('❌ STEP 1 FAILED: issueStorageRequest error:');
-        console.error('Error message:', error?.message);
-        console.error('Error stack:', error?.stack);
-        console.error('Full error object:', error);
-        throw error; // Re-throw to maintain the original behavior
+        console.error('❌ Storage request failed:', error?.message || error);
+        throw error;
       }
 
-      console.log('🔄 STEP 2: Waiting for transaction receipt...');
       const storageRequestReceipt = await publicClient!.waitForTransactionReceipt({ 
         hash: storageRequestTxHash 
       });
 
       if (storageRequestReceipt.status !== 'success') {
-        console.error('❌ STEP 2 FAILED: Storage request transaction failed');
         throw new Error('Storage request transaction failed');
       }
 
-      console.log('✅ STEP 2 SUCCESS: Storage request transaction confirmed');
       setUploadState(prev => ({ ...prev, uploadProgress: 30 }));
 
       // CRITICAL: Recompute file key AFTER storage request (like sdk-precompiles line 215)
-      console.log('🔄 STEP 3: Recomputing file key after storage request (sdk-precompiles pattern)...');
       const finalFileKey = await fileManager.computeFileKey(owner, bucketIdH256, fileLocation);
-      
-      console.log('🔍 STEP 3 DEBUG: File key comparison:');
-      console.log('- Original fileKey.toHex():', fileKey.toHex());
-      console.log('- Final fileKey.toHex():', finalFileKey.toHex());
-      console.log('- Keys match:', fileKey.toHex() === finalFileKey.toHex());
 
-      // STEP 3.5: Wait a moment for MSP to process the storage request (like sdk-precompiles)
-      console.log('⏳ STEP 3.5: Waiting for MSP to process storage request...');
+      // Wait a moment for MSP to process the storage request (like sdk-precompiles)
       await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
       setUploadState(prev => ({ ...prev, uploadProgress: 40 }));
 
       let uploadReceipt;
       try {
-        console.log('🚀 STEP 4: Starting MSP file upload...');
-        
         // Upload file to MSP (use exact same pattern as sdk-precompiles line 245-251)
         const fileBlob = await fileManager.getFileBlob(); // Get Blob like sdk-precompiles
-        console.log('📁 File blob size:', fileBlob.size);
-        
         const fileKeyHex = finalFileKey.toHex();
-        console.log('📤 About to call uploadFile with:');
-        console.log('- bucketId:', selectedBucketId);
-        console.log('- fileKey:', fileKeyHex);
-        console.log('- fileKey length:', fileKeyHex.length);
-        console.log('- fileKey starts with 0x:', fileKeyHex.startsWith('0x'));
-        console.log('- owner:', walletAddress);
-        console.log('- location:', fileLocation);
         
         await new Promise(resolve => setTimeout(resolve, 3000)); // Add a 3 second delay before uploading
-            // DEBUGGING: Check bucket ID format for MSP upload
-            console.log('🔍 DEBUG: selectedBucketId for MSP upload:', selectedBucketId);
-            console.log('🔍 DEBUG: selectedBucketId type:', typeof selectedBucketId);
-            console.log('🔍 DEBUG: selectedBucketId length:', selectedBucketId.length);
             
-            uploadReceipt = await mspClient.uploadFile(
-              selectedBucketId, // MSP expects bucket ID without 0x prefix
-              fileKeyHex, // Use the final computed file key
-              fileBlob, // Use Blob instead of File object
-              walletAddress, // owner parameter like sdk-precompiles
-              fileLocation // location parameter like sdk-precompiles
-            );
-        
-        console.log('✅ STEP 4 SUCCESS: MSP upload completed:', uploadReceipt);
+        uploadReceipt = await mspClient.uploadFile(
+          selectedBucketId, // MSP expects bucket ID without 0x prefix
+          fileKeyHex, // Use the final computed file key
+          fileBlob, // Use Blob instead of File object
+          walletAddress, // owner parameter like sdk-precompiles
+          fileLocation // location parameter like sdk-precompiles
+        );
         
       } catch (error: any) {
-        console.error('❌ STEP 4 FAILED: MSP upload error:');
-        console.error('Error message:', error?.message);
-        console.error('Error stack:', error?.stack);
-        console.error('Full error object:', error);
-        
-        // Additional debugging for HTTP errors
-        if (error?.response) {
-          console.error('HTTP Response Status:', error.response.status);
-          console.error('HTTP Response Headers:', error.response.headers);
-          console.error('HTTP Response Data:', error.response.data);
-        }
-        
-        throw error; // Re-throw to maintain the original behavior
+        console.error('❌ MSP upload failed:', error?.message || error);
+        throw error;
       }
 
-      console.log('🎉 UPLOAD COMPLETE: All steps successful!');
       setUploadState(prev => ({
         ...prev,
         isUploading: false,
