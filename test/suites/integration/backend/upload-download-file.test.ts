@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { u8aToHex } from "@polkadot/util";
 import * as $ from "scale-codec";
-import { describeMspNet, type EnrichedBspApi, waitFor } from "../../../util";
+import { bspKey, describeMspNet, type EnrichedBspApi, waitFor } from "../../../util";
 import { fetchJwtToken } from "../../../util/backend/jwt";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import {
@@ -144,7 +144,7 @@ await describeMspNet(
             fileMetadata.fingerprint,
             fileMetadata.file_size,
             userApi.shConsts.DUMMY_MSP_ID,
-            [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+            [userApi.shConsts.NODE_INFOS.msp1.expectedPeerId],
             { Custom: 2 }
           )
         ],
@@ -299,6 +299,14 @@ await describeMspNet(
         localBucketRoot.toString() !== freshBucketRoot.toString(),
         "Root of bucket should have changed"
       );
+    });
+
+    it("MSP should successfully distribute the file to BSPs who have volunteered to store it", async () => {
+      const bspAddress = userApi.createType("Address", bspKey.address);
+      await userApi.wait.bspStored({
+        expectedExts: 1,
+        bspAccount: bspAddress
+      });
     });
 
     it("Should successfully download a file via the backend API", async () => {
