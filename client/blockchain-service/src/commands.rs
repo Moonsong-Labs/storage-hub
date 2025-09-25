@@ -25,9 +25,9 @@ use pallet_storage_providers_runtime_api::{
 use shc_actors_derive::actor_command;
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::types::{
-    AccountId, Balance, BlockNumber, BucketId, ChunkId, CustomChallenge, ForestLeaf,
-    MainStorageProviderId, ProofsDealerProviderId, ProviderId, RandomnessOutput, StorageDataUnit,
-    StorageHubEventsVec, StorageProviderId, TickNumber,
+    AccountId, BackupStorageProviderId, Balance, BlockNumber, BucketId, ChunkId, CustomChallenge,
+    FileKey, ForestLeaf, MainStorageProviderId, ProofsDealerProviderId, ProviderId,
+    RandomnessOutput, StorageDataUnit, StorageHubEventsVec, StorageProviderId, TickNumber,
 };
 use shc_forest_manager::traits::ForestStorageHandler;
 
@@ -194,6 +194,16 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     QueryBucketsOfUserStoredByMsp {
         msp_id: ProviderId<Runtime>,
         user: AccountId<Runtime>,
+    },
+    #[command(success_type = ())]
+    RegisterBspDistributing {
+        file_key: FileKey,
+        bsp_id: BackupStorageProviderId<Runtime>,
+    },
+    #[command(success_type = ())]
+    UnregisterBspDistributing {
+        file_key: FileKey,
+        bsp_id: BackupStorageProviderId<Runtime>,
     },
 }
 
