@@ -438,82 +438,9 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
     setFileBrowserState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      console.log('🔄 Loading files from bucket:', bucketId, 'path:', path);
-      console.log('🔍 DEBUG: getFiles call parameters:', { bucketId, options: path ? { path } : undefined });
+      console.log('🔄 Loading files from bucket:', bucketId);
       
-      // COMPARISON TEST: Call both SDK and direct API to compare
-      const token = (mspClient as any).token;
-      console.log('🔍 COMPARISON: JWT token exists:', !!token);
-      console.log('🔍 COMPARISON: JWT token preview:', token ? token.substring(0, 50) + '...' : 'NO TOKEN');
-      
-      // Check SDK internal state
-      console.log('🔍 SDK DEBUG: MspClient internal state:');
-      console.log('- baseUrl:', (mspClient as any).config?.baseUrl || (mspClient as any).http?.baseUrl);
-      console.log('- http client exists:', !!(mspClient as any).http);
-      console.log('- token set:', !!(mspClient as any).token);
-      
-      // Test the withAuth method directly
-      const authHeaders = (mspClient as any).withAuth();
-      console.log('🔍 SDK DEBUG: withAuth() returns:', authHeaders);
-      console.log('🔍 SDK DEBUG: Authorization header from withAuth:', authHeaders?.Authorization?.substring(0, 30) + '...');
-      
-      // First, make the SDK call
-      console.log('🔍 COMPARISON: Making SDK call...');
-      console.log('🔍 SDK CALL: URL will be:', `/buckets/${encodeURIComponent(bucketId)}/files`);
-      console.log('🔍 SDK CALL: Options:', path ? { path } : undefined);
-      
-      let fileListResponse;
-      try {
-        fileListResponse = await mspClient.getFiles(bucketId, path ? { path } : undefined);
-        console.log('✅ SDK call succeeded');
-      } catch (sdkError) {
-        console.error('❌ SDK call failed:', sdkError);
-        throw sdkError; // Re-throw to see the full error
-      }
-      console.log('✅ SDK Files loaded - Full response:', fileListResponse);
-      console.log('🔍 SDK DEBUG: Response type:', typeof fileListResponse);
-      console.log('🔍 SDK DEBUG: Response keys:', Object.keys(fileListResponse || {}));
-      console.log('🔍 SDK DEBUG: Files array:', fileListResponse?.files);
-      console.log('🔍 SDK DEBUG: Files array type:', typeof fileListResponse?.files);
-      console.log('🔍 SDK DEBUG: Files array length:', fileListResponse?.files?.length);
-      console.log('🔍 SDK DEBUG: Raw JSON:', JSON.stringify(fileListResponse, null, 2));
-      
-      // Now make the direct API call for comparison
-      console.log('🔍 COMPARISON: Making direct API call...');
-      console.log('🔍 DIRECT CALL: URL:', `http://127.0.0.1:8080/buckets/${bucketId}/files`);
-      console.log('🔍 DIRECT CALL: Headers:', {
-        'Authorization': `Bearer ${token ? token.substring(0, 20) + '...' : 'NO TOKEN'}`,
-        'Content-Type': 'application/json'
-      });
-      
-      let directApiResponse = null;
-      try {
-        const directResponse = await fetch(`http://127.0.0.1:8080/buckets/${bucketId}/files`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        if (directResponse.ok) {
-          directApiResponse = await directResponse.json();
-          console.log('✅ DIRECT API Response:', directApiResponse);
-          console.log('🔍 DIRECT API Raw JSON:', JSON.stringify(directApiResponse, null, 2));
-        } else {
-          console.error('❌ DIRECT API Error:', directResponse.status, await directResponse.text());
-        }
-      } catch (directError) {
-        console.error('❌ DIRECT API Failed:', directError);
-      }
-      
-      // Compare the two responses
-      console.log('🔍 COMPARISON RESULTS:');
-      console.log('- SDK Response:', fileListResponse);
-      console.log('- Direct API Response:', directApiResponse);
-      console.log('- SDK files count:', fileListResponse?.files?.length || 0);
-      console.log('- Direct API files count:', directApiResponse?.files?.length || 0);
-      console.log('- Responses match:', JSON.stringify(fileListResponse) === JSON.stringify(directApiResponse));
+      const fileListResponse = await mspClient.getFiles(bucketId, path ? { path } : undefined);
 
       // Extract files from the hierarchical tree structure
       let extractedFiles: FileEntry[] = [];
@@ -1246,38 +1173,6 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
                       {fileBrowserState.isLoading ? 'Loading...' : 'Refresh'}
                     </button>
                     
-                    {/* Debug button to test API directly */}
-                    <button
-                      onClick={async () => {
-                        if (!mspClient) return;
-                        const token = (mspClient as any).token;
-                        if (!token) return;
-                        
-                        console.log('🧪 Testing API directly with curl-like fetch...');
-                        try {
-                          const response = await fetch(`http://127.0.0.1:8080/buckets/${fileBrowserState.selectedBucketId}/files`, {
-                            method: 'GET',
-                            headers: {
-                              'Authorization': `Bearer ${token}`,
-                              'Content-Type': 'application/json'
-                            }
-                          });
-                          
-                          if (response.ok) {
-                            const data = await response.json();
-                            console.log('🧪 Direct API Response:', data);
-                            console.log('🧪 Response Structure:', JSON.stringify(data, null, 2));
-                          } else {
-                            console.error('🧪 Direct API Error:', response.status, await response.text());
-                          }
-                        } catch (error) {
-                          console.error('🧪 Direct API Failed:', error);
-                        }
-                      }}
-                      className="px-3 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
-                    >
-                      🧪 Test API
-                    </button>
                   </>
                 )}
               </div>
