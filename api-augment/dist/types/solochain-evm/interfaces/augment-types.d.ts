@@ -1398,6 +1398,7 @@ import type {
   ProviderId,
   QueryAvailableStorageCapacityError,
   QueryBspConfirmChunksToProveForFileError,
+  QueryBspsVolunteeredForFileError,
   QueryBucketsForMspError,
   QueryBucketsOfUserStoredByMspError,
   QueryConfirmChunksToProveForFileError,
@@ -2318,6 +2319,7 @@ declare module "@polkadot/types/types/registry" {
     PvfPrepTimeoutKind: PvfPrepTimeoutKind;
     QueryAvailableStorageCapacityError: QueryAvailableStorageCapacityError;
     QueryBspConfirmChunksToProveForFileError: QueryBspConfirmChunksToProveForFileError;
+    QueryBspsVolunteeredForFileError: QueryBspsVolunteeredForFileError;
     QueryBucketsForMspError: QueryBucketsForMspError;
     QueryBucketsOfUserStoredByMspError: QueryBucketsOfUserStoredByMspError;
     QueryConfirmChunksToProveForFileError: QueryConfirmChunksToProveForFileError;
