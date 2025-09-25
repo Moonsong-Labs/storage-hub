@@ -120,22 +120,10 @@ impl MspService {
 
     /// Get MSP information
     pub async fn get_info(&self) -> Result<InfoResponse, Error> {
-        // Try to retrieve the provider ID from the client RPC
-        let provider_id_result: RpcProviderId = self
-            .rpc
-            .call("storagehubclient_getProviderId", jsonrpsee::rpc_params![])
-            .await
-            .map_err(|e| Error::BadRequest(e.to_string()))?;
-
-        let provider_id_hex = match provider_id_result {
-            RpcProviderId::NotAProvider => hex::encode(DUMMY_MSP_ID),
-            RpcProviderId::Bsp(id) | RpcProviderId::Msp(id) => hex::encode(id.as_ref()),
-        };
-
         Ok(InfoResponse {
             client: "storagehub-node v1.0.0".to_string(),
             version: "StorageHub MSP v0.1.0".to_string(),
-            msp_id: provider_id_hex,
+            msp_id: self.msp_id.to_string(),
             // TODO: Until we have actual MSP info, we should at least get the multiaddress from an RPC.
             // This way the backend can actually upload files to the MSP without having to change this code.
             multiaddresses: vec![
