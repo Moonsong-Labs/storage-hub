@@ -2,7 +2,7 @@
 //!
 //! TODO(MOCK): many of methods of the MspService returns mocked data
 
-use std::{collections::HashSet, sync::Arc, time::Duration};
+use std::{collections::HashSet, sync::Arc};
 
 use chrono::Utc;
 use codec::{Decode, Encode};
@@ -99,7 +99,8 @@ impl MspService {
                         "Connected node is not yet a registered MSP; retrying provider discovery... (attempt {})",
                         retry_attempts + 1
                     );
-                    tokio::time::sleep(Duration::from_secs(delay_between_retries_secs)).await;
+                    tokio::time::sleep(std::time::Duration::from_secs(delay_between_retries_secs))
+                        .await;
                     retry_attempts += 1;
                     continue;
                 }
