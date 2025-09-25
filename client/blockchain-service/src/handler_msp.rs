@@ -13,7 +13,7 @@ use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use shc_actors_framework::actor::Actor;
 use shc_common::{
     traits::StorageEnableRuntime,
-    typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
+    typed_store::CFDequeAPI,
     types::{
         BackupStorageProviderId, BlockHash, BlockNumber, Fingerprint, ProviderId,
         StorageEnableEvents, StorageRequestMetadata,
@@ -32,10 +32,6 @@ use crate::{
         ProcessStopStoringForInsolventUserRequestData, StartMovedBucketDownload,
     },
     handler::LOG_TARGET,
-    state::{
-        OngoingProcessFileDeletionRequestCf, OngoingProcessMspRespondStorageRequestCf,
-        OngoingProcessStopStoringForInsolventUserRequestCf,
-    },
     types::{FileDistributionInfo, ManagedProvider},
     BlockchainService,
 };
@@ -373,26 +369,6 @@ where
                         error!(target: LOG_TARGET, "Forest root write task channel closed unexpectedly. Lock is released anyway!");
                     }
                 }
-
-                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                state_store_context
-                    .access_value(&OngoingProcessFileDeletionRequestCf::<Runtime> {
-                        phantom: Default::default(),
-                    })
-                    .delete();
-                state_store_context
-                    .access_value(&OngoingProcessMspRespondStorageRequestCf::<Runtime> {
-                        phantom: Default::default(),
-                    })
-                    .delete();
-                state_store_context
-                    .access_value(
-                        &OngoingProcessStopStoringForInsolventUserRequestCf::<Runtime> {
-                            phantom: Default::default(),
-                        },
-                    )
-                    .delete();
-                state_store_context.commit();
             }
         }
 
@@ -605,53 +581,12 @@ where
         let (tx, rx) = tokio::sync::oneshot::channel();
         *forest_root_write_lock = Some(rx);
 
-        // If this is a respond storage request, stop storing for insolvent user request, or
-        // file deletion request, we need to store it in the state store.
-        let data = data.into();
-        match &data {
-            ForestWriteLockTaskData::MspRespondStorageRequest(data) => {
-                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                state_store_context
-                    .access_value(&OngoingProcessMspRespondStorageRequestCf::<Runtime> {
-                        phantom: Default::default(),
-                    })
-                    .write(data);
-                state_store_context.commit();
-            }
-            ForestWriteLockTaskData::FileDeletionRequest(data) => {
-                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                state_store_context
-                    .access_value(&OngoingProcessFileDeletionRequestCf::<Runtime> {
-                        phantom: Default::default(),
-                    })
-                    .write(data);
-                state_store_context.commit();
-            }
-            ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
-                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                state_store_context
-                    .access_value(
-                        &OngoingProcessStopStoringForInsolventUserRequestCf::<Runtime> {
-                            phantom: Default::default(),
-                        },
-                    )
-                    .write(data);
-                state_store_context.commit();
-            }
-            ForestWriteLockTaskData::ConfirmStoringRequest(_) => {
-                unreachable!("MSPs do not confirm storing requests the way BSPs do.")
-            }
-            ForestWriteLockTaskData::SubmitProofRequest(_) => {
-                unreachable!("MSPs do not submit proofs.")
-            }
-        }
-
         // This is an [`Arc<Mutex<Option<T>>>`] (in this case [`oneshot::Sender<()>`]) instead of just
         // T so that we can keep using the current actors event bus (emit) which requires Clone on the
         // event. Clone is required because there is no constraint on the number of listeners that can
         // subscribe to the event (and each is guaranteed to receive all emitted events).
         let forest_root_write_tx = Arc::new(Mutex::new(Some(tx)));
-        match data {
+        match data.into() {
             ForestWriteLockTaskData::MspRespondStorageRequest(data) => {
                 self.emit(ProcessMspRespondStoringRequest {
                     data,
