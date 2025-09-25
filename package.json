@@ -6,7 +6,8 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "test"
+    "test",
+    "sdk/examples/demo-app"
   ],
   "scripts": {
     "lint": "pnpm -r lint",
