@@ -60,6 +60,7 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
   const [buckets, setBuckets] = useState<Bucket[]>([]);
   const [selectedBucketId, setSelectedBucketId] = useState<string>('');
   const [walletBalance, setWalletBalance] = useState<string | null>(null);
+  const [isLoadingBuckets, setIsLoadingBuckets] = useState<boolean>(false);
 
   // Get wallet balance
   useEffect(() => {
@@ -147,24 +148,24 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
         balance: walletBalance
       });
 
-      const bucketId = await storageHubClient.deriveBucketId(walletAddress, bucketState.bucketName);
+      const bucketId = await storageHubClient.deriveBucketId(walletAddress as `0x${string}`, bucketState.bucketName);
       console.log('Derived bucket ID:', bucketId);
 
-      const txHash = await storageHubClient.createBucket(
-        TEST_MSP_ID,
-        bucketState.bucketName,
-        false, // isPrivate
-        TEST_VALUE_PROP_ID,
-        {
-          // Explicit gas settings to avoid estimation issues
-          gas: 500_000n, // Explicit gas limit
-          gasPrice: BigInt('1000000000') // 1 gwei
-        }
-      );
+          const txHash = await storageHubClient.createBucket(
+            TEST_MSP_ID,
+            bucketState.bucketName,
+            false, // isPrivate
+            TEST_VALUE_PROP_ID,
+            {
+              // Explicit gas settings to avoid estimation issues
+              gas: BigInt(500000), // Explicit gas limit
+              gasPrice: BigInt('1000000000') // 1 gwei
+            }
+          );
 
       console.log('Bucket creation transaction submitted:', txHash);
 
-      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+      const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
 
       if (receipt.status === 'success') {
         setBucketState(prev => ({
@@ -175,69 +176,227 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
           error: null
         }));
 
-        // Add the created bucket to local state immediately
-        const newBucket: Bucket = {
-          bucketId: bucketId as string,
-          name: bucketState.bucketName,
-          root: '/',
-          isPublic: true, // We created it as public (isPrivate: false)
-          sizeBytes: 0,
-          valuePropId: TEST_VALUE_PROP_ID,
-          fileCount: 0,
-        };
-        
-        setBuckets(prev => {
-          const updatedBuckets = [...prev, newBucket];
-          console.log('✅ Added bucket to local state:', newBucket);
-          console.log('📋 All buckets now:', updatedBuckets);
-          return updatedBuckets;
-        });
-
         console.log('🎉 Bucket creation completed successfully!');
+        
+        // Refresh bucket list from MSP backend to get the latest state
+        console.log('🔄 Refreshing bucket list after creation...');
+        await loadBuckets();
       } else {
         throw new Error('Bucket creation transaction failed');
       }
-    } catch (error) {
-      console.error('Bucket creation failed:', error);
-      setBucketState(prev => ({
-        ...prev,
-        error: error instanceof Error ? error.message : 'Bucket creation failed',
+        } catch (error: any) {
+          console.error('Bucket creation failed:', error);
+          setBucketState(prev => ({
+            ...prev,
+            error: error instanceof Error ? error.message : 'Bucket creation failed',
         isCreating: false
       }));
     }
   };
 
-  // Load buckets
+  // Load buckets from MSP backend
   const loadBuckets = async () => {
-    if (!mspClient) return;
+    if (!mspClient) {
+      console.warn('⚠️ MSP client not available, cannot load buckets');
+      return;
+    }
+    
+    setIsLoadingBuckets(true);
     
     try {
-      console.log('🔍 Loading buckets from MSP...');
-      const bucketList = await mspClient.listBuckets();
-      console.log('✅ Buckets loaded from MSP:', bucketList);
+      console.log('🔄 Refreshing buckets from MSP backend...');
       
-      // Merge MSP buckets with existing local buckets, avoiding duplicates
-      setBuckets(prev => {
-        const mspBuckets = bucketList || [];
-        const existingIds = prev.map(b => b.bucketId);
-        const newMspBuckets = mspBuckets.filter(b => !existingIds.includes(b.bucketId));
-        const merged = [...prev, ...newMspBuckets];
-        console.log('🔄 Merged buckets (local + MSP):', merged);
-        return merged;
+      // DEBUGGING: Check if token is set on MSP client
+      const clientToken = (mspClient as any).token;
+      console.log('🔍 DEBUG: MSP Client token set?', !!clientToken);
+      if (clientToken) {
+        console.log('🔍 DEBUG: Token preview:', clientToken.substring(0, 50) + '...');
+        
+        // Decode the JWT payload to verify contents
+        try {
+          const parts = clientToken.split('.');
+          if (parts.length === 3) {
+            const payload = JSON.parse(atob(parts[1] + '=='));
+            console.log('🔍 DEBUG: JWT payload:', payload);
+          }
+        } catch (decodeError) {
+          console.log('🔍 DEBUG: Could not decode JWT:', decodeError);
+        }
+      } else {
+        console.error('❌ DEBUG: No token found on MSP client!');
+      }
+      
+      // DEBUGGING: Test MSP client health first (no auth required)
+      console.log('🔍 DEBUG: Testing MSP client health...');
+      try {
+        const health = await mspClient.getHealth();
+        console.log('🔍 DEBUG: MSP health check:', health);
+      } catch (healthError) {
+        console.error('🔍 DEBUG: MSP health check failed:', healthError);
+      }
+      
+      console.log('🔄 Making listBuckets request...');
+      
+      // DEBUGGING: Test the HTTP client directly (EXACTLY like curl command)
+      console.log('🔍 DEBUG: Testing HTTP client directly (like curl)...');
+      console.log('🔍 DEBUG: Using exact same JWT as working curl:', clientToken);
+      
+      // DEBUGGING: Check what address is in the JWT vs wallet
+      try {
+        const jwtParts = clientToken.split('.');
+        const payload = JSON.parse(atob(jwtParts[1] + '=='));
+        console.log('🔍 DEBUG: JWT token address:', payload.address);
+        console.log('🔍 DEBUG: Current wallet address:', walletAddress);
+        console.log('🔍 DEBUG: Addresses match?', payload.address?.toLowerCase() === walletAddress?.toLowerCase());
+      } catch (e) {
+        console.log('🔍 DEBUG: Could not decode JWT for address comparison');
+      }
+      console.log('🔍 DEBUG: Making request to: http://127.0.0.1:8080/buckets');
+      console.log('🔍 DEBUG: Headers: Authorization: Bearer [token], Content-Type: application/json');
+      
+      try {
+        const directResponse = await fetch('http://127.0.0.1:8080/buckets', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${clientToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        console.log('🔍 DEBUG: Direct fetch response status:', directResponse.status);
+        console.log('🔍 DEBUG: Direct fetch response headers:', Object.fromEntries(directResponse.headers.entries()));
+        
+        if (directResponse.ok) {
+          const directData = await directResponse.json();
+          console.log('🔍 DEBUG: Direct fetch SUCCESS - data:', directData);
+          console.log('🔍 DEBUG: Direct fetch found', directData.length, 'buckets');
+        } else {
+          const errorText = await directResponse.text();
+          console.error('🔍 DEBUG: Direct fetch HTTP error:', directResponse.status, errorText);
+        }
+      } catch (directError) {
+        console.error('🔍 DEBUG: Direct fetch NETWORK error:', directError);
+      }
+      
+      // DEBUGGING: Intercept fetch to see what SDK is actually sending
+      const originalFetch = window.fetch;
+      const interceptedRequests: Array<{url: string, options: RequestInit}> = [];
+      
+      window.fetch = async (url: string | URL | Request, options?: RequestInit) => {
+        const urlString = url.toString();
+        if (urlString.includes('/buckets')) {
+          console.log('🔍 DEBUG: INTERCEPTED SDK REQUEST:', urlString);
+          console.log('🔍 DEBUG: INTERCEPTED SDK OPTIONS:', options);
+          console.log('🔍 DEBUG: INTERCEPTED SDK HEADERS:', options?.headers);
+          interceptedRequests.push({url: urlString, options: options || {}});
+        }
+        return originalFetch(url as any, options);
+      };
+      
+      // DEBUGGING: Log the actual HTTP request being made
+      console.log('🔍 DEBUG: About to call mspClient.listBuckets()...');
+      console.log('🔍 DEBUG: MSP client config:', (mspClient as any).config);
+      console.log('🔍 DEBUG: MSP client HTTP instance:', (mspClient as any).http);
+      
+      // DEBUGGING: Check the HttpClient's fetch implementation
+      const httpClient = (mspClient as any).http;
+      console.log('🔍 DEBUG: HttpClient fetchImpl:', typeof httpClient.fetchImpl);
+      console.log('🔍 DEBUG: HttpClient baseUrl:', httpClient.baseUrl);
+      console.log('🔍 DEBUG: HttpClient defaultHeaders:', httpClient.defaultHeaders);
+      console.log('🔍 DEBUG: Global fetch available:', typeof globalThis.fetch);
+      console.log('🔍 DEBUG: Window fetch available:', typeof window.fetch);
+      
+      // DEBUGGING: Test HttpClient directly
+      console.log('🔍 DEBUG: Testing HttpClient directly...');
+      try {
+        const directHttpResult = await httpClient.get('/buckets', {
+          headers: {
+            'Authorization': `Bearer ${clientToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        console.log('✅ Direct HttpClient SUCCESS:', directHttpResult);
+      } catch (directHttpError: any) {
+        console.error('❌ Direct HttpClient FAILED:', directHttpError);
+        console.error('❌ Direct HttpClient error type:', typeof directHttpError);
+        console.error('❌ Direct HttpClient error name:', directHttpError?.name);
+        console.error('❌ Direct HttpClient error message:', directHttpError?.message);
+      }
+      
+      console.log('🔍 DEBUG: ==========================================');
+      console.log('🔍 DEBUG: NOW TESTING SDK vs DIRECT COMPARISON');
+      console.log('🔍 DEBUG: ==========================================');
+      
+      let bucketList: any[] = [];
+      try {
+        console.log('🔍 DEBUG: Calling mspClient.listBuckets()...');
+        bucketList = await mspClient.listBuckets();
+        console.log('✅ Buckets loaded from MSP SDK:', bucketList);
+      } catch (sdkError: any) {
+        console.error('❌ SDK ERROR: mspClient.listBuckets() failed:', sdkError);
+        console.error('❌ SDK ERROR type:', typeof sdkError);
+        console.error('❌ SDK ERROR name:', sdkError?.name);
+        console.error('❌ SDK ERROR message:', sdkError?.message);
+        console.error('❌ SDK ERROR stack:', sdkError?.stack);
+        bucketList = []; // Fallback to empty array
+      }
+      console.log('🔍 DEBUG: SDK result type:', typeof bucketList);
+      console.log('🔍 DEBUG: SDK result Array.isArray:', Array.isArray(bucketList));
+      console.log('🔍 DEBUG: SDK result length:', bucketList?.length);
+      
+      console.log('🔍 DEBUG: ==========================================');
+      console.log('🔍 DEBUG: COMPARISON SUMMARY:');
+      console.log('🔍 DEBUG: - Direct fetch (like curl): Should show buckets above');
+      console.log('🔍 DEBUG: - SDK listBuckets():', bucketList?.length || 0, 'buckets');
+      console.log('🔍 DEBUG: ==========================================');
+      
+      // Restore original fetch
+      window.fetch = originalFetch;
+      
+      console.log('🔍 DEBUG: INTERCEPTED REQUESTS:', interceptedRequests);
+      
+      if (Array.isArray(bucketList) && bucketList.length === 0) {
+        console.error('🚨 FOUND THE ISSUE: SDK returns empty array but direct fetch works!');
+        console.error('🚨 This means the SDK HttpClient is not sending the request correctly!');
+        console.error('🚨 Check intercepted requests above to see the difference!');
+      }
+      
+      // Replace all buckets with the fresh list from MSP backend
+      // This ensures we have the most up-to-date bucket information
+      const freshBuckets = bucketList || [];
+      setBuckets(freshBuckets);
+      
+      console.log(`📋 Updated bucket list: ${freshBuckets.length} buckets available`);
+      freshBuckets.forEach(bucket => {
+        console.log(`  - ${bucket.name} (ID: ${bucket.bucketId.slice(0, 8)}..., Files: ${bucket.fileCount}, Size: ${bucket.sizeBytes} bytes)`);
+        console.log(`    🔍 DEBUG: Full bucket ID: "${bucket.bucketId}" (length: ${bucket.bucketId.length})`);
       });
-    } catch (error) {
-      console.error('❌ Failed to load buckets from MSP:', error);
-      // Don't clear existing buckets if MSP fails
-      console.log('🔄 Keeping existing local buckets due to MSP error');
+      
+    } catch (error: any) {
+      console.error('❌ Failed to refresh buckets from MSP:', error);
+      
+      // Additional debugging for authentication errors
+      if (error?.status === 401) {
+        console.error('🔍 DEBUG: 401 Unauthorized - JWT token issue');
+      } else if (error?.status === 403) {
+        console.error('🔍 DEBUG: 403 Forbidden - Permission issue');
+      } else if (error?.status) {
+        console.error('🔍 DEBUG: HTTP Status:', error.status);
+      }
+      
+      // Log response body if available
+      if (error?.response) {
+        console.error('🔍 DEBUG: Response body:', error.response);
+      }
+      
+      // Show user-friendly error message
+      console.error('This could be due to authentication issues or MSP backend connectivity problems');
+    } finally {
+      setIsLoadingBuckets(false);
     }
   };
 
-  // Load buckets when component mounts and when MSP client changes
-  useEffect(() => {
-    if (mspClient) {
-      loadBuckets();
-    }
-  }, [mspClient]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Note: loadBuckets is only called manually via refresh button or after bucket creation
+  // No automatic loading to avoid excessive API calls
 
   // File upload function
   const uploadFile = async () => {
@@ -289,7 +448,24 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
       // Create TypeRegistry and types for file key computation (like sdk-precompiles)
       const registry = new TypeRegistry();
       const owner = registry.createType("AccountId20", walletAddress) as AccountId20;
-      const bucketIdH256 = registry.createType("H256", selectedBucketId) as H256;
+      
+      // DEBUGGING: Check bucket ID format
+      console.log('🔍 DEBUG: selectedBucketId:', selectedBucketId);
+      console.log('🔍 DEBUG: selectedBucketId length:', selectedBucketId.length);
+      console.log('🔍 DEBUG: selectedBucketId starts with 0x:', selectedBucketId.startsWith('0x'));
+      
+      // Ensure bucket ID is properly formatted as 32-byte hex string
+      let bucketIdForH256 = selectedBucketId;
+      if (!bucketIdForH256.startsWith('0x')) {
+        bucketIdForH256 = '0x' + bucketIdForH256;
+      }
+      // H256 expects exactly 64 hex chars (32 bytes) after 0x
+      if (bucketIdForH256.length !== 66) { // 0x + 64 hex chars = 66 total
+        console.error('❌ Invalid bucket ID length for H256:', bucketIdForH256.length, 'expected 66');
+        throw new Error(`Invalid bucket ID format: ${bucketIdForH256} (length: ${bucketIdForH256.length})`);
+      }
+      
+      const bucketIdH256 = registry.createType("H256", bucketIdForH256) as H256;
       const fileKey = await fileManager.computeFileKey(owner, bucketIdH256, fileLocation);
 
       console.log('📋 File metadata computed:', {
@@ -328,7 +504,7 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
       console.log('ReplicationLevel.Basic:', ReplicationLevel.Basic, typeof ReplicationLevel.Basic);
       
       // Check if any are undefined
-      const params = [
+      const params: Array<{ name: string; value: any }> = [
         { name: 'selectedBucketId', value: selectedBucketId },
         { name: 'fileLocation', value: fileLocation },
         { name: 'fingerprint.toHex()', value: fingerprint.toHex() },
@@ -349,8 +525,18 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
       let storageRequestTxHash;
       try {
         console.log('🚀 STEP 1: Issuing storage request...');
+        
+        // DEBUGGING: Check bucket ID format for storage request
+        console.log('🔍 DEBUG: selectedBucketId for storage request:', selectedBucketId);
+        console.log('🔍 DEBUG: selectedBucketId length:', selectedBucketId.length);
+        
+        // Ensure bucket ID has 0x prefix for storage request
+        const bucketIdForStorageRequest = selectedBucketId.startsWith('0x') ? selectedBucketId : `0x${selectedBucketId}`;
+        console.log('🔍 DEBUG: bucketIdForStorageRequest:', bucketIdForStorageRequest);
+        console.log('🔍 DEBUG: bucketIdForStorageRequest length:', bucketIdForStorageRequest.length);
+        
         storageRequestTxHash = await storageHubClient.issueStorageRequest(
-          selectedBucketId as `0x${string}`,
+          bucketIdForStorageRequest as `0x${string}`,
           fileLocation,
           fingerprint.toHex() as `0x${string}`, // Use hex string like sdk-precompiles
           fileSize,
@@ -362,16 +548,16 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
         );
         
         console.log('✅ STEP 1 SUCCESS: Storage request submitted:', storageRequestTxHash);
-      } catch (error) {
+      } catch (error: any) {
         console.error('❌ STEP 1 FAILED: issueStorageRequest error:');
-        console.error('Error message:', error.message);
-        console.error('Error stack:', error.stack);
+        console.error('Error message:', error?.message);
+        console.error('Error stack:', error?.stack);
         console.error('Full error object:', error);
         throw error; // Re-throw to maintain the original behavior
       }
 
       console.log('🔄 STEP 2: Waiting for transaction receipt...');
-      const storageRequestReceipt = await publicClient.waitForTransactionReceipt({ 
+      const storageRequestReceipt = await publicClient!.waitForTransactionReceipt({ 
         hash: storageRequestTxHash 
       });
 
@@ -415,24 +601,29 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
         console.log('- location:', fileLocation);
         
         await new Promise(resolve => setTimeout(resolve, 3000)); // Add a 3 second delay before uploading
-        uploadReceipt = await mspClient.uploadFile(
-          selectedBucketId,
-          fileKeyHex, // Use the final computed file key
-          fileBlob, // Use Blob instead of File object
-          walletAddress, // owner parameter like sdk-precompiles
-          fileLocation // location parameter like sdk-precompiles
-        );
+            // DEBUGGING: Check bucket ID format for MSP upload
+            console.log('🔍 DEBUG: selectedBucketId for MSP upload:', selectedBucketId);
+            console.log('🔍 DEBUG: selectedBucketId type:', typeof selectedBucketId);
+            console.log('🔍 DEBUG: selectedBucketId length:', selectedBucketId.length);
+            
+            uploadReceipt = await mspClient.uploadFile(
+              selectedBucketId, // MSP expects bucket ID without 0x prefix
+              fileKeyHex, // Use the final computed file key
+              fileBlob, // Use Blob instead of File object
+              walletAddress, // owner parameter like sdk-precompiles
+              fileLocation // location parameter like sdk-precompiles
+            );
         
         console.log('✅ STEP 4 SUCCESS: MSP upload completed:', uploadReceipt);
         
-      } catch (error) {
+      } catch (error: any) {
         console.error('❌ STEP 4 FAILED: MSP upload error:');
-        console.error('Error message:', error.message);
-        console.error('Error stack:', error.stack);
+        console.error('Error message:', error?.message);
+        console.error('Error stack:', error?.stack);
         console.error('Full error object:', error);
         
         // Additional debugging for HTTP errors
-        if (error.response) {
+        if (error?.response) {
           console.error('HTTP Response Status:', error.response.status);
           console.error('HTTP Response Headers:', error.response.headers);
           console.error('HTTP Response Data:', error.response.data);
@@ -451,11 +642,11 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
         uploadProgress: 100
       }));
 
-    } catch (error) {
-      console.error('Upload failed:', error);
-      setUploadState(prev => ({
-        ...prev,
-        error: error instanceof Error ? error.message : 'Upload failed',
+        } catch (error: any) {
+          console.error('Upload failed:', error);
+          setUploadState(prev => ({
+            ...prev,
+            error: error instanceof Error ? error.message : 'Upload failed',
         isUploading: false
       }));
     }
@@ -528,14 +719,24 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
 
         {/* Bucket Selection */}
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">
-            Select Bucket ({buckets.length} available)
-            {buckets.length > 0 && (
-              <span className="text-xs text-gray-500 ml-2">
-                [{buckets.map(b => b.name).join(', ')}]
-              </span>
-            )}
-          </label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Select Bucket ({buckets.length} available)
+                {isLoadingBuckets && (
+                  <span className="text-xs text-blue-400 ml-2 animate-pulse">
+                    Refreshing...
+                  </span>
+                )}
+                {!isLoadingBuckets && buckets.length === 0 && (
+                  <span className="text-xs text-yellow-400 ml-2">
+                    Click refresh to load buckets
+                  </span>
+                )}
+                {!isLoadingBuckets && buckets.length > 0 && (
+                  <span className="text-xs text-gray-500 ml-2">
+                    [{buckets.map(b => `${b.name} (${b.fileCount} files)`).join(', ')}]
+                  </span>
+                )}
+              </label>
           <div className="flex gap-3">
             <select
               value={selectedBucketId}
@@ -543,24 +744,26 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
               className="flex-1 rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
             >
               <option value="">Select a bucket...</option>
-              {buckets.length === 0 && (
-                <option value="" disabled>No buckets available</option>
-              )}
-              {buckets.map((bucket) => {
-                console.log('🔍 Rendering bucket option:', bucket);
-                return (
-                  <option key={bucket.bucketId} value={bucket.bucketId}>
-                    {bucket.name} ({bucket.bucketId.slice(0, 8)}...)
-                  </option>
-                );
-              })}
+                  {buckets.length === 0 && (
+                    <option value="" disabled>No buckets available</option>
+                  )}
+                  {buckets.map((bucket) => {
+                    console.log('🔍 Rendering bucket option:', bucket);
+                    console.log('🔍 Bucket ID for dropdown:', bucket.bucketId, 'length:', bucket.bucketId.length);
+                    return (
+                      <option key={bucket.bucketId} value={bucket.bucketId}>
+                        {bucket.name} ({bucket.bucketId.slice(0, 8)}...)
+                      </option>
+                    );
+                  })}
             </select>
-            <button
-              onClick={loadBuckets}
-              className="px-4 py-2 text-sm bg-gray-700 text-gray-300 rounded-md hover:bg-gray-600"
-            >
-              Refresh
-            </button>
+                <button
+                  onClick={loadBuckets}
+                  disabled={isLoadingBuckets}
+                  className="px-4 py-2 text-sm bg-gray-700 text-gray-300 rounded-md hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isLoadingBuckets ? 'Loading...' : 'Refresh'}
+                </button>
           </div>
         </div>
 

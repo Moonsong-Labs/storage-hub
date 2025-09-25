@@ -2,7 +2,6 @@
   "name": "demo-app",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@10.15.0",
   "scripts": {
     "dev": "next dev --turbopack --port 3001",
     "build": "next build --turbopack",
@@ -10,7 +9,7 @@
     "lint": "eslint",
     "type-check": "tsc --noEmit",
     "env:build": "cd ../../.. && cd test && pnpm docker:build && pnpm docker:build:backend",
-    "env:start": "cd ../../.. && cd test && INDEXER=1 BACKEND=1 pnpm tsx scripts/solochainEvmBootstrapClean.ts",
+    "env:start": "cd ../../.. && cd test && pnpm docker:start:solochain-evm:initialised",
     "env:start:initialized": "cd ../../.. && cd test && pnpm docker:start:solochain-evm:initialised",
     "env:stop": "cd ../../.. && cd test && pnpm docker:stop:fullnet"
   },

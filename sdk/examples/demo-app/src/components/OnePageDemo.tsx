@@ -6,12 +6,14 @@ import { createWalletClient, createPublicClient, custom, formatEther, type Walle
 import { StorageHubClient } from '@storagehub-sdk/core';
 import { MspClient } from '@storagehub-sdk/msp-client';
 import { FileManager } from './FileManager';
+import { generateMockJWT } from '../utils/mockJwt';
 
 export function OnePageDemo() {
   const [config, setConfig] = useState({
     rpcUrl: 'http://127.0.0.1:9888',
     chainId: 181222,
-    mspUrl: 'http://127.0.0.1:8080'
+    mspUrl: 'http://127.0.0.1:8080',
+    mockAuth: false // Toggle for mock vs real authentication
   });
 
   // Wallet state
@@ -36,13 +38,23 @@ export function OnePageDemo() {
     rpcUrls: { default: { http: [config.rpcUrl] } },
   };
 
-  // Check if MetaMask is available
-  const isMetaMaskAvailable = typeof window !== 'undefined' && typeof window.ethereum !== 'undefined';
+  // Check if MetaMask is available (client-side only to avoid hydration mismatch)
+  const [isMetaMaskAvailable, setIsMetaMaskAvailable] = useState<boolean | null>(null);
+
+  // Check MetaMask availability after component mounts (client-side only)
+  useEffect(() => {
+    setIsMetaMaskAvailable(typeof window !== 'undefined' && typeof window.ethereum !== 'undefined');
+  }, []);
 
   // Connect wallet function
   const connectWallet = useCallback(async () => {
-    if (!isMetaMaskAvailable) {
+    if (isMetaMaskAvailable === false) {
       setWalletError('MetaMask is not installed. Please install MetaMask to continue.');
+      return;
+    }
+    
+    if (isMetaMaskAvailable === null) {
+      // Still checking, shouldn't happen but safety check
       return;
     }
 
@@ -50,44 +62,36 @@ export function OnePageDemo() {
     setWalletError(null);
 
     try {
+      console.log('🔄 Step 1: Requesting account access...');
       // Request account access
-      await window.ethereum!.request({ method: 'eth_requestAccounts' });
+      const accounts = await window.ethereum!.request({ method: 'eth_requestAccounts' }) as string[];
+      
+      if (!accounts || accounts.length === 0) {
+        throw new Error('No accounts returned from MetaMask');
+      }
 
-      // Create Viem clients
-      const transport = custom(window.ethereum!);
-      
-      // Get account address first
-      const tempWalletClient = createWalletClient({
-        chain: storageHubChain,
-        transport,
-      });
-      const [address] = await tempWalletClient.getAddresses();
-      
-      // Create wallet client with account bound
-      const walletClient = createWalletClient({
-        chain: storageHubChain,
-        transport,
-        account: address,
-      });
+      const address = accounts[0] as `0x${string}`;
+      console.log('✅ Step 1 Complete: Got address:', address);
 
-      const publicClient = createPublicClient({
-        chain: storageHubChain,
-        transport,
-      });
-      
-      // Check current chain
-      const currentChainId = await walletClient.getChainId();
-      
+      console.log('🔄 Step 2: Checking current network...');
+      // Check current network directly via MetaMask
+      const currentChainIdHex = await window.ethereum!.request({ method: 'eth_chainId' }) as string;
+      const currentChainId = parseInt(currentChainIdHex, 16);
+      console.log('Current Chain ID:', currentChainId, 'Expected:', config.chainId);
+
       // Switch to StorageHub chain if needed
       if (currentChainId !== config.chainId) {
+        console.log('🔄 Step 3: Switching to StorageHub network...');
         try {
           await window.ethereum!.request({
             method: 'wallet_switchEthereumChain',
             params: [{ chainId: `0x${config.chainId.toString(16)}` }],
           });
+          console.log('✅ Network switched successfully');
         } catch (switchError: any) {
           // If chain doesn't exist, add it
           if (switchError.code === 4902) {
+            console.log('🔄 Network not found, adding StorageHub network...');
             await window.ethereum!.request({
               method: 'wallet_addEthereumChain',
               params: [{
@@ -97,15 +101,46 @@ export function OnePageDemo() {
                 rpcUrls: [config.rpcUrl],
               }],
             });
+            console.log('✅ Network added successfully');
           } else {
-            throw switchError;
+            console.error('Network switch failed:', switchError);
+            throw new Error(`Failed to switch network: ${switchError.message}`);
           }
         }
       }
 
-      // Get balance
-      const balance = await publicClient.getBalance({ address });
-      const formattedBalance = formatEther(balance);
+      console.log('🔄 Step 4: Creating Viem clients...');
+      // Create Viem clients with error handling
+      const transport = custom(window.ethereum!, {
+        // Add retries and timeout for better reliability
+        retryCount: 3,
+        retryDelay: 1000,
+      });
+
+      const publicClient = createPublicClient({
+        chain: storageHubChain,
+        transport,
+      });
+
+      const walletClient = createWalletClient({
+        chain: storageHubChain,
+        transport,
+        account: address,
+      });
+
+      console.log('✅ Step 4 Complete: Viem clients created');
+
+      console.log('🔄 Step 5: Getting wallet balance...');
+      // Get balance with error handling
+      let formattedBalance = '0';
+      try {
+        const balance = await publicClient.getBalance({ address });
+        formattedBalance = formatEther(balance);
+        console.log('✅ Step 5 Complete: Balance retrieved:', formattedBalance, 'SH');
+      } catch (balanceError) {
+        console.warn('⚠️ Could not fetch balance, using default:', balanceError);
+        // Don't fail the connection just because balance fetch failed
+      }
 
       // Set state
       setWalletClient(walletClient);
@@ -113,15 +148,28 @@ export function OnePageDemo() {
       setWalletAddress(address);
       setWalletBalance(formattedBalance);
 
-      console.log('✅ Wallet connected:', {
+      console.log('✅ Wallet connection complete:', {
         address,
         chainId: config.chainId,
         balance: formattedBalance
       });
 
-    } catch (error) {
-      console.error('Wallet connection failed:', error);
-      setWalletError(error instanceof Error ? error.message : 'Failed to connect wallet');
+    } catch (error: any) {
+      console.error('❌ Wallet connection failed:', error);
+      
+      // Provide more specific error messages
+      let errorMessage = 'Failed to connect wallet';
+      if (error.message?.includes('User rejected')) {
+        errorMessage = 'Connection cancelled by user';
+      } else if (error.message?.includes('network')) {
+        errorMessage = 'Network configuration error. Please check your MetaMask settings.';
+      } else if (error.message?.includes('JSON-RPC')) {
+        errorMessage = 'RPC connection error. Please ensure the StorageHub node is running.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      setWalletError(errorMessage);
     } finally {
       setIsConnecting(false);
     }
@@ -138,27 +186,57 @@ export function OnePageDemo() {
       // Create MSP client
       const mspClient = await MspClient.connect({ baseUrl: config.mspUrl });
 
-      // SIWE authentication (exact same pattern as sdk-precompiles line 93-94)
-      console.log('🔐 MSP Authentication Step 1: Getting nonce...');
-      console.log('- Address:', walletAddress);
-      console.log('- Chain ID:', config.chainId);
+      let authToken: string;
+
+      if (config.mockAuth) {
+        // MOCK AUTHENTICATION PATH
+        const mockAddress = '0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac'; // Address that has buckets
+        console.log('🧪 MOCK Authentication: Using test JWT token');
+        console.log('- Wallet Address:', walletAddress);
+        console.log('- Mock Address (with buckets):', mockAddress);
+        console.log('- Mock mode enabled, skipping SIWE flow');
+        
+        authToken = generateMockJWT(mockAddress); // Use mock address instead of wallet address
+        console.log('✅ Mock JWT generated for address with existing buckets');
+        
+      } else {
+        // REAL SIWE AUTHENTICATION PATH (existing code unchanged)
+        console.log('🔐 MSP Authentication Step 1: Getting nonce...');
+        console.log('- Address:', walletAddress);
+        console.log('- Chain ID:', config.chainId);
+        
+        const { message } = await mspClient.getNonce(walletAddress, config.chainId);
+        console.log('✅ Nonce received, message:', message);
+        
+        console.log('🔐 MSP Authentication Step 2: Signing message...');
+        const signature = await walletClient.signMessage({ 
+          account: walletClient.account!, // Use account object, not address string
+          message 
+        });
+        console.log('✅ Message signed:', signature);
+        
+        console.log('🔐 MSP Authentication Step 3: Verifying signature...');
+        const verified = await mspClient.verify(message, signature);
+        console.log('✅ Signature verified, token received');
+        
+        authToken = verified.token;
+      }
+
+      // Set the token (works for both mock and real auth)
+      mspClient.setToken(authToken);
+      console.log(`✅ MSP client authenticated successfully (${config.mockAuth ? 'Mock' : 'Real'} auth)`);
       
-      const { message } = await mspClient.getNonce(walletAddress, config.chainId);
-      console.log('✅ Nonce received, message:', message);
+      // DEBUGGING: Verify token was set correctly
+      const verifyToken = (mspClient as any).token;
+      console.log('🔍 DEBUG: Token set on MSP client?', !!verifyToken);
+      if (verifyToken) {
+        console.log('🔍 DEBUG: Token matches?', verifyToken === authToken);
+      }
       
-      console.log('🔐 MSP Authentication Step 2: Signing message...');
-      const signature = await walletClient.signMessage({ 
-        account: walletClient.account!, // Use account object, not address string
-        message 
-      });
-      console.log('✅ Message signed:', signature);
-      
-      console.log('🔐 MSP Authentication Step 3: Verifying signature...');
-      const verified = await mspClient.verify(message, signature);
-      console.log('✅ Signature verified, token received');
-      
-      mspClient.setToken(verified.token);
-      console.log('✅ MSP client authenticated successfully');
+      // 🔑 JWT TOKEN FOR CURL COMMANDS - Copy this for manual API testing
+      console.log('🔑 JWT TOKEN (for curl):', authToken);
+      console.log('📋 Copy this curl command:');
+      console.log(`curl -X GET "http://127.0.0.1:8080/buckets" -H "Authorization: Bearer ${authToken}" -H "Content-Type: application/json"`);
 
       // Create StorageHub client
       const storageHubClient = new StorageHubClient({
@@ -182,10 +260,11 @@ export function OnePageDemo() {
 
   // Listen for account changes
   useEffect(() => {
-    if (!isMetaMaskAvailable) return;
+    if (isMetaMaskAvailable !== true) return;
 
-    const handleAccountsChanged = (accounts: string[]) => {
-      if (accounts.length === 0) {
+    const handleAccountsChanged = (accounts: unknown) => {
+      const accountList = accounts as string[];
+      if (accountList.length === 0) {
         // User disconnected
         setWalletClient(null);
         setPublicClient(null);
@@ -193,7 +272,7 @@ export function OnePageDemo() {
         setWalletBalance(null);
         setMspClient(null);
         setStorageHubClient(null);
-      } else if (accounts[0] !== walletAddress) {
+      } else if (accountList[0] !== walletAddress) {
         // Account changed, reconnect
         connectWallet();
       }
@@ -204,12 +283,16 @@ export function OnePageDemo() {
       connectWallet();
     };
 
-    window.ethereum?.on('accountsChanged', handleAccountsChanged);
-    window.ethereum?.on('chainChanged', handleChainChanged);
+    if (window.ethereum) {
+      window.ethereum.on('accountsChanged', handleAccountsChanged);
+      window.ethereum.on('chainChanged', handleChainChanged);
+    }
 
     return () => {
-      window.ethereum?.removeListener('accountsChanged', handleAccountsChanged);
-      window.ethereum?.removeListener('chainChanged', handleChainChanged);
+      if (window.ethereum) {
+        window.ethereum.removeListener!('accountsChanged', handleAccountsChanged);
+        window.ethereum.removeListener!('chainChanged', handleChainChanged);
+      }
     };
   }, [isMetaMaskAvailable, walletAddress, connectWallet]);
 
@@ -260,6 +343,30 @@ export function OnePageDemo() {
               />
             </div>
           </div>
+          
+          {/* Mock Authentication Toggle */}
+          <div className="mt-4 p-4 bg-gray-800 rounded-md border border-gray-700">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="block text-sm font-medium text-gray-300">Mock Authentication</label>
+                <p className="text-xs text-gray-500 mt-1">Skip SIWE authentication and use mock JWT token for testing</p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={config.mockAuth}
+                  onChange={(e) => setConfig(prev => ({ ...prev, mockAuth: e.target.checked }))}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+              </label>
+            </div>
+            {config.mockAuth && (
+              <div className="mt-2 p-2 bg-yellow-900/20 border border-yellow-900/50 rounded text-yellow-400 text-xs">
+                ⚠️ Mock mode enabled: Using test JWT token instead of real SIWE authentication
+              </div>
+            )}
+          </div>
         </section>
 
         {/* Wallet Section */}
@@ -275,33 +382,44 @@ export function OnePageDemo() {
             )}
           </div>
           
-          {!walletAddress ? (
-            <div className="space-y-4">
-              {!isMetaMaskAvailable && (
-                <div className="flex items-center gap-2 p-3 bg-yellow-900/20 border border-yellow-900/50 rounded-md text-yellow-400">
-                  <AlertCircle className="h-4 w-4" />
-                  <span className="text-sm">MetaMask not detected.</span>
-                  <a 
-                    href="https://metamask.io/download/" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-blue-400 hover:text-blue-300 inline-flex items-center gap-1"
-                  >
-                    Install MetaMask <ExternalLink className="h-3 w-3" />
-                  </a>
-                </div>
-              )}
-              
-              <div className="text-center py-8">
-                <p className="text-gray-400 mb-4">Connect your MetaMask wallet to continue</p>
-                <button 
-                  onClick={connectWallet}
-                  disabled={!isMetaMaskAvailable || isConnecting}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
-                >
-                  {isConnecting ? 'Connecting...' : 'Connect Wallet'}
-                </button>
-              </div>
+              {!walletAddress ? (
+                <div className="space-y-4">
+                  {/* Show loading state during MetaMask detection */}
+                  {isMetaMaskAvailable === null && (
+                    <div className="text-center py-8">
+                      <p className="text-gray-400 mb-4">Checking for MetaMask...</p>
+                    </div>
+                  )}
+                  
+                  {/* Show MetaMask not available warning */}
+                  {isMetaMaskAvailable === false && (
+                    <div className="flex items-center gap-2 p-3 bg-yellow-900/20 border border-yellow-900/50 rounded-md text-yellow-400">
+                      <AlertCircle className="h-4 w-4" />
+                      <span className="text-sm">MetaMask not detected.</span>
+                      <a 
+                        href="https://metamask.io/download/" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-blue-400 hover:text-blue-300 inline-flex items-center gap-1"
+                      >
+                        Install MetaMask <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                  )}
+                  
+                  {/* Show connect button when MetaMask is available */}
+                  {isMetaMaskAvailable === true && (
+                    <div className="text-center py-8">
+                      <p className="text-gray-400 mb-4">Connect your MetaMask wallet to continue</p>
+                      <button 
+                        onClick={connectWallet}
+                        disabled={isConnecting}
+                        className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {isConnecting ? 'Connecting...' : 'Connect Wallet'}
+                      </button>
+                    </div>
+                  )}
 
               {walletError && (
                 <div className="flex items-center gap-2 p-3 bg-red-900/20 border border-red-900/50 rounded-md text-red-400">
@@ -365,12 +483,36 @@ export function OnePageDemo() {
                   </div>
                 )}
               </div>
-            ) : (
-              <div className="flex items-center gap-2 p-3 bg-green-900/20 border border-green-900/50 rounded-md text-green-400">
-                <CheckCircle className="h-4 w-4" />
-                <span className="text-sm">MSP connected and authenticated</span>
-              </div>
-            )}
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 p-3 bg-green-900/20 border border-green-900/50 rounded-md text-green-400">
+                      <CheckCircle className="h-4 w-4" />
+                      <span className="text-sm">
+                        MSP connected and authenticated {config.mockAuth ? '(Mock Mode)' : '(SIWE)'}
+                      </span>
+                    </div>
+                    {config.mockAuth && (
+                      <div className="p-2 bg-blue-900/20 border border-blue-900/50 rounded text-blue-400 text-xs">
+                        🧪 Using mock JWT token for testing purposes<br/>
+                        📋 Mock address (with test buckets): 0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac
+                      </div>
+                    )}
+                    <button
+                      onClick={() => {
+                        if (mspClient && (mspClient as any).token) {
+                          const token = (mspClient as any).token;
+                          console.log('🔑 JWT TOKEN (for curl):', token);
+                          console.log('📋 Copy this curl command:');
+                          console.log(`curl -X GET "http://127.0.0.1:8080/buckets" -H "Authorization: Bearer ${token}" -H "Content-Type: application/json"`);
+                          console.log(`curl -X GET "http://127.0.0.1:8080/value-props" -H "Content-Type: application/json"`);
+                        }
+                      }}
+                      className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                    >
+                      📋 Print Curl Commands
+                    </button>
+                  </div>
+                )}
           </section>
         )}
 
