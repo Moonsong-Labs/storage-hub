@@ -447,126 +447,76 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
       
       if (fileListResponse?.files && fileListResponse.files.length > 0) {
         const rootTree = fileListResponse.files[0]; // First element is the root folder
-        console.log('🔍 SDK DEBUG: Root tree:', rootTree);
-        console.log('🔍 SDK DEBUG: Root tree type:', typeof rootTree);
-        console.log('🔍 SDK DEBUG: Root tree keys:', Object.keys(rootTree || {}));
-        console.log('🔍 SDK DEBUG: Has entry property:', 'entry' in (rootTree || {}));
         
         if (rootTree && typeof rootTree === 'object') {
           // Check if it's the new format (direct children) or old format (nested entry)
           const hasDirectChildren = 'children' in rootTree && rootTree.type === 'folder';
           const hasNestedEntry = 'entry' in rootTree;
           
-          console.log('🔍 SDK DEBUG: hasDirectChildren:', hasDirectChildren);
-          console.log('🔍 SDK DEBUG: hasNestedEntry:', hasNestedEntry);
-          
           let children = null;
           
           if (hasDirectChildren) {
             // NEW FORMAT: Direct children in the root object
-            console.log('🔍 SDK DEBUG: Using new format - direct children');
             children = (rootTree as any).children;
           } else if (hasNestedEntry) {
             // OLD FORMAT: Children nested in entry object
-            console.log('🔍 SDK DEBUG: Using old format - nested entry');
             const entry = (rootTree as any).entry;
             children = entry?.children;
           }
           
-          console.log('🔍 SDK DEBUG: Found children:', children);
-          console.log('🔍 SDK DEBUG: Children length:', children?.length);
-          
           if (children && Array.isArray(children)) {
-            console.log('🔍 SDK DEBUG: Processing children array:', children);
-            
             // CRITICAL FIX: Filter out the root folder itself, only process its children
             const childrenToProcess = children.filter((child: any) => child.name !== '/');
-            console.log('🔍 SDK DEBUG: Children after filtering root:', childrenToProcess);
             
             extractedFiles = childrenToProcess.map((child: any, index: number) => {
-              console.log(`🔍 SDK DEBUG: Processing child ${index}:`, child);
-              console.log(`🔍 SDK DEBUG: Child keys:`, Object.keys(child || {}));
-              console.log(`🔍 SDK DEBUG: Child.entry:`, child?.entry);
-              
               // Handle both new format (direct properties) and old format (nested entry)
               const isDirectFormat = child.type && !child.entry;
               const isNestedFormat = child.entry;
               
-              console.log(`🔍 SDK DEBUG: Child ${index} - isDirectFormat:`, isDirectFormat, 'isNestedFormat:', isNestedFormat);
-              
               if (isDirectFormat && child.type === 'file') {
                 // NEW FORMAT: Direct file properties
-                const fileEntry = {
+                return {
                   name: child.name,
                   type: 'file' as const,
                   sizeBytes: child.sizeBytes,
                   fileKey: child.fileKey
                 };
-                console.log(`🔍 SDK DEBUG: Created file entry (direct):`, fileEntry);
-                return fileEntry;
               } else if (isDirectFormat && child.type === 'folder') {
                 // NEW FORMAT: Direct folder properties
-                const folderEntry = {
+                return {
                   name: child.name,
                   type: 'folder' as const
                 };
-                console.log(`🔍 SDK DEBUG: Created folder entry (direct):`, folderEntry);
-                return folderEntry;
               } else if (isNestedFormat && child.entry.type === 'file') {
                 // OLD FORMAT: Nested file properties
-                const fileEntry = {
+                return {
                   name: child.name,
                   type: 'file' as const,
                   sizeBytes: child.entry.sizeBytes,
                   fileKey: child.entry.fileKey
                 };
-                console.log(`🔍 SDK DEBUG: Created file entry (nested):`, fileEntry);
-                return fileEntry;
               } else if (isNestedFormat && child.entry.type === 'folder') {
                 // OLD FORMAT: Nested folder properties
-                const folderEntry = {
+                return {
                   name: child.name,
                   type: 'folder' as const
                 };
-                console.log(`🔍 SDK DEBUG: Created folder entry (nested):`, folderEntry);
-                return folderEntry;
               } else {
                 // Fallback for unexpected structure
-                const fallbackEntry = {
+                return {
                   name: child.name || 'Unknown',
                   type: (child.type || 'file') as const,
                   sizeBytes: child.sizeBytes,
                   fileKey: child.fileKey
                 };
-                console.log(`🔍 SDK DEBUG: Created fallback entry:`, fallbackEntry);
-                return fallbackEntry;
               }
             });
-          } else {
-            console.log('🔍 SDK DEBUG: No valid children found');
-            console.log('🔍 SDK DEBUG: children type:', typeof children);
-            console.log('🔍 SDK DEBUG: children isArray:', Array.isArray(children));
           }
         } else {
           // Fallback: treat as flat FileEntry array (in case backend changes)
-          console.log('🔍 SDK DEBUG: Treating as flat FileEntry array');
-          console.log('🔍 SDK DEBUG: fileListResponse.files:', fileListResponse.files);
           extractedFiles = fileListResponse.files as FileEntry[];
         }
-      } else {
-        console.log('🔍 SDK DEBUG: No files in response or empty files array');
-        console.log('🔍 SDK DEBUG: fileListResponse?.files exists:', !!fileListResponse?.files);
-        console.log('🔍 SDK DEBUG: files length:', fileListResponse?.files?.length);
       }
-
-      console.log('🔍 DEBUG: Extracted files:', extractedFiles);
-      extractedFiles.forEach((file, index) => {
-        console.log(`🔍 DEBUG: Extracted file ${index}:`, file);
-        console.log(`  - Name: ${file.name}`);
-        console.log(`  - Type: ${file.type}`);
-        console.log(`  - Size: ${file.sizeBytes}`);
-        console.log(`  - FileKey: ${file.fileKey}`);
-      });
 
       setFileBrowserState(prev => ({
         ...prev,
@@ -577,14 +527,7 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
         error: null,
       }));
 
-      console.log(`📁 Loaded ${fileListResponse?.files?.length || 0} raw files from backend`);
-      console.log(`📁 Extracted ${extractedFiles.length} files for UI`);
-      console.log(`📁 Final extracted files:`, extractedFiles);
-      
-      // CRITICAL DEBUG: Log what will be set in state
-      console.log('🔍 FINAL STATE DEBUG: Setting fileBrowserState.files to:', extractedFiles);
-      console.log('🔍 FINAL STATE DEBUG: extractedFiles.length:', extractedFiles.length);
-      console.log('🔍 FINAL STATE DEBUG: extractedFiles[0]:', extractedFiles[0]);
+      console.log(`📁 Loaded ${extractedFiles.length} files from ${bucketId}`);
       
     } catch (error: any) {
       console.error('❌ Failed to load files:', error);
