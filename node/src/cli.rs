@@ -175,10 +175,7 @@ pub struct ProviderConfigurations {
 
     /// Enable MSP file distribution to BSPs (disabled by default unless set via config/CLI).
     /// Only applicable when running as an MSP provider.
-    #[arg(long, value_name = "BOOLEAN", required_if_eq_all([
-        ("provider", "true"),
-        ("provider_type", "msp"),
-    ]))]
+    #[arg(long, value_name = "BOOLEAN")]
     pub msp_distribute_files: bool,
 
     // ============== Provider RPC options ==============
