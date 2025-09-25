@@ -272,8 +272,7 @@ export const SHARED_TYPES = {
   GetValuePropositionsResult: {
     _enum: {
       Success: "Vec<Vec<u8>>",
-      NotAnMsp: null,
-      ErrorRetrievingValuePropositions: null
+      NotAnMsp: null
     }
   }
 };

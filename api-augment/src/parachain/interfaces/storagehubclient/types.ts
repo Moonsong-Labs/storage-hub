@@ -161,8 +161,7 @@ export interface GetValuePropositionsResult extends Enum {
   readonly isSuccess: boolean;
   readonly asSuccess: Vec<Bytes>;
   readonly isNotAnMsp: boolean;
-  readonly isErrorRetrievingValuePropositions: boolean;
-  readonly type: "Success" | "NotAnMsp" | "ErrorRetrievingValuePropositions";
+  readonly type: "Success" | "NotAnMsp";
 }
 
 /** @name IncompleteFileStatus */

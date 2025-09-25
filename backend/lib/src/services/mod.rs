@@ -35,7 +35,7 @@ pub struct Services {
 
 impl Services {
     /// Create a new services struct
-    pub fn new(
+    pub async fn new(
         storage: Arc<dyn BoxedStorage>,
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
@@ -48,12 +48,16 @@ impl Services {
             rpc.clone(),
         ));
 
-        let msp = Arc::new(MspService::new(
-            storage.clone(),
-            postgres.clone(),
-            rpc.clone(),
-            config.storage_hub.msp_callback_url.clone(),
-        ));
+        let msp = Arc::new(
+            MspService::new(
+                storage.clone(),
+                postgres.clone(),
+                rpc.clone(),
+                config.storage_hub.msp_callback_url.clone(),
+            )
+            .await
+            .expect("MSP must be available when starting the backend's services"),
+        );
 
         Self {
             config,

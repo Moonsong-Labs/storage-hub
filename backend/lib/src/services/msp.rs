@@ -2,14 +2,14 @@
 //!
 //! TODO(MOCK): many of methods of the MspService returns mocked data
 
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use chrono::Utc;
-use codec::Encode;
+use codec::{Decode, Encode};
 use sc_network::PeerId;
 use serde::{Deserialize, Serialize};
 use shc_common::types::{ChunkId, FileKeyProof};
-use shc_rpc::SaveFileToDisk;
+use shc_rpc::{GetValuePropositionsResult, RpcProviderId, SaveFileToDisk};
 use sp_core::{Blake2Hasher, H256};
 use tracing::{debug, info, warn};
 
@@ -26,7 +26,9 @@ use crate::{
     models::{
         buckets::{Bucket, FileTree},
         files::{DistributeResponse, FileInfo},
-        msp_info::{Capacity, InfoResponse, MspHealthResponse, StatsResponse, ValueProp},
+        msp_info::{
+            Capacity, InfoResponse, MspHealthResponse, StatsResponse, ValuePropositionWithId,
+        },
         payment::PaymentStream,
     },
 };
@@ -58,16 +60,53 @@ pub struct MspService {
 
 impl MspService {
     /// Create a new MSP service
-    pub fn new(
+    /// Only MSP nodes are supported so it returns an error if the node is not an MSP.
+    pub async fn new(
         storage: Arc<dyn BoxedStorage>,
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
         msp_callback_url: String,
-    ) -> Self {
-        // TODO: retrieve from RPC
-        let msp_id = OnchainMspId::new(Hash::from_slice(DUMMY_MSP_ID.as_slice()));
+    ) -> Result<Self, Error> {
+        // Discover provider id from the connected node.
+        // If the node is not yet an MSP (which happens in integration tests), retry with
+        // a bounded number of attempts.
+        // TODO: Think about making it so in integration tests we spin up the backend
+        // only after the MSP has been registered on-chain, to avoid having this retry logic.
+        let mut retry_attempts = 0;
+        let max_retries = 10;
+        let delay_between_retries_secs = 5;
 
-        Self {
+        let msp_id = loop {
+            let provider_id: RpcProviderId = rpc
+                .call_no_params("storagehubclient_getProviderId")
+                .await
+                .map_err(|e| Error::BadRequest(e.to_string()))?;
+
+            match provider_id {
+                RpcProviderId::Msp(id) => break OnchainMspId::new(Hash::from_slice(id.as_ref())),
+                RpcProviderId::Bsp(_) => {
+                    return Err(Error::BadRequest(
+                        "Connected node is a BSP; expected an MSP".to_string(),
+                    ))
+                }
+                RpcProviderId::NotAProvider => {
+                    if retry_attempts >= max_retries {
+                        return Err(Error::BadRequest(
+                            "Connected node not a registered MSP after timeout".to_string(),
+                        ));
+                    }
+                    warn!(
+                        "Connected node is not yet a registered MSP; retrying provider discovery... (attempt {})",
+                        retry_attempts + 1
+                    );
+                    tokio::time::sleep(Duration::from_secs(delay_between_retries_secs)).await;
+                    retry_attempts += 1;
+                    continue;
+                }
+            }
+        };
+
+        Ok(Self {
             msp_id,
             storage,
             postgres,
@@ -75,15 +114,27 @@ impl MspService {
             // TODO: dedicated config struct
             // see: https://github.com/Moonsong-Labs/storage-hub/pull/459/files#r2369596519
             msp_callback_url,
-        }
+        })
     }
 
     /// Get MSP information
     pub async fn get_info(&self) -> Result<InfoResponse, Error> {
+        // Try to retrieve the provider ID from the client RPC
+        let provider_id_result: RpcProviderId = self
+            .rpc
+            .call("storagehubclient_getProviderId", jsonrpsee::rpc_params![])
+            .await
+            .map_err(|e| Error::BadRequest(e.to_string()))?;
+
+        let provider_id_hex = match provider_id_result {
+            RpcProviderId::NotAProvider => hex::encode(DUMMY_MSP_ID),
+            RpcProviderId::Bsp(id) | RpcProviderId::Msp(id) => hex::encode(id.as_ref()),
+        };
+
         Ok(InfoResponse {
             client: "storagehub-node v1.0.0".to_string(),
             version: "StorageHub MSP v0.1.0".to_string(),
-            msp_id: self.msp_id.to_string(),
+            msp_id: provider_id_hex,
             // TODO: Until we have actual MSP info, we should at least get the multiaddress from an RPC.
             // This way the backend can actually upload files to the MSP without having to change this code.
             multiaddresses: vec![
@@ -113,27 +164,42 @@ impl MspService {
     }
 
     /// Get MSP value propositions
-    pub async fn get_value_props(&self) -> Result<Vec<ValueProp>, Error> {
-        Ok(vec![
-            ValueProp {
-                id: "f32282ba18056b02cf2feb4cea92aa4552131617cdb7da03acaa554e4e736c32".to_string(),
-                price_per_gb_block: 0.5,
-                data_limit_per_bucket_bytes: 10737418240,
-                is_available: true,
-            },
-            ValueProp {
-                id: "a12345ba18056b02cf2feb4cea92aa4552131617cdb7da03acaa554e4e736c45".to_string(),
-                price_per_gb_block: 0.3,
-                data_limit_per_bucket_bytes: 5368709120,
-                is_available: true,
-            },
-            ValueProp {
-                id: "b67890ba18056b02cf2feb4cea92aa4552131617cdb7da03acaa554e4e736c67".to_string(),
-                price_per_gb_block: 0.8,
-                data_limit_per_bucket_bytes: 21474836480,
-                is_available: false,
-            },
-        ])
+    pub async fn get_value_props(&self) -> Result<Vec<ValuePropositionWithId>, Error> {
+        // Call RPC to get the value propositions
+        let result: GetValuePropositionsResult = self
+            .rpc
+            .call(
+                "storagehubclient_getValuePropositions",
+                jsonrpsee::rpc_params![],
+            )
+            .await
+            .map_err(|e| Error::BadRequest(e.to_string()))?;
+
+        // Decode the SCALE-encoded ValuePropositionWithId entries
+        match result {
+            GetValuePropositionsResult::Success(encoded_props) => {
+                let mut props = Vec::with_capacity(encoded_props.len());
+                for encoded_value_proposition in encoded_props {
+                    let value_prop_with_id =
+                        ValuePropositionWithId::decode(&mut encoded_value_proposition.as_slice())
+                            .map_err(|e| {
+                            Error::BadRequest(format!(
+                                "Failed to decode ValuePropositionWithId: {}",
+                                e
+                            ))
+                        })?;
+
+                    props.push(ValuePropositionWithId {
+                        id: value_prop_with_id.id,
+                        value_prop: value_prop_with_id.value_prop,
+                    });
+                }
+                Ok(props)
+            }
+            GetValuePropositionsResult::NotAnMsp => Err(Error::BadRequest(
+                "The node that we are connected to is not an MSP".to_string(),
+            )),
+        }
     }
 
     /// Get MSP health status

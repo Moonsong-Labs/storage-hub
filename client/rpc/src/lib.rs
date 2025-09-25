@@ -45,18 +45,6 @@ use remote_file::{RemoteFileConfig, RemoteFileHandlerFactory};
 
 const LOG_TARGET: &str = "storage-hub-client-rpc";
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct CheckpointChallenge {
-    pub file_key: shp_types::Hash,
-    pub should_remove_file: bool,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct LoadFileInStorageResult {
-    pub file_key: shp_types::Hash,
-    pub file_metadata: FileMetadata,
-}
-
 /// RPC configuration.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct RpcConfig {
@@ -121,6 +109,18 @@ where
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CheckpointChallenge {
+    pub file_key: shp_types::Hash,
+    pub should_remove_file: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LoadFileInStorageResult {
+    pub file_key: shp_types::Hash,
+    pub file_metadata: FileMetadata,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct IncompleteFileStatus {
     pub file_metadata: FileMetadata,
@@ -171,7 +171,6 @@ pub enum RpcProviderId {
 pub enum GetValuePropositionsResult {
     Success(Vec<Vec<u8>>),
     NotAnMsp,
-    ErrorRetrievingValuePropositions,
 }
 
 /// Provides an interface with the desired RPC method.
