@@ -225,18 +225,6 @@ export function OnePageDemo() {
       // Set the token (works for both mock and real auth)
       mspClient.setToken(authToken);
       console.log(`✅ MSP client authenticated successfully (${config.mockAuth ? 'Mock' : 'Real'} auth)`);
-      
-      // DEBUGGING: Verify token was set correctly
-      const verifyToken = (mspClient as any).token;
-      console.log('🔍 DEBUG: Token set on MSP client?', !!verifyToken);
-      if (verifyToken) {
-        console.log('🔍 DEBUG: Token matches?', verifyToken === authToken);
-      }
-      
-      // 🔑 JWT TOKEN FOR CURL COMMANDS - Copy this for manual API testing
-      console.log('🔑 JWT TOKEN (for curl):', authToken);
-      console.log('📋 Copy this curl command:');
-      console.log(`curl -X GET "http://127.0.0.1:8080/buckets" -H "Authorization: Bearer ${authToken}" -H "Content-Type: application/json"`);
 
       // Create StorageHub client
       const storageHubClient = new StorageHubClient({
@@ -497,25 +485,6 @@ export function OnePageDemo() {
                         📋 Mock address (with test buckets): 0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac
                       </div>
                     )}
-                    <button
-                      onClick={() => {
-                        if (mspClient && (mspClient as any).token) {
-                          const token = (mspClient as any).token;
-                          console.log('🔑 JWT TOKEN (for curl):', token);
-                          console.log('📋 Copy these curl commands:');
-                          console.log(`curl -X GET "http://127.0.0.1:8080/buckets" -H "Authorization: Bearer ${token}" -H "Content-Type: application/json"`);
-                          console.log(`curl -X GET "http://127.0.0.1:8080/value-props" -H "Content-Type: application/json"`);
-                          // Add file listing commands for each bucket
-                          const bucketIds = ['your-bucket-id-here']; // Replace with actual bucket IDs
-                          bucketIds.forEach(bucketId => {
-                            console.log(`curl -X GET "http://127.0.0.1:8080/buckets/${bucketId}/files" -H "Authorization: Bearer ${token}" -H "Content-Type: application/json"`);
-                          });
-                        }
-                      }}
-                      className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-                    >
-                      📋 Print Curl Commands
-                    </button>
                   </div>
                 )}
           </section>

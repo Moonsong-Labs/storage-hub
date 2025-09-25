@@ -170,16 +170,8 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
       const TEST_MSP_ID = '0x0000000000000000000000000000000000000000000000000000000000000300' as `0x${string}`;
       const TEST_VALUE_PROP_ID = '0x3dd8887de89f01cef28701feda1435cf0bb38e9d5cb38321a615c1a1e1d5d51b' as `0x${string}`;
 
-      console.log('🔍 Creating bucket with test constants:', {
-        mspId: TEST_MSP_ID,
-        valuePropId: TEST_VALUE_PROP_ID,
-        bucketName: bucketState.bucketName,
-        walletAddress,
-        balance: walletBalance
-      });
 
       const bucketId = await storageHubClient.deriveBucketId(walletAddress as `0x${string}`, bucketState.bucketName);
-      console.log('Derived bucket ID:', bucketId);
 
           const txHash = await storageHubClient.createBucket(
             TEST_MSP_ID,
@@ -206,10 +198,8 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
           error: null
         }));
 
-        console.log('🎉 Bucket creation completed successfully!');
         
         // Refresh bucket list from MSP backend to get the latest state
-        console.log('🔄 Refreshing bucket list after creation...');
         await loadBuckets();
       } else {
         throw new Error('Bucket creation transaction failed');
@@ -234,192 +224,21 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
     setIsLoadingBuckets(true);
     
     try {
-      console.log('🔄 Refreshing buckets from MSP backend...');
-      
-      // DEBUGGING: Check if token is set on MSP client
-      const clientToken = (mspClient as any).token;
-      console.log('🔍 DEBUG: MSP Client token set?', !!clientToken);
-      if (clientToken) {
-        console.log('🔍 DEBUG: Token preview:', clientToken.substring(0, 50) + '...');
-        
-        // Decode the JWT payload to verify contents
-        try {
-          const parts = clientToken.split('.');
-          if (parts.length === 3) {
-            const payload = JSON.parse(atob(parts[1] + '=='));
-            console.log('🔍 DEBUG: JWT payload:', payload);
-          }
-        } catch (decodeError) {
-          console.log('🔍 DEBUG: Could not decode JWT:', decodeError);
-        }
-      } else {
-        console.error('❌ DEBUG: No token found on MSP client!');
-      }
-      
-      // DEBUGGING: Test MSP client health first (no auth required)
-      console.log('🔍 DEBUG: Testing MSP client health...');
-      try {
-        const health = await mspClient.getHealth();
-        console.log('🔍 DEBUG: MSP health check:', health);
-      } catch (healthError) {
-        console.error('🔍 DEBUG: MSP health check failed:', healthError);
-      }
-      
-      console.log('🔄 Making listBuckets request...');
-      
-      // DEBUGGING: Test the HTTP client directly (EXACTLY like curl command)
-      console.log('🔍 DEBUG: Testing HTTP client directly (like curl)...');
-      console.log('🔍 DEBUG: Using exact same JWT as working curl:', clientToken);
-      
-      // DEBUGGING: Check what address is in the JWT vs wallet
-      try {
-        const jwtParts = clientToken.split('.');
-        const payload = JSON.parse(atob(jwtParts[1] + '=='));
-        console.log('🔍 DEBUG: JWT token address:', payload.address);
-        console.log('🔍 DEBUG: Current wallet address:', walletAddress);
-        console.log('🔍 DEBUG: Addresses match?', payload.address?.toLowerCase() === walletAddress?.toLowerCase());
-      } catch (e) {
-        console.log('🔍 DEBUG: Could not decode JWT for address comparison');
-      }
-      console.log('🔍 DEBUG: Making request to: http://127.0.0.1:8080/buckets');
-      console.log('🔍 DEBUG: Headers: Authorization: Bearer [token], Content-Type: application/json');
-      
-      try {
-        const directResponse = await fetch('http://127.0.0.1:8080/buckets', {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${clientToken}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        console.log('🔍 DEBUG: Direct fetch response status:', directResponse.status);
-        console.log('🔍 DEBUG: Direct fetch response headers:', Object.fromEntries(directResponse.headers.entries()));
-        
-        if (directResponse.ok) {
-          const directData = await directResponse.json();
-          console.log('🔍 DEBUG: Direct fetch SUCCESS - data:', directData);
-          console.log('🔍 DEBUG: Direct fetch found', directData.length, 'buckets');
-        } else {
-          const errorText = await directResponse.text();
-          console.error('🔍 DEBUG: Direct fetch HTTP error:', directResponse.status, errorText);
-        }
-      } catch (directError) {
-        console.error('🔍 DEBUG: Direct fetch NETWORK error:', directError);
-      }
-      
-      // DEBUGGING: Intercept fetch to see what SDK is actually sending
-      const originalFetch = window.fetch;
-      const interceptedRequests: Array<{url: string, options: RequestInit}> = [];
-      
-      window.fetch = async (url: string | URL | Request, options?: RequestInit) => {
-        const urlString = url.toString();
-        if (urlString.includes('/buckets')) {
-          console.log('🔍 DEBUG: INTERCEPTED SDK REQUEST:', urlString);
-          console.log('🔍 DEBUG: INTERCEPTED SDK OPTIONS:', options);
-          console.log('🔍 DEBUG: INTERCEPTED SDK HEADERS:', options?.headers);
-          interceptedRequests.push({url: urlString, options: options || {}});
-        }
-        return originalFetch(url as any, options);
-      };
-      
-      // DEBUGGING: Log the actual HTTP request being made
-      console.log('🔍 DEBUG: About to call mspClient.listBuckets()...');
-      console.log('🔍 DEBUG: MSP client config:', (mspClient as any).config);
-      console.log('🔍 DEBUG: MSP client HTTP instance:', (mspClient as any).http);
-      
-      // DEBUGGING: Check the HttpClient's fetch implementation
-      const httpClient = (mspClient as any).http;
-      console.log('🔍 DEBUG: HttpClient fetchImpl:', typeof httpClient.fetchImpl);
-      console.log('🔍 DEBUG: HttpClient baseUrl:', httpClient.baseUrl);
-      console.log('🔍 DEBUG: HttpClient defaultHeaders:', httpClient.defaultHeaders);
-      console.log('🔍 DEBUG: Global fetch available:', typeof globalThis.fetch);
-      console.log('🔍 DEBUG: Window fetch available:', typeof window.fetch);
-      
-      // DEBUGGING: Test HttpClient directly
-      console.log('🔍 DEBUG: Testing HttpClient directly...');
-      try {
-        const directHttpResult = await httpClient.get('/buckets', {
-          headers: {
-            'Authorization': `Bearer ${clientToken}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        console.log('✅ Direct HttpClient SUCCESS:', directHttpResult);
-      } catch (directHttpError: any) {
-        console.error('❌ Direct HttpClient FAILED:', directHttpError);
-        console.error('❌ Direct HttpClient error type:', typeof directHttpError);
-        console.error('❌ Direct HttpClient error name:', directHttpError?.name);
-        console.error('❌ Direct HttpClient error message:', directHttpError?.message);
-      }
-      
-      console.log('🔍 DEBUG: ==========================================');
-      console.log('🔍 DEBUG: NOW TESTING SDK vs DIRECT COMPARISON');
-      console.log('🔍 DEBUG: ==========================================');
       
       let bucketList: any[] = [];
       try {
-        console.log('🔍 DEBUG: Calling mspClient.listBuckets()...');
         bucketList = await mspClient.listBuckets();
-        console.log('✅ Buckets loaded from MSP SDK:', bucketList);
       } catch (sdkError: any) {
-        console.error('❌ SDK ERROR: mspClient.listBuckets() failed:', sdkError);
-        console.error('❌ SDK ERROR type:', typeof sdkError);
-        console.error('❌ SDK ERROR name:', sdkError?.name);
-        console.error('❌ SDK ERROR message:', sdkError?.message);
-        console.error('❌ SDK ERROR stack:', sdkError?.stack);
+        console.error('❌ Failed to load buckets:', sdkError?.message || sdkError);
         bucketList = []; // Fallback to empty array
-      }
-      console.log('🔍 DEBUG: SDK result type:', typeof bucketList);
-      console.log('🔍 DEBUG: SDK result Array.isArray:', Array.isArray(bucketList));
-      console.log('🔍 DEBUG: SDK result length:', bucketList?.length);
-      
-      console.log('🔍 DEBUG: ==========================================');
-      console.log('🔍 DEBUG: COMPARISON SUMMARY:');
-      console.log('🔍 DEBUG: - Direct fetch (like curl): Should show buckets above');
-      console.log('🔍 DEBUG: - SDK listBuckets():', bucketList?.length || 0, 'buckets');
-      console.log('🔍 DEBUG: ==========================================');
-      
-      // Restore original fetch
-      window.fetch = originalFetch;
-      
-      console.log('🔍 DEBUG: INTERCEPTED REQUESTS:', interceptedRequests);
-      
-      if (Array.isArray(bucketList) && bucketList.length === 0) {
-        console.error('🚨 FOUND THE ISSUE: SDK returns empty array but direct fetch works!');
-        console.error('🚨 This means the SDK HttpClient is not sending the request correctly!');
-        console.error('🚨 Check intercepted requests above to see the difference!');
       }
       
       // Replace all buckets with the fresh list from MSP backend
-      // This ensures we have the most up-to-date bucket information
       const freshBuckets = bucketList || [];
       setBuckets(freshBuckets);
       
-      console.log(`📋 Updated bucket list: ${freshBuckets.length} buckets available`);
-      freshBuckets.forEach(bucket => {
-        console.log(`  - ${bucket.name} (ID: ${bucket.bucketId.slice(0, 8)}..., Files: ${bucket.fileCount}, Size: ${bucket.sizeBytes} bytes)`);
-        console.log(`    🔍 DEBUG: Full bucket ID: "${bucket.bucketId}" (length: ${bucket.bucketId.length})`);
-      });
-      
     } catch (error: any) {
-      console.error('❌ Failed to refresh buckets from MSP:', error);
-      
-      // Additional debugging for authentication errors
-      if (error?.status === 401) {
-        console.error('🔍 DEBUG: 401 Unauthorized - JWT token issue');
-      } else if (error?.status === 403) {
-        console.error('🔍 DEBUG: 403 Forbidden - Permission issue');
-      } else if (error?.status) {
-        console.error('🔍 DEBUG: HTTP Status:', error.status);
-      }
-      
-      // Log response body if available
-      if (error?.response) {
-        console.error('🔍 DEBUG: Response body:', error.response);
-      }
-      
-      // Show user-friendly error message
-      console.error('This could be due to authentication issues or MSP backend connectivity problems');
+      console.error('❌ Failed to refresh buckets:', error?.message || error);
     } finally {
       setIsLoadingBuckets(false);
     }
@@ -438,7 +257,6 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
     setFileBrowserState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      console.log('🔄 Loading files from bucket:', bucketId);
       
       const fileListResponse = await mspClient.getFiles(bucketId, path ? { path } : undefined);
 
@@ -527,7 +345,7 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
         error: null,
       }));
 
-      console.log(`📁 Loaded ${extractedFiles.length} files from ${bucketId}`);
+      console.log(`📁 Loaded ${extractedFiles.length} files`);
       
     } catch (error: any) {
       console.error('❌ Failed to load files:', error);
@@ -589,10 +407,6 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
       const registry = new TypeRegistry();
       const owner = registry.createType("AccountId20", walletAddress) as AccountId20;
       
-      // DEBUGGING: Check bucket ID format
-      console.log('🔍 DEBUG: selectedBucketId:', selectedBucketId);
-      console.log('🔍 DEBUG: selectedBucketId length:', selectedBucketId.length);
-      console.log('🔍 DEBUG: selectedBucketId starts with 0x:', selectedBucketId.startsWith('0x'));
       
       // Ensure bucket ID is properly formatted as 32-byte hex string
       let bucketIdForH256 = selectedBucketId;
@@ -885,15 +699,11 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
                   {buckets.length === 0 && (
                     <option value="" disabled>No buckets available</option>
                   )}
-                  {buckets.map((bucket) => {
-                    console.log('🔍 Rendering bucket option:', bucket);
-                    console.log('🔍 Bucket ID for dropdown:', bucket.bucketId, 'length:', bucket.bucketId.length);
-                    return (
+                {buckets.map((bucket) => (
                       <option key={bucket.bucketId} value={bucket.bucketId}>
                         {bucket.name} ({bucket.bucketId.slice(0, 8)}...)
                       </option>
-                    );
-                  })}
+                    ))}
             </select>
                 <button
                   onClick={loadBuckets}
