@@ -67,7 +67,7 @@ await describeMspNet(
       strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp1.expectedPeerId);
     });
 
-    it("Should succesfully list no buckets", async () => {
+    it("Should successfully list no buckets", async () => {
       assert(userJWT, "User token is initialized");
 
       const response = await fetch("http://localhost:8080/buckets", {
@@ -130,7 +130,7 @@ await describeMspNet(
       });
     });
 
-    it("Should succesfully get specific bucket info", async () => {
+    it("Should successfully get specific bucket info", async () => {
       assert(userJWT, "User token is initialized");
       assert(bucketId, "Bucket should have been created");
 
@@ -148,7 +148,7 @@ await describeMspNet(
       strictEqual(bucket.name, bucketName, "Should have same name as creation");
     });
 
-    it("Should succesfully list user buckets", async () => {
+    it("Should successfully list user buckets", async () => {
       assert(userJWT, "User token is initialized");
       assert(bucketId, "Bucket should have been created");
 
@@ -168,7 +168,7 @@ await describeMspNet(
       assert(sample_bucket, "list should include bucket added in initialization");
     });
 
-    it("Should succesfully get bucket files", async () => {
+    it("Should successfully get bucket files", async () => {
       assert(userJWT, "User token is initialized");
       assert(bucketId, "Bucket should have been created");
 
@@ -197,7 +197,7 @@ await describeMspNet(
       assert(test.type === "folder", "Child entry should be a folder");
     });
 
-    it("Should succesfully get bucket files subpath", async () => {
+    it("Should successfully get bucket files subpath", async () => {
       assert(userJWT, "User token is initialized");
       assert(bucketId, "Bucket should have been created");
 
@@ -239,7 +239,7 @@ await describeMspNet(
       );
     });
 
-    it("Should succesfully get file info by key", async () => {
+    it("Should successfully get file info by key", async () => {
       assert(userJWT, "User token is initialized");
       assert(bucketId, "Bucket should have been created");
       assert(fileKey, "File should have been created");

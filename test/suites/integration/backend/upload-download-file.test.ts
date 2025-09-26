@@ -196,7 +196,7 @@ await describeMspNet(
         assert(fileKey, "File should have been created");
         assert(form, "Upload form should be ready");
 
-        // Generatea a JWT token for Baltathar using the backend's auth endpoints
+        // Generate a JWT token for Baltathar using the backend's auth endpoints
         // Trying to upload this file with it should fail
         const baltatharToken = await fetchJwtToken(
           BALTATHAR_PRIVATE_KEY,
