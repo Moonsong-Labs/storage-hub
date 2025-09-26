@@ -69,6 +69,7 @@ impl Services {
             })
             .expect("JWT secret configuration should be valid");
 
+        #[allow(unused_mut)] // triggers warning without mocks feature
         let mut auth = AuthService::new(jwt_secret.as_slice(), storage.clone());
 
         #[cfg(feature = "mocks")]
