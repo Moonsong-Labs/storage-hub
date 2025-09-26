@@ -1,3 +1,4 @@
+#[cfg(test)]
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
