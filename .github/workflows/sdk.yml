@@ -110,13 +110,13 @@ jobs:
         working-directory: .
       - name: Install SDK dependencies
         run: pnpm install --frozen-lockfile
+      - name: Format check
+        run: pnpm fmt
+      - name: Lint
+        run: pnpm lint
       - name: Build
         working-directory: sdk
         run: pnpm build
-      - name: Lint
-        run: pnpm lint
-      - name: Format check
-        run: pnpm fmt
       - name: Type check
         run: pnpm typecheck
       - name: Run tests (core)
