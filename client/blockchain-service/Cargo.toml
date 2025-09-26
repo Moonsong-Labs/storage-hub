@@ -35,6 +35,7 @@ pallet-transaction-payment = { workspace = true }
 sc-client-api = { workspace = true }
 sc-service = { workspace = true }
 sc-network = { workspace = true }
+sc-network-types = { workspace = true }
 sc-utils = { workspace = true }
 sc-tracing = { workspace = true }
 sp-api = { workspace = true }

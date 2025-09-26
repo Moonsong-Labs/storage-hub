@@ -54,6 +54,7 @@ services:
         '--sealing=manual',
         '--base-path=/data',
         '--msp-charging-period=12',
+        '--msp-distribute-files',
       ]
   sh-msp-2:
     image: storage-hub:local
@@ -83,6 +84,7 @@ services:
         '--sealing=manual',
         '--base-path=/data',
         '--msp-charging-period=12',
+        '--msp-distribute-files',
       ]
   sh-user:
     image: storage-hub:local

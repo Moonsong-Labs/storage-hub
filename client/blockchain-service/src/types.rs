@@ -1,7 +1,7 @@
 use log::warn;
 use std::{
     cmp::{min, Ordering},
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     future::Future,
     pin::Pin,
     time::Duration,
@@ -13,7 +13,7 @@ use sc_client_api::BlockImportNotification;
 use shc_common::{
     traits::StorageEnableRuntime,
     types::{
-        BackupStorageProviderId, BlockNumber, BucketId, CustomChallenge, HasherOutT,
+        BackupStorageProviderId, BlockNumber, BucketId, CustomChallenge, FileKey, HasherOutT,
         MainStorageProviderId, MerkleTrieHash, OpaqueBlock, ProofsDealerProviderId,
         RandomnessOutput, RejectedStorageRequestReason, StorageDataUnit, StorageHubEventsVec,
         StorageProofsMerkleTrieLayout, StorageProviderId,
@@ -584,6 +584,26 @@ impl<Runtime: StorageEnableRuntime> Ord for ForestStorageSnapshotInfo<Runtime> {
     }
 }
 
+/// Info recorded for files being distributed to BSPs from an MSP.
+///
+/// Stores the BSPs for which there are tasks currently distributing the file,
+/// and the BSPs for which the file has been confirmed to be stored.
+#[derive(Debug, Clone)]
+pub struct FileDistributionInfo<Runtime: StorageEnableRuntime> {
+    /// The BSPs for which there are tasks currently distributing the file.
+    pub(crate) bsps_distributing: BTreeSet<BackupStorageProviderId<Runtime>>,
+    /// The BSPs for which the file has been confirmed to be stored.
+    pub(crate) bsps_confirmed: BTreeSet<BackupStorageProviderId<Runtime>>,
+}
+
+impl<Runtime: StorageEnableRuntime> FileDistributionInfo<Runtime> {
+    pub fn new() -> Self {
+        Self {
+            bsps_distributing: BTreeSet::new(),
+            bsps_confirmed: BTreeSet::new(),
+        }
+    }
+}
 /// A struct that holds the information to handle a BSP.
 ///
 /// This struct implements all the needed logic to manage BSP specific functionality.
@@ -641,6 +661,11 @@ pub struct MspHandler<Runtime: StorageEnableRuntime> {
     #[allow(dead_code)]
     pub(crate) forest_root_snapshots:
         BTreeMap<BucketId<Runtime>, BTreeSet<ForestStorageSnapshotInfo<Runtime>>>,
+    /// A map of [`FileKey`] to the information needed to distribute the file to BSPs.
+    ///
+    /// This is used to keep track of the BSPs for which there are tasks currently distributing the file,
+    /// and the BSPs for which the file has been confirmed to be stored.
+    pub(crate) files_to_distribute: HashMap<FileKey, FileDistributionInfo<Runtime>>,
 }
 
 impl<Runtime: StorageEnableRuntime> MspHandler<Runtime> {
@@ -649,6 +674,7 @@ impl<Runtime: StorageEnableRuntime> MspHandler<Runtime> {
             msp_id,
             forest_root_write_lock: None,
             forest_root_snapshots: BTreeMap::new(),
+            files_to_distribute: HashMap::new(),
         }
     }
 }
