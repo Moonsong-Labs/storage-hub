@@ -204,6 +204,7 @@ impl RpcConnection for MockConnection {
         let response: Value = match method {
             "storagehubclient_saveFileToDisk" => self.mock_save_file_to_disk(params).await,
             "storagehubclient_isFileKeyExpected" => serde_json::json!(true),
+            "storagehubclient_receiveBackendFileChunks" => serde_json::json!([]),
             _ => {
                 let responses = self.responses.read().await;
                 responses
