@@ -196,7 +196,6 @@ await describeMspNet(
 
       // Ensure fisherman node is ready
       assert(createFishermanApi, "Fisherman API not available for fisherman test");
-      await createFishermanApi();
 
       // Fund shUser account with extra balance for creating many buckets
       // Each bucket creation requires a deposit, and Test 3 creates 150 buckets
@@ -249,8 +248,6 @@ await describeMspNet(
 
       const { bucketId } = await ensureBucket(bucketName);
 
-      // Stop the fisherman container
-      console.log("Stopping fisherman container...");
       await userApi.docker.pauseContainer("storage-hub-sh-fisherman-1");
 
       // Pause MSP container so that we trigger the incomplete storage request
@@ -278,9 +275,7 @@ await describeMspNet(
         await userApi.rpc.engine.createBlock(true, true);
       }
 
-      // Start the fisherman container again
-      console.log("Starting fisherman container...");
-      await userApi.docker.restartContainer({ containerName: "storage-hub-sh-fisherman-1" });
+      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-fisherman-1" });
 
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",
