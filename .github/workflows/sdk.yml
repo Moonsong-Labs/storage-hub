@@ -105,11 +105,9 @@ jobs:
           key: wasm-pack-v0.12.1
       - name: Install wasm-pack
         run: curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
-      - name: Install root dependencies
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile
         working-directory: .
-      - name: Install SDK dependencies
-        run: pnpm install --frozen-lockfile
       - name: Format check
         run: pnpm fmt
       - name: Lint
