@@ -1,7 +1,7 @@
 "use client";
 
-import type { JSX } from 'react';
-import { useSDK } from './useSDK';
+import type { JSX } from "react";
+import { useSDK } from "./useSDK";
 
 export const Test = (): JSX.Element => {
   const status = useSDK();
