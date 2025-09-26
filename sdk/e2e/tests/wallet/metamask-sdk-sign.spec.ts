@@ -13,7 +13,8 @@ export const test = baseTest.extend<{
   wallet: Dappwright;
   page: Page;
 }>({
-  context: async (_, use) => {
+  // biome-ignore lint/correctness/noEmptyPattern: Playwright fixtures API requires this signature
+  context: async ({}, use) => {
     if (!sharedBrowserContext) {
       console.log("🚀 Launching browser with MetaMask...");
       const { browserContext } = await dappwright.launch("", {
