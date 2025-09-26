@@ -177,9 +177,7 @@ impl AuthService {
     /// The signature should be a valid ETH signature. The message should be the same as the returned value from `generate_nonce`.
     /// The method will fail if `message` has expired
     pub async fn login(&self, message: &str, signature: &str) -> Result<VerifyResponse, Error> {
-        // Retrieve the stored address for this message from storage
-        // TODO: change it so the nonce is removed in this operation to avoid nonce reuse
-        // if verification fails we can reinsert the nonce
+        // Retrieve (and remove) the stored address for this message from storage
         let address = self
             .storage
             .get_nonce(message)
@@ -194,17 +192,21 @@ impl AuthService {
             // NOTE: we compare the lowercase versions to avoid issues where the given user address is not
             // in the right casing, but would otherwise be the correct address.
             if recovered_address.as_str().to_lowercase() != address.as_str().to_lowercase() {
+                // since verification failed, reinsert nonce
+                self.storage
+                    .store_nonce(
+                        message.to_string(),
+                        address.clone(),
+                        AUTH_NONCE_EXPIRATION_SECONDS,
+                    )
+                    .await
+                    .map_err(|_| Error::Internal)?;
+
                 return Err(Error::Unauthorized(
                     "Signature doesn't match the provided address".to_string(),
                 ));
             }
         }
-
-        // Remove the nonce from storage after successful verification (one-time use)
-        self.storage
-            .remove_nonce(message)
-            .await
-            .map_err(|_| Error::Internal)?;
 
         // Finally, generate JWT token
         let token = self.generate_jwt(&address)?;

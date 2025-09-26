@@ -22,8 +22,6 @@ pub trait BoxedStorage: Send + Sync {
     ) -> Result<(), BoxedStorageError>;
 
     async fn get_nonce(&self, message: &str) -> Result<Option<String>, BoxedStorageError>;
-
-    async fn remove_nonce(&self, message: &str) -> Result<(), BoxedStorageError>;
 }
 
 /// Wrapper struct that implements BoxedStorage for any Storage implementation
@@ -67,12 +65,5 @@ where
 
     async fn get_nonce(&self, message: &str) -> Result<Option<String>, BoxedStorageError> {
         self.inner.get_nonce(message).await.map_err(Self::wrap_err)
-    }
-
-    async fn remove_nonce(&self, message: &str) -> Result<(), BoxedStorageError> {
-        self.inner
-            .remove_nonce(message)
-            .await
-            .map_err(Self::wrap_err)
     }
 }

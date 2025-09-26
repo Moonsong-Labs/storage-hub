@@ -150,23 +150,17 @@ impl Storage for InMemoryStorage {
     }
 
     async fn get_nonce(&self, message: &str) -> Result<Option<String>, Self::Error> {
-        let nonces = self.nonces.read();
+        let mut nonces = self.nonces.write();
 
-        if let Some(entry) = nonces.get(message) {
+        if let Some(entry) = nonces.remove(message) {
             let now = Instant::now();
 
             if now < entry.expires_at {
-                return Ok(Some(entry.address.clone()));
+                return Ok(Some(entry.address));
             }
-            // Entry is expired but will be cleaned up by the background task
         }
 
         Ok(None)
-    }
-
-    async fn remove_nonce(&self, message: &str) -> Result<(), Self::Error> {
-        self.nonces.write().remove(message);
-        Ok(())
     }
 }
 
@@ -199,12 +193,9 @@ mod tests {
         let retrieved = storage.get_nonce(message).await.unwrap();
         assert_eq!(retrieved, Some(address.to_string()));
 
-        // Remove nonce
-        storage.remove_nonce(message).await.unwrap();
-
-        // Verify it's gone
-        let retrieved_after_remove = storage.get_nonce(message).await.unwrap();
-        assert_eq!(retrieved_after_remove, None);
+        // Verify it can't be retrieved twice
+        let retrieved_again = storage.get_nonce(message).await.unwrap();
+        assert_eq!(retrieved_again, None);
     }
 
     #[tokio::test]
