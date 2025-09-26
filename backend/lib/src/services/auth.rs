@@ -293,9 +293,15 @@ impl AuthenticatedUser {
         let now = Utc::now();
         let exp = DateTime::<Utc>::from_timestamp(claims.exp, 0)
             .ok_or_else(|| Error::Unauthorized("Invalid JWT expiry".to_string()))?;
+        let iat = DateTime::<Utc>::from_timestamp(claims.iat, 0)
+            .ok_or_else(|| Error::Unauthorized("Invalid JWT issuance time".to_string()))?;
 
         if now >= exp {
             return Err(Error::Unauthorized("Expired JWT".to_string()));
+        }
+
+        if iat > now {
+            return Err(Error::Unauthorized("JWT issued in the future".to_string()));
         }
 
         Ok(AuthenticatedUser {
