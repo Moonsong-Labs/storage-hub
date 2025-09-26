@@ -69,7 +69,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
     ) -> Self {
         Self {
             client,
-            last_processed_block: 0u32.into(), // Initialize to 0 like blockchain service
+            last_processed_block: 0u32.into(),
             event_bus_provider: FishermanServiceEventBusProvider::<Runtime>::new(),
             sync_mode_min_blocks_behind: sync_mode_min_blocks_behind.into(),
             incomplete_sync_max,
