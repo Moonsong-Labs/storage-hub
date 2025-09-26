@@ -62,12 +62,12 @@ impl AuthService {
     }
 
     /// Returns the configured JWT decoding key
-    pub fn jwt_decoding_key(&self) -> &DecodingKey {
+    pub(crate) fn jwt_decoding_key(&self) -> &DecodingKey {
         &self.decoding_key
     }
 
     /// Returns the configured JWT validation parameter
-    pub fn jwt_validation(&self) -> &Validation {
+    pub(crate) fn jwt_validation(&self) -> &Validation {
         &self.validation
     }
 
