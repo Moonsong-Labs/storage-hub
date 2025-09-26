@@ -7,11 +7,10 @@ use axum::{
     http::request::Parts,
 };
 use axum_jwt::{
-    jsonwebtoken::{self, DecodingKey, EncodingKey, Header},
+    jsonwebtoken::{self, DecodingKey, EncodingKey, Header, Validation},
     Claims, Decoder,
 };
 use chrono::{DateTime, Utc};
-use jsonwebtoken::Validation;
 use rand::{distributions::Alphanumeric, Rng};
 
 use crate::{
@@ -40,20 +39,18 @@ impl AuthService {
     ///
     /// Arguments:
     /// * `secret`: secret to use to initialize the JWT encoding and decoding keys
-    /// * `validate_signature`: used to enable Eth and JWT signature validation. Recommended set to true.
     /// * `storage`: reference to the storage service to use to store nonce information
-    pub fn new(secret: &[u8], validate_signature: bool, storage: Arc<dyn BoxedStorage>) -> Self {
-        let mut validation = jsonwebtoken::Validation::default();
-        if !validate_signature {
-            validation.insecure_disable_signature_validation();
-        }
+    pub fn new(secret: &[u8], storage: Arc<dyn BoxedStorage>) -> Self {
+        // `Validation` is used by the underlying lib to determine how to decode
+        // the JWT passed in
+        let mut validation = Validation::default();
 
         Self {
             encoding_key: EncodingKey::from_secret(secret),
             decoding_key: DecodingKey::from_secret(secret),
             validation,
             storage,
-            validate_signature,
+            validate_signature: true,
         }
     }
 
@@ -236,6 +233,25 @@ impl AuthService {
     }
 }
 
+#[cfg(any(test, feature = "mocks"))]
+impl AuthService {
+    /// Disables Eth and JWT signature validation checks
+    ///
+    /// Will also enable fallaback authentication to [`MOCK_ADDRESS`]
+    pub fn insecure_disable_validation(&mut self) {
+        self.validation.insecure_disable_signature_validation();
+        self.validate_signature = false;
+    }
+
+    /// Enables Eth and JWT signature validation checks
+    ///
+    /// Opposite operation of [`insecure_disable_validation`].
+    pub fn enable_validation(&mut self) {
+        self.validation = Validation::default();
+        self.validate_signature = true;
+    }
+}
+
 #[cfg(test)]
 impl AuthService {
     /// Encodes the given claims as a JWT
@@ -338,8 +354,12 @@ mod tests {
             .jwt_secret
             .as_ref()
             .expect("JWT secret should be set in tests");
-        let auth_service =
-            AuthService::new(jwt_secret.as_bytes(), validate_signature, storage.clone());
+        let mut auth_service = AuthService::new(jwt_secret.as_bytes(), storage.clone());
+
+        if !validate_signature {
+            auth_service.insecure_disable_validation();
+        }
+
         (auth_service, storage, cfg)
     }
 
@@ -370,14 +390,14 @@ mod tests {
 
     #[tokio::test]
     async fn generate_jwt_creates_valid_token() {
-        let (auth_service, _, cfg) = create_test_auth_service(true);
+        let (auth_service, _, _) = create_test_auth_service(true);
 
         let address = MOCK_ADDRESS;
         let token = auth_service.generate_jwt(address).unwrap();
 
         // Try to decode the token
-        let decoding_key = cfg.get_jwt_key();
-        let validation = Validation::new(Algorithm::HS256);
+        let decoding_key = auth_service.jwt_decoding_key();
+        let validation = Validation::new(Algorithm::HS256); // ensure we validate
 
         let decoded = decode::<JwtClaims>(&token, &decoding_key, &validation).unwrap();
 

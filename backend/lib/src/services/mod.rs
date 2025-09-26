@@ -69,16 +69,16 @@ impl Services {
             })
             .expect("JWT secret configuration should be valid");
 
-        #[cfg(feature = "mocks")]
-        let jwt_validate = !config.auth.mock_mode;
-        #[cfg(not(feature = "mocks"))]
-        let jwt_validate = true;
+        let mut auth = AuthService::new(jwt_secret.as_slice(), storage.clone());
 
-        let auth = Arc::new(AuthService::new(
-            jwt_secret.as_slice(),
-            jwt_validate,
-            storage.clone(),
-        ));
+        #[cfg(feature = "mocks")]
+        {
+            if config.auth.mock_mode {
+                auth.insecure_disable_validation();
+            }
+        }
+
+        let auth = Arc::new(auth);
         let health = Arc::new(HealthService::new(
             storage.clone(),
             postgres.clone(),

@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NonceRequest {
+    // TODO: consider typing this field more strongly
     pub address: String,
     #[serde(rename = "chainId")]
     pub chain_id: u64,
@@ -26,12 +27,14 @@ pub struct VerifyResponse {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct User {
+    // TODO: consider typing this field more strongly
     pub address: String,
     pub ens: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct JwtClaims {
+    // TODO: consider typing this field more strongly
     pub address: String,
     pub exp: i64,
     pub iat: i64,
