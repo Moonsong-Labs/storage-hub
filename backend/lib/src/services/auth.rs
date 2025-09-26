@@ -43,7 +43,7 @@ impl AuthService {
     pub fn new(secret: &[u8], storage: Arc<dyn BoxedStorage>) -> Self {
         // `Validation` is used by the underlying lib to determine how to decode
         // the JWT passed in
-        let mut validation = Validation::default();
+        let validation = Validation::default();
 
         Self {
             encoding_key: EncodingKey::from_secret(secret),
@@ -59,7 +59,7 @@ impl AuthService {
         &self.decoding_key
     }
 
-    /// Returns the configured JWT validation paramter
+    /// Returns the configured JWT validation parameter
     pub fn jwt_validation(&self) -> &Validation {
         &self.validation
     }
@@ -85,7 +85,7 @@ impl AuthService {
 
         // TODO: make uri match endpoint
         let uri = format!("{scheme}://{domain}/auth/nonce");
-        let statement = "I authenticate with this MSP Backend with my address";
+        let statement = "I authenticate to this MSP Backend with my address";
         let version = 1;
         let issued_at = chrono::Utc::now().to_rfc3339();
 
@@ -168,7 +168,7 @@ impl AuthService {
     pub async fn login(&self, message: &str, signature: &str) -> Result<VerifyResponse, Error> {
         // Retrieve the stored address for this message from storage
         // TODO: change it so the nonce is removed in this operation to avoid nonce reuse
-        // if verification fails we can reisert the nonce
+        // if verification fails we can reinsert the nonce
         let address = self
             .storage
             .get_nonce(message)
@@ -199,6 +199,7 @@ impl AuthService {
         let token = self.generate_jwt(&address)?;
 
         // TODO: Store the session token in database
+        // to allow users to logout (invalidate their session)
         Ok(VerifyResponse {
             token,
             user: User {
@@ -274,7 +275,8 @@ impl AuthenticatedUser {
     /// Verifies the passed in `JwtClaims`
     ///
     /// Returns the user information if the claims are valid and not expired
-    pub fn from_claims(claims: JwtClaims) -> Result<Self, Error> {
+    // TODO: user logout verification
+    pub fn from_claims(claims: &JwtClaims) -> Result<Self, Error> {
         let now = Utc::now();
         let exp = DateTime::<Utc>::from_timestamp(claims.exp, 0)
             .ok_or_else(|| Error::Unauthorized("Invalid JWT expiry".to_string()))?;
@@ -284,20 +286,23 @@ impl AuthenticatedUser {
         }
 
         Ok(AuthenticatedUser {
-            address: claims.address,
+            address: claims.address.clone(),
         })
     }
 
-    async fn from_request_parts_impl<S>(parts: &mut Parts, state: &S) -> Result<Self, Error>
+    async fn from_request_parts_impl<S>(
+        parts: &mut Parts,
+        state: &S,
+    ) -> Result<Self, (Option<JwtClaims>, Error)>
     where
         S: Send + Sync,
         Decoder: FromRef<S>,
     {
         let claims = Claims::<JwtClaims>::from_request_parts(parts, state)
             .await
-            .map_err(|e| Error::Unauthorized(format!("Invalid JWT: {e:?}")))?;
+            .map_err(|e| (None, Error::Unauthorized(format!("Invalid JWT: {e:?}"))))?;
 
-        Self::from_claims(claims.0)
+        Self::from_claims(&claims.0).map_err(|e| (Some(claims.0), e))
     }
 }
 
@@ -316,15 +321,18 @@ where
         match maybe_auth {
             Ok(ok) => Ok(ok),
             // if services are configured to not validate signature
-            // return a mocked result as fallback
-            Err(e) if !services.auth.validate_signature => {
+            Err((claims, e)) if !services.auth.validate_signature => {
                 tracing::warn!("Authentication failed: {e:?}");
-                tracing::debug!("Bypassing authentication - authenticating user as MOCK_ADDDRESS");
-                return Ok(AuthenticatedUser {
-                    address: MOCK_ADDRESS.to_string(),
-                });
+
+                // if we were able to retrieve the claims then use the passed in address
+                let address = claims
+                    .map(|claims| claims.address)
+                    .unwrap_or_else(|| MOCK_ADDRESS.to_string());
+                tracing::debug!("Bypassing authentication - authenticating user as {address}");
+
+                return Ok(AuthenticatedUser { address });
             }
-            Err(e) => Err(e),
+            Err((_, e)) => Err(e),
         }
     }
 }
