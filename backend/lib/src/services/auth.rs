@@ -25,6 +25,13 @@ use crate::{
     services::Services,
 };
 
+/// Authentication service for the backend
+///
+/// The intended authentication flow is as follows:
+/// * User retrieves a nonce using [`AuthService::challenge`]
+/// * User constructs an Eth personal message signature for the resulting message
+/// * User submits the signature using [`AuthService::login`]
+/// * If verification succeeds, the User obtains JWT representing the User's address which they can then use to authenticate with this service
 #[derive(Clone)]
 pub struct AuthService {
     encoding_key: EncodingKey,
