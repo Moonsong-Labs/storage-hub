@@ -16,7 +16,10 @@ use rand::{distributions::Alphanumeric, Rng};
 use crate::{
     api::validation::validate_eth_address,
     constants::{
-        auth::{AUTH_NONCE_EXPIRATION_SECONDS, AUTH_SIWE_DOMAIN, JWT_EXPIRY_OFFSET, MOCK_ENS},
+        auth::{
+            AUTH_NONCE_ENDPOINT, AUTH_NONCE_EXPIRATION_SECONDS, AUTH_SIWE_DOMAIN,
+            JWT_EXPIRY_OFFSET, MOCK_ENS,
+        },
         mocks::MOCK_ADDRESS,
     },
     data::storage::BoxedStorage,
@@ -62,18 +65,17 @@ impl AuthService {
     }
 
     /// Returns the configured JWT decoding key
-    pub fn jwt_decoding_key(&self) -> &DecodingKey {
+    pub(crate) fn jwt_decoding_key(&self) -> &DecodingKey {
         &self.decoding_key
     }
 
     /// Returns the configured JWT validation parameter
-    pub fn jwt_validation(&self) -> &Validation {
+    pub(crate) fn jwt_validation(&self) -> &Validation {
         &self.validation
     }
 
     /// Generate a random SIWE-compliant nonce (at least 8 alphanumeric characters)
     fn generate_random_nonce() -> String {
-        // TODO: make rng configurable (OS's cryptorng / seeded rng for tests)
         rand::thread_rng()
             .sample_iter(&Alphanumeric)
             .take(16) // 16 characters for better security
@@ -91,7 +93,7 @@ impl AuthService {
         let scheme = "https";
 
         // TODO: make uri match endpoint
-        let uri = format!("{scheme}://{domain}/auth/nonce");
+        let uri = format!("{scheme}://{domain}/{AUTH_NONCE_ENDPOINT}");
         let statement = "I authenticate to this MSP Backend with my address";
         let version = 1;
         let issued_at = chrono::Utc::now().to_rfc3339();

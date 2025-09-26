@@ -62,7 +62,10 @@ mod tests {
     use crate::{
         api::{create_app, mock_app},
         config::Config,
-        constants::{auth::MOCK_ENS, mocks::MOCK_ADDRESS},
+        constants::{
+            auth::{AUTH_NONCE_ENDPOINT, MOCK_ENS},
+            mocks::MOCK_ADDRESS,
+        },
         models::auth::{
             JwtClaims, NonceRequest, NonceResponse, TokenResponse, User, VerifyRequest,
             VerifyResponse,
@@ -88,7 +91,7 @@ mod tests {
             chain_id: 1,
         };
 
-        let response = server.post("/auth/nonce").json(&nonce_request).await;
+        let response = server.post(AUTH_NONCE_ENDPOINT).json(&nonce_request).await;
 
         assert_eq!(response.status_code(), StatusCode::OK);
         let nonce_response: NonceResponse = response.json();
@@ -159,7 +162,10 @@ mod tests {
             chain_id: 1,
         };
 
-        let response = server.post("/auth/nonce").json(&invalid_request).await;
+        let response = server
+            .post(AUTH_NONCE_ENDPOINT)
+            .json(&invalid_request)
+            .await;
 
         assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
     }

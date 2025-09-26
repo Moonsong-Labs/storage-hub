@@ -64,6 +64,13 @@ pub mod api {
 pub mod auth {
     use chrono::Duration;
 
+    /// The endpoint for the nonce authentication
+    ///
+    /// This is here as a constant because it is used both in the
+    /// routing of the API, and in the construction of the SIWE message.
+    /// This way, if we change the endpoint, we only need to change it in one place.
+    pub const AUTH_NONCE_ENDPOINT: &str = "/auth/nonce";
+
     /// The 'domain' to use for the SIWE message
     // TODO: make configurable
     pub const AUTH_SIWE_DOMAIN: &str = "localhost";

@@ -6,7 +6,7 @@ use axum::{
     Router,
 };
 
-use crate::{api::handlers, services::Services};
+use crate::{api::handlers, constants::auth::AUTH_NONCE_ENDPOINT, services::Services};
 
 /// Creates the router with all API routes
 pub fn routes(services: Services) -> Router {
@@ -28,7 +28,7 @@ pub fn routes(services: Services) -> Router {
 
     Router::new()
         // Auth routes
-        .route("/auth/nonce", post(handlers::auth::nonce))
+        .route(AUTH_NONCE_ENDPOINT, post(handlers::auth::nonce))
         .route("/auth/verify", post(handlers::auth::verify))
         .route("/auth/refresh", post(handlers::auth::refresh))
         .route("/auth/logout", post(handlers::auth::logout))
