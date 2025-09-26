@@ -16,7 +16,8 @@ use shc_indexer_db::{
 };
 
 use crate::{
-    constants::database::DEFAULT_PAGE_LIMIT, data::indexer_db::repository::StorageOperations,
+    constants::database::DEFAULT_PAGE_LIMIT,
+    data::indexer_db::repository::{PaymentStreamData, StorageOperations},
     error::Result,
 };
 
@@ -132,6 +133,17 @@ impl DBClient {
         let hash = shp_types::Hash::from_slice(file_key);
         self.repository
             .get_file_by_file_key(&hash)
+            .await
+            .map_err(Into::into)
+    }
+
+    /// Get all payment streams for a user
+    pub async fn get_payment_streams_for_user(
+        &self,
+        user_account: &str,
+    ) -> Result<Vec<PaymentStreamData>> {
+        self.repository
+            .get_payment_streams_for_user(user_account)
             .await
             .map_err(Into::into)
     }

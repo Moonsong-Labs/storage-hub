@@ -21,13 +21,17 @@ use bigdecimal::BigDecimal;
 #[cfg(test)]
 use shc_indexer_db::{models::FileStorageRequestStep, OnchainBspId};
 use shc_indexer_db::{
-    models::{Bsp, Bucket, File, Msp},
+    models::{payment_stream::PaymentStream, Bsp, Bucket, File, Msp},
     schema::{bsp, bucket, file},
     OnchainMspId,
 };
 use shp_types::Hash;
 
-use crate::data::indexer_db::repository::{error::RepositoryResult, pool::SmartPool, IndexerOps};
+use crate::data::indexer_db::repository::{
+    error::{RepositoryError, RepositoryResult},
+    pool::SmartPool,
+    IndexerOps, PaymentStreamData, PaymentStreamKind,
+};
 #[cfg(test)]
 use crate::{constants::test, data::indexer_db::repository::IndexerOpsMut};
 
@@ -136,6 +140,39 @@ impl IndexerOps for Repository {
         File::get_by_file_key(&mut conn, file_key.as_bytes())
             .await
             .map_err(Into::into)
+    }
+
+    // ============ Payment Stream Operations ============
+    async fn get_payment_streams_for_user(
+        &self,
+        user_account: &str,
+    ) -> RepositoryResult<Vec<PaymentStreamData>> {
+        let mut conn = self.pool.get().await?;
+
+        // Get all payment streams for the user from the database
+        let streams = PaymentStream::get_all_by_user(&mut conn, user_account.to_string()).await?;
+
+        // Convert to our PaymentStreamData format, preserving BigDecimal types
+        streams
+            .into_iter()
+            .map(|stream| {
+                let kind = match (stream.rate, stream.amount_provided) {
+                    (Some(rate), None) => Ok(PaymentStreamKind::Fixed { rate }),
+                    (None, Some(amount_provided)) => {
+                        Ok(PaymentStreamKind::Dynamic { amount_provided })
+                    }
+                    _ => Err(RepositoryError::configuration(
+                        "payment stream must be either fixed or dynamic",
+                    )),
+                }?;
+
+                Ok(PaymentStreamData {
+                    provider: stream.provider,
+                    total_amount_paid: stream.total_amount_paid,
+                    kind,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()
     }
 }
 

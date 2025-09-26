@@ -12,7 +12,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use bigdecimal::BigDecimal;
+use bigdecimal::{BigDecimal, FromPrimitive};
 use chrono::Utc;
 use hex_literal::hex;
 use tokio::sync::RwLock;
@@ -27,7 +27,7 @@ use crate::{
     constants::test,
     data::indexer_db::repository::{
         error::{RepositoryError, RepositoryResult},
-        IndexerOps, IndexerOpsMut,
+        IndexerOps, IndexerOpsMut, PaymentStreamData, PaymentStreamKind,
     },
     mock_utils::{random_bytes_32, random_hash},
 };
@@ -290,6 +290,30 @@ impl IndexerOps for MockRepository {
             .find(|f| f.file_key.as_slice() == file_key.as_bytes())
             .cloned()
             .ok_or_else(|| RepositoryError::not_found("File"))
+    }
+
+    // ============ Payment Stream Operations ============
+    async fn get_payment_streams_for_user(
+        &self,
+        _user_account: &str,
+    ) -> RepositoryResult<Vec<PaymentStreamData>> {
+        // TODO(MOCK): add mechanism to create this data in the mock repository and retrieve it here
+        Ok(vec![
+            PaymentStreamData {
+                provider: "0x1234567890abcdef1234567890abcdef12345678".to_string(),
+                total_amount_paid: BigDecimal::from_i64(500000).unwrap(),
+                kind: PaymentStreamKind::Fixed {
+                    rate: BigDecimal::from_i64(5).unwrap(),
+                },
+            },
+            PaymentStreamData {
+                provider: "0xabcdef1234567890abcdef1234567890abcdef12".to_string(),
+                total_amount_paid: BigDecimal::from_i64(200000).unwrap(),
+                kind: PaymentStreamKind::Dynamic {
+                    amount_provided: BigDecimal::from_i64(10).unwrap(),
+                },
+            },
+        ])
     }
 }
 

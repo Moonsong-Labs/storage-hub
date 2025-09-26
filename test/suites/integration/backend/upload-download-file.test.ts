@@ -12,7 +12,7 @@ import {
   shUser,
   waitFor
 } from "../../../util";
-import type { HealthResponse } from "./types";
+import type { HealthResponse } from "../../../util/backend";
 
 await describeMspNet(
   "Backend file upload integration",

@@ -5,6 +5,7 @@ use log::{error, info};
 use std::sync::Arc;
 use thiserror::Error;
 
+use pallet_payment_streams::types::BalanceOf;
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use sc_client_api::{BlockBackend, BlockchainEvents};
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
@@ -543,25 +544,61 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             pallet_payment_streams::Event::DynamicRatePaymentStreamCreated {
                 provider_id,
                 user_account,
-                amount_provided: _amount_provided,
+                amount_provided,
             } => {
-                PaymentStream::create(conn, user_account.to_string(), provider_id.to_string())
-                    .await?;
+                let provider_id = format!("{:#?}", provider_id);
+                // We can't convert Units to BigDecimal directly
+                // so instead we pass thru Balance
+                let amount_provided: BalanceOf<Runtime> = (*amount_provided).into();
+                PaymentStream::create_dynamic_rate(
+                    conn,
+                    user_account.to_string(),
+                    provider_id,
+                    amount_provided.into(),
+                )
+                .await?;
             }
-            pallet_payment_streams::Event::DynamicRatePaymentStreamUpdated { .. } => {
-                // TODO: Currently we are not treating the info of dynamic rate update
+            pallet_payment_streams::Event::DynamicRatePaymentStreamUpdated {
+                provider_id,
+                user_account,
+                new_amount_provided,
+            } => {
+                let provider_id = format!("{:#?}", provider_id);
+
+                let ps = PaymentStream::get(conn, user_account.to_string(), provider_id).await?;
+
+                // We can't convert Units to BigDecimal directly
+                // so instead we pass thru Balance
+                let new_amount: BalanceOf<Runtime> = (*new_amount_provided).into();
+                PaymentStream::update_dynamic_rate(conn, ps.id, new_amount.into()).await?;
             }
             pallet_payment_streams::Event::DynamicRatePaymentStreamDeleted { .. } => {}
             pallet_payment_streams::Event::FixedRatePaymentStreamCreated {
                 provider_id,
                 user_account,
-                rate: _rate,
+                rate,
             } => {
-                PaymentStream::create(conn, user_account.to_string(), provider_id.to_string())
-                    .await?;
+                let provider_id = format!("{:#?}", provider_id);
+
+                let rate_decimal: BigDecimal = (*rate).into();
+                PaymentStream::create_fixed_rate(
+                    conn,
+                    user_account.to_string(),
+                    provider_id,
+                    rate_decimal,
+                )
+                .await?;
             }
-            pallet_payment_streams::Event::FixedRatePaymentStreamUpdated { .. } => {
-                // TODO: Currently we are not treating the info of fixed rate update
+            pallet_payment_streams::Event::FixedRatePaymentStreamUpdated {
+                provider_id,
+                user_account,
+                new_rate,
+            } => {
+                let provider_id = format!("{:#?}", provider_id);
+
+                let ps = PaymentStream::get(conn, user_account.to_string(), provider_id).await?;
+                let new_rate_decimal: BigDecimal = (*new_rate).into();
+                PaymentStream::update_fixed_rate(conn, ps.id, new_rate_decimal).await?;
             }
             pallet_payment_streams::Event::FixedRatePaymentStreamDeleted { .. } => {}
             pallet_payment_streams::Event::PaymentStreamCharged {
@@ -571,10 +608,10 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 last_tick_charged,
                 charged_at_tick,
             } => {
+                let provider_id = format!("{:#?}", provider_id);
+
                 // We want to handle this and update the payment stream total amount
-                let ps =
-                    PaymentStream::get(conn, user_account.to_string(), provider_id.to_string())
-                        .await?;
+                let ps = PaymentStream::get(conn, user_account.to_string(), provider_id).await?;
                 let amount: BigDecimal = (*amount).into();
                 let new_total_amount = ps.total_amount_paid + amount;
                 let last_tick_charged: u64 = (*last_tick_charged).saturated_into();
