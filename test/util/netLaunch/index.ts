@@ -130,9 +130,21 @@ export class NetworkLauncher {
       }
     }
 
-    // Remove fisherman service if not enabled
+    // Configure fisherman service
     if (!this.config.fisherman || this.type !== "fullnet") {
       delete composeYaml.services["sh-fisherman"];
+    } else {
+      // Add fisherman incomplete sync parameters if specified
+      if (this.config.fishermanIncompleteSyncMax !== undefined) {
+        composeYaml.services["sh-fisherman"].command.push(
+          `--fisherman-incomplete-sync-max=${this.config.fishermanIncompleteSyncMax}`
+        );
+      }
+      if (this.config.fishermanIncompleteSyncPageSize !== undefined) {
+        composeYaml.services["sh-fisherman"].command.push(
+          `--fisherman-incomplete-sync-page-size=${this.config.fishermanIncompleteSyncPageSize}`
+        );
+      }
     }
 
     if (this.config.extrinsicRetryTimeout) {
@@ -939,4 +951,16 @@ export type NetLaunchConfig = {
    * 'solochain' - Solochain EVM runtime
    */
   runtimeType?: "parachain" | "solochain";
+
+  /**
+   * Maximum number of incomplete storage requests to process during initial sync.
+   * Must be at least 1.
+   */
+  fishermanIncompleteSyncMax?: number;
+
+  /**
+   * Page size for incomplete storage request pagination.
+   * Must be at least 1.
+   */
+  fishermanIncompleteSyncPageSize?: number;
 };

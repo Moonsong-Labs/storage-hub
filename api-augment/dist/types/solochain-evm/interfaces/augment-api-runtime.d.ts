@@ -445,6 +445,16 @@ declare module "@polkadot/api-base/types/calls" {
         ) => Observable<Result<bool, IsStorageRequestOpenToVolunteersError>>
       >;
       /**
+       * List incomplete storage request keys with pagination.
+       **/
+      listIncompleteStorageRequestKeys: AugmentedCall<
+        ApiType,
+        (
+          startAfter: Option<H256> | null | Uint8Array | H256 | string,
+          limit: u32 | AnyNumber | Uint8Array
+        ) => Observable<Vec<H256>>
+      >;
+      /**
        * Get pending storage requests for a Main Storage Provider.
        **/
       pendingStorageRequestsByMsp: AugmentedCall<

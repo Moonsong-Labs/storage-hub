@@ -203,12 +203,16 @@ where
     pub async fn with_fisherman(
         &mut self,
         client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+        fisherman_options: &FishermanOptions,
     ) -> &mut Self {
         let fisherman_service_handle = spawn_fisherman_service::<Runtime>(
             self.task_spawner
                 .as_ref()
                 .expect("Task spawner is not set."),
             client,
+            fisherman_options.incomplete_sync_max,
+            fisherman_options.incomplete_sync_page_size,
+            fisherman_options.sync_mode_min_blocks_behind,
         )
         .await;
 
@@ -848,6 +852,12 @@ pub struct FishermanOptions {
     /// Deserializing as "fisherman_database_url" to match the expected field name in the toml file.
     #[serde(rename = "fisherman_database_url")]
     pub database_url: String,
+    /// Maximum number of incomplete storage requests to process during initial sync.
+    pub incomplete_sync_max: u32,
+    /// Page size for incomplete storage request pagination.
+    pub incomplete_sync_page_size: u32,
+    /// The minimum number of blocks behind the current best block to consider the fisherman out of sync.
+    pub sync_mode_min_blocks_behind: u32,
     /// Whether the node is running in maintenance mode.
     #[serde(default)]
     pub maintenance_mode: bool,
