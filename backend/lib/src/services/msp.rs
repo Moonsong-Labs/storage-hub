@@ -117,15 +117,18 @@ impl MspService {
 
     /// Get MSP information
     pub async fn get_info(&self) -> Result<InfoResponse, Error> {
+        // Fetch the MSP's local listen multiaddresses via RPC
+        let multiaddresses: Vec<String> = self
+            .rpc
+            .call_no_params("system_localListenAddresses")
+            .await
+            .map_err(|e| Error::BadRequest(e.to_string()))?;
+
         Ok(InfoResponse {
             client: "storagehub-node v1.0.0".to_string(),
             version: "StorageHub MSP v0.1.0".to_string(),
             msp_id: self.msp_id.to_string(),
-            // TODO: Until we have actual MSP info, we should at least get the multiaddress from an RPC.
-            // This way the backend can actually upload files to the MSP without having to change this code.
-            multiaddresses: vec![
-                "/ip4/192.168.0.10/tcp/30333/p2p/12D3KooWSUvz8QM5X4tfAaSLErAZjR2puojo16pULBHyqTMGKtNV".to_string()
-            ],
+            multiaddresses,
             owner_account: "0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac".to_string(),
             payment_account: "0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac".to_string(),
             status: "active".to_string(),
@@ -443,7 +446,7 @@ impl MspService {
         &self,
         multiaddresses: &[String],
     ) -> Result<Vec<PeerId>, Error> {
-        let mut peer_ids = Vec::new();
+        let mut peer_ids = HashSet::new();
 
         for multiaddr_str in multiaddresses {
             // Parse multiaddress string to extract peer ID
@@ -458,7 +461,7 @@ impl MspService {
                             "Extracted peer ID {:?} from multiaddress {}",
                             peer_id, multiaddr_str
                         );
-                        peer_ids.push(peer_id);
+                        peer_ids.insert(peer_id);
                     }
                     Err(e) => {
                         warn!(
@@ -478,7 +481,7 @@ impl MspService {
             ));
         }
 
-        Ok(peer_ids)
+        Ok(peer_ids.into_iter().collect())
     }
 
     /// Send an upload request to a specific peer ID of the MSP with retry logic.

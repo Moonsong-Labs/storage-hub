@@ -238,7 +238,10 @@ impl RpcConnection for MockConnection {
                         value_prop_with_id.encode()
                     }
                 ]))
-            }
+            },
+						"system_localListenAddresses" => serde_json::json!(vec![
+                "/ip4/192.168.0.10/tcp/30333/p2p/12D3KooWSUvz8QM5X4tfAaSLErAZjR2puojo16pULBHyqTMGKtNV"
+            ]),
             _ => {
                 let responses = self.responses.read().await;
                 responses
