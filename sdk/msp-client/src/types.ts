@@ -1,8 +1,8 @@
 export enum HealthState {
-  Healthy = 'healthy',
-  Unhealthy = 'unhealthy',
-  Degraded = 'degraded',
-  Unknown = 'unknown',
+  Healthy = "healthy",
+  Unhealthy = "unhealthy",
+  Degraded = "degraded",
+  Unknown = "unknown"
 }
 
 export interface ComponentHealth {
@@ -27,9 +27,9 @@ export interface HealthStatus {
 export type Hash = string; // 0x-prefixed hex string
 export type CustomMetadata = Record<string, string>;
 export enum Priority {
-  Low = 'low',
-  Normal = 'normal',
-  High = 'high',
+  Low = "low",
+  Normal = "normal",
+  High = "high"
 }
 
 export interface UploadProgress {
@@ -41,7 +41,7 @@ export interface UploadProgress {
   eta: number; // seconds remaining
 }
 
-export type UploadState = 'staged' | 'committed';
+export type UploadState = "staged" | "committed";
 
 export interface UploadOptions {
   // Documented fields
@@ -108,7 +108,7 @@ export interface Bucket {
   fileCount: number;
 }
 
-export type FileEntryType = 'file' | 'folder' | string;
+export type FileEntryType = "file" | "folder" | string;
 
 export interface FileEntry {
   name: string;

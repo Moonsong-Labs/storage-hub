@@ -3,23 +3,23 @@
 // Config:  Add entries to CONTRACTS below to support more contracts.
 // Output:  ./src/abi/<ContractName>.abi.json
 
-import fs from 'node:fs';
-import path from 'node:path';
-import solc from 'solc';
+import fs from "node:fs";
+import path from "node:path";
+import solc from "solc";
 
 // -------- Configuration (add new contracts here) --------
 const CONTRACTS = [
   {
-    name: 'FileSystem',
-    sourcePath: 'precompiles/pallet-file-system/FileSystem.sol',
-  },
+    name: "FileSystem",
+    sourcePath: "precompiles/pallet-file-system/FileSystem.sol"
+  }
   // { name: 'AnotherContract', sourcePath: 'path/to/AnotherContract.sol' },
 ];
-const OUT_DIR = 'src/abi';
+const OUT_DIR = "src/abi";
 // --------------------------------------------------------
 
 // Resolve paths relative to the Core package
-const repoRoot = path.resolve(process.cwd(), '../..');
+const repoRoot = path.resolve(process.cwd(), "../..");
 const outDir = path.resolve(process.cwd(), OUT_DIR);
 fs.mkdirSync(outDir, { recursive: true });
 
@@ -36,26 +36,26 @@ function compileAbi({ name, sourcePath }) {
   const sourceKey = path.basename(inputSol); // e.g. FileSystem.sol
   const sources = {
     [sourceKey]: {
-      content: fs.readFileSync(inputSol, 'utf8'),
-    },
+      content: fs.readFileSync(inputSol, "utf8")
+    }
   };
 
   // Standard JSON input for solc
   const input = {
-    language: 'Solidity',
+    language: "Solidity",
     sources,
     settings: {
       outputSelection: {
-        '*': {
-          '*': ['abi'],
-        },
-      },
-    },
+        "*": {
+          "*": ["abi"]
+        }
+      }
+    }
   };
 
   // Compile and parse the Standard JSON output
   const output = JSON.parse(solc.compile(JSON.stringify(input)));
-  if (output.errors && output.errors.some(e => e.severity === 'error')) {
+  if (output.errors?.some((e) => e.severity === "error")) {
     console.error(`[compile-abi] solc errors for ${name}:\n`, output.errors);
     process.exit(1);
   }
@@ -85,5 +85,3 @@ function compileAbi({ name, sourcePath }) {
 for (const entry of CONTRACTS) {
   compileAbi(entry);
 }
-
-
