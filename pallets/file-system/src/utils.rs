@@ -397,6 +397,31 @@ where
         )
     }
 
+    pub fn list_incomplete_storage_request_keys(
+        start_after: Option<MerkleHash<T>>,
+        limit: u32,
+    ) -> Vec<MerkleHash<T>> {
+        if limit == 0 {
+            return Vec::new();
+        }
+
+        let mut keys = Vec::new();
+
+        let iter = match start_after {
+            Some(start_key) => {
+                // iter_from_key excludes the starting key
+                IncompleteStorageRequests::<T>::iter_from_key(start_key)
+            }
+            None => IncompleteStorageRequests::<T>::iter(),
+        };
+
+        for (key, _) in iter.take(limit as usize) {
+            keys.push(key);
+        }
+
+        keys
+    }
+
     fn query_confirm_chunks_to_prove_for_file(
         provider_id: ProviderIdFor<T>,
         storage_request_metadata: StorageRequestMetadata<T>,

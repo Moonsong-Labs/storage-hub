@@ -442,7 +442,8 @@ export class BspNetTestApi implements AsyncDisposable {
         location: string,
         bucketId: H256,
         owner?: KeyringPair,
-        msp_id?: HexString
+        msp_id?: HexString,
+        replicationTarget?: number
       ) =>
         Files.sendNewStorageRequest(
           this._api,
@@ -450,7 +451,8 @@ export class BspNetTestApi implements AsyncDisposable {
           location,
           bucketId,
           owner ?? (this._runtimeType === "solochain" ? ethShUser : shUser),
-          msp_id
+          msp_id,
+          replicationTarget
         ),
 
       /**
