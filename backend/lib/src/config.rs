@@ -2,7 +2,6 @@
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
-#[cfg(test)]
 use crate::constants::{
     api::{DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE},
     database::DEFAULT_DATABASE_URL,
@@ -53,7 +52,6 @@ pub struct AuthConfig {
     pub mock_mode: bool,
 }
 
-#[cfg(test)]
 impl AuthConfig {
     /// Generate a random JWT secret for development/testing
     pub(crate) fn generate_random_secret() -> String {
@@ -102,7 +100,7 @@ pub struct DatabaseConfig {
     pub mock_mode: bool,
 }
 
-#[cfg(test)]
+// TODO: only provide during tests or similar
 impl Default for Config {
     fn default() -> Self {
         Self {
