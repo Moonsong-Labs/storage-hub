@@ -263,9 +263,12 @@ await describeMspNet(
 
       // Make sure the accept transaction from the MSP is in the tx pool
       await userApi.wait.mspResponseInTxPool(1);
+      await userApi.wait.bspVolunteerInTxPool(1);
 
-      // Seal the block containing the MSP's acceptance
+      // Seal the block containing the MSP's acceptance and the BSP's volunteer
       await userApi.block.seal();
+
+      await userApi.assert.eventPresent("fileSystem", "AcceptedBspVolunteer");
 
       // Check that there's a `MspAcceptedStorageRequest` event
       const mspAcceptedStorageRequestEvent = await userApi.assert.eventPresent(
