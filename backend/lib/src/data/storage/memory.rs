@@ -35,7 +35,9 @@ pub enum InMemoryStorageError {
 /// Nonce entry with address and expiration timestamp
 #[derive(Clone, Debug)]
 struct NonceEntry {
+    /// The user address associated with the nonce key
     address: String,
+    /// Timestamp when the nonce will expire from storage
     expires_at: Instant,
 }
 
@@ -45,8 +47,15 @@ struct NonceEntry {
 /// All data is lost when the process terminates.
 #[derive(Clone)]
 pub struct InMemoryStorage {
+    /// Contains the authentication nonces<->user address relations, mapping a given nonce to the corresponding user address that requested the nonce
     nonces: Arc<RwLock<HashMap<String, NonceEntry>>>,
+
+    /// Handle for the nonce cleanup task
+    ///
+    /// The cleanup task is in charge of finding expired nonces and removing them from the map
     cleanup_task: Arc<RwLock<Option<JoinHandle<()>>>>,
+
+    /// Signal for the cleanup task to terminate
     shutdown: Arc<AtomicBool>,
 }
 
