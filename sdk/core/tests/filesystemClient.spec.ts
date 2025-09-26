@@ -66,6 +66,6 @@ describe("StorageHubClient", () => {
       `0x${"00".repeat(32)}` as `0x${string}`
     );
     expect(typeof (p as Promise<unknown>).then).toBe("function");
-    await p.catch(() => { });
+    await p.catch(() => {});
   });
 });

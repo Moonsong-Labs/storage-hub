@@ -1,47 +1,47 @@
 {
-  "name": "@storagehub-sdk/msp-client",
-  "version": "0.0.5",
-  "description": "High-level TypeScript client for StorageHub MSP: simple file upload/download, SIWE-style auth, health checks, and bucket browsing built on top of @storagehub-sdk/core.",
-  "type": "module",
-  "main": "./dist/index.node.js",
-  "browser": "./dist/index.browser.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "browser": "./dist/index.browser.js",
-      "import": "./dist/index.node.js",
-      "default": "./dist/index.node.js"
-    }
-  },
-  "publishConfig": {
-    "access": "public",
-    "registry": "https://registry.npmjs.org/"
-  },
-  "files": [
-    "dist",
-    "README.md"
-  ],
-  "scripts": {
-    "build": "node ./build.js && pnpm run build:types",
-    "build:types": "tsc --emitDeclarationOnly -p tsconfig.json",
-    "clean": "rm -rf dist node_modules",
-    "coverage": "vitest run --coverage",
-    "dev": "node ./build.js --watch",
-    "fmt": "../../node_modules/.bin/biome format .",
-    "fmt:fix": "../../node_modules/.bin/biome format . --write",
-    "lint": "../../node_modules/.bin/biome lint .",
-    "lint:fix": "../../node_modules/.bin/biome lint . --write",
-    "test": "vitest",
-    "typecheck": "tsc --noEmit"
-  },
-  "peerDependencies": {
-    "@storagehub-sdk/core": ">=0.0.5"
-  },
-  "devDependencies": {
-    "@storagehub-sdk/core": "workspace:*"
-  },
-  "engines": {
-    "node": ">=22"
-  }
+	"name": "@storagehub-sdk/msp-client",
+	"version": "0.0.5",
+	"description": "High-level TypeScript client for StorageHub MSP: simple file upload/download, SIWE-style auth, health checks, and bucket browsing built on top of @storagehub-sdk/core.",
+	"type": "module",
+	"main": "./dist/index.node.js",
+	"browser": "./dist/index.browser.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"browser": "./dist/index.browser.js",
+			"import": "./dist/index.node.js",
+			"default": "./dist/index.node.js"
+		}
+	},
+	"publishConfig": {
+		"access": "public",
+		"registry": "https://registry.npmjs.org/"
+	},
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"scripts": {
+		"build": "node ./build.js && pnpm run build:types",
+		"build:types": "tsc --emitDeclarationOnly -p tsconfig.json",
+		"clean": "rm -rf dist node_modules",
+		"coverage": "vitest run --coverage",
+		"dev": "node ./build.js --watch",
+		"fmt": "../../node_modules/.bin/biome format .",
+		"fmt:fix": "../../node_modules/.bin/biome format . --write",
+		"lint": "../../node_modules/.bin/biome lint .",
+		"lint:fix": "../../node_modules/.bin/biome lint . --write",
+		"test": "vitest",
+		"typecheck": "tsc --noEmit"
+	},
+	"peerDependencies": {
+		"@storagehub-sdk/core": ">=0.0.5"
+	},
+	"devDependencies": {
+		"@storagehub-sdk/core": "workspace:*"
+	},
+	"engines": {
+		"node": ">=22"
+	}
 }
