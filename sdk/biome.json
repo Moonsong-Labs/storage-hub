@@ -11,10 +11,7 @@
       "!**/dist",
       "!**/wasm/pkg",
       "!**/examples/nextjs/.next",
-      "!**/tmp/*",
-      "!**/*.spec.json",
-      "!**/.papi/descriptors/**/*",
-      "!**/contract-bindings/**/*"
+      "!**/_wasm_embed.ts"
     ]
   },
   "assist": {
