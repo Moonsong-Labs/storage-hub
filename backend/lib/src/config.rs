@@ -149,3 +149,16 @@ impl Config {
         Ok(config)
     }
 }
+
+#[cfg(test)]
+impl Config {
+    /// Helper to get a DecodingKey
+    pub fn get_jwt_key(&self) -> jsonwebtoken::DecodingKey {
+        let jwt_secret = self
+            .auth
+            .jwt_secret
+            .as_ref()
+            .expect("JWT secret should be set in tests");
+        jsonwebtoken::DecodingKey::from_secret(jwt_secret.as_bytes())
+    }
+}

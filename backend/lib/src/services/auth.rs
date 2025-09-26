@@ -210,26 +210,23 @@ impl AuthService {
     }
 
     /// Generate a new JWT token, matching the same address as the valid token passed in
-    pub async fn refresh(&self, claims: JwtClaims) -> Result<TokenResponse, Error> {
-        let user = AuthenticatedUser::from_claims(claims)?;
-
-        // Since the claims were valid, we can just generate a new token
-        let token = self.generate_jwt(&user.address)?;
+    // TODO: properly separate between the session and the refresh token
+    pub async fn refresh(&self, user_address: &str) -> Result<TokenResponse, Error> {
+        let token = self.generate_jwt(user_address)?;
 
         Ok(TokenResponse { token })
     }
 
     /// Retrieve the user profile from the corresponding `JwtClaims`
-    pub async fn profile(&self, claims: JwtClaims) -> Result<User, Error> {
-        let user = AuthenticatedUser::from_claims(claims)?;
-
+    pub async fn profile(&self, user_address: &str) -> Result<User, Error> {
         Ok(User {
-            address: user.address,
+            address: user_address.to_string(),
+            // TODO: retrieve ENS (lookup or cache?)
             ens: MOCK_ENS.to_string(),
         })
     }
 
-    pub async fn logout(&self, _claims: JwtClaims) -> Result<(), Error> {
+    pub async fn logout(&self, _user_address: &str) -> Result<(), Error> {
         // TODO: Invalidate the token in session storage
         // For now, the nonce cleanup happens automatically on expiration
         // or during verification (one-time use)
@@ -333,16 +330,6 @@ mod tests {
         (auth_service, storage, cfg)
     }
 
-    /// Helper to get a DecodingKey from the test config
-    fn get_decoding_key(cfg: &Config) -> DecodingKey {
-        let jwt_secret = cfg
-            .auth
-            .jwt_secret
-            .as_ref()
-            .expect("JWT secret should be set in tests");
-        DecodingKey::from_secret(jwt_secret.as_bytes())
-    }
-
     #[test]
     fn construct_auth_message_contains_address() {
         let address = MOCK_ADDRESS;
@@ -376,7 +363,7 @@ mod tests {
         let token = auth_service.generate_jwt(address).unwrap();
 
         // Try to decode the token
-        let decoding_key = get_decoding_key(&cfg);
+        let decoding_key = cfg.get_jwt_key();
         let validation = Validation::new(Algorithm::HS256);
 
         let decoded = decode::<JwtClaims>(&token, &decoding_key, &validation).unwrap();
@@ -516,73 +503,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn refresh_rejects_expired_claims() {
-        let (auth_service, _, _) = create_test_auth_service(true);
-
-        let expired_claims = JwtClaims {
-            address: MOCK_ADDRESS.to_string(),
-            exp: Utc::now().timestamp() - 3600, // 1 hour ago
-            iat: Utc::now().timestamp() - 7200, // 2 hours ago
-        };
-
-        let result = auth_service.refresh(expired_claims).await;
-        assert!(result.is_err(), "Should reject expired claims");
-    }
-
-    #[tokio::test]
-    async fn refresh_generates_new_token_with_updated_timestamps() {
-        let (auth_service, _, cfg) = create_test_auth_service(true);
-
-        let valid_claims = JwtClaims {
-            address: MOCK_ADDRESS.to_string(),
-            exp: Utc::now().timestamp() + 3600, // 1 hour from now
-            iat: Utc::now().timestamp(),
-        };
-
-        let result = auth_service.refresh(valid_claims.clone()).await.unwrap();
-
-        // Decode and verify the new token
-        let decoding_key = get_decoding_key(&cfg);
-        let validation = Validation::new(Algorithm::HS256);
-        let decoded = decode::<JwtClaims>(&result.token, &decoding_key, &validation).unwrap();
-
-        assert_eq!(decoded.claims.address, valid_claims.address);
-        assert!(
-            decoded.claims.iat >= valid_claims.iat,
-            "New token should have newer or equal iat"
-        );
-        assert!(
-            decoded.claims.exp > valid_claims.iat,
-            "New token should have exp after original iat"
-        );
-    }
-
-    #[tokio::test]
-    async fn profile_rejects_expired_claims() {
-        let (auth_service, _, _) = create_test_auth_service(true);
-
-        let expired_claims = JwtClaims {
-            address: MOCK_ADDRESS.to_string(),
-            exp: Utc::now().timestamp() - 3600, // 1 hour ago
-            iat: Utc::now().timestamp() - 7200, // 2 hours ago
-        };
-
-        let result = auth_service.profile(expired_claims).await;
-        assert!(result.is_err(), "Should reject expired claims");
-    }
-
-    #[tokio::test]
     async fn profile_returns_user_data_for_valid_claims() {
         let (auth_service, _, _) = create_test_auth_service(true);
 
         let address = MOCK_ADDRESS;
-        let valid_claims = JwtClaims {
-            address: address.to_string(),
-            exp: Utc::now().timestamp() + 3600, // 1 hour from now
-            iat: Utc::now().timestamp(),
-        };
 
-        let result = auth_service.profile(valid_claims).await.unwrap();
+        let result = auth_service.profile(address).await.unwrap();
         assert_eq!(result.address, address, "Should return address from claims");
         assert_eq!(result.ens, MOCK_ENS, "Should return mock ENS");
     }

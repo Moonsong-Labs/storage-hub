@@ -84,7 +84,7 @@ pub async fn download_by_key(
         return Err(Error::BadRequest("Invalid file key".to_string()));
     }
 
-    // TODO(AUTH): verify user permissions
+    // TODO(AUTH): verify that user has permissions to access this file
     let download_result = services.msp.get_file_from_key(&file_key).await?;
 
     // Extract filename from location or use file_key as fallback
@@ -139,7 +139,7 @@ pub async fn upload_file(
     Path((bucket_id, file_key)): Path<(String, String)>,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, Error> {
-    // TODO(AUTH): verify user permissions
+    // TODO(AUTH): verify that user has permissions to access this file
 
     // Pre-check with MSP whether this file key is expected before doing heavy processing
     let is_expected = services
@@ -384,7 +384,7 @@ pub async fn distribute_file(
     AuthenticatedUser { address: _ }: AuthenticatedUser,
     Path((bucket_id, file_key)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, Error> {
-    // TODO(AUTH): verify user permissions
+    // TODO(AUTH): verify that user has permissions to access this file
 
     let response = services.msp.distribute_file(&bucket_id, &file_key).await?;
     Ok(Json(response))

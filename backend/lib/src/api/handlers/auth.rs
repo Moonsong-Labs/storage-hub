@@ -1,10 +1,9 @@
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
-use axum_jwt::Claims;
 
 use crate::{
     error::Error,
-    models::auth::{JwtClaims, NonceRequest, VerifyRequest},
-    services::Services,
+    models::auth::{NonceRequest, VerifyRequest},
+    services::{auth::AuthenticatedUser, Services},
 };
 
 pub async fn nonce(
@@ -31,38 +30,40 @@ pub async fn verify(
 
 pub async fn refresh(
     State(services): State<Services>,
-    Claims(user): Claims<JwtClaims>,
+    AuthenticatedUser { address }: AuthenticatedUser,
 ) -> Result<impl IntoResponse, Error> {
-    let response = services.auth.refresh(user).await?;
+    let response = services.auth.refresh(&address).await?;
     Ok(Json(response))
 }
 
 pub async fn logout(
     State(services): State<Services>,
-    Claims(user): Claims<JwtClaims>,
+    AuthenticatedUser { address }: AuthenticatedUser,
 ) -> Result<impl IntoResponse, Error> {
-    services.auth.logout(user).await?;
+    services.auth.logout(&address).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn profile(
     State(services): State<Services>,
-    Claims(user): Claims<JwtClaims>,
+    AuthenticatedUser { address }: AuthenticatedUser,
 ) -> Result<impl IntoResponse, Error> {
-    let response = services.auth.profile(user).await?;
+    let response = services.auth.profile(&address).await?;
     Ok(Json(response))
 }
 
 #[cfg(all(test, feature = "mocks"))]
 mod tests {
+    use std::time::Duration;
+
     use axum::http::StatusCode;
     use axum_test::TestServer;
-    use jsonwebtoken::decode;
+    use jsonwebtoken::{decode, Algorithm, Validation};
 
     use crate::{
         api::{create_app, mock_app},
         config::Config,
-        constants::auth::MOCK_ENS,
+        constants::auth::{JWT_EXPIRY_OFFSET, MOCK_ENS},
         models::auth::{
             JwtClaims, NonceRequest, NonceResponse, TokenResponse, User, VerifyRequest,
             VerifyResponse,
@@ -70,6 +71,30 @@ mod tests {
         services::Services,
         test_utils::auth::{eth_wallet, sign_message},
     };
+
+    async fn login_flow(server: &TestServer) -> String {
+        let (address, sk) = eth_wallet();
+        let nonce: NonceResponse = server
+            .post("/auth/nonce")
+            .json(&NonceRequest {
+                address,
+                chain_id: 1,
+            })
+            .await
+            .json();
+
+        let signature = sign_message(&sk, &nonce.message);
+        let token: VerifyResponse = server
+            .post("/auth/verify")
+            .json(&VerifyRequest {
+                message: nonce.message,
+                signature,
+            })
+            .await
+            .json();
+
+        token.token
+    }
 
     #[tokio::test]
     async fn auth_flow_complete() {
@@ -270,6 +295,45 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn refresh_generates_new_token_with_updated_timestamps() {
+        let mut cfg = Config::default();
+        cfg.auth.mock_mode = false;
+
+        // Get decoding key
+        let jwt_key = cfg.get_jwt_key();
+        let jwt_validation = Validation::new(Algorithm::HS256);
+
+        let services = Services::mocks_with_config(cfg);
+        let app = create_app(services);
+        let server = TestServer::new(app).unwrap();
+
+        let token = login_flow(&server).await;
+        let decoded = decode::<JwtClaims>(&token, &jwt_key, &jwt_validation).unwrap();
+
+        // Wait 2 seconds to change the token timestamps
+        tokio::time::advance(Duration::from_secs(2)).await;
+
+        let response = server
+            .post("/auth/refresh")
+            .add_header("Authorization", format!("Bearer {token}"))
+            .await;
+        assert_eq!(response.status_code(), StatusCode::OK);
+
+        let new_token: TokenResponse = response.json();
+        let decoded_new = decode::<JwtClaims>(&new_token, &jwt_key, &jwt_validation).unwrap();
+
+        assert_eq!(decoded.claims.address, decoded_new.claims.address);
+        assert!(
+            decoded.claims.iat <= decoded_new.claims.iat,
+            "New token should have newer or equal iat"
+        );
+        assert!(
+            decoded.claims.exp < decoded_new.claims.iat,
+            "New token should have exp after original iat"
+        );
+    }
+
+    #[tokio::test]
     async fn profile_requires_valid_jwt() {
         let app = mock_app();
         let server = TestServer::new(app).unwrap();
@@ -401,5 +465,36 @@ mod tests {
 
         let user2: User = response.json();
         assert_eq!(user2.address, address2);
+    }
+
+    #[tokio::test]
+    async fn rejects_expired() {
+        let mut cfg = Config::default();
+        cfg.auth.mock_mode = false;
+
+        let services = Services::mocks_with_config(cfg);
+        let app = create_app(services);
+        let server = TestServer::new(app).unwrap();
+
+        let token = login_flow(&server).await;
+
+        tokio::time::advance(
+            JWT_EXPIRY_OFFSET
+                .to_std()
+                .expect("JWT expiry offset should be a positive value"),
+        )
+        .await;
+
+        let response = server
+            .post("/auth/refresh")
+            .add_header("Authorization", format!("Bearer {token}"))
+            .await;
+        assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
+
+        let response = server
+            .post("/auth/profile")
+            .add_header("Authorization", format!("Bearer {token}"))
+            .await;
+        assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
     }
 }
