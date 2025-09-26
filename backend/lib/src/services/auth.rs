@@ -104,7 +104,9 @@ impl AuthService {
         )
     }
 
-    /// Generate a JWT token for the given address
+    /// Generate a JWT for the given address
+    ///
+    /// The resulting JWT is already base64 encoded and signed by the service
     fn generate_jwt(&self, address: &str) -> Result<String, Error> {
         let now = Utc::now();
         let exp = now + JWT_EXPIRY_OFFSET;
@@ -115,6 +117,7 @@ impl AuthService {
             iat: now.timestamp(),
         };
 
+        // encodes the given claims and also produces a signature of it
         jsonwebtoken::encode(&Header::default(), &claims, &self.encoding_key)
             .map_err(|_| Error::Internal)
     }
@@ -143,7 +146,8 @@ impl AuthService {
         Ok(NonceResponse { message })
     }
 
-    fn verify_eth_signature(message: &str, signature: &str) -> Result<String, Error> {
+    /// Recovers the ethereum address that signed the EIP191 `message` and produced `signature`
+    fn recover_eth_address_from_sig(message: &str, signature: &str) -> Result<String, Error> {
         let sig = PrimitiveSignature::from_str(signature)
             .map_err(|_| Error::Unauthorized("Invalid signature format".to_string()))?;
 
@@ -177,7 +181,7 @@ impl AuthService {
             .ok_or_else(|| Error::Unauthorized("Invalid or expired nonce".to_string()))?;
 
         if self.validate_signature {
-            let recovered_address = Self::verify_eth_signature(message, signature)?;
+            let recovered_address = Self::recover_eth_address_from_sig(message, signature)?;
 
             // Verify that the recovered address matches the stored address
             // NOTE: we compare the lowercase versions to avoid issues where the given user address is not
@@ -434,7 +438,7 @@ mod tests {
     }
 
     #[test]
-    fn verify_eth_signature_recovers_correct_address() {
+    fn recovers_correct_eth_address() {
         // Create a test signing key
         let (address, sk) = eth_wallet();
 
@@ -442,23 +446,23 @@ mod tests {
         let sig_str = sign_message(&sk, message);
 
         // Test with correct signature
-        let recovered = AuthService::verify_eth_signature(message, &sig_str).unwrap();
+        let recovered = AuthService::recover_eth_address_from_sig(message, &sig_str).unwrap();
         assert_eq!(recovered, address.to_string());
     }
 
     #[test]
-    fn verify_eth_signature_rejects_invalid_format() {
-        let result = AuthService::verify_eth_signature("test message", "invalid_signature");
+    fn recover_eth_address_from_sig_rejects_invalid_format() {
+        let result = AuthService::recover_eth_address_from_sig("test message", "invalid_signature");
         assert!(result.is_err(), "Should reject invalid signature format");
     }
 
     #[test]
-    fn verify_eth_signature_wrong_message_recovers_different_address() {
+    fn recover_eth_address_from_sig_wrong_message_recovers_different_address() {
         let (address, sk) = eth_wallet();
         let sig_str = sign_message(&sk, "original message");
 
         // Test with wrong message for the signature
-        let result = AuthService::verify_eth_signature("different message", &sig_str);
+        let result = AuthService::recover_eth_address_from_sig("different message", &sig_str);
         assert!(
             result.is_ok(),
             "Should recover an address, but it won't match"
