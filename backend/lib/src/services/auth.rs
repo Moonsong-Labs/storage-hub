@@ -183,7 +183,9 @@ impl AuthService {
             let recovered_address = Self::verify_eth_signature(message, signature)?;
 
             // Verify that the recovered address matches the stored address
-            if recovered_address.as_str() != address.as_str() {
+            // NOTE: we compare the lowercase versions to avoid issues where the given user address is not
+            // in the right casing, but would otherwise be the correct address.
+            if recovered_address.as_str().to_lowercase() != address.as_str().to_lowercase() {
                 return Err(Error::Unauthorized(
                     "Signature doesn't match the provided address".to_string(),
                 ));
