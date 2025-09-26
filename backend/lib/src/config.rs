@@ -99,7 +99,6 @@ pub struct DatabaseConfig {
     pub mock_mode: bool,
 }
 
-// TODO: only provide during tests or similar
 impl Default for Config {
     fn default() -> Self {
         Self {
