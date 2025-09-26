@@ -93,13 +93,23 @@ impl InMemoryStorage {
 
         *self.cleanup_task.write() = Some(handle);
     }
+}
 
-    pub async fn shutdown(&self) {
+impl Drop for InMemoryStorage {
+    fn drop(&mut self) {
         self.shutdown.store(true, Ordering::Relaxed);
-        let handle = self.cleanup_task.write().take();
-
-        if let Some(handle) = handle {
-            let _ = handle.await;
+        if let Some(handle) = self.cleanup_task.write().take() {
+            // This doesn't ensure the task is shut down before the end of the drop impl
+            tokio::task::spawn(async move {
+                match tokio::time::timeout(Duration::from_secs(5), handle).await {
+                    Ok(result) => {
+                        if let Err(e) = result {
+                            tracing::warn!("Cleanup task failed during shutdown: {e}");
+                        }
+                    }
+                    Err(_) => tracing::warn!("Cleanup task did not complete within timeout"),
+                }
+            });
         }
     }
 }
@@ -235,8 +245,5 @@ mod tests {
 
         // Should be gone from storage after cleanup task runs
         assert!(storage.nonces.read().get(message).is_none());
-
-        // Shutdown cleanup task
-        storage.shutdown().await;
     }
 }
