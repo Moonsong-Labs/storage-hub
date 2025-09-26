@@ -67,7 +67,7 @@ impl Services {
                     Ok(decoded)
                 }
             })
-            .expect("valid JWT secret configuration");
+            .expect("JWT secret configuration should be valid");
 
         #[cfg(feature = "mocks")]
         let jwt_validate = !config.auth.mock_mode;
