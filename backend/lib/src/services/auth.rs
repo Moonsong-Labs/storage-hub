@@ -234,6 +234,17 @@ impl AuthService {
     }
 }
 
+#[cfg(test)]
+impl AuthService {
+    /// Encodes the given claims as a JWT
+    ///
+    /// Used in tests that simulate token expiration
+    pub fn encode_jwt(&self, claims: JwtClaims) -> Result<String, Error> {
+        jsonwebtoken::encode(&Header::default(), &claims, &self.encoding_key)
+            .map_err(|_| Error::Internal)
+    }
+}
+
 /// Axum extractor to verify the authenticated user.
 ///
 /// Will error if the JWT token is expired or it is otherwise invalid
@@ -302,7 +313,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+    use jsonwebtoken::{decode, Algorithm, Validation};
 
     use crate::{
         config::Config,

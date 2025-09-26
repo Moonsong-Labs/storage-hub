@@ -54,16 +54,15 @@ pub async fn profile(
 
 #[cfg(all(test, feature = "mocks"))]
 mod tests {
-    use std::time::Duration;
-
     use axum::http::StatusCode;
     use axum_test::TestServer;
-    use jsonwebtoken::{decode, Algorithm, Validation};
+    use chrono::Utc;
+    use jsonwebtoken::decode;
 
     use crate::{
         api::{create_app, mock_app},
         config::Config,
-        constants::auth::{JWT_EXPIRY_OFFSET, MOCK_ENS},
+        constants::{auth::MOCK_ENS, mocks::MOCK_ADDRESS},
         models::auth::{
             JwtClaims, NonceRequest, NonceResponse, TokenResponse, User, VerifyRequest,
             VerifyResponse,
@@ -71,30 +70,6 @@ mod tests {
         services::Services,
         test_utils::auth::{eth_wallet, sign_message},
     };
-
-    async fn login_flow(server: &TestServer) -> String {
-        let (address, sk) = eth_wallet();
-        let nonce: NonceResponse = server
-            .post("/auth/nonce")
-            .json(&NonceRequest {
-                address,
-                chain_id: 1,
-            })
-            .await
-            .json();
-
-        let signature = sign_message(&sk, &nonce.message);
-        let token: VerifyResponse = server
-            .post("/auth/verify")
-            .json(&VerifyRequest {
-                message: nonce.message,
-                signature,
-            })
-            .await
-            .json();
-
-        token.token
-    }
 
     #[tokio::test]
     async fn auth_flow_complete() {
@@ -278,7 +253,11 @@ mod tests {
 
     #[tokio::test]
     async fn refresh_requires_valid_jwt() {
-        let app = mock_app();
+        let mut cfg = Config::default();
+        cfg.auth.mock_mode = false;
+
+        let services = Services::mocks_with_config(cfg);
+        let app = create_app(services);
         let server = TestServer::new(app).unwrap();
 
         // Try refresh without token
@@ -299,19 +278,22 @@ mod tests {
         let mut cfg = Config::default();
         cfg.auth.mock_mode = false;
 
-        // Get decoding key
-        let jwt_key = cfg.get_jwt_key();
-        let jwt_validation = Validation::new(Algorithm::HS256);
-
         let services = Services::mocks_with_config(cfg);
+        let auth_service = services.auth.clone();
+
         let app = create_app(services);
         let server = TestServer::new(app).unwrap();
 
-        let token = login_flow(&server).await;
-        let decoded = decode::<JwtClaims>(&token, &jwt_key, &jwt_validation).unwrap();
-
-        // Wait 2 seconds to change the token timestamps
-        tokio::time::advance(Duration::from_secs(2)).await;
+        // Unfortunately we can't easily advance system time
+        // so instead we create an "old" token
+        let old_claims = JwtClaims {
+            address: MOCK_ADDRESS.to_string(),
+            iat: Utc::now().timestamp() - 10, // issued 10 seconds ago
+            exp: Utc::now().timestamp() + 10, // expires in 10 seconds
+        };
+        let token = auth_service
+            .encode_jwt(old_claims.clone())
+            .expect("should be able to encode jwt");
 
         let response = server
             .post("/auth/refresh")
@@ -320,22 +302,31 @@ mod tests {
         assert_eq!(response.status_code(), StatusCode::OK);
 
         let new_token: TokenResponse = response.json();
-        let decoded_new = decode::<JwtClaims>(&new_token, &jwt_key, &jwt_validation).unwrap();
+        let decoded_new = decode::<JwtClaims>(
+            &new_token.token,
+            &auth_service.jwt_decoding_key(),
+            &auth_service.jwt_validation(),
+        )
+        .unwrap();
 
-        assert_eq!(decoded.claims.address, decoded_new.claims.address);
+        assert_eq!(old_claims.address, decoded_new.claims.address);
         assert!(
-            decoded.claims.iat <= decoded_new.claims.iat,
-            "New token should have newer or equal iat"
+            decoded_new.claims.iat > old_claims.iat,
+            "New token should have newer IAT"
         );
         assert!(
-            decoded.claims.exp < decoded_new.claims.iat,
-            "New token should have exp after original iat"
+            decoded_new.claims.exp > old_claims.iat,
+            "New token should have EXP after original IAT"
         );
     }
 
     #[tokio::test]
     async fn profile_requires_valid_jwt() {
-        let app = mock_app();
+        let mut cfg = Config::default();
+        cfg.auth.mock_mode = false;
+
+        let services = Services::mocks_with_config(cfg);
+        let app = create_app(services);
         let server = TestServer::new(app).unwrap();
 
         // Try profile without token
@@ -473,17 +464,22 @@ mod tests {
         cfg.auth.mock_mode = false;
 
         let services = Services::mocks_with_config(cfg);
+        let auth_service = services.auth.clone();
+
         let app = create_app(services);
         let server = TestServer::new(app).unwrap();
 
-        let token = login_flow(&server).await;
-
-        tokio::time::advance(
-            JWT_EXPIRY_OFFSET
-                .to_std()
-                .expect("JWT expiry offset should be a positive value"),
-        )
-        .await;
+        // unfortunately we can't easily advance system time
+        // until the token is expired
+        // so we create a token that's already expired
+        let expired_claims = JwtClaims {
+            address: MOCK_ADDRESS.to_string(),
+            exp: Utc::now().timestamp() - 3600, // 1 hour ago
+            iat: Utc::now().timestamp() - 7200, // 2 hours ago
+        };
+        let token = auth_service
+            .encode_jwt(expired_claims)
+            .expect("should be able to encode jwt");
 
         let response = server
             .post("/auth/refresh")
@@ -492,7 +488,7 @@ mod tests {
         assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
 
         let response = server
-            .post("/auth/profile")
+            .get("/auth/profile")
             .add_header("Authorization", format!("Bearer {token}"))
             .await;
         assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
