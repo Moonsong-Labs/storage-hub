@@ -159,7 +159,7 @@ test.describe("MSP Web Page Flow", () => {
       await page.getByRole("button", { name: "Get Value Props" }).click();
     });
     const valuePropsJson = await page.locator("#valuePropsJson").textContent();
-    expect(valuePropsJson?.includes("pricePerGbBlock")).toBeTruthy();
+    expect(valuePropsJson?.includes("pricePerGbPerBlock")).toBeTruthy();
     console.log("✅ Get Value Props");
 
     // MSP File Info (uses defaults in page)
