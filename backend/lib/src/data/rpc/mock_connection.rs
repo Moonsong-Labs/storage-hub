@@ -25,8 +25,8 @@ use crate::{
         connection::error::{RpcConnectionError, RpcResult},
         RpcConnection,
     },
-    mock_utils::random_bytes_32,
     models::msp_info::{ValueProposition, ValuePropositionWithId},
+    test_utils::random_bytes_32,
 };
 
 /// Error simulation modes for testing

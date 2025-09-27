@@ -79,7 +79,7 @@ mod tests {
         let mut cfg = Config::default();
         cfg.auth.mock_mode = false;
 
-        let services = Services::mocks_with_config(cfg);
+        let services = Services::mocks_with_config(cfg).await;
         let app = create_app(services.clone());
         let server = TestServer::new(app).unwrap();
 
@@ -154,7 +154,7 @@ mod tests {
 
     #[tokio::test]
     async fn nonce_validates_address() {
-        let app = mock_app();
+        let app = mock_app().await;
         let server = TestServer::new(app).unwrap();
 
         let invalid_request = NonceRequest {
@@ -172,7 +172,7 @@ mod tests {
 
     #[tokio::test]
     async fn login_fails_without_nonce() {
-        let app = mock_app();
+        let app = mock_app().await;
         let server = TestServer::new(app).unwrap();
         let (_, signing_key) = eth_wallet();
 
@@ -194,7 +194,7 @@ mod tests {
         let mut cfg = Config::default();
         cfg.auth.mock_mode = false;
 
-        let services = Services::mocks_with_config(cfg);
+        let services = Services::mocks_with_config(cfg).await;
         let app = create_app(services);
         let server = TestServer::new(app).unwrap();
 
@@ -226,7 +226,7 @@ mod tests {
 
     #[tokio::test]
     async fn replay_attack_prevention() {
-        let app = mock_app();
+        let app = mock_app().await;
         let server = TestServer::new(app).unwrap();
         let (address, signing_key) = eth_wallet();
 
@@ -262,7 +262,7 @@ mod tests {
         let mut cfg = Config::default();
         cfg.auth.mock_mode = false;
 
-        let services = Services::mocks_with_config(cfg);
+        let services = Services::mocks_with_config(cfg).await;
         let app = create_app(services);
         let server = TestServer::new(app).unwrap();
 
@@ -284,7 +284,7 @@ mod tests {
         let mut cfg = Config::default();
         cfg.auth.mock_mode = false;
 
-        let services = Services::mocks_with_config(cfg);
+        let services = Services::mocks_with_config(cfg).await;
         let auth_service = services.auth.clone();
 
         let app = create_app(services);
@@ -331,7 +331,7 @@ mod tests {
         let mut cfg = Config::default();
         cfg.auth.mock_mode = false;
 
-        let services = Services::mocks_with_config(cfg);
+        let services = Services::mocks_with_config(cfg).await;
         let app = create_app(services);
         let server = TestServer::new(app).unwrap();
 
@@ -350,7 +350,7 @@ mod tests {
 
     #[tokio::test]
     async fn logout_clears_session() {
-        let app = mock_app();
+        let app = mock_app().await;
         let server = TestServer::new(app).unwrap();
         let (address, signing_key) = eth_wallet();
 
@@ -393,7 +393,7 @@ mod tests {
 
     #[tokio::test]
     async fn multiple_sessions() {
-        let app = mock_app();
+        let app = mock_app().await;
         let server = TestServer::new(app).unwrap();
 
         // Create two different wallets
@@ -469,7 +469,7 @@ mod tests {
         let mut cfg = Config::default();
         cfg.auth.mock_mode = false;
 
-        let services = Services::mocks_with_config(cfg);
+        let services = Services::mocks_with_config(cfg).await;
         let auth_service = services.auth.clone();
 
         let app = create_app(services);
