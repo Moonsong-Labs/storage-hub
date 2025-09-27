@@ -1,9 +1,9 @@
 import assert, { strictEqual } from "node:assert";
-import { type EnrichedBspApi, describeMspNet, shUser, generateMockJWT } from "../../../util";
+import type { Hash } from "@polkadot/types/interfaces";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
-import type { Hash } from "@polkadot/types/interfaces";
-import type { Bucket, FileListResponse, FileInfo } from "./types";
+import { describeMspNet, type EnrichedBspApi, generateMockJWT, shUser } from "../../../util";
+import type { Bucket, FileInfo, FileListResponse } from "./types";
 
 await describeMspNet(
   "Backend bucket endpoints",
@@ -113,6 +113,9 @@ await describeMspNet(
         ],
         signer: shUser
       });
+
+      // Wait until the MSP has received and stored the file
+      await msp1Api.wait.fileStorageComplete(file_key);
     });
 
     it("Should succesfully get specific bucket info", async () => {

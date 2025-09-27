@@ -15,12 +15,18 @@ use tokio::{
     time::sleep,
 };
 
+use codec::Encode;
+use shc_rpc::{GetValuePropositionsResult, RpcProviderId};
+use sp_core::H256;
+
 use crate::{
-    constants::{mocks::DOWNLOAD_FILE_CONTENT, rpc::TIMEOUT_MULTIPLIER},
+    constants::{mocks::DOWNLOAD_FILE_CONTENT, rpc::DUMMY_MSP_ID, rpc::TIMEOUT_MULTIPLIER},
     data::rpc::{
         connection::error::{RpcConnectionError, RpcResult},
         RpcConnection,
     },
+    mock_utils::random_bytes_32,
+    models::msp_info::{ValueProposition, ValuePropositionWithId},
 };
 
 /// Error simulation modes for testing
@@ -204,6 +210,38 @@ impl RpcConnection for MockConnection {
         let response: Value = match method {
             "storagehubclient_saveFileToDisk" => self.mock_save_file_to_disk(params).await,
             "storagehubclient_isFileKeyExpected" => serde_json::json!(true),
+            "storagehubclient_getProviderId" => serde_json::json!(RpcProviderId::Msp(
+                shp_types::Hash::from_slice(DUMMY_MSP_ID.as_slice())
+            )),
+            "storagehubclient_getValuePropositions" => {
+                serde_json::json!(GetValuePropositionsResult::Success(vec![
+                    {
+                        let mut value_prop_with_id = ValuePropositionWithId::default();
+                        value_prop_with_id.id = H256::from_slice(&random_bytes_32());
+                        value_prop_with_id.value_prop = ValueProposition::default();
+                        value_prop_with_id
+                            .value_prop
+                            .price_per_giga_unit_of_data_per_block = 100;
+                        value_prop_with_id.value_prop.bucket_data_limit = 100;
+                        value_prop_with_id.value_prop.available = true;
+                        value_prop_with_id.encode()
+                    },
+                    {
+                        let mut value_prop_with_id = ValuePropositionWithId::default();
+                        value_prop_with_id.id = H256::from_slice(&random_bytes_32());
+                        value_prop_with_id.value_prop = ValueProposition::default();
+                        value_prop_with_id
+                            .value_prop
+                            .price_per_giga_unit_of_data_per_block = 200;
+                        value_prop_with_id.value_prop.bucket_data_limit = 300;
+                        value_prop_with_id.value_prop.available = false;
+                        value_prop_with_id.encode()
+                    }
+                ]))
+            },
+						"system_localListenAddresses" => serde_json::json!(vec![
+                "/ip4/192.168.0.10/tcp/30333/p2p/12D3KooWSUvz8QM5X4tfAaSLErAZjR2puojo16pULBHyqTMGKtNV"
+            ]),
             _ => {
                 let responses = self.responses.read().await;
                 responses

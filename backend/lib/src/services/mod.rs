@@ -35,7 +35,7 @@ pub struct Services {
 
 impl Services {
     /// Create a new services struct
-    pub fn new(
+    pub async fn new(
         storage: Arc<dyn BoxedStorage>,
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
@@ -48,12 +48,16 @@ impl Services {
             rpc.clone(),
         ));
 
-        let msp = Arc::new(MspService::new(
-            storage.clone(),
-            postgres.clone(),
-            rpc.clone(),
-            config.storage_hub.msp_callback_url.clone(),
-        ));
+        let msp = Arc::new(
+            MspService::new(
+                storage.clone(),
+                postgres.clone(),
+                rpc.clone(),
+                config.storage_hub.msp_callback_url.clone(),
+            )
+            .await
+            .expect("MSP must be available when starting the backend's services"),
+        );
 
         Self {
             config,
@@ -70,7 +74,7 @@ impl Services {
 #[cfg(all(test, feature = "mocks"))]
 impl Services {
     /// Create a test services struct with in-memory storage and mocks
-    pub fn mocks() -> Self {
+    pub async fn mocks() -> Self {
         // Create in-memory storage
         let memory_storage = InMemoryStorage::new();
         let storage = Arc::new(BoxedStorageWrapper::new(memory_storage));
@@ -84,6 +88,6 @@ impl Services {
         let rpc_conn = Arc::new(AnyRpcConnection::Mock(mock_conn));
         let rpc = Arc::new(StorageHubRpcClient::new(rpc_conn));
 
-        Self::new(storage, postgres, rpc, Config::default())
+        Self::new(storage, postgres, rpc, Config::default()).await
     }
 }

@@ -274,6 +274,17 @@ export const rpcDefinitions: Record<string, Record<string, DefinitionRpc | Defin
         }
       ],
       type: "Vec<u8>"
+    },
+    getProviderId: {
+      description: "Get the provider ID of the current node, if any.",
+      params: [],
+      type: "RpcProviderId"
+    },
+    getValuePropositions: {
+      description:
+        "Get the value propositions of the node if it's an MSP; otherwise a NotAnMsp/Error enum.",
+      params: [],
+      type: "GetValuePropositionsResult"
     }
   }
 };
