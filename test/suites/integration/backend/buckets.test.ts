@@ -1,14 +1,14 @@
 import assert, { strictEqual } from "node:assert";
-import { type EnrichedBspApi, describeMspNet } from "../../../util";
-import { fetchJwtToken } from "../../../util/backend/jwt";
 import type { Hash } from "@polkadot/types/interfaces";
-import type { Bucket, FileListResponse, FileInfo } from "./types";
+import { describeMspNet, type EnrichedBspApi } from "../../../util";
+import { fetchJwtToken } from "../../../util/backend/jwt";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import {
   ETH_SH_USER_ADDRESS,
-  ethShUser,
-  ETH_SH_USER_PRIVATE_KEY
+  ETH_SH_USER_PRIVATE_KEY,
+  ethShUser
 } from "../../../util/evmNet/keyring";
+import type { Bucket, FileInfo, FileListResponse } from "./types";
 
 await describeMspNet(
   "Backend bucket endpoints",
@@ -128,6 +128,9 @@ await describeMspNet(
         ],
         signer: ethShUser
       });
+
+      // Wait until the MSP has received and stored the file
+      await msp1Api.wait.fileStorageComplete(file_key);
     });
 
     it("Should successfully get specific bucket info", async () => {

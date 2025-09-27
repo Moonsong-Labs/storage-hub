@@ -84,6 +84,13 @@ await describeMspNet(
       };
       mspClient = await MspClient.connect(mspBackendHttpConfig);
 
+      // Wait for the backend to be ready
+      await userApi.docker.waitForLog({
+        containerName: "storage-hub-sh-backend-1",
+        searchString: "Server listening on",
+        timeout: 10000
+      });
+
       // Ensure the connection works
       const healthResponse = await mspClient.getHealth();
       assert(healthResponse.status === "healthy", "MSP health response should be healthy");
@@ -100,14 +107,6 @@ await describeMspNet(
       await userApi.docker.waitForLog({
         containerName: "storage-hub-sh-postgres-1",
         searchString: "database system is ready to accept connections",
-        timeout: 10000
-      });
-    });
-
-    it("Backend service is ready", async () => {
-      await userApi.docker.waitForLog({
-        containerName: "storage-hub-sh-backend-1",
-        searchString: "Server listening on",
         timeout: 10000
       });
     });

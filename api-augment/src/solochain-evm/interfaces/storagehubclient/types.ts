@@ -163,6 +163,14 @@ export interface GetUsersWithDebtOverThresholdError extends Enum {
     | "InternalApiError";
 }
 
+/** @name GetValuePropositionsResult */
+export interface GetValuePropositionsResult extends Enum {
+  readonly isSuccess: boolean;
+  readonly asSuccess: Vec<Bytes>;
+  readonly isNotAnMsp: boolean;
+  readonly type: "Success" | "NotAnMsp";
+}
+
 /** @name IncompleteFileStatus */
 export interface IncompleteFileStatus extends Struct {
   readonly file_metadata: FileMetadata;
@@ -331,6 +339,16 @@ export interface RemoveFilesFromForestStorageResult extends Enum {
 
 /** @name ReputationWeightType */
 export interface ReputationWeightType extends u32 {}
+
+/** @name RpcProviderId */
+export interface RpcProviderId extends Enum {
+  readonly isNotAProvider: boolean;
+  readonly isBsp: boolean;
+  readonly asBsp: H256;
+  readonly isMsp: boolean;
+  readonly asMsp: H256;
+  readonly type: "NotAProvider" | "Bsp" | "Msp";
+}
 
 /** @name SaveFileToDisk */
 export interface SaveFileToDisk extends Enum {

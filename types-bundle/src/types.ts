@@ -263,6 +263,19 @@ export const SHARED_TYPES: RegistryTypes = {
       NotAnMsp: null,
       InternalError: null
     }
+  },
+  RpcProviderId: {
+    _enum: {
+      NotAProvider: null,
+      Bsp: "H256",
+      Msp: "H256"
+    }
+  },
+  GetValuePropositionsResult: {
+    _enum: {
+      Success: "Vec<Vec<u8>>",
+      NotAnMsp: null
+    }
   }
 };
 

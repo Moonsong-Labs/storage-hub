@@ -5,11 +5,11 @@
 use std::{collections::HashSet, sync::Arc};
 
 use chrono::Utc;
-use codec::Encode;
+use codec::{Decode, Encode};
 use sc_network::PeerId;
 use serde::{Deserialize, Serialize};
 use shc_common::types::{ChunkId, FileKeyProof};
-use shc_rpc::SaveFileToDisk;
+use shc_rpc::{GetValuePropositionsResult, RpcProviderId, SaveFileToDisk};
 use sp_core::{Blake2Hasher, H256};
 use tracing::{debug, info, warn};
 
@@ -17,16 +17,15 @@ use shc_indexer_db::{models::Bucket as DBBucket, OnchainMspId};
 use shp_types::Hash;
 
 use crate::{
-    constants::{
-        mocks::{PLACEHOLDER_BUCKET_FILE_COUNT, PLACEHOLDER_BUCKET_SIZE_BYTES},
-        rpc::DUMMY_MSP_ID,
-    },
+    constants::mocks::{PLACEHOLDER_BUCKET_FILE_COUNT, PLACEHOLDER_BUCKET_SIZE_BYTES},
     data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage},
     error::Error,
     models::{
         buckets::{Bucket, FileTree},
         files::{DistributeResponse, FileInfo},
-        msp_info::{Capacity, InfoResponse, MspHealthResponse, StatsResponse, ValueProp},
+        msp_info::{
+            Capacity, InfoResponse, MspHealthResponse, StatsResponse, ValuePropositionWithId,
+        },
         payment::PaymentStream,
     },
 };
@@ -58,16 +57,54 @@ pub struct MspService {
 
 impl MspService {
     /// Create a new MSP service
-    pub fn new(
+    /// Only MSP nodes are supported so it returns an error if the node is not an MSP.
+    pub async fn new(
         storage: Arc<dyn BoxedStorage>,
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
         msp_callback_url: String,
-    ) -> Self {
-        // TODO: retrieve from RPC
-        let msp_id = OnchainMspId::new(Hash::from_slice(DUMMY_MSP_ID.as_slice()));
+    ) -> Result<Self, Error> {
+        // Discover provider id from the connected node.
+        // If the node is not yet an MSP (which happens in integration tests), retry with
+        // a bounded number of attempts.
+        // TODO: Think about making it so in integration tests we spin up the backend
+        // only after the MSP has been registered on-chain, to avoid having this retry logic.
+        let mut retry_attempts = 0;
+        let max_retries = 10;
+        let delay_between_retries_secs = 5;
 
-        Self {
+        let msp_id = loop {
+            let provider_id: RpcProviderId = rpc
+                .call_no_params("storagehubclient_getProviderId")
+                .await
+                .map_err(|e| Error::BadRequest(e.to_string()))?;
+
+            match provider_id {
+                RpcProviderId::Msp(id) => break OnchainMspId::new(Hash::from_slice(id.as_ref())),
+                RpcProviderId::Bsp(_) => {
+                    return Err(Error::BadRequest(
+                        "Connected node is a BSP; expected an MSP".to_string(),
+                    ))
+                }
+                RpcProviderId::NotAProvider => {
+                    if retry_attempts >= max_retries {
+                        return Err(Error::BadRequest(
+                            "Connected node not a registered MSP after timeout".to_string(),
+                        ));
+                    }
+                    warn!(
+                        "Connected node is not yet a registered MSP; retrying provider discovery... (attempt {})",
+                        retry_attempts + 1
+                    );
+                    tokio::time::sleep(std::time::Duration::from_secs(delay_between_retries_secs))
+                        .await;
+                    retry_attempts += 1;
+                    continue;
+                }
+            }
+        };
+
+        Ok(Self {
             msp_id,
             storage,
             postgres,
@@ -75,20 +112,23 @@ impl MspService {
             // TODO: dedicated config struct
             // see: https://github.com/Moonsong-Labs/storage-hub/pull/459/files#r2369596519
             msp_callback_url,
-        }
+        })
     }
 
     /// Get MSP information
     pub async fn get_info(&self) -> Result<InfoResponse, Error> {
+        // Fetch the MSP's local listen multiaddresses via RPC
+        let multiaddresses: Vec<String> = self
+            .rpc
+            .call_no_params("system_localListenAddresses")
+            .await
+            .map_err(|e| Error::BadRequest(e.to_string()))?;
+
         Ok(InfoResponse {
             client: "storagehub-node v1.0.0".to_string(),
             version: "StorageHub MSP v0.1.0".to_string(),
             msp_id: self.msp_id.to_string(),
-            // TODO: Until we have actual MSP info, we should at least get the multiaddress from an RPC.
-            // This way the backend can actually upload files to the MSP without having to change this code.
-            multiaddresses: vec![
-                "/ip4/192.168.0.10/tcp/30333/p2p/12D3KooWSUvz8QM5X4tfAaSLErAZjR2puojo16pULBHyqTMGKtNV".to_string()
-            ],
+            multiaddresses,
             owner_account: "0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac".to_string(),
             payment_account: "0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac".to_string(),
             status: "active".to_string(),
@@ -113,27 +153,42 @@ impl MspService {
     }
 
     /// Get MSP value propositions
-    pub async fn get_value_props(&self) -> Result<Vec<ValueProp>, Error> {
-        Ok(vec![
-            ValueProp {
-                id: "f32282ba18056b02cf2feb4cea92aa4552131617cdb7da03acaa554e4e736c32".to_string(),
-                price_per_gb_block: 0.5,
-                data_limit_per_bucket_bytes: 10737418240,
-                is_available: true,
-            },
-            ValueProp {
-                id: "a12345ba18056b02cf2feb4cea92aa4552131617cdb7da03acaa554e4e736c45".to_string(),
-                price_per_gb_block: 0.3,
-                data_limit_per_bucket_bytes: 5368709120,
-                is_available: true,
-            },
-            ValueProp {
-                id: "b67890ba18056b02cf2feb4cea92aa4552131617cdb7da03acaa554e4e736c67".to_string(),
-                price_per_gb_block: 0.8,
-                data_limit_per_bucket_bytes: 21474836480,
-                is_available: false,
-            },
-        ])
+    pub async fn get_value_props(&self) -> Result<Vec<ValuePropositionWithId>, Error> {
+        // Call RPC to get the value propositions
+        let result: GetValuePropositionsResult = self
+            .rpc
+            .call(
+                "storagehubclient_getValuePropositions",
+                jsonrpsee::rpc_params![],
+            )
+            .await
+            .map_err(|e| Error::BadRequest(e.to_string()))?;
+
+        // Decode the SCALE-encoded ValuePropositionWithId entries
+        match result {
+            GetValuePropositionsResult::Success(encoded_props) => {
+                let mut props = Vec::with_capacity(encoded_props.len());
+                for encoded_value_proposition in encoded_props {
+                    let value_prop_with_id =
+                        ValuePropositionWithId::decode(&mut encoded_value_proposition.as_slice())
+                            .map_err(|e| {
+                            Error::BadRequest(format!(
+                                "Failed to decode ValuePropositionWithId: {}",
+                                e
+                            ))
+                        })?;
+
+                    props.push(ValuePropositionWithId {
+                        id: value_prop_with_id.id,
+                        value_prop: value_prop_with_id.value_prop,
+                    });
+                }
+                Ok(props)
+            }
+            GetValuePropositionsResult::NotAnMsp => Err(Error::BadRequest(
+                "The node that we are connected to is not an MSP".to_string(),
+            )),
+        }
     }
 
     /// Get MSP health status
@@ -393,7 +448,7 @@ impl MspService {
         &self,
         multiaddresses: &[String],
     ) -> Result<Vec<PeerId>, Error> {
-        let mut peer_ids = Vec::new();
+        let mut peer_ids = HashSet::new();
 
         for multiaddr_str in multiaddresses {
             // Parse multiaddress string to extract peer ID
@@ -408,7 +463,7 @@ impl MspService {
                             "Extracted peer ID {:?} from multiaddress {}",
                             peer_id, multiaddr_str
                         );
-                        peer_ids.push(peer_id);
+                        peer_ids.insert(peer_id);
                     }
                     Err(e) => {
                         warn!(
@@ -428,7 +483,7 @@ impl MspService {
             ));
         }
 
-        Ok(peer_ids)
+        Ok(peer_ids.into_iter().collect())
     }
 
     /// Send an upload request to a specific peer ID of the MSP with retry logic.
@@ -559,6 +614,7 @@ mod tests {
             rpc::{AnyRpcConnection, MockConnection, StorageHubRpcClient},
             storage::{BoxedStorageWrapper, InMemoryStorage},
         },
+        models::msp_info::{ValueProposition, ValuePropositionWithId},
         test_utils::random_bytes_32,
     };
 
@@ -603,7 +659,7 @@ mod tests {
         }
 
         /// Build the final MspService
-        pub fn build(self) -> MspService {
+        pub async fn build(self) -> MspService {
             let cfg = Config::default();
 
             MspService::new(
@@ -612,12 +668,14 @@ mod tests {
                 self.rpc,
                 cfg.storage_hub.msp_callback_url,
             )
+            .await
+            .expect("Mocked MSP service builder should succeed")
         }
     }
 
     #[tokio::test]
     async fn test_get_info() {
-        let service = MockMspServiceBuilder::new().build();
+        let service = MockMspServiceBuilder::new().build().await;
         let info = service.get_info().await.unwrap();
 
         assert_eq!(info.status, "active");
@@ -626,7 +684,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_stats() {
-        let service = MockMspServiceBuilder::new().build();
+        let service = MockMspServiceBuilder::new().build().await;
         let stats = service.get_stats().await.unwrap();
 
         assert!(stats.capacity.total_bytes > 0);
@@ -635,11 +693,28 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_value_props() {
-        let service = MockMspServiceBuilder::new().build();
+        let service = MockMspServiceBuilder::new()
+            .with_rpc_responses(vec![(
+                "storagehubclient_getValuePropositions",
+                serde_json::json!(GetValuePropositionsResult::Success(vec![{
+                    let mut value_prop_with_id = ValuePropositionWithId::default();
+                    value_prop_with_id.id = H256::from_slice(&random_bytes_32());
+                    value_prop_with_id.value_prop = ValueProposition::default();
+                    value_prop_with_id
+                        .value_prop
+                        .price_per_giga_unit_of_data_per_block = 100;
+                    value_prop_with_id.value_prop.bucket_data_limit = 100;
+                    value_prop_with_id.value_prop.available = true;
+                    value_prop_with_id.encode()
+                },])),
+            )])
+            .await
+            .build()
+            .await;
         let props = service.get_value_props().await.unwrap();
 
         assert!(!props.is_empty());
-        assert!(props.iter().any(|p| p.is_available));
+        assert!(props.iter().any(|p| p.value_prop.available));
     }
 
     #[tokio::test]
@@ -670,7 +745,8 @@ mod tests {
                 })
             })
             .await
-            .build();
+            .build()
+            .await;
 
         let buckets = service
             .list_user_buckets(MOCK_ADDRESS)
@@ -725,7 +801,8 @@ mod tests {
                 })
             })
             .await
-            .build();
+            .build()
+            .await;
 
         let bucket_id = hex::encode(bucket_id);
         let bucket = service.get_bucket(&bucket_id, MOCK_ADDRESS).await.unwrap();
@@ -777,7 +854,8 @@ mod tests {
                 })
             })
             .await
-            .build();
+            .build()
+            .await;
 
         let tree = service
             .get_file_tree(hex::encode(bucket_id).as_ref(), MOCK_ADDRESS, "/")
@@ -831,7 +909,8 @@ mod tests {
                 })
             })
             .await
-            .build();
+            .build()
+            .await;
 
         let bucket_id = hex::encode(bucket_id);
         let file_key = hex::encode(file_key);
@@ -849,7 +928,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_distribute_file() {
-        let service = MockMspServiceBuilder::new().build();
+        let service = MockMspServiceBuilder::new().build().await;
         let file_key = "abc123";
         let resp = service
             .distribute_file("bucket123", file_key)
@@ -863,7 +942,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_payment_stream() {
-        let service = MockMspServiceBuilder::new().build();
+        let service = MockMspServiceBuilder::new().build().await;
         let ps = service
             .get_payment_stream("0x123")
             .await
@@ -881,7 +960,8 @@ mod tests {
                 serde_json::json!([]),
             )])
             .await
-            .build();
+            .build()
+            .await;
 
         // Provide at least one chunk id (upload_to_msp rejects empty sets)
         let mut chunk_ids = HashSet::new();
