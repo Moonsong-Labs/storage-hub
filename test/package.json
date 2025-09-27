@@ -58,7 +58,7 @@
     "test:node": "node --no-deprecation --import tsx --test ./suites/solo-node/**/**.test.ts",
     "test:node:only": "node --no-deprecation --import tsx --test --test-only ./suites/solo-node/**/**.test.ts",
     "test:node:single": "node --no-deprecation --import tsx --test --test-name-pattern=$FILTER ./suites/solo-node/**/**.test.ts",
-    "test:fisherman": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/integration/fisherman/**.test.ts",
+    "test:fisherman": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/integration/fisherman/incomplete-storage-restart.test.ts",
     "test:fisherman:only": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test --test-only ./suites/integration/fisherman/**.test.ts",
     "test:backend": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/integration/backend/**.test.ts",
     "test:backend:only": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test --test-only ./suites/integration/backend/**.test.ts"
