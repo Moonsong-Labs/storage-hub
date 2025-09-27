@@ -29,7 +29,7 @@ use crate::{
         error::{RepositoryError, RepositoryResult},
         IndexerOps, IndexerOpsMut,
     },
-    mock_utils::{random_bytes_32, random_hash},
+    test_utils::{random_bytes_32, random_hash},
 };
 
 /// Mock repository implementation using in-memory storage
@@ -478,7 +478,7 @@ pub mod tests {
             rpc::DUMMY_MSP_ID,
             test::{accounts::*, bucket, file},
         },
-        mock_utils::random_hash,
+        test_utils::random_hash,
     };
 
     #[tokio::test]

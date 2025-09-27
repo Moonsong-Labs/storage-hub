@@ -2,6 +2,10 @@
 
 use std::sync::Arc;
 
+use auth::AuthService;
+use axum::extract::FromRef;
+use axum_jwt::Decoder;
+
 #[cfg(all(test, feature = "mocks"))]
 use crate::data::{
     indexer_db::mock_repository::MockRepository,
@@ -17,7 +21,6 @@ pub mod auth;
 pub mod health;
 pub mod msp;
 
-use auth::AuthService;
 use health::HealthService;
 use msp::MspService;
 
@@ -41,7 +44,42 @@ impl Services {
         rpc: Arc<StorageHubRpcClient>,
         config: Config,
     ) -> Self {
-        let auth = Arc::new(AuthService::default());
+        let jwt_secret = config
+            .auth
+            .jwt_secret
+            .as_ref()
+            .ok_or_else(|| {
+                tracing::error!("JWT_SECRET is not set. Please set it in the config file or as an environment variable.");
+                "JWT_SECRET is not configured"
+            })
+            .and_then(|secret| {
+                hex::decode(secret.trim_start_matches("0x"))
+                    .map_err(|e| {
+                        tracing::error!("Invalid JWT_SECRET format. Must be a valid hex string: {}", e);
+                        "Invalid JWT_SECRET format"
+                    })
+            })
+            .and_then(|decoded| {
+                if decoded.len() < 32 {
+                    tracing::error!("JWT_SECRET is too short. Must be at least 32 bytes (64 hex characters), got {} bytes", decoded.len());
+                    Err("JWT_SECRET must be at least 32 bytes")
+                } else {
+                    Ok(decoded)
+                }
+            })
+            .expect("JWT secret configuration should be valid");
+
+        #[allow(unused_mut)] // triggers warning without mocks feature
+        let mut auth = AuthService::new(jwt_secret.as_slice(), storage.clone());
+
+        #[cfg(feature = "mocks")]
+        {
+            if config.auth.mock_mode {
+                auth.insecure_disable_validation();
+            }
+        }
+
+        let auth = Arc::new(auth);
         let health = Arc::new(HealthService::new(
             storage.clone(),
             postgres.clone(),
@@ -75,6 +113,14 @@ impl Services {
 impl Services {
     /// Create a test services struct with in-memory storage and mocks
     pub async fn mocks() -> Self {
+        // Use default config for mocks
+        let config = Config::default();
+
+        Self::mocks_with_config(config).await
+    }
+
+    /// Create a test services struct with in-memory storage and mocks and custom config
+    pub async fn mocks_with_config(config: Config) -> Self {
         // Create in-memory storage
         let memory_storage = InMemoryStorage::new();
         let storage = Arc::new(BoxedStorageWrapper::new(memory_storage));
@@ -88,6 +134,17 @@ impl Services {
         let rpc_conn = Arc::new(AnyRpcConnection::Mock(mock_conn));
         let rpc = Arc::new(StorageHubRpcClient::new(rpc_conn));
 
-        Self::new(storage, postgres, rpc, Config::default()).await
+        Self::new(storage, postgres, rpc, config).await
+    }
+}
+
+// axum_jwt extractors require the app state to implement this
+// to be able to extract the token/claims in the request
+impl FromRef<Services> for Decoder {
+    fn from_ref(services: &Services) -> Decoder {
+        Decoder::new(
+            services.auth.jwt_decoding_key().clone(),
+            services.auth.jwt_validation().clone(),
+        )
     }
 }

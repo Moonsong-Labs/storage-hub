@@ -351,6 +351,8 @@ impl MspService {
     /// We provide an URL as saveFileToDisk RPC requires it to stream the file.
     /// We also implemented the internal_upload_by_key handler to handle this temporary file upload.
     pub async fn get_file_from_key(&self, file_key: &str) -> Result<FileDownloadResult, Error> {
+        // TODO: authenticate user
+
         // Create temp url for download
         let temp_path = format!("/tmp/uploads/{}", file_key);
         let upload_url = format!("{}/internal/uploads/{}", self.msp_callback_url, file_key);
@@ -612,8 +614,8 @@ mod tests {
             rpc::{AnyRpcConnection, MockConnection, StorageHubRpcClient},
             storage::{BoxedStorageWrapper, InMemoryStorage},
         },
-        mock_utils::random_bytes_32,
         models::msp_info::{ValueProposition, ValuePropositionWithId},
+        test_utils::random_bytes_32,
     };
 
     /// Builder for creating MspService instances with mock dependencies for testing

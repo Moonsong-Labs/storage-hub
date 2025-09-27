@@ -5,28 +5,20 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use axum_extra::TypedHeader;
-use headers::{authorization::Bearer, Authorization};
 use serde::Deserialize;
 
 use crate::{
-    api::validation::extract_bearer_token, constants::mocks::MOCK_ADDRESS, error::Error,
-    models::files::FileListResponse, services::Services,
+    error::Error, models::files::FileListResponse, services::auth::AuthenticatedUser,
+    services::Services,
 };
 
 pub async fn list_buckets(
     State(services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    AuthenticatedUser { address }: AuthenticatedUser,
 ) -> Result<impl IntoResponse, Error> {
-    let payload = extract_bearer_token(&auth)?;
-    let address = payload
-        .get("address")
-        .and_then(|a| a.as_str())
-        .unwrap_or(MOCK_ADDRESS);
-
     let response = services
         .msp
-        .list_user_buckets(address)
+        .list_user_buckets(&address)
         .await?
         .collect::<Vec<_>>();
     Ok(Json(response))
@@ -34,16 +26,10 @@ pub async fn list_buckets(
 
 pub async fn get_bucket(
     State(services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    AuthenticatedUser { address }: AuthenticatedUser,
     Path(bucket_id): Path<String>,
 ) -> Result<impl IntoResponse, Error> {
-    let payload = extract_bearer_token(&auth)?;
-    let address = payload
-        .get("address")
-        .and_then(|a| a.as_str())
-        .unwrap_or(MOCK_ADDRESS);
-
-    let response = services.msp.get_bucket(&bucket_id, address).await?;
+    let response = services.msp.get_bucket(&bucket_id, &address).await?;
 
     Ok(Json(response))
 }
@@ -55,19 +41,13 @@ pub struct FilesQuery {
 
 pub async fn get_files(
     State(services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    AuthenticatedUser { address }: AuthenticatedUser,
     Path(bucket_id): Path<String>,
     Query(query): Query<FilesQuery>,
 ) -> Result<impl IntoResponse, Error> {
-    let payload = extract_bearer_token(&auth)?;
-    let address = payload
-        .get("address")
-        .and_then(|a| a.as_str())
-        .unwrap_or(MOCK_ADDRESS);
-
     let file_tree = services
         .msp
-        .get_file_tree(&bucket_id, address, query.path.as_deref().unwrap_or("/"))
+        .get_file_tree(&bucket_id, &address, query.path.as_deref().unwrap_or("/"))
         .await?;
 
     let response = FileListResponse {
