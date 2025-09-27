@@ -125,7 +125,7 @@ diesel::table! {
 diesel::table! {
     service_state (id) {
         id -> Int4,
-        last_processed_block -> Int8,
+        last_indexed_finalized_block -> Int8,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
     }
