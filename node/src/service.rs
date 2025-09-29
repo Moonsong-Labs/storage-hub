@@ -328,7 +328,10 @@ where
             }
 
             if let Some(c) = blockchain_service {
-                builder.with_blockchain_service_config(c.clone());
+                let peer_id = network.local_peer_id().to_bytes();
+                let mut c = c.clone();
+                c.peer_id = Some(peer_id);
+                builder.with_blockchain_service_config(c);
             }
 
             rpc_config.clone()

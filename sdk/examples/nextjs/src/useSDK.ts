@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useState } from 'react';
-import { MspClient } from '@storagehub-sdk/msp-client';
-import { FileManager } from '@storagehub-sdk/core';
+import { useEffect, useState } from "react";
+import { MspClient } from "@storagehub-sdk/msp-client";
+import { FileManager } from "@storagehub-sdk/core";
 
 export const useSDK = (): string => {
   const [status, setStatus] = useState<string>("Initializing SDK...");
 
   useEffect(() => {
-    (async () => {
+    void (async () => {
       const msgs: string[] = [];
-      const baseUrl = 'http://127.0.0.1:8080';
+      const baseUrl = "http://127.0.0.1:8080";
 
       // Try MSP first (short timeout so UI doesn't hang)
       try {
@@ -19,7 +19,9 @@ export const useSDK = (): string => {
           const health = await client.getHealth();
           msgs.push(`MSP Health: ${JSON.stringify(health)}`);
         } catch (e) {
-          msgs.push(`MSP backend not reachable (${baseUrl}): ${e instanceof Error ? e.message : String(e)}`);
+          msgs.push(
+            `MSP backend not reachable (${baseUrl}): ${e instanceof Error ? e.message : String(e)}`
+          );
         }
       } catch (e) {
         msgs.push(`MSP init failed (${baseUrl}): ${e instanceof Error ? e.message : String(e)}`);
@@ -32,7 +34,7 @@ export const useSDK = (): string => {
           start(controller) {
             controller.enqueue(bytes);
             controller.close();
-          },
+          }
         });
         const fm = new FileManager({ size: bytes.length, stream: () => stream });
         const fp = await fm.getFingerprint();
@@ -47,5 +49,3 @@ export const useSDK = (): string => {
 
   return status;
 };
-
-

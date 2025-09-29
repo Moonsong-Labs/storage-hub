@@ -300,7 +300,7 @@ mod tests {
     use chrono::DateTime;
 
     use super::*;
-    use crate::mock_utils::random_bytes_32;
+    use crate::test_utils::random_bytes_32;
 
     fn test_file_with_location_key_and_size(location: &str, file_key: &[u8], size: i64) -> DBFile {
         DBFile {

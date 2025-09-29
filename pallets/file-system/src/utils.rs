@@ -22,9 +22,9 @@ use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 
 use pallet_file_system_runtime_api::{
     GenericApplyDeltaEventInfoError, IsStorageRequestOpenToVolunteersError,
-    QueryBspConfirmChunksToProveForFileError, QueryConfirmChunksToProveForFileError,
-    QueryFileEarliestVolunteerTickError, QueryIncompleteStorageRequestMetadataError,
-    QueryMspConfirmChunksToProveForFileError,
+    QueryBspConfirmChunksToProveForFileError, QueryBspsVolunteeredForFileError,
+    QueryConfirmChunksToProveForFileError, QueryFileEarliestVolunteerTickError,
+    QueryIncompleteStorageRequestMetadataError, QueryMspConfirmChunksToProveForFileError,
 };
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
 use shp_constants::GIGAUNIT;
@@ -342,6 +342,20 @@ where
 
         Self::query_confirm_chunks_to_prove_for_file(msp_id, storage_request_metadata, file_key)
             .map_err(|e| QueryMspConfirmChunksToProveForFileError::ConfirmChunks(e))
+    }
+
+    pub fn query_bsps_volunteered_for_file(
+        file_key: MerkleHash<T>,
+    ) -> Result<Vec<ProviderIdFor<T>>, QueryBspsVolunteeredForFileError> {
+        // Check that the storage request exists.
+        if !<StorageRequests<T>>::contains_key(&file_key) {
+            return Err(QueryBspsVolunteeredForFileError::StorageRequestNotFound);
+        }
+
+        let bsps_volunteered =
+            <StorageRequestBsps<T>>::iter_prefix(&file_key).map(|(bsp_id, _)| bsp_id);
+
+        Ok(bsps_volunteered.collect())
     }
 
     pub fn decode_generic_apply_delta_event_info(
@@ -2698,6 +2712,20 @@ where
         mut encoded_event_info: &[u8],
     ) -> Result<BucketIdFor<T>, codec::Error> {
         BucketIdFor::<T>::decode(&mut encoded_event_info)
+    }
+
+    pub fn storage_requests_by_msp(
+        msp_id: ProviderIdFor<T>,
+    ) -> BTreeMap<MerkleHash<T>, StorageRequestMetadata<T>> {
+        StorageRequests::<T>::iter()
+            .filter(|(_, metadata)| {
+                if let Some(msp) = metadata.msp {
+                    msp.0 == msp_id
+                } else {
+                    false
+                }
+            })
+            .collect()
     }
 
     pub fn pending_storage_requests_by_msp(

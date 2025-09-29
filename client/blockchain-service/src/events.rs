@@ -8,9 +8,9 @@ use shc_actors_derive::{ActorEvent, ActorEventBus};
 use shc_common::{
     traits::StorageEnableRuntime,
     types::{
-        Balance, BlockNumber, BucketId, CustomChallenge, FileKey, FileLocation, Fingerprint,
-        ForestRoot, KeyProofs, PeerIds, ProofsDealerProviderId, ProviderId, RandomnessOutput,
-        StorageDataUnit, TickNumber, TrieMutation, ValuePropId,
+        BackupStorageProviderId, Balance, BlockNumber, BucketId, CustomChallenge, FileKey,
+        FileLocation, Fingerprint, ForestRoot, KeyProofs, PeerIds, ProofsDealerProviderId,
+        ProviderId, RandomnessOutput, StorageDataUnit, TickNumber, TrieMutation, ValuePropId,
     },
 };
 
@@ -442,6 +442,15 @@ pub struct FinalisedBucketMovedAway<Runtime: StorageEnableRuntime> {
     pub bucket_id: BucketId<Runtime>,
     pub old_msp_id: ProviderId<Runtime>,
     pub new_msp_id: ProviderId<Runtime>,
+}
+
+/// Event emitted when a file needs to be distributed to a BSP who volunteered to store it.
+/// and the current node is an MSP configured to distribute files to BSPs.
+#[derive(Debug, Clone, ActorEvent)]
+#[actor(actor = "blockchain_service")]
+pub struct DistributeFileToBsp<Runtime: StorageEnableRuntime> {
+    pub file_key: FileKey,
+    pub bsp_id: BackupStorageProviderId<Runtime>,
 }
 
 /// The event bus provider for the BlockchainService actor.

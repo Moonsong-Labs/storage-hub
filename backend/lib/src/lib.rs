@@ -9,4 +9,4 @@ pub mod models;
 pub mod services;
 
 #[cfg(any(feature = "mocks", test))]
-pub mod mock_utils;
+pub mod test_utils;

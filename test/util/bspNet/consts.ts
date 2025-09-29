@@ -117,6 +117,3 @@ export const TRANSFER_WEIGHT_PROOF_SIZE = 308;
 
 export const JUMP_CAPACITY_BSP = 1073741824;
 export const MSP_CHARGING_PERIOD = 12;
-
-// EVM Chain Constants
-export const SH_EVM_SOLOCHAIN_CHAIN_ID = 181222;

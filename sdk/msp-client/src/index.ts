@@ -1,4 +1,4 @@
-export { MspClient } from './MspClient.js';
+export { MspClient } from "./MspClient.js";
 export type {
   Bucket,
   Capacity,
@@ -14,5 +14,5 @@ export type {
   UploadOptions,
   UploadReceipt,
   ValueProp,
-  VerifyResponse,
-} from './types.js';
+  VerifyResponse
+} from "./types.js";

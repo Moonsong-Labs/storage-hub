@@ -5,7 +5,7 @@ import { ALITH_PRIVATE_KEY, ETH_BSP_ADDRESS } from "../../../util/evmNet/keyring
 
 await describeBspNet(
   "Solochain EVM ETH Transfer",
-  { initialised: false, networkConfig: "standard", runtimeType: "solochain", keepAlive: false },
+  { initialised: false, runtimeType: "solochain" },
   ({ before, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
 

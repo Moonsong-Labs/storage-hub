@@ -6,7 +6,7 @@
  * for retrieving the active account address, sending transactions, and
  * signing arbitrary messages.
  */
-import type { TransactionRequest } from 'ethers';
+import type { TransactionRequest } from "ethers";
 
 export abstract class WalletBase {
   /**

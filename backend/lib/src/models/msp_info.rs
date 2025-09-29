@@ -1,5 +1,8 @@
 use chrono::{DateTime, Utc};
+use codec::{Decode, Encode};
 use serde::Serialize;
+use sp_core::{ConstU32, H256};
+use sp_runtime::BoundedVec;
 
 #[derive(Debug, Serialize)]
 pub struct InfoResponse {
@@ -41,15 +44,46 @@ pub struct Capacity {
     pub used_bytes: u64,
 }
 
-#[derive(Debug, Serialize)]
-pub struct ValueProp {
-    pub id: String,
-    #[serde(rename = "pricePerGbBlock")]
-    pub price_per_gb_block: f64,
-    #[serde(rename = "dataLimitPerBucketBytes")]
-    pub data_limit_per_bucket_bytes: u64,
-    #[serde(rename = "isAvailable")]
-    pub is_available: bool,
+// TODO: We should update this to somehow use the types configured in the runtime.
+// For now, I hardcoded them to match
+#[derive(Debug, Serialize, Encode, Decode, Default)]
+pub struct ValueProposition {
+    #[serde(rename = "pricePerGbPerBlock")]
+    pub price_per_giga_unit_of_data_per_block: u128,
+    #[serde(rename = "commitment")]
+    pub commitment: BoundedVec<u8, ConstU32<1000>>,
+    #[serde(rename = "bucketDataLimit")]
+    pub bucket_data_limit: u64,
+    #[serde(rename = "available")]
+    pub available: bool,
+}
+
+#[derive(Debug, Serialize, Encode, Decode, Default)]
+pub struct ValuePropositionWithId {
+    pub id: H256,
+    pub value_prop: ValueProposition,
+}
+
+impl ValuePropositionWithId {
+    pub fn new(id: H256, value_prop: ValueProposition) -> Self {
+        Self { id, value_prop }
+    }
+}
+
+impl ValueProposition {
+    pub fn new(
+        price_per_giga_unit_of_data_per_block: u128,
+        commitment: BoundedVec<u8, ConstU32<1000>>,
+        bucket_data_limit: u64,
+        available: bool,
+    ) -> Self {
+        Self {
+            price_per_giga_unit_of_data_per_block,
+            commitment,
+            bucket_data_limit,
+            available,
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]

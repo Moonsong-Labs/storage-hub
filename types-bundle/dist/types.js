@@ -171,6 +171,12 @@ export const SHARED_TYPES = {
       InternalError: null
     }
   },
+  QueryBspsVolunteeredForFileError: {
+    _enum: {
+      StorageRequestNotFound: null,
+      InternalError: null
+    }
+  },
   GenericApplyDeltaEventInfoError: {
     _enum: {
       DecodeError: null
@@ -254,6 +260,19 @@ export const SHARED_TYPES = {
     _enum: {
       NotAnMsp: null,
       InternalError: null
+    }
+  },
+  RpcProviderId: {
+    _enum: {
+      NotAProvider: null,
+      Bsp: "H256",
+      Msp: "H256"
+    }
+  },
+  GetValuePropositionsResult: {
+    _enum: {
+      Success: "Vec<Vec<u8>>",
+      NotAnMsp: null
     }
   }
 };

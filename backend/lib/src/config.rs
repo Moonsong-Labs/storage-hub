@@ -1,3 +1,4 @@
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
 use crate::constants::{
@@ -18,6 +19,7 @@ pub struct Config {
     /// The backend will serve requests at this port
     pub port: u16,
     pub api: ApiConfig,
+    pub auth: AuthConfig,
     pub storage_hub: StorageHubConfig,
     pub database: DatabaseConfig,
 }
@@ -33,6 +35,32 @@ pub struct ApiConfig {
     pub default_page_size: usize,
     /// Maximum allowed page size for paginated responses
     pub max_page_size: usize,
+}
+
+/// Authentication configuration for JWT tokens
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthConfig {
+    /// JWT secret key for signing and verifying tokens
+    /// Must be at least 32 bytes for HS256 algorithm
+    /// Can be set in config or loaded from JWT_SECRET environment variable
+    /// Environment variable takes precedence over config value
+    pub jwt_secret: Option<String>,
+
+    /// When enabled, do not verify JWT signature
+    #[cfg(feature = "mocks")]
+    pub mock_mode: bool,
+}
+
+impl AuthConfig {
+    /// Generate a random JWT secret for development/testing
+    pub(crate) fn generate_random_secret() -> String {
+        let mut data = [0u8; 32];
+
+        let mut rng = rand::thread_rng();
+        rng.fill_bytes(&mut data);
+
+        hex::encode(data)
+    }
 }
 
 /// StorageHub RPC configuration for blockchain interaction
@@ -80,6 +108,14 @@ impl Default for Config {
                 default_page_size: DEFAULT_PAGE_SIZE,
                 max_page_size: MAX_PAGE_SIZE,
             },
+            auth: AuthConfig {
+                jwt_secret: std::env::var("JWT_SECRET").ok().or_else(|| {
+                    tracing::warn!("JWT_SECRET not set, using random secret for development");
+                    Some(AuthConfig::generate_random_secret())
+                }),
+                #[cfg(feature = "mocks")]
+                mock_mode: true,
+            },
             storage_hub: StorageHubConfig {
                 rpc_url: DEFAULT_RPC_URL.to_string(),
                 timeout_secs: Some(DEFAULT_TIMEOUT_SECS),
@@ -101,7 +137,27 @@ impl Default for Config {
 impl Config {
     pub fn from_file(path: &str) -> std::io::Result<Self> {
         let contents = std::fs::read_to_string(path)?;
-        toml::from_str(&contents)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+        let mut config: Self = toml::from_str(&contents)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+
+        // Override JWT secret with environment variable if present
+        if let Ok(jwt_secret) = std::env::var("JWT_SECRET") {
+            config.auth.jwt_secret = Some(jwt_secret);
+        }
+
+        Ok(config)
+    }
+}
+
+#[cfg(test)]
+impl Config {
+    /// Helper to get a DecodingKey
+    pub fn get_jwt_key(&self) -> jsonwebtoken::DecodingKey {
+        let jwt_secret = self
+            .auth
+            .jwt_secret
+            .as_ref()
+            .expect("JWT secret should be set in tests");
+        jsonwebtoken::DecodingKey::from_secret(jwt_secret.as_bytes())
     }
 }

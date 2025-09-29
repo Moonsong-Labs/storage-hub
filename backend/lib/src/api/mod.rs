@@ -33,7 +33,7 @@ pub fn create_app(services: Services) -> Router {
 /// Create a test application
 ///
 /// This function creates a test application with mock services.
-pub fn mock_app() -> Router {
-    let services = Services::mocks();
+pub async fn mock_app() -> Router {
+    let services = Services::mocks().await;
     create_app(services)
 }

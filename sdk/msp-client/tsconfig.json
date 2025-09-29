@@ -1,23 +1,17 @@
 {
-  "extends": "../tsconfig.json",
-  "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "dist",
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "declaration": true,
-    "declarationDir": "./dist",
-    "baseUrl": ".",
-    "paths": {
-      "@storagehub-sdk/core": [
-        "../core/dist"
-      ]
-    }
-  },
-  "include": [
-    "src/**/*"
-  ],
-  "exclude": [
-    "dist"
-  ]
+	"extends": "../tsconfig.json",
+	"compilerOptions": {
+		"rootDir": "src",
+		"outDir": "dist",
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"declaration": true,
+		"declarationDir": "./dist",
+		"baseUrl": ".",
+		"paths": {
+			"@storagehub-sdk/core": ["../core/dist"]
+		}
+	},
+	"include": ["src/**/*"],
+	"exclude": ["dist"]
 }

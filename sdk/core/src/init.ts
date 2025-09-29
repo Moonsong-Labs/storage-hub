@@ -17,13 +17,13 @@ let initPromise: Promise<void> | null = null;
 function decodeBase64ToBytes(b64: string): Uint8Array {
   // Prefer Node's Buffer when available (Buffer extends Uint8Array)
   if (
-    typeof Buffer !== 'undefined' &&
-    typeof (Buffer as unknown as { from?: (s: string, enc: 'base64') => Uint8Array }).from ===
-      'function'
+    typeof Buffer !== "undefined" &&
+    typeof (Buffer as unknown as { from?: (s: string, enc: "base64") => Uint8Array }).from ===
+      "function"
   ) {
-    const buf = (Buffer as unknown as { from: (s: string, enc: 'base64') => Uint8Array }).from(
+    const buf = (Buffer as unknown as { from: (s: string, enc: "base64") => Uint8Array }).from(
       b64,
-      'base64',
+      "base64"
     );
     return new Uint8Array(buf);
   }
@@ -34,7 +34,7 @@ function decodeBase64ToBytes(b64: string): Uint8Array {
     }
   ).atob;
   if (!atobFn) {
-    throw new Error('Base64 decoder not available');
+    throw new Error("Base64 decoder not available");
   }
   const binary = atobFn(b64);
   const out = new Uint8Array(binary.length);
@@ -55,12 +55,12 @@ export async function initWasm(): Promise<void> {
   // Create the initialization Promise and store it
   initPromise = (async () => {
     // Import the wasm glue dynamically by URL so bundlers don't inline it
-    const wasmInit = (await import('../wasm/pkg/storagehub_wasm.js')).default;
+    const wasmInit = (await import("../wasm/pkg/storagehub_wasm.js")).default;
 
-    const mod = (await import('./_wasm_embed.js')) as { WASM_BASE64?: unknown };
-    const b64 = typeof mod.WASM_BASE64 === 'string' ? (mod.WASM_BASE64 as string) : undefined;
+    const mod = (await import("./_wasm_embed.js")) as { WASM_BASE64?: unknown };
+    const b64 = typeof mod.WASM_BASE64 === "string" ? (mod.WASM_BASE64 as string) : undefined;
     if (!b64 || b64.length === 0) {
-      throw new Error('Embedded WASM is missing or empty. Ensure build generated _wasm_embed.ts.');
+      throw new Error("Embedded WASM is missing or empty. Ensure build generated _wasm_embed.ts.");
     }
     const bytes = decodeBase64ToBytes(b64);
     await wasmInit(bytes);

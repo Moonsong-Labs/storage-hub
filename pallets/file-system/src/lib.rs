@@ -626,13 +626,13 @@ pub mod pallet {
         /// of BSPs and choose to either delete the file and re-issue a storage request or continue.
         StorageRequestExpired { file_key: MerkleHash<T> },
         /// Notifies that a storage request has been revoked by the user who initiated it.
-        /// Note: the BSPs who confirmed the file are also issued a priority challenge to delete the
-        /// file.
+        /// Note: the storage request will be marked as "incomplete", and it is expected that fisherman
+        /// nodes will pick it up and delete the file from the confirmed BSPs as well as the Bucket.
         StorageRequestRevoked { file_key: MerkleHash<T> },
         /// Notifies that a storage request has either been directly rejected by the MSP or
         /// the MSP did not respond to the storage request in time.
-        /// Note: There might be BSPs that have volunteered and confirmed the file already, for
-        /// which a priority challenge to delete the file will be issued.
+        /// Note: the storage request will be marked as "incomplete", and it is expected that fisherman
+        /// nodes will pick it up and delete the file from the confirmed BSPs as well as the Bucket.
         StorageRequestRejected {
             file_key: MerkleHash<T>,
             reason: RejectedStorageRequestReason,

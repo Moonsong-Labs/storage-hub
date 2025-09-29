@@ -2,7 +2,7 @@
  * Type definitions for StorageHub EVM client
  */
 
-import type { Address, Chain, WalletClient } from 'viem';
+import type { Address, Chain, WalletClient } from "viem";
 
 /**
  * Configuration options for StorageHubClient
@@ -77,5 +77,5 @@ export enum ReplicationLevel {
   /** Ultra high security replication */
   UltraHighSecurity = 4,
   /** Custom replication (requires specifying exact replica count) */
-  Custom = 5,
+  Custom = 5
 }

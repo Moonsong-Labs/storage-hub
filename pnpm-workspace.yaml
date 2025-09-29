@@ -2,6 +2,7 @@ packages:
   - api-augment
   - types-bundle
   - test
+  - sdk
   - sdk/core
   - sdk/msp-client
 

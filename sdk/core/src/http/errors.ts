@@ -4,7 +4,7 @@ export class HttpError extends Error {
 
   constructor(message: string, status: number, body?: unknown) {
     super(message);
-    this.name = 'HttpError';
+    this.name = "HttpError";
     this.status = status;
     this.body = body;
   }
@@ -13,13 +13,13 @@ export class HttpError extends Error {
 export class NetworkError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'NetworkError';
+    this.name = "NetworkError";
   }
 }
 
 export class TimeoutError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'TimeoutError';
+    this.name = "TimeoutError";
   }
 }

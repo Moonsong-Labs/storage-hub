@@ -12,9 +12,9 @@ import {
   createWalletClient,
   custom,
   type EIP1193Provider,
-  http,
-} from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
+  http
+} from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 
 // Transport options (exclusive via nested union)
 /**
@@ -56,7 +56,7 @@ export type EvmClients = {
  */
 function resolveAccount(input?: Account | `0x${string}`): Account | undefined {
   if (!input) return undefined;
-  if (typeof input === 'string') {
+  if (typeof input === "string") {
     // Treat as a raw private key
     return privateKeyToAccount(input);
   }
@@ -80,14 +80,14 @@ export function createEvmClients(opts: EvmClientsOptions): EvmClients {
   let transport: ReturnType<typeof http> | ReturnType<typeof custom>;
   let chain: Chain | undefined;
 
-  if ('httpUrl' in opts.transport) {
+  if ("httpUrl" in opts.transport) {
     transport = http(opts.transport.httpUrl, { timeout: timeoutMs });
     chain = opts.transport.chain;
-  } else if ('eip1193' in opts.transport) {
+  } else if ("eip1193" in opts.transport) {
     transport = custom(opts.transport.eip1193);
     chain = undefined; // optional for EIP-1193; provider supplies chain context
   } else {
-    throw new Error('createEvmClients: invalid transport');
+    throw new Error("createEvmClients: invalid transport");
   }
 
   // Public (read) client is always available

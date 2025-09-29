@@ -1,1 +1,1 @@
-export { FileMetadata, FileTrie } from '../wasm/pkg/storagehub_wasm.js';
+export { FileMetadata, FileTrie } from "../wasm/pkg/storagehub_wasm.js";
