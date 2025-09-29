@@ -4,3 +4,4 @@ packages:
   - e2e
   - examples/node
   - examples/nextjs
+  - examples/demo-app
