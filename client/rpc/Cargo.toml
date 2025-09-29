@@ -49,6 +49,7 @@ sc-rpc-api = { workspace = true }
 pallet-file-system-runtime-api = { workspace = true }
 pallet-payment-streams-runtime-api = { workspace = true }
 pallet-proofs-dealer-runtime-api = { workspace = true }
+pallet-storage-providers-runtime-api = { workspace = true }
 shc-actors-framework = { workspace = true }
 shc-common = { workspace = true }
 shc-file-manager = { workspace = true }

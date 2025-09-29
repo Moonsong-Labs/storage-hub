@@ -1,7 +1,9 @@
-//! Test utilities for generating random IDs and test data
+//! Test utilities for backend testing
 
 use rand::Rng;
 use shp_types::Hash;
+
+pub mod auth;
 
 /// Generate a random 32-byte Hash for use in tests
 pub fn random_hash() -> Hash {

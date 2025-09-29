@@ -1,36 +1,37 @@
 import assert, { strictEqual } from "node:assert";
-import { type EnrichedBspApi, describeMspNet, shUser } from "../../../util";
-import {
-  generateMockJWT,
-  type Bucket,
-  type FileListResponse,
-  type FileInfo
-} from "../../../util/backend";
-import { u8aToHex } from "@polkadot/util";
-import { decodeAddress } from "@polkadot/util-crypto";
 import type { Hash } from "@polkadot/types/interfaces";
+import { describeMspNet, type EnrichedBspApi } from "../../../util";
+import { fetchJwtToken } from "../../../util/backend/jwt";
+import type { Bucket, FileInfo, FileListResponse } from "../util/backend/types";
+import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
+import {
+  ETH_SH_USER_ADDRESS,
+  ETH_SH_USER_PRIVATE_KEY,
+  ethShUser
+} from "../../../util/evmNet/keyring";
 
 await describeMspNet(
   "Backend bucket endpoints",
   {
     indexer: true,
-    backend: true
+    backend: true,
+    runtimeType: "solochain"
   },
   ({ before, createMsp1Api, createUserApi, it }) => {
     let userApi: EnrichedBspApi;
     let msp1Api: EnrichedBspApi;
-    let mockJWT: string;
+    let userJWT: string;
 
     const bucketName = "backend-test-bucket";
     let bucketId: string;
 
-    let file_key: Hash;
-    const fileLocation = "test/whatsup.jpg";
+    let fileKey: Hash;
+    const fileLocationSubPath = "test";
+    const fileLocationBasename = "whatsup.jpg";
+    const fileLocation = `${fileLocationSubPath}/${fileLocationBasename}`;
 
     before(async () => {
       userApi = await createUserApi();
-
-      mockJWT = generateMockJWT(userApi.accounts.shUser.address);
 
       const maybeMsp1Api = await createMsp1Api();
       if (maybeMsp1Api) {
@@ -54,6 +55,8 @@ await describeMspNet(
         searchString: "Server listening on",
         timeout: 10000
       });
+
+      userJWT = await fetchJwtToken(ETH_SH_USER_PRIVATE_KEY, SH_EVM_SOLOCHAIN_CHAIN_ID);
     });
 
     it("Network launches and can be queried", async () => {
@@ -64,10 +67,12 @@ await describeMspNet(
       strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp1.expectedPeerId);
     });
 
-    it("Should succesfully list no buckets", async () => {
+    it("Should successfully list no buckets", async () => {
+      assert(userJWT, "User token is initialized");
+
       const response = await fetch("http://localhost:8080/buckets", {
         headers: {
-          Authorization: `Bearer ${mockJWT}`
+          Authorization: `Bearer ${userJWT}`
         }
       });
 
@@ -79,7 +84,15 @@ await describeMspNet(
     });
 
     it("Should create a bucket with a file", async () => {
-      const newBucketEvent = await userApi.createBucket(bucketName);
+      assert(userJWT, "User token is initialized");
+
+      // Create a new bucket with the MSP
+      const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
+        userApi.shConsts.DUMMY_MSP_ID
+      );
+      const valuePropId = valueProps[0].id;
+
+      const newBucketEvent = await userApi.createBucket(bucketName, valuePropId);
       const newBucketEventDataBlob =
         userApi.events.fileSystem.NewBucket.is(newBucketEvent) && newBucketEvent.data;
 
@@ -91,17 +104,14 @@ await describeMspNet(
 
       const source = "res/whatsup.jpg";
 
-      const ownerHex = u8aToHex(decodeAddress(userApi.accounts.shUser.address)).slice(2);
-
-      const result = await userApi.rpc.storagehubclient.loadFileInStorage(
+      const userAddress = ETH_SH_USER_ADDRESS.slice(2);
+      const { file_key, file_metadata } = await userApi.rpc.storagehubclient.loadFileInStorage(
         source,
         fileLocation,
-        ownerHex,
+        userAddress,
         newBucketId
       );
-      file_key = result.file_key;
-
-      const file_metadata = result.file_metadata;
+      fileKey = file_key;
 
       // Issue the storage request
       await userApi.block.seal({
@@ -116,18 +126,24 @@ await describeMspNet(
             { Custom: 2 }
           )
         ],
-        signer: shUser
+        signer: ethShUser
       });
+
+      // Wait until the MSP has received and stored the file
+      await msp1Api.wait.fileStorageComplete(file_key);
     });
 
-    it("Should succesfully get specific bucket info", async () => {
+    it("Should successfully get specific bucket info", async () => {
+      assert(userJWT, "User token is initialized");
+      assert(bucketId, "Bucket should have been created");
+
       const response = await fetch(`http://localhost:8080/buckets/${bucketId}`, {
         headers: {
-          Authorization: `Bearer ${mockJWT}`
+          Authorization: `Bearer ${userJWT}`
         }
       });
 
-      strictEqual(response.status, 200, "/bucket/bucker_id should return OK status");
+      strictEqual(response.status, 200, "/bucket/bucket_id should return OK status");
 
       const bucket = (await response.json()) as Bucket;
 
@@ -135,10 +151,13 @@ await describeMspNet(
       strictEqual(bucket.name, bucketName, "Should have same name as creation");
     });
 
-    it("Should succesfully list buckets", async () => {
+    it("Should successfully list user buckets", async () => {
+      assert(userJWT, "User token is initialized");
+      assert(bucketId, "Bucket should have been created");
+
       const response = await fetch("http://localhost:8080/buckets", {
         headers: {
-          Authorization: `Bearer ${mockJWT}`
+          Authorization: `Bearer ${userJWT}`
         }
       });
 
@@ -146,16 +165,19 @@ await describeMspNet(
 
       const buckets = (await response.json()) as Bucket[];
 
-      assert(buckets.length > 0);
+      assert(buckets.length > 0, "should contain at least the bucket added during init");
 
       const sample_bucket = buckets.find((bucket) => bucket.bucketId === bucketId);
       assert(sample_bucket, "list should include bucket added in initialization");
     });
 
-    it("Should succesfully get bucket files", async () => {
+    it("Should successfully get bucket files", async () => {
+      assert(userJWT, "User token is initialized");
+      assert(bucketId, "Bucket should have been created");
+
       const response = await fetch(`http://localhost:8080/buckets/${bucketId}/files`, {
         headers: {
-          Authorization: `Bearer ${mockJWT}`
+          Authorization: `Bearer ${userJWT}`
         }
       });
 
@@ -173,17 +195,23 @@ await describeMspNet(
 
       assert(files.children.length > 0, "At least one file in the root");
 
-      const test = files.children.find((entry) => entry.name === "test");
-      assert(test, "Should have a folder named 'test'");
+      const test = files.children.find((entry) => entry.name === fileLocationSubPath);
+      assert(test, `Should have a folder named '${fileLocationSubPath}'`);
       assert(test.type === "folder", "Child entry should be a folder");
     });
 
-    it("Should succesfully get bucket files subpath", async () => {
-      const response = await fetch(`http://localhost:8080/buckets/${bucketId}/files?path=test`, {
-        headers: {
-          Authorization: `Bearer ${mockJWT}`
+    it("Should successfully get bucket files subpath", async () => {
+      assert(userJWT, "User token is initialized");
+      assert(bucketId, "Bucket should have been created");
+
+      const response = await fetch(
+        `http://localhost:8080/buckets/${bucketId}/files?path=${fileLocationSubPath}`,
+        {
+          headers: {
+            Authorization: `Bearer ${userJWT}`
+          }
         }
-      });
+      );
 
       strictEqual(
         response.status,
@@ -198,37 +226,41 @@ await describeMspNet(
       strictEqual(fileList.files.length, 1, "File list should have exactly 1 entry");
 
       const files = fileList.files[0];
-      strictEqual(files.name, "test", "First entry should be the folder of the path");
+      strictEqual(files.name, fileLocationSubPath, "First entry should be the folder of the path");
       assert(files.type === "folder", "First entry should be a folder");
 
-      assert(files.children.length > 0, "At least one file in the test folder");
+      assert(files.children.length > 0, `At least one file in the ${fileLocationSubPath} folder`);
 
-      const whatsup = files.children.find((entry) => entry.name === "whatsup.jpg");
-      assert(whatsup, "Should have a file named 'whatsup.jpg'");
+      const whatsup = files.children.find((entry) => entry.name === fileLocationBasename);
+      assert(whatsup, `Should have a file named '${fileLocationBasename}'`);
 
       assert(whatsup.type === "file", "Child entry should be file");
       strictEqual(
         whatsup.fileKey,
-        file_key.toHex().slice(2),
+        fileKey.toHex().slice(2),
         "Returned file key matches the one at time of creation"
       );
     });
 
-    it("Should succesfully get file info by key", async () => {
+    it("Should successfully get file info by key", async () => {
+      assert(userJWT, "User token is initialized");
+      assert(bucketId, "Bucket should have been created");
+      assert(fileKey, "File should have been created");
+
       const response = await fetch(
-        `http://localhost:8080/buckets/${bucketId}/info/${file_key.toHex()}`,
+        `http://localhost:8080/buckets/${bucketId}/info/${fileKey.toHex()}`,
         {
           headers: {
-            Authorization: `Bearer ${mockJWT}`
+            Authorization: `Bearer ${userJWT}`
           }
         }
       );
 
-      strictEqual(response.status, 200, "/bucket/bucket_id/info/file_key should return OK status");
+      strictEqual(response.status, 200, "/bucket/bucket_id/info/fileKey should return OK status");
 
       const file = (await response.json()) as FileInfo;
 
-      strictEqual(file.fileKey, file_key.toHex().slice(2), "Should have same file key as queried");
+      strictEqual(file.fileKey, fileKey.toHex().slice(2), "Should have same file key as queried");
       strictEqual(file.bucketId, bucketId, "Should have same bucket id as queried");
 
       strictEqual(file.location, fileLocation, "Should have same location as creation");

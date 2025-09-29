@@ -33,6 +33,14 @@ impl StorageHubRpcClient {
         self.connection.call(method, params).await
     }
 
+    // Call a JSON-RPC method on the connected node without parameters
+    pub async fn call_no_params<R>(&self, method: &str) -> RpcResult<R>
+    where
+        R: DeserializeOwned,
+    {
+        self.connection.call_no_params(method).await
+    }
+
     // TODO: use the storagehubrpc client trait directly
 
     /// Get the current price per giga unit per tick

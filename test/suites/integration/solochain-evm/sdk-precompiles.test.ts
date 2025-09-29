@@ -14,7 +14,7 @@ import { MspClient } from "@storagehub-sdk/msp-client";
 import { createPublicClient, createWalletClient, defineChain, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { describeMspNet, type EnrichedBspApi, ShConsts } from "../../../util";
-import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/bspNet/consts";
+import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import { ALITH_PRIVATE_KEY } from "../../../util/evmNet/keyring";
 
 await describeMspNet(
@@ -84,6 +84,13 @@ await describeMspNet(
       };
       mspClient = await MspClient.connect(mspBackendHttpConfig);
 
+      // Wait for the backend to be ready
+      await userApi.docker.waitForLog({
+        containerName: "storage-hub-sh-backend-1",
+        searchString: "Server listening on",
+        timeout: 10000
+      });
+
       // Ensure the connection works
       const healthResponse = await mspClient.getHealth();
       assert(healthResponse.status === "healthy", "MSP health response should be healthy");
@@ -100,14 +107,6 @@ await describeMspNet(
       await userApi.docker.waitForLog({
         containerName: "storage-hub-sh-postgres-1",
         searchString: "database system is ready to accept connections",
-        timeout: 10000
-      });
-    });
-
-    it("Backend service is ready", async () => {
-      await userApi.docker.waitForLog({
-        containerName: "storage-hub-sh-backend-1",
-        searchString: "Server listening on",
         timeout: 10000
       });
     });

@@ -5,6 +5,7 @@ import path from "node:path";
 import * as compose from "docker-compose";
 import tmp from "tmp";
 import yaml from "yaml";
+import { JWT_SECRET } from "../backend/consts";
 import {
   addBsp,
   BspNetTestApi,
@@ -313,7 +314,11 @@ export class NetworkLauncher {
         await compose.upOne("sh-backend", {
           cwd: cwd,
           config: tmpFile,
-          log: verbose
+          log: verbose,
+          env: {
+            ...process.env,
+            JWT_SECRET: JWT_SECRET
+          }
         });
       }
     }
