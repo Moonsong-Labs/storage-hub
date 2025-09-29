@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { Settings, Wallet, Database, CheckCircle, AlertCircle, ExternalLink } from 'lucide-react';
-import { createWalletClient, createPublicClient, custom, formatEther, type WalletClient, type PublicClient } from 'viem';
+import { createWalletClient, createPublicClient, custom, formatEther, getAddress, type WalletClient, type PublicClient } from 'viem';
 import { StorageHubClient } from '@storagehub-sdk/core';
 import { MspClient } from '@storagehub-sdk/msp-client';
 import { FileManager } from './FileManager';
@@ -52,7 +52,7 @@ export function OnePageDemo() {
       setWalletError('MetaMask is not installed. Please install MetaMask to continue.');
       return;
     }
-    
+
     if (isMetaMaskAvailable === null) {
       // Still checking, shouldn't happen but safety check
       return;
@@ -65,13 +65,15 @@ export function OnePageDemo() {
       console.log('🔄 Step 1: Requesting account access...');
       // Request account access
       const accounts = await window.ethereum!.request({ method: 'eth_requestAccounts' }) as string[];
-      
+
       if (!accounts || accounts.length === 0) {
         throw new Error('No accounts returned from MetaMask');
       }
 
-      const address = accounts[0] as `0x${string}`;
-      console.log('✅ Step 1 Complete: Got address:', address);
+      const rawAddress = accounts[0] as `0x${string}`;
+      const address = getAddress(rawAddress); // Ensure proper checksum format
+      console.log('✅ Step 1 Complete: Got address (raw):', rawAddress);
+      console.log('✅ Step 1 Complete: Got address (checksum):', address);
 
       console.log('🔄 Step 2: Checking current network...');
       // Check current network directly via MetaMask
@@ -156,7 +158,7 @@ export function OnePageDemo() {
 
     } catch (error: any) {
       console.error('❌ Wallet connection failed:', error);
-      
+
       // Provide more specific error messages
       let errorMessage = 'Failed to connect wallet';
       if (error.message?.includes('User rejected')) {
@@ -168,7 +170,7 @@ export function OnePageDemo() {
       } else if (error.message) {
         errorMessage = error.message;
       }
-      
+
       setWalletError(errorMessage);
     } finally {
       setIsConnecting(false);
@@ -195,30 +197,30 @@ export function OnePageDemo() {
         console.log('- Wallet Address:', walletAddress);
         console.log('- Mock Address (with buckets):', mockAddress);
         console.log('- Mock mode enabled, skipping SIWE flow');
-        
+
         authToken = generateMockJWT(mockAddress); // Use mock address instead of wallet address
         console.log('✅ Mock JWT generated for address with existing buckets');
-        
+
       } else {
-        // REAL SIWE AUTHENTICATION PATH (existing code unchanged)
+        // REAL SIWE AUTHENTICATION PATH (walletAddress is already checksummed)
         console.log('🔐 MSP Authentication Step 1: Getting nonce...');
         console.log('- Address:', walletAddress);
         console.log('- Chain ID:', config.chainId);
-        
+
         const { message } = await mspClient.getNonce(walletAddress, config.chainId);
         console.log('✅ Nonce received, message:', message);
-        
+
         console.log('🔐 MSP Authentication Step 2: Signing message...');
-        const signature = await walletClient.signMessage({ 
+        const signature = await walletClient.signMessage({
           account: walletClient.account!, // Use account object, not address string
-          message 
+          message
         });
         console.log('✅ Message signed:', signature);
-        
+
         console.log('🔐 MSP Authentication Step 3: Verifying signature...');
         const verified = await mspClient.verify(message, signature);
         console.log('✅ Signature verified, token received');
-        
+
         authToken = verified.token;
       }
 
@@ -299,7 +301,7 @@ export function OnePageDemo() {
             <Settings className="h-5 w-5 text-blue-400" />
             <h2 className="text-xl font-semibold">Configuration</h2>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">RPC URL</label>
@@ -310,7 +312,7 @@ export function OnePageDemo() {
                 className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-gray-100 focus:border-blue-500 focus:outline-none"
               />
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">Chain ID</label>
               <input
@@ -320,7 +322,7 @@ export function OnePageDemo() {
                 className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-gray-100 focus:border-blue-500 focus:outline-none"
               />
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">MSP URL</label>
               <input
@@ -331,7 +333,7 @@ export function OnePageDemo() {
               />
             </div>
           </div>
-          
+
           {/* Mock Authentication Toggle */}
           <div className="mt-4 p-4 bg-gray-800 rounded-md border border-gray-700">
             <div className="flex items-center justify-between">
@@ -369,45 +371,45 @@ export function OnePageDemo() {
               </div>
             )}
           </div>
-          
-              {!walletAddress ? (
-                <div className="space-y-4">
-                  {/* Show loading state during MetaMask detection */}
-                  {isMetaMaskAvailable === null && (
-                    <div className="text-center py-8">
-                      <p className="text-gray-400 mb-4">Checking for MetaMask...</p>
-                    </div>
-                  )}
-                  
-                  {/* Show MetaMask not available warning */}
-                  {isMetaMaskAvailable === false && (
-                    <div className="flex items-center gap-2 p-3 bg-yellow-900/20 border border-yellow-900/50 rounded-md text-yellow-400">
-                      <AlertCircle className="h-4 w-4" />
-                      <span className="text-sm">MetaMask not detected.</span>
-                      <a 
-                        href="https://metamask.io/download/" 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-blue-400 hover:text-blue-300 inline-flex items-center gap-1"
-                      >
-                        Install MetaMask <ExternalLink className="h-3 w-3" />
-                      </a>
-                    </div>
-                  )}
-                  
-                  {/* Show connect button when MetaMask is available */}
-                  {isMetaMaskAvailable === true && (
-                    <div className="text-center py-8">
-                      <p className="text-gray-400 mb-4">Connect your MetaMask wallet to continue</p>
-                      <button 
-                        onClick={connectWallet}
-                        disabled={isConnecting}
-                        className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
-                      >
-                        {isConnecting ? 'Connecting...' : 'Connect Wallet'}
-                      </button>
-                    </div>
-                  )}
+
+          {!walletAddress ? (
+            <div className="space-y-4">
+              {/* Show loading state during MetaMask detection */}
+              {isMetaMaskAvailable === null && (
+                <div className="text-center py-8">
+                  <p className="text-gray-400 mb-4">Checking for MetaMask...</p>
+                </div>
+              )}
+
+              {/* Show MetaMask not available warning */}
+              {isMetaMaskAvailable === false && (
+                <div className="flex items-center gap-2 p-3 bg-yellow-900/20 border border-yellow-900/50 rounded-md text-yellow-400">
+                  <AlertCircle className="h-4 w-4" />
+                  <span className="text-sm">MetaMask not detected.</span>
+                  <a
+                    href="https://metamask.io/download/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-400 hover:text-blue-300 inline-flex items-center gap-1"
+                  >
+                    Install MetaMask <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+              )}
+
+              {/* Show connect button when MetaMask is available */}
+              {isMetaMaskAvailable === true && (
+                <div className="text-center py-8">
+                  <p className="text-gray-400 mb-4">Connect your MetaMask wallet to continue</p>
+                  <button
+                    onClick={connectWallet}
+                    disabled={isConnecting}
+                    className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {isConnecting ? 'Connecting...' : 'Connect Wallet'}
+                  </button>
+                </div>
+              )}
 
               {walletError && (
                 <div className="flex items-center gap-2 p-3 bg-red-900/20 border border-red-900/50 rounded-md text-red-400">
@@ -455,7 +457,7 @@ export function OnePageDemo() {
               <div className="space-y-4">
                 <div className="text-center py-8">
                   <p className="text-gray-400 mb-4">Connect to MSP backend to access storage features</p>
-                  <button 
+                  <button
                     onClick={connectMsp}
                     disabled={isMspConnecting}
                     className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
@@ -471,22 +473,22 @@ export function OnePageDemo() {
                   </div>
                 )}
               </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 p-3 bg-green-900/20 border border-green-900/50 rounded-md text-green-400">
-                      <CheckCircle className="h-4 w-4" />
-                      <span className="text-sm">
-                        MSP connected and authenticated {config.mockAuth ? '(Mock Mode)' : '(SIWE)'}
-                      </span>
-                    </div>
-                    {config.mockAuth && (
-                      <div className="p-2 bg-blue-900/20 border border-blue-900/50 rounded text-blue-400 text-xs">
-                        🧪 Using mock JWT token for testing purposes<br/>
-                        📋 Mock address (with test buckets): 0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac
-                      </div>
-                    )}
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 p-3 bg-green-900/20 border border-green-900/50 rounded-md text-green-400">
+                  <CheckCircle className="h-4 w-4" />
+                  <span className="text-sm">
+                    MSP connected and authenticated {config.mockAuth ? '(Mock Mode)' : '(SIWE)'}
+                  </span>
+                </div>
+                {config.mockAuth && (
+                  <div className="p-2 bg-blue-900/20 border border-blue-900/50 rounded text-blue-400 text-xs">
+                    🧪 Using mock JWT token for testing purposes<br />
+                    📋 Mock address (with test buckets): 0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac
                   </div>
                 )}
+              </div>
+            )}
           </section>
         )}
 
@@ -496,7 +498,7 @@ export function OnePageDemo() {
             <Database className="h-5 w-5 text-blue-400" />
             <h2 className="text-xl font-semibold">Storage Actions</h2>
           </div>
-          
+
           {mspClient && storageHubClient && walletClient && publicClient && walletAddress ? (
             <FileManager
               walletClient={walletClient}
