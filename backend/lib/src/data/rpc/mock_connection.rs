@@ -21,7 +21,8 @@ use sp_core::H256;
 
 use crate::{
     constants::{
-        mocks::{DOWNLOAD_FILE_CONTENT, rpc::DUMMY_MSP_ID, PRICE_PER_GIGA_UNIT},
+        mocks::{DOWNLOAD_FILE_CONTENT, PRICE_PER_GIGA_UNIT},
+        rpc::DUMMY_MSP_ID,
         rpc::TIMEOUT_MULTIPLIER,
     },
     data::rpc::{

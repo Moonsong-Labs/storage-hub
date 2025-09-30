@@ -1,13 +1,16 @@
 import assert, { strictEqual } from "node:assert";
 import { type EnrichedBspApi, describeMspNet } from "../../../util";
-import { generateMockJWT, type PaymentStreamsResponse } from "../../../util/backend";
+import { fetchJwtToken, type PaymentStreamsResponse } from "../../../util/backend";
+import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
+import { ETH_SH_USER_PRIVATE_KEY } from "../../../util/evmNet/keyring";
 
 await describeMspNet(
   "Backend Payment Streams retrieval",
   {
     initialised: true,
     indexer: true,
-    backend: true
+    backend: true,
+    runtimeType: "solochain"
   },
   ({ before, createMsp1Api, createUserApi, it }) => {
     let userApi: EnrichedBspApi;
@@ -63,11 +66,11 @@ await describeMspNet(
 
     it("Should return payment stream information user", async () => {
       // TODO: Replace with proper flow
-      const mockJWT = generateMockJWT(userApi.shConsts.NODE_INFOS.user.AddressId);
+      const userJWT = await fetchJwtToken(ETH_SH_USER_PRIVATE_KEY, SH_EVM_SOLOCHAIN_CHAIN_ID);
 
       const response = await fetch("http://localhost:8080/payment_streams", {
         headers: {
-          Authorization: `Bearer ${mockJWT}`
+          Authorization: `Bearer ${userJWT}`
         }
       });
 

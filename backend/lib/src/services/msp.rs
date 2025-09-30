@@ -19,7 +19,11 @@ use shp_types::Hash;
 
 use crate::{
     constants::mocks::{PLACEHOLDER_BUCKET_FILE_COUNT, PLACEHOLDER_BUCKET_SIZE_BYTES},
-    data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage, repository::PaymentStreamKind},
+    data::{
+        indexer_db::{client::DBClient, repository::PaymentStreamKind},
+        rpc::StorageHubRpcClient,
+        storage::BoxedStorage,
+    },
     error::Error,
     models::{
         buckets::{Bucket, FileTree},
@@ -641,7 +645,7 @@ mod tests {
     use crate::{
         config::Config,
         constants::{
-            mocks::{MOCK_ADDRESS, PRICE_PER_GIGA_UNIT},
+            mocks::MOCK_ADDRESS,
             rpc::DUMMY_MSP_ID,
             test::{bucket::DEFAULT_BUCKET_NAME, file::DEFAULT_SIZE},
         },
@@ -978,13 +982,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_payment_stream() {
-        let service = MockMspServiceBuilder::new()
-            .with_rpc_responses(vec![(
-                "storagehubclient_getCurrentPricePerGigaUnitPerTick",
-                serde_json::json!(PRICE_PER_GIGA_UNIT),
-            )])
-            .await
-            .build();
+        let service = MockMspServiceBuilder::new().build().await;
 
         let ps = service
             .get_payment_streams("0x123") // TODO: random address
