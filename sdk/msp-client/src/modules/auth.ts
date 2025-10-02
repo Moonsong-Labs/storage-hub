@@ -1,9 +1,94 @@
 import type { MspClientContext } from "../context.js";
+import type { NonceResponse, Session, UserInfo, AuthStatus } from "../types.js";
+import { AuthState } from "../types.js";
+import { getAddress, type WalletClient } from "viem";
 import { ModuleBase } from "../base.js";
 
 export class AuthModule extends ModuleBase {
   constructor(ctx: MspClientContext) {
     super(ctx);
+  }
+
+  /**
+   * Request nonce for SIWE.
+   * - Input: EVM `address`, `chainId`.
+   * - Output: message to sign.
+   */
+  private getNonce(
+    address: string,
+    chainId: number,
+    options?: { signal?: AbortSignal }
+  ): Promise<NonceResponse> {
+    return this.ctx.http.post<NonceResponse>("/auth/nonce", {
+      body: { address, chainId },
+      headers: { "Content-Type": "application/json" },
+      ...(options?.signal !== undefined && { signal: options.signal })
+    });
+  }
+
+  /**
+   * Verify SIWE signature.
+   * - Persists `session` in context on success.
+   */
+  private async verify(
+    message: string,
+    signature: string,
+    options?: { signal?: AbortSignal }
+  ): Promise<Session> {
+    const session = await this.ctx.http.post<Session>("/auth/verify", {
+      body: { message, signature },
+      headers: { "Content-Type": "application/json" },
+      ...(options?.signal !== undefined && { signal: options.signal })
+    });
+    this.ctx.session = session;
+    return session;
+  }
+
+  /**
+   * Full SIWE flow using a `WalletClient`.
+   * - Derives address, fetches nonce, signs message, verifies and stores session.
+   */
+  async SIWE(wallet: WalletClient, options?: { signal?: AbortSignal }): Promise<void> {
+    const rawAddress = (await wallet.getAddresses())?.[0];
+    if (!rawAddress) throw new Error("No wallet addresses found");
+    const address = getAddress(rawAddress);
+
+    const chainId = await wallet.getChainId();
+    const { message } = await this.getNonce(address, chainId, {
+      ...(options?.signal && { signal: options.signal })
+    });
+
+    if (!wallet.account) throw new Error("Wallet client has no active account");
+    const signature = await wallet.signMessage({ account: wallet.account, message });
+
+    this.ctx.session = await this.verify(message, signature, {
+      ...(options?.signal && { signal: options.signal })
+    });
+  }
+
+  /**
+   * Fetch authenticated user's profile.
+   * - Requires valid `session` (Authorization header added automatically).
+   */
+  getProfile(options?: { signal?: AbortSignal }): Promise<UserInfo> {
+    const headers = this.withAuth();
+    return this.ctx.http.get<UserInfo>("/auth/profile", {
+      ...(headers ? { headers } : {}),
+      ...(options?.signal !== undefined && { signal: options.signal })
+    });
+  }
+
+  /**
+   * Determine auth status by checking token presence and profile reachability.
+   */
+  async getAuthStatus(): Promise<AuthStatus> {
+    if (!this.ctx.session?.token) {
+      return { status: AuthState.NotAuthenticated };
+    }
+    const profile = await this.getProfile().catch((err: any) =>
+      err?.response?.status === 401 ? null : Promise.reject(err)
+    );
+    return profile ? { status: AuthState.Authenticated } : { status: AuthState.TokenExpired };
   }
 }
 
