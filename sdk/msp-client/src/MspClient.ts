@@ -7,24 +7,30 @@ import type {
   GetFilesOptions,
   HealthStatus,
   InfoResponse,
-  NonceResponse,
   StatsResponse,
   UploadOptions,
   UploadReceipt,
-  ValueProp,
-  VerifyResponse
+  ValueProp
 } from "./types.js";
 import type { HttpClientConfig } from "@storagehub-sdk/core";
 import { FileMetadata, FileTrie, HttpClient, initWasm } from "@storagehub-sdk/core";
+import type { MspClientContext } from "./context.js";
+import { AuthModule } from "./modules/auth.js";
+import { ModuleBase } from "./base.js";
 
-export class MspClient {
+export class MspClient extends ModuleBase {
   public readonly config: HttpClientConfig;
   private readonly http: HttpClient;
-  public token?: string;
+  private readonly context: MspClientContext;
+  public readonly auth: AuthModule;
 
   private constructor(config: HttpClientConfig, http: HttpClient) {
+    const context: MspClientContext = { config, http };
+    super(context);
     this.config = config;
     this.http = http;
+    this.context = context;
+    this.auth = new AuthModule(this.context);
   }
 
   static async connect(config: HttpClientConfig): Promise<MspClient> {
@@ -67,45 +73,6 @@ export class MspClient {
     return this.http.get<ValueProp[]>("/value-props", {
       ...(options?.signal !== undefined && { signal: options.signal })
     });
-  }
-
-  // Auth endpoints:
-
-  /** Request a SIWE-style nonce message for the given address and chainId */
-  getNonce(
-    address: string,
-    chainId: number,
-    options?: { signal?: AbortSignal }
-  ): Promise<NonceResponse> {
-    return this.http.post<NonceResponse>("/auth/nonce", {
-      body: { address, chainId },
-      headers: { "Content-Type": "application/json" },
-      ...(options?.signal !== undefined && { signal: options.signal })
-    });
-  }
-
-  /** Verify signed message and receive JWT token */
-  verify(
-    message: string,
-    signature: string,
-    options?: { signal?: AbortSignal }
-  ): Promise<VerifyResponse> {
-    return this.http.post<VerifyResponse>("/auth/verify", {
-      body: { message, signature },
-      headers: { "Content-Type": "application/json" },
-      ...(options?.signal !== undefined && { signal: options.signal })
-    });
-  }
-
-  /** Store token to be sent on subsequent protected requests */
-  setToken(token: string): void {
-    this.token = token;
-  }
-
-  /** Merge Authorization header when token is present */
-  private withAuth(headers?: Record<string, string>): Record<string, string> | undefined {
-    if (!this.token) return headers;
-    return { ...(headers ?? {}), Authorization: `Bearer ${this.token}` };
   }
 
   // Bucket endpoints:

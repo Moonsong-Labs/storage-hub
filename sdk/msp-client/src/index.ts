@@ -10,9 +10,12 @@ export type {
   HealthStatus,
   InfoResponse,
   NonceResponse,
+  AuthState,
+  AuthStatus,
+  UserInfo,
   StatsResponse,
   UploadOptions,
   UploadReceipt,
   ValueProp,
-  VerifyResponse
+  Session
 } from "./types.js";
