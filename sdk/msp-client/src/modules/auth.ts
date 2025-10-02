@@ -1,13 +1,9 @@
-import type { MspClientContext } from "../context.js";
 import type { NonceResponse, Session, UserInfo, AuthStatus } from "../types.js";
 import { AuthState } from "../types.js";
 import { getAddress, type WalletClient } from "viem";
 import { ModuleBase } from "../base.js";
 
 export class AuthModule extends ModuleBase {
-  constructor(ctx: MspClientContext) {
-    super(ctx);
-  }
 
   /**
    * Request nonce for SIWE.
@@ -85,9 +81,11 @@ export class AuthModule extends ModuleBase {
     if (!this.ctx.session?.token) {
       return { status: AuthState.NotAuthenticated };
     }
-    const profile = await this.getProfile().catch((err: any) =>
-      err?.response?.status === 401 ? null : Promise.reject(err)
-    );
+    // Treat 401 as an expired/invalid token (map to TokenExpired); rethrow other errors
+    const profile = await this.getProfile().catch((err: unknown) => {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      return status === 401 ? null : Promise.reject(err);
+    });
     return profile ? { status: AuthState.Authenticated } : { status: AuthState.TokenExpired };
   }
 }

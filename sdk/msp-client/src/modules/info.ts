@@ -1,11 +1,7 @@
-import type { MspClientContext } from "../context.js";
 import { ModuleBase } from "../base.js";
 import type { HealthStatus, InfoResponse, StatsResponse, ValueProp } from "../types.js";
 
 export class InfoModule extends ModuleBase {
-  constructor(ctx: MspClientContext) {
-    super(ctx);
-  }
 
   getHealth(options?: { signal?: AbortSignal }): Promise<HealthStatus> {
     return this.ctx.http.get<HealthStatus>("/health", {
