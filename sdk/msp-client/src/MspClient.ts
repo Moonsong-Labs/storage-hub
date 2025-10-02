@@ -3,8 +3,6 @@ import type {
   DownloadOptions,
   DownloadResult,
   FileInfo,
-  FileListResponse,
-  GetFilesOptions,
   HealthStatus,
   InfoResponse,
   StatsResponse,
@@ -16,6 +14,7 @@ import type { HttpClientConfig } from "@storagehub-sdk/core";
 import { FileMetadata, FileTrie, HttpClient, initWasm } from "@storagehub-sdk/core";
 import type { MspClientContext } from "./context.js";
 import { AuthModule } from "./modules/auth.js";
+import { BucketsModule } from "./modules/buckets.js";
 import { ModuleBase } from "./base.js";
 
 export class MspClient extends ModuleBase {
@@ -23,6 +22,7 @@ export class MspClient extends ModuleBase {
   private readonly http: HttpClient;
   private readonly context: MspClientContext;
   public readonly auth: AuthModule;
+  public readonly buckets: BucketsModule;
 
   private constructor(config: HttpClientConfig, http: HttpClient) {
     const context: MspClientContext = { config, http };
@@ -31,6 +31,7 @@ export class MspClient extends ModuleBase {
     this.http = http;
     this.context = context;
     this.auth = new AuthModule(this.context);
+    this.buckets = new BucketsModule(this.context);
   }
 
   static async connect(config: HttpClientConfig): Promise<MspClient> {
@@ -72,38 +73,6 @@ export class MspClient extends ModuleBase {
   getValuePropositions(options?: { signal?: AbortSignal }): Promise<ValueProp[]> {
     return this.http.get<ValueProp[]>("/value-props", {
       ...(options?.signal !== undefined && { signal: options.signal })
-    });
-  }
-
-  // Bucket endpoints:
-
-  /** List all buckets for the current authenticateduser */
-  listBuckets(options?: { signal?: AbortSignal }): Promise<Bucket[]> {
-    const headers = this.withAuth();
-    return this.http.get<Bucket[]>("/buckets", {
-      ...(headers ? { headers } : {}),
-      ...(options?.signal ? { signal: options.signal } : {})
-    });
-  }
-
-  /** Get a specific bucket's metadata by its bucket ID */
-  getBucket(bucketId: string, options?: { signal?: AbortSignal }): Promise<Bucket> {
-    const headers = this.withAuth();
-    const path = `/buckets/${encodeURIComponent(bucketId)}`;
-    return this.http.get<Bucket>(path, {
-      ...(headers ? { headers } : {}),
-      ...(options?.signal ? { signal: options.signal } : {})
-    });
-  }
-
-  /** Gets the list of files and folders under the specified path for a bucket. If no path is provided, it returns the files and folders found at root. */
-  getFiles(bucketId: string, options?: GetFilesOptions): Promise<FileListResponse> {
-    const headers = this.withAuth();
-    const path = `/buckets/${encodeURIComponent(bucketId)}/files`;
-    return this.http.get<FileListResponse>(path, {
-      ...(headers ? { headers } : {}),
-      ...(options?.signal ? { signal: options.signal } : {}),
-      ...(options?.path ? { query: { path: options.path.replace(/^\/+/, "") } } : {})
     });
   }
 
