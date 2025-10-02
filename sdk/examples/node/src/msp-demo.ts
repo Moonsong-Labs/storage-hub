@@ -12,7 +12,7 @@ import {
   type FileInfo
 } from "@storagehub-sdk/msp-client";
 import { LocalWallet, initWasm } from "@storagehub-sdk/core";
-import type { VerifyResponse, UploadReceipt } from "@storagehub-sdk/msp-client";
+import type { Session, UploadReceipt } from "@storagehub-sdk/msp-client";
 
 export async function runMspDemo(): Promise<void> {
   // Initialize embedded WASM once
@@ -44,7 +44,7 @@ export async function runMspDemo(): Promise<void> {
   // SIWE-like: request message, sign, and verify to obtain JWT
   const { message } = await client.getNonce(address, chainId);
   const signature = await wallet.signMessage(message);
-  const verified: VerifyResponse = await client.verify(message, signature);
+  const verified: Session = await client.verify(message, signature);
   client.setToken(verified.token);
   console.log("verified user:", verified.user);
 
