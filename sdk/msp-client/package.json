@@ -36,10 +36,12 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "@storagehub-sdk/core": ">=0.0.5"
+    "@storagehub-sdk/core": ">=0.0.5",
+    "viem": ">=2.37.6"
   },
   "devDependencies": {
-    "@storagehub-sdk/core": "workspace:*"
+    "@storagehub-sdk/core": "workspace:*",
+    "viem": "2.37.6"
   },
   "engines": {
     "node": ">=22"
