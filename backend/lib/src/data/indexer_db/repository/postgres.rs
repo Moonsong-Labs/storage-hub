@@ -13,11 +13,10 @@
 //! - Comprehensive error handling
 
 use async_trait::async_trait;
-use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
-
 #[cfg(test)]
 use bigdecimal::BigDecimal;
+use diesel::prelude::*;
+use diesel_async::RunQueryDsl;
 #[cfg(test)]
 use shc_indexer_db::{models::FileStorageRequestStep, OnchainBspId};
 use shc_indexer_db::{
@@ -27,13 +26,15 @@ use shc_indexer_db::{
 };
 use shp_types::Hash;
 
+#[cfg(test)]
+use crate::constants::test;
+#[cfg(test)]
+use crate::data::indexer_db::repository::IndexerOpsMut;
 use crate::data::indexer_db::repository::{
     error::{RepositoryError, RepositoryResult},
     pool::SmartPool,
     IndexerOps, PaymentStreamData, PaymentStreamKind,
 };
-#[cfg(test)]
-use crate::{constants::test, data::indexer_db::repository::IndexerOpsMut};
 
 /// PostgreSQL repository implementation.
 ///
@@ -306,11 +307,59 @@ impl IndexerOpsMut for Repository {
         File::delete(&mut conn, file_key.as_bytes()).await?;
         Ok(())
     }
+
+    async fn create_payment_stream(
+        &self,
+        user_account: &str,
+        provider: &str,
+        total_amount_paid: BigDecimal,
+        kind: PaymentStreamKind,
+    ) -> RepositoryResult<PaymentStreamData> {
+        let mut conn = self.pool.get().await?;
+
+        let payment_stream = match &kind {
+            PaymentStreamKind::Fixed { rate } => {
+                PaymentStream::create_fixed_rate(
+                    &mut conn,
+                    user_account.to_string(),
+                    provider.to_string(),
+                    rate.clone(),
+                )
+                .await?
+            }
+            PaymentStreamKind::Dynamic { amount_provided } => {
+                PaymentStream::create_dynamic_rate(
+                    &mut conn,
+                    user_account.to_string(),
+                    provider.to_string(),
+                    amount_provided.clone(),
+                )
+                .await?
+            }
+        };
+
+        // Update the total amount paid if provided
+        if total_amount_paid > BigDecimal::from(0) {
+            PaymentStream::update_total_amount(
+                &mut conn,
+                payment_stream.id,
+                total_amount_paid.clone(),
+                payment_stream.last_tick_charged,
+                payment_stream.charged_at_tick,
+            )
+            .await?;
+        }
+
+        Ok(PaymentStreamData {
+            provider: provider.to_string(),
+            total_amount_paid,
+            kind,
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use bigdecimal::BigDecimal;
     use hex_literal::hex;
     use shc_indexer_db::{OnchainBspId, OnchainMspId};
     use shp_types::Hash;

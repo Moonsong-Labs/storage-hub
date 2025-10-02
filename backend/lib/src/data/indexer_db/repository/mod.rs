@@ -214,6 +214,21 @@ pub trait IndexerOpsMut: IndexerOps {
 
     /// Delete a file by its file key.
     async fn delete_file(&self, file_key: &Hash) -> RepositoryResult<()>;
+
+    /// Create a new payment stream.
+    ///
+    /// # Arguments
+    /// * `user_account` - User account address
+    /// * `provider` - Provider address
+    /// * `total_amount_paid` - Total amount paid in the stream
+    /// * `kind` - Payment stream kind (Fixed or Dynamic)
+    async fn create_payment_stream(
+        &self,
+        user_account: &str,
+        provider: &str,
+        total_amount_paid: BigDecimal,
+        kind: PaymentStreamKind,
+    ) -> RepositoryResult<PaymentStreamData>;
 }
 
 // The following trait aliases are so when compiling for unit tests we get access to write operations

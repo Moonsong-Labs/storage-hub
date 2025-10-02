@@ -638,6 +638,7 @@ impl MspService {
 mod tests {
     use std::sync::Arc;
 
+    use bigdecimal::BigDecimal;
     use serde_json::Value;
 
     use shc_common::types::{FileKeyProof, FileMetadata};
@@ -647,12 +648,14 @@ mod tests {
     use crate::{
         config::Config,
         constants::{
-            mocks::MOCK_ADDRESS,
+            mocks::{MOCK_ADDRESS, MOCK_PRICE_PER_GIGA_UNIT},
             rpc::DUMMY_MSP_ID,
             test::{bucket::DEFAULT_BUCKET_NAME, file::DEFAULT_SIZE},
         },
         data::{
-            indexer_db::{client::DBClient, mock_repository::MockRepository},
+            indexer_db::{
+                client::DBClient, mock_repository::MockRepository, repository::PaymentStreamKind,
+            },
             rpc::{AnyRpcConnection, MockConnection, StorageHubRpcClient},
             storage::{BoxedStorageWrapper, InMemoryStorage},
         },
@@ -967,24 +970,77 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_payment_stream() {
-        let service = MockMspServiceBuilder::new().build().await;
+        let rate = BigDecimal::from(5);
+        let amount_provided = BigDecimal::from(10);
+
+        let service = MockMspServiceBuilder::new()
+            .init_repository_with(|client| {
+                let rate = rate.clone();
+                let amount_provided = amount_provided.clone();
+
+                Box::pin(async move {
+                    // Create 2 payment streams for MOCK_ADDRESS, one for MSP and one for BSP
+                    client
+                        .create_payment_stream(
+                            MOCK_ADDRESS,
+                            "0x1234567890abcdef1234567890abcdef12345678",
+                            BigDecimal::from(500000),
+                            PaymentStreamKind::Fixed { rate },
+                        )
+                        .await
+                        .expect("should create fixed payment stream");
+
+                    client
+                        .create_payment_stream(
+                            MOCK_ADDRESS,
+                            "0xabcdef1234567890abcdef1234567890abcdef12",
+                            BigDecimal::from(200000),
+                            PaymentStreamKind::Dynamic { amount_provided },
+                        )
+                        .await
+                        .expect("should create dynamic payment stream");
+                })
+            })
+            .await
+            .build()
+            .await;
 
         let ps = service
-            .get_payment_streams("0x123") // TODO: random address
+            .get_payment_streams(MOCK_ADDRESS)
             .await
             .expect("get_payment_stream should succeed");
 
-        // These are present in the MockRepository
-        assert!(ps.streams.len() == 2);
+        // Verify we have the expected payment streams
+        assert_eq!(ps.streams.len(), 2);
 
-        ps.streams
+        let fixed = ps
+            .streams
             .iter()
             .find(|s| s.provider_type == "msp")
             .expect("a fixed stream");
-        ps.streams
+        assert_eq!(
+            BigDecimal::from_str(&fixed.cost_per_tick).expect("cost per tick to be a valid number"),
+            rate,
+            "Fixed payment stream cost per tick should match what it was crated with"
+        );
+
+        let dynamic = ps
+            .streams
             .iter()
             .find(|s| s.provider_type == "bsp")
             .expect("a dynamic stream");
+
+        let expected_cost_per_tick = amount_provided
+            // mock environment sets price per giga unit to this value
+            * BigDecimal::from(MOCK_PRICE_PER_GIGA_UNIT)
+            * BigDecimal::from_str("1e-9").unwrap();
+
+        assert_eq!(
+            BigDecimal::from_str(&dynamic.cost_per_tick)
+                .expect("cost per tick to be a valid number"),
+            expected_cost_per_tick,
+            "Dynamic payment stream cost per tick should be a function of amount provided and price per giga unit"
+        )
     }
 
     #[tokio::test]

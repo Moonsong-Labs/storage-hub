@@ -21,6 +21,9 @@ use crate::{
     error::Result,
 };
 
+#[cfg(test)]
+use crate::data::indexer_db::repository::PaymentStreamKind;
+
 /// Database client that delegates to a repository implementation
 ///
 /// This client provides a clean abstraction over database operations,
@@ -246,6 +249,20 @@ impl DBClient {
     pub async fn delete_file(&self, file_key: &[u8]) -> Result<()> {
         let hash = shp_types::Hash::from_slice(file_key);
         self.repository.delete_file(&hash).await.map_err(Into::into)
+    }
+
+    /// Create a payment stream
+    pub async fn create_payment_stream(
+        &self,
+        user_account: &str,
+        provider: &str,
+        total_amount_paid: BigDecimal,
+        kind: PaymentStreamKind,
+    ) -> Result<PaymentStreamData> {
+        self.repository
+            .create_payment_stream(user_account, provider, total_amount_paid, kind)
+            .await
+            .map_err(Into::into)
     }
 }
 
