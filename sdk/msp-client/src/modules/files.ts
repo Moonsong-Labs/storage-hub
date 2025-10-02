@@ -271,7 +271,7 @@ export class FilesModule extends ModuleBase {
 		return trie.get_root();
 	}
 
-	private async formFileMetadata(
+	async formFileMetadata(
 		owner: string,
 		bucketId: string,
 		location: string,
@@ -291,7 +291,7 @@ export class FilesModule extends ModuleBase {
 		);
 	}
 
-	private hexToBytes(hex: string): Uint8Array {
+	hexToBytes(hex: string): Uint8Array {
 		if (!hex) {
 			throw new Error("hex string cannot be empty");
 		}
@@ -311,9 +311,7 @@ export class FilesModule extends ModuleBase {
 		);
 	}
 
-	private async computeFileKey(
-		fileMetadata: FileMetadata,
-	): Promise<Uint8Array> {
+	async computeFileKey(fileMetadata: FileMetadata): Promise<Uint8Array> {
 		await initWasm();
 		return fileMetadata.getFileKey();
 	}
