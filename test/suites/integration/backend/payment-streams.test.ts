@@ -2,7 +2,7 @@ import assert, { strictEqual } from "node:assert";
 import { type EnrichedBspApi, describeMspNet } from "../../../util";
 import { fetchJwtToken, type PaymentStreamsResponse } from "../../../util/backend";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
-import { ETH_SH_USER_PRIVATE_KEY } from "../../../util/evmNet/keyring";
+import { ETH_SH_USER_PRIVATE_KEY, ETH_SH_USER_ADDRESS } from "../../../util/evmNet/keyring";
 
 await describeMspNet(
   "Backend Payment Streams retrieval",
@@ -15,6 +15,7 @@ await describeMspNet(
   ({ before, createMsp1Api, createUserApi, it }) => {
     let userApi: EnrichedBspApi;
     let msp1Api: EnrichedBspApi;
+    let chainPaymentStreams: any[] = [];
 
     before(async () => {
       userApi = await createUserApi();
@@ -64,7 +65,43 @@ await describeMspNet(
       );
     });
 
+    it("Should fetch payment streams from chain", async () => {
+      const userAddress = ETH_SH_USER_ADDRESS;
+
+      // Get providers with payment streams for the user
+      const providersWithPaymentStreams = await userApi.call.paymentStreamsApi.getProvidersWithPaymentStreamsWithUser(userAddress);
+
+      // Fetch both fixed and dynamic rate payment streams for each provider
+      for (const provider of providersWithPaymentStreams) {
+        const fixedStream = await userApi.query.paymentStreams.fixedRatePaymentStreams(provider, userAddress);
+        const dynamicStream = await userApi.query.paymentStreams.dynamicRatePaymentStreams(provider, userAddress);
+
+        if (fixedStream.isSome) {
+          chainPaymentStreams.push({
+            provider: provider.toString(),
+            user: userAddress,
+            type: 'fixed',
+            data: fixedStream.unwrap()
+          });
+        }
+
+        if (dynamicStream.isSome) {
+          chainPaymentStreams.push({
+            provider: provider.toString(),
+            user: userAddress,
+            type: 'dynamic',
+            data: dynamicStream.unwrap()
+          });
+        }
+      }
+
+      // Verify we have payment streams on chain
+      assert(chainPaymentStreams.length > 0, "Should have at least one payment stream on chain");
+    });
+
     it("Should return payment stream information user", async () => {
+      assert(chainPaymentStreams, "On-chain payment stream data is initialized");
+
       const userJWT = await fetchJwtToken(ETH_SH_USER_PRIVATE_KEY, SH_EVM_SOLOCHAIN_CHAIN_ID);
 
       const response = await fetch("http://localhost:8080/payment_streams", {
@@ -75,23 +112,47 @@ await describeMspNet(
 
       const data = (await response.json()) as PaymentStreamsResponse;
 
-      // Check that we have exactly 2 streams
-      assert(data.streams.length === 2, "Should have exactly 2 payment streams");
-
       // Find the MSP and BSP streams
-      const mspStream = data.streams.find((s) => s.providerType === "msp");
-      const bspStream = data.streams.find((s) => s.providerType === "bsp");
+      const apiMspStreams = data.streams.filter(s => s.providerType === 'msp');
+      const apiBspStreams = data.streams.filter(s => s.providerType === 'bsp');
 
       // Verify both stream types exist
-      assert(mspStream, "Should have an MSP stream");
-      assert(bspStream, "Should have a BSP stream");
+      assert(apiMspStreams.length > 0, "Should have an MSP stream");
+      assert(apiBspStreams.length > 0, "Should have a BSP stream");
 
       // Verify the MSP provider ID matches DUMMY_MSP_ID
+      apiMspStreams.forEach((stream) => strictEqual(stream.provider, userApi.shConsts.DUMMY_MSP_ID, "MSP provider should match DUMMY_MSP_ID"));
+
+      // Verify that the API data matches what's on chain
+      // Count fixed streams (MSP = fixed) and dynamic streams (BSP = dynamic) from chain
+      const chainFixedStreams = chainPaymentStreams.filter(s => s.type === 'fixed');
+      const chainDynamicStreams = chainPaymentStreams.filter(s => s.type === 'dynamic');
+
+      // Verify counts match
       strictEqual(
-        mspStream.provider,
-        userApi.shConsts.DUMMY_MSP_ID,
-        "MSP provider should match DUMMY_MSP_ID"
+        apiMspStreams.length,
+        chainFixedStreams.length,
+        "Backend API MSP streams count should match on chain data"
       );
+
+      strictEqual(
+        apiBspStreams.length,
+        chainDynamicStreams.length,
+        "Backend API BSP streams count should match on chain data"
+      );
+
+      // Verify each API stream has a matching chain stream with correct type
+      for (const apiStream of data.streams) {
+        const expectedType = apiStream.providerType === 'msp' ? 'fixed' : 'dynamic';
+        const matchingChainStream = chainPaymentStreams.find(
+          s => s.provider === apiStream.provider && s.type === expectedType
+        );
+
+        assert(
+          matchingChainStream,
+          `Stream for provider ${apiStream.provider} with type ${expectedType} should exist on chain`
+        );
+      }
     });
   }
 );
