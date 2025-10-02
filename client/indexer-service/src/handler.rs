@@ -5,7 +5,6 @@ use log::{error, info};
 use std::sync::Arc;
 use thiserror::Error;
 
-use pallet_payment_streams::types::BalanceOf;
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use sc_client_api::{BlockBackend, BlockchainEvents};
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
@@ -546,15 +545,13 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 user_account,
                 amount_provided,
             } => {
+                // Using .to_string() leads to truncated provider_id
                 let provider_id = format!("{:#?}", provider_id);
-                // We can't convert Units to BigDecimal directly
-                // so instead we pass thru Balance
-                let amount_provided: BalanceOf<Runtime> = (*amount_provided).into();
                 PaymentStream::create_dynamic_rate(
                     conn,
                     user_account.to_string(),
                     provider_id,
-                    amount_provided.into(),
+                    (*amount_provided).into().into(),
                 )
                 .await?;
             }
@@ -563,14 +560,17 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 user_account,
                 new_amount_provided,
             } => {
+                // Using .to_string() leads to truncated provider_id
                 let provider_id = format!("{:#?}", provider_id);
 
                 let ps = PaymentStream::get(conn, user_account.to_string(), provider_id).await?;
 
-                // We can't convert Units to BigDecimal directly
-                // so instead we pass thru Balance
-                let new_amount: BalanceOf<Runtime> = (*new_amount_provided).into();
-                PaymentStream::update_dynamic_rate(conn, ps.id, new_amount.into()).await?;
+                PaymentStream::update_dynamic_rate(
+                    conn,
+                    ps.id,
+                    (*new_amount_provided).into().into(),
+                )
+                .await?;
             }
             pallet_payment_streams::Event::DynamicRatePaymentStreamDeleted { .. } => {}
             pallet_payment_streams::Event::FixedRatePaymentStreamCreated {
@@ -578,14 +578,14 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 user_account,
                 rate,
             } => {
+                // Using .to_string() leads to truncated provider_id
                 let provider_id = format!("{:#?}", provider_id);
 
-                let rate_decimal: BigDecimal = (*rate).into();
                 PaymentStream::create_fixed_rate(
                     conn,
                     user_account.to_string(),
                     provider_id,
-                    rate_decimal,
+                    (*rate).into(),
                 )
                 .await?;
             }
@@ -594,11 +594,11 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 user_account,
                 new_rate,
             } => {
+                // Using .to_string() leads to truncated provider_id
                 let provider_id = format!("{:#?}", provider_id);
 
                 let ps = PaymentStream::get(conn, user_account.to_string(), provider_id).await?;
-                let new_rate_decimal: BigDecimal = (*new_rate).into();
-                PaymentStream::update_fixed_rate(conn, ps.id, new_rate_decimal).await?;
+                PaymentStream::update_fixed_rate(conn, ps.id, (*new_rate).into()).await?;
             }
             pallet_payment_streams::Event::FixedRatePaymentStreamDeleted { .. } => {}
             pallet_payment_streams::Event::PaymentStreamCharged {
@@ -608,6 +608,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 last_tick_charged,
                 charged_at_tick,
             } => {
+                // Using .to_string() leads to truncated provider_id
                 let provider_id = format!("{:#?}", provider_id);
 
                 // We want to handle this and update the payment stream total amount

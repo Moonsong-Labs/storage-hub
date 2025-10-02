@@ -6,6 +6,7 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
+use codec::Encode;
 use jsonrpsee::core::traits::ToRpcParams;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -15,13 +16,13 @@ use tokio::{
     time::sleep,
 };
 
-use codec::Encode;
-use shc_rpc::{GetValuePropositionsResult, RpcProviderId};
+use shc_common::types::FileMetadata;
+use shc_rpc::{GetValuePropositionsResult, RpcProviderId, SaveFileToDisk};
 use sp_core::H256;
 
 use crate::{
     constants::{
-        mocks::{DOWNLOAD_FILE_CONTENT, PRICE_PER_GIGA_UNIT},
+        mocks::{DOWNLOAD_FILE_CONTENT, MOCK_PRICE_PER_GIGA_UNIT},
         rpc::DUMMY_MSP_ID,
         rpc::TIMEOUT_MULTIPLIER,
     },
@@ -164,15 +165,16 @@ impl MockConnection {
         let _ = fs::write(&local_path, content).await;
 
         // Return expected response shape
-        serde_json::json!({
-            "Success": {
-                "owner": vec![0u8; 32],
-                "bucket_id": vec![0u8; 32],
-                "location": file_name.as_bytes().to_vec(),
-                "file_size": content.len() as u64,
-                "fingerprint": vec![0u8; 32]
-            }
-        })
+        serde_json::json!(SaveFileToDisk::Success(
+            FileMetadata::new(
+                vec![0; 32],
+                vec![0; 32],
+                file_name.as_bytes().to_vec(),
+                content.len() as u64,
+                vec![0u8; 32].as_slice().into(),
+            )
+            .expect("a valid file metadata descriptor")
+        ))
     }
 }
 
@@ -214,10 +216,10 @@ impl RpcConnection for MockConnection {
         let response: Value = match method {
             methods::SAVE_FILE_TO_DISK => self.mock_save_file_to_disk(params).await,
             methods::FILE_KEY_EXPECTED => serde_json::json!(true),
-            "storagehubclient_getProviderId" => serde_json::json!(RpcProviderId::Msp(
+            methods::PROVIDER_ID => serde_json::json!(RpcProviderId::Msp(
                 shp_types::Hash::from_slice(DUMMY_MSP_ID.as_slice())
             )),
-            "storagehubclient_getValuePropositions" => {
+            methods::VALUE_PROPS => {
                 serde_json::json!(GetValuePropositionsResult::Success(vec![
                     {
                         let mut value_prop_with_id = ValuePropositionWithId::default();
@@ -243,13 +245,16 @@ impl RpcConnection for MockConnection {
                     }
                 ]))
             },
-			"system_localListenAddresses" => serde_json::json!(vec![
+            methods::PEER_IDS => serde_json::json!(vec![
                 "/ip4/192.168.0.10/tcp/30333/p2p/12D3KooWSUvz8QM5X4tfAaSLErAZjR2puojo16pULBHyqTMGKtNV"
             ]),
             methods::CURRENT_PRICE => {
                 // Return a mock price value (e.g., 100 units)
-                serde_json::json!(PRICE_PER_GIGA_UNIT)
+                serde_json::json!(MOCK_PRICE_PER_GIGA_UNIT)
             },
+            methods::RECEIVE_FILE_CHUNKS => {
+                serde_json::json!([])
+            }
             _ => {
                 let responses = self.responses.read().await;
                 responses

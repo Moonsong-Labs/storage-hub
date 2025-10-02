@@ -117,12 +117,9 @@ impl HealthService {
             };
         }
 
-        // Then to make sure everything works test actual RPC functionality by getting the provider ID of the connected node.
-        let (status, message) = match self
-            .rpc
-            .call_no_params::<RpcProviderId>("storagehubclient_getProviderId")
-            .await
-        {
+        // Then to make sure everything works test actual RPC functionality
+        // by getting the provider ID of the connected node.
+        let (status, message) = match self.rpc.get_provider_id().await {
             Ok(RpcProviderId::Msp(_)) => (Self::HEALTHY, None),
             Ok(RpcProviderId::Bsp(_)) => (
                 Self::UNHEALTHY,

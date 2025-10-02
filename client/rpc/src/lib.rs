@@ -38,7 +38,7 @@ use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use sp_core::{sr25519::Pair as Sr25519Pair, Encode, Pair};
 use sp_keystore::{Keystore, KeystorePtr};
-use sp_runtime::{Deserialize, KeyTypeId, Serialize};
+use sp_runtime::{Deserialize, KeyTypeId, SaturatedConversion, Serialize};
 use sp_runtime_interface::pass_by::PassByInner;
 
 pub mod remote_file;
@@ -1244,9 +1244,9 @@ where
                 )
             })?;
 
-        // Convert Balance to u128 (Balance is u128 in our runtimes)
-        // We use saturated_into to safely convert
-        use sp_runtime::SaturatedConversion;
+        // Saturate the obtained price into a `u128`.
+        // If the configured `Balance` type of the `payment-streams` pallet is of a greater
+        // capacity (such as a u256), this could cause issues, so be wary.
         Ok(balance.saturated_into())
     }
 }

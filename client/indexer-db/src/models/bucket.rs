@@ -1,7 +1,6 @@
 use bigdecimal::BigDecimal;
 use chrono::NaiveDateTime;
-use diesel::dsl::sum;
-use diesel::prelude::*;
+use diesel::{dsl::sum, prelude::*};
 use diesel_async::RunQueryDsl;
 
 use crate::{

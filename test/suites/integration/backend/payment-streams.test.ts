@@ -65,7 +65,6 @@ await describeMspNet(
     });
 
     it("Should return payment stream information user", async () => {
-      // TODO: Replace with proper flow
       const userJWT = await fetchJwtToken(ETH_SH_USER_PRIVATE_KEY, SH_EVM_SOLOCHAIN_CHAIN_ID);
 
       const response = await fetch("http://localhost:8080/payment_streams", {

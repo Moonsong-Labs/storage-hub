@@ -102,5 +102,5 @@ pub mod mocks {
     pub const DOWNLOAD_FILE_CONTENT: &str = "GoodFla mock file content for download";
 
     /// Mock price per giga unit
-    pub const PRICE_PER_GIGA_UNIT: u128 = 100;
+    pub const MOCK_PRICE_PER_GIGA_UNIT: u128 = 100;
 }
