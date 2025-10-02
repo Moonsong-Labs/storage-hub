@@ -4,6 +4,7 @@
   ],
   "files": {
     "includes": [
+      "**/*.ts",
       "**/*.jsx",
       "**/*.tsx",
       "!**/dist",
