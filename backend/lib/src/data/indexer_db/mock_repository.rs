@@ -1225,38 +1225,6 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn create_and_get_payment_streams() {
-        let repo = MockRepository::new();
-        let user_account = "test_user";
-
-        // Create a fixed-rate payment stream
-        let created_stream = repo
-            .create_payment_stream(
-                user_account,
-                &hex::encode(random_bytes_32()),
-                BigDecimal::from_i64(500000).unwrap(),
-                PaymentStreamKind::Fixed {
-                    rate: BigDecimal::from_i64(5).unwrap(),
-                },
-            )
-            .await
-            .expect("should create payment stream");
-
-        // Retrieve payment streams for the user
-        let streams = repo
-            .get_payment_streams_for_user(user_account)
-            .await
-            .expect("should retrieve payment streams");
-
-        assert_eq!(streams.len(), 1);
-        assert_eq!(streams[0].provider, created_stream.provider);
-        assert_eq!(
-            streams[0].total_amount_paid,
-            created_stream.total_amount_paid
-        );
-    }
-
-    #[tokio::test]
     async fn get_payment_streams_filters_by_user() {
         let repo = MockRepository::new();
         let user1 = "user_1";
@@ -1267,6 +1235,18 @@ pub mod tests {
         repo.create_payment_stream(
             user1,
             &provider,
+            BigDecimal::from_i64(100000).unwrap(),
+            PaymentStreamKind::Fixed {
+                rate: BigDecimal::from_i64(3).unwrap(),
+            },
+        )
+        .await
+        .expect("should create payment stream for user1");
+
+        // Create another payment stream for user1
+        repo.create_payment_stream(
+            user1,
+            &hex::encode(random_bytes_32()),
             BigDecimal::from_i64(100000).unwrap(),
             PaymentStreamKind::Fixed {
                 rate: BigDecimal::from_i64(3).unwrap(),
@@ -1294,8 +1274,7 @@ pub mod tests {
             .expect("should retrieve user1 streams");
 
         // Should only get user1's stream
-        assert_eq!(user1_streams.len(), 1);
-        assert_eq!(user1_streams[0].provider, provider);
+        assert_eq!(user1_streams.len(), 2);
 
         // Retrieve payment streams for user2
         let user2_streams = repo

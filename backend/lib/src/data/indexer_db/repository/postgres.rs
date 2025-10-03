@@ -371,9 +371,10 @@ mod tests {
             test_helpers::{
                 setup_test_db,
                 snapshot_move_bucket::{
-                    BSP_NUM, BUCKET_ACCOUNT, BUCKET_FILES, BUCKET_ID, BUCKET_NAME,
-                    BUCKET_ONCHAIN_ID, BUCKET_PRIVATE, FILE_ONE_FILE_KEY, FILE_ONE_LOCATION,
-                    MSP_ONE_ACCOUNT, MSP_ONE_ID, MSP_ONE_ONCHAIN_ID, MSP_TWO_ID, SNAPSHOT_SQL,
+                    BSP_NUM, BSP_ONE_ONCHAIN_ID, BUCKET_ACCOUNT, BUCKET_FILES, BUCKET_ID,
+                    BUCKET_NAME, BUCKET_ONCHAIN_ID, BUCKET_PRIVATE, FILE_ONE_FILE_KEY,
+                    FILE_ONE_LOCATION, MSP_ONE_ACCOUNT, MSP_ONE_ID, MSP_ONE_ONCHAIN_ID, MSP_TWO_ID,
+                    MSP_TWO_ONCHAIN_ID, SNAPSHOT_SQL,
                 },
             },
         },
@@ -1035,6 +1036,66 @@ mod tests {
             }
             _ => panic!("Expected Database error for not found, got: {:?}", err),
         }
+    }
+
+    #[tokio::test]
+    async fn get_payment_streams_filters_by_user() {
+        let (_container, database_url) =
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
+
+        let repo = Repository::new(&database_url)
+            .await
+            .expect("Failed to create repository");
+
+        let provider = format!("0x{}", hex::encode(MSP_TWO_ONCHAIN_ID));
+
+        // inject additional payment stream to filter out
+        let additional_user = hex::encode(random_bytes_32());
+        repo.create_payment_stream(
+            &additional_user,
+            &provider,
+            BigDecimal::from(1234),
+            PaymentStreamKind::Fixed {
+                rate: BigDecimal::from(42),
+            },
+        )
+        .await
+        .expect("able to inject payment stream");
+
+        let streams = repo
+            .get_payment_streams_for_user(BUCKET_ACCOUNT)
+            .await
+            .expect("able to retrieve payment streams");
+
+        assert!(streams.len() > 0, "should have at least 1 payment stream");
+        dbg!(&streams);
+
+        let msp_stream = streams
+            .iter()
+            .find(|stream| stream.provider.as_str() == &provider)
+            .expect("should have a payment stream with MSP holding the bucket");
+
+        assert!(
+            matches!(msp_stream.kind, PaymentStreamKind::Fixed { .. }),
+            "msp stream should always be fixed"
+        );
+
+        let bsp_streams = streams
+            .iter()
+            .filter(|stream| matches!(stream.kind, PaymentStreamKind::Dynamic { .. }))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            bsp_streams.len(),
+            3,
+            "should have 3 BSPs storing files for given user"
+        );
+
+        let bsp_one = format!("0x{}", hex::encode(BSP_ONE_ONCHAIN_ID));
+        bsp_streams
+            .iter()
+            .find(|stream| stream.provider.as_str() == &bsp_one)
+            .expect("should have a payment stream with BSP #1");
     }
 
     #[tokio::test]
