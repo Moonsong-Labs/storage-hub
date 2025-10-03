@@ -2,8 +2,9 @@
 //!
 //! TODO(MOCK): many of methods of the MspService returns mocked data
 
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::HashSet, str::FromStr, sync::Arc};
 
+use bigdecimal::BigDecimal;
 use chrono::Utc;
 use codec::{Decode, Encode};
 use sc_network::PeerId;
@@ -18,7 +19,11 @@ use shp_types::Hash;
 
 use crate::{
     constants::mocks::{PLACEHOLDER_BUCKET_FILE_COUNT, PLACEHOLDER_BUCKET_SIZE_BYTES},
-    data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage},
+    data::{
+        indexer_db::{client::DBClient, repository::PaymentStreamKind},
+        rpc::StorageHubRpcClient,
+        storage::BoxedStorage,
+    },
     error::Error,
     models::{
         buckets::{Bucket, FileTree},
@@ -26,7 +31,7 @@ use crate::{
         msp_info::{
             Capacity, InfoResponse, MspHealthResponse, StatsResponse, ValuePropositionWithId,
         },
-        payment::PaymentStream,
+        payment::{PaymentStreamInfo, PaymentStreamsResponse},
     },
 };
 
@@ -75,7 +80,7 @@ impl MspService {
 
         let msp_id = loop {
             let provider_id: RpcProviderId = rpc
-                .call_no_params("storagehubclient_getProviderId")
+                .get_provider_id()
                 .await
                 .map_err(|e| Error::BadRequest(e.to_string()))?;
 
@@ -120,7 +125,7 @@ impl MspService {
         // Fetch the MSP's local listen multiaddresses via RPC
         let multiaddresses: Vec<String> = self
             .rpc
-            .call_no_params("system_localListenAddresses")
+            .get_multiaddresses()
             .await
             .map_err(|e| Error::BadRequest(e.to_string()))?;
 
@@ -157,10 +162,7 @@ impl MspService {
         // Call RPC to get the value propositions
         let result: GetValuePropositionsResult = self
             .rpc
-            .call(
-                "storagehubclient_getValuePropositions",
-                jsonrpsee::rpc_params![],
-            )
+            .get_value_props()
             .await
             .map_err(|e| Error::BadRequest(e.to_string()))?;
 
@@ -313,7 +315,7 @@ impl MspService {
     pub async fn is_msp_expecting_file_key(&self, file_key: &str) -> Result<bool, Error> {
         let expected: bool = self
             .rpc
-            .call("storagehubclient_isFileKeyExpected", (file_key,))
+            .is_file_key_expected(file_key)
             .await
             .map_err(|e| Error::BadRequest(e.to_string()))?;
         Ok(expected)
@@ -333,15 +335,55 @@ impl MspService {
         })
     }
 
-    /// Get payment stream for a user
-    pub async fn get_payment_stream(&self, _user_address: &str) -> Result<PaymentStream, Error> {
-        // Mock implementation
-        Ok(PaymentStream {
-            tokens_per_block: 100,
-            last_charged_tick: 1234567,
-            user_deposit: 100000,
-            out_of_funds_tick: None,
-        })
+    /// Get all payment streams for a user
+    pub async fn get_payment_streams(
+        &self,
+        user_address: &str,
+    ) -> Result<PaymentStreamsResponse, Error> {
+        // Get all payment streams for the user from the database
+        let payment_stream_data = self
+            .postgres
+            .get_payment_streams_for_user(user_address)
+            .await?;
+
+        // Get current price per giga unit per tick from RPC (for dynamic rate calculations)
+        let current_price_per_giga_unit_per_tick = self
+            .rpc
+            .get_current_price_per_giga_unit_per_tick()
+            .await
+            .map_err(|e| Error::BadRequest(format!("Failed to get price per unit: {}", e)))?;
+        let unit_to_giga_unit =
+            BigDecimal::from_str("1e-9").expect("Inverse of GIGA to be parsed correctly");
+
+        // Process each payment stream
+        let mut streams = Vec::new();
+        for stream_data in payment_stream_data {
+            let (provider_type, cost_per_tick) = match stream_data.kind {
+                PaymentStreamKind::Fixed { rate } => {
+                    // This is an MSP (fixed rate payment stream)
+                    ("msp".to_string(), rate.to_string())
+                }
+                PaymentStreamKind::Dynamic { amount_provided } => {
+                    // This is a BSP (dynamic rate payment stream)
+                    // Cost per tick = amount_provided * 1e-9 * current_price_per_giga_unit_per_tick
+
+                    // Convert u128 price to BigDecimal and multiply
+                    let price_bd = BigDecimal::from(current_price_per_giga_unit_per_tick);
+                    let cost = amount_provided * &unit_to_giga_unit * price_bd;
+
+                    ("bsp".to_string(), cost.to_string())
+                }
+            };
+
+            streams.push(PaymentStreamInfo {
+                provider: stream_data.provider,
+                provider_type,
+                total_amount_paid: stream_data.total_amount_paid.to_string(),
+                cost_per_tick,
+            });
+        }
+
+        Ok(PaymentStreamsResponse { streams })
     }
 
     /// Download a file by `file_key` via the MSP RPC into `/tmp/uploads/<file_key>` and
@@ -360,10 +402,7 @@ impl MspService {
         // Make the RPC call to download file and get metadata
         let rpc_response: SaveFileToDisk = self
             .rpc
-            .call(
-                "storagehubclient_saveFileToDisk",
-                (file_key, upload_url.as_str()),
-            )
+            .save_file_to_disk(file_key, upload_url.as_str())
             .await
             .map_err(|e| Error::BadRequest(e.to_string()))?;
 
@@ -409,8 +448,12 @@ impl MspService {
             ));
         }
 
+        debug!("get_info");
+
         // Get the MSP's info including its multiaddresses.
         let msp_info = self.get_info().await?;
+
+        debug!("extract_peer_ids");
 
         // Extract the peer IDs from the multiaddresses.
         let peer_ids = self.extract_peer_ids_from_multiaddresses(&msp_info.multiaddresses)?;
@@ -503,6 +546,7 @@ impl MspService {
 
         // Get the file key from the file metadata.
         let file_key: H256 = file_metadata.file_key::<Blake2Hasher>();
+        let file_key_hexstr = format!("{file_key:x}");
 
         // Encode the FileKeyProof as SCALE for transport
         let encoded_proof = file_key_proof.encode();
@@ -513,12 +557,10 @@ impl MspService {
         let delay_between_retries_secs = 1;
 
         while retry_attempts < max_retries {
+            debug!("receive file chunks");
             let result: Result<Vec<u8>, _> = self
                 .rpc
-                .call(
-                    "storagehubclient_receiveBackendFileChunks",
-                    (file_key, encoded_proof.clone()),
-                )
+                .receive_file_chunks(&file_key_hexstr, encoded_proof.clone())
                 .await;
 
             match result {
@@ -596,6 +638,7 @@ impl MspService {
 mod tests {
     use std::sync::Arc;
 
+    use bigdecimal::BigDecimal;
     use serde_json::Value;
 
     use shc_common::types::{FileKeyProof, FileMetadata};
@@ -605,16 +648,17 @@ mod tests {
     use crate::{
         config::Config,
         constants::{
-            mocks::MOCK_ADDRESS,
+            mocks::{MOCK_ADDRESS, MOCK_PRICE_PER_GIGA_UNIT},
             rpc::DUMMY_MSP_ID,
             test::{bucket::DEFAULT_BUCKET_NAME, file::DEFAULT_SIZE},
         },
         data::{
-            indexer_db::{client::DBClient, mock_repository::MockRepository},
+            indexer_db::{
+                client::DBClient, mock_repository::MockRepository, repository::PaymentStreamKind,
+            },
             rpc::{AnyRpcConnection, MockConnection, StorageHubRpcClient},
             storage::{BoxedStorageWrapper, InMemoryStorage},
         },
-        models::msp_info::{ValueProposition, ValuePropositionWithId},
         test_utils::random_bytes_32,
     };
 
@@ -646,6 +690,7 @@ mod tests {
             self
         }
 
+        #[allow(dead_code)] // useful helper if we are making requests that we don't mock yet
         /// Set RPC responses for the connection to use
         pub async fn with_rpc_responses(mut self, responses: Vec<(&str, Value)>) -> Self {
             let mock_conn = MockConnection::new();
@@ -693,24 +738,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_value_props() {
-        let service = MockMspServiceBuilder::new()
-            .with_rpc_responses(vec![(
-                "storagehubclient_getValuePropositions",
-                serde_json::json!(GetValuePropositionsResult::Success(vec![{
-                    let mut value_prop_with_id = ValuePropositionWithId::default();
-                    value_prop_with_id.id = H256::from_slice(&random_bytes_32());
-                    value_prop_with_id.value_prop = ValueProposition::default();
-                    value_prop_with_id
-                        .value_prop
-                        .price_per_giga_unit_of_data_per_block = 100;
-                    value_prop_with_id.value_prop.bucket_data_limit = 100;
-                    value_prop_with_id.value_prop.available = true;
-                    value_prop_with_id.encode()
-                },])),
-            )])
-            .await
-            .build()
-            .await;
+        let service = MockMspServiceBuilder::new().build().await;
         let props = service.get_value_props().await.unwrap();
 
         assert!(!props.is_empty());
@@ -942,26 +970,82 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_payment_stream() {
-        let service = MockMspServiceBuilder::new().build().await;
+        let rate = BigDecimal::from(5);
+        let amount_provided = BigDecimal::from(10);
+
+        let service = MockMspServiceBuilder::new()
+            .init_repository_with(|client| {
+                let rate = rate.clone();
+                let amount_provided = amount_provided.clone();
+
+                Box::pin(async move {
+                    // Create 2 payment streams for MOCK_ADDRESS, one for MSP and one for BSP
+                    client
+                        .create_payment_stream(
+                            MOCK_ADDRESS,
+                            "0x1234567890abcdef1234567890abcdef12345678",
+                            BigDecimal::from(500000),
+                            PaymentStreamKind::Fixed { rate },
+                        )
+                        .await
+                        .expect("should create fixed payment stream");
+
+                    client
+                        .create_payment_stream(
+                            MOCK_ADDRESS,
+                            "0xabcdef1234567890abcdef1234567890abcdef12",
+                            BigDecimal::from(200000),
+                            PaymentStreamKind::Dynamic { amount_provided },
+                        )
+                        .await
+                        .expect("should create dynamic payment stream");
+                })
+            })
+            .await
+            .build()
+            .await;
+
         let ps = service
-            .get_payment_stream("0x123")
+            .get_payment_streams(MOCK_ADDRESS)
             .await
             .expect("get_payment_stream should succeed");
 
-        assert!(ps.tokens_per_block > 0);
-        assert!(ps.user_deposit > 0);
+        // Verify we have the expected payment streams
+        assert_eq!(ps.streams.len(), 2);
+
+        let fixed = ps
+            .streams
+            .iter()
+            .find(|s| s.provider_type == "msp")
+            .expect("a fixed stream");
+        assert_eq!(
+            BigDecimal::from_str(&fixed.cost_per_tick).expect("cost per tick to be a valid number"),
+            rate,
+            "Fixed payment stream cost per tick should match what it was crated with"
+        );
+
+        let dynamic = ps
+            .streams
+            .iter()
+            .find(|s| s.provider_type == "bsp")
+            .expect("a dynamic stream");
+
+        let expected_cost_per_tick = amount_provided
+            // mock environment sets price per giga unit to this value
+            * BigDecimal::from(MOCK_PRICE_PER_GIGA_UNIT)
+            * BigDecimal::from_str("1e-9").unwrap();
+
+        assert_eq!(
+            BigDecimal::from_str(&dynamic.cost_per_tick)
+                .expect("cost per tick to be a valid number"),
+            expected_cost_per_tick,
+            "Dynamic payment stream cost per tick should be a function of amount provided and price per giga unit"
+        )
     }
 
     #[tokio::test]
     async fn test_upload_to_msp() {
-        let service = MockMspServiceBuilder::new()
-            .with_rpc_responses(vec![(
-                "storagehubclient_receiveBackendFileChunks",
-                serde_json::json!([]),
-            )])
-            .await
-            .build()
-            .await;
+        let service = MockMspServiceBuilder::new().build().await;
 
         // Provide at least one chunk id (upload_to_msp rejects empty sets)
         let mut chunk_ids = HashSet::new();
@@ -990,8 +1074,9 @@ mod tests {
         )
         .unwrap();
 
-        let result = service.upload_to_msp(&chunk_ids, &file_key_proof).await;
-
-        assert!(result.is_ok());
+        service
+            .upload_to_msp(&chunk_ids, &file_key_proof)
+            .await
+            .expect("able to upload file");
     }
 }

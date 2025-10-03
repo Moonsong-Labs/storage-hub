@@ -283,6 +283,11 @@ export const rpcDefinitions = {
         "Get the value propositions of the node if it's an MSP; otherwise a NotAnMsp/Error enum.",
       params: [],
       type: "GetValuePropositionsResult"
+    },
+    getCurrentPricePerGigaUnitPerTick: {
+      description: "Get the current price per giga unit per tick from the payment streams pallet",
+      params: [],
+      type: "u128"
     }
   }
 };

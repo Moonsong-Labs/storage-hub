@@ -13,6 +13,7 @@ use log::{debug, error, info};
 use tokio::{fs, io::AsyncReadExt, sync::RwLock};
 
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
+use pallet_payment_streams_runtime_api::PaymentStreamsApi as PaymentStreamsRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
 use pallet_storage_providers_runtime_api::StorageProvidersApi as StorageProvidersRuntimeApi;
 use sc_rpc_api::check_if_safe;
@@ -37,7 +38,7 @@ use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use sp_core::{sr25519::Pair as Sr25519Pair, Encode, Pair};
 use sp_keystore::{Keystore, KeystorePtr};
-use sp_runtime::{Deserialize, KeyTypeId, Serialize};
+use sp_runtime::{Deserialize, KeyTypeId, SaturatedConversion, Serialize};
 use sp_runtime_interface::pass_by::PassByInner;
 
 pub mod remote_file;
@@ -358,6 +359,10 @@ pub trait StorageHubClientApi {
     /// Get the value propositions of the node if it's an MSP, or None if it's a BSP
     #[method(name = "getValuePropositions", with_extensions)]
     async fn get_value_propositions(&self) -> RpcResult<GetValuePropositionsResult>;
+
+    /// Get the current price per giga unit per tick from the payment streams pallet.
+    #[method(name = "getCurrentPricePerGigaUnitPerTick")]
+    async fn get_current_price_per_giga_unit_per_tick(&self) -> RpcResult<u128>;
 }
 
 /// Stores the required objects to be used in our RPC method.
@@ -1220,6 +1225,29 @@ where
         } else {
             Ok(GetValuePropositionsResult::NotAnMsp)
         }
+    }
+
+    async fn get_current_price_per_giga_unit_per_tick(&self) -> RpcResult<u128> {
+        let api = self.client.runtime_api();
+        let at_hash = self.client.info().best_hash;
+
+        let balance = api
+            .get_current_price_per_giga_unit_per_tick(at_hash)
+            .map_err(|e| {
+                JsonRpseeError::owned(
+                    INTERNAL_ERROR_CODE,
+                    format!(
+                        "Failed to get current price per giga unit per tick: {:?}",
+                        e
+                    ),
+                    None::<()>,
+                )
+            })?;
+
+        // Saturate the obtained price into a `u128`.
+        // If the configured `Balance` type of the `payment-streams` pallet is of a greater
+        // capacity (such as a u256), this could cause issues, so be wary.
+        Ok(balance.saturated_into())
     }
 }
 

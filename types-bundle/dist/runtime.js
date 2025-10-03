@@ -387,6 +387,11 @@ const PAYMENT_STREAMS_V1 = {
       }
     ],
     type: "Vec<ProviderId>"
+  },
+  get_current_price_per_giga_unit_per_tick: {
+    description: "Get the current price per giga unit per tick",
+    params: [],
+    type: "Balance"
   }
 };
 export const runtime = {

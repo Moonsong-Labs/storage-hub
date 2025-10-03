@@ -24,10 +24,10 @@ use shc_indexer_db::{
 use shp_types::Hash;
 
 use crate::{
-    constants::test,
+    constants::{mocks::MOCK_ADDRESS, rpc::DUMMY_MSP_ID, test},
     data::indexer_db::repository::{
         error::{RepositoryError, RepositoryResult},
-        IndexerOps, IndexerOpsMut,
+        IndexerOps, IndexerOpsMut, PaymentStreamData, PaymentStreamKind,
     },
     test_utils::{random_bytes_32, random_hash},
 };
@@ -41,6 +41,8 @@ pub struct MockRepository {
     buckets: Arc<RwLock<BTreeMap<i64, Bucket>>>,
     /// Files stored in BTreeMap to maintain natural ordering by ID
     files: Arc<RwLock<BTreeMap<i64, File>>>,
+    /// Payment streams stored by ID with (user_account, PaymentStreamData) tuple
+    payment_streams: Arc<RwLock<HashMap<i64, (String, PaymentStreamData)>>>,
     next_id: Arc<AtomicI64>,
 }
 
@@ -52,6 +54,7 @@ impl MockRepository {
             msps: Arc::new(RwLock::new(HashMap::new())),
             buckets: Arc::new(RwLock::new(BTreeMap::new())),
             files: Arc::new(RwLock::new(BTreeMap::new())),
+            payment_streams: Arc::new(RwLock::new(HashMap::new())),
             next_id: Arc::new(AtomicI64::new(1)),
         }
     }
@@ -67,7 +70,7 @@ impl MockRepository {
         let msp1 = this
             .create_msp(
                 &hex::encode(random_bytes_32()),
-                OnchainMspId::new(Hash::from_slice(&crate::constants::rpc::DUMMY_MSP_ID)),
+                OnchainMspId::new(Hash::from_slice(&DUMMY_MSP_ID)),
             )
             .await
             .expect("should create MSP 1");
@@ -98,7 +101,7 @@ impl MockRepository {
         ));
         let bucket1 = this
             .create_bucket(
-                crate::constants::mocks::MOCK_ADDRESS,
+                MOCK_ADDRESS,
                 Some(msp1.id),
                 b"Documents",
                 &bucket1_hash,
@@ -144,7 +147,7 @@ impl MockRepository {
             "e901c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f7"
         ));
         this.create_file(
-            crate::constants::mocks::MOCK_ADDRESS.as_bytes(),
+            MOCK_ADDRESS.as_bytes(),
             &bucket1_file1_key,
             bucket1.id,
             &bucket1_hash,
@@ -158,7 +161,7 @@ impl MockRepository {
         // File 2: /Thesis/chapter1.pdf
         let bucket1_file2_key = random_hash();
         this.create_file(
-            crate::constants::mocks::MOCK_ADDRESS.as_bytes(),
+            MOCK_ADDRESS.as_bytes(),
             &bucket1_file2_key,
             bucket1.id,
             &bucket1_hash,
@@ -196,6 +199,29 @@ impl MockRepository {
         )
         .await
         .expect("should create file 3");
+
+        // Create some sample payment streams
+        this.create_payment_stream(
+            MOCK_ADDRESS,
+            &hex::encode(DUMMY_MSP_ID),
+            BigDecimal::from(500000),
+            PaymentStreamKind::Fixed {
+                rate: BigDecimal::from(5),
+            },
+        )
+        .await
+        .expect("should create fixed payment stream");
+
+        this.create_payment_stream(
+            MOCK_ADDRESS,
+            &hex::encode(random_bytes_32()),
+            BigDecimal::from(200000),
+            PaymentStreamKind::Dynamic {
+                amount_provided: BigDecimal::from(10),
+            },
+        )
+        .await
+        .expect("should create dynamic payment stream");
 
         this
     }
@@ -290,6 +316,20 @@ impl IndexerOps for MockRepository {
             .find(|f| f.file_key.as_slice() == file_key.as_bytes())
             .cloned()
             .ok_or_else(|| RepositoryError::not_found("File"))
+    }
+
+    // ============ Payment Stream Operations ============
+    async fn get_payment_streams_for_user(
+        &self,
+        user_account: &str,
+    ) -> RepositoryResult<Vec<PaymentStreamData>> {
+        let streams = self.payment_streams.read().await;
+
+        Ok(streams
+            .values()
+            .filter(|(account, _)| account == user_account)
+            .map(|(_, data)| data.clone())
+            .collect())
     }
 }
 
@@ -466,10 +506,35 @@ impl IndexerOpsMut for MockRepository {
             Err(RepositoryError::not_found("File"))
         }
     }
+
+    // ============ Payment Stream Write Operations ============
+    async fn create_payment_stream(
+        &self,
+        user_account: &str,
+        provider: &str,
+        total_amount_paid: BigDecimal,
+        kind: PaymentStreamKind,
+    ) -> RepositoryResult<PaymentStreamData> {
+        let id = self.next_id();
+
+        let stream_data = PaymentStreamData {
+            provider: provider.to_string(),
+            total_amount_paid,
+            kind,
+        };
+
+        self.payment_streams
+            .write()
+            .await
+            .insert(id, (user_account.to_string(), stream_data.clone()));
+
+        Ok(stream_data)
+    }
 }
 
 #[cfg(test)]
 pub mod tests {
+    use bigdecimal::FromPrimitive;
     use shp_types::Hash;
 
     use super::*;
@@ -1157,5 +1222,68 @@ pub mod tests {
             result.unwrap_err(),
             RepositoryError::NotFound { .. }
         ));
+    }
+
+    #[tokio::test]
+    async fn get_payment_streams_filters_by_user() {
+        let repo = MockRepository::new();
+        let user1 = "user_1";
+        let user2 = "user_2";
+        let provider = hex::encode(random_bytes_32());
+
+        // Create payment stream for user1
+        repo.create_payment_stream(
+            user1,
+            &provider,
+            BigDecimal::from_i64(100000).unwrap(),
+            PaymentStreamKind::Fixed {
+                rate: BigDecimal::from_i64(3).unwrap(),
+            },
+        )
+        .await
+        .expect("should create payment stream for user1");
+
+        // Create another payment stream for user1
+        repo.create_payment_stream(
+            user1,
+            &hex::encode(random_bytes_32()),
+            BigDecimal::from_i64(100000).unwrap(),
+            PaymentStreamKind::Fixed {
+                rate: BigDecimal::from_i64(3).unwrap(),
+            },
+        )
+        .await
+        .expect("should create payment stream for user1");
+
+        // Create payment stream for user2
+        repo.create_payment_stream(
+            user2,
+            &provider,
+            BigDecimal::from_i64(200000).unwrap(),
+            PaymentStreamKind::Dynamic {
+                amount_provided: BigDecimal::from_i64(7).unwrap(),
+            },
+        )
+        .await
+        .expect("should create payment stream for user2");
+
+        // Retrieve payment streams for user1
+        let user1_streams = repo
+            .get_payment_streams_for_user(user1)
+            .await
+            .expect("should retrieve user1 streams");
+
+        // Should only get user1's stream
+        assert_eq!(user1_streams.len(), 2);
+
+        // Retrieve payment streams for user2
+        let user2_streams = repo
+            .get_payment_streams_for_user(user2)
+            .await
+            .expect("should retrieve user2 streams");
+
+        // Should only get user2's stream
+        assert_eq!(user2_streams.len(), 1);
+        assert_eq!(user2_streams[0].provider, provider);
     }
 }
