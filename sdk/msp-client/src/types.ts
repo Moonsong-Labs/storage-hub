@@ -124,18 +124,30 @@ export interface Bucket {
 	fileCount: number;
 }
 
-export type FileEntryType = "file" | "folder" | string;
+export interface FileTreeFile {
+	sizeBytes: number;
+	fileKey: string;
+}
 
-export interface FileEntry {
+export interface FileTreeFolder {
+	children: FileTree[];
+}
+
+export type FileTreeEntry =
+	| { type: "file"; sizeBytes: number; fileKey: string }
+	| { type: "folder"; children: FileTree[] };
+
+export interface FileTree {
 	name: string;
-	type: FileEntryType;
-	sizeBytes?: number;
-	fileKey?: string;
+	type: "file" | "folder";
+	sizeBytes?: number; // Only present for "file" type
+	fileKey?: string; // Only present for "file" type
+	children?: FileTree[]; // Only present for "folder" type
 }
 
 export interface FileListResponse {
 	bucketId: string;
-	files: FileEntry[];
+	files: FileTree[];
 }
 
 export interface GetFilesOptions {
