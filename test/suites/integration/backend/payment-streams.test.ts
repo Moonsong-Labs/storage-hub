@@ -15,7 +15,7 @@ await describeMspNet(
   ({ before, createMsp1Api, createUserApi, it }) => {
     let userApi: EnrichedBspApi;
     let msp1Api: EnrichedBspApi;
-    let chainPaymentStreams: any[] = [];
+    const chainPaymentStreams: any[] = [];
 
     before(async () => {
       userApi = await createUserApi();
@@ -69,18 +69,25 @@ await describeMspNet(
       const userAddress = ETH_SH_USER_ADDRESS;
 
       // Get providers with payment streams for the user
-      const providersWithPaymentStreams = await userApi.call.paymentStreamsApi.getProvidersWithPaymentStreamsWithUser(userAddress);
+      const providersWithPaymentStreams =
+        await userApi.call.paymentStreamsApi.getProvidersWithPaymentStreamsWithUser(userAddress);
 
       // Fetch both fixed and dynamic rate payment streams for each provider
       for (const provider of providersWithPaymentStreams) {
-        const fixedStream = await userApi.query.paymentStreams.fixedRatePaymentStreams(provider, userAddress);
-        const dynamicStream = await userApi.query.paymentStreams.dynamicRatePaymentStreams(provider, userAddress);
+        const fixedStream = await userApi.query.paymentStreams.fixedRatePaymentStreams(
+          provider,
+          userAddress
+        );
+        const dynamicStream = await userApi.query.paymentStreams.dynamicRatePaymentStreams(
+          provider,
+          userAddress
+        );
 
         if (fixedStream.isSome) {
           chainPaymentStreams.push({
             provider: provider.toString(),
             user: userAddress,
-            type: 'fixed',
+            type: "fixed",
             data: fixedStream.unwrap()
           });
         }
@@ -89,7 +96,7 @@ await describeMspNet(
           chainPaymentStreams.push({
             provider: provider.toString(),
             user: userAddress,
-            type: 'dynamic',
+            type: "dynamic",
             data: dynamicStream.unwrap()
           });
         }
@@ -113,20 +120,26 @@ await describeMspNet(
       const data = (await response.json()) as PaymentStreamsResponse;
 
       // Find the MSP and BSP streams
-      const apiMspStreams = data.streams.filter(s => s.providerType === 'msp');
-      const apiBspStreams = data.streams.filter(s => s.providerType === 'bsp');
+      const apiMspStreams = data.streams.filter((s) => s.providerType === "msp");
+      const apiBspStreams = data.streams.filter((s) => s.providerType === "bsp");
 
       // Verify both stream types exist
       assert(apiMspStreams.length > 0, "Should have an MSP stream");
       assert(apiBspStreams.length > 0, "Should have a BSP stream");
 
       // Verify the MSP provider ID matches DUMMY_MSP_ID
-      apiMspStreams.forEach((stream) => strictEqual(stream.provider, userApi.shConsts.DUMMY_MSP_ID, "MSP provider should match DUMMY_MSP_ID"));
+      for (stream in apiMspStreams) {
+        strictEqual(
+          stream.provider,
+          userApi.shConsts.DUMMY_MSP_ID,
+          "MSP provider should match DUMMY_MSP_ID"
+        );
+      }
 
       // Verify that the API data matches what's on chain
       // Count fixed streams (MSP = fixed) and dynamic streams (BSP = dynamic) from chain
-      const chainFixedStreams = chainPaymentStreams.filter(s => s.type === 'fixed');
-      const chainDynamicStreams = chainPaymentStreams.filter(s => s.type === 'dynamic');
+      const chainFixedStreams = chainPaymentStreams.filter((s) => s.type === "fixed");
+      const chainDynamicStreams = chainPaymentStreams.filter((s) => s.type === "dynamic");
 
       // Verify counts match
       strictEqual(
@@ -143,9 +156,9 @@ await describeMspNet(
 
       // Verify each API stream has a matching chain stream with correct type
       for (const apiStream of data.streams) {
-        const expectedType = apiStream.providerType === 'msp' ? 'fixed' : 'dynamic';
+        const expectedType = apiStream.providerType === "msp" ? "fixed" : "dynamic";
         const matchingChainStream = chainPaymentStreams.find(
-          s => s.provider === apiStream.provider && s.type === expectedType
+          (s) => s.provider === apiStream.provider && s.type === expectedType
         );
 
         assert(
