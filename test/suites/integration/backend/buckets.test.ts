@@ -2,7 +2,7 @@ import assert, { strictEqual } from "node:assert";
 import type { Hash } from "@polkadot/types/interfaces";
 import { describeMspNet, type EnrichedBspApi } from "../../../util";
 import { fetchJwtToken } from "../../../util/backend/jwt";
-import type { Bucket, FileInfo, FileListResponse } from "../util/backend/types";
+import type { Bucket, FileInfo, FileListResponse } from "../../../util/backend/types";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import {
   ETH_SH_USER_ADDRESS,

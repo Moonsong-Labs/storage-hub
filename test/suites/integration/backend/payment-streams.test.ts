@@ -3,6 +3,13 @@ import { type EnrichedBspApi, describeMspNet } from "../../../util";
 import { fetchJwtToken, type PaymentStreamsResponse } from "../../../util/backend";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import { ETH_SH_USER_PRIVATE_KEY, ETH_SH_USER_ADDRESS } from "../../../util/evmNet/keyring";
+import type { H256 } from "@polkadot/types/interfaces";
+import type { u128, u64 } from "@polkadot/types";
+
+type OnChainPaymentStream = { provider: string; user: `0x${string}` } & (
+  | { type: "fixed"; rate: u128 }
+  | { type: "dynamic"; amountProvided: u64 }
+);
 
 await describeMspNet(
   "Backend Payment Streams retrieval",
@@ -15,7 +22,7 @@ await describeMspNet(
   ({ before, createMsp1Api, createUserApi, it }) => {
     let userApi: EnrichedBspApi;
     let msp1Api: EnrichedBspApi;
-    const chainPaymentStreams: any[] = [];
+    const chainPaymentStreams: OnChainPaymentStream[] = [];
 
     before(async () => {
       userApi = await createUserApi();
@@ -69,8 +76,9 @@ await describeMspNet(
       const userAddress = ETH_SH_USER_ADDRESS;
 
       // Get providers with payment streams for the user
-      const providersWithPaymentStreams =
-        await userApi.call.paymentStreamsApi.getProvidersWithPaymentStreamsWithUser(userAddress);
+      const providersWithPaymentStreams = (
+        await userApi.call.paymentStreamsApi.getProvidersWithPaymentStreamsWithUser(userAddress)
+      ).map((provider) => provider as H256);
 
       // Fetch both fixed and dynamic rate payment streams for each provider
       for (const provider of providersWithPaymentStreams) {
@@ -88,7 +96,7 @@ await describeMspNet(
             provider: provider.toString(),
             user: userAddress,
             type: "fixed",
-            data: fixedStream.unwrap()
+            rate: fixedStream.unwrap().rate
           });
         }
 
@@ -97,7 +105,7 @@ await describeMspNet(
             provider: provider.toString(),
             user: userAddress,
             type: "dynamic",
-            data: dynamicStream.unwrap()
+            amountProvided: dynamicStream.unwrap().amountProvided
           });
         }
       }
@@ -128,7 +136,7 @@ await describeMspNet(
       assert(apiBspStreams.length > 0, "Should have a BSP stream");
 
       // Verify the MSP provider ID matches DUMMY_MSP_ID
-      for (stream in apiMspStreams) {
+      for (const stream of apiMspStreams) {
         strictEqual(
           stream.provider,
           userApi.shConsts.DUMMY_MSP_ID,
