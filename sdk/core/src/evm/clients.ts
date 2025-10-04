@@ -6,13 +6,13 @@
  */
 
 import {
-  type Account,
-  type Chain,
-  createPublicClient,
-  createWalletClient,
-  custom,
-  type EIP1193Provider,
-  http
+	type Account,
+	type Chain,
+	createPublicClient,
+	createWalletClient,
+	custom,
+	type EIP1193Provider,
+	http,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
@@ -31,11 +31,11 @@ type Eip1193Transport = { eip1193: EIP1193Provider };
 
 // Single options struct with nested, exclusive transport
 export type EvmClientsOptions = {
-  transport: HttpTransport | Eip1193Transport;
-  // Account for writes
-  account?: Account | `0x${string}`;
-  // Optional network tuning
-  timeoutMs?: number; // default HTTP timeout
+	transport: HttpTransport | Eip1193Transport;
+	// Account for writes
+	account?: Account | `0x${string}`;
+	// Optional network tuning
+	timeoutMs?: number; // default HTTP timeout
 };
 
 /**
@@ -44,8 +44,8 @@ export type EvmClientsOptions = {
  * - writeClient: wallet client for transactions (only when account is provided)
  */
 export type EvmClients = {
-  readClient: ReturnType<typeof createPublicClient>;
-  writeClient: ReturnType<typeof createWalletClient> | undefined;
+	readClient: ReturnType<typeof createPublicClient>;
+	writeClient: ReturnType<typeof createWalletClient> | undefined;
 };
 
 /**
@@ -55,12 +55,12 @@ export type EvmClients = {
  * - If undefined, returns undefined.
  */
 function resolveAccount(input?: Account | `0x${string}`): Account | undefined {
-  if (!input) return undefined;
-  if (typeof input === "string") {
-    // Treat as a raw private key
-    return privateKeyToAccount(input);
-  }
-  return input;
+	if (!input) return undefined;
+	if (typeof input === "string") {
+		// Treat as a raw private key
+		return privateKeyToAccount(input);
+	}
+	return input;
 }
 
 /**
@@ -75,29 +75,29 @@ function resolveAccount(input?: Account | `0x${string}`): Account | undefined {
  * - writeClient: present when an account is provided (wallet client)
  */
 export function createEvmClients(opts: EvmClientsOptions): EvmClients {
-  const { account: accountInput, timeoutMs = 30_000 } = opts;
+	const { account: accountInput, timeoutMs = 30_000 } = opts;
 
-  let transport: ReturnType<typeof http> | ReturnType<typeof custom>;
-  let chain: Chain | undefined;
+	let transport: ReturnType<typeof http> | ReturnType<typeof custom>;
+	let chain: Chain | undefined;
 
-  if ("httpUrl" in opts.transport) {
-    transport = http(opts.transport.httpUrl, { timeout: timeoutMs });
-    chain = opts.transport.chain;
-  } else if ("eip1193" in opts.transport) {
-    transport = custom(opts.transport.eip1193);
-    chain = undefined; // optional for EIP-1193; provider supplies chain context
-  } else {
-    throw new Error("createEvmClients: invalid transport");
-  }
+	if ("httpUrl" in opts.transport) {
+		transport = http(opts.transport.httpUrl, { timeout: timeoutMs });
+		chain = opts.transport.chain;
+	} else if ("eip1193" in opts.transport) {
+		transport = custom(opts.transport.eip1193);
+		chain = undefined; // optional for EIP-1193; provider supplies chain context
+	} else {
+		throw new Error("createEvmClients: invalid transport");
+	}
 
-  // Public (read) client is always available
-  const readClient = createPublicClient({ chain, transport });
+	// Public (read) client is always available
+	const readClient = createPublicClient({ chain, transport });
 
-  // Wallet (write) client only if an account is provided
-  const account = resolveAccount(accountInput);
-  const writeClient: ReturnType<typeof createWalletClient> | undefined = account
-    ? createWalletClient({ chain, account, transport })
-    : undefined;
+	// Wallet (write) client only if an account is provided
+	const account = resolveAccount(accountInput);
+	const writeClient: ReturnType<typeof createWalletClient> | undefined = account
+		? createWalletClient({ chain, account, transport })
+		: undefined;
 
-  return { readClient, writeClient };
+	return { readClient, writeClient };
 }

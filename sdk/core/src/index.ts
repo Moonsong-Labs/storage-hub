@@ -5,9 +5,9 @@ export type { EvmWriteOptions, StorageHubClientOptions } from "./evm/types.js";
 export { ReplicationLevel } from "./evm/types.js";
 export { FileManager } from "./file-manager.js";
 export {
-  HttpClient,
-  type HttpClientConfig,
-  type RequestOptions
+	HttpClient,
+	type HttpClientConfig,
+	type RequestOptions,
 } from "./http/HttpClient.js";
 export { initWasm } from "./init.js";
 export { WalletBase } from "./wallet/base.js";
