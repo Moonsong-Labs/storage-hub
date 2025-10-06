@@ -22,12 +22,11 @@ use crate::{
     data::{
         indexer_db::{client::DBClient, repository::PaymentStreamKind},
         rpc::StorageHubRpcClient,
-        storage::BoxedStorage,
     },
     error::Error,
     models::{
         buckets::{Bucket, FileTree},
-        files::{DistributeResponse, FileInfo},
+        files::FileInfo,
         msp_info::{
             Capacity, InfoResponse, MspHealthResponse, StatsResponse, ValuePropositionWithId,
         },
@@ -636,14 +635,12 @@ mod tests {
                 client::DBClient, mock_repository::MockRepository, repository::PaymentStreamKind,
             },
             rpc::{AnyRpcConnection, MockConnection, StorageHubRpcClient},
-            storage::{BoxedStorageWrapper, InMemoryStorage},
         },
         test_utils::random_bytes_32,
     };
 
     /// Builder for creating MspService instances with mock dependencies for testing
     struct MockMspServiceBuilder {
-        storage: Arc<BoxedStorageWrapper<InMemoryStorage>>,
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
     }
@@ -652,7 +649,6 @@ mod tests {
         /// Create a new builder with default empty mocks
         pub fn new() -> Self {
             Self {
-                storage: Arc::new(BoxedStorageWrapper::new(InMemoryStorage::new())),
                 postgres: Arc::new(DBClient::new(Arc::new(MockRepository::new()))),
                 rpc: Arc::new(StorageHubRpcClient::new(Arc::new(AnyRpcConnection::Mock(
                     MockConnection::new(),
@@ -859,12 +855,18 @@ mod tests {
             .build()
             .await;
 
+        let filter = "/";
         let tree = service
-            .get_file_tree(hex::encode(bucket_id).as_ref(), MOCK_ADDRESS, "/")
+            .get_file_tree(hex::encode(bucket_id).as_ref(), MOCK_ADDRESS, filter)
             .await
             .unwrap();
 
-        tree.entry.folder().expect("first entry to be a folder");
+        assert_eq!(
+            tree.name.as_str(),
+            filter,
+            "Folder name should match folder"
+        );
+        assert!(tree.children.len() > 0, "Shold have at least 1 entry");
     }
 
     #[tokio::test]
