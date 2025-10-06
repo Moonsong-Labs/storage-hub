@@ -4,18 +4,29 @@
     "includes": [
       "**/*.js",
       "**/*.ts",
+      "**/*.jsx",
+      "**/*.tsx",
       "**/*.json",
-      "**/*.yml",
-      "**/*.md",
-      "!node_modules/*",
-      "!target/*",
-      "!**/tmp/*",
+      "!**/node_modules",
+      "!**/target",
+      "!**/tmp",
       "!**/*.spec.json",
-      "!**/.papi/descriptors/**/*",
-      "!**/contract-bindings/**/*"
+      "!**/.papi/descriptors",
+      "!**/contract-bindings",
+      "!**/dist",
+      "!**/build",
+      "!**/wasm/pkg",
+      "!**/examples/nextjs/.next",
+      "!**/_wasm_embed.ts"
     ]
   },
-  "assist": { "actions": { "source": { "organizeImports": "on" } } },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
   "formatter": {
     "enabled": true,
     "attributePosition": "multiline",
@@ -45,7 +56,8 @@
       },
       "suspicious": {
         "noExplicitAny": "off",
-        "noAsyncPromiseExecutor": "off"
+        "noAsyncPromiseExecutor": "off",
+        "noVar": "warn"
       },
       "performance": {
         "noAccumulatingSpread": "off"
