@@ -7,7 +7,6 @@ import {
   bspKey,
   waitFor,
   assertEventPresent,
-  assertEventMany,
   mspKey,
   ShConsts
 } from "../../../util";

@@ -6,7 +6,6 @@ import {
   bspKey,
   waitFor,
   assertEventPresent,
-  assertEventMany,
   mspKey,
   sleep,
   ShConsts
