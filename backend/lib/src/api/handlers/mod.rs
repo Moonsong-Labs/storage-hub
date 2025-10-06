@@ -1,72 +1,13 @@
-use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
-use axum_extra::{
-    headers::{authorization::Bearer, Authorization},
-    TypedHeader,
-};
+use axum::{extract::State, response::IntoResponse, Json};
 
 use crate::{
-    api::validation::extract_bearer_token,
-    constants::mocks::MOCK_ADDRESS,
     error::Error,
-    models::auth::{NonceRequest, VerifyRequest},
-    services::Services,
+    services::{auth::AuthenticatedUser, Services},
 };
 
+pub mod auth;
 pub mod buckets;
 pub mod files;
-
-// TODO: we could move from `TypedHeader` to axum-jwt (needs rust 1.88)
-
-// ==================== Auth Handlers ====================
-
-pub async fn nonce(
-    State(services): State<Services>,
-    Json(payload): Json<NonceRequest>,
-) -> Result<impl IntoResponse, Error> {
-    let response = services
-        .auth
-        .generate_nonce(&payload.address, payload.chain_id)
-        .await?;
-    Ok(Json(response))
-}
-
-pub async fn verify(
-    State(services): State<Services>,
-    Json(payload): Json<VerifyRequest>,
-) -> Result<impl IntoResponse, Error> {
-    let response = services
-        .auth
-        .verify_eth_signature(&payload.message, &payload.signature)
-        .await?;
-    Ok(Json(response))
-}
-
-pub async fn refresh(
-    State(services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
-) -> Result<impl IntoResponse, Error> {
-    let token = auth.token();
-    let response = services.auth.refresh_token(token).await?;
-    Ok(Json(response))
-}
-
-pub async fn logout(
-    State(services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
-) -> Result<impl IntoResponse, Error> {
-    let token = auth.token();
-    services.auth.logout(token).await?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
-pub async fn profile(
-    State(services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
-) -> Result<impl IntoResponse, Error> {
-    let token = auth.token();
-    let response = services.auth.get_profile(token).await?;
-    Ok(Json(response))
-}
 
 // ==================== MSP Info Handlers ====================
 
@@ -92,16 +33,10 @@ pub async fn msp_health(State(services): State<Services>) -> Result<impl IntoRes
 
 // ==================== Payment Handler ====================
 
-pub async fn payment_stream(
+pub async fn payment_streams(
     State(services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    AuthenticatedUser { address }: AuthenticatedUser,
 ) -> Result<impl IntoResponse, Error> {
-    let auth = extract_bearer_token(&auth)?;
-
-    let address = auth
-        .get("address")
-        .and_then(|a| a.as_str())
-        .unwrap_or(MOCK_ADDRESS);
-    let response = services.msp.get_payment_stream(address).await?;
+    let response = services.msp.get_payment_streams(&address).await?;
     Ok(Json(response))
 }

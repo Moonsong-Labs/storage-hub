@@ -23,10 +23,10 @@ export interface Bucket {
   bucketId: string;
   name: string;
   root: string;
-  is_public: boolean;
-  size_bytes: number;
-  value_prop_id: string;
-  file_count: number;
+  isPublic: boolean;
+  sizeBytes: number;
+  valuePropId: string;
+  fileCount: number;
 }
 
 export type FileTree = {
@@ -56,4 +56,15 @@ export interface FileInfo {
   size: number;
   isPublic: boolean;
   uploadedAt: string;
+}
+
+export interface PaymentStream {
+  provider: string;
+  providerType: "msp" | "bsp";
+  totalAmountPaid: string;
+  costPerTick: string;
+}
+
+export interface PaymentStreamsResponse {
+  streams: PaymentStream[];
 }

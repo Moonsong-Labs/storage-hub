@@ -2,7 +2,6 @@
 //!
 //! TODO: move the rest of the endpoints as they are implemented
 
-use std::io::Cursor;
 
 use axum::{
     body::Bytes,
@@ -14,51 +13,29 @@ use axum::{
 use axum_extra::{
     extract::{multipart::Field, Multipart},
     response::FileStream,
-    TypedHeader,
 };
 use codec::Decode;
-use headers::{authorization::Bearer, Authorization};
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
 
 use shc_common::types::FileMetadata;
 
 use crate::{
-    api::validation::extract_bearer_token, constants::mocks::MOCK_ADDRESS, error::Error,
-    services::Services,
+    error::Error,
+   
+    services::{auth::AuthenticatedUser, Services},
 };
 
 pub async fn get_file_info(
     State(services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    AuthenticatedUser { address }: AuthenticatedUser,
     Path((bucket_id, file_key)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, Error> {
-    let payload = extract_bearer_token(&auth)?;
-    let address = payload
-        .get("address")
-        .and_then(|a| a.as_str())
-        .unwrap_or(MOCK_ADDRESS);
-
     let response = services
         .msp
-        .get_file_info(&bucket_id, address, &file_key)
+        .get_file_info(&bucket_id, &address, &file_key)
         .await?;
     Ok(Json(response))
-}
-
-pub async fn download_by_location(
-    State(_services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
-    Path((_bucket_id, _file_location)): Path<(String, String)>,
-) -> Result<impl IntoResponse, Error> {
-    let _auth = extract_bearer_token(&auth)?;
-
-    // TODO(MOCK): return proper data
-    let file_data = b"Mock file content for download".to_vec();
-    let stream = ReaderStream::new(Cursor::new(file_data));
-    let file_stream_resp = FileStream::new(stream).file_name("by_location.txt");
-
-    Ok(file_stream_resp.into_response())
 }
 
 // Internal endpoint used by the MSP RPC to upload a file to the backend
@@ -89,17 +66,16 @@ pub async fn internal_upload_by_key(
 
 pub async fn download_by_key(
     State(services): State<Services>,
+    AuthenticatedUser { address: _ }: AuthenticatedUser,
     Path(file_key): Path<String>,
 ) -> Result<impl IntoResponse, Error> {
-    // TODO: re-add auth
-    // let _auth = extract_bearer_token(&auth)?;
-
     // Validate file_key is a hex string
     let key = file_key.trim_start_matches("0x");
     if hex::decode(key).is_err() {
         return Err(Error::BadRequest("Invalid file key".to_string()));
     }
 
+    // TODO(AUTH): verify that user has permissions to access this file
     let download_result = services.msp.get_file_from_key(&file_key).await?;
 
     // Extract filename from location or use file_key as fallback
@@ -149,11 +125,11 @@ pub async fn download_by_key(
 /// TODO: Further optimize this to avoid having to load the entire file into memory.
 pub async fn upload_file(
     State(services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    AuthenticatedUser { address: _ }: AuthenticatedUser,
     Path((bucket_id, file_key)): Path<(String, String)>,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, Error> {
-    let _auth = extract_bearer_token(&auth)?;
+    // TODO(AUTH): verify that user has permissions to access this file
 
     // Pre-check with MSP whether this file key is expected before doing heavy processing
     let is_expected = services
@@ -222,10 +198,10 @@ pub async fn upload_file(
 
 pub async fn distribute_file(
     State(services): State<Services>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    AuthenticatedUser { address: _ }: AuthenticatedUser,
     Path((bucket_id, file_key)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, Error> {
-    let _auth = extract_bearer_token(&auth)?;
+    // TODO(AUTH): verify that user has permissions to access this file
 
     let response = services.msp.distribute_file(&bucket_id, &file_key).await?;
     Ok(Json(response))

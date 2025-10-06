@@ -6,6 +6,7 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
+use codec::Encode;
 use jsonrpsee::core::traits::ToRpcParams;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -15,12 +16,22 @@ use tokio::{
     time::sleep,
 };
 
+use shc_common::types::FileMetadata;
+use shc_rpc::{GetValuePropositionsResult, RpcProviderId, SaveFileToDisk};
+use sp_core::H256;
+
 use crate::{
-    constants::{mocks::DOWNLOAD_FILE_CONTENT, rpc::TIMEOUT_MULTIPLIER},
+    constants::{
+        mocks::{DOWNLOAD_FILE_CONTENT, MOCK_PRICE_PER_GIGA_UNIT},
+        rpc::DUMMY_MSP_ID,
+        rpc::TIMEOUT_MULTIPLIER,
+    },
     data::rpc::{
         connection::error::{RpcConnectionError, RpcResult},
-        RpcConnection,
+        methods, RpcConnection,
     },
+    models::msp_info::{ValueProposition, ValuePropositionWithId},
+    test_utils::random_bytes_32,
 };
 
 /// Error simulation modes for testing
@@ -154,15 +165,16 @@ impl MockConnection {
         let _ = fs::write(&local_path, content).await;
 
         // Return expected response shape
-        serde_json::json!({
-            "Success": {
-                "owner": vec![0u8; 32],
-                "bucket_id": vec![0u8; 32],
-                "location": file_name.as_bytes().to_vec(),
-                "file_size": content.len() as u64,
-                "fingerprint": vec![0u8; 32]
-            }
-        })
+        serde_json::json!(SaveFileToDisk::Success(
+            FileMetadata::new(
+                vec![0; 32],
+                vec![0; 32],
+                file_name.as_bytes().to_vec(),
+                content.len() as u64,
+                vec![0u8; 32].as_slice().into(),
+            )
+            .expect("a valid file metadata descriptor")
+        ))
     }
 }
 
@@ -202,9 +214,47 @@ impl RpcConnection for MockConnection {
 
         // Build JSON response by method
         let response: Value = match method {
-            "storagehubclient_saveFileToDisk" => self.mock_save_file_to_disk(params).await,
-            "storagehubclient_isFileKeyExpected" => serde_json::json!(true),
-            "storagehubclient_receiveBackendFileChunks" => serde_json::json!([]),
+            methods::SAVE_FILE_TO_DISK => self.mock_save_file_to_disk(params).await,
+            methods::FILE_KEY_EXPECTED => serde_json::json!(true),
+            methods::PROVIDER_ID => serde_json::json!(RpcProviderId::Msp(
+                shp_types::Hash::from_slice(DUMMY_MSP_ID.as_slice())
+            )),
+            methods::VALUE_PROPS => {
+                serde_json::json!(GetValuePropositionsResult::Success(vec![
+                    {
+                        let mut value_prop_with_id = ValuePropositionWithId::default();
+                        value_prop_with_id.id = H256::from_slice(&random_bytes_32());
+                        value_prop_with_id.value_prop = ValueProposition::default();
+                        value_prop_with_id
+                            .value_prop
+                            .price_per_giga_unit_of_data_per_block = 100;
+                        value_prop_with_id.value_prop.bucket_data_limit = 100;
+                        value_prop_with_id.value_prop.available = true;
+                        value_prop_with_id.encode()
+                    },
+                    {
+                        let mut value_prop_with_id = ValuePropositionWithId::default();
+                        value_prop_with_id.id = H256::from_slice(&random_bytes_32());
+                        value_prop_with_id.value_prop = ValueProposition::default();
+                        value_prop_with_id
+                            .value_prop
+                            .price_per_giga_unit_of_data_per_block = 200;
+                        value_prop_with_id.value_prop.bucket_data_limit = 300;
+                        value_prop_with_id.value_prop.available = false;
+                        value_prop_with_id.encode()
+                    }
+                ]))
+            },
+            methods::PEER_IDS => serde_json::json!(vec![
+                "/ip4/192.168.0.10/tcp/30333/p2p/12D3KooWSUvz8QM5X4tfAaSLErAZjR2puojo16pULBHyqTMGKtNV"
+            ]),
+            methods::CURRENT_PRICE => {
+                // Return a mock price value (e.g., 100 units)
+                serde_json::json!(MOCK_PRICE_PER_GIGA_UNIT)
+            },
+            methods::RECEIVE_FILE_CHUNKS => {
+                serde_json::json!([])
+            }
             _ => {
                 let responses = self.responses.read().await;
                 responses

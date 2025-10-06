@@ -39,6 +39,21 @@ pub mod postgres;
 
 use error::RepositoryResult;
 
+/// Represents the different types of payment streams
+#[derive(Debug, Clone)]
+pub enum PaymentStreamKind {
+    Fixed { rate: BigDecimal },
+    Dynamic { amount_provided: BigDecimal },
+}
+
+/// Payment stream data from the database
+#[derive(Debug, Clone)]
+pub struct PaymentStreamData {
+    pub provider: String,
+    pub total_amount_paid: BigDecimal,
+    pub kind: PaymentStreamKind,
+}
+
 /// Read-only operations for indexer data access.
 ///
 /// This trait provides read-only access to database entities,
@@ -99,6 +114,18 @@ pub trait IndexerOps: Send + Sync {
     /// # Arguments
     /// * `key` - the File Key to search
     async fn get_file_by_file_key(&self, file_key: &Hash) -> RepositoryResult<File>;
+
+    /// Get all payment streams for a user account
+    ///
+    /// # Arguments
+    /// * `user_account` - The user's account address
+    ///
+    /// # Returns
+    /// * Vector of payment stream data
+    async fn get_payment_streams_for_user(
+        &self,
+        user_account: &str,
+    ) -> RepositoryResult<Vec<PaymentStreamData>>;
 }
 
 /// Mutable operations for test environments.
@@ -187,6 +214,21 @@ pub trait IndexerOpsMut: IndexerOps {
 
     /// Delete a file by its file key.
     async fn delete_file(&self, file_key: &Hash) -> RepositoryResult<()>;
+
+    /// Create a new payment stream.
+    ///
+    /// # Arguments
+    /// * `user_account` - User account address
+    /// * `provider` - Provider address
+    /// * `total_amount_paid` - Total amount paid in the stream
+    /// * `kind` - Payment stream kind (Fixed or Dynamic)
+    async fn create_payment_stream(
+        &self,
+        user_account: &str,
+        provider: &str,
+        total_amount_paid: BigDecimal,
+        kind: PaymentStreamKind,
+    ) -> RepositoryResult<PaymentStreamData>;
 }
 
 // The following trait aliases are so when compiling for unit tests we get access to write operations

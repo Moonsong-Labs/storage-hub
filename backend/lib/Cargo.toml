@@ -8,11 +8,14 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
 axum-extra = { workspace = true }
+axum-jwt = { workspace = true }
 base64 = { workspace = true }
 bigdecimal = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
 diesel = { workspace = true }
 diesel-async = { workspace = true }
+alloy-core = "0.8"
+alloy-signer = "0.8"
 headers = { workspace = true }
 hex = { workspace = true }
 hex-literal = { workspace = true }
@@ -45,9 +48,11 @@ sp-trie = { workspace = true }
 trie-db = { workspace = true }
 
 [dev-dependencies]
+alloy-signer = "0.8"
 axum-test = { workspace = true }
 diesel_migrations = { version = "2.2", features = ["postgres"] }
 futures = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
 testcontainers = "0.24"
 testcontainers-modules = { version = "0.12", features = ["postgres"] }
 

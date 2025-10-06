@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use serde::Serialize;
-use sp_core::H256;
+use shc_rpc::RpcProviderId;
 
 use crate::data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage};
 
@@ -117,13 +117,18 @@ impl HealthService {
             };
         }
 
-        // Then to make sure everything works test actual RPC functionality by calling the getForestRoot method
-        let (status, message) = match self
-            .rpc
-            .call::<_, Option<H256>>("storagehubclient_getForestRoot", (None::<H256>,))
-            .await
-        {
-            Ok(_) => (Self::HEALTHY, None),
+        // Then to make sure everything works test actual RPC functionality
+        // by getting the provider ID of the connected node.
+        let (status, message) = match self.rpc.get_provider_id().await {
+            Ok(RpcProviderId::Msp(_)) => (Self::HEALTHY, None),
+            Ok(RpcProviderId::Bsp(_)) => (
+                Self::UNHEALTHY,
+                Some("The node that we are connected to is a BSP, expected an MSP".to_string()),
+            ),
+            Ok(RpcProviderId::NotAProvider) => (
+                Self::UNHEALTHY,
+                Some("The node that we are connected to is not a storage provider".to_string()),
+            ),
             Err(e) => (Self::UNHEALTHY, Some(format!("RPC call failed: {}", e))),
         };
 
