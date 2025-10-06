@@ -575,7 +575,7 @@ pub struct FishermanConfigurations {
 
     /// The minimum number of blocks behind the current best block to consider the fisherman out of sync.
     #[arg(long, default_value = "5")]
-    pub fisherman_sync_mode_min_blocks_behind: Option<u32>,
+    pub fisherman_sync_mode_min_blocks_behind: u32,
 }
 
 impl FishermanConfigurations {
@@ -588,9 +588,7 @@ impl FishermanConfigurations {
                     .expect("Fisherman database URL is required"),
                 incomplete_sync_max: self.fisherman_incomplete_sync_max,
                 incomplete_sync_page_size: self.fisherman_incomplete_sync_page_size,
-                sync_mode_min_blocks_behind: self
-                    .fisherman_sync_mode_min_blocks_behind
-                    .unwrap_or(5),
+                sync_mode_min_blocks_behind: self.fisherman_sync_mode_min_blocks_behind,
                 maintenance_mode,
             })
         } else {

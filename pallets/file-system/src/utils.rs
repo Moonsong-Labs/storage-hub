@@ -401,6 +401,11 @@ where
         start_after: Option<MerkleHash<T>>,
         limit: u32,
     ) -> Vec<MerkleHash<T>> {
+        /// Maximum number of incomplete storage request keys that can be returned in a single call.
+        const MAX_INCOMPLETE_REQUEST_KEYS: u32 = 10_000;
+
+        let limit = limit.min(MAX_INCOMPLETE_REQUEST_KEYS);
+
         if limit == 0 {
             return Vec::new();
         }

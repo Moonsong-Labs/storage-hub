@@ -274,8 +274,8 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
             // Advance cursor to last processed key
             cursor = keys.last().cloned();
 
-            // Stop if we've got less than the configured page_size
-            if (page_count as u32) < page_size {
+            // Check if we've hit the cap
+            if processed >= cap {
                 break;
             }
         }
