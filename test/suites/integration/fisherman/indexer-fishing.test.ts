@@ -493,7 +493,7 @@ await describeMspNet(
       );
 
       await userApi.assert.extrinsicPresent({
-        method: "deleteFile",
+        method: "deleteFiles",
         module: "fileSystem",
         checkTxPool: true,
         assertLength: 2,

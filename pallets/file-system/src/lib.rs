@@ -285,6 +285,13 @@ pub mod pallet {
         #[pallet::constant]
         type MaxBatchConfirmStorageRequests: Get<u32>;
 
+        /// Maximum number of file deletions that can be processed in a single extrinsic call.
+        ///
+        /// This allows multiple files to be deleted from a single provider's forest using one proof,
+        /// improving efficiency when cleaning up multiple files.
+        #[pallet::constant]
+        type MaxFileDeletionsPerExtrinsic: Get<u32>;
+
         /// Maximum byte size of a file path.
         #[pallet::constant]
         type MaxFilePathSize: Get<u32>;
@@ -761,29 +768,22 @@ pub mod pallet {
             signed_delete_intention: FileOperationIntention<T>,
             signature: T::OffchainSignature,
         },
-        /// Notifies that a file deletion has been completed successfully for a Bucket.
+        /// Notifies that file deletions have been completed successfully for a Bucket.
         BucketFileDeletionCompleted {
             user: T::AccountId,
-            file_key: MerkleHash<T>,
-            file_size: StorageDataUnit<T>,
+            file_keys: BoundedVec<MerkleHash<T>, T::MaxFileDeletionsPerExtrinsic>,
             bucket_id: BucketIdFor<T>,
             msp_id: Option<ProviderIdFor<T>>,
             old_root: MerkleHash<T>,
             new_root: MerkleHash<T>,
         },
-        /// Notifies that a file deletion has been completed successfully for a BSP.
+        /// Notifies that file deletions have been completed successfully for a BSP.
         BspFileDeletionCompleted {
-            user: T::AccountId,
-            file_key: MerkleHash<T>,
-            file_size: StorageDataUnit<T>,
+            users: BoundedVec<T::AccountId, T::MaxFileDeletionsPerExtrinsic>,
+            file_keys: BoundedVec<MerkleHash<T>, T::MaxFileDeletionsPerExtrinsic>,
             bsp_id: ProviderIdFor<T>,
             old_root: MerkleHash<T>,
             new_root: MerkleHash<T>,
-        },
-        /// Notifies that a file has been deleted from a rejected storage request.
-        FileDeletedFromIncompleteStorageRequest {
-            file_key: MerkleHash<T>,
-            bsp_id: Option<ProviderIdFor<T>>,
         },
         /// Notifies that a storage request was marked as incomplete.
         ///
@@ -880,6 +880,10 @@ pub mod pallet {
         NotFileOwner,
         /// File key already pending deletion.
         FileKeyAlreadyPendingDeletion,
+        /// Batch file deletion must contain files from a single bucket only.
+        BatchFileDeletionMustContainSingleBucket,
+        /// Duplicate file key detected within the same batch deletion request.
+        DuplicateFileKeyInBatchFileDeletion,
         /// Max number of user pending deletion requests reached.
         MaxUserPendingDeletionRequestsReached,
         /// Unauthorized operation, signer is not an MSP of the bucket id.
@@ -1493,69 +1497,54 @@ pub mod pallet {
             Ok(())
         }
 
-        /// Deletes a file from a provider's forest, changing its root
+        /// Deletes files from a provider's forest, changing its root
         ///
         /// This extrinsic allows any actor to execute file deletion based on signed intentions
-        /// from the `FileDeletionRequested` event. It requires a valid forest proof showing that the
-        /// file exists in the specified provider's forest before allowing deletion.
+        /// from the `FileDeletionRequested` event. It requires a valid forest proof showing that
+        /// all files exist in the specified provider's forest before allowing deletion.
         ///
-        /// If `bsp_id` is `None`, the file will be deleted from the bucket forest.
-        /// If `bsp_id` is `Some(id)`, the file will be deleted from the specified BSP's forest.
+        /// Multiple files can be deleted in a single call using one forest proof, improving
+        /// efficiency when cleaning up multiple files from the same provider.
+        ///
+        /// If `bsp_id` is `None`, files will be deleted from the bucket forest.
+        /// If `bsp_id` is `Some(id)`, files will be deleted from the specified BSP's forest.
         #[pallet::call_index(17)]
         #[pallet::weight(Weight::zero())]
-        pub fn delete_file(
+        pub fn delete_files(
             origin: OriginFor<T>,
-            file_owner: T::AccountId,
-            signed_intention: FileOperationIntention<T>,
-            signature: T::OffchainSignature,
-            bucket_id: BucketIdFor<T>,
-            location: FileLocation<T>,
-            size: StorageDataUnit<T>,
-            fingerprint: Fingerprint<T>,
+            file_deletions: BoundedVec<FileDeletionRequest<T>, T::MaxFileDeletionsPerExtrinsic>,
             bsp_id: Option<ProviderIdFor<T>>,
             forest_proof: ForestProof<T>,
         ) -> DispatchResult {
-            // TODO: We need to reward the caller of delete_file
+            // TODO: We need to reward the caller of delete_files
             let _caller = ensure_signed(origin)?;
 
-            Self::do_delete_file(
-                file_owner,
-                signed_intention,
-                signature,
-                bucket_id,
-                location,
-                size,
-                fingerprint,
-                bsp_id,
-                forest_proof,
-            )?;
+            Self::do_delete_file(file_deletions, bsp_id, forest_proof)?;
 
             Ok(())
         }
 
-        /// Delete a file from an incomplete (rejected, expired or revoked) storage request.
+        /// Delete files from an incomplete (rejected, expired or revoked) storage request.
         ///
-        /// This extrinsic allows fisherman nodes to delete files from providers when an IncompleteStorageRequestMetadata for the given file_key
-        /// exist in the IncompleteStorageRequests mapping. It validates that the IncompleteStorageRequestMetadata exists,
-        /// that the provider has the file in its Merkle Patricia Forest, and verifies the file key matches the metadata.
+        /// This extrinsic allows fisherman nodes to delete files from providers when IncompleteStorageRequestMetadata
+        /// for the given file keys exist in the IncompleteStorageRequests mapping. It validates that the metadata exists
+        /// for each file, that the provider has the files in its Merkle Patricia Forest, and verifies the file keys match
+        /// the metadata.
+        ///
+        /// Multiple files can be deleted in a single call using one forest proof, improving
+        /// efficiency when cleaning up multiple incomplete storage requests from the same provider.
         #[pallet::call_index(18)]
         #[pallet::weight(Weight::zero())]
-        pub fn delete_file_for_incomplete_storage_request(
+        pub fn delete_files_for_incomplete_storage_request(
             origin: OriginFor<T>,
-            file_key: MerkleHash<T>,
+            file_keys: BoundedVec<MerkleHash<T>, T::MaxFileDeletionsPerExtrinsic>,
             bsp_id: Option<ProviderIdFor<T>>,
             forest_proof: ForestProof<T>,
         ) -> DispatchResult {
-            // TODO: We need to reward the caller of delete_file_for_incomplete_storage_request
+            // TODO: We need to reward the caller of delete_files_for_incomplete_storage_request
             let _caller = ensure_signed(origin)?;
 
-            Self::do_delete_file_for_incomplete_storage_request(file_key, bsp_id, forest_proof)?;
-
-            // Emit event
-            Self::deposit_event(Event::FileDeletedFromIncompleteStorageRequest {
-                file_key,
-                bsp_id,
-            });
+            Self::do_delete_files_for_incomplete_storage_request(file_keys, bsp_id, forest_proof)?;
 
             Ok(())
         }

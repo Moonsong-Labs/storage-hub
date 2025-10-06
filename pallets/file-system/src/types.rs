@@ -438,6 +438,43 @@ impl<T: Config> Debug for FileOperationIntention<T> {
     }
 }
 
+/// A single file deletion request containing all metadata and signatures needed.
+///
+/// Used for batch file deletion operations where multiple files can be deleted
+/// from a single provider's forest using one forest proof.
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub struct FileDeletionRequest<T: Config> {
+    /// Owner account of the file
+    pub file_owner: T::AccountId,
+    /// Signed intention containing the file key and delete operation
+    pub signed_intention: FileOperationIntention<T>,
+    /// Signature from the file owner authorizing the deletion
+    pub signature: T::OffchainSignature,
+    /// Bucket containing the file
+    pub bucket_id: BucketIdFor<T>,
+    /// File location/path
+    pub location: FileLocation<T>,
+    /// File size in storage units
+    pub size: StorageDataUnit<T>,
+    /// File fingerprint for verification
+    pub fingerprint: Fingerprint<T>,
+}
+
+impl<T: Config> core::fmt::Debug for FileDeletionRequest<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("FileDeletionRequest")
+            .field("file_owner", &self.file_owner)
+            .field("signed_intention", &self.signed_intention)
+            .field("signature", &"<signature>")
+            .field("bucket_id", &self.bucket_id)
+            .field("location", &self.location)
+            .field("size", &self.size)
+            .field("fingerprint", &self.fingerprint)
+            .finish()
+    }
+}
+
 /// Ephemeral metadata for incomplete storage requests.
 /// This is used to track which providers still need to remove their files.
 /// Once all providers have removed their files, the entry is  cleaned up.

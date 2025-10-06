@@ -549,22 +549,14 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
-       * Notifies that a file deletion has been completed successfully for a BSP.
+       * Notifies that file deletions have been completed successfully for a BSP.
        **/
       BspFileDeletionCompleted: AugmentedEvent<
         ApiType,
-        [
-          user: AccountId32,
-          fileKey: H256,
-          fileSize: u64,
-          bspId: H256,
-          oldRoot: H256,
-          newRoot: H256
-        ],
+        [users: Vec<AccountId32>, fileKeys: Vec<H256>, bspId: H256, oldRoot: H256, newRoot: H256],
         {
-          user: AccountId32;
-          fileKey: H256;
-          fileSize: u64;
+          users: Vec<AccountId32>;
+          fileKeys: Vec<H256>;
           bspId: H256;
           oldRoot: H256;
           newRoot: H256;
@@ -593,14 +585,13 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
-       * Notifies that a file deletion has been completed successfully for a Bucket.
+       * Notifies that file deletions have been completed successfully for a Bucket.
        **/
       BucketFileDeletionCompleted: AugmentedEvent<
         ApiType,
         [
           user: AccountId32,
-          fileKey: H256,
-          fileSize: u64,
+          fileKeys: Vec<H256>,
           bucketId: H256,
           mspId: Option<H256>,
           oldRoot: H256,
@@ -608,8 +599,7 @@ declare module "@polkadot/api-base/types/events" {
         ],
         {
           user: AccountId32;
-          fileKey: H256;
-          fileSize: u64;
+          fileKeys: Vec<H256>;
           bucketId: H256;
           mspId: Option<H256>;
           oldRoot: H256;
@@ -707,17 +697,6 @@ declare module "@polkadot/api-base/types/events" {
           bspId: H256;
           amountToTransfer: u128;
           error: SpRuntimeDispatchError;
-        }
-      >;
-      /**
-       * Notifies that a file has been deleted from a rejected storage request.
-       **/
-      FileDeletedFromIncompleteStorageRequest: AugmentedEvent<
-        ApiType,
-        [fileKey: H256, bspId: Option<H256>],
-        {
-          fileKey: H256;
-          bspId: Option<H256>;
         }
       >;
       /**

@@ -469,28 +469,29 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             pallet_file_system::Event::FailedToTransferDepositFundsToBsp { .. } => {
                 // In the future we should monitor for this to detect eventual bugs in the pallets
             }
-            pallet_file_system::Event::FileDeletedFromIncompleteStorageRequest { .. } => {
-                // TODO: index this event
-            }
             pallet_file_system::Event::BucketFileDeletionCompleted {
                 user: _,
-                file_key,
-                file_size: _,
+                file_keys,
                 bucket_id,
                 msp_id: maybe_msp_id,
                 old_root: _,
                 new_root,
             } => {
-                // Delete MSP-file association
+                // Delete MSP-file associations for all files in the batch
                 if let Some(msp_id) = maybe_msp_id {
-                    MspFile::delete(conn, file_key.as_ref(), OnchainMspId::from(*msp_id)).await?;
+                    for file_key in file_keys.iter() {
+                        MspFile::delete(conn, file_key.as_ref(), OnchainMspId::from(*msp_id))
+                            .await?;
+                    }
                 }
 
-                // Check if file should be deleted (no more associations)
-                let deleted = File::delete_if_orphaned(conn, file_key.as_ref()).await?;
+                // Check if files should be deleted (no more associations)
+                for file_key in file_keys.iter() {
+                    let deleted = File::delete_if_orphaned(conn, file_key.as_ref()).await?;
 
-                if deleted {
-                    log::trace!("Deleted orphaned file after MSP deletion: {:?}", file_key);
+                    if deleted {
+                        log::trace!("Deleted orphaned file after MSP deletion: {:?}", file_key);
+                    }
                 }
 
                 // Update bucket merkle root
@@ -502,22 +503,25 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 .await?;
             }
             pallet_file_system::Event::BspFileDeletionCompleted {
-                user: _,
-                file_key,
-                file_size: _,
+                users: _,
+                file_keys,
                 bsp_id,
                 old_root: _,
                 new_root,
             } => {
-                // Delete BSP-file association
-                BspFile::delete_for_bsp(conn, file_key.as_ref(), OnchainBspId::from(*bsp_id))
-                    .await?;
+                // Delete BSP-file associations for all files in the batch
+                for file_key in file_keys.iter() {
+                    BspFile::delete_for_bsp(conn, file_key.as_ref(), OnchainBspId::from(*bsp_id))
+                        .await?;
+                }
 
-                // Check if file should be deleted (no more associations)
-                let deleted = File::delete_if_orphaned(conn, file_key.as_ref()).await?;
+                // Check if files should be deleted (no more associations)
+                for file_key in file_keys.iter() {
+                    let deleted = File::delete_if_orphaned(conn, file_key.as_ref()).await?;
 
-                if deleted {
-                    log::trace!("Deleted orphaned file after BSP deletion: {:?}", file_key);
+                    if deleted {
+                        log::trace!("Deleted orphaned file after BSP deletion: {:?}", file_key);
+                    }
                 }
 
                 // Update BSP merkle root

@@ -167,6 +167,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       AboveThreshold: AugmentedError<ApiType>;
       /**
+       * Batch file deletion must contain files from a single bucket only.
+       **/
+      BatchFileDeletionMustContainSingleBucket: AugmentedError<ApiType>;
+      /**
        * BSP has already confirmed storing the given file.
        **/
       BspAlreadyConfirmed: AugmentedError<ApiType>;
@@ -222,6 +226,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Divided by 0
        **/
       DividedByZero: AugmentedError<ApiType>;
+      /**
+       * Duplicate file key detected within the same batch deletion request.
+       **/
+      DuplicateFileKeyInBatchFileDeletion: AugmentedError<ApiType>;
       /**
        * Failed to fetch the dynamic-rate payment stream.
        **/

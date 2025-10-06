@@ -102,7 +102,6 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             pallet_file_system::Event::FileDeletionRequested { .. } => true,
             pallet_file_system::Event::BucketFileDeletionCompleted { .. } => true,
             pallet_file_system::Event::BspFileDeletionCompleted { .. } => true,
-            pallet_file_system::Event::FileDeletedFromIncompleteStorageRequest { .. } => true,
             pallet_file_system::Event::IncompleteStorageRequest { .. } => true,
             pallet_file_system::Event::__Ignore(_, _) => true,
         };

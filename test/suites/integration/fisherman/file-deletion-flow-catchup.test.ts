@@ -269,9 +269,9 @@ await describeMspNet(
       const eventFileKey = deletionEventData.signedDeleteIntention.fileKey;
       assert.equal(eventFileKey.toString(), fileToDelete.fileKey.toString());
 
-      // Verify delete_file extrinsics are submitted (should be 2: one for BSP and one for MSP)
+      // Verify delete_files extrinsics are submitted (should be 2: one for BSP and one for MSP)
       await userApi.assert.extrinsicPresent({
-        method: "deleteFile",
+        method: "deleteFiles",
         module: "fileSystem",
         checkTxPool: true,
         assertLength: 2

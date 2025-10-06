@@ -110,6 +110,13 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       maxExpiredItemsInTick: u32 & AugmentedConst<ApiType>;
       /**
+       * Maximum number of file deletions that can be processed in a single extrinsic call.
+       *
+       * This allows multiple files to be deleted from a single provider's forest using one proof,
+       * improving efficiency when cleaning up multiple files.
+       **/
+      maxFileDeletionsPerExtrinsic: u32 & AugmentedConst<ApiType>;
+      /**
        * Maximum byte size of a file path.
        **/
       maxFilePathSize: u32 & AugmentedConst<ApiType>;
