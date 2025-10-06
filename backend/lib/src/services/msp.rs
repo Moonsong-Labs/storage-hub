@@ -35,27 +35,22 @@ use crate::{
     },
 };
 
-/// Placeholder
+/// Result of [`MspService::get_file_from_key`]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct FileDownloadResult {
     pub file_size: u64,
     pub location: String,
     pub fingerprint: [u8; 32],
+    /// Local filesystem path where the file is stored
     pub temp_path: String,
 }
 
 /// Service for handling MSP-related operations
-//TODO: remove dead_code annotations when we actually use these items
-// storage: anything that the backend will need to store temporarily
-// rpc: anything that the backend needs to request to the underlying MSP node
 #[derive(Clone)]
 pub struct MspService {
     msp_id: OnchainMspId,
 
-    #[allow(dead_code)]
-    storage: Arc<dyn BoxedStorage>,
     postgres: Arc<DBClient>,
-    #[allow(dead_code)]
     rpc: Arc<StorageHubRpcClient>,
     msp_callback_url: String,
 }
@@ -64,7 +59,6 @@ impl MspService {
     /// Create a new MSP service
     /// Only MSP nodes are supported so it returns an error if the node is not an MSP.
     pub async fn new(
-        storage: Arc<dyn BoxedStorage>,
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
         msp_callback_url: String,
@@ -111,7 +105,6 @@ impl MspService {
 
         Ok(Self {
             msp_id,
-            storage,
             postgres,
             rpc,
             // TODO: dedicated config struct
@@ -693,14 +686,9 @@ mod tests {
         pub async fn build(self) -> MspService {
             let cfg = Config::default();
 
-            MspService::new(
-                self.storage,
-                self.postgres,
-                self.rpc,
-                cfg.storage_hub.msp_callback_url,
-            )
-            .await
-            .expect("Mocked MSP service builder should succeed")
+            MspService::new(self.postgres, self.rpc, cfg.storage_hub.msp_callback_url)
+                .await
+                .expect("Mocked MSP service builder should succeed")
         }
     }
 

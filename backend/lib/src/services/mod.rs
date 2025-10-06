@@ -88,7 +88,6 @@ impl Services {
 
         let msp = Arc::new(
             MspService::new(
-                storage.clone(),
                 postgres.clone(),
                 rpc.clone(),
                 config.storage_hub.msp_callback_url.clone(),
