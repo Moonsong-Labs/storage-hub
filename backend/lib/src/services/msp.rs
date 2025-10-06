@@ -321,20 +321,6 @@ impl MspService {
         Ok(expected)
     }
 
-    /// Distribute a file to BSPs
-    pub async fn distribute_file(
-        &self,
-        _bucket_id: &str,
-        file_key: &str,
-    ) -> Result<DistributeResponse, Error> {
-        // Mock implementation
-        Ok(DistributeResponse {
-            status: "distribution_initiated".to_string(),
-            file_key: file_key.to_string(),
-            message: "File distribution to volunteering BSPs has been initiated".to_string(),
-        })
-    }
-
     /// Get all payment streams for a user
     pub async fn get_payment_streams(
         &self,
@@ -952,20 +938,6 @@ mod tests {
         assert_eq!(info.file_key, file_key);
         assert!(!info.location.is_empty());
         assert!(info.size > 0);
-    }
-
-    #[tokio::test]
-    async fn test_distribute_file() {
-        let service = MockMspServiceBuilder::new().build().await;
-        let file_key = "abc123";
-        let resp = service
-            .distribute_file("bucket123", file_key)
-            .await
-            .expect("distribute_file should succeed");
-
-        assert_eq!(resp.status, "distribution_initiated");
-        assert_eq!(resp.file_key, file_key);
-        assert!(!resp.message.is_empty());
     }
 
     #[tokio::test]

@@ -378,14 +378,3 @@ async fn process_upload_after_validation(
 
     Ok((StatusCode::CREATED, Json(response)))
 }
-
-pub async fn distribute_file(
-    State(services): State<Services>,
-    AuthenticatedUser { address: _ }: AuthenticatedUser,
-    Path((bucket_id, file_key)): Path<(String, String)>,
-) -> Result<impl IntoResponse, Error> {
-    // TODO(AUTH): verify that user has permissions to access this file
-
-    let response = services.msp.distribute_file(&bucket_id, &file_key).await?;
-    Ok(Json(response))
-}
