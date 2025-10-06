@@ -110,6 +110,8 @@ diesel::table! {
         total_amount_paid -> Numeric,
         last_tick_charged -> Int8,
         charged_at_tick -> Int8,
+        rate -> Nullable<Numeric>,
+        amount_provided -> Nullable<Numeric>,
     }
 }
 

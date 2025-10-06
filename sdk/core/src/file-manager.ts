@@ -1,11 +1,16 @@
-import { CHUNK_SIZE } from './constants';
-import { initWasm } from './init.js';
-import { FileMetadata, FileTrie } from './wasm.js';
-import { TypeRegistry } from '@polkadot/types';
-import type { AccountId20, H256 } from '@polkadot/types/interfaces';
+import { CHUNK_SIZE } from "./constants";
+import { initWasm } from "./init.js";
+import { FileMetadata, FileTrie } from "./wasm.js";
+import { TypeRegistry } from "@polkadot/types";
+import type { AccountId20, H256 } from "@polkadot/types/interfaces";
 
 export class FileManager {
-  constructor(private readonly file: { size: number; stream: () => ReadableStream<Uint8Array> }) {}
+  constructor(
+    private readonly file: {
+      size: number;
+      stream: () => ReadableStream<Uint8Array>;
+    }
+  ) {}
 
   private fingerprint?: H256;
   private fileKey?: H256;
@@ -92,7 +97,7 @@ export class FileManager {
 
     // Retrieve Merkle root from the trie and cache it
     const rootHash = trie.get_root();
-    const fingerprint = registry.createType('H256', rootHash) as H256;
+    const fingerprint = registry.createType("H256", rootHash) as H256;
 
     this.fingerprint = fingerprint;
     // Build and cache the Blob for later reuse
@@ -124,12 +129,12 @@ export class FileManager {
       bucketId.toU8a(),
       new TextEncoder().encode(location),
       BigInt(this.file.size),
-      fp.toU8a(),
+      fp.toU8a()
     );
 
     const fileKey = metadata.getFileKey();
     const registry = new TypeRegistry();
-    this.fileKey = registry.createType('H256', fileKey) as H256;
+    this.fileKey = registry.createType("H256", fileKey) as H256;
     return this.fileKey;
   }
 
@@ -143,7 +148,7 @@ export class FileManager {
     }
     await this.getFingerprint();
     if (!this.fileBlob) {
-      throw new Error('Failed to create file blob during fingerprint computation.');
+      throw new Error("Failed to create file blob during fingerprint computation.");
     }
     return this.fileBlob;
   }

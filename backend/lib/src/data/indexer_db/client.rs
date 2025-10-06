@@ -16,9 +16,13 @@ use shc_indexer_db::{
 };
 
 use crate::{
-    constants::database::DEFAULT_PAGE_LIMIT, data::indexer_db::repository::StorageOperations,
+    constants::database::DEFAULT_PAGE_LIMIT,
+    data::indexer_db::repository::{PaymentStreamData, StorageOperations},
     error::Result,
 };
+
+#[cfg(test)]
+use crate::data::indexer_db::repository::PaymentStreamKind;
 
 /// Database client that delegates to a repository implementation
 ///
@@ -135,6 +139,17 @@ impl DBClient {
             .await
             .map_err(Into::into)
     }
+
+    /// Get all payment streams for a user
+    pub async fn get_payment_streams_for_user(
+        &self,
+        user_account: &str,
+    ) -> Result<Vec<PaymentStreamData>> {
+        self.repository
+            .get_payment_streams_for_user(user_account)
+            .await
+            .map_err(Into::into)
+    }
 }
 
 // Test-only mutable operations
@@ -234,6 +249,20 @@ impl DBClient {
     pub async fn delete_file(&self, file_key: &[u8]) -> Result<()> {
         let hash = shp_types::Hash::from_slice(file_key);
         self.repository.delete_file(&hash).await.map_err(Into::into)
+    }
+
+    /// Create a payment stream
+    pub async fn create_payment_stream(
+        &self,
+        user_account: &str,
+        provider: &str,
+        total_amount_paid: BigDecimal,
+        kind: PaymentStreamKind,
+    ) -> Result<PaymentStreamData> {
+        self.repository
+            .create_payment_stream(user_account, provider, total_amount_paid, kind)
+            .await
+            .map_err(Into::into)
     }
 }
 

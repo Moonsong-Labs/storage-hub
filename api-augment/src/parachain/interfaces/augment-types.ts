@@ -1394,6 +1394,7 @@ import type {
   GetProofSubmissionRecordError,
   GetStakeError,
   GetUsersWithDebtOverThresholdError,
+  GetValuePropositionsResult,
   IncompleteFileStatus,
   IncompleteStorageRequestMetadataResponse,
   IsStorageRequestOpenToVolunteersError,
@@ -1418,6 +1419,7 @@ import type {
   RandomnessOutput,
   RemoveFilesFromForestStorageResult,
   ReputationWeightType,
+  RpcProviderId,
   SaveFileToDisk,
   ShouldRemoveFile,
   StorageDataUnit,
@@ -1938,6 +1940,7 @@ declare module "@polkadot/types/types/registry" {
     GetProofSubmissionRecordError: GetProofSubmissionRecordError;
     GetStakeError: GetStakeError;
     GetUsersWithDebtOverThresholdError: GetUsersWithDebtOverThresholdError;
+    GetValuePropositionsResult: GetValuePropositionsResult;
     GiltBid: GiltBid;
     GlobalValidationData: GlobalValidationData;
     GlobalValidationSchedule: GlobalValidationSchedule;
@@ -2412,6 +2415,7 @@ declare module "@polkadot/types/types/registry" {
     RoundSnapshot: RoundSnapshot;
     RoundState: RoundState;
     RpcMethods: RpcMethods;
+    RpcProviderId: RpcProviderId;
     RuntimeApiMetadataLatest: RuntimeApiMetadataLatest;
     RuntimeApiMetadataV15: RuntimeApiMetadataV15;
     RuntimeApiMetadataV16: RuntimeApiMetadataV16;

@@ -13,23 +13,28 @@
 //! - Comprehensive error handling
 
 use async_trait::async_trait;
-use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
-
 #[cfg(test)]
 use bigdecimal::BigDecimal;
+use diesel::prelude::*;
+use diesel_async::RunQueryDsl;
 #[cfg(test)]
 use shc_indexer_db::{models::FileStorageRequestStep, OnchainBspId};
 use shc_indexer_db::{
-    models::{Bsp, Bucket, File, Msp},
+    models::{payment_stream::PaymentStream, Bsp, Bucket, File, Msp},
     schema::{bsp, bucket, file},
     OnchainMspId,
 };
 use shp_types::Hash;
 
-use crate::data::indexer_db::repository::{error::RepositoryResult, pool::SmartPool, IndexerOps};
 #[cfg(test)]
-use crate::{constants::test, data::indexer_db::repository::IndexerOpsMut};
+use crate::constants::test;
+#[cfg(test)]
+use crate::data::indexer_db::repository::IndexerOpsMut;
+use crate::data::indexer_db::repository::{
+    error::{RepositoryError, RepositoryResult},
+    pool::SmartPool,
+    IndexerOps, PaymentStreamData, PaymentStreamKind,
+};
 
 /// PostgreSQL repository implementation.
 ///
@@ -136,6 +141,39 @@ impl IndexerOps for Repository {
         File::get_by_file_key(&mut conn, file_key.as_bytes())
             .await
             .map_err(Into::into)
+    }
+
+    // ============ Payment Stream Operations ============
+    async fn get_payment_streams_for_user(
+        &self,
+        user_account: &str,
+    ) -> RepositoryResult<Vec<PaymentStreamData>> {
+        let mut conn = self.pool.get().await?;
+
+        // Get all payment streams for the user from the database
+        let streams = PaymentStream::get_all_by_user(&mut conn, user_account.to_string()).await?;
+
+        // Convert to our PaymentStreamData format, preserving BigDecimal types
+        streams
+            .into_iter()
+            .map(|stream| {
+                let kind = match (stream.rate, stream.amount_provided) {
+                    (Some(rate), None) => Ok(PaymentStreamKind::Fixed { rate }),
+                    (None, Some(amount_provided)) => {
+                        Ok(PaymentStreamKind::Dynamic { amount_provided })
+                    }
+                    _ => Err(RepositoryError::configuration(
+                        "payment stream must be either fixed or dynamic",
+                    )),
+                }?;
+
+                Ok(PaymentStreamData {
+                    provider: stream.provider,
+                    total_amount_paid: stream.total_amount_paid,
+                    kind,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()
     }
 }
 
@@ -269,11 +307,59 @@ impl IndexerOpsMut for Repository {
         File::delete(&mut conn, file_key.as_bytes()).await?;
         Ok(())
     }
+
+    async fn create_payment_stream(
+        &self,
+        user_account: &str,
+        provider: &str,
+        total_amount_paid: BigDecimal,
+        kind: PaymentStreamKind,
+    ) -> RepositoryResult<PaymentStreamData> {
+        let mut conn = self.pool.get().await?;
+
+        let payment_stream = match &kind {
+            PaymentStreamKind::Fixed { rate } => {
+                PaymentStream::create_fixed_rate(
+                    &mut conn,
+                    user_account.to_string(),
+                    provider.to_string(),
+                    rate.clone(),
+                )
+                .await?
+            }
+            PaymentStreamKind::Dynamic { amount_provided } => {
+                PaymentStream::create_dynamic_rate(
+                    &mut conn,
+                    user_account.to_string(),
+                    provider.to_string(),
+                    amount_provided.clone(),
+                )
+                .await?
+            }
+        };
+
+        // Update the total amount paid if provided
+        if total_amount_paid > BigDecimal::from(0) {
+            PaymentStream::update_total_amount(
+                &mut conn,
+                payment_stream.id,
+                total_amount_paid.clone(),
+                payment_stream.last_tick_charged,
+                payment_stream.charged_at_tick,
+            )
+            .await?;
+        }
+
+        Ok(PaymentStreamData {
+            provider: provider.to_string(),
+            total_amount_paid,
+            kind,
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use bigdecimal::BigDecimal;
     use hex_literal::hex;
     use shc_indexer_db::{OnchainBspId, OnchainMspId};
     use shp_types::Hash;
@@ -285,13 +371,14 @@ mod tests {
             test_helpers::{
                 setup_test_db,
                 snapshot_move_bucket::{
-                    BSP_NUM, BUCKET_ACCOUNT, BUCKET_FILES, BUCKET_ID, BUCKET_NAME,
-                    BUCKET_ONCHAIN_ID, BUCKET_PRIVATE, FILE_ONE_FILE_KEY, FILE_ONE_LOCATION,
-                    MSP_ONE_ACCOUNT, MSP_ONE_ID, MSP_ONE_ONCHAIN_ID, MSP_TWO_ID, SNAPSHOT_SQL,
+                    BSP_NUM, BSP_ONE_ONCHAIN_ID, BUCKET_ACCOUNT, BUCKET_FILES, BUCKET_ID,
+                    BUCKET_NAME, BUCKET_ONCHAIN_ID, BUCKET_PRIVATE, FILE_ONE_FILE_KEY,
+                    FILE_ONE_LOCATION, MSP_ONE_ACCOUNT, MSP_ONE_ID, MSP_ONE_ONCHAIN_ID, MSP_TWO_ID,
+                    MSP_TWO_ONCHAIN_ID, SNAPSHOT_SQL,
                 },
             },
         },
-        mock_utils::{random_bytes_32, random_hash},
+        test_utils::{random_bytes_32, random_hash},
     };
 
     #[tokio::test]
@@ -949,6 +1036,66 @@ mod tests {
             }
             _ => panic!("Expected Database error for not found, got: {:?}", err),
         }
+    }
+
+    #[tokio::test]
+    async fn get_payment_streams_filters_by_user() {
+        let (_container, database_url) =
+            setup_test_db(vec![SNAPSHOT_SQL.to_string()], vec![]).await;
+
+        let repo = Repository::new(&database_url)
+            .await
+            .expect("Failed to create repository");
+
+        let provider = format!("0x{}", hex::encode(MSP_TWO_ONCHAIN_ID));
+
+        // inject additional payment stream to filter out
+        let additional_user = hex::encode(random_bytes_32());
+        repo.create_payment_stream(
+            &additional_user,
+            &provider,
+            BigDecimal::from(1234),
+            PaymentStreamKind::Fixed {
+                rate: BigDecimal::from(42),
+            },
+        )
+        .await
+        .expect("able to inject payment stream");
+
+        let streams = repo
+            .get_payment_streams_for_user(BUCKET_ACCOUNT)
+            .await
+            .expect("able to retrieve payment streams");
+
+        assert!(streams.len() > 0, "should have at least 1 payment stream");
+        dbg!(&streams);
+
+        let msp_stream = streams
+            .iter()
+            .find(|stream| stream.provider.as_str() == &provider)
+            .expect("should have a payment stream with MSP holding the bucket");
+
+        assert!(
+            matches!(msp_stream.kind, PaymentStreamKind::Fixed { .. }),
+            "msp stream should always be fixed"
+        );
+
+        let bsp_streams = streams
+            .iter()
+            .filter(|stream| matches!(stream.kind, PaymentStreamKind::Dynamic { .. }))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            bsp_streams.len(),
+            3,
+            "should have 3 BSPs storing files for given user"
+        );
+
+        let bsp_one = format!("0x{}", hex::encode(BSP_ONE_ONCHAIN_ID));
+        bsp_streams
+            .iter()
+            .find(|stream| stream.provider.as_str() == &bsp_one)
+            .expect("should have a payment stream with BSP #1");
     }
 
     #[tokio::test]

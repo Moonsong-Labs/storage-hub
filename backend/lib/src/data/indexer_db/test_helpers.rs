@@ -19,7 +19,7 @@ pub mod snapshot_move_bucket {
     /// * 2 MSPs
     ///
     /// The snapshot contains the required information to re-create it
-    /// This snapshot has been taken at commit b78b5648a38849cee1a462a1b938d63d27e68547
+    /// This snapshot has been taken at commit 7ccb95bfe87a5fb2af2e101897d4ea0b14f51b2d
     pub const SNAPSHOT_SQL: &str = include_str!("./indexer-db-snapshot.sql");
 
     /// The ID value of MSP #1

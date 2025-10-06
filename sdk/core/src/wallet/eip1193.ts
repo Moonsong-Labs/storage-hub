@@ -1,5 +1,5 @@
-import { WalletBase } from './base.js';
-import { BrowserProvider, type Eip1193Provider, type TransactionRequest } from 'ethers';
+import { WalletBase } from "./base.js";
+import { BrowserProvider, type Eip1193Provider, type TransactionRequest } from "ethers";
 
 declare global {
   /**
@@ -39,12 +39,12 @@ export class Eip1193Wallet extends WalletBase {
    * @throws If no injected provider is found.
    */
   public static async connect(): Promise<Eip1193Wallet> {
-    if (typeof window.ethereum === 'undefined') {
-      throw new Error('EIP-1193 provider not found. Please install a compatible wallet.');
+    if (typeof window.ethereum === "undefined") {
+      throw new Error("EIP-1193 provider not found. Please install a compatible wallet.");
     }
 
     const provider = new BrowserProvider(window.ethereum as Eip1193Provider);
-    await provider.send('eth_requestAccounts', []);
+    await provider.send("eth_requestAccounts", []);
     return new Eip1193Wallet(provider);
   }
 
@@ -59,7 +59,7 @@ export class Eip1193Wallet extends WalletBase {
     const signer = await this.provider.getSigner();
     const txRequest: Partial<TransactionRequest> = {};
     if (tx.to) txRequest.to = tx.to;
-    if (tx.data && tx.data !== '0x') txRequest.data = tx.data;
+    if (tx.data && tx.data !== "0x") txRequest.data = tx.data;
     if (tx.value && tx.value !== 0n) txRequest.value = tx.value;
     if (tx.gasLimit && tx.gasLimit !== 0n) txRequest.gasLimit = tx.gasLimit;
     const response = await signer.sendTransaction(txRequest);

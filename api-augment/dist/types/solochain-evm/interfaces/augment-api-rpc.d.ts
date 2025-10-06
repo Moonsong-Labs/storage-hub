@@ -13,6 +13,7 @@ import type {
   Vec,
   bool,
   f64,
+  u128,
   u32,
   u64
 } from "@polkadot/types-codec";
@@ -95,8 +96,10 @@ import type {
   CheckpointChallenge,
   FileMetadata,
   GetFileFromFileStorageResult,
+  GetValuePropositionsResult,
   LoadFileInStorageResult,
   RemoveFilesFromForestStorageResult,
+  RpcProviderId,
   SaveFileToDisk
 } from "@storagehub/api-augment/solochain-evm/interfaces/storagehubclient";
 export type __AugmentedRpc = AugmentedRpc<() => unknown>;
@@ -1159,6 +1162,10 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
         ) => Observable<Bytes>
       >;
       /**
+       * Get the current price per giga unit per tick from the payment streams pallet
+       **/
+      getCurrentPricePerGigaUnitPerTick: AugmentedRpc<() => Observable<u128>>;
+      /**
        * Get the metadata of a file from the Forest storage.
        **/
       getFileMetadata: AugmentedRpc<
@@ -1173,6 +1180,14 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
       getForestRoot: AugmentedRpc<
         (forest_key: Option<H256> | null | Uint8Array | H256 | string) => Observable<Option<H256>>
       >;
+      /**
+       * Get the provider ID of the current node, if any.
+       **/
+      getProviderId: AugmentedRpc<() => Observable<RpcProviderId>>;
+      /**
+       * Get the value propositions of the node if it's an MSP; otherwise a NotAnMsp/Error enum.
+       **/
+      getValuePropositions: AugmentedRpc<() => Observable<GetValuePropositionsResult>>;
       /**
        * Generate and insert new keys of type BCSV into the keystore.
        **/

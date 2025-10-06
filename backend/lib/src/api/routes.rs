@@ -6,7 +6,7 @@ use axum::{
     Router,
 };
 
-use crate::{api::handlers, services::Services};
+use crate::{api::handlers, constants::auth::AUTH_NONCE_ENDPOINT, services::Services};
 
 /// Creates the router with all API routes
 pub fn routes(services: Services) -> Router {
@@ -28,11 +28,11 @@ pub fn routes(services: Services) -> Router {
 
     Router::new()
         // Auth routes
-        .route("/auth/nonce", post(handlers::nonce))
-        .route("/auth/verify", post(handlers::verify))
-        .route("/auth/refresh", post(handlers::refresh))
-        .route("/auth/logout", post(handlers::logout))
-        .route("/auth/profile", get(handlers::profile))
+        .route(AUTH_NONCE_ENDPOINT, post(handlers::auth::nonce))
+        .route("/auth/verify", post(handlers::auth::verify))
+        .route("/auth/refresh", post(handlers::auth::refresh))
+        .route("/auth/logout", post(handlers::auth::logout))
+        .route("/auth/profile", get(handlers::auth::profile))
         // MSP info routes
         .route("/info", get(handlers::info))
         .route("/stats", get(handlers::stats))
@@ -61,7 +61,7 @@ pub fn routes(services: Services) -> Router {
             get(handlers::files::download_by_key),
         )
         // Payment streams routes
-        .route("/payment_stream", get(handlers::payment_stream))
+        .route("/payment_streams", get(handlers::payment_streams))
         // Add state to all routes
         .with_state(services)
 }
@@ -77,7 +77,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_health_route() {
-        let app = crate::api::mock_app();
+        let app = crate::api::mock_app().await;
         let server = TestServer::new(app).unwrap();
 
         let response = server.get("/health").await;
@@ -89,7 +89,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_download_by_key_streams_and_cleans_temp() {
-        let app = crate::api::mock_app();
+        let app = crate::api::mock_app().await;
         let server = TestServer::new(app).unwrap();
 
         let file_key = "0xde4a17999bc1482ba71737367e5d858a133ed1e13327a29c495ab976004a138f";

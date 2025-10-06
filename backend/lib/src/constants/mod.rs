@@ -60,6 +60,33 @@ pub mod api {
     pub const MAX_PAGE_SIZE: usize = 100;
 }
 
+/// Auth configuration constants
+pub mod auth {
+    use chrono::Duration;
+
+    /// The endpoint for the nonce authentication
+    ///
+    /// This is here as a constant because it is used both in the
+    /// routing of the API, and in the construction of the SIWE message.
+    /// This way, if we change the endpoint, we only need to change it in one place.
+    pub const AUTH_NONCE_ENDPOINT: &str = "/auth/nonce";
+
+    /// The 'domain' to use for the SIWE message
+    // TODO: make configurable
+    pub const AUTH_SIWE_DOMAIN: &str = "localhost";
+
+    /// Authentication nonce expiration, in seconds
+    // TODO: make configurable
+    pub const AUTH_NONCE_EXPIRATION_SECONDS: u64 = 300; // 5 minutes
+
+    /// Authentication JWT token expiration
+    // TODO: make configurable
+    pub const JWT_EXPIRY_OFFSET: Duration = Duration::minutes(60 * 5); // 5 hours
+
+    // TODO(MOCK): retrieve ens from token?
+    pub const MOCK_ENS: &str = "user.eth";
+}
+
 pub mod mocks {
     /// The user address to mock
     pub const MOCK_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
@@ -73,4 +100,7 @@ pub mod mocks {
 
     /// Shared mock file content used by tests and RPC mocks
     pub const DOWNLOAD_FILE_CONTENT: &str = "GoodFla mock file content for download";
+
+    /// Mock price per giga unit
+    pub const MOCK_PRICE_PER_GIGA_UNIT: u128 = 100;
 }

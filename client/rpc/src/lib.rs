@@ -13,16 +13,19 @@ use log::{debug, error, info};
 use tokio::{fs, io::AsyncReadExt, sync::RwLock};
 
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
+use pallet_payment_streams_runtime_api::PaymentStreamsApi as PaymentStreamsRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
+use pallet_storage_providers_runtime_api::StorageProvidersApi as StorageProvidersRuntimeApi;
 use sc_rpc_api::check_if_safe;
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::{
+    blockchain_utils::get_provider_id_from_keystore,
     consts::CURRENT_FOREST_KEY,
     traits::StorageEnableRuntime,
     types::{
         BlockHash, ChunkId, FileKey, FileKeyProof, FileMetadata, HashT, KeyProof, KeyProofs,
         OpaqueBlock, ParachainClient, ProofsDealerProviderId, Proven, RandomnessOutput,
-        StorageProof, StorageProofsMerkleTrieLayout, BCSV_KEY_TYPE,
+        StorageProof, StorageProofsMerkleTrieLayout, StorageProviderId, BCSV_KEY_TYPE,
     },
 };
 use shc_file_manager::traits::{ExcludeType, FileDataTrie, FileStorage, FileStorageError};
@@ -35,25 +38,13 @@ use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use sp_core::{sr25519::Pair as Sr25519Pair, Encode, Pair};
 use sp_keystore::{Keystore, KeystorePtr};
-use sp_runtime::{Deserialize, KeyTypeId, Serialize};
+use sp_runtime::{Deserialize, KeyTypeId, SaturatedConversion, Serialize};
 use sp_runtime_interface::pass_by::PassByInner;
 
 pub mod remote_file;
 use remote_file::{RemoteFileConfig, RemoteFileHandlerFactory};
 
 const LOG_TARGET: &str = "storage-hub-client-rpc";
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct CheckpointChallenge {
-    pub file_key: shp_types::Hash,
-    pub should_remove_file: bool,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct LoadFileInStorageResult {
-    pub file_key: shp_types::Hash,
-    pub file_metadata: FileMetadata,
-}
 
 /// RPC configuration.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -119,6 +110,18 @@ where
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CheckpointChallenge {
+    pub file_key: shp_types::Hash,
+    pub should_remove_file: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LoadFileInStorageResult {
+    pub file_key: shp_types::Hash,
+    pub file_metadata: FileMetadata,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct IncompleteFileStatus {
     pub file_metadata: FileMetadata,
@@ -153,6 +156,22 @@ pub enum AddFilesToForestStorageResult {
 pub enum RemoveFilesFromForestStorageResult {
     ForestNotFound,
     Success,
+}
+
+/// Result of getting the provider ID of the node.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum RpcProviderId {
+    NotAProvider,
+    Bsp(shp_types::Hash),
+    Msp(shp_types::Hash),
+}
+
+/// Result of getting the value propositions of the node.
+/// It returns a vector of the SCALE-encoded `ValuePropositionWithId`s.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum GetValuePropositionsResult {
+    Success(Vec<Vec<u8>>),
+    NotAnMsp,
 }
 
 /// Provides an interface with the desired RPC method.
@@ -332,6 +351,18 @@ pub trait StorageHubClientApi {
         file_key: shp_types::Hash,
         file_key_proof: Vec<u8>,
     ) -> RpcResult<Vec<u8>>;
+
+    /// Get the provider ID of the current node, if any
+    #[method(name = "getProviderId", with_extensions)]
+    async fn get_provider_id(&self) -> RpcResult<RpcProviderId>;
+
+    /// Get the value propositions of the node if it's an MSP, or None if it's a BSP
+    #[method(name = "getValuePropositions", with_extensions)]
+    async fn get_value_propositions(&self) -> RpcResult<GetValuePropositionsResult>;
+
+    /// Get the current price per giga unit per tick from the payment streams pallet.
+    #[method(name = "getCurrentPricePerGigaUnitPerTick")]
+    async fn get_current_price_per_giga_unit_per_tick(&self) -> RpcResult<u128>;
 }
 
 /// Stores the required objects to be used in our RPC method.
@@ -1142,6 +1173,81 @@ where
 
         // Return the raw response
         Ok(raw)
+    }
+
+    async fn get_provider_id(&self, ext: &Extensions) -> RpcResult<RpcProviderId> {
+        // Check if the execution is safe.
+        check_if_safe(ext)?;
+
+        // Derive the provider ID from the keystore.
+        let at_hash = self.client.info().best_hash;
+        let provider =
+            get_provider_id_from_keystore::<Runtime>(&self.client, &self.keystore, &at_hash)
+                .map_err(into_rpc_error)?;
+
+        // Convert the provider ID to the expected format.
+        let result = match provider {
+            None => RpcProviderId::NotAProvider,
+            Some(StorageProviderId::BackupStorageProvider(id)) => RpcProviderId::Bsp(id.into()),
+            Some(StorageProviderId::MainStorageProvider(id)) => RpcProviderId::Msp(id.into()),
+        };
+
+        Ok(result)
+    }
+
+    async fn get_value_propositions(
+        &self,
+        ext: &Extensions,
+    ) -> RpcResult<GetValuePropositionsResult> {
+        // Check if the execution is safe.
+        check_if_safe(ext)?;
+
+        // Get the node's provider ID.
+        let provider_id = self.get_provider_id(ext).await?;
+
+        // Check if the node is an MSP, and extract its provider ID.
+        if let RpcProviderId::Msp(msp_id) = provider_id {
+            // If the node is indeed an MSP, get its value propositions.
+
+            // First, get the runtime APIs.
+            let api = self.client.runtime_api();
+            let at_hash = self.client.info().best_hash;
+
+            // Then, get the value propositions for the MSP and encode them.
+            let value_propositions = api
+                .query_value_propositions_for_msp(at_hash, &msp_id)
+                .map_err(into_rpc_error)?
+                .into_iter()
+                .map(|vp| vp.encode())
+                .collect::<Vec<_>>();
+
+            Ok(GetValuePropositionsResult::Success(value_propositions))
+        } else {
+            Ok(GetValuePropositionsResult::NotAnMsp)
+        }
+    }
+
+    async fn get_current_price_per_giga_unit_per_tick(&self) -> RpcResult<u128> {
+        let api = self.client.runtime_api();
+        let at_hash = self.client.info().best_hash;
+
+        let balance = api
+            .get_current_price_per_giga_unit_per_tick(at_hash)
+            .map_err(|e| {
+                JsonRpseeError::owned(
+                    INTERNAL_ERROR_CODE,
+                    format!(
+                        "Failed to get current price per giga unit per tick: {:?}",
+                        e
+                    ),
+                    None::<()>,
+                )
+            })?;
+
+        // Saturate the obtained price into a `u128`.
+        // If the configured `Balance` type of the `payment-streams` pallet is of a greater
+        // capacity (such as a u256), this could cause issues, so be wary.
+        Ok(balance.saturated_into())
     }
 }
 

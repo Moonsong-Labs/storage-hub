@@ -301,7 +301,10 @@ CREATE TABLE public.paymentstream (
     provider character varying NOT NULL,
     total_amount_paid numeric(38,0) DEFAULT 0 NOT NULL,
     last_tick_charged bigint DEFAULT 0 NOT NULL,
-    charged_at_tick bigint DEFAULT 0 NOT NULL
+    charged_at_tick bigint DEFAULT 0 NOT NULL,
+    rate numeric(38,0),
+    amount_provided numeric(38,0),
+    CONSTRAINT check_payment_stream_type CHECK ((((rate IS NOT NULL) AND (amount_provided IS NULL)) OR ((rate IS NULL) AND (amount_provided IS NOT NULL))))
 );
 
 
@@ -421,28 +424,29 @@ ALTER TABLE ONLY public.peer_id ALTER COLUMN id SET DEFAULT nextval('public.peer
 -- Data for Name: __diesel_schema_migrations; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.__diesel_schema_migrations (version, run_on) VALUES ('00000000000000', '2025-09-04 14:09:25.085495');
-INSERT INTO public.__diesel_schema_migrations (version, run_on) VALUES ('20240920035333', '2025-09-04 14:09:25.0919');
-INSERT INTO public.__diesel_schema_migrations (version, run_on) VALUES ('20240926132546', '2025-09-04 14:09:25.096798');
-INSERT INTO public.__diesel_schema_migrations (version, run_on) VALUES ('20240926145832', '2025-09-04 14:09:25.109845');
-INSERT INTO public.__diesel_schema_migrations (version, run_on) VALUES ('20240927112918', '2025-09-04 14:09:25.126793');
-INSERT INTO public.__diesel_schema_migrations (version, run_on) VALUES ('20240927125722', '2025-09-04 14:09:25.144808');
-INSERT INTO public.__diesel_schema_migrations (version, run_on) VALUES ('20240927152605', '2025-09-04 14:09:25.147572');
-INSERT INTO public.__diesel_schema_migrations (version, run_on) VALUES ('20241001112655', '2025-09-04 14:09:25.165801');
-INSERT INTO public.__diesel_schema_migrations (version, run_on) VALUES ('20241007133907', '2025-09-04 14:09:25.226873');
-INSERT INTO public.__diesel_schema_migrations (version, run_on) VALUES ('20241007133908', '2025-09-04 14:09:25.312759');
-INSERT INTO public.__diesel_schema_migrations (version, run_on) VALUES ('20241115160045', '2025-09-04 14:09:25.341834');
-INSERT INTO public.__diesel_schema_migrations (version, run_on) VALUES ('20250718085225', '2025-09-04 14:09:25.348024');
-INSERT INTO public.__diesel_schema_migrations (version, run_on) VALUES ('20250718104055', '2025-09-04 14:09:25.364454');
+INSERT INTO public.__diesel_schema_migrations (version, run_on) VALUES ('00000000000000', '2025-10-03 18:50:08.458999');
+INSERT INTO public.__diesel_schema_migrations (version, run_on) VALUES ('20240920035333', '2025-10-03 18:50:08.461168');
+INSERT INTO public.__diesel_schema_migrations (version, run_on) VALUES ('20240926132546', '2025-10-03 18:50:08.466104');
+INSERT INTO public.__diesel_schema_migrations (version, run_on) VALUES ('20240926145832', '2025-10-03 18:50:08.473292');
+INSERT INTO public.__diesel_schema_migrations (version, run_on) VALUES ('20240927112918', '2025-10-03 18:50:08.484333');
+INSERT INTO public.__diesel_schema_migrations (version, run_on) VALUES ('20240927125722', '2025-10-03 18:50:08.495687');
+INSERT INTO public.__diesel_schema_migrations (version, run_on) VALUES ('20240927152605', '2025-10-03 18:50:08.499038');
+INSERT INTO public.__diesel_schema_migrations (version, run_on) VALUES ('20241001112655', '2025-10-03 18:50:08.510338');
+INSERT INTO public.__diesel_schema_migrations (version, run_on) VALUES ('20241007133907', '2025-10-03 18:50:08.516918');
+INSERT INTO public.__diesel_schema_migrations (version, run_on) VALUES ('20241007133908', '2025-10-03 18:50:08.520632');
+INSERT INTO public.__diesel_schema_migrations (version, run_on) VALUES ('20241115160045', '2025-10-03 18:50:08.528814');
+INSERT INTO public.__diesel_schema_migrations (version, run_on) VALUES ('20250718085225', '2025-10-03 18:50:08.534834');
+INSERT INTO public.__diesel_schema_migrations (version, run_on) VALUES ('20250718104055', '2025-10-03 18:50:08.541051');
+INSERT INTO public.__diesel_schema_migrations (version, run_on) VALUES ('20250917081751', '2025-10-03 18:50:08.55286');
 
 
 --
 -- Data for Name: bsp; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.bsp (id, account, capacity, stake, last_tick_proven, created_at, updated_at, onchain_bsp_id, merkle_root) VALUES (3, '5DaD86XpaVrrVK1JkmBck6pJk9eSF73c295GLnw9CC1H8sZu', 536870912, 100001073741820, 0, '2025-09-04 14:09:57.894037', '2025-09-04 14:09:57.894037', '0x0000000000000000000000000000000000000000000000000000000000000003', '\x03170a2e7597b7b7e3d84c05391d139a62b157e78786d8c082f29dcf4c111314');
-INSERT INTO public.bsp (id, account, capacity, stake, last_tick_proven, created_at, updated_at, onchain_bsp_id, merkle_root) VALUES (2, '5DCv11eqGA3JnnMnWUtbpxVZFpZZuKPoH8whZjpXebUkvAty', 536870912, 100001073741820, 0, '2025-09-04 14:09:48.178327', '2025-09-04 14:09:48.178327', '0x0000000000000000000000000000000000000000000000000000000000000002', '\xb76c26518c6ac5fbc7a2c7d9210bd1075a5bded6fc42697303e372cef4ab6a4b');
-INSERT INTO public.bsp (id, account, capacity, stake, last_tick_proven, created_at, updated_at, onchain_bsp_id, merkle_root) VALUES (1, '5FHSHEFWHVGDnyiw66DoRUpLyh5RouWkXo9GT1Sjk8qw7MAg', 536870912, 100001073741820, 0, '2025-09-04 14:09:35.508407', '2025-09-04 14:09:35.508407', '0x2b83b972e63f52abc0d4146c4aee1f1ec8aa8e274d2ad1b626529446da93736c', '\xb76c26518c6ac5fbc7a2c7d9210bd1075a5bded6fc42697303e372cef4ab6a4b');
+INSERT INTO public.bsp (id, account, capacity, stake, last_tick_proven, created_at, updated_at, onchain_bsp_id, merkle_root) VALUES (2, '5DCv11eqGA3JnnMnWUtbpxVZFpZZuKPoH8whZjpXebUkvAty', 536870912, 100001073741820, 0, '2025-10-03 18:50:33.615748', '2025-10-03 18:50:33.615748', '0x0000000000000000000000000000000000000000000000000000000000000002', '\xa5fb7b3e7b554b26f5f2943cb1b98649885993e9c723905a3b14b47f776a2222');
+INSERT INTO public.bsp (id, account, capacity, stake, last_tick_proven, created_at, updated_at, onchain_bsp_id, merkle_root) VALUES (1, '5FHSHEFWHVGDnyiw66DoRUpLyh5RouWkXo9GT1Sjk8qw7MAg', 536870912, 100001073741820, 0, '2025-10-03 18:50:20.449767', '2025-10-03 18:50:20.449767', '0x2b83b972e63f52abc0d4146c4aee1f1ec8aa8e274d2ad1b626529446da93736c', '\xeb1291dee884f484f93526ecc95ce77ae6e982c5ca9d6bada3daba3ca2ce6409');
+INSERT INTO public.bsp (id, account, capacity, stake, last_tick_proven, created_at, updated_at, onchain_bsp_id, merkle_root) VALUES (3, '5DaD86XpaVrrVK1JkmBck6pJk9eSF73c295GLnw9CC1H8sZu', 536870912, 100001073741820, 0, '2025-10-03 18:50:43.733369', '2025-10-03 18:50:43.733369', '0x0000000000000000000000000000000000000000000000000000000000000003', '\xb76c26518c6ac5fbc7a2c7d9210bd1075a5bded6fc42697303e372cef4ab6a4b');
 
 
 --
@@ -450,11 +454,11 @@ INSERT INTO public.bsp (id, account, capacity, stake, last_tick_proven, created_
 --
 
 INSERT INTO public.bsp_file (bsp_id, file_id) VALUES (2, 1);
-INSERT INTO public.bsp_file (bsp_id, file_id) VALUES (1, 1);
-INSERT INTO public.bsp_file (bsp_id, file_id) VALUES (2, 3);
-INSERT INTO public.bsp_file (bsp_id, file_id) VALUES (2, 2);
 INSERT INTO public.bsp_file (bsp_id, file_id) VALUES (1, 2);
+INSERT INTO public.bsp_file (bsp_id, file_id) VALUES (3, 1);
 INSERT INTO public.bsp_file (bsp_id, file_id) VALUES (1, 3);
+INSERT INTO public.bsp_file (bsp_id, file_id) VALUES (3, 3);
+INSERT INTO public.bsp_file (bsp_id, file_id) VALUES (3, 2);
 
 
 --
@@ -470,16 +474,16 @@ INSERT INTO public.bsp_multiaddress (bsp_id, multiaddress_id) VALUES (3, 5);
 -- Data for Name: bucket; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.bucket (id, msp_id, account, onchain_bucket_id, name, collection_id, private, created_at, updated_at, merkle_root) VALUES (1, 2, '5CombC1j5ZmdNMEpWYpeEWcKPPYcKsC1WgMPgzGLU72SLa4o', '\x8e0ec449e3a21dab7cd1276895db940843246e336e24b9a4a1a10c8d59511cde', '\x6e6f7468696e676d7563682d33', NULL, false, '2025-09-04 14:09:58.00364', '2025-09-04 14:09:58.00364', '\xb76c26518c6ac5fbc7a2c7d9210bd1075a5bded6fc42697303e372cef4ab6a4b');
+INSERT INTO public.bucket (id, msp_id, account, onchain_bucket_id, name, collection_id, private, created_at, updated_at, merkle_root) VALUES (1, 2, '5CombC1j5ZmdNMEpWYpeEWcKPPYcKsC1WgMPgzGLU72SLa4o', '\x8e0ec449e3a21dab7cd1276895db940843246e336e24b9a4a1a10c8d59511cde', '\x6e6f7468696e676d7563682d33', NULL, false, '2025-10-03 18:50:43.81239', '2025-10-03 18:50:43.81239', '\xb76c26518c6ac5fbc7a2c7d9210bd1075a5bded6fc42697303e372cef4ab6a4b');
 
 
 --
 -- Data for Name: file; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.file (id, account, file_key, bucket_id, onchain_bucket_id, location, fingerprint, size, step, deletion_status, created_at, updated_at) VALUES (1, '\x20d81e86ed5b986d1d6ddbe416627f96f740252c4a80ab8ed91db58f7ecf9657', '\xe592bcecc540f2363850b6895d82a310a4dd6686f066603ca2abfb77fc478b0a', 1, '\x8e0ec449e3a21dab7cd1276895db940843246e336e24b9a4a1a10c8d59511cde', '\x746573742f776861747375702e6a7067', '\x2b83b972e63f52abc0d4146c4aee1f1ec8aa8e274d2ad1b626529446da93736c', 216211, 1, NULL, '2025-09-04 14:09:58.248827', '2025-09-04 14:09:58.248827');
-INSERT INTO public.file (id, account, file_key, bucket_id, onchain_bucket_id, location, fingerprint, size, step, deletion_status, created_at, updated_at) VALUES (2, '\x20d81e86ed5b986d1d6ddbe416627f96f740252c4a80ab8ed91db58f7ecf9657', '\x6b24ad7fd18b01148eeb4039029d5c32fa535db70ae42413e7025d74919ae5c9', 1, '\x8e0ec449e3a21dab7cd1276895db940843246e336e24b9a4a1a10c8d59511cde', '\x746573742f61646f6c706875732e6a7067', '\x34eb5f637e05fc18f857ccb013250076534192189894d174ee3aa6d3525f6970', 416400, 1, NULL, '2025-09-04 14:09:58.248827', '2025-09-04 14:09:58.248827');
-INSERT INTO public.file (id, account, file_key, bucket_id, onchain_bucket_id, location, fingerprint, size, step, deletion_status, created_at, updated_at) VALUES (3, '\x20d81e86ed5b986d1d6ddbe416627f96f740252c4a80ab8ed91db58f7ecf9657', '\x9134625b559ec290a821019522301ce7a948a8e31d8a2739d8ba1c7e55ba01b2', 1, '\x8e0ec449e3a21dab7cd1276895db940843246e336e24b9a4a1a10c8d59511cde', '\x746573742f736d696c652e6a7067', '\x535dd863026735ffe0919cc0fc3d8e5da45b9203f01fbf014dbe98005bd8d2fe', 633160, 1, NULL, '2025-09-04 14:09:58.248827', '2025-09-04 14:09:58.248827');
+INSERT INTO public.file (id, account, file_key, bucket_id, onchain_bucket_id, location, fingerprint, size, step, deletion_status, created_at, updated_at) VALUES (1, '\x20d81e86ed5b986d1d6ddbe416627f96f740252c4a80ab8ed91db58f7ecf9657', '\xe592bcecc540f2363850b6895d82a310a4dd6686f066603ca2abfb77fc478b0a', 1, '\x8e0ec449e3a21dab7cd1276895db940843246e336e24b9a4a1a10c8d59511cde', '\x746573742f776861747375702e6a7067', '\x2b83b972e63f52abc0d4146c4aee1f1ec8aa8e274d2ad1b626529446da93736c', 216211, 1, NULL, '2025-10-03 18:50:44.066343', '2025-10-03 18:50:44.066343');
+INSERT INTO public.file (id, account, file_key, bucket_id, onchain_bucket_id, location, fingerprint, size, step, deletion_status, created_at, updated_at) VALUES (3, '\x20d81e86ed5b986d1d6ddbe416627f96f740252c4a80ab8ed91db58f7ecf9657', '\x9134625b559ec290a821019522301ce7a948a8e31d8a2739d8ba1c7e55ba01b2', 1, '\x8e0ec449e3a21dab7cd1276895db940843246e336e24b9a4a1a10c8d59511cde', '\x746573742f736d696c652e6a7067', '\x535dd863026735ffe0919cc0fc3d8e5da45b9203f01fbf014dbe98005bd8d2fe', 633160, 1, NULL, '2025-10-03 18:50:44.066343', '2025-10-03 18:50:44.066343');
+INSERT INTO public.file (id, account, file_key, bucket_id, onchain_bucket_id, location, fingerprint, size, step, deletion_status, created_at, updated_at) VALUES (2, '\x20d81e86ed5b986d1d6ddbe416627f96f740252c4a80ab8ed91db58f7ecf9657', '\x6b24ad7fd18b01148eeb4039029d5c32fa535db70ae42413e7025d74919ae5c9', 1, '\x8e0ec449e3a21dab7cd1276895db940843246e336e24b9a4a1a10c8d59511cde', '\x746573742f61646f6c706875732e6a7067', '\x34eb5f637e05fc18f857ccb013250076534192189894d174ee3aa6d3525f6970', 416400, 1, NULL, '2025-10-03 18:50:44.066343', '2025-10-03 18:50:44.066343');
 
 
 --
@@ -495,8 +499,8 @@ INSERT INTO public.file_peer_id (file_id, peer_id) VALUES (3, 3);
 -- Data for Name: msp; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.msp (id, account, capacity, value_prop, created_at, updated_at, onchain_msp_id) VALUES (1, '5E1rPv1M2mheg6pM57QqU7TZ6eCwbVpiYfyYkrugpBdEzDiU', 536870912, 'ValuePropositionWithId { id: 0x3dd8887de89f01cef28701feda1435cf0bb38e9d5cb38321a615c1a1e1d5d51b, value_prop: ValueProposition { price_per_giga_unit_of_data_per_block: 104857600, commitment: BoundedVec([84, 101, 114, 109, 115, 32, 111, 102, 32, 83, 101, 114, 118, 105, 99, 101, 46, 46, 46], 1000), bucket_data_limit: 9999999, available: true } }', '2025-09-04 14:09:36.238088', '2025-09-04 14:09:36.238088', '0x0000000000000000000000000000000000000000000000000000000000000300');
-INSERT INTO public.msp (id, account, capacity, value_prop, created_at, updated_at, onchain_msp_id) VALUES (2, '5CMDKyadzWu6MUwCzBB93u32Z1PPPsV8A1qAy4ydyVWuRzWR', 536870912, 'ValuePropositionWithId { id: 0x3dd8887de89f01cef28701feda1435cf0bb38e9d5cb38321a615c1a1e1d5d51b, value_prop: ValueProposition { price_per_giga_unit_of_data_per_block: 104857600, commitment: BoundedVec([84, 101, 114, 109, 115, 32, 111, 102, 32, 83, 101, 114, 118, 105, 99, 101, 46, 46, 46], 1000), bucket_data_limit: 9999999, available: true } }', '2025-09-04 14:09:36.343219', '2025-09-04 14:09:36.343219', '0x0000000000000000000000000000000000000000000000000000000000000301');
+INSERT INTO public.msp (id, account, capacity, value_prop, created_at, updated_at, onchain_msp_id) VALUES (1, '5E1rPv1M2mheg6pM57QqU7TZ6eCwbVpiYfyYkrugpBdEzDiU', 536870912, 'ValuePropositionWithId { id: 0x3dd8887de89f01cef28701feda1435cf0bb38e9d5cb38321a615c1a1e1d5d51b, value_prop: ValueProposition { price_per_giga_unit_of_data_per_block: 104857600, commitment: BoundedVec([84, 101, 114, 109, 115, 32, 111, 102, 32, 83, 101, 114, 118, 105, 99, 101, 46, 46, 46], 1000), bucket_data_limit: 9999999, available: true } }', '2025-10-03 18:50:21.190544', '2025-10-03 18:50:21.190544', '0x0000000000000000000000000000000000000000000000000000000000000300');
+INSERT INTO public.msp (id, account, capacity, value_prop, created_at, updated_at, onchain_msp_id) VALUES (2, '5CMDKyadzWu6MUwCzBB93u32Z1PPPsV8A1qAy4ydyVWuRzWR', 536870912, 'ValuePropositionWithId { id: 0x3dd8887de89f01cef28701feda1435cf0bb38e9d5cb38321a615c1a1e1d5d51b, value_prop: ValueProposition { price_per_giga_unit_of_data_per_block: 104857600, commitment: BoundedVec([84, 101, 114, 109, 115, 32, 111, 102, 32, 83, 101, 114, 118, 105, 99, 101, 46, 46, 46], 1000), bucket_data_limit: 9999999, available: true } }', '2025-10-03 18:50:21.298897', '2025-10-03 18:50:21.298897', '0x0000000000000000000000000000000000000000000000000000000000000301');
 
 
 --
@@ -520,37 +524,38 @@ INSERT INTO public.msp_multiaddress (msp_id, multiaddress_id) VALUES (2, 3);
 -- Data for Name: multiaddress; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.multiaddress (id, address, created_at, updated_at) VALUES (1, '\x04ac12000206768ea50326002408011220b87e930365d6c6ffc5f71f46e660ae02dc06b3d8567e0962ef7278073b997977', '2025-09-04 14:09:35.508407', '2025-09-04 14:09:35.508407');
-INSERT INTO public.multiaddress (id, address, created_at, updated_at) VALUES (2, '\x04ac12000306768ea50326002408011220f79c2af6c0719176040b005d56818bfcac38cc16bb1ffb25832d1635378df0ca', '2025-09-04 14:09:36.238088', '2025-09-04 14:09:36.238088');
-INSERT INTO public.multiaddress (id, address, created_at, updated_at) VALUES (3, '\x04ac12000406768ea5032600240801122006631a7d98c2644e4d2670aab0145e7427e3f07c55ac152692e07d20c000b8f8', '2025-09-04 14:09:36.343219', '2025-09-04 14:09:36.343219');
-INSERT INTO public.multiaddress (id, address, created_at, updated_at) VALUES (4, '\x04ac120007067692a50326002408011220191cb8a33ba7ad81244af911bf77005820260f6bbfe08a379ee94590f38605c3', '2025-09-04 14:09:48.178327', '2025-09-04 14:09:48.178327');
-INSERT INTO public.multiaddress (id, address, created_at, updated_at) VALUES (5, '\x04ac120008067693a50326002408011220c85aa25d02961ebe007663b84a117568a090d436adac187f58f2167b48c84b3e', '2025-09-04 14:09:57.894037', '2025-09-04 14:09:57.894037');
+INSERT INTO public.multiaddress (id, address, created_at, updated_at) VALUES (1, '\x04ac12000206768ea50326002408011220b87e930365d6c6ffc5f71f46e660ae02dc06b3d8567e0962ef7278073b997977', '2025-10-03 18:50:20.449767', '2025-10-03 18:50:20.449767');
+INSERT INTO public.multiaddress (id, address, created_at, updated_at) VALUES (2, '\x04ac12000306768ea50326002408011220f79c2af6c0719176040b005d56818bfcac38cc16bb1ffb25832d1635378df0ca', '2025-10-03 18:50:21.190544', '2025-10-03 18:50:21.190544');
+INSERT INTO public.multiaddress (id, address, created_at, updated_at) VALUES (3, '\x04ac12000406768ea5032600240801122006631a7d98c2644e4d2670aab0145e7427e3f07c55ac152692e07d20c000b8f8', '2025-10-03 18:50:21.298897', '2025-10-03 18:50:21.298897');
+INSERT INTO public.multiaddress (id, address, created_at, updated_at) VALUES (4, '\x04ac120007067692a50326002408011220cdcc307655ee95761298dfc68841e43f6599de5654c35980a357e3daad81cd3c', '2025-10-03 18:50:33.615748', '2025-10-03 18:50:33.615748');
+INSERT INTO public.multiaddress (id, address, created_at, updated_at) VALUES (5, '\x04ac120008067693a50326002408011220b61ab4f7a66c2a1d95d29ce0d3c9a1f19d4d191785f1ef42f2d07a6e519be9ae', '2025-10-03 18:50:43.733369', '2025-10-03 18:50:43.733369');
 
 
 --
 -- Data for Name: paymentstream; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.paymentstream (id, account, provider, total_amount_paid, last_tick_charged, charged_at_tick) VALUES (2, '5CombC1j5ZmdNMEpWYpeEWcKPPYcKsC1WgMPgzGLU72SLa4o', '0x0000…0002', 0, 0, 0);
-INSERT INTO public.paymentstream (id, account, provider, total_amount_paid, last_tick_charged, charged_at_tick) VALUES (3, '5CombC1j5ZmdNMEpWYpeEWcKPPYcKsC1WgMPgzGLU72SLa4o', '0x2b83…736c', 0, 0, 0);
-INSERT INTO public.paymentstream (id, account, provider, total_amount_paid, last_tick_charged, charged_at_tick) VALUES (1, '5CombC1j5ZmdNMEpWYpeEWcKPPYcKsC1WgMPgzGLU72SLa4o', '0x0000…0300', 691944, 27, 27);
-INSERT INTO public.paymentstream (id, account, provider, total_amount_paid, last_tick_charged, charged_at_tick) VALUES (4, '5CombC1j5ZmdNMEpWYpeEWcKPPYcKsC1WgMPgzGLU72SLa4o', '0x0000…0301', 0, 0, 0);
+INSERT INTO public.paymentstream (id, account, provider, total_amount_paid, last_tick_charged, charged_at_tick, rate, amount_provided) VALUES (2, '5CombC1j5ZmdNMEpWYpeEWcKPPYcKsC1WgMPgzGLU72SLa4o', '0x0000000000000000000000000000000000000000000000000000000000000002', 0, 0, 0, NULL, 216211);
+INSERT INTO public.paymentstream (id, account, provider, total_amount_paid, last_tick_charged, charged_at_tick, rate, amount_provided) VALUES (3, '5CombC1j5ZmdNMEpWYpeEWcKPPYcKsC1WgMPgzGLU72SLa4o', '0x2b83b972e63f52abc0d4146c4aee1f1ec8aa8e274d2ad1b626529446da93736c', 0, 0, 0, NULL, 1049560);
+INSERT INTO public.paymentstream (id, account, provider, total_amount_paid, last_tick_charged, charged_at_tick, rate, amount_provided) VALUES (4, '5CombC1j5ZmdNMEpWYpeEWcKPPYcKsC1WgMPgzGLU72SLa4o', '0x0000000000000000000000000000000000000000000000000000000000000003', 0, 0, 0, NULL, 1265771);
+INSERT INTO public.paymentstream (id, account, provider, total_amount_paid, last_tick_charged, charged_at_tick, rate, amount_provided) VALUES (1, '5CombC1j5ZmdNMEpWYpeEWcKPPYcKsC1WgMPgzGLU72SLa4o', '0x0000000000000000000000000000000000000000000000000000000000000300', 691944, 27, 27, 173610, NULL);
+INSERT INTO public.paymentstream (id, account, provider, total_amount_paid, last_tick_charged, charged_at_tick, rate, amount_provided) VALUES (5, '5CombC1j5ZmdNMEpWYpeEWcKPPYcKsC1WgMPgzGLU72SLa4o', '0x0000000000000000000000000000000000000000000000000000000000000301', 0, 0, 0, 173610, NULL);
 
 
 --
 -- Data for Name: peer_id; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.peer_id (id, peer, created_at, updated_at) VALUES (1, '\x313244334b6f6f574d76626874596a6268676a6f447a626e66373153467a6e4a414b42426b5347594555746e704553317939744d', '2025-09-04 14:09:58.248827', '2025-09-04 14:09:58.248827');
-INSERT INTO public.peer_id (id, peer, created_at, updated_at) VALUES (2, '\x313244334b6f6f574d76626874596a6268676a6f447a626e66373153467a6e4a414b42426b5347594555746e704553317939744d', '2025-09-04 14:09:58.248827', '2025-09-04 14:09:58.248827');
-INSERT INTO public.peer_id (id, peer, created_at, updated_at) VALUES (3, '\x313244334b6f6f574d76626874596a6268676a6f447a626e66373153467a6e4a414b42426b5347594555746e704553317939744d', '2025-09-04 14:09:58.248827', '2025-09-04 14:09:58.248827');
+INSERT INTO public.peer_id (id, peer, created_at, updated_at) VALUES (1, '\x313244334b6f6f574d76626874596a6268676a6f447a626e66373153467a6e4a414b42426b5347594555746e704553317939744d', '2025-10-03 18:50:44.066343', '2025-10-03 18:50:44.066343');
+INSERT INTO public.peer_id (id, peer, created_at, updated_at) VALUES (2, '\x313244334b6f6f574d76626874596a6268676a6f447a626e66373153467a6e4a414b42426b5347594555746e704553317939744d', '2025-10-03 18:50:44.066343', '2025-10-03 18:50:44.066343');
+INSERT INTO public.peer_id (id, peer, created_at, updated_at) VALUES (3, '\x313244334b6f6f574d76626874596a6268676a6f447a626e66373153467a6e4a414b42426b5347594555746e704553317939744d', '2025-10-03 18:50:44.066343', '2025-10-03 18:50:44.066343');
 
 
 --
 -- Data for Name: service_state; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.service_state (id, last_indexed_finalized_block, created_at, updated_at) VALUES (1, 27, '2025-09-04 14:09:25.0919+00', '2025-09-04 14:09:25.0919+00');
+INSERT INTO public.service_state (id, last_indexed_finalized_block, created_at, updated_at) VALUES (1, 27, '2025-10-03 18:50:08.461168+00', '2025-10-03 18:50:08.461168+00');
 
 
 --
@@ -592,7 +597,7 @@ SELECT pg_catalog.setval('public.multiaddress_id_seq', 5, true);
 -- Name: paymentstream_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.paymentstream_id_seq', 4, true);
+SELECT pg_catalog.setval('public.paymentstream_id_seq', 5, true);
 
 
 --
@@ -820,10 +825,24 @@ CREATE INDEX idx_paymentstream_account ON public.paymentstream USING btree (acco
 
 
 --
+-- Name: idx_paymentstream_amount_provided; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_paymentstream_amount_provided ON public.paymentstream USING btree (amount_provided) WHERE (amount_provided IS NOT NULL);
+
+
+--
 -- Name: idx_paymentstream_provider; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_paymentstream_provider ON public.paymentstream USING btree (provider);
+
+
+--
+-- Name: idx_paymentstream_rate; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_paymentstream_rate ON public.paymentstream USING btree (rate) WHERE (rate IS NOT NULL);
 
 
 --

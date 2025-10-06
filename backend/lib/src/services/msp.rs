@@ -2,14 +2,15 @@
 //!
 //! TODO(MOCK): many of methods of the MspService returns mocked data
 
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::HashSet, str::FromStr, sync::Arc};
 
+use bigdecimal::BigDecimal;
 use chrono::Utc;
-use codec::Encode;
+use codec::{Decode, Encode};
 use sc_network::PeerId;
 use serde::{Deserialize, Serialize};
 use shc_common::types::{ChunkId, FileKeyProof};
-use shc_rpc::SaveFileToDisk;
+use shc_rpc::{GetValuePropositionsResult, RpcProviderId, SaveFileToDisk};
 use sp_core::{Blake2Hasher, H256};
 use tracing::{debug, info, warn};
 
@@ -17,17 +18,20 @@ use shc_indexer_db::{models::Bucket as DBBucket, OnchainMspId};
 use shp_types::Hash;
 
 use crate::{
-    constants::{
-        mocks::{PLACEHOLDER_BUCKET_FILE_COUNT, PLACEHOLDER_BUCKET_SIZE_BYTES},
-        rpc::DUMMY_MSP_ID,
+    constants::mocks::{PLACEHOLDER_BUCKET_FILE_COUNT, PLACEHOLDER_BUCKET_SIZE_BYTES},
+    data::{
+        indexer_db::{client::DBClient, repository::PaymentStreamKind},
+        rpc::StorageHubRpcClient,
+        storage::BoxedStorage,
     },
-    data::{indexer_db::client::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage},
     error::Error,
     models::{
         buckets::{Bucket, FileTree},
         files::{DistributeResponse, FileInfo},
-        msp_info::{Capacity, InfoResponse, MspHealthResponse, StatsResponse, ValueProp},
-        payment::PaymentStream,
+        msp_info::{
+            Capacity, InfoResponse, MspHealthResponse, StatsResponse, ValuePropositionWithId,
+        },
+        payment::{PaymentStreamInfo, PaymentStreamsResponse},
     },
 };
 
@@ -58,16 +62,54 @@ pub struct MspService {
 
 impl MspService {
     /// Create a new MSP service
-    pub fn new(
+    /// Only MSP nodes are supported so it returns an error if the node is not an MSP.
+    pub async fn new(
         storage: Arc<dyn BoxedStorage>,
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
         msp_callback_url: String,
-    ) -> Self {
-        // TODO: retrieve from RPC
-        let msp_id = OnchainMspId::new(Hash::from_slice(DUMMY_MSP_ID.as_slice()));
+    ) -> Result<Self, Error> {
+        // Discover provider id from the connected node.
+        // If the node is not yet an MSP (which happens in integration tests), retry with
+        // a bounded number of attempts.
+        // TODO: Think about making it so in integration tests we spin up the backend
+        // only after the MSP has been registered on-chain, to avoid having this retry logic.
+        let mut retry_attempts = 0;
+        let max_retries = 10;
+        let delay_between_retries_secs = 5;
 
-        Self {
+        let msp_id = loop {
+            let provider_id: RpcProviderId = rpc
+                .get_provider_id()
+                .await
+                .map_err(|e| Error::BadRequest(e.to_string()))?;
+
+            match provider_id {
+                RpcProviderId::Msp(id) => break OnchainMspId::new(Hash::from_slice(id.as_ref())),
+                RpcProviderId::Bsp(_) => {
+                    return Err(Error::BadRequest(
+                        "Connected node is a BSP; expected an MSP".to_string(),
+                    ))
+                }
+                RpcProviderId::NotAProvider => {
+                    if retry_attempts >= max_retries {
+                        return Err(Error::BadRequest(
+                            "Connected node not a registered MSP after timeout".to_string(),
+                        ));
+                    }
+                    warn!(
+                        "Connected node is not yet a registered MSP; retrying provider discovery... (attempt {})",
+                        retry_attempts + 1
+                    );
+                    tokio::time::sleep(std::time::Duration::from_secs(delay_between_retries_secs))
+                        .await;
+                    retry_attempts += 1;
+                    continue;
+                }
+            }
+        };
+
+        Ok(Self {
             msp_id,
             storage,
             postgres,
@@ -75,20 +117,23 @@ impl MspService {
             // TODO: dedicated config struct
             // see: https://github.com/Moonsong-Labs/storage-hub/pull/459/files#r2369596519
             msp_callback_url,
-        }
+        })
     }
 
     /// Get MSP information
     pub async fn get_info(&self) -> Result<InfoResponse, Error> {
+        // Fetch the MSP's local listen multiaddresses via RPC
+        let multiaddresses: Vec<String> = self
+            .rpc
+            .get_multiaddresses()
+            .await
+            .map_err(|e| Error::BadRequest(e.to_string()))?;
+
         Ok(InfoResponse {
             client: "storagehub-node v1.0.0".to_string(),
             version: "StorageHub MSP v0.1.0".to_string(),
             msp_id: self.msp_id.to_string(),
-            // TODO: Until we have actual MSP info, we should at least get the multiaddress from an RPC.
-            // This way the backend can actually upload files to the MSP without having to change this code.
-            multiaddresses: vec![
-                "/ip4/192.168.0.10/tcp/30333/p2p/12D3KooWSUvz8QM5X4tfAaSLErAZjR2puojo16pULBHyqTMGKtNV".to_string()
-            ],
+            multiaddresses,
             owner_account: "0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac".to_string(),
             payment_account: "0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac".to_string(),
             status: "active".to_string(),
@@ -113,27 +158,39 @@ impl MspService {
     }
 
     /// Get MSP value propositions
-    pub async fn get_value_props(&self) -> Result<Vec<ValueProp>, Error> {
-        Ok(vec![
-            ValueProp {
-                id: "f32282ba18056b02cf2feb4cea92aa4552131617cdb7da03acaa554e4e736c32".to_string(),
-                price_per_gb_block: 0.5,
-                data_limit_per_bucket_bytes: 10737418240,
-                is_available: true,
-            },
-            ValueProp {
-                id: "a12345ba18056b02cf2feb4cea92aa4552131617cdb7da03acaa554e4e736c45".to_string(),
-                price_per_gb_block: 0.3,
-                data_limit_per_bucket_bytes: 5368709120,
-                is_available: true,
-            },
-            ValueProp {
-                id: "b67890ba18056b02cf2feb4cea92aa4552131617cdb7da03acaa554e4e736c67".to_string(),
-                price_per_gb_block: 0.8,
-                data_limit_per_bucket_bytes: 21474836480,
-                is_available: false,
-            },
-        ])
+    pub async fn get_value_props(&self) -> Result<Vec<ValuePropositionWithId>, Error> {
+        // Call RPC to get the value propositions
+        let result: GetValuePropositionsResult = self
+            .rpc
+            .get_value_props()
+            .await
+            .map_err(|e| Error::BadRequest(e.to_string()))?;
+
+        // Decode the SCALE-encoded ValuePropositionWithId entries
+        match result {
+            GetValuePropositionsResult::Success(encoded_props) => {
+                let mut props = Vec::with_capacity(encoded_props.len());
+                for encoded_value_proposition in encoded_props {
+                    let value_prop_with_id =
+                        ValuePropositionWithId::decode(&mut encoded_value_proposition.as_slice())
+                            .map_err(|e| {
+                            Error::BadRequest(format!(
+                                "Failed to decode ValuePropositionWithId: {}",
+                                e
+                            ))
+                        })?;
+
+                    props.push(ValuePropositionWithId {
+                        id: value_prop_with_id.id,
+                        value_prop: value_prop_with_id.value_prop,
+                    });
+                }
+                Ok(props)
+            }
+            GetValuePropositionsResult::NotAnMsp => Err(Error::BadRequest(
+                "The node that we are connected to is not an MSP".to_string(),
+            )),
+        }
     }
 
     /// Get MSP health status
@@ -258,7 +315,7 @@ impl MspService {
     pub async fn is_msp_expecting_file_key(&self, file_key: &str) -> Result<bool, Error> {
         let expected: bool = self
             .rpc
-            .call("storagehubclient_isFileKeyExpected", (file_key,))
+            .is_file_key_expected(file_key)
             .await
             .map_err(|e| Error::BadRequest(e.to_string()))?;
         Ok(expected)
@@ -278,15 +335,55 @@ impl MspService {
         })
     }
 
-    /// Get payment stream for a user
-    pub async fn get_payment_stream(&self, _user_address: &str) -> Result<PaymentStream, Error> {
-        // Mock implementation
-        Ok(PaymentStream {
-            tokens_per_block: 100,
-            last_charged_tick: 1234567,
-            user_deposit: 100000,
-            out_of_funds_tick: None,
-        })
+    /// Get all payment streams for a user
+    pub async fn get_payment_streams(
+        &self,
+        user_address: &str,
+    ) -> Result<PaymentStreamsResponse, Error> {
+        // Get all payment streams for the user from the database
+        let payment_stream_data = self
+            .postgres
+            .get_payment_streams_for_user(user_address)
+            .await?;
+
+        // Get current price per giga unit per tick from RPC (for dynamic rate calculations)
+        let current_price_per_giga_unit_per_tick = self
+            .rpc
+            .get_current_price_per_giga_unit_per_tick()
+            .await
+            .map_err(|e| Error::BadRequest(format!("Failed to get price per unit: {}", e)))?;
+        let unit_to_giga_unit =
+            BigDecimal::from_str("1e-9").expect("Inverse of GIGA to be parsed correctly");
+
+        // Process each payment stream
+        let mut streams = Vec::new();
+        for stream_data in payment_stream_data {
+            let (provider_type, cost_per_tick) = match stream_data.kind {
+                PaymentStreamKind::Fixed { rate } => {
+                    // This is an MSP (fixed rate payment stream)
+                    ("msp".to_string(), rate.to_string())
+                }
+                PaymentStreamKind::Dynamic { amount_provided } => {
+                    // This is a BSP (dynamic rate payment stream)
+                    // Cost per tick = amount_provided * 1e-9 * current_price_per_giga_unit_per_tick
+
+                    // Convert u128 price to BigDecimal and multiply
+                    let price_bd = BigDecimal::from(current_price_per_giga_unit_per_tick);
+                    let cost = amount_provided * &unit_to_giga_unit * price_bd;
+
+                    ("bsp".to_string(), cost.to_string())
+                }
+            };
+
+            streams.push(PaymentStreamInfo {
+                provider: stream_data.provider,
+                provider_type,
+                total_amount_paid: stream_data.total_amount_paid.to_string(),
+                cost_per_tick,
+            });
+        }
+
+        Ok(PaymentStreamsResponse { streams })
     }
 
     /// Download a file by `file_key` via the MSP RPC into `/tmp/uploads/<file_key>` and
@@ -296,6 +393,8 @@ impl MspService {
     /// We provide an URL as saveFileToDisk RPC requires it to stream the file.
     /// We also implemented the internal_upload_by_key handler to handle this temporary file upload.
     pub async fn get_file_from_key(&self, file_key: &str) -> Result<FileDownloadResult, Error> {
+        // TODO: authenticate user
+
         // Create temp url for download
         let temp_path = format!("/tmp/uploads/{}", file_key);
         let upload_url = format!("{}/internal/uploads/{}", self.msp_callback_url, file_key);
@@ -303,10 +402,7 @@ impl MspService {
         // Make the RPC call to download file and get metadata
         let rpc_response: SaveFileToDisk = self
             .rpc
-            .call(
-                "storagehubclient_saveFileToDisk",
-                (file_key, upload_url.as_str()),
-            )
+            .save_file_to_disk(file_key, upload_url.as_str())
             .await
             .map_err(|e| Error::BadRequest(e.to_string()))?;
 
@@ -352,8 +448,12 @@ impl MspService {
             ));
         }
 
+        debug!("get_info");
+
         // Get the MSP's info including its multiaddresses.
         let msp_info = self.get_info().await?;
+
+        debug!("extract_peer_ids");
 
         // Extract the peer IDs from the multiaddresses.
         let peer_ids = self.extract_peer_ids_from_multiaddresses(&msp_info.multiaddresses)?;
@@ -391,7 +491,7 @@ impl MspService {
         &self,
         multiaddresses: &[String],
     ) -> Result<Vec<PeerId>, Error> {
-        let mut peer_ids = Vec::new();
+        let mut peer_ids = HashSet::new();
 
         for multiaddr_str in multiaddresses {
             // Parse multiaddress string to extract peer ID
@@ -406,7 +506,7 @@ impl MspService {
                             "Extracted peer ID {:?} from multiaddress {}",
                             peer_id, multiaddr_str
                         );
-                        peer_ids.push(peer_id);
+                        peer_ids.insert(peer_id);
                     }
                     Err(e) => {
                         warn!(
@@ -426,7 +526,7 @@ impl MspService {
             ));
         }
 
-        Ok(peer_ids)
+        Ok(peer_ids.into_iter().collect())
     }
 
     /// Send an upload request to a specific peer ID of the MSP with retry logic.
@@ -446,6 +546,7 @@ impl MspService {
 
         // Get the file key from the file metadata.
         let file_key: H256 = file_metadata.file_key::<Blake2Hasher>();
+        let file_key_hexstr = format!("{file_key:x}");
 
         // Encode the FileKeyProof as SCALE for transport
         let encoded_proof = file_key_proof.encode();
@@ -456,12 +557,10 @@ impl MspService {
         let delay_between_retries_secs = 1;
 
         while retry_attempts < max_retries {
+            debug!("receive file chunks");
             let result: Result<Vec<u8>, _> = self
                 .rpc
-                .call(
-                    "storagehubclient_receiveBackendFileChunks",
-                    (file_key, encoded_proof.clone()),
-                )
+                .receive_file_chunks(&file_key_hexstr, encoded_proof.clone())
                 .await;
 
             match result {
@@ -539,6 +638,7 @@ impl MspService {
 mod tests {
     use std::sync::Arc;
 
+    use bigdecimal::BigDecimal;
     use serde_json::Value;
 
     use shc_common::types::{FileKeyProof, FileMetadata};
@@ -548,16 +648,18 @@ mod tests {
     use crate::{
         config::Config,
         constants::{
-            mocks::MOCK_ADDRESS,
+            mocks::{MOCK_ADDRESS, MOCK_PRICE_PER_GIGA_UNIT},
             rpc::DUMMY_MSP_ID,
             test::{bucket::DEFAULT_BUCKET_NAME, file::DEFAULT_SIZE},
         },
         data::{
-            indexer_db::{client::DBClient, mock_repository::MockRepository},
+            indexer_db::{
+                client::DBClient, mock_repository::MockRepository, repository::PaymentStreamKind,
+            },
             rpc::{AnyRpcConnection, MockConnection, StorageHubRpcClient},
             storage::{BoxedStorageWrapper, InMemoryStorage},
         },
-        mock_utils::random_bytes_32,
+        test_utils::random_bytes_32,
     };
 
     /// Builder for creating MspService instances with mock dependencies for testing
@@ -588,6 +690,7 @@ mod tests {
             self
         }
 
+        #[allow(dead_code)] // useful helper if we are making requests that we don't mock yet
         /// Set RPC responses for the connection to use
         pub async fn with_rpc_responses(mut self, responses: Vec<(&str, Value)>) -> Self {
             let mock_conn = MockConnection::new();
@@ -601,7 +704,7 @@ mod tests {
         }
 
         /// Build the final MspService
-        pub fn build(self) -> MspService {
+        pub async fn build(self) -> MspService {
             let cfg = Config::default();
 
             MspService::new(
@@ -610,12 +713,14 @@ mod tests {
                 self.rpc,
                 cfg.storage_hub.msp_callback_url,
             )
+            .await
+            .expect("Mocked MSP service builder should succeed")
         }
     }
 
     #[tokio::test]
     async fn test_get_info() {
-        let service = MockMspServiceBuilder::new().build();
+        let service = MockMspServiceBuilder::new().build().await;
         let info = service.get_info().await.unwrap();
 
         assert_eq!(info.status, "active");
@@ -624,7 +729,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_stats() {
-        let service = MockMspServiceBuilder::new().build();
+        let service = MockMspServiceBuilder::new().build().await;
         let stats = service.get_stats().await.unwrap();
 
         assert!(stats.capacity.total_bytes > 0);
@@ -633,11 +738,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_value_props() {
-        let service = MockMspServiceBuilder::new().build();
+        let service = MockMspServiceBuilder::new().build().await;
         let props = service.get_value_props().await.unwrap();
 
         assert!(!props.is_empty());
-        assert!(props.iter().any(|p| p.is_available));
+        assert!(props.iter().any(|p| p.value_prop.available));
     }
 
     #[tokio::test]
@@ -668,7 +773,8 @@ mod tests {
                 })
             })
             .await
-            .build();
+            .build()
+            .await;
 
         let buckets = service
             .list_user_buckets(MOCK_ADDRESS)
@@ -723,7 +829,8 @@ mod tests {
                 })
             })
             .await
-            .build();
+            .build()
+            .await;
 
         let bucket_id = hex::encode(bucket_id);
         let bucket = service.get_bucket(&bucket_id, MOCK_ADDRESS).await.unwrap();
@@ -775,7 +882,8 @@ mod tests {
                 })
             })
             .await
-            .build();
+            .build()
+            .await;
 
         let tree = service
             .get_file_tree(hex::encode(bucket_id).as_ref(), MOCK_ADDRESS, "/")
@@ -829,7 +937,8 @@ mod tests {
                 })
             })
             .await
-            .build();
+            .build()
+            .await;
 
         let bucket_id = hex::encode(bucket_id);
         let file_key = hex::encode(file_key);
@@ -847,7 +956,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_distribute_file() {
-        let service = MockMspServiceBuilder::new().build();
+        let service = MockMspServiceBuilder::new().build().await;
         let file_key = "abc123";
         let resp = service
             .distribute_file("bucket123", file_key)
@@ -861,25 +970,82 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_payment_stream() {
-        let service = MockMspServiceBuilder::new().build();
+        let rate = BigDecimal::from(5);
+        let amount_provided = BigDecimal::from(10);
+
+        let service = MockMspServiceBuilder::new()
+            .init_repository_with(|client| {
+                let rate = rate.clone();
+                let amount_provided = amount_provided.clone();
+
+                Box::pin(async move {
+                    // Create 2 payment streams for MOCK_ADDRESS, one for MSP and one for BSP
+                    client
+                        .create_payment_stream(
+                            MOCK_ADDRESS,
+                            "0x1234567890abcdef1234567890abcdef12345678",
+                            BigDecimal::from(500000),
+                            PaymentStreamKind::Fixed { rate },
+                        )
+                        .await
+                        .expect("should create fixed payment stream");
+
+                    client
+                        .create_payment_stream(
+                            MOCK_ADDRESS,
+                            "0xabcdef1234567890abcdef1234567890abcdef12",
+                            BigDecimal::from(200000),
+                            PaymentStreamKind::Dynamic { amount_provided },
+                        )
+                        .await
+                        .expect("should create dynamic payment stream");
+                })
+            })
+            .await
+            .build()
+            .await;
+
         let ps = service
-            .get_payment_stream("0x123")
+            .get_payment_streams(MOCK_ADDRESS)
             .await
             .expect("get_payment_stream should succeed");
 
-        assert!(ps.tokens_per_block > 0);
-        assert!(ps.user_deposit > 0);
+        // Verify we have the expected payment streams
+        assert_eq!(ps.streams.len(), 2);
+
+        let fixed = ps
+            .streams
+            .iter()
+            .find(|s| s.provider_type == "msp")
+            .expect("a fixed stream");
+        assert_eq!(
+            BigDecimal::from_str(&fixed.cost_per_tick).expect("cost per tick to be a valid number"),
+            rate,
+            "Fixed payment stream cost per tick should match what it was crated with"
+        );
+
+        let dynamic = ps
+            .streams
+            .iter()
+            .find(|s| s.provider_type == "bsp")
+            .expect("a dynamic stream");
+
+        let expected_cost_per_tick = amount_provided
+            // mock environment sets price per giga unit to this value
+            * BigDecimal::from(MOCK_PRICE_PER_GIGA_UNIT)
+            * BigDecimal::from_str("1e-9").unwrap();
+
+        assert_eq!(
+            BigDecimal::from_str(&dynamic.cost_per_tick)
+                .expect("cost per tick to be a valid number"),
+            expected_cost_per_tick,
+            "Dynamic payment stream cost per tick should be a function of amount provided and price per giga unit"
+        )
     }
 
     #[tokio::test]
     async fn test_upload_to_msp() {
-        let service = MockMspServiceBuilder::new()
-            .with_rpc_responses(vec![(
-                "storagehubclient_receiveBackendFileChunks",
-                serde_json::json!([]),
-            )])
-            .await
-            .build();
+        let service = MockMspServiceBuilder::new().build().await;
 
         // Provide at least one chunk id (upload_to_msp rejects empty sets)
         let mut chunk_ids = HashSet::new();
@@ -908,8 +1074,9 @@ mod tests {
         )
         .unwrap();
 
-        let result = service.upload_to_msp(&chunk_ids, &file_key_proof).await;
-
-        assert!(result.is_ok());
+        service
+            .upload_to_msp(&chunk_ids, &file_key_proof)
+            .await
+            .expect("able to upload file");
     }
 }

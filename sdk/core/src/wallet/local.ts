@@ -1,13 +1,13 @@
-import { WalletBase } from './base.js';
-import { WalletError } from './errors.js';
+import { WalletBase } from "./base.js";
+import { WalletError } from "./errors.js";
 import {
   type HDNodeWallet,
   hexlify,
   type Provider,
   Transaction,
   type TransactionRequest,
-  Wallet as EthersWallet,
-} from 'ethers';
+  Wallet as EthersWallet
+} from "ethers";
 
 /**
  * A local, in-memory wallet implementation.
@@ -19,7 +19,7 @@ import {
 export class LocalWallet extends WalletBase {
   private constructor(
     private readonly wallet: EthersWallet | HDNodeWallet,
-    private readonly provider?: Provider,
+    private readonly provider?: Provider
   ) {
     super();
   }
@@ -33,12 +33,12 @@ export class LocalWallet extends WalletBase {
   public static fromPrivateKey(privateKey: string, provider?: Provider): LocalWallet {
     // Validate early to provide a stable error type regardless of ethers internals
     const isHex = /^0x[0-9a-fA-F]{64}$/.test(privateKey);
-    if (!isHex) throw new WalletError('InvalidPrivateKey');
+    if (!isHex) throw new WalletError("InvalidPrivateKey");
 
     try {
       return new LocalWallet(new EthersWallet(privateKey, provider), provider);
     } catch {
-      throw new WalletError('InvalidPrivateKey');
+      throw new WalletError("InvalidPrivateKey");
     }
   }
 
@@ -55,7 +55,7 @@ export class LocalWallet extends WalletBase {
       const connected = provider ? wallet.connect(provider) : wallet;
       return new LocalWallet(connected, provider);
     } catch {
-      throw new WalletError('InvalidMnemonic');
+      throw new WalletError("InvalidMnemonic");
     }
   }
 
@@ -83,7 +83,7 @@ export class LocalWallet extends WalletBase {
   /** @inheritdoc */
   public async sendTransaction(tx: TransactionRequest): Promise<string> {
     if (!this.provider) {
-      throw new Error('No provider configured for LocalWallet; cannot send transaction');
+      throw new Error("No provider configured for LocalWallet; cannot send transaction");
     }
     const connected = this.wallet.connect(this.provider);
     const response = await connected.sendTransaction(tx);
