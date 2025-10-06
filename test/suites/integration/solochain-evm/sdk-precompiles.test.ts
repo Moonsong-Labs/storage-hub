@@ -301,6 +301,17 @@ await describeMspNet(
       await msp1Api.wait.fileStorageComplete(hexFileKey);
     });
 
+    it("Should fetch payment streams using the SDK's MspClient", async () => {
+      // Retrieve payment streams for the authenticated user and print details for review
+      const streamsResp = await mspClient.getPaymentStreams();
+      strictEqual(streamsResp.streams.length, 1, "payment streams array length should be 1");
+
+      const ps = streamsResp.streams[0];
+      strictEqual(ps.providerType, "msp", "providerType should be 'msp'");
+      strictEqual(ps.totalAmountPaid, "100000", "totalAmountPaid should be '100000'");
+      strictEqual(ps.costPerTick, "90664", "costPerTick should be '90664'");
+    });
+
     it("Should download the file from the MSP through the backend using the SDK's MspClient", async () => {
       // Try to download the file from the MSP through the SDK's MspClient that uses the MSP backend
       const downloadResponse = await mspClient.downloadByKey(fileKey.toHex());
