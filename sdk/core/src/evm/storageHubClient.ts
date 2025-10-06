@@ -433,6 +433,6 @@ export class StorageHubClient {
     const txOpts = this.buildTxOptions(gasLimit, options);
 
     const contract = this.getWriteContract();
-    return await contract.write.requestDeleteFile?.(args, txOpts);
+    return await contract.write.requestDeleteFile!(args, txOpts);
   }
 }
