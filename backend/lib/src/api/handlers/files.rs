@@ -2,7 +2,6 @@
 //!
 //! TODO: move the rest of the endpoints as they are implemented
 
-
 use axum::{
     body::Bytes,
     extract::{Path, State},
@@ -22,7 +21,6 @@ use shc_common::types::FileMetadata;
 
 use crate::{
     error::Error,
-   
     services::{auth::AuthenticatedUser, Services},
 };
 
