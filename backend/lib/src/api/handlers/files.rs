@@ -120,12 +120,10 @@ pub async fn download_by_key(
 /// TODO: Further optimize this to avoid having to load the entire file into memory.
 pub async fn upload_file(
     State(services): State<Services>,
-    AuthenticatedUser { address: _ }: AuthenticatedUser,
-    Path((bucket_id, file_key)): Path<(String, String)>,
+    AuthenticatedUser { address }: AuthenticatedUser,
+    Path((_bucket_id, file_key)): Path<(String, String)>,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, Error> {
-    // TODO(AUTH): verify that user has permissions to access this file
-
     // Pre-check with MSP whether this file key is expected before doing heavy processing
     let is_expected = services
         .msp
@@ -185,7 +183,7 @@ pub async fn upload_file(
     // Process and upload the file using the MSP service
     let response = services
         .msp
-        .process_and_upload_file(&bucket_id, &file_key, file_data_stream, file_metadata)
+        .process_and_upload_file(&address, &file_key, file_data_stream, file_metadata)
         .await?;
 
     Ok((StatusCode::CREATED, Json(response)))

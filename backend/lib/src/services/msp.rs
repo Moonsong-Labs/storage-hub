@@ -29,7 +29,7 @@ use crate::{
     error::Error,
     models::{
         buckets::{Bucket, FileTree},
-        files::FileInfo,
+        files::{FileInfo, FileUploadResponse},
         msp_info::{
             Capacity, InfoResponse, MspHealthResponse, StatsResponse, ValuePropositionWithId,
         },
@@ -408,9 +408,13 @@ impl MspService {
                 // Convert location bytes to string
                 let location = String::from_utf8_lossy(file_metadata.location()).to_string();
                 let file_size = file_metadata.file_size();
+                let fingerprint = file_metadata.fingerprint().as_hash();
 
                 // Ensure data received from MSP matches what we expect
-                if location != file.location || file_size != file.size {
+                if location != file.location
+                    || file_size != file.size
+                    || fingerprint != file.fingerprint
+                {
                     Err(Error::BadRequest(
                         "Downloaded file doesn't match given file key".to_string(),
                     ))
@@ -427,23 +431,28 @@ impl MspService {
     }
 
     /// Process a streamed file upload: validate metadata, chunk into trie, batch proofs, and send to MSP.
+    ///
+    /// Verifies ownership of bucket that the file belongs to is `user`
     pub async fn process_and_upload_file(
         &self,
-        bucket_id: &str,
+        user: &str,
         file_key: &str,
         mut file_data_stream: Field,
         file_metadata: FileMetadata,
     ) -> Result<FileUploadResponse, Error> {
+        // Retrieve the onchain file info and verify user has permission to access the file
+        let info = self.get_file_info(user, &file_key).await?;
+
         // Validate bucket id and file key against metadata
         let expected_bucket_id = hex::encode(file_metadata.bucket_id());
-        if bucket_id.trim_start_matches("0x") != expected_bucket_id {
+        if info.bucket_id.trim_start_matches("0x") != expected_bucket_id {
             return Err(Error::BadRequest(
                 "Bucket ID in URL does not match file metadata".to_string(),
             ));
         }
 
         let expected_file_key = hex::encode(file_metadata.file_key::<Blake2Hasher>());
-        if file_key.trim_start_matches("0x") != expected_file_key {
+        if info.file_key.trim_start_matches("0x") != expected_file_key {
             return Err(Error::BadRequest(
                 "File key in URL does not match file metadata".to_string(),
             ));
@@ -550,15 +559,16 @@ impl MspService {
         }
 
         // If the complete file was uploaded to the MSP successfully, we can return the response.
-        let bytes_location = file_metadata.location().clone();
+        let bytes_location = file_metadata.location();
         let location = str::from_utf8(&bytes_location)
-            .unwrap_or(file_key)
+            .unwrap_or(&info.file_key)
             .to_string();
+
         Ok(FileUploadResponse {
             status: "upload_successful".to_string(),
-            file_key: file_key.to_string(),
-            bucket_id: bucket_id.to_string(),
-            fingerprint: format!("0x{}", hex::encode(trie.get_root())),
+            fingerprint: info.fingerprint_hexstr(),
+            file_key: info.file_key,
+            bucket_id: info.bucket_id,
             location,
         })
     }
@@ -1078,7 +1088,7 @@ mod tests {
         let file_key = hex::encode(file_key);
 
         let info = service
-            .get_file_info(&bucket_id, MOCK_ADDRESS, &file_key)
+            .get_file_info(MOCK_ADDRESS, &file_key)
             .await
             .expect("get_file_info should succeed");
 

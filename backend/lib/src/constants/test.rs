@@ -62,9 +62,9 @@ pub mod bucket {
     /// Default bucket name
     pub const DEFAULT_BUCKET_NAME: &str = "test_bucket";
 
-    /// Default bucket onchain ID (valid 32-byte hex string = 64 hex chars)
-    pub const DEFAULT_BUCKET_ID: [u8; 32] =
-        hex!("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef");
+    /// Bucket ID expected by the SDK tests to be owned by MOCK_ADDRESS
+    pub const BUCKET1_BUCKET_ID: [u8; 32] =
+        hex!("d8793e4187f5642e96016a96fb33849a7e03eda91358b311bbd426ed38b26692");
 
     /// Default bucket is public
     pub const DEFAULT_IS_PUBLIC: bool = true;
@@ -75,8 +75,11 @@ pub mod bucket {
 
 /// Test file data
 pub mod file {
-    /// Default file key
-    pub const DEFAULT_FILE_KEY: &str = "test_file.txt";
+    use hex_literal::hex;
+
+    /// File key expected by the SDK tests to be in [`super::bucket::BUCKET1_BUCKET_ID`]
+    pub const BUCKET1_FILE1_KEY: [u8; 32] =
+        hex!("e901c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f7");
 
     /// Default file location
     pub const DEFAULT_LOCATION: &str = "/files/test_file.txt";

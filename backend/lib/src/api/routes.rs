@@ -64,15 +64,28 @@ pub fn routes(services: Services) -> Router {
 
 #[cfg(all(test, feature = "mocks"))]
 mod tests {
-    use crate::{constants::mocks::DOWNLOAD_FILE_CONTENT, services::health::HealthService};
+    use crate::{
+        api::create_app,
+        constants::{
+            mocks::{DOWNLOAD_FILE_CONTENT, MOCK_ADDRESS},
+            rpc::DUMMY_MSP_ID,
+            test::{bucket::DEFAULT_BUCKET_NAME, file::DEFAULT_FINGERPRINT},
+        },
+        services::{health::HealthService, Services},
+        test_utils::random_bytes_32,
+    };
 
     use std::path::Path;
 
     use axum::http::StatusCode;
     use axum_test::TestServer;
+    use shc_indexer_db::OnchainMspId;
+    use shp_types::Hash;
 
     #[tokio::test]
     async fn test_health_route() {
+        crate::test_utils::init_tracing();
+
         let app = crate::api::mock_app().await;
         let server = TestServer::new(app).unwrap();
 
@@ -85,10 +98,56 @@ mod tests {
 
     #[tokio::test]
     async fn test_download_by_key_streams_and_cleans_temp() {
-        let app = crate::api::mock_app().await;
+        crate::test_utils::init_tracing();
+
+        // setup file and bucket to satisfy backend checks
+        let services = Services::mocks().await;
+        let file_key = {
+            let client = &services.postgres;
+
+            // Create MSP with the ID that matches the default config
+            let msp = client
+                .create_msp(
+                    MOCK_ADDRESS,
+                    OnchainMspId::new(Hash::from_slice(&DUMMY_MSP_ID)),
+                )
+                .await
+                .expect("should create MSP");
+
+            // Create a test bucket for the mock user
+            let bucket_onchain_id = random_bytes_32();
+            let bucket = client
+                .create_bucket(
+                    MOCK_ADDRESS,
+                    Some(msp.id),
+                    DEFAULT_BUCKET_NAME.as_bytes(),
+                    &bucket_onchain_id,
+                    false,
+                )
+                .await
+                .expect("should create bucket");
+
+            // Create a test file for the mock user in the test bucket
+            let file_key = random_bytes_32();
+            let file = client
+                .create_file(
+                    MOCK_ADDRESS.as_bytes(),
+                    file_key.as_slice(),
+                    bucket.id,
+                    &bucket_onchain_id,
+                    hex::encode(file_key).as_bytes(), // RPC mock response has location as file key
+                    DEFAULT_FINGERPRINT,
+                    DOWNLOAD_FILE_CONTENT.as_bytes().len() as i64,
+                )
+                .await
+                .expect("should create file");
+
+            hex::encode(file.file_key)
+        };
+
+        let app = create_app(services);
         let server = TestServer::new(app).unwrap();
 
-        let file_key = "0xde4a17999bc1482ba71737367e5d858a133ed1e13327a29c495ab976004a138f";
         let temp_path = format!("/tmp/uploads/{}", file_key);
 
         let response = server.get(&format!("/download/{}", file_key)).await;

@@ -35,6 +35,10 @@ impl FileInfo {
             uploaded_at: db.updated_at.and_utc(),
         }
     }
+
+    pub fn fingerprint_hexstr(&self) -> String {
+        hex::encode(&self.fingerprint)
+    }
 }
 
 #[derive(Debug, Serialize)]

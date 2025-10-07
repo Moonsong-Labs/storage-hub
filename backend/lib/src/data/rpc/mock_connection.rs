@@ -25,6 +25,7 @@ use crate::{
         mocks::{DOWNLOAD_FILE_CONTENT, MOCK_PRICE_PER_GIGA_UNIT},
         rpc::DUMMY_MSP_ID,
         rpc::TIMEOUT_MULTIPLIER,
+        test::file::DEFAULT_FINGERPRINT,
     },
     data::rpc::{
         connection::error::{RpcConnectionError, RpcResult},
@@ -171,7 +172,7 @@ impl MockConnection {
                 vec![0; 32],
                 file_name.as_bytes().to_vec(),
                 content.len() as u64,
-                vec![0u8; 32].as_slice().into(),
+                DEFAULT_FINGERPRINT.as_slice().into(),
             )
             .expect("a valid file metadata descriptor")
         ))
