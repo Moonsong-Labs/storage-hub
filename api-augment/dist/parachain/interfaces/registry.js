@@ -2,5 +2,5 @@
 /* eslint-disable */
 // import type lookup before we augment - in some environments
 // this is required to allow for ambient/previous definitions
-import "@polkadot/types/types/registry";
+import '@polkadot/types/types/registry';
 //# sourceMappingURL=registry.js.map
