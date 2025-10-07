@@ -111,9 +111,9 @@ export interface Bucket {
 export type FileTree = {
   name: string;
 } & (
-    | { type: "file"; sizeBytes: number; fileKey: string }
-    | { type: "folder"; children: FileTree[] }
-  );
+  | { type: "file"; sizeBytes: number; fileKey: string }
+  | { type: "folder"; children: FileTree[] }
+);
 
 export interface FileListResponse {
   bucketId: string;
