@@ -687,12 +687,13 @@ where
         let service_state = shc_indexer_db::models::ServiceState::get(&mut conn)
             .await
             .map_err(|e| anyhow!("Failed to get service state from indexer: {:?}", e))?;
-        let last_indexed_block = (service_state.last_processed_block as u64).saturated_into();
+        let last_indexed_finalized_block =
+            (service_state.last_indexed_finalized_block as u64).saturated_into();
 
         trace!(
             target: LOG_TARGET,
             "Building ephemeral trie from indexer data at last processed block {}",
-            last_indexed_block
+            last_indexed_finalized_block
         );
 
         // Fetch all file keys for the deletion target from finalized data
@@ -762,12 +763,12 @@ where
         trace!(
             target: LOG_TARGET,
             "Applying catch-up from block {} to best block",
-            last_indexed_block
+            last_indexed_finalized_block
         );
 
         // Get file key changes since finalized block using the generated interface method
         let file_key_changes = fisherman_service
-            .get_file_key_changes_since_block(last_indexed_block, deletion_target.clone())
+            .get_file_key_changes_since_block(last_indexed_finalized_block, deletion_target.clone())
             .await
             .map_err(|e| anyhow!("Failed to get file key changes: {:?}", e))?;
 

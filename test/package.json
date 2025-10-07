@@ -22,6 +22,7 @@
     "crossbuild:mac:backend": "DOCKER_DEFAULT_PLATFORM=linux/amd64 pnpm tsx scripts/crossBuildBackendMac.ts",
     "docker:build": "DOCKER_DEFAULT_PLATFORM=linux/amd64 pnpm tsx scripts/buildLocalDocker.ts",
     "docker:build:backend": "DOCKER_DEFAULT_PLATFORM=linux/amd64 pnpm tsx scripts/buildBackendDocker.ts",
+    "sdk:build": "pnpm --filter @storagehub-sdk/core build && pnpm --filter @storagehub-sdk/msp-client build",
     "docker:start": "docker compose -f ../docker/local-parachain-compose.yml  -p sh_dev_node up -d",
     "docker:start:latest": "docker compose -f ../docker/latest-node-compose.yml  -p sh_dev_node up -d",
     "docker:stop": "docker compose -f ../docker/local-parachain-compose.yml  -p sh_dev_node down",
