@@ -18,7 +18,10 @@ use sp_runtime::{
     },
     ArithmeticError, BoundedBTreeSet, BoundedVec, DispatchError,
 };
-use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
+use sp_std::{
+    collections::{btree_map::BTreeMap, btree_set::BTreeSet},
+    vec::Vec,
+};
 
 use pallet_file_system_runtime_api::{
     GenericApplyDeltaEventInfoError, IsStorageRequestOpenToVolunteersError,
@@ -35,7 +38,6 @@ use shp_traits::{
     ProofsDealerInterface, ReadBucketsInterface, ReadProvidersInterface,
     ReadStorageProvidersInterface, ReadUserSolvencyInterface, TrieAddMutation, TrieRemoveMutation,
 };
-use sp_std::collections::btree_map::BTreeMap;
 
 use crate::{
     pallet,
@@ -1290,7 +1292,7 @@ where
         ensure!(!file_deletions.is_empty(), Error::<T>::NoFileKeysToDelete);
 
         // Collect validated file deletion data
-        let mut validated_deletions = sp_std::vec::Vec::new();
+        let mut validated_deletions = Vec::new();
 
         // Process each file deletion request
         for deletion_request in file_deletions.iter() {
@@ -1370,8 +1372,8 @@ where
         ensure!(!file_keys.is_empty(), Error::<T>::NoFileKeysToConfirm);
 
         // Collect validated file deletion data
-        let mut validated_deletions = sp_std::vec::Vec::new();
-        let mut incomplete_metadatas = sp_std::vec::Vec::new();
+        let mut validated_deletions = Vec::new();
+        let mut incomplete_metadatas = Vec::new();
 
         // Process each file key
         for file_key in file_keys.iter() {
@@ -2786,10 +2788,10 @@ where
         let bucket_id = file_deletions[0].3;
 
         // Single pass collection: gather file keys, mutations, total size, and validate bucket consistency
-        let mut file_keys = sp_std::vec::Vec::with_capacity(file_deletions.len());
-        let mut mutations = sp_std::vec::Vec::with_capacity(file_deletions.len());
+        let mut file_keys = BoundedVec::<MerkleHash<T>, T::MaxFileDeletionsPerExtrinsic>::default();
+        let mut mutations = Vec::with_capacity(file_deletions.len());
         let mut total_size = StorageDataUnit::<T>::zero();
-        let mut seen_keys = sp_std::collections::btree_set::BTreeSet::new();
+        let mut seen_keys = BTreeSet::new();
 
         for (_, file_key, size, bid) in file_deletions {
             // Ensure all files are in the same bucket
@@ -2804,7 +2806,9 @@ where
                 Error::<T>::DuplicateFileKeyInBatchFileDeletion
             );
 
-            file_keys.push(*file_key);
+            file_keys
+                .try_push(*file_key)
+                .expect("file_deletions is already bounded by MaxFileDeletionsPerExtrinsic");
             mutations.push((*file_key, TrieRemoveMutation::default().into()));
             total_size = total_size.saturating_add(*size);
         }
@@ -2819,7 +2823,7 @@ where
         // Verify all file keys are part of the bucket's forest
         let proven_keys = <T::ProofDealer as ProofsDealerInterface>::verify_generic_forest_proof(
             &old_bucket_root,
-            &file_keys,
+            file_keys.as_slice(),
             &forest_proof,
         )?;
 
@@ -2866,17 +2870,10 @@ where
             )?;
         }
 
-        // Collect all file keys for the event
-        let file_keys: BoundedVec<MerkleHash<T>, T::MaxFileDeletionsPerExtrinsic> = file_deletions
-            .iter()
-            .map(|(_, file_key, _, _)| *file_key)
-            .collect::<Vec<_>>()
-            .try_into()
-            .expect("file_deletions is already bounded by MaxFileDeletionsPerExtrinsic");
-
         // Emit single event for the batch
-        Self::deposit_event(Event::BucketFileDeletionCompleted {
-            user: file_deletions[0].0.clone(), // All files have same owner in bucket
+        Self::deposit_event(Event::BucketFileDeletionsCompleted {
+            // We validate that all the deleted files belong to the same bucket and therefore a single user owns them all
+            user: file_deletions[0].0.clone(),
             file_keys,
             bucket_id,
             msp_id: maybe_msp_id,
@@ -2907,15 +2904,13 @@ where
         let old_root = <T::Providers as ReadProvidersInterface>::get_root(bsp_id)
             .ok_or(Error::<T>::NotABsp)?;
 
-        // Single pass collection: gather file keys, mutations, total size, and owner sizes
-        let mut file_keys = sp_std::vec::Vec::with_capacity(file_deletions.len());
-        let mut mutations = sp_std::vec::Vec::with_capacity(file_deletions.len());
+        // Single pass collection: gather users, file keys, mutations, total size, and owner sizes
+        let mut users = BoundedVec::<T::AccountId, T::MaxFileDeletionsPerExtrinsic>::default();
+        let mut file_keys = BoundedVec::<MerkleHash<T>, T::MaxFileDeletionsPerExtrinsic>::default();
+        let mut mutations = Vec::with_capacity(file_deletions.len());
         let mut total_size = StorageDataUnit::<T>::zero();
-        let mut owner_sizes: sp_std::collections::btree_map::BTreeMap<
-            T::AccountId,
-            StorageDataUnit<T>,
-        > = sp_std::collections::btree_map::BTreeMap::new();
-        let mut seen_keys = sp_std::collections::btree_set::BTreeSet::new();
+        let mut owner_sizes: BTreeMap<T::AccountId, StorageDataUnit<T>> = BTreeMap::new();
+        let mut seen_keys = BTreeSet::new();
 
         for (owner, file_key, size, _) in file_deletions {
             // Detect duplicate file keys in the batch
@@ -2924,14 +2919,16 @@ where
                 Error::<T>::DuplicateFileKeyInBatchFileDeletion
             );
 
-            file_keys.push(*file_key);
+            users
+                .try_push(owner.clone())
+                .expect("file_deletions is already bounded by MaxFileDeletionsPerExtrinsic");
+            file_keys
+                .try_push(*file_key)
+                .expect("file_deletions is already bounded by MaxFileDeletionsPerExtrinsic");
             mutations.push((*file_key, TrieRemoveMutation::default().into()));
             total_size = total_size.saturating_add(*size);
 
-            // Aggregate sizes per owner for payment stream updates.
-            // This optimization prevents redundant payment stream updates when a batch
-            // contains multiple files from the same owner. Instead of updating the stream
-            // N times (once per file), we aggregate all sizes per owner and update once.
+            // Aggregate sizes per owner for payment stream updates..
             owner_sizes
                 .entry(owner.clone())
                 .and_modify(|s| *s = s.saturating_add(*size))
@@ -2944,7 +2941,7 @@ where
         // Verify all file keys are part of the BSP's forest
         let proven_keys = <T::ProofDealer as ProofsDealerInterface>::verify_forest_proof(
             &bsp_id,
-            &file_keys,
+            file_keys.as_slice(),
             &forest_proof,
         )?;
 
@@ -2979,23 +2976,8 @@ where
             Self::update_bsp_payment_and_cycles_after_file_removal(bsp_id, &owner, size, new_root)?;
         }
 
-        // Collect all users and file keys for the event
-        let users: BoundedVec<T::AccountId, T::MaxFileDeletionsPerExtrinsic> = file_deletions
-            .iter()
-            .map(|(owner, _, _, _)| owner.clone())
-            .collect::<Vec<_>>()
-            .try_into()
-            .expect("file_deletions is already bounded by MaxFileDeletionsPerExtrinsic");
-
-        let file_keys: BoundedVec<MerkleHash<T>, T::MaxFileDeletionsPerExtrinsic> = file_deletions
-            .iter()
-            .map(|(_, file_key, _, _)| *file_key)
-            .collect::<Vec<_>>()
-            .try_into()
-            .expect("file_deletions is already bounded by MaxFileDeletionsPerExtrinsic");
-
         // Emit single event for the batch
-        Self::deposit_event(Event::BspFileDeletionCompleted {
+        Self::deposit_event(Event::BspFileDeletionsCompleted {
             users,
             file_keys,
             bsp_id,

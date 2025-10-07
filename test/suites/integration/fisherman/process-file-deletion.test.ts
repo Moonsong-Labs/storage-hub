@@ -191,18 +191,18 @@ await describeMspNet(
       assertEventPresent(
         userApi,
         "fileSystem",
-        "BucketFileDeletionCompleted",
+        "BucketFileDeletionsCompleted",
         deletionResult.events
       );
-      assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", deletionResult.events);
+      assertEventPresent(userApi, "fileSystem", "BspFileDeletionsCompleted", deletionResult.events);
 
       // Extract deletion events to verify root changes
       const mspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BucketFileDeletionCompleted,
+        userApi.events.fileSystem.BucketFileDeletionsCompleted,
         deletionResult.events
       );
       const bspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BspFileDeletionCompleted,
+        userApi.events.fileSystem.BspFileDeletionsCompleted,
         deletionResult.events
       );
 
@@ -341,11 +341,11 @@ await describeMspNet(
         // Seal block to process the extrinsic
         const deletionResult = await userApi.block.seal();
 
-        // Verify BspFileDeletionCompleted event
+        // Verify BspFileDeletionsCompleted event
         assertEventPresent(
           userApi,
           "fileSystem",
-          "BspFileDeletionCompleted",
+          "BspFileDeletionsCompleted",
           deletionResult.events
         );
       } finally {
@@ -420,18 +420,18 @@ await describeMspNet(
       assertEventPresent(
         userApi,
         "fileSystem",
-        "BucketFileDeletionCompleted",
+        "BucketFileDeletionsCompleted",
         deletionResult.events
       );
-      assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", deletionResult.events);
+      assertEventPresent(userApi, "fileSystem", "BspFileDeletionsCompleted", deletionResult.events);
 
       // Extract deletion events to verify root changes
       const mspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BucketFileDeletionCompleted,
+        userApi.events.fileSystem.BucketFileDeletionsCompleted,
         deletionResult.events
       );
       const bspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BspFileDeletionCompleted,
+        userApi.events.fileSystem.BspFileDeletionsCompleted,
         deletionResult.events
       );
 
@@ -575,18 +575,18 @@ await describeMspNet(
       assertEventPresent(
         userApi,
         "fileSystem",
-        "BucketFileDeletionCompleted",
+        "BucketFileDeletionsCompleted",
         deletionResult.events
       );
-      assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", deletionResult.events);
+      assertEventPresent(userApi, "fileSystem", "BspFileDeletionsCompleted", deletionResult.events);
 
       // Extract deletion events to verify root changes
       const mspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BucketFileDeletionCompleted,
+        userApi.events.fileSystem.BucketFileDeletionsCompleted,
         deletionResult.events
       );
       const bspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BspFileDeletionCompleted,
+        userApi.events.fileSystem.BspFileDeletionsCompleted,
         deletionResult.events
       );
 
@@ -738,18 +738,18 @@ await describeMspNet(
       assertEventPresent(
         userApi,
         "fileSystem",
-        "BucketFileDeletionCompleted",
+        "BucketFileDeletionsCompleted",
         deletionResult.events
       );
-      assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", deletionResult.events);
+      assertEventPresent(userApi, "fileSystem", "BspFileDeletionsCompleted", deletionResult.events);
 
       // Extract deletion events to verify root changes
       const mspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BucketFileDeletionCompleted,
+        userApi.events.fileSystem.BucketFileDeletionsCompleted,
         deletionResult.events
       );
       const bspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BspFileDeletionCompleted,
+        userApi.events.fileSystem.BspFileDeletionsCompleted,
         deletionResult.events
       );
 

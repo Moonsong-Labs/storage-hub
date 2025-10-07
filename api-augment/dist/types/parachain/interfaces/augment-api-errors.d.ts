@@ -380,6 +380,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       NoFileKeysToConfirm: AugmentedError<ApiType>;
       /**
+       * Requires at least 1 file key to be deleted.
+       **/
+      NoFileKeysToDelete: AugmentedError<ApiType>;
+      /**
        * No global reputation weight set.
        **/
       NoGlobalReputationWeightSet: AugmentedError<ApiType>;

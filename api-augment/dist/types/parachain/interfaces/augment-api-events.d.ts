@@ -551,7 +551,7 @@ declare module "@polkadot/api-base/types/events" {
       /**
        * Notifies that file deletions have been completed successfully for a BSP.
        **/
-      BspFileDeletionCompleted: AugmentedEvent<
+      BspFileDeletionsCompleted: AugmentedEvent<
         ApiType,
         [users: Vec<AccountId32>, fileKeys: Vec<H256>, bspId: H256, oldRoot: H256, newRoot: H256],
         {
@@ -587,7 +587,7 @@ declare module "@polkadot/api-base/types/events" {
       /**
        * Notifies that file deletions have been completed successfully for a Bucket.
        **/
-      BucketFileDeletionCompleted: AugmentedEvent<
+      BucketFileDeletionsCompleted: AugmentedEvent<
         ApiType,
         [
           user: AccountId32,

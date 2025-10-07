@@ -469,7 +469,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             pallet_file_system::Event::FailedToTransferDepositFundsToBsp { .. } => {
                 // In the future we should monitor for this to detect eventual bugs in the pallets
             }
-            pallet_file_system::Event::BucketFileDeletionCompleted {
+            pallet_file_system::Event::BucketFileDeletionsCompleted {
                 user: _,
                 file_keys,
                 bucket_id,
@@ -502,7 +502,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 )
                 .await?;
             }
-            pallet_file_system::Event::BspFileDeletionCompleted {
+            pallet_file_system::Event::BspFileDeletionsCompleted {
                 users: _,
                 file_keys,
                 bsp_id,

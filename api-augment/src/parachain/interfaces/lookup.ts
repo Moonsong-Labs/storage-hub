@@ -1699,7 +1699,7 @@ export default {
         signedDeleteIntention: "PalletFileSystemFileOperationIntention",
         signature: "SpRuntimeMultiSignature"
       },
-      BucketFileDeletionCompleted: {
+      BucketFileDeletionsCompleted: {
         user: "AccountId32",
         fileKeys: "Vec<H256>",
         bucketId: "H256",
@@ -1707,7 +1707,7 @@ export default {
         oldRoot: "H256",
         newRoot: "H256"
       },
-      BspFileDeletionCompleted: {
+      BspFileDeletionsCompleted: {
         users: "Vec<AccountId32>",
         fileKeys: "Vec<H256>",
         bspId: "H256",
@@ -4862,6 +4862,7 @@ export default {
       "FileKeyAlreadyPendingDeletion",
       "BatchFileDeletionMustContainSingleBucket",
       "DuplicateFileKeyInBatchFileDeletion",
+      "NoFileKeysToDelete",
       "MaxUserPendingDeletionRequestsReached",
       "MspNotStoringBucket",
       "FileKeyNotPendingDeletion",

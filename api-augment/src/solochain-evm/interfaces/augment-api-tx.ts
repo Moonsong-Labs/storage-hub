@@ -535,8 +535,7 @@ declare module "@polkadot/api-base/types/submittable" {
        * from the `FileDeletionRequested` event. It requires a valid forest proof showing that
        * all files exist in the specified provider's forest before allowing deletion.
        *
-       * Multiple files can be deleted in a single call using one forest proof, improving
-       * efficiency when cleaning up multiple files from the same provider.
+       * Multiple files can be deleted in a single call using one forest proof bounded by [`MaxFileDeletionsPerExtrinsic`](Config::MaxFileDeletionsPerExtrinsic).
        *
        * If `bsp_id` is `None`, files will be deleted from the bucket forest.
        * If `bsp_id` is `Some(id)`, files will be deleted from the specified BSP's forest.
@@ -572,8 +571,7 @@ declare module "@polkadot/api-base/types/submittable" {
        * for each file, that the provider has the files in its Merkle Patricia Forest, and verifies the file keys match
        * the metadata.
        *
-       * Multiple files can be deleted in a single call using one forest proof, improving
-       * efficiency when cleaning up multiple incomplete storage requests from the same provider.
+       * Multiple files can be deleted in a single call using one forest proof bounded by [`MaxFileDeletionsPerExtrinsic`](Config::MaxFileDeletionsPerExtrinsic).
        **/
       deleteFilesForIncompleteStorageRequest: AugmentedSubmittable<
         (

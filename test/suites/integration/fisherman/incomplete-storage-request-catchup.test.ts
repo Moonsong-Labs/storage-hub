@@ -133,11 +133,11 @@ await describeMspNet(
         // Seal block to process the extrinsic
         const deletionResult = await userApi.block.seal();
 
-        // Verify BspFileDeletionCompleted event
+        // Verify BspFileDeletionsCompleted event
         assertEventPresent(
           userApi,
           "fileSystem",
-          "BspFileDeletionCompleted",
+          "BspFileDeletionsCompleted",
           deletionResult.events
         );
       } finally {
@@ -215,10 +215,10 @@ await describeMspNet(
       assertEventPresent(
         userApi,
         "fileSystem",
-        "BucketFileDeletionCompleted",
+        "BucketFileDeletionsCompleted",
         deletionResult.events
       );
-      assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", deletionResult.events);
+      assertEventPresent(userApi, "fileSystem", "BspFileDeletionsCompleted", deletionResult.events);
     });
 
     it("processes MSP stop storing bucket with incomplete request in unfinalized block", async () => {
@@ -304,14 +304,14 @@ await describeMspNet(
       assertEventPresent(
         userApi,
         "fileSystem",
-        "BucketFileDeletionCompleted",
+        "BucketFileDeletionsCompleted",
         deletionResult.events
       );
-      assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", deletionResult.events);
+      assertEventPresent(userApi, "fileSystem", "BspFileDeletionsCompleted", deletionResult.events);
 
-      // Verify BucketFileDeletionCompleted event with no MSP ID
+      // Verify BucketFileDeletionsCompleted event with no MSP ID
       const mspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BucketFileDeletionCompleted,
+        userApi.events.fileSystem.BucketFileDeletionsCompleted,
         deletionResult.events
       );
 

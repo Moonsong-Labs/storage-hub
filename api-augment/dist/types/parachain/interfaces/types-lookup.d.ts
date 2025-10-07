@@ -2132,8 +2132,8 @@ declare module "@polkadot/types/lookup" {
       readonly signedDeleteIntention: PalletFileSystemFileOperationIntention;
       readonly signature: SpRuntimeMultiSignature;
     } & Struct;
-    readonly isBucketFileDeletionCompleted: boolean;
-    readonly asBucketFileDeletionCompleted: {
+    readonly isBucketFileDeletionsCompleted: boolean;
+    readonly asBucketFileDeletionsCompleted: {
       readonly user: AccountId32;
       readonly fileKeys: Vec<H256>;
       readonly bucketId: H256;
@@ -2141,8 +2141,8 @@ declare module "@polkadot/types/lookup" {
       readonly oldRoot: H256;
       readonly newRoot: H256;
     } & Struct;
-    readonly isBspFileDeletionCompleted: boolean;
-    readonly asBspFileDeletionCompleted: {
+    readonly isBspFileDeletionsCompleted: boolean;
+    readonly asBspFileDeletionsCompleted: {
       readonly users: Vec<AccountId32>;
       readonly fileKeys: Vec<H256>;
       readonly bspId: H256;
@@ -2186,8 +2186,8 @@ declare module "@polkadot/types/lookup" {
       | "FailedToReleaseStorageRequestCreationDeposit"
       | "FailedToTransferDepositFundsToBsp"
       | "FileDeletionRequested"
-      | "BucketFileDeletionCompleted"
-      | "BspFileDeletionCompleted"
+      | "BucketFileDeletionsCompleted"
+      | "BspFileDeletionsCompleted"
       | "IncompleteStorageRequest";
   }
   /** @name ShpFileMetadataFileMetadata (153) */
@@ -5933,6 +5933,7 @@ declare module "@polkadot/types/lookup" {
     readonly isFileKeyAlreadyPendingDeletion: boolean;
     readonly isBatchFileDeletionMustContainSingleBucket: boolean;
     readonly isDuplicateFileKeyInBatchFileDeletion: boolean;
+    readonly isNoFileKeysToDelete: boolean;
     readonly isMaxUserPendingDeletionRequestsReached: boolean;
     readonly isMspNotStoringBucket: boolean;
     readonly isFileKeyNotPendingDeletion: boolean;
@@ -6024,6 +6025,7 @@ declare module "@polkadot/types/lookup" {
       | "FileKeyAlreadyPendingDeletion"
       | "BatchFileDeletionMustContainSingleBucket"
       | "DuplicateFileKeyInBatchFileDeletion"
+      | "NoFileKeysToDelete"
       | "MaxUserPendingDeletionRequestsReached"
       | "MspNotStoringBucket"
       | "FileKeyNotPendingDeletion"

@@ -11573,7 +11573,7 @@ mod msp_stop_storing_bucket {
 
                 // Verify event was emitted
                 System::assert_has_event(
-                    Event::BucketFileDeletionCompleted {
+                    Event::BucketFileDeletionsCompleted {
                         user: owner.clone(),
                         file_keys: vec![file_key].try_into().unwrap(),
                         bucket_id,
@@ -11996,9 +11996,9 @@ mod delete_file_tests {
                     forest_proof,
                 ));
 
-                // Verify BucketFileDeletionCompleted event was emitted
+                // Verify BucketFileDeletionsCompleted event was emitted
                 System::assert_last_event(
-                    Event::BucketFileDeletionCompleted {
+                    Event::BucketFileDeletionsCompleted {
                         user: alice.clone(),
                         file_keys: vec![file_key].try_into().unwrap(),
                         bucket_id,
@@ -12106,7 +12106,7 @@ mod delete_file_tests {
 
                 // Verify BSP event
                 System::assert_last_event(
-                    Event::BspFileDeletionCompleted {
+                    Event::BspFileDeletionsCompleted {
                         users: vec![alice.clone()].try_into().unwrap(),
                         file_keys: vec![file_key].try_into().unwrap(),
                         bsp_id,
@@ -12225,7 +12225,7 @@ mod delete_file_tests {
 
                 // Verify BSP event
                 System::assert_last_event(
-                    Event::BspFileDeletionCompleted {
+                    Event::BspFileDeletionsCompleted {
                         users: vec![alice.clone()].try_into().unwrap(),
                         file_keys: vec![file_key].try_into().unwrap(),
                         bsp_id,
@@ -12321,7 +12321,7 @@ mod delete_file_tests {
 
                 // Verify event shows Alice as the user
                 System::assert_last_event(
-                    Event::BucketFileDeletionCompleted {
+                    Event::BucketFileDeletionsCompleted {
                         user: alice.clone(),
                         file_keys: vec![file_key].try_into().unwrap(),
                         bucket_id,
@@ -12800,9 +12800,9 @@ mod delete_files_for_incomplete_storage_request_tests {
                 // This limitation means we can’t test whether the challenge cycles stop.
                 // TODO: Consider using the real `apply_delta` from the `file_system` pallet to enable correct testing.
 
-                // Verify the BspFileDeletionCompleted event was emitted
+                // Verify the BspFileDeletionsCompleted event was emitted
                 System::assert_has_event(
-                    Event::BspFileDeletionCompleted {
+                    Event::BspFileDeletionsCompleted {
                         users: vec![owner.clone()].try_into().unwrap(),
                         file_keys: vec![file_key].try_into().unwrap(),
                         bsp_id,
@@ -13047,7 +13047,7 @@ mod delete_files_for_incomplete_storage_request_tests {
 
                 // Verify deletion events
                 System::assert_has_event(
-                    Event::BspFileDeletionCompleted {
+                    Event::BspFileDeletionsCompleted {
                         users: vec![owner.clone()].try_into().unwrap(),
                         file_keys: vec![file_key2].try_into().unwrap(),
                         bsp_id,
@@ -15111,7 +15111,7 @@ mod batch_delete_file_tests {
                 let events: Vec<_> = System::events()
                     .into_iter()
                     .filter_map(|e| match e.event {
-                        RuntimeEvent::FileSystem(Event::BucketFileDeletionCompleted { .. }) => Some(()),
+                        RuntimeEvent::FileSystem(Event::BucketFileDeletionsCompleted { .. }) => Some(()),
                         _ => None,
                     })
                     .collect();
@@ -15264,7 +15264,7 @@ mod batch_delete_file_tests {
                 let events: Vec<_> = System::events()
                     .into_iter()
                     .filter_map(|e| match e.event {
-                        RuntimeEvent::FileSystem(Event::BspFileDeletionCompleted { .. }) => {
+                        RuntimeEvent::FileSystem(Event::BspFileDeletionsCompleted { .. }) => {
                             Some(())
                         }
                         _ => None,
@@ -15630,7 +15630,7 @@ mod batch_delete_file_tests {
                 let events: Vec<_> = System::events()
                     .into_iter()
                     .filter_map(|e| match e.event {
-                        RuntimeEvent::FileSystem(Event::BspFileDeletionCompleted { .. }) => {
+                        RuntimeEvent::FileSystem(Event::BspFileDeletionsCompleted { .. }) => {
                             Some(())
                         }
                         _ => None,

@@ -766,7 +766,7 @@ pub mod pallet {
             signature: T::OffchainSignature,
         },
         /// Notifies that file deletions have been completed successfully for a Bucket.
-        BucketFileDeletionCompleted {
+        BucketFileDeletionsCompleted {
             user: T::AccountId,
             file_keys: BoundedVec<MerkleHash<T>, T::MaxFileDeletionsPerExtrinsic>,
             bucket_id: BucketIdFor<T>,
@@ -775,7 +775,7 @@ pub mod pallet {
             new_root: MerkleHash<T>,
         },
         /// Notifies that file deletions have been completed successfully for a BSP.
-        BspFileDeletionCompleted {
+        BspFileDeletionsCompleted {
             users: BoundedVec<T::AccountId, T::MaxFileDeletionsPerExtrinsic>,
             file_keys: BoundedVec<MerkleHash<T>, T::MaxFileDeletionsPerExtrinsic>,
             bsp_id: ProviderIdFor<T>,

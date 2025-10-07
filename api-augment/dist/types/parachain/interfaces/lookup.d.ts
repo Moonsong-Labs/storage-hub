@@ -1668,7 +1668,7 @@ declare const _default: {
         signedDeleteIntention: string;
         signature: string;
       };
-      BucketFileDeletionCompleted: {
+      BucketFileDeletionsCompleted: {
         user: string;
         fileKeys: string;
         bucketId: string;
@@ -1676,7 +1676,7 @@ declare const _default: {
         oldRoot: string;
         newRoot: string;
       };
-      BspFileDeletionCompleted: {
+      BspFileDeletionsCompleted: {
         users: string;
         fileKeys: string;
         bspId: string;
