@@ -15773,7 +15773,7 @@ mod batch_delete_file_tests {
                         None,
                         forest_proof,
                     ),
-                    Error::<Test>::NoFileKeysToConfirm
+                    Error::<Test>::NoFileKeysToDelete
                 );
             });
         }
@@ -15808,7 +15808,7 @@ mod batch_delete_file_tests {
                         Some(bsp_id),
                         forest_proof,
                     ),
-                    Error::<Test>::NoFileKeysToConfirm
+                    Error::<Test>::NoFileKeysToDelete
                 );
             });
         }

@@ -439,9 +439,6 @@ impl<T: Config> Debug for FileOperationIntention<T> {
 }
 
 /// A single file deletion request containing all metadata and signatures needed.
-///
-/// Used for batch file deletion operations where multiple files can be deleted
-/// from a single provider's forest using one forest proof.
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct FileDeletionRequest<T: Config> {

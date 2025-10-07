@@ -285,10 +285,7 @@ pub mod pallet {
         #[pallet::constant]
         type MaxBatchConfirmStorageRequests: Get<u32>;
 
-        /// Maximum number of file deletions that can be processed in a single extrinsic call.
-        ///
-        /// This allows multiple files to be deleted from a single provider's forest using one proof,
-        /// improving efficiency when cleaning up multiple files.
+        /// Maximum number of file deletions that can be processed in a single extrinsic call for `delete_files` and `delete_files_for_incomplete_storage_request`.
         #[pallet::constant]
         type MaxFileDeletionsPerExtrinsic: Get<u32>;
 
@@ -884,6 +881,8 @@ pub mod pallet {
         BatchFileDeletionMustContainSingleBucket,
         /// Duplicate file key detected within the same batch deletion request.
         DuplicateFileKeyInBatchFileDeletion,
+        /// Requires at least 1 file key to be deleted.
+        NoFileKeysToDelete,
         /// Max number of user pending deletion requests reached.
         MaxUserPendingDeletionRequestsReached,
         /// Unauthorized operation, signer is not an MSP of the bucket id.
@@ -1503,8 +1502,7 @@ pub mod pallet {
         /// from the `FileDeletionRequested` event. It requires a valid forest proof showing that
         /// all files exist in the specified provider's forest before allowing deletion.
         ///
-        /// Multiple files can be deleted in a single call using one forest proof, improving
-        /// efficiency when cleaning up multiple files from the same provider.
+        /// Multiple files can be deleted in a single call using one forest proof bounded by [`MaxFileDeletionsPerExtrinsic`](Config::MaxFileDeletionsPerExtrinsic).
         ///
         /// If `bsp_id` is `None`, files will be deleted from the bucket forest.
         /// If `bsp_id` is `Some(id)`, files will be deleted from the specified BSP's forest.
@@ -1531,8 +1529,7 @@ pub mod pallet {
         /// for each file, that the provider has the files in its Merkle Patricia Forest, and verifies the file keys match
         /// the metadata.
         ///
-        /// Multiple files can be deleted in a single call using one forest proof, improving
-        /// efficiency when cleaning up multiple incomplete storage requests from the same provider.
+        /// Multiple files can be deleted in a single call using one forest proof bounded by [`MaxFileDeletionsPerExtrinsic`](Config::MaxFileDeletionsPerExtrinsic).
         #[pallet::call_index(18)]
         #[pallet::weight(Weight::zero())]
         pub fn delete_files_for_incomplete_storage_request(

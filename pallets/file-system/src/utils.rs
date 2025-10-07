@@ -1287,7 +1287,7 @@ where
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
         // Ensure we have at least one file to delete
-        ensure!(!file_deletions.is_empty(), Error::<T>::NoFileKeysToConfirm);
+        ensure!(!file_deletions.is_empty(), Error::<T>::NoFileKeysToDelete);
 
         // Collect validated file deletion data
         let mut validated_deletions = sp_std::vec::Vec::new();
@@ -2773,7 +2773,7 @@ where
     /// # Arguments
     /// * `file_deletions` - Slice of tuples containing (owner, file_key, size, bucket_id) for each file
     /// * `forest_proof` - Proof that all files exist in the bucket's forest
-    pub(crate) fn delete_files_from_bucket(
+    fn delete_files_from_bucket(
         file_deletions: &[(
             T::AccountId,
             MerkleHash<T>,
@@ -2782,9 +2782,6 @@ where
         )],
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
-        // Ensure we have at least one file to delete
-        ensure!(!file_deletions.is_empty(), Error::<T>::NoFileKeysToConfirm);
-
         // All files must be in the same bucket - validate and get bucket_id
         let bucket_id = file_deletions[0].3;
 
@@ -2896,7 +2893,7 @@ where
     /// * `file_deletions` - Slice of tuples containing (owner, file_key, size, bucket_id) for each file
     /// * `bsp_id` - The BSP from which to delete the files
     /// * `forest_proof` - Proof that all files exist in the BSP's forest
-    pub(crate) fn delete_files_from_bsp(
+    fn delete_files_from_bsp(
         file_deletions: &[(
             T::AccountId,
             MerkleHash<T>,
@@ -2906,9 +2903,6 @@ where
         bsp_id: ProviderIdFor<T>,
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
-        // Ensure we have at least one file to delete
-        ensure!(!file_deletions.is_empty(), Error::<T>::NoFileKeysToConfirm);
-
         // Get current BSP root
         let old_root = <T::Providers as ReadProvidersInterface>::get_root(bsp_id)
             .ok_or(Error::<T>::NotABsp)?;
