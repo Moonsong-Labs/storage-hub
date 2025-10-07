@@ -16847,6 +16847,7 @@ dependencies = [
  "mime_guess",
  "mockito",
  "pallet-file-system-runtime-api",
+ "pallet-payment-streams-runtime-api",
  "pallet-proofs-dealer-runtime-api",
  "pallet-storage-providers-runtime-api",
  "parity-scale-codec",

@@ -33,10 +33,10 @@ pub async fn msp_health(State(services): State<Services>) -> Result<impl IntoRes
 
 // ==================== Payment Handler ====================
 
-pub async fn payment_stream(
+pub async fn payment_streams(
     State(services): State<Services>,
     AuthenticatedUser { address }: AuthenticatedUser,
 ) -> Result<impl IntoResponse, Error> {
-    let response = services.msp.get_payment_stream(&address).await?;
+    let response = services.msp.get_payment_streams(&address).await?;
     Ok(Json(response))
 }

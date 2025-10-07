@@ -522,7 +522,7 @@ export interface WaitForOptions {
  * a timeout is reached.
  */
 export const waitFor = async (options: WaitForOptions) => {
-  const { lambda, iterations = 100, delay = 100 } = options;
+  const { lambda, iterations = 200, delay = 100 } = options;
 
   for (let i = 0; i < iterations; i++) {
     try {

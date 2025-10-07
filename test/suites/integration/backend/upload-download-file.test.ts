@@ -13,7 +13,7 @@ import {
   BALTATHAR_PRIVATE_KEY
 } from "../../../util/evmNet/keyring";
 import type { H256 } from "@polkadot/types/interfaces";
-import type { HealthResponse } from "./types";
+import type { HealthResponse } from "../../../util/backend";
 
 await describeMspNet(
   "Backend file upload integration",

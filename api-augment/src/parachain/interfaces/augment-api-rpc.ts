@@ -19,6 +19,7 @@ import type {
   Vec,
   bool,
   f64,
+  u128,
   u32,
   u64
 } from "@polkadot/types-codec";
@@ -1115,6 +1116,10 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
               )[]
         ) => Observable<Bytes>
       >;
+      /**
+       * Get the current price per giga unit per tick from the payment streams pallet
+       **/
+      getCurrentPricePerGigaUnitPerTick: AugmentedRpc<() => Observable<u128>>;
       /**
        * Get the metadata of a file from the Forest storage.
        **/
