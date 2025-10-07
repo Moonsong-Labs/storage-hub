@@ -84,8 +84,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_health_route() {
-        crate::test_utils::init_tracing();
-
         let app = crate::api::mock_app().await;
         let server = TestServer::new(app).unwrap();
 
@@ -98,8 +96,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_download_by_key_streams_and_cleans_temp() {
-        crate::test_utils::init_tracing();
-
         // setup file and bucket to satisfy backend checks
         let services = Services::mocks().await;
         let file_key = {
