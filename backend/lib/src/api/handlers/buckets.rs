@@ -52,7 +52,7 @@ pub async fn get_files(
 
     let response = FileListResponse {
         bucket_id: bucket_id.clone(),
-        files: vec![file_tree],
+        tree: file_tree,
     };
 
     Ok(Json(response))

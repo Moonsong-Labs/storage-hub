@@ -112,12 +112,17 @@ export type FileTree = {
   name: string;
 } & (
     | { type: "file"; sizeBytes: number; fileKey: string }
-    | { type: "folder"; children: FileTree[] }
+    | { type: "folder" }
   );
+
+export type FileTreeRoot = {
+  name: string;
+  children: FileTree[];
+}
 
 export interface FileListResponse {
   bucketId: string;
-  files: FileTree[];
+  tree: FileTreeRoot;
 }
 
 export interface GetFilesOptions {

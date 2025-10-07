@@ -53,8 +53,7 @@ pub struct DistributeResponse {
 pub struct FileListResponse {
     #[serde(rename = "bucketId")]
     pub bucket_id: String,
-    // TODO: consider renaming to "tree" and removing the Vec
-    pub files: Vec<FileTree>,
+    pub tree: FileTree,
 }
 
 #[derive(Debug, Serialize)]

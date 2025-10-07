@@ -39,13 +39,15 @@ export type FileTree = {
     }
   | {
       type: "folder";
-      children: FileTree[];
     }
 );
 
 export interface FileListResponse {
   bucketId: string;
-  files: FileTree[];
+  tree: {
+    name: string;
+    children: FileTree[];
+  };
 }
 
 export interface FileInfo {
