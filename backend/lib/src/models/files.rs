@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use shc_indexer_db::models::File as DBFile;
+use shp_types::Hash;
 
 use crate::models::buckets::FileTree;
 
@@ -9,7 +10,8 @@ use crate::models::buckets::FileTree;
 pub struct FileInfo {
     #[serde(rename = "fileKey")]
     pub file_key: String,
-    pub fingerprint: String,
+    #[serde(serialize_with = "crate::serde_utils::ser::hex_string")]
+    pub fingerprint: [u8; 32],
     #[serde(rename = "bucketId")]
     pub bucket_id: String,
     pub location: String,
@@ -24,7 +26,7 @@ impl FileInfo {
     pub fn from_db(db: &DBFile, is_public: bool) -> Self {
         Self {
             file_key: hex::encode(&db.file_key),
-            fingerprint: hex::encode(&db.fingerprint),
+            fingerprint: Hash::from_slice(&db.fingerprint).to_fixed_bytes(),
             bucket_id: hex::encode(&db.onchain_bucket_id),
             // TODO: determine if lossy conversion is acceptable here
             location: String::from_utf8_lossy(&db.location).into_owned(),

@@ -1,6 +1,4 @@
-//! MSP service implementation with mock data
-//!
-//! TODO(MOCK): many of methods of the MspService returns mocked data
+//! MSP service implementation
 
 use std::{collections::HashSet, str::FromStr, sync::Arc};
 
@@ -276,12 +274,9 @@ impl MspService {
     }
 
     /// Get file information
-    pub async fn get_file_info(
-        &self,
-        bucket_id: &str,
-        user: &str,
-        file_key: &str,
-    ) -> Result<FileInfo, Error> {
+    ///
+    /// Verifies ownership of bucket that the file belongs to is `user`
+    pub async fn get_file_info(&self, user: &str, file_key: &str) -> Result<FileInfo, Error> {
         let file_key_hex = file_key.trim_start_matches("0x");
 
         let file_key = hex::decode(file_key_hex)
@@ -294,13 +289,14 @@ impl MspService {
             )));
         }
 
-        // get bucket determine if user can view it
-        let bucket = self.get_bucket(bucket_id, user).await?;
+        let db_file = self.postgres.get_file_info(&file_key).await?;
 
-        self.postgres
-            .get_file_info(&file_key)
-            .await
-            .map(|file| FileInfo::from_db(&file, bucket.is_public))
+        // get bucket determine if user can view it
+        let bucket = self
+            .get_bucket(&hex::encode(&db_file.onchain_bucket_id), user)
+            .await?;
+
+        Ok(FileInfo::from_db(&db_file, bucket.is_public))
     }
 
     /// Check via MSP RPC if this node is expecting to receive the given file key
@@ -368,19 +364,33 @@ impl MspService {
     /// return its size, UTF-8 location, fingerprint, and temp path.
     /// Returns BadRequest on RPC/parse errors.
     ///
+    /// Will verify that `user` has permission to access the specified `file_key`
+    ///
     /// We provide an URL as saveFileToDisk RPC requires it to stream the file.
     /// We also implemented the internal_upload_by_key handler to handle this temporary file upload.
-    pub async fn get_file_from_key(&self, file_key: &str) -> Result<FileDownloadResult, Error> {
-        // TODO: authenticate user
+    pub async fn get_file_from_key(
+        &self,
+        user: &str,
+        file_key: &str,
+    ) -> Result<FileDownloadResult, Error> {
+        // Retrieve file info, this will also authenticate the user
+        let file = self.get_file_info(user, file_key).await?;
 
         // Create temp url for download
-        let temp_path = format!("/tmp/uploads/{}", file_key);
-        let upload_url = format!("{}/internal/uploads/{}", self.msp_callback_url, file_key);
+        let temp_path = format!("/tmp/uploads/{}", file.file_key);
+
+        // TODO(AUTH): Add MSP Node authentication credentials
+        // Currently this internal endpoint doesn't authenticate that
+        // the client connecting to it is the MSP Node
+        let upload_url = format!(
+            "{}/internal/uploads/{}",
+            self.msp_callback_url, file.file_key
+        );
 
         // Make the RPC call to download file and get metadata
         let rpc_response: SaveFileToDisk = self
             .rpc
-            .save_file_to_disk(file_key, upload_url.as_str())
+            .save_file_to_disk(&file.file_key, upload_url.as_str())
             .await
             .map_err(|e| Error::BadRequest(e.to_string()))?;
 
@@ -392,15 +402,21 @@ impl MspService {
             SaveFileToDisk::Success(file_metadata) => {
                 // Convert location bytes to string
                 let location = String::from_utf8_lossy(file_metadata.location()).to_string();
-                let fingerprint: [u8; 32] = file_metadata.fingerprint().as_hash();
                 let file_size = file_metadata.file_size();
 
-                Ok(FileDownloadResult {
-                    file_size,
-                    location,
-                    fingerprint,
-                    temp_path,
-                })
+                // Ensure data received from MSP matches what we expect
+                if location != file.location || file_size != file.size {
+                    Err(Error::BadRequest(
+                        "Downloaded file doesn't match given file key".to_string(),
+                    ))
+                } else {
+                    Ok(FileDownloadResult {
+                        file_size: file.size,
+                        location: file.location,
+                        fingerprint: file.fingerprint,
+                        temp_path,
+                    })
+                }
             }
         }
     }

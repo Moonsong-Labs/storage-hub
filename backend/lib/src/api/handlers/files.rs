@@ -38,28 +38,26 @@ use crate::{
 pub async fn get_file_info(
     State(services): State<Services>,
     AuthenticatedUser { address }: AuthenticatedUser,
-    Path((bucket_id, file_key)): Path<(String, String)>,
+    Path((_bucket_id, file_key)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, Error> {
-    let response = services
-        .msp
-        .get_file_info(&bucket_id, &address, &file_key)
-        .await?;
+    let response = services.msp.get_file_info(&address, &file_key).await?;
     Ok(Json(response))
 }
 
-// Internal endpoint used by the MSP RPC to upload a file to the backend
-// The file is only temporary and will be deleted after the stream is closed
+/// Internal endpoint used by the MSP RPC to upload a file to the backend
+/// The file is only temporary and will be deleted after the stream is closed
+// TODO(AUTH): Add MSP Node authentication
+// Currently this internal endpoint doesn't authenticate that
+// the client connecting to it is the MSP Node
 pub async fn internal_upload_by_key(
     State(_services): State<Services>,
     Path(file_key): Path<String>,
     body: Bytes,
 ) -> (StatusCode, impl IntoResponse) {
-    // TODO: re-add auth
-    // FIXME: make this only callable by the rpc itself
-    // let _auth = extract_bearer_token(&auth)?;
     if let Err(e) = tokio::fs::create_dir_all("/tmp/uploads").await {
         return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
     }
+
     // Validate file_key is a hex string
     let key = file_key.trim_start_matches("0x");
     if hex::decode(key).is_err() {
@@ -75,7 +73,7 @@ pub async fn internal_upload_by_key(
 
 pub async fn download_by_key(
     State(services): State<Services>,
-    AuthenticatedUser { address: _ }: AuthenticatedUser,
+    AuthenticatedUser { address }: AuthenticatedUser,
     Path(file_key): Path<String>,
 ) -> Result<impl IntoResponse, Error> {
     // Validate file_key is a hex string
@@ -84,8 +82,7 @@ pub async fn download_by_key(
         return Err(Error::BadRequest("Invalid file key".to_string()));
     }
 
-    // TODO(AUTH): verify that user has permissions to access this file
-    let download_result = services.msp.get_file_from_key(&file_key).await?;
+    let download_result = services.msp.get_file_from_key(&address, &file_key).await?;
 
     // Extract filename from location or use file_key as fallback
     let filename = download_result
