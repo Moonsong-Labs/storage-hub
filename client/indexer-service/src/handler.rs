@@ -90,7 +90,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
 
         let service_state = ServiceState::get(&mut db_conn).await?;
 
-        let mut next_block = service_state.last_processed_block as u64;
+        let mut next_block = service_state.last_indexed_finalized_block as u64;
         next_block = next_block.saturating_add(1);
 
         while next_block <= finalized_block_number {
