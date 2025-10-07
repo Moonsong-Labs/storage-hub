@@ -1,15 +1,3 @@
 {
-  "extends": [
-    "../biome.json"
-  ],
-  "files": {
-    "includes": [
-      "**/*.jsx",
-      "**/*.tsx",
-      "!**/dist",
-      "!**/wasm/pkg",
-      "!**/examples/nextjs/.next",
-      "!**/_wasm_embed.ts"
-    ]
-  }
+  "extends": "//"
 }
