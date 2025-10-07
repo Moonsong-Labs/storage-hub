@@ -364,7 +364,7 @@ ALTER SEQUENCE public.peer_id_id_seq OWNED BY public.peer_id.id;
 
 CREATE TABLE public.service_state (
     id integer NOT NULL,
-    last_processed_block bigint NOT NULL,
+    last_indexed_finalized_block bigint NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT service_state_id_check CHECK ((id = 1))
@@ -555,7 +555,7 @@ INSERT INTO public.peer_id (id, peer, created_at, updated_at) VALUES (3, '\x3132
 -- Data for Name: service_state; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.service_state (id, last_processed_block, created_at, updated_at) VALUES (1, 27, '2025-10-03 18:50:08.461168+00', '2025-10-03 18:50:08.461168+00');
+INSERT INTO public.service_state (id, last_indexed_finalized_block, created_at, updated_at) VALUES (1, 27, '2025-10-03 18:50:08.461168+00', '2025-10-03 18:50:08.461168+00');
 
 
 --
