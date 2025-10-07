@@ -10,27 +10,26 @@
 #[cfg(test)]
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-#[cfg(not(test))]
-use std::time::Duration;
-use std::{fs::File, io::BufReader};
 
-use diesel::{ConnectionError, ConnectionResult};
-use futures::{future::BoxFuture, FutureExt};
-use rustls::{
-    client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
-    pki_types::{CertificateDer, ServerName, UnixTime},
-    version, ClientConfig, DigitallySignedStruct, RootCertStore, SignatureScheme,
+#[cfg(not(test))]
+use {
+    diesel::{ConnectionError, ConnectionResult},
+    diesel_async::pooled_connection::ManagerConfig,
+    diesel_async::RunQueryDsl,
+    futures::{future::BoxFuture, FutureExt},
+    rustls::{
+        client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
+        pki_types::{CertificateDer, ServerName, UnixTime},
+        version, ClientConfig, DigitallySignedStruct, RootCertStore, SignatureScheme,
+    },
+    rustls_pemfile::certs as load_pem_certs,
+    rustls_platform_verifier::ConfigVerifierExt,
+    std::{fs::File, io::BufReader, time::Duration},
+    tracing::warn,
 };
-use rustls_pemfile::certs as load_pem_certs;
-use rustls_platform_verifier::ConfigVerifierExt;
-use tracing::warn;
 
-#[cfg(not(test))]
-use diesel_async::pooled_connection::ManagerConfig;
 #[cfg(test)]
 use diesel_async::AsyncConnection;
-#[cfg(not(test))]
-use diesel_async::RunQueryDsl;
 use diesel_async::{
     pooled_connection::{bb8::Pool, AsyncDieselConnectionManager},
     AsyncPgConnection,
@@ -171,8 +170,10 @@ impl SmartPool {
 // --- TLS setup and custom connection establishment ---
 
 #[derive(Debug)]
+#[cfg(not(test))]
 struct NoCertificateVerification;
 
+#[cfg(not(test))]
 impl ServerCertVerifier for NoCertificateVerification {
     fn verify_server_cert(
         &self,
@@ -216,6 +217,7 @@ impl ServerCertVerifier for NoCertificateVerification {
     }
 }
 
+#[cfg(not(test))]
 fn make_rustls_config_from_env() -> ClientConfig {
     let insecure = std::env::var_os("SH_DB_TLS_INSECURE").is_some();
     let ca_file = std::env::var_os("SH_DB_TLS_CA_FILE");
@@ -274,6 +276,7 @@ fn make_rustls_config_from_env() -> ClientConfig {
     }
 }
 
+#[cfg(not(test))]
 fn establish_connection(config: &str) -> BoxFuture<'_, ConnectionResult<AsyncPgConnection>> {
     let fut = async {
         let rustls_config = make_rustls_config_from_env();
