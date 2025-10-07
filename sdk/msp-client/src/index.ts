@@ -4,7 +4,7 @@ export type {
   Capacity,
   DownloadOptions,
   DownloadResult,
-  FileEntry,
+  FileTree,
   FileInfo,
   FileListResponse,
   HealthStatus,
