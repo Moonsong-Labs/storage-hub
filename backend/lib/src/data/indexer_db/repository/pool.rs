@@ -10,9 +10,27 @@
 #[cfg(test)]
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+#[cfg(not(test))]
+use std::time::Duration;
+use std::{fs::File, io::BufReader};
 
+use diesel::{ConnectionError, ConnectionResult};
+use futures::{future::BoxFuture, FutureExt};
+use rustls::{
+    client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
+    pki_types::{CertificateDer, ServerName, UnixTime},
+    version, ClientConfig, DigitallySignedStruct, RootCertStore, SignatureScheme,
+};
+use rustls_pemfile::certs as load_pem_certs;
+use rustls_platform_verifier::ConfigVerifierExt;
+use tracing::warn;
+
+#[cfg(not(test))]
+use diesel_async::pooled_connection::ManagerConfig;
 #[cfg(test)]
 use diesel_async::AsyncConnection;
+#[cfg(not(test))]
+use diesel_async::RunQueryDsl;
 use diesel_async::{
     pooled_connection::{bb8::Pool, AsyncDieselConnectionManager},
     AsyncPgConnection,
@@ -53,7 +71,19 @@ impl SmartPool {
     /// * `Result<Self, RepositoryError>` - The configured pool or error
     pub async fn new(database_url: &str) -> Result<Self, RepositoryError> {
         // Create the connection manager
+        #[cfg(test)]
         let manager = AsyncDieselConnectionManager::<AsyncPgConnection>::new(database_url);
+
+        #[cfg(not(test))]
+        let manager = {
+            // Use TLS-aware custom setup only in non-test builds
+            let mut manager_cfg = ManagerConfig::default();
+            manager_cfg.custom_setup = Box::new(|config: &str| establish_connection(config));
+            AsyncDieselConnectionManager::<AsyncPgConnection>::new_with_config(
+                database_url,
+                manager_cfg,
+            )
+        };
 
         // Configure pool based on compile mode
         #[cfg(test)]
@@ -68,14 +98,31 @@ impl SmartPool {
 
         #[cfg(not(test))]
         let pool = {
-            // Normal pool size for production
-            Pool::builder()
+            // Normal pool size and tuned settings for production
+            let pool = Pool::builder()
                 .max_size(32)
+                .connection_timeout(Duration::from_secs(15))
+                .idle_timeout(Some(Duration::from_secs(300)))
+                .max_lifetime(Some(Duration::from_secs(3600)))
+                .min_idle(Some(4))
                 .build(manager)
                 .await
                 .map_err(|e| {
                     RepositoryError::Pool(format!("Failed to create production pool: {}", e))
-                })?
+                })?;
+
+            // Perform immediate health-check to surface connection/TLS errors early
+            {
+                let mut conn = pool.get().await.map_err(|e| {
+                    RepositoryError::Pool(format!("Failed to get connection: {}", e))
+                })?;
+                diesel::sql_query("SELECT 1")
+                    .execute(&mut conn)
+                    .await
+                    .map_err(|e| RepositoryError::Pool(format!("Healthcheck failed: {}", e)))?;
+            }
+
+            pool
         };
 
         Ok(Self {
@@ -119,6 +166,125 @@ impl SmartPool {
 
         Ok(conn)
     }
+}
+
+// --- TLS setup and custom connection establishment ---
+
+#[derive(Debug)]
+struct NoCertificateVerification;
+
+impl ServerCertVerifier for NoCertificateVerification {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _server_name: &ServerName<'_>,
+        _ocsp: &[u8],
+        _now: UnixTime,
+    ) -> Result<ServerCertVerified, rustls::Error> {
+        Ok(ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &CertificateDer<'_>,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        Ok(HandshakeSignatureValid::assertion())
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        _message: &[u8],
+        _cert: &CertificateDer<'_>,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        Ok(HandshakeSignatureValid::assertion())
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        vec![
+            SignatureScheme::ECDSA_NISTP256_SHA256,
+            SignatureScheme::ECDSA_NISTP384_SHA384,
+            SignatureScheme::RSA_PSS_SHA256,
+            SignatureScheme::RSA_PSS_SHA384,
+            SignatureScheme::RSA_PSS_SHA512,
+            SignatureScheme::RSA_PKCS1_SHA256,
+            SignatureScheme::ED25519,
+        ]
+    }
+}
+
+fn make_rustls_config_from_env() -> ClientConfig {
+    let insecure = std::env::var_os("SH_DB_TLS_INSECURE").is_some();
+    let ca_file = std::env::var_os("SH_DB_TLS_CA_FILE");
+    if insecure {
+        // Accept any certificate and hostname. DO NOT use in production.
+        let provider = rustls::crypto::ring::default_provider();
+        let builder = rustls::ClientConfig::builder_with_provider(provider.into());
+        let builder = builder
+            .with_protocol_versions(&[&version::TLS13, &version::TLS12])
+            .expect("valid TLS versions");
+        builder
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(NoCertificateVerification))
+            .with_no_client_auth()
+    } else if let Some(path) = ca_file {
+        match File::open(&path) {
+            Ok(file) => {
+                let mut reader = BufReader::new(file);
+                let certs_result: Result<Vec<_>, std::io::Error> =
+                    load_pem_certs(&mut reader).collect();
+                match certs_result {
+                    Ok(pems) => {
+                        let mut roots = RootCertStore::empty();
+                        for cert in pems {
+                            if let Err(err) = roots.add(cert) {
+                                warn!("Failed to add certificate to root store: {}", err);
+                            }
+                        }
+                        let provider = rustls::crypto::ring::default_provider();
+                        let builder = rustls::ClientConfig::builder_with_provider(provider.into());
+                        let builder = builder
+                            .with_protocol_versions(&[&version::TLS13, &version::TLS12])
+                            .expect("valid TLS versions");
+                        builder.with_root_certificates(roots).with_no_client_auth()
+                    }
+                    Err(err) => {
+                        warn!(
+                            "Failed to parse PEM certs from {:?}: {}. Falling back to platform verifier.",
+                            path, err
+                        );
+                        ClientConfig::with_platform_verifier()
+                    }
+                }
+            }
+            Err(err) => {
+                warn!(
+                    "Failed to open CA file {:?}: {}. Falling back to platform verifier.",
+                    path, err
+                );
+                ClientConfig::with_platform_verifier()
+            }
+        }
+    } else {
+        // Use system trust store and normal verification.
+        ClientConfig::with_platform_verifier()
+    }
+}
+
+fn establish_connection(config: &str) -> BoxFuture<'_, ConnectionResult<AsyncPgConnection>> {
+    let fut = async {
+        let rustls_config = make_rustls_config_from_env();
+        let tls = tokio_postgres_rustls::MakeRustlsConnect::new(rustls_config);
+        let (client, conn) = tokio_postgres::connect(config, tls)
+            .await
+            .map_err(|e| ConnectionError::BadConnection(e.to_string()))?;
+
+        AsyncPgConnection::try_from_client_and_connection(client, conn).await
+    };
+    fut.boxed()
 }
 
 #[cfg(test)]
