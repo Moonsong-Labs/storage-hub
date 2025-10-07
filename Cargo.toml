@@ -88,6 +88,9 @@ prost = "0.12"
 prost-build = "0.12.3"
 rand = "0.8.5"
 reference-trie = "0.29.1"
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+rustls-platform-verifier = "0.5"
+
 scale-info = { version = "2.11.0", default-features = false, features = [
 	"derive",
 ] }
@@ -97,6 +100,8 @@ smallvec = "1.11.0"
 strum = { version = "0.26.3", features = ["derive"] }
 thiserror = "1.0.48"
 tokio = "1.36.0"
+tokio-postgres = "0.7"
+tokio-postgres-rustls = "0.13"
 tokio-util = { version = "0.7", features = ["io"] }
 toml = "0.8.19"
 tower-http = { version = "0.5", features = ["cors"] }

@@ -1,13 +1,16 @@
 use std::time::Duration;
 
-use diesel::ConnectionError;
+use diesel::{ConnectionError, ConnectionResult};
 use diesel_async::{
     pooled_connection::{
         bb8::{Pool, PooledConnection},
-        AsyncDieselConnectionManager,
+        AsyncDieselConnectionManager, ManagerConfig,
     },
     AsyncPgConnection, RunQueryDsl,
 };
+use futures::{future::BoxFuture, FutureExt};
+use rustls::ClientConfig;
+use rustls_platform_verifier::ConfigVerifierExt;
 use thiserror::Error;
 
 pub mod models;
@@ -29,7 +32,9 @@ pub enum DbSetupError {
 }
 
 pub async fn setup_db_pool(database_url: String) -> Result<DbPool, DbSetupError> {
-    let mgr = AsyncDieselConnectionManager::<AsyncPgConnection>::new(database_url);
+    let mut cfg = ManagerConfig::default();
+    cfg.custom_setup = Box::new(|config: &str| establish_connection(config));
+    let mgr = AsyncDieselConnectionManager::<AsyncPgConnection>::new_with_config(database_url, cfg);
 
     let pool = Pool::builder()
         .max_size(16)
@@ -54,4 +59,18 @@ pub async fn setup_db_pool(database_url: String) -> Result<DbPool, DbSetupError>
     }
 
     Ok(pool)
+}
+
+fn establish_connection(config: &str) -> BoxFuture<'_, ConnectionResult<AsyncPgConnection>> {
+    let fut = async {
+        // We first set up the way we want rustls to work.
+        let rustls_config = ClientConfig::with_platform_verifier();
+        let tls = tokio_postgres_rustls::MakeRustlsConnect::new(rustls_config);
+        let (client, conn) = tokio_postgres::connect(config, tls)
+            .await
+            .map_err(|e| ConnectionError::BadConnection(e.to_string()))?;
+
+        AsyncPgConnection::try_from_client_and_connection(client, conn).await
+    };
+    fut.boxed()
 }
