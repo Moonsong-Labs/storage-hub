@@ -25,18 +25,15 @@ await describeMspNet(
     createApi
   }) => {
     let userApi: EnrichedBspApi;
-    let _bspApi: EnrichedBspApi;
-    let _msp1Api: EnrichedBspApi;
     let indexerApi: EnrichedBspApi;
     let sql: SqlClient;
 
     before(async () => {
       userApi = await createUserApi();
-      _bspApi = await createBspApi();
+      await createBspApi();
       const maybeMsp1Api = await createMsp1Api();
 
       assert(maybeMsp1Api, "MSP API not available");
-      _msp1Api = maybeMsp1Api;
       sql = createSqlClient();
 
       // Create API connection to standalone indexer service (port 9800)

@@ -187,6 +187,11 @@ export type BspNetConfig = {
    * Requires indexer to be enabled.
    */
   backend?: boolean;
+
+  /**
+   * If true, runs indexer as standalone service instead of embedded in user node (fullnet only).
+   */
+  standaloneIndexer?: boolean;
 };
 
 /**

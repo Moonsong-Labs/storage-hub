@@ -25,18 +25,15 @@ await describeMspNet(
     createApi
   }) => {
     let userApi: EnrichedBspApi;
-    let _bspApi: EnrichedBspApi;
-    let _msp1Api: EnrichedBspApi;
     let indexerApi: EnrichedBspApi;
     let sql: SqlClient;
 
     before(async () => {
       userApi = await createUserApi();
-      _bspApi = await createBspApi();
+      await createBspApi();
       const maybeMsp1Api = await createMsp1Api();
 
       assert(maybeMsp1Api, "MSP API not available");
-      _msp1Api = maybeMsp1Api;
       sql = createSqlClient();
 
       // Create API connection to standalone indexer service (port 9800)
@@ -58,7 +55,7 @@ await describeMspNet(
 
     it("indexes all events produced while behind and during sync", async () => {
       // Capture baseline state to verify indexer was truly paused during block production
-      const _initialBlock = await getLastIndexedBlock(sql);
+      await getLastIndexedBlock(sql);
 
       // Simulate indexer falling behind by pausing its container while blockchain continues
       await userApi.docker.pauseContainer("storage-hub-sh-indexer-1");
@@ -77,7 +74,7 @@ await describeMspNet(
       const finalBlockNumber = finalBlockHeader.number.toNumber();
 
       // Confirm indexer remained frozen at initial block - ensures pause was effective
-      const _lastIndexedBeforeResume = await getLastIndexedBlock(sql);
+      await getLastIndexedBlock(sql);
 
       // Resume indexer to trigger catchup - it must now process backlog via finality notifications
       await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-indexer-1" });
@@ -100,10 +97,6 @@ await describeMspNet(
 
       // Validate service_state tracking is accurate after catchup
       const lastIndexedBlock = await getLastIndexedBlock(sql);
-
-      const currentFinalizedHead = await userApi.rpc.chain.getFinalizedHead();
-      const currentFinalizedHeader = await userApi.rpc.chain.getHeader(currentFinalizedHead);
-      const _currentFinalizedNumber = currentFinalizedHeader.number.toNumber();
 
       // Indexer should have processed at minimum the blocks we created, possibly more if chain advanced
       assert(
