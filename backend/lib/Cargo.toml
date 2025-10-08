@@ -14,6 +14,7 @@ bigdecimal = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
 diesel = { workspace = true }
 diesel-async = { workspace = true }
+futures = { workspace = true }
 alloy-core = "0.8"
 alloy-signer = "0.8"
 headers = { workspace = true }
@@ -31,6 +32,11 @@ tokio-util = { workspace = true }
 toml = { workspace = true }
 tower-http = { workspace = true }
 tracing = { workspace = true }
+rustls = { workspace = true }
+rustls-platform-verifier = { workspace = true }
+tokio-postgres = { workspace = true }
+tokio-postgres-rustls = { workspace = true }
+rustls-pemfile = { workspace = true }
 
 # Workspace dependencies
 codec = { workspace = true }
