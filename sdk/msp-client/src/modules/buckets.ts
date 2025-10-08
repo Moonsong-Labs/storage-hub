@@ -28,7 +28,7 @@ export class BucketsModule extends ModuleBase {
     return this.ctx.http.get<FileListResponse>(path, {
       ...(headers ? { headers } : {}),
       ...(options?.signal ? { signal: options.signal } : {}),
-      ...(options?.path ? { query: { path: options.path.replace(/^\/+/, "") } } : {})
+      ...(options?.path ? { query: { path: this.normalizePath(options.path) } } : {})
     });
   }
 }
