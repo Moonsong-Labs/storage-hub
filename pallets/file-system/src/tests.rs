@@ -11926,6 +11926,18 @@ mod request_file_deletion {
             );
         });
     }
+
+    #[test]
+    fn test_eip191_message_works() {
+        new_test_ext().execute_with(|| {
+            let message = "test";
+            let prefixed_hash = FileSystem::eip191_message(message.as_bytes());
+            assert_eq!(
+                prefixed_hash,
+                format!("\x19Ethereum Signed Message:\n{}{}", message.len(), message).as_bytes()
+            );
+        });
+    }
 }
 
 mod delete_file_tests {

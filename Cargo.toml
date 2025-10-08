@@ -69,6 +69,7 @@ hash-db = "0.16.0"
 headers = "0.4.1"
 hex = { version = "0.4.3", default-features = false }
 hex-literal = { version = "0.4.1" }
+itoa = "1"
 jsonrpsee = { version = "0.24.9" }
 jsonrpsee-core = { version = "0.24.9" }
 jsonwebtoken = "9"
