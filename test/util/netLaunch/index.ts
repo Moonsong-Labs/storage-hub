@@ -353,7 +353,7 @@ export class NetworkLauncher {
     console.log(services);
   }
 
-  private async runMigrations() {
+  public async runMigrations() {
     assert(this.config.indexer, "Indexer must be enabled to run migrations");
 
     const dieselCheck = spawnSync("diesel", ["--version"], { stdio: "ignore" });
