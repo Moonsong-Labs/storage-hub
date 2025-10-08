@@ -291,6 +291,18 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       FailedToGetPaymentAccount: AugmentedError<ApiType>;
       /**
+       * Failed to push file key to bounded vector during BSP file deletion
+       **/
+      FailedToPushFileKeyToBspDeletionVector: AugmentedError<ApiType>;
+      /**
+       * Failed to push file key to bounded vector during bucket file deletion
+       **/
+      FailedToPushFileKeyToBucketDeletionVector: AugmentedError<ApiType>;
+      /**
+       * Failed to push user to bounded vector during BSP file deletion
+       **/
+      FailedToPushUserToBspDeletionVector: AugmentedError<ApiType>;
+      /**
        * Failed to query earliest volunteer tick
        **/
       FailedToQueryEarliestFileVolunteerTick: AugmentedError<ApiType>;

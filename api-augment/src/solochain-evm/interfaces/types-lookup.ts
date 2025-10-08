@@ -4139,6 +4139,9 @@ declare module "@polkadot/types/lookup" {
     readonly isBatchFileDeletionMustContainSingleBucket: boolean;
     readonly isDuplicateFileKeyInBatchFileDeletion: boolean;
     readonly isNoFileKeysToDelete: boolean;
+    readonly isFailedToPushFileKeyToBucketDeletionVector: boolean;
+    readonly isFailedToPushUserToBspDeletionVector: boolean;
+    readonly isFailedToPushFileKeyToBspDeletionVector: boolean;
     readonly isMaxUserPendingDeletionRequestsReached: boolean;
     readonly isMspNotStoringBucket: boolean;
     readonly isFileKeyNotPendingDeletion: boolean;
@@ -4231,6 +4234,9 @@ declare module "@polkadot/types/lookup" {
       | "BatchFileDeletionMustContainSingleBucket"
       | "DuplicateFileKeyInBatchFileDeletion"
       | "NoFileKeysToDelete"
+      | "FailedToPushFileKeyToBucketDeletionVector"
+      | "FailedToPushUserToBspDeletionVector"
+      | "FailedToPushFileKeyToBspDeletionVector"
       | "MaxUserPendingDeletionRequestsReached"
       | "MspNotStoringBucket"
       | "FileKeyNotPendingDeletion"
