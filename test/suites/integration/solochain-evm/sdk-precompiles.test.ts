@@ -308,7 +308,7 @@ await describeMspNet(
       const onChain = maybeOnChain.unwrap();
 
       // Retrieve payment streams for the authenticated using the SDK
-      const { streams } = await mspClient.getPaymentStreams();
+      const { streams } = await mspClient.info.getPaymentStreams();
       const sdkPs = streams.find((s) => s.provider.toLowerCase() === mspId.toLowerCase());
       assert(sdkPs, "SDK did not return a payment stream for the expected MSP");
 
