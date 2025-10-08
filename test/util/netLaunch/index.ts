@@ -301,13 +301,12 @@ export class NetworkLauncher {
     }
 
     if (this.config.indexer) {
+      // The indexer will automatically run migrations
       await compose.upOne("sh-postgres", {
         cwd: cwd,
         config: tmpFile,
         log: verbose
       });
-
-      await this.runMigrations();
 
       // Start backend only if backend flag is enabled (depends on msp-1 and postgres)
       if (this.config.backend && this.type === "fullnet") {
