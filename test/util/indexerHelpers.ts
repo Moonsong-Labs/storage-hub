@@ -51,7 +51,7 @@ export const waitForBucketByIdIndexed = async (
     lambda: async () => {
       const query = mspId
         ? sql`
-            SELECT * FROM bucket WHERE onchain_bucket_id = ${hexToBuffer(bucketId)} AND 
+            SELECT * FROM bucket WHERE onchain_bucket_id = ${hexToBuffer(bucketId)} AND
             msp_id = ${mspId}
           `
         : sql`
@@ -88,7 +88,7 @@ export const waitForMspFileAssociation = async (
             SELECT mf.* FROM msp_file mf
             INNER JOIN file f ON mf.file_id = f.id
             INNER JOIN msp m ON mf.msp_id = m.id
-            WHERE f.file_key = ${hexToBuffer(fileKey)} 
+            WHERE f.file_key = ${hexToBuffer(fileKey)}
             AND m.onchain_msp_id = ${mspId}
           `
         : sql`
@@ -114,7 +114,7 @@ export const waitForBspFileAssociation = async (
             SELECT bf.* FROM bsp_file bf
             INNER JOIN file f ON bf.file_id = f.id
             INNER JOIN bsp b ON bf.bsp_id = b.id
-            WHERE f.file_key = ${hexToBuffer(fileKey)} 
+            WHERE f.file_key = ${hexToBuffer(fileKey)}
             AND b.onchain_bsp_id = ${bspId}
           `
         : sql`
@@ -153,7 +153,7 @@ export const waitForBspFileAssociationRemoved = async (
             SELECT bf.* FROM bsp_file bf
             INNER JOIN file f ON bf.file_id = f.id
             INNER JOIN bsp b ON bf.bsp_id = b.id
-            WHERE f.file_key = ${hexToBuffer(fileKey)} 
+            WHERE f.file_key = ${hexToBuffer(fileKey)}
             AND b.onchain_bsp_id = ${bspId}
           `
         : sql`
@@ -179,7 +179,7 @@ export const waitForMspFileAssociationRemoved = async (
             SELECT mf.* FROM msp_file mf
             INNER JOIN file f ON mf.file_id = f.id
             INNER JOIN msp m ON mf.msp_id = m.id
-            WHERE f.file_key = ${hexToBuffer(fileKey)} 
+            WHERE f.file_key = ${hexToBuffer(fileKey)}
             AND m.onchain_msp_id = ${mspId}
           `
         : sql`
@@ -416,4 +416,36 @@ export const chargeUserUntilInsolvent = async (
     userBecameInsolvent: finalResult.userBecameInsolvent,
     finalResult
   };
+};
+
+/**
+ * Get the last indexed block number from the service_state table.
+ *
+ * @param sql - The SQL client instance
+ * @returns The last indexed finalized block number
+ */
+export const getLastIndexedBlock = async (sql: SqlClient): Promise<number> => {
+  const result = await sql`SELECT last_indexed_finalized_block FROM service_state WHERE id = 1`;
+  return Number(result[0].last_indexed_finalized_block);
+};
+
+/**
+ * Wait for the indexer to catch up to a target block number.
+ *
+ * @param api - The enriched API instance
+ * @param sql - The SQL client instance
+ * @param targetBlock - The target block number to wait for
+ */
+export const waitForIndexerSyncToBlock = async (
+  sql: SqlClient,
+  targetBlock: number
+): Promise<void> => {
+  await waitFor({
+    lambda: async () => {
+      const lastIndexed = await getLastIndexedBlock(sql);
+      return lastIndexed >= targetBlock;
+    },
+    iterations: 100,
+    delay: 500
+  });
 };

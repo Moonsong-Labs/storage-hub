@@ -215,6 +215,12 @@ async fn configure_and_spawn_indexer<Runtime: StorageEnableRuntime>(
     Ok(Some(db_pool))
 }
 
+/// Initialize the StorageHub builder with configured services based on the node's role.
+///
+/// If `indexer_options` is provided, spawns the indexer service regardless of role configuration.
+/// The indexer service is decoupled from the role system and can run standalone.
+///
+/// Returns `None` if no role is configured (e.g., standalone indexer mode).
 async fn init_sh_builder<R, S, Runtime: StorageEnableRuntime>(
     role_options: &Option<RoleOptions>,
     indexer_options: &Option<IndexerOptions>,
@@ -240,15 +246,15 @@ where
     (R, S): ShNodeType<Runtime>,
     StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder,
 {
+    // Spawn indexer service if enabled. Runs before role check to allow standalone operation.
+    let maybe_indexer_db_pool =
+        configure_and_spawn_indexer::<Runtime>(&indexer_options, &task_manager, client.clone())
+            .await?;
+
     let role_options = match role_options {
         Some(role) => role,
         None => return Ok(None),
     };
-
-    // Configure indexer if enabled
-    let maybe_indexer_db_pool =
-        configure_and_spawn_indexer::<Runtime>(&indexer_options, &task_manager, client.clone())
-            .await?;
 
     let task_spawner_name = match role_options {
         RoleOptions::Provider(ProviderOptions {
