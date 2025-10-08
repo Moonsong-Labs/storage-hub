@@ -184,26 +184,27 @@ async fn create_rpc_client(config: &Config) -> Result<Arc<StorageHubRpcClient>> 
     Ok(Arc::new(client))
 }
 
+/// This function tries to create an RPC client and, if failling to do so (mainly caused by the MSP client
+/// not being ready yet), it retries indefinitely.
+///
+/// Note: Keep in mind that the failure to connect to the RPC is not always caused by the MSP client
+/// not being ready yet, but could also occur due to a badly configured RPC URL. If this is the case,
+/// the backend will keep retrying but fail to start.
 async fn create_rpc_client_with_retry(config: &Config) -> Result<Arc<StorageHubRpcClient>> {
-    // TODO: We should make these configurable.
-    let mut attempts: u32 = 0;
-    let max_attempts: u32 = 30;
-    let delay_between_retries_secs: u64 = 2;
+    // TODO: We should make this configurable.
+    let delay_between_retries_secs: u64 = 5;
     loop {
         match create_rpc_client(config).await {
             Ok(client) => return Ok(client),
-            Err(e) if attempts < max_attempts => {
-                attempts += 1;
+            Err(e) => {
                 tracing::warn!(
-                    "RPC not ready yet (attempt {}/{}): {:?}",
-                    attempts,
-                    max_attempts,
+                    "RPC not ready yet, retrying in {} seconds. Error: {:?}",
+                    delay_between_retries_secs,
                     e
                 );
                 tokio::time::sleep(std::time::Duration::from_secs(delay_between_retries_secs))
                     .await;
             }
-            Err(e) => return Err(e),
         }
     }
 }
