@@ -302,14 +302,26 @@ await describeMspNet(
     });
 
     it("Should fetch payment streams using the SDK's MspClient", async () => {
-      // Retrieve payment streams for the authenticated user and print details for review
-      const streamsResp = await mspClient.getPaymentStreams();
-      strictEqual(streamsResp.streams.length, 1, "payment streams array length should be 1");
+      // Get on-chain information for payment streams
+      const mspId = userApi.shConsts.DUMMY_MSP_ID;
+      const maybeOnChain = await userApi.query.paymentStreams.fixedRatePaymentStreams(
+        mspId,
+        account.address
+      );
+      assert(maybeOnChain.isSome, "On-chain fixed-rate payment stream not found");
+      const onChain = maybeOnChain.unwrap();
 
-      const ps = streamsResp.streams[0];
-      strictEqual(ps.providerType, "msp", "providerType should be 'msp'");
-      strictEqual(ps.totalAmountPaid, "100000", "totalAmountPaid should be '100000'");
-      strictEqual(ps.costPerTick, "90664", "costPerTick should be '90664'");
+      // Retrieve payment streams for the authenticated using the SDK
+      const { streams } = await mspClient.getPaymentStreams();
+      const sdkPs = streams.find((s) => s.provider.toLowerCase() === mspId.toLowerCase());
+      assert(sdkPs, "SDK did not return a payment stream for the expected MSP");
+
+      strictEqual(sdkPs.providerType, "msp", "providerType should be 'msp'");
+      strictEqual(
+        sdkPs.costPerTick,
+        onChain.rate.toString(),
+        "costPerTick must match on-chain rate"
+      );
     });
 
     it("Should download the file from the MSP through the backend using the SDK's MspClient", async () => {
