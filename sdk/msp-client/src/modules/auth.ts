@@ -46,14 +46,14 @@ export class AuthModule extends ModuleBase {
   async SIWE(wallet: WalletClient, options?: { signal?: AbortSignal }): Promise<void> {
     const rawAddress = (await wallet.getAddresses())?.[0];
     if (!rawAddress) throw new Error("No wallet addresses found");
-    const address = getAddress(rawAddress);
+    if (!wallet.account) throw new Error("Wallet client has no active account");
 
+    // Get the checksummed address
+    const address = getAddress(rawAddress);
     const chainId = await wallet.getChainId();
     const { message } = await this.getNonce(address, chainId, {
       ...(options?.signal && { signal: options.signal })
     });
-
-    if (!wallet.account) throw new Error("Wallet client has no active account");
     const signature = await wallet.signMessage({ account: wallet.account, message });
 
     this.ctx.session = await this.verify(message, signature, {
