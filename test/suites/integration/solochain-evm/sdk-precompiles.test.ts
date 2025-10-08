@@ -6,6 +6,7 @@ import { TypeRegistry } from "@polkadot/types";
 import type { AccountId20, H256 } from "@polkadot/types/interfaces";
 import {
   FileManager,
+  type FileInfo,
   type HttpClientConfig,
   ReplicationLevel,
   StorageHubClient
@@ -341,6 +342,102 @@ await describeMspNet(
         ),
         "File should be the same as the one uploaded"
       );
+    });
+
+    it("Should request deletion and verify complete cleanup", async () => {
+      const registry = new TypeRegistry();
+      const owner = registry.createType("AccountId20", account.address) as AccountId20;
+      const bucketIdH256 = registry.createType("H256", bucketId) as H256;
+
+      const fingerprint = await fileManager.getFingerprint();
+      const fileSize = BigInt(fileManager.getFileSize());
+
+      const fileInfo: FileInfo = {
+        fileKey: fileKey.toHex() as `0x${string}`,
+        bucketId: bucketIdH256.toHex() as `0x${string}`,
+        location: fileLocation,
+        size: fileSize,
+        fingerprint: fingerprint.toHex() as `0x${string}`
+      };
+
+      const txHash = await storageHubClient.requestDeleteFile(fileInfo);
+      await userApi.wait.waitForTxInPool({
+        module: "ethereum",
+        method: "transact"
+      });
+      await userApi.block.seal();
+
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+      assert(receipt.status === "success", "Request delete file transaction failed");
+
+      // TODO: Complete deletion verification
+      // - Wait for MSP backend to process the deletion request from blockchain events
+      // - Verify file is marked as deleted in on-chain state
+      // - Attempt to download the file using mspClient.downloadByKey(fileInfo.fileKey)
+      // - Expect download to fail with 404 or "not found" error
+      // - Verify MSP no longer serves the deleted file
+    });
+
+    it("Should create, verify, delete, and verify deletion of a bucket", async () => {
+      const testBucketName = "delete-bucket-test";
+
+      const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
+        userApi.shConsts.DUMMY_MSP_ID
+      );
+
+      assert(valueProps.length > 0, "No value propositions found for MSP");
+      assert(valueProps[0].id, "Value proposition ID is undefined");
+      const valuePropId = valueProps[0].id.toHex();
+
+      const testBucketId = (await storageHubClient.deriveBucketId(
+        account.address,
+        testBucketName
+      )) as string;
+
+      const bucketBeforeCreation = await userApi.query.providers.buckets(testBucketId);
+      assert(bucketBeforeCreation.isEmpty, "Test bucket should not exist before creation");
+
+      const createTxHash = await storageHubClient.createBucket(
+        userApi.shConsts.DUMMY_MSP_ID as `0x${string}`,
+        testBucketName,
+        false,
+        valuePropId as `0x${string}`
+      );
+
+      await userApi.wait.waitForTxInPool({
+        module: "ethereum",
+        method: "transact"
+      });
+      await userApi.block.seal();
+
+      const createReceipt = await publicClient.waitForTransactionReceipt({ hash: createTxHash });
+      assert(createReceipt.status === "success", "Create bucket transaction failed");
+
+      const bucketAfterCreation = await userApi.query.providers.buckets(testBucketId);
+      assert(!bucketAfterCreation.isEmpty, "Bucket should exist after creation");
+      const bucketData = bucketAfterCreation.unwrap();
+      assert(
+        bucketData.userId.toString() === account.address,
+        "Bucket userId should match account address"
+      );
+      assert(
+        bucketData.mspId.toString() === userApi.shConsts.DUMMY_MSP_ID,
+        "Bucket mspId should match expected MSP ID"
+      );
+
+      const deleteTxHash = await storageHubClient.deleteBucket(testBucketId as `0x${string}`);
+
+      await userApi.wait.waitForTxInPool({
+        module: "ethereum",
+        method: "transact"
+      });
+      await userApi.block.seal();
+
+      const deleteReceipt = await publicClient.waitForTransactionReceipt({ hash: deleteTxHash });
+      assert(deleteReceipt.status === "success", "Delete bucket transaction failed");
+
+      const bucketAfterDeletion = await userApi.query.providers.buckets(testBucketId);
+      assert(bucketAfterDeletion.isEmpty, "Bucket should not exist after deletion");
     });
   }
 );

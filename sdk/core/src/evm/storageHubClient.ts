@@ -8,22 +8,24 @@
  * Binary data (signatures) are passed as Uint8Array. Hex values are 0x-prefixed strings (32-byte IDs).
  */
 
-import { filesystemAbi } from "../abi/filesystem";
-import type { EvmWriteOptions, StorageHubClientOptions } from "./types";
-import type { ReplicationLevel } from "./types";
+import { filesystemAbi } from '../abi/filesystem';
+import type { FileInfo } from '../types';
+import type { EvmWriteOptions, StorageHubClientOptions } from './types';
+import { FileOperation, ReplicationLevel } from './types';
 import {
   type Address,
   createPublicClient,
   getContract,
   type GetContractReturnType,
+  hexToBytes,
   http,
+  keccak256,
   parseGwei,
   type PublicClient,
   stringToBytes,
   stringToHex,
-  toHex,
-  type WalletClient
-} from "viem";
+  type WalletClient,
+} from 'viem';
 
 // Re-export filesystemAbi for external use
 export { filesystemAbi };
@@ -149,6 +151,41 @@ export class StorageHubClient {
       throw new Error(`${label} exceeds maximum length of ${maxBytes} bytes (got ${bytes.length})`);
     }
     return stringToHex(str);
+  }
+
+  /**
+   * Serialize FileOperationIntention and sign it
+   */
+  private async signIntention(
+    fileKey: `0x${string}`,
+    operation: FileOperation,
+  ): Promise<{
+    signedIntention: readonly [`0x${string}`, number];
+    signature: `0x${string}`;
+  }> {
+    const fileKeyBytes = hexToBytes(fileKey);
+    if (fileKeyBytes.length !== 32) {
+      throw new Error(`Invalid file key: expected 32 bytes, got ${fileKeyBytes.length} bytes`);
+    }
+
+    const serialized = new Uint8Array([...fileKeyBytes, operation]);
+    // TODO: we need to replace this with signMessage or EIP-712 (sign structure data)
+    // we cannot sign this raw message/bytes with Metamask or any other EIP1193 wallet
+    // const hash = keccak256(serialized);
+    // const signature = await this.walletClient.account!.sign!({ hash });
+    if (!this.walletClient.account) {
+      throw new Error('Wallet client must have an account to sign messages');
+    }
+
+    const signature = await this.walletClient.signMessage({
+      account: this.walletClient.account,
+      message: { raw: serialized }
+    });
+
+    return {
+      signedIntention: [fileKey, operation],
+      signature,
+    };
   }
 
   /**
@@ -365,36 +402,37 @@ export class StorageHubClient {
   }
 
   /**
-   * Request deletion of a file using a signed intention.
-   * @param signedIntention - tuple [fileKey: 0x32, operation: number] where operation must be 0 (Delete)
-   * @param signature - 65-byte secp256k1 signature over the SCALE-encoded intention
-   * @param bucketId - 32-byte bucket ID
-   * @param location - file path as string (max 512 UTF-8 bytes)
-   * @param size - file size as bigint (storage units)
-   * @param fingerprint - 32-byte file fingerprint
-   * @param options - optional gas and fee overrides
+   * Request deletion of a file from the network.
+   * @param fileInfo File information containing all required data
+   * @param operation File operation to perform (defaults to Delete)
+   * @param options Optional transaction options
+   * @returns Transaction hash
    */
   async requestDeleteFile(
-    signedIntention: readonly [`0x${string}`, number],
-    signature: Uint8Array,
-    bucketId: `0x${string}`,
-    location: string,
-    size: bigint,
-    fingerprint: `0x${string}`,
-    options?: EvmWriteOptions
-  ) {
-    const signatureHex = toHex(signature);
+    fileInfo: FileInfo,
+    operation: FileOperation = FileOperation.Delete,
+    options?: EvmWriteOptions,
+  ): Promise<`0x${string}`> {
+    // Create signed intention and execute transaction
+    const { signedIntention, signature } = await this.signIntention(fileInfo.fileKey, operation);
     const locationHex = this.validateStringLength(
-      location,
+      fileInfo.location,
       StorageHubClient.MAX_LOCATION_BYTES,
-      "File location"
+      'File location',
     );
-    const args = [signedIntention, signatureHex, bucketId, locationHex, size, fingerprint] as const;
+    const args = [
+      signedIntention,
+      signature,
+      fileInfo.bucketId,
+      locationHex,
+      fileInfo.size,
+      fileInfo.fingerprint,
+    ] as const;
 
     const gasLimit = await this.estimateGas("requestDeleteFile", args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
     const contract = this.getWriteContract();
-    return await contract.write.requestDeleteFile?.(args, txOpts);
+    return await contract.write.requestDeleteFile!(args, txOpts);
   }
 }
