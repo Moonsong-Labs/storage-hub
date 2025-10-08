@@ -1,12 +1,7 @@
-import type { MspClientContext } from "../context.js";
 import type { Bucket, FileListResponse, GetFilesOptions } from "../types.js";
 import { ModuleBase } from "../base.js";
 
 export class BucketsModule extends ModuleBase {
-  constructor(ctx: MspClientContext) {
-    super(ctx);
-  }
-
   /** List all buckets for the current authenticated user */
   list(options?: { signal?: AbortSignal }): Promise<Bucket[]> {
     const headers = this.withAuth();
@@ -37,5 +32,3 @@ export class BucketsModule extends ModuleBase {
     });
   }
 }
-
-

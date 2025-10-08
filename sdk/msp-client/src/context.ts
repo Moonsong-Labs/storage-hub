@@ -6,5 +6,3 @@ export interface MspClientContext {
   http: HttpClient;
   session?: Session;
 }
-
-

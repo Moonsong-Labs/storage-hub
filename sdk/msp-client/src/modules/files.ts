@@ -1,4 +1,3 @@
-import type { MspClientContext } from "../context.js";
 import { ModuleBase } from "../base.js";
 import type {
   DownloadOptions,
@@ -12,10 +11,6 @@ import type {
 import { FileMetadata, FileTrie, initWasm } from "@storagehub-sdk/core";
 
 export class FilesModule extends ModuleBase {
-  constructor(ctx: MspClientContext) {
-    super(ctx);
-  }
-
   /** Get metadata for a file in a bucket by fileKey */
   getFileInfo(
     bucketId: string,
@@ -285,5 +280,3 @@ export class FilesModule extends ModuleBase {
     return fileMetadata.getFileKey();
   }
 }
-
-

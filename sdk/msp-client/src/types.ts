@@ -77,7 +77,7 @@ export interface NonceResponse {
 export enum AuthState {
   NotAuthenticated = "NotAuthenticated",
   TokenExpired = "TokenExpired",
-  Authenticated = "Authenticated",
+  Authenticated = "Authenticated"
 }
 
 export interface AuthStatus {

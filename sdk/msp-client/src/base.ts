@@ -12,5 +12,3 @@ export abstract class ModuleBase {
     return token ? { ...(headers ?? {}), Authorization: `Bearer ${token}` } : headers;
   }
 }
-
-
