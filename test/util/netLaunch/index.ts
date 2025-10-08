@@ -164,6 +164,9 @@ export class NetworkLauncher {
 
     if (this.config.indexer) {
       composeYaml.services["sh-user"].command.push("--indexer");
+      composeYaml.services["sh-user"].environment =
+        composeYaml.services["sh-user"].environment ?? {};
+      composeYaml.services["sh-user"].environment.SH_INDEXER_DB_AUTO_MIGRATE = "false";
       composeYaml.services["sh-user"].command.push(
         "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
       );
@@ -172,6 +175,9 @@ export class NetworkLauncher {
           "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
         );
         composeYaml.services["sh-msp-2"].command.push("--indexer");
+        composeYaml.services["sh-msp-2"].environment =
+          composeYaml.services["sh-msp-2"].environment ?? {};
+        composeYaml.services["sh-msp-2"].environment.SH_INDEXER_DB_AUTO_MIGRATE = "false";
         composeYaml.services["sh-msp-2"].command.push(
           "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
         );
@@ -301,12 +307,13 @@ export class NetworkLauncher {
     }
 
     if (this.config.indexer) {
-      // The indexer will automatically run migrations
       await compose.upOne("sh-postgres", {
         cwd: cwd,
         config: tmpFile,
         log: verbose
       });
+
+      await this.runMigrations();
 
       // Start backend only if backend flag is enabled (depends on msp-1 and postgres)
       if (this.config.backend && this.type === "fullnet") {
@@ -353,7 +360,7 @@ export class NetworkLauncher {
     console.log(services);
   }
 
-  public async runMigrations() {
+  private async runMigrations() {
     assert(this.config.indexer, "Indexer must be enabled to run migrations");
 
     const dieselCheck = spawnSync("diesel", ["--version"], { stdio: "ignore" });
