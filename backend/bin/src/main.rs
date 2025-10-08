@@ -11,6 +11,7 @@ use sh_msp_backend_lib::data::{indexer_db::mock_repository::MockRepository, rpc:
 use sh_msp_backend_lib::{
     api::create_app,
     config::Config,
+    constants::retry::get_retry_delay,
     data::{
         indexer_db::{client::DBClient, repository::postgres::Repository},
         rpc::{AnyRpcConnection, RpcConfig, StorageHubRpcClient, WsConnection},
@@ -18,7 +19,7 @@ use sh_msp_backend_lib::{
     },
     services::Services,
 };
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 #[derive(Parser, Debug)]
@@ -184,26 +185,30 @@ async fn create_rpc_client(config: &Config) -> Result<Arc<StorageHubRpcClient>> 
     Ok(Arc::new(client))
 }
 
-/// This function tries to create an RPC client and, if failling to do so (mainly caused by the MSP client
-/// not being ready yet), it retries indefinitely.
+/// This function tries to create an RPC client and, if failing to do so (mainly caused by the MSP client
+/// not being ready yet), it retries indefinitely with a stepped backoff strategy.
 ///
 /// Note: Keep in mind that the failure to connect to the RPC is not always caused by the MSP client
 /// not being ready yet, but could also occur due to a badly configured RPC URL. If this is the case,
-/// the backend will keep retrying but fail to start.
+/// the backend will keep retrying indefinitely but fail to start. Monitor the retry attempt count
+/// in logs to detect potential configuration issues.
 async fn create_rpc_client_with_retry(config: &Config) -> Result<Arc<StorageHubRpcClient>> {
-    // TODO: We should make this configurable.
-    let delay_between_retries_secs: u64 = 5;
+    let mut attempt = 0;
+
     loop {
         match create_rpc_client(config).await {
             Ok(client) => return Ok(client),
             Err(e) => {
-                tracing::warn!(
-                    "RPC not ready yet, retrying in {} seconds. Error: {:?}",
-                    delay_between_retries_secs,
+                // Calculate the retry delay before the next attempt based on the attempt number
+                let delay_secs = get_retry_delay(attempt);
+                warn!(
+                    "RPC not ready yet (attempt {}), retrying in {} seconds. Error: {:?}",
+                    attempt + 1,
+                    delay_secs,
                     e
                 );
-                tokio::time::sleep(std::time::Duration::from_secs(delay_between_retries_secs))
-                    .await;
+                tokio::time::sleep(std::time::Duration::from_secs(delay_secs)).await;
+                attempt += 1;
             }
         }
     }

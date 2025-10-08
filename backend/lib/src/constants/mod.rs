@@ -87,6 +87,25 @@ pub mod auth {
     pub const MOCK_ENS: &str = "user.eth";
 }
 
+/// Retry and backoff configuration
+pub mod retry {
+    /// Stepped backoff delays (in seconds) for retry operations.
+    /// Sequence: 1s → 2s → 5s → 10s → 15s → 20s → 60s → 90s → 150s → 240s
+    pub const BACKOFF_DELAYS_SECS: &[u64] = &[1, 2, 5, 10, 15, 20, 60, 90, 150, 240];
+
+    /// Maximum backoff delay (in seconds) for retry operations
+    /// Used when all stepped delays have been exhausted.
+    pub const MAX_BACKOFF_DELAY_SECS: u64 = 300; // 5 minutes
+
+    /// Calculates the retry delay based on the attempt number using the stepped backoff strategy.
+    pub fn get_retry_delay(attempt: u32) -> u64 {
+        BACKOFF_DELAYS_SECS
+            .get(attempt as usize)
+            .copied()
+            .unwrap_or(MAX_BACKOFF_DELAY_SECS)
+    }
+}
+
 pub mod mocks {
     /// The user address to mock
     pub const MOCK_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";

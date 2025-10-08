@@ -23,7 +23,10 @@ use shc_indexer_db::{models::Bucket as DBBucket, OnchainMspId};
 use shp_types::Hash;
 
 use crate::{
-    constants::mocks::{PLACEHOLDER_BUCKET_FILE_COUNT, PLACEHOLDER_BUCKET_SIZE_BYTES},
+    constants::{
+        mocks::{PLACEHOLDER_BUCKET_FILE_COUNT, PLACEHOLDER_BUCKET_SIZE_BYTES},
+        retry::get_retry_delay,
+    },
     data::{
         indexer_db::{client::DBClient, repository::PaymentStreamKind},
         rpc::StorageHubRpcClient,
@@ -69,35 +72,17 @@ impl MspService {
     /// Create a new MSP service
     ///
     /// This function tries to discover the MSP's provider ID and, if the node is not yet
-    /// registered as an MSP, it retries indefinitely.
+    /// registered as an MSP, it retries indefinitely with a stepped backoff strategy.
     ///
     /// Note: Keep in mind that if the node is never registered as an MSP, this function
-    /// will keep retrying indefinitely and the backend will fail to start.
+    /// will keep retrying indefinitely and the backend will fail to start. Monitor the
+    /// retry attempt count in logs to detect potential configuration issues.
     pub async fn new(
         storage: Arc<dyn BoxedStorage>,
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
         msp_callback_url: String,
     ) -> Result<Self, Error> {
-        // Helper function to calculate the retry delay with a stepped backoff
-        // Sequence: 1 → 2 → 5 → 10 → 15 → 20 → 60 → 90 → 150 → 240 → 300 (max)
-        // TODO: We should make the delay steps configurable.
-        let get_retry_delay = |attempt: u32| -> u64 {
-            match attempt {
-                0 => 1,
-                1 => 2,
-                2 => 5,
-                3 => 10,
-                4 => 15,
-                5 => 20,
-                6 => 60,
-                7 => 90,
-                8 => 150,
-                9 => 240,
-                _ => 300, // Max delay: 5 minutes
-            }
-        };
-
         let mut attempt = 0;
 
         // Discover the Provider ID of the connected node.
