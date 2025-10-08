@@ -8,6 +8,7 @@ import type {
   HealthStatus,
   InfoResponse,
   NonceResponse,
+  PaymentStreamsResponse,
   StatsResponse,
   UploadOptions,
   UploadReceipt,
@@ -69,8 +70,16 @@ export class MspClient {
     });
   }
 
-  // Auth endpoints:
+  /** Get payment streams for current authenticated user */
+  getPaymentStreams(options?: { signal?: AbortSignal }): Promise<PaymentStreamsResponse> {
+    const headers = this.withAuth();
+    return this.http.get<PaymentStreamsResponse>("/payment_streams", {
+      ...(headers ? { headers } : {}),
+      ...(options?.signal ? { signal: options.signal } : {})
+    });
+  }
 
+  // Auth endpoints:
   /** Request a SIWE-style nonce message for the given address and chainId */
   getNonce(
     address: string,
@@ -109,7 +118,6 @@ export class MspClient {
   }
 
   // Bucket endpoints:
-
   /** List all buckets for the current authenticateduser */
   listBuckets(options?: { signal?: AbortSignal }): Promise<Bucket[]> {
     const headers = this.withAuth();
@@ -163,7 +171,6 @@ export class MspClient {
   }
 
   // File endpoints:
-
   /**
    * Upload a file to a bucket with a specific key.
    *

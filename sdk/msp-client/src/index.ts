@@ -10,6 +10,8 @@ export type {
   HealthStatus,
   InfoResponse,
   NonceResponse,
+  PaymentStreamInfo,
+  PaymentStreamsResponse,
   StatsResponse,
   UploadOptions,
   UploadReceipt,
