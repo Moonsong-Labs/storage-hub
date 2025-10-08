@@ -44,42 +44,8 @@ impl Services {
         rpc: Arc<StorageHubRpcClient>,
         config: Config,
     ) -> Self {
-        let jwt_secret = config
-            .auth
-            .jwt_secret
-            .as_ref()
-            .ok_or_else(|| {
-                tracing::error!("JWT_SECRET is not set. Please set it in the config file or as an environment variable.");
-                "JWT_SECRET is not configured"
-            })
-            .and_then(|secret| {
-                hex::decode(secret.trim_start_matches("0x"))
-                    .map_err(|e| {
-                        tracing::error!("Invalid JWT_SECRET format. Must be a valid hex string: {}", e);
-                        "Invalid JWT_SECRET format"
-                    })
-            })
-            .and_then(|decoded| {
-                if decoded.len() < 32 {
-                    tracing::error!("JWT_SECRET is too short. Must be at least 32 bytes (64 hex characters), got {} bytes", decoded.len());
-                    Err("JWT_SECRET must be at least 32 bytes")
-                } else {
-                    Ok(decoded)
-                }
-            })
-            .expect("JWT secret configuration should be valid");
+        let auth = Arc::new(AuthService::from_config(&config.auth, storage.clone()));
 
-        #[allow(unused_mut)] // triggers warning without mocks feature
-        let mut auth = AuthService::new(jwt_secret.as_slice(), storage.clone());
-
-        #[cfg(feature = "mocks")]
-        {
-            if config.auth.mock_mode {
-                auth.insecure_disable_validation();
-            }
-        }
-
-        let auth = Arc::new(auth);
         let health = Arc::new(HealthService::new(
             storage.clone(),
             postgres.clone(),

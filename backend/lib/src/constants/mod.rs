@@ -62,8 +62,6 @@ pub mod api {
 
 /// Auth configuration constants
 pub mod auth {
-    use chrono::Duration;
-
     /// The endpoint for the nonce authentication
     ///
     /// This is here as a constant because it is used both in the
@@ -79,9 +77,9 @@ pub mod auth {
     // TODO: make configurable
     pub const AUTH_NONCE_EXPIRATION_SECONDS: u64 = 300; // 5 minutes
 
-    /// Authentication JWT token expiration
-    // TODO: make configurable
-    pub const JWT_EXPIRY_OFFSET: Duration = Duration::minutes(60 * 5); // 5 hours
+    /// Default authentication JWT token expiration (in minutes)
+    // TODO: temporarily set to 5 hours to extend sessions
+    pub const DEFAULT_JWT_EXPIRY_OFFSET_MINUTES: usize = 60 * 5;
 
     // TODO(MOCK): retrieve ens from token?
     pub const MOCK_ENS: &str = "user.eth";

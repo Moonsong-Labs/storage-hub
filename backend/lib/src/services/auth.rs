@@ -10,15 +10,16 @@ use axum_jwt::{
     jsonwebtoken::{self, DecodingKey, EncodingKey, Header, Validation},
     Claims, Decoder,
 };
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use rand::{distributions::Alphanumeric, Rng};
 
 use crate::{
     api::validation::validate_eth_address,
+    config::AuthConfig,
     constants::{
         auth::{
             AUTH_NONCE_ENDPOINT, AUTH_NONCE_EXPIRATION_SECONDS, AUTH_SIWE_DOMAIN,
-            JWT_EXPIRY_OFFSET, MOCK_ENS,
+            DEFAULT_JWT_EXPIRY_OFFSET, MOCK_ENS,
         },
         mocks::MOCK_ADDRESS,
     },
@@ -42,15 +43,61 @@ pub struct AuthService {
     validation: Validation,
     validate_signature: bool,
     storage: Arc<dyn BoxedStorage>,
+
+    session_duration: Duration,
 }
 
 impl AuthService {
+    /// Create an instance of `AuthService` from the passed in `config`.
+    ///
+    /// Requires an existing `storage` instance
+    pub fn from_config(config: &AuthConfig, storage: Arc<dyn BoxedStorage>) -> Self {
+        let secret = config
+            .jwt_secret
+            .as_ref()
+            .ok_or_else(|| {
+                tracing::error!("JWT_SECRET is not set. Please set it in the config file or as an environment variable.");
+                "JWT_SECRET is not configured"
+            })
+            .and_then(|secret| {
+                hex::decode(secret.trim_start_matches("0x"))
+                    .map_err(|e| {
+                        tracing::error!("Invalid JWT_SECRET format. Must be a valid hex string: {}", e);
+                        "Invalid JWT_SECRET format"
+                    })
+            })
+            .and_then(|decoded| {
+                if decoded.len() < 32 {
+                    tracing::error!("JWT_SECRET is too short. Must be at least 32 bytes (64 hex characters), got {} bytes", decoded.len());
+                    Err("JWT_SECRET must be at least 32 bytes")
+                } else {
+                    Ok(decoded)
+                }
+            })
+            .expect("JWT secret configuration should be valid");
+
+        let session_duration = Duration::minutes(config.session_expiration_minutes as _);
+
+        #[allow(unused_mut)] // triggers warning without mocks feature
+        let mut this = Self::new(secret.as_slice(), storage, session_duration);
+
+        #[cfg(feature = "mocks")]
+        {
+            if config.mock_mode {
+                this.insecure_disable_validation();
+            }
+        }
+
+        this
+    }
+
     /// Crete a new instance of `AuthService` with the configured secret.
     ///
     /// Arguments:
     /// * `secret`: secret to use to initialize the JWT encoding and decoding keys
     /// * `storage`: reference to the storage service to use to store nonce information
-    pub fn new(secret: &[u8], storage: Arc<dyn BoxedStorage>) -> Self {
+    /// * `session_duration`: the JWT duration before expiry
+    pub fn new(secret: &[u8], storage: Arc<dyn BoxedStorage>, session_duration: Duration) -> Self {
         // `Validation` is used by the underlying lib to determine how to decode
         // the JWT passed in
         let validation = Validation::default();
@@ -61,6 +108,7 @@ impl AuthService {
             validation,
             storage,
             validate_signature: true,
+            session_duration,
         }
     }
 
@@ -92,7 +140,6 @@ impl AuthService {
     fn construct_auth_message(address: &str, domain: &str, nonce: &str, chain_id: u64) -> String {
         let scheme = "https";
 
-        // TODO: make uri match endpoint
         let uri = format!("{scheme}://{domain}/{AUTH_NONCE_ENDPOINT}");
         let statement = "I authenticate to this MSP Backend with my address";
         let version = 1;
@@ -118,7 +165,7 @@ impl AuthService {
     /// The resulting JWT is already base64 encoded and signed by the service
     fn generate_jwt(&self, address: &str) -> Result<String, Error> {
         let now = Utc::now();
-        let exp = now + JWT_EXPIRY_OFFSET;
+        let exp = now + DEFAULT_JWT_EXPIRY_OFFSET;
 
         let claims = JwtClaims {
             address: address.to_string(),
@@ -378,15 +425,13 @@ mod tests {
         let cfg = Config::default();
         let storage: Arc<dyn BoxedStorage> =
             Arc::new(BoxedStorageWrapper::new(InMemoryStorage::new()));
-        let jwt_secret = cfg
-            .auth
-            .jwt_secret
-            .as_ref()
-            .expect("JWT secret should be set in tests");
-        let mut auth_service = AuthService::new(jwt_secret.as_bytes(), storage.clone());
+
+        let mut auth_service = AuthService::from_config(&cfg.auth, storage.clone());
 
         if !validate_signature {
             auth_service.insecure_disable_validation();
+        } else {
+            auth_service.enable_validation();
         }
 
         (auth_service, storage, cfg)

@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::constants::{
     api::{DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE},
+    auth::DEFAULT_JWT_EXPIRY_OFFSET_MINUTES,
     database::DEFAULT_DATABASE_URL,
     rpc::{
         DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_MSP_CALLBACK_URL, DEFAULT_RPC_URL,
@@ -49,6 +50,11 @@ pub struct AuthConfig {
     /// When enabled, do not verify JWT signature
     #[cfg(feature = "mocks")]
     pub mock_mode: bool,
+
+    /// The expiration time (in minutes) of the user session
+    ///
+    /// Recommended a relatively short duration (10 minutes) to represent a typical user session with the backend
+    pub session_expiration_minutes: usize,
 }
 
 impl AuthConfig {
@@ -115,6 +121,7 @@ impl Default for Config {
                 }),
                 #[cfg(feature = "mocks")]
                 mock_mode: true,
+                session_expiration_minutes: DEFAULT_JWT_EXPIRY_OFFSET_MINUTES,
             },
             storage_hub: StorageHubConfig {
                 rpc_url: DEFAULT_RPC_URL.to_string(),
