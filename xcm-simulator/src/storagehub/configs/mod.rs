@@ -385,7 +385,7 @@ impl pallet_nfts::Config for Runtime {
     type Locker = ();
 }
 
-/// Only callable after `set_validation_data` is formed
+/// Only callable after `set_validation_data` is called which forms this proof the same way
 fn relay_chain_state_proof() -> RelayChainStateProof {
     let relay_storage_root = cumulus_pallet_parachain_system::ValidationData::<Runtime>::get()
         .expect("set in `set_validation_data`")

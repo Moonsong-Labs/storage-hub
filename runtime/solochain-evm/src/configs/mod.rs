@@ -879,8 +879,8 @@ impl Convert<StorageDataUnit, Balance> for StorageDataUnitToBalance {
         storage_data_unit.into()
     }
 }
-pub struct Eip191KeccakAdapter;
-impl shp_traits::IntentionMessageAdapter for Eip191KeccakAdapter {
+pub struct Eip191Adapter;
+impl shp_traits::IntentionMessageAdapter for Eip191Adapter {
     fn bytes_to_verify(message: &[u8]) -> Vec<u8> {
         const PREFIX: &str = "\x19Ethereum Signed Message:\n";
         let len = message.len();
@@ -955,7 +955,7 @@ impl pallet_file_system::Config for Runtime {
         runtime_params::dynamic_params::runtime_config::TickRangeToMaximumThreshold;
     type OffchainSignature = Signature;
     type OffchainPublicKey = <Signature as Verify>::Signer;
-    type IntentionMsgAdapter = Eip191KeccakAdapter;
+    type IntentionMsgAdapter = Eip191Adapter;
 }
 
 const RANDOM_CHALLENGES_PER_BLOCK: u32 = 10;
