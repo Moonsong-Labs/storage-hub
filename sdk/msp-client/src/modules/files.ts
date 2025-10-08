@@ -139,47 +139,6 @@ export class FilesModule extends ModuleBase {
     };
   }
 
-  /** Download a file by its location path under a bucket */
-  async downloadByLocation(
-    bucketId: string,
-    filePath: string,
-    options?: DownloadOptions
-  ): Promise<DownloadResult> {
-    const normalized = filePath.replace(/^\/+/, "");
-    const encodedPath = normalized.split("/").map(encodeURIComponent).join("/");
-    const path = `/buckets/${encodeURIComponent(bucketId)}/download/path/${encodedPath}`;
-    const baseHeaders: Record<string, string> = { Accept: "*/*" };
-    if (options?.range) {
-      const { start, end } = options.range;
-      const rangeValue = `bytes=${start}-${end ?? ""}`;
-      baseHeaders.Range = rangeValue;
-    }
-    const headers = this.withAuth(baseHeaders);
-    const res = await this.ctx.http.getRaw(path, {
-      ...(headers ? { headers } : {}),
-      ...(options?.signal ? { signal: options.signal } : {})
-    });
-
-    if (!res.body) {
-      throw new Error("Response body is null - unable to create stream");
-    }
-
-    const contentType = res.headers.get("content-type");
-    const contentRange = res.headers.get("content-range");
-    const contentLengthHeader = res.headers.get("content-length");
-    const parsedLength = contentLengthHeader !== null ? Number(contentLengthHeader) : undefined;
-    const contentLength =
-      typeof parsedLength === "number" && Number.isFinite(parsedLength) ? parsedLength : null;
-
-    return {
-      stream: res.body,
-      status: res.status,
-      contentType,
-      contentRange,
-      contentLength
-    };
-  }
-
   // Helpers
   private async coerceToFormPart(
     file: Blob | ArrayBuffer | Uint8Array | ReadableStream<Uint8Array> | unknown

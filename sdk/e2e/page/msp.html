@@ -136,7 +136,6 @@
       </div>
       <div class="row">
         <button id="download-key">Download by Key</button>
-        <button id="download-path">Download by Path</button>
       </div>
       <div class="row">
         <div><strong>Upload Receipt:</strong> <span id="uploadReceipt" class="mono"></span></div>
@@ -399,34 +398,7 @@
       }
     };
 
-    document.getElementById('download-path').onclick = async () => {
-      try {
-        if (!client) throw new Error('Connect MSP first');
-        setStatus('Downloading by path...');
-        const bucketId = 'e2e-bucket';
-        const path = 'files/e2e-bucket/adolphus.jpg';
-        const auth = await client.auth.getAuthStatus();
-        if (!auth || auth.status !== 'Authenticated') throw new Error('Not authenticated');
-        const dl = await client.files.downloadByLocation(bucketId, path);
-        window.__msp.downloadMeta = { status: dl?.status, contentType: dl?.contentType, contentLength: dl?.contentLength, contentRange: dl?.contentRange };
-        console.log('[DOWNLOAD][PATH][META]', window.__msp.downloadMeta);
-        // Save to user-selected location (browsers cannot write to /tmp)
-        const blob = await new Response(dl.stream).blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = '/tmp/download_by_location.txt';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-        setStatus('Download (path) done');
-      } catch (e) {
-        setStatus('Download (path) failed');
-        window.__msp.error = e?.message || String(e);
-        console.error('[DOWNLOAD][PATH][ERROR]', e);
-      }
-    };
+
 
     // Buckets
     document.getElementById('list-buckets').onclick = async () => {
