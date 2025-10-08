@@ -862,9 +862,14 @@ where
         );
 
         // Get the MSP that's currently storing the bucket. It should exist since the bucket is not currently being moved.
+        let bucket_msp_result = expect_or_err!(
+            <T::Providers as ReadBucketsInterface>::get_msp_of_bucket(&bucket_id),
+            "Bucket was checked to exist previously. qed",
+            Error::<T>::BucketNotFound,
+            result
+        );
         let msp_id_storing_bucket = expect_or_err!(
-            <T::Providers as ReadBucketsInterface>::get_msp_of_bucket(&bucket_id)
-                .expect("Bucket was checked to exist previously. qed"),
+            bucket_msp_result,
             "MSP should exist for bucket",
             Error::<T>::MspNotStoringBucket
         );
@@ -2806,9 +2811,12 @@ where
                 Error::<T>::DuplicateFileKeyInBatchFileDeletion
             );
 
-            file_keys
-                .try_push(*file_key)
-                .expect("file_deletions is already bounded by MaxFileDeletionsPerExtrinsic");
+            expect_or_err!(
+                file_keys.try_push(*file_key),
+                "file_deletions is already bounded by MaxFileDeletionsPerExtrinsic",
+                Error::<T>::FailedToPushFileKeyToBucketDeletionVector,
+                result
+            );
             mutations.push((*file_key, TrieRemoveMutation::default().into()));
             total_size = total_size.saturating_add(*size);
         }
@@ -2919,16 +2927,22 @@ where
                 Error::<T>::DuplicateFileKeyInBatchFileDeletion
             );
 
-            users
-                .try_push(owner.clone())
-                .expect("file_deletions is already bounded by MaxFileDeletionsPerExtrinsic");
-            file_keys
-                .try_push(*file_key)
-                .expect("file_deletions is already bounded by MaxFileDeletionsPerExtrinsic");
+            expect_or_err!(
+                users.try_push(owner.clone()),
+                "file_deletions is already bounded by MaxFileDeletionsPerExtrinsic",
+                Error::<T>::FailedToPushUserToBspDeletionVector,
+                result
+            );
+            expect_or_err!(
+                file_keys.try_push(*file_key),
+                "file_deletions is already bounded by MaxFileDeletionsPerExtrinsic",
+                Error::<T>::FailedToPushFileKeyToBspDeletionVector,
+                result
+            );
             mutations.push((*file_key, TrieRemoveMutation::default().into()));
             total_size = total_size.saturating_add(*size);
 
-            // Aggregate sizes per owner for payment stream updates..
+            // Aggregate sizes per owner for payment stream updates.
             owner_sizes
                 .entry(owner.clone())
                 .and_modify(|s| *s = s.saturating_add(*size))

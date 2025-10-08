@@ -883,6 +883,12 @@ pub mod pallet {
         DuplicateFileKeyInBatchFileDeletion,
         /// Requires at least 1 file key to be deleted.
         NoFileKeysToDelete,
+        /// Failed to push file key to bounded vector during bucket file deletion
+        FailedToPushFileKeyToBucketDeletionVector,
+        /// Failed to push user to bounded vector during BSP file deletion
+        FailedToPushUserToBspDeletionVector,
+        /// Failed to push file key to bounded vector during BSP file deletion
+        FailedToPushFileKeyToBspDeletionVector,
         /// Max number of user pending deletion requests reached.
         MaxUserPendingDeletionRequestsReached,
         /// Unauthorized operation, signer is not an MSP of the bucket id.

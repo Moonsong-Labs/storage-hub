@@ -465,7 +465,7 @@ where
             fingerprint: H256::from_slice(fingerprint.as_ref()),
         };
 
-        // Wrap in BoundedVec (single file for now)
+        // TODO: Wrap in BoundedVec (single file for now)
         let file_deletions = vec![file_deletion]
             .try_into()
             .expect("Single file fits in MaxFileDeletionsPerExtrinsic");
