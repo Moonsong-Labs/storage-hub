@@ -43,5 +43,4 @@ export class MspClient extends ModuleBase {
 
     return new MspClient(config, http);
   }
-
 }

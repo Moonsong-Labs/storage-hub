@@ -22,6 +22,7 @@ test.describe("MSP Web Page Flow", () => {
       if (text.startsWith("[MSP][STATS]")) seen.add("msp-stats");
       if (text.startsWith("[MSP][VALUE-PROPS]")) seen.add("msp-value-props");
       if (text.startsWith("[MSP][FILE-INFO]")) seen.add("msp-file-info");
+      if (text.startsWith("[PAYMENT][STREAMS]")) seen.add("payment-streams");
     });
 
     const waitForConsoleTag = async (tag: string, action: () => Promise<void>) => {
@@ -146,6 +147,15 @@ test.describe("MSP Web Page Flow", () => {
     const valuePropsJson = await page.locator("#valuePropsJson").textContent();
     expect(valuePropsJson?.includes("pricePerGbPerBlock")).toBeTruthy();
     console.log("✅ Get Value Props");
+
+    // Payment Streams
+    console.log("[TEST] click Get Payment Streams");
+    await waitForConsoleTag("payment-streams", async () => {
+      await page.getByRole("button", { name: "Get Payment Streams" }).click();
+    });
+    const paymentStreamsJson = await page.locator("#paymentStreamsJson").textContent();
+    expect(paymentStreamsJson && paymentStreamsJson.length > 0).toBeTruthy();
+    console.log("✅ Get Payment Streams");
 
     // MSP File Info (uses defaults in page)
     console.log("[TEST] click Get File Info");

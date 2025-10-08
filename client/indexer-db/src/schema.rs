@@ -110,6 +110,8 @@ diesel::table! {
         total_amount_paid -> Numeric,
         last_tick_charged -> Int8,
         charged_at_tick -> Int8,
+        rate -> Nullable<Numeric>,
+        amount_provided -> Nullable<Numeric>,
     }
 }
 
@@ -125,7 +127,7 @@ diesel::table! {
 diesel::table! {
     service_state (id) {
         id -> Int4,
-        last_processed_block -> Int8,
+        last_indexed_finalized_block -> Int8,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
     }

@@ -124,18 +124,16 @@ export interface Bucket {
   fileCount: number;
 }
 
-export type FileEntryType = "file" | "folder" | string;
-
-export interface FileEntry {
+export type FileTree = {
   name: string;
-  type: FileEntryType;
-  sizeBytes?: number;
-  fileKey?: string;
-}
+} & (
+  | { type: "file"; sizeBytes: number; fileKey: string }
+  | { type: "folder"; children: FileTree[] }
+);
 
 export interface FileListResponse {
   bucketId: string;
-  files: FileEntry[];
+  files: FileTree[];
 }
 
 export interface GetFilesOptions {
@@ -186,4 +184,18 @@ export interface FileInfo {
   size: number;
   isPublic: boolean;
   uploadedAt: Date;
+}
+
+// Payments
+export type PaymentProviderType = "msp" | "bsp";
+
+export interface PaymentStreamInfo {
+  provider: string;
+  providerType: PaymentProviderType;
+  totalAmountPaid: string;
+  costPerTick: string;
+}
+
+export interface PaymentStreamsResponse {
+  streams: PaymentStreamInfo[];
 }

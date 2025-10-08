@@ -1,6 +1,12 @@
 import type { MspClientContext } from "../context.js";
 import { ModuleBase } from "../base.js";
-import type { HealthStatus, InfoResponse, StatsResponse, ValueProp } from "../types.js";
+import type {
+  HealthStatus,
+  InfoResponse,
+  PaymentStreamsResponse,
+  StatsResponse,
+  ValueProp
+} from "../types.js";
 
 export class InfoModule extends ModuleBase {
   constructor(ctx: MspClientContext) {
@@ -31,6 +37,15 @@ export class InfoModule extends ModuleBase {
   getValuePropositions(options?: { signal?: AbortSignal }): Promise<ValueProp[]> {
     return this.ctx.http.get<ValueProp[]>("/value-props", {
       ...(options?.signal !== undefined && { signal: options.signal })
+    });
+  }
+
+  /** Get payment streams for current authenticated user */
+  getPaymentStreams(options?: { signal?: AbortSignal }): Promise<PaymentStreamsResponse> {
+    const headers = this.withAuth();
+    return this.ctx.http.get<PaymentStreamsResponse>("/payment_streams", {
+      ...(headers ? { headers } : {}),
+      ...(options?.signal ? { signal: options.signal } : {})
     });
   }
 }

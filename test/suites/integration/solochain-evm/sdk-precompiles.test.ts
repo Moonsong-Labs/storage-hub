@@ -297,6 +297,29 @@ await describeMspNet(
       await msp1Api.wait.fileStorageComplete(hexFileKey);
     });
 
+    it("Should fetch payment streams using the SDK's MspClient", async () => {
+      // Get on-chain information for payment streams
+      const mspId = userApi.shConsts.DUMMY_MSP_ID;
+      const maybeOnChain = await userApi.query.paymentStreams.fixedRatePaymentStreams(
+        mspId,
+        account.address
+      );
+      assert(maybeOnChain.isSome, "On-chain fixed-rate payment stream not found");
+      const onChain = maybeOnChain.unwrap();
+
+      // Retrieve payment streams for the authenticated using the SDK
+      const { streams } = await mspClient.getPaymentStreams();
+      const sdkPs = streams.find((s) => s.provider.toLowerCase() === mspId.toLowerCase());
+      assert(sdkPs, "SDK did not return a payment stream for the expected MSP");
+
+      strictEqual(sdkPs.providerType, "msp", "providerType should be 'msp'");
+      strictEqual(
+        sdkPs.costPerTick,
+        onChain.rate.toString(),
+        "costPerTick must match on-chain rate"
+      );
+    });
+
     it("Should download the file from the MSP through the backend using the SDK's MspClient", async () => {
       // Try to download the file from the MSP through the SDK's MspClient that uses the MSP backend
       const downloadResponse = await mspClient.files.downloadByKey(fileKey.toHex());

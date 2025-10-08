@@ -108,7 +108,7 @@ Distribution
 
 Payments
 
-- GET `/payment_stream` (auth) -> returns payment stream status for the current user
+- GET `/payment_streams` (auth) -> returns payment stream information of the current user
 
 Notes
 
