@@ -176,6 +176,9 @@ export class NetworkLauncher {
 
     if (this.config.indexer) {
       composeYaml.services["sh-user"].command.push("--indexer");
+      composeYaml.services["sh-user"].environment =
+        composeYaml.services["sh-user"].environment ?? {};
+      composeYaml.services["sh-user"].environment.SH_INDEXER_DB_AUTO_MIGRATE = "false";
       composeYaml.services["sh-user"].command.push(
         "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
       );
@@ -184,6 +187,9 @@ export class NetworkLauncher {
           "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
         );
         composeYaml.services["sh-msp-2"].command.push("--indexer");
+        composeYaml.services["sh-msp-2"].environment =
+          composeYaml.services["sh-msp-2"].environment ?? {};
+        composeYaml.services["sh-msp-2"].environment.SH_INDEXER_DB_AUTO_MIGRATE = "false";
         composeYaml.services["sh-msp-2"].command.push(
           "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
         );
