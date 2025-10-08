@@ -16769,6 +16769,7 @@ dependencies = [
  "chrono",
  "diesel",
  "diesel-async",
+ "diesel_migrations",
  "futures",
  "hex",
  "log",
