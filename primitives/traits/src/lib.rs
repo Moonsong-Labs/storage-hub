@@ -1257,6 +1257,8 @@ pub trait IntentionMessageAdapter {
     fn bytes_to_verify(message: &[u8]) -> Vec<u8>;
 }
 
+// Default implementation for the IntentionMessageAdapter
+/// The IdentityAdapter is a default implementation that returns the message as is.
 pub struct IdentityAdapter;
 impl IntentionMessageAdapter for IdentityAdapter {
     fn bytes_to_verify(message: &[u8]) -> Vec<u8> {
