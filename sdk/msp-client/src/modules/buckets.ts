@@ -3,21 +3,21 @@ import { ModuleBase } from "../base.js";
 
 export class BucketsModule extends ModuleBase {
   /** List all buckets for the current authenticated user */
-  list(options?: { signal?: AbortSignal }): Promise<Bucket[]> {
+  list(signal?: AbortSignal): Promise<Bucket[]> {
     const headers = this.withAuth();
     return this.ctx.http.get<Bucket[]>("/buckets", {
       ...(headers ? { headers } : {}),
-      ...(options?.signal ? { signal: options.signal } : {})
+      ...(signal ? { signal } : {})
     });
   }
 
   /** Get a specific bucket's metadata by its bucket ID */
-  get(bucketId: string, options?: { signal?: AbortSignal }): Promise<Bucket> {
+  get(bucketId: string, signal?: AbortSignal): Promise<Bucket> {
     const headers = this.withAuth();
     const path = `/buckets/${encodeURIComponent(bucketId)}`;
     return this.ctx.http.get<Bucket>(path, {
       ...(headers ? { headers } : {}),
-      ...(options?.signal ? { signal: options.signal } : {})
+      ...(signal ? { signal } : {})
     });
   }
 

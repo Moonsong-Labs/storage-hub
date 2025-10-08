@@ -12,18 +12,14 @@ import { FileMetadata, FileTrie, initWasm } from "@storagehub-sdk/core";
 
 export class FilesModule extends ModuleBase {
   /** Get metadata for a file in a bucket by fileKey */
-  getFileInfo(
-    bucketId: string,
-    fileKey: string,
-    options?: { signal?: AbortSignal }
-  ): Promise<FileInfo> {
+  getFileInfo(bucketId: string, fileKey: string, signal?: AbortSignal): Promise<FileInfo> {
     const headers = this.withAuth();
     const path = `/buckets/${encodeURIComponent(bucketId)}/info/${encodeURIComponent(fileKey)}`;
     type FileInfoWire = Omit<FileInfo, "uploadedAt"> & { uploadedAt: string };
     return this.ctx.http
       .get<FileInfoWire>(path, {
         ...(headers ? { headers } : {}),
-        ...(options?.signal ? { signal: options.signal } : {})
+        ...(signal ? { signal } : {})
       })
       .then(
         (wire): FileInfo => ({
