@@ -1,6 +1,4 @@
 //! This module contains the handlers for the file management endpoints
-//!
-//! TODO: move the rest of the endpoints as they are implemented
 
 use axum::{
     body::Bytes,
