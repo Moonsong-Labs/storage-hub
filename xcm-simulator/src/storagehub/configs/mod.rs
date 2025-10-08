@@ -35,7 +35,9 @@ use polkadot_runtime_common::{prod_or_fast, BlockHashCount, SlowAdjustingFeeUpda
 use runtime_params::RuntimeParameters;
 use shp_data_price_updater::NoUpdatePriceIndexUpdater;
 use shp_file_metadata::ChunkId;
-use shp_traits::{CommitmentVerifier, MaybeDebug, TrieMutation, TrieProofDeltaApplier};
+use shp_traits::{
+    CommitmentVerifier, IdentityAdapter, MaybeDebug, TrieMutation, TrieProofDeltaApplier,
+};
 use shp_treasury_funding::{
     LinearThenPowerOfTwoTreasuryCutCalculator, LinearThenPowerOfTwoTreasuryCutCalculatorConfig,
 };
@@ -383,7 +385,7 @@ impl pallet_nfts::Config for Runtime {
     type Locker = ();
 }
 
-/// Only callable after `set_validation_data` is called which forms this proof the same way
+/// Only callable after `set_validation_data` is formed
 fn relay_chain_state_proof() -> RelayChainStateProof {
     let relay_storage_root = cumulus_pallet_parachain_system::ValidationData::<Runtime>::get()
         .expect("set in `set_validation_data`")
@@ -927,6 +929,7 @@ impl pallet_file_system::Config for Runtime {
         runtime_params::dynamic_params::runtime_config::TickRangeToMaximumThreshold;
     type OffchainSignature = Signature;
     type OffchainPublicKey = <Signature as Verify>::Signer;
+    type IntentionMsgAdapter = IdentityAdapter;
 }
 
 // Converter from the Balance type to the BlockNumber type for math.

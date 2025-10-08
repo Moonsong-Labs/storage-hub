@@ -17,8 +17,8 @@ use pallet_nfts::PalletFeatures;
 use shp_data_price_updater::NoUpdatePriceIndexUpdater;
 use shp_file_metadata::ChunkId;
 use shp_traits::{
-    CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, ReadUserSolvencyInterface,
-    TrieMutation, TrieProofDeltaApplier,
+    CommitmentVerifier, IdentityAdapter, MaybeDebug, ProofSubmittersInterface,
+    ReadUserSolvencyInterface, TrieMutation, TrieProofDeltaApplier,
 };
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
@@ -657,6 +657,7 @@ impl crate::Config for Test {
     type TickRangeToMaximumThreshold = ConstU64<30>;
     type OffchainSignature = Signature;
     type OffchainPublicKey = <Signature as Verify>::Signer;
+    type IntentionMsgAdapter = IdentityAdapter;
 }
 
 // Use a RwLock for Eve’s insolvency status.

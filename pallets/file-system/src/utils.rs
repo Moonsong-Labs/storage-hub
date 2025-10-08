@@ -30,10 +30,11 @@ use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettin
 use shp_constants::GIGAUNIT;
 use shp_file_metadata::ChunkId;
 use shp_traits::{
-    CommitRevealRandomnessInterface, MutateBucketsInterface, MutateProvidersInterface,
-    MutateStorageProvidersInterface, PaymentStreamsInterface, PricePerGigaUnitPerTickInterface,
-    ProofsDealerInterface, ReadBucketsInterface, ReadProvidersInterface,
-    ReadStorageProvidersInterface, ReadUserSolvencyInterface, TrieAddMutation, TrieRemoveMutation,
+    CommitRevealRandomnessInterface, IntentionMessageAdapter, MutateBucketsInterface,
+    MutateProvidersInterface, MutateStorageProvidersInterface, PaymentStreamsInterface,
+    PricePerGigaUnitPerTickInterface, ProofsDealerInterface, ReadBucketsInterface,
+    ReadProvidersInterface, ReadStorageProvidersInterface, ReadUserSolvencyInterface,
+    TrieAddMutation, TrieRemoveMutation,
 };
 use sp_std::collections::btree_map::BTreeMap;
 
@@ -1251,10 +1252,12 @@ where
 
         // Encode the intention for signature verification
         let signed_intention_encoded = signed_intention.encode();
-        // EIP-191 message "\x19Ethereum Signed Message:\n" + len + message
-        let eip191_msg = Self::eip191_message(&signed_intention_encoded);
+        // Runtime-selected message bytes to verify
+        let to_verify = <T as crate::pallet::Config>::IntentionMsgAdapter::bytes_to_verify(
+            &signed_intention_encoded,
+        );
 
-        let is_valid = signature.verify(&eip191_msg[..], &who);
+        let is_valid = signature.verify(&to_verify[..], &who);
         ensure!(is_valid, Error::<T>::InvalidSignature);
 
         // Compute file key from the provided metadata
@@ -1269,19 +1272,6 @@ where
         );
 
         Ok(())
-    }
-
-    pub(crate) fn eip191_message(message: &[u8]) -> Vec<u8> {
-        const PREFIX: &str = "\x19Ethereum Signed Message:\n";
-        let len = message.len();
-        let mut len_string_buffer = itoa::Buffer::new();
-        let len_string = len_string_buffer.format(len);
-
-        let mut eth_message = Vec::with_capacity(PREFIX.len() + len_string.len() + len);
-        eth_message.extend_from_slice(PREFIX.as_bytes());
-        eth_message.extend_from_slice(len_string.as_bytes());
-        eth_message.extend_from_slice(message);
-        eth_message
     }
 
     /// Executes actual file deletion. Any entity that has the owner's signed intention can delete the file on their behalf,
@@ -1322,7 +1312,11 @@ where
         // Encode the intention for signature verification
         let signed_intention_encoded = signed_intention.encode();
 
-        let is_valid = signature.verify(&signed_intention_encoded[..], &file_owner);
+        let to_verify = <T as crate::pallet::Config>::IntentionMsgAdapter::bytes_to_verify(
+            &signed_intention_encoded,
+        );
+
+        let is_valid = signature.verify(&to_verify[..], &file_owner);
         ensure!(is_valid, Error::<T>::InvalidSignature);
 
         // Compute file key from the provided metadata

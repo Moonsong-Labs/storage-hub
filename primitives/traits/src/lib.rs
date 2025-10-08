@@ -1251,6 +1251,19 @@ pub trait TreasuryCutCalculator {
     ) -> Self::Balance;
 }
 
+/// Trait to adapt a given message into the corresponding bytes that comply with a given protocol (e.g., EIP-191) before verification.
+pub trait IntentionMessageAdapter {
+    /// Returns the exact bytes that will be passed to `signature.verify(&bytes[..], &signer)`.
+    fn bytes_to_verify(message: &[u8]) -> Vec<u8>;
+}
+
+pub struct IdentityAdapter;
+impl IntentionMessageAdapter for IdentityAdapter {
+    fn bytes_to_verify(message: &[u8]) -> Vec<u8> {
+        message.to_vec()
+    }
+}
+
 /// The interface for the Commit-Reveal Randomness pallet.
 pub trait CommitRevealRandomnessInterface {
     /// The type which represents a Provider's ID.

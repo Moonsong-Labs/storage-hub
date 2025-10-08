@@ -398,6 +398,9 @@ pub mod pallet {
         /// to arrive at its maximum value.
         #[pallet::constant]
         type TickRangeToMaximumThreshold: Get<TickNumber<Self>>;
+
+        /// Adapter to transform encoded intentions into the bytes that should be verified on-chain.
+        type IntentionMsgAdapter: shp_traits::IntentionMessageAdapter;
     }
 
     #[pallet::pallet]
