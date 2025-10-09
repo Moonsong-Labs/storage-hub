@@ -16209,6 +16209,7 @@ dependencies = [
  "frame-system-rpc-runtime-api 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "frame-try-runtime 0.45.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "hex-literal",
+ "itoa",
  "log",
  "num-bigint",
  "pallet-authorship 39.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
