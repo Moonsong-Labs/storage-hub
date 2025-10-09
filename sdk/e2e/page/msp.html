@@ -237,21 +237,6 @@
         .replace(/=+$/g, '');
     }
 
-    function generateMockJwt(address) {
-      const header = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9'; // {"alg":"HS256","typ":"JWT"}
-      const now = Math.floor(Date.now() / 1000);
-      const user = address || '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
-      const payload = {
-        sub: user,
-        iat: now,
-        exp: now + 3600,
-        address: user
-      };
-      const payloadB64 = toBase64Url(JSON.stringify(payload));
-      const signatureB64 = toBase64Url('mock_signature');
-      return `${header}.${payloadB64}.${signatureB64}`;
-    }
-
     async function loadAdolphusBlob() {
       const candidates = ['/e2e/page/adolphus.jpg', '/docker/resource/adolphus.jpg'];
       for (const url of candidates) {
@@ -520,12 +505,7 @@
       try {
         await ensureConnected();
         setStatus('Getting payment streams...');
-        if (!window.__msp.token) {
-          const jwt = generateMockJwt();
-          client.setToken(jwt);
-          window.__msp.token = jwt;
-        }
-        const streams = await client.getPaymentStreams();
+        const streams = await client.info.getPaymentStreams();
         window.__msp.paymentStreams = streams;
         document.getElementById('paymentStreamsJson').textContent = JSON.stringify(streams, null, 2);
         console.log('[PAYMENT][STREAMS]', JSON.stringify(streams));
