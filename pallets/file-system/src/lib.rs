@@ -400,7 +400,9 @@ pub mod pallet {
         type TickRangeToMaximumThreshold: Get<TickNumber<Self>>;
 
         /// Adapter to transform encoded intentions into the bytes that should be verified on-chain.
-        type IntentionMsgAdapter: shp_traits::IntentionMessageAdapter;
+        /// e.g: in the case of Solochain-EVM runtime, we need to adapt the bytes to verify to comply with EIP-191
+        /// EIP-191: https://eips.ethereum.org/EIPS/eip-191
+        type IntentionMsgAdapter: shp_traits::MessageAdapter;
     }
 
     #[pallet::pallet]

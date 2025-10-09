@@ -1252,15 +1252,14 @@ pub trait TreasuryCutCalculator {
 }
 
 /// Trait to adapt a given message into the corresponding bytes that comply with a given protocol (e.g., EIP-191) before verification.
-pub trait IntentionMessageAdapter {
+pub trait MessageAdapter {
     /// Returns the exact bytes that will be passed to `signature.verify(&bytes[..], &signer)`.
     fn bytes_to_verify(message: &[u8]) -> Vec<u8>;
 }
 
-// Default implementation for the IntentionMessageAdapter
 /// The IdentityAdapter is a default implementation that returns the message as is.
 pub struct IdentityAdapter;
-impl IntentionMessageAdapter for IdentityAdapter {
+impl MessageAdapter for IdentityAdapter {
     fn bytes_to_verify(message: &[u8]) -> Vec<u8> {
         message.to_vec()
     }
