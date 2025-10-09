@@ -74,6 +74,7 @@ pub type FileKeyWithProof<Runtime> = pallet_file_system::types::FileKeyWithProof
 pub type PeerIds<Runtime> = pallet_file_system::types::PeerIds<Runtime>;
 pub type FileOperationIntention<Runtime> =
     pallet_file_system::types::FileOperationIntention<Runtime>;
+pub type FileDeletionRequest<Runtime> = pallet_file_system::types::FileDeletionRequest<Runtime>;
 pub type BucketId<Runtime> = pallet_storage_providers::types::ProviderIdFor<Runtime>;
 pub type ValuePropId<Runtime> = pallet_storage_providers::types::ValuePropId<Runtime>;
 pub type StorageProviderId<Runtime> = pallet_storage_providers::types::StorageProviderId<Runtime>;

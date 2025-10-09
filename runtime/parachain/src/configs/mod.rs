@@ -849,6 +849,7 @@ impl pallet_file_system::Config for Runtime {
         runtime_params::dynamic_params::runtime_config::BspStopStoringFilePenalty;
     type TreasuryAccount = TreasuryAccount;
     type MaxBatchConfirmStorageRequests = ConstU32<10>;
+    type MaxFileDeletionsPerExtrinsic = ConstU32<100>;
     type MaxFilePathSize = ConstU32<512u32>;
     type MaxPeerIdSize = ConstU32<100>;
     type MaxNumberOfPeerIds = ConstU32<5>;

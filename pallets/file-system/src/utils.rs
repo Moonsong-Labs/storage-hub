@@ -18,7 +18,10 @@ use sp_runtime::{
     },
     ArithmeticError, BoundedBTreeSet, BoundedVec, DispatchError,
 };
-use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
+use sp_std::{
+    collections::{btree_map::BTreeMap, btree_set::BTreeSet},
+    vec::Vec,
+};
 
 use pallet_file_system_runtime_api::{
     GenericApplyDeltaEventInfoError, IsStorageRequestOpenToVolunteersError,
@@ -35,16 +38,15 @@ use shp_traits::{
     ProofsDealerInterface, ReadBucketsInterface, ReadProvidersInterface,
     ReadStorageProvidersInterface, ReadUserSolvencyInterface, TrieAddMutation, TrieRemoveMutation,
 };
-use sp_std::collections::btree_map::BTreeMap;
 
 use crate::{
     pallet,
     types::{
         BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
-        CollectionIdFor, ExpirationItem, FileKeyHasher, FileKeyWithProof, FileLocation,
-        FileMetadata, FileOperation, FileOperationIntention, Fingerprint, ForestProof,
-        IncompleteStorageRequestMetadata, MerkleHash, MoveBucketRequestMetadata, MultiAddresses,
-        PeerIds, PendingStopStoringRequest, ProviderIdFor, RejectedStorageRequest,
+        CollectionIdFor, ExpirationItem, FileDeletionRequest, FileKeyHasher, FileKeyWithProof,
+        FileLocation, FileMetadata, FileOperation, FileOperationIntention, Fingerprint,
+        ForestProof, IncompleteStorageRequestMetadata, MerkleHash, MoveBucketRequestMetadata,
+        MultiAddresses, PeerIds, PendingStopStoringRequest, ProviderIdFor, RejectedStorageRequest,
         ReplicationTarget, ReplicationTargetType, StorageDataUnit, StorageRequestBspsMetadata,
         StorageRequestMetadata, StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
         StorageRequestMspResponse, TickNumber, ValuePropId,
@@ -890,9 +892,14 @@ where
         );
 
         // Get the MSP that's currently storing the bucket. It should exist since the bucket is not currently being moved.
+        let bucket_msp_result = expect_or_err!(
+            <T::Providers as ReadBucketsInterface>::get_msp_of_bucket(&bucket_id),
+            "Bucket was checked to exist previously. qed",
+            Error::<T>::BucketNotFound,
+            result
+        );
         let msp_id_storing_bucket = expect_or_err!(
-            <T::Providers as ReadBucketsInterface>::get_msp_of_bucket(&bucket_id)
-                .expect("Bucket was checked to exist previously. qed"),
+            bucket_msp_result,
             "MSP should exist for bucket",
             Error::<T>::MspNotStoringBucket
         );
@@ -1312,49 +1319,63 @@ where
     ///
     /// Passing `None` for `bsp_id` will treat this as a Bucket Forest deletion and a BSP Forest deletion otherwise.
     pub(crate) fn do_delete_file(
-        file_owner: T::AccountId,
-        signed_intention: FileOperationIntention<T>,
-        signature: T::OffchainSignature,
-        bucket_id: BucketIdFor<T>,
-        location: FileLocation<T>,
-        size: StorageDataUnit<T>,
-        fingerprint: Fingerprint<T>,
+        file_deletions: BoundedVec<FileDeletionRequest<T>, T::MaxFileDeletionsPerExtrinsic>,
         bsp_id: Option<ProviderIdFor<T>>,
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
-        // Check that the file owner is not currently insolvent.
-        ensure!(
-            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&file_owner),
-            Error::<T>::OperationNotAllowedWithInsolventUser
-        );
+        // Ensure we have at least one file to delete
+        ensure!(!file_deletions.is_empty(), Error::<T>::NoFileKeysToDelete);
 
-        // Verify that the operation is Delete
-        ensure!(
-            signed_intention.operation == FileOperation::Delete,
-            Error::<T>::InvalidSignedOperation
-        );
+        // Collect validated file deletion data
+        let mut validated_deletions = Vec::new();
 
-        // Encode the intention for signature verification
-        let signed_intention_encoded = signed_intention.encode();
+        // Process each file deletion request
+        for deletion_request in file_deletions.iter() {
+            // Check that the file owner is not currently insolvent
+            ensure!(
+                !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(
+                    &deletion_request.file_owner
+                ),
+                Error::<T>::OperationNotAllowedWithInsolventUser
+            );
 
-        let is_valid = signature.verify(&signed_intention_encoded[..], &file_owner);
-        ensure!(is_valid, Error::<T>::InvalidSignature);
+            // Verify that the operation is Delete
+            ensure!(
+                deletion_request.signed_intention.operation == FileOperation::Delete,
+                Error::<T>::InvalidSignedOperation
+            );
 
-        // Compute file key from the provided metadata
-        let computed_file_key = Self::compute_file_key(
-            file_owner.clone(),
-            bucket_id,
-            location.clone(),
-            size,
-            fingerprint,
-        )
-        .map_err(|_| Error::<T>::FailedToComputeFileKey)?;
+            // Encode the intention for signature verification
+            let signed_intention_encoded = deletion_request.signed_intention.encode();
 
-        // Verify that the file_key in the signed intention matches the computed one
-        ensure!(
-            signed_intention.file_key == computed_file_key,
-            Error::<T>::InvalidFileKeyMetadata
-        );
+            let is_valid = deletion_request
+                .signature
+                .verify(&signed_intention_encoded[..], &deletion_request.file_owner);
+            ensure!(is_valid, Error::<T>::InvalidSignature);
+
+            // Compute file key from the provided metadata
+            let computed_file_key = Self::compute_file_key(
+                deletion_request.file_owner.clone(),
+                deletion_request.bucket_id,
+                deletion_request.location.clone(),
+                deletion_request.size,
+                deletion_request.fingerprint,
+            )
+            .map_err(|_| Error::<T>::FailedToComputeFileKey)?;
+
+            // Verify that the file_key in the signed intention matches the computed one
+            ensure!(
+                deletion_request.signed_intention.file_key == computed_file_key,
+                Error::<T>::InvalidFileKeyMetadata
+            );
+
+            validated_deletions.push((
+                deletion_request.file_owner.clone(),
+                computed_file_key,
+                deletion_request.size,
+                deletion_request.bucket_id,
+            ));
+        }
 
         // Forest proof verification and file deletion
         if let Some(bsp_id) = bsp_id {
@@ -1364,89 +1385,94 @@ where
                 Error::<T>::InvalidProviderID
             );
 
-            Self::delete_file_from_bsp(file_owner, computed_file_key, size, bsp_id, forest_proof)?;
+            Self::delete_files_from_bsp(validated_deletions.as_slice(), bsp_id, forest_proof)?;
         } else {
-            // Delete from bucket forest - no MSP requirement
-            Self::delete_file_from_bucket(
-                file_owner,
-                computed_file_key,
-                size,
-                bucket_id,
-                forest_proof,
-            )?;
+            Self::delete_files_from_bucket(validated_deletions.as_slice(), forest_proof)?;
         }
 
         // TODO: Reward the caller
         Ok(())
     }
 
-    /// Delete a file associated to an incomplete storage request from a Bucket or BSP.
+    /// Delete files associated to incomplete storage requests from a Bucket or BSP.
     ///
     /// Passing `None` for `bsp_id` will treat this as a Bucket Forest deletion and a BSP Forest deletion otherwise.
-    pub(crate) fn do_delete_file_for_incomplete_storage_request(
-        file_key: MerkleHash<T>,
+    /// Multiple files can be deleted in a single call using one forest proof.
+    pub(crate) fn do_delete_files_for_incomplete_storage_request(
+        file_keys: BoundedVec<MerkleHash<T>, T::MaxFileDeletionsPerExtrinsic>,
         bsp_id: Option<ProviderIdFor<T>>,
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
-        let mut incomplete_storage_request_metadata =
-            IncompleteStorageRequests::<T>::get(&file_key)
+        // Ensure we have at least one file to delete
+        ensure!(!file_keys.is_empty(), Error::<T>::NoFileKeysToConfirm);
+
+        // Collect validated file deletion data
+        let mut validated_deletions = Vec::new();
+        let mut incomplete_metadatas = Vec::new();
+
+        // Process each file key
+        for file_key in file_keys.iter() {
+            let incomplete_storage_request_metadata = IncompleteStorageRequests::<T>::get(file_key)
                 .ok_or(Error::<T>::IncompleteStorageRequestNotFound)?;
 
-        // Verify file key integrity
-        let computed_file_key = Self::compute_file_key(
-            incomplete_storage_request_metadata.owner.clone(),
-            incomplete_storage_request_metadata.bucket_id,
-            incomplete_storage_request_metadata.location.clone(),
-            incomplete_storage_request_metadata.file_size,
-            incomplete_storage_request_metadata.fingerprint,
-        )
-        .map_err(|_| Error::<T>::FailedToComputeFileKey)?;
-
-        ensure!(computed_file_key == file_key, Error::<T>::FileKeyMismatch);
-
-        if let Some(bsp_id) = bsp_id {
-            let is_bsp = incomplete_storage_request_metadata
-                .pending_bsp_removals
-                .contains(&bsp_id);
-
-            // Ensure the BSP is actually in the pending removals list
-            ensure!(is_bsp, Error::<T>::ProviderNotStoringFile);
-
-            Self::delete_file_from_bsp(
+            // Verify file key integrity
+            let computed_file_key = Self::compute_file_key(
                 incomplete_storage_request_metadata.owner.clone(),
-                file_key,
+                incomplete_storage_request_metadata.bucket_id,
+                incomplete_storage_request_metadata.location.clone(),
                 incomplete_storage_request_metadata.file_size,
-                bsp_id,
-                forest_proof,
-            )?;
-            incomplete_storage_request_metadata
-                .pending_bsp_removals
-                .retain(|&id| id != bsp_id);
-        } else {
-            ensure!(
-                incomplete_storage_request_metadata.pending_bucket_removal,
-                Error::<T>::ProviderNotStoringFile
-            );
+                incomplete_storage_request_metadata.fingerprint,
+            )
+            .map_err(|_| Error::<T>::FailedToComputeFileKey)?;
 
-            Self::delete_file_from_bucket(
+            ensure!(computed_file_key == *file_key, Error::<T>::FileKeyMismatch);
+
+            // Verify the provider is in the pending removals
+            if let Some(bsp_id) = bsp_id {
+                let is_bsp = incomplete_storage_request_metadata
+                    .pending_bsp_removals
+                    .contains(&bsp_id);
+
+                // Ensure the BSP is actually in the pending removals list
+                ensure!(is_bsp, Error::<T>::ProviderNotStoringFile);
+            } else {
+                ensure!(
+                    incomplete_storage_request_metadata.pending_bucket_removal,
+                    Error::<T>::ProviderNotStoringFile
+                );
+            }
+
+            validated_deletions.push((
                 incomplete_storage_request_metadata.owner.clone(),
-                file_key,
+                *file_key,
                 incomplete_storage_request_metadata.file_size,
                 incomplete_storage_request_metadata.bucket_id,
-                forest_proof,
-            )?;
-            incomplete_storage_request_metadata.pending_bucket_removal = false;
+            ));
+
+            incomplete_metadatas.push((*file_key, incomplete_storage_request_metadata));
         }
 
-        // Check if all providers have removed their files
-        if incomplete_storage_request_metadata
-            .pending_bsp_removals
-            .is_empty()
-            && !incomplete_storage_request_metadata.pending_bucket_removal
-        {
-            IncompleteStorageRequests::<T>::remove(&file_key);
+        // Delete all files from the provider's forest
+        if let Some(bsp_id) = bsp_id {
+            Self::delete_files_from_bsp(validated_deletions.as_slice(), bsp_id, forest_proof)?;
         } else {
-            Self::add_incomplete_storage_request(file_key, incomplete_storage_request_metadata);
+            Self::delete_files_from_bucket(validated_deletions.as_slice(), forest_proof)?;
+        }
+
+        // Update incomplete storage request metadata for each file
+        for (file_key, mut metadata) in incomplete_metadatas {
+            if let Some(bsp_id) = bsp_id {
+                metadata.pending_bsp_removals.retain(|&id| id != bsp_id);
+            } else {
+                metadata.pending_bucket_removal = false;
+            }
+
+            // Check if all providers have removed their files
+            if metadata.pending_bsp_removals.is_empty() && !metadata.pending_bucket_removal {
+                IncompleteStorageRequests::<T>::remove(&file_key);
+            } else {
+                Self::add_incomplete_storage_request(file_key, metadata);
+            }
         }
 
         Ok(())
@@ -2773,44 +2799,90 @@ where
             .collect()
     }
 
-    /// Removes file key from the bucket's forest, updating the bucket's root.
+    /// Removes multiple file keys from the bucket's forest in a single operation, updating the bucket's root.
     ///
-    /// Does not enforce the presense of an MSP storing the bucket. If no MSP is found to be
+    /// Does not enforce the presence of an MSP storing the bucket. If no MSP is found to be
     /// storing the bucket, no payment stream is updated.
     ///
     /// This is to support the case where an MSP stops storing a bucket while there still exists
     /// incomplete storage requests for that bucket.
-    pub(crate) fn delete_file_from_bucket(
-        file_owner: T::AccountId,
-        file_key: MerkleHash<T>,
-        size: StorageDataUnit<T>,
-        bucket_id: BucketIdFor<T>,
+    ///
+    /// # Arguments
+    /// * `file_deletions` - Slice of tuples containing (owner, file_key, size, bucket_id) for each file
+    /// * `forest_proof` - Proof that all files exist in the bucket's forest
+    fn delete_files_from_bucket(
+        file_deletions: &[(
+            T::AccountId,
+            MerkleHash<T>,
+            StorageDataUnit<T>,
+            BucketIdFor<T>,
+        )],
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
+        // All files must be in the same bucket - validate and get bucket_id
+        let bucket_id = file_deletions[0].3;
+
+        // Single pass collection: gather file keys, mutations, total size, and validate bucket consistency
+        let mut file_keys = BoundedVec::<MerkleHash<T>, T::MaxFileDeletionsPerExtrinsic>::default();
+        let mut mutations = Vec::with_capacity(file_deletions.len());
+        let mut total_size = StorageDataUnit::<T>::zero();
+        let mut seen_keys = BTreeSet::new();
+
+        for (_, file_key, size, bid) in file_deletions {
+            // Ensure all files are in the same bucket
+            ensure!(
+                *bid == bucket_id,
+                Error::<T>::BatchFileDeletionMustContainSingleBucket
+            );
+
+            // Detect duplicate file keys in the batch
+            ensure!(
+                seen_keys.insert(*file_key),
+                Error::<T>::DuplicateFileKeyInBatchFileDeletion
+            );
+
+            expect_or_err!(
+                file_keys.try_push(*file_key),
+                "file_deletions is already bounded by MaxFileDeletionsPerExtrinsic",
+                Error::<T>::FailedToPushFileKeyToBucketDeletionVector,
+                result
+            );
+            mutations.push((*file_key, TrieRemoveMutation::default().into()));
+            total_size = total_size.saturating_add(*size);
+        }
+
+        // Drop seen_keys to free memory - no longer needed after validation
+        drop(seen_keys);
+
         // Get current bucket root
         let old_bucket_root = <T::Providers as ReadBucketsInterface>::get_root_bucket(&bucket_id)
             .ok_or(Error::<T>::BucketNotFound)?;
 
-        // Verify if the file key is part of the bucket's forest
+        // Verify all file keys are part of the bucket's forest
         let proven_keys = <T::ProofDealer as ProofsDealerInterface>::verify_generic_forest_proof(
             &old_bucket_root,
-            &[file_key],
+            file_keys.as_slice(),
             &forest_proof,
         )?;
 
-        // Ensure that the file key is part of the bucket's forest
-        ensure!(
-            proven_keys.contains(&file_key),
-            Error::<T>::ExpectedInclusionProof
-        );
+        // Ensure that all file keys are proven
+        for file_key in &file_keys {
+            ensure!(
+                proven_keys.contains(file_key),
+                Error::<T>::ExpectedInclusionProof
+            );
+        }
 
-        // Compute new root after removing file key from forest
+        // Compute new root after removing all file keys from forest
         let new_root = <T::ProofDealer as ProofsDealerInterface>::generic_apply_delta(
             &old_bucket_root,
-            &[(file_key, TrieRemoveMutation::default().into())],
+            &mutations,
             &forest_proof,
             Some(bucket_id.encode()),
         )?;
+
+        // Drop mutations to free memory - no longer needed after apply_delta
+        drop(mutations);
 
         // Check if there's an MSP storing the bucket
         let maybe_msp_id = <T::Providers as ReadBucketsInterface>::get_bucket_msp(&bucket_id)?;
@@ -2819,28 +2891,28 @@ where
             <T::Providers as MutateBucketsInterface>::change_root_bucket(bucket_id, new_root)?;
             // Decrease capacity used of the MSP
             <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
-                &msp_id, size,
+                &msp_id, total_size,
             )?;
 
             // Decrease bucket size
             // This function also updates the fixed rate payment stream between the user and the MSP.
             // via apply_delta_fixed_rate_payment_stream function in providers pallet.
-            <T::Providers as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, size)?;
+            <T::Providers as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, total_size)?;
         } else {
             <T::Providers as MutateBucketsInterface>::change_root_bucket_without_msp(
                 bucket_id, new_root,
             )?;
             // Decrease bucket size
             <T::Providers as MutateBucketsInterface>::decrease_bucket_size_without_msp(
-                &bucket_id, size,
+                &bucket_id, total_size,
             )?;
         }
 
-        // Emit the MSP file deletion completed event
-        Self::deposit_event(Event::BucketFileDeletionCompleted {
-            user: file_owner,
-            file_key,
-            file_size: size,
+        // Emit single event for the batch
+        Self::deposit_event(Event::BucketFileDeletionsCompleted {
+            // We validate that all the deleted files belong to the same bucket and therefore a single user owns them all
+            user: file_deletions[0].0.clone(),
+            file_keys,
             bucket_id,
             msp_id: maybe_msp_id,
             old_root: old_bucket_root,
@@ -2850,11 +2922,19 @@ where
         Ok(())
     }
 
-    /// Removes file key from the BSP's forest, updating the BSP's root.
-    pub(crate) fn delete_file_from_bsp(
-        file_owner: T::AccountId,
-        file_key: MerkleHash<T>,
-        size: StorageDataUnit<T>,
+    /// Removes multiple file keys from the BSP's forest in a single operation, updating the BSP's root.
+    ///
+    /// # Arguments
+    /// * `file_deletions` - Slice of tuples containing (owner, file_key, size, bucket_id) for each file
+    /// * `bsp_id` - The BSP from which to delete the files
+    /// * `forest_proof` - Proof that all files exist in the BSP's forest
+    fn delete_files_from_bsp(
+        file_deletions: &[(
+            T::AccountId,
+            MerkleHash<T>,
+            StorageDataUnit<T>,
+            BucketIdFor<T>,
+        )],
         bsp_id: ProviderIdFor<T>,
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
@@ -2862,45 +2942,88 @@ where
         let old_root = <T::Providers as ReadProvidersInterface>::get_root(bsp_id)
             .ok_or(Error::<T>::NotABsp)?;
 
-        // Verify that the file key is part of the BSP's forest
+        // Single pass collection: gather users, file keys, mutations, total size, and owner sizes
+        let mut users = BoundedVec::<T::AccountId, T::MaxFileDeletionsPerExtrinsic>::default();
+        let mut file_keys = BoundedVec::<MerkleHash<T>, T::MaxFileDeletionsPerExtrinsic>::default();
+        let mut mutations = Vec::with_capacity(file_deletions.len());
+        let mut total_size = StorageDataUnit::<T>::zero();
+        let mut owner_sizes: BTreeMap<T::AccountId, StorageDataUnit<T>> = BTreeMap::new();
+        let mut seen_keys = BTreeSet::new();
+
+        for (owner, file_key, size, _) in file_deletions {
+            // Detect duplicate file keys in the batch
+            ensure!(
+                seen_keys.insert(*file_key),
+                Error::<T>::DuplicateFileKeyInBatchFileDeletion
+            );
+
+            expect_or_err!(
+                users.try_push(owner.clone()),
+                "file_deletions is already bounded by MaxFileDeletionsPerExtrinsic",
+                Error::<T>::FailedToPushUserToBspDeletionVector,
+                result
+            );
+            expect_or_err!(
+                file_keys.try_push(*file_key),
+                "file_deletions is already bounded by MaxFileDeletionsPerExtrinsic",
+                Error::<T>::FailedToPushFileKeyToBspDeletionVector,
+                result
+            );
+            mutations.push((*file_key, TrieRemoveMutation::default().into()));
+            total_size = total_size.saturating_add(*size);
+
+            // Aggregate sizes per owner for payment stream updates.
+            owner_sizes
+                .entry(owner.clone())
+                .and_modify(|s| *s = s.saturating_add(*size))
+                .or_insert(*size);
+        }
+
+        // Drop seen_keys to free memory - no longer needed after validation
+        drop(seen_keys);
+
+        // Verify all file keys are part of the BSP's forest
         let proven_keys = <T::ProofDealer as ProofsDealerInterface>::verify_forest_proof(
             &bsp_id,
-            &[file_key],
+            file_keys.as_slice(),
             &forest_proof,
         )?;
 
-        // Ensure that the file key is part of the BSP's forest
-        ensure!(
-            proven_keys.contains(&file_key),
-            Error::<T>::ExpectedInclusionProof
-        );
+        // Ensure that all file keys are proven
+        for file_key in &file_keys {
+            ensure!(
+                proven_keys.contains(file_key),
+                Error::<T>::ExpectedInclusionProof
+            );
+        }
 
-        // Compute new root after removing file key from forest
+        // Compute new root after removing all file keys from forest
         let new_root = <T::ProofDealer as ProofsDealerInterface>::apply_delta(
             &bsp_id,
-            &[(file_key, TrieRemoveMutation::default().into())],
+            &mutations,
             &forest_proof,
         )?;
+
+        // Drop mutations to free memory - no longer needed after apply_delta
+        drop(mutations);
 
         // Update root of BSP
         <T::Providers as MutateProvidersInterface>::update_root(bsp_id, new_root)?;
 
         // Decrease capacity used by the BSP
-        <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(&bsp_id, size)?;
-
-        // Update payment stream and manage BSP cycles after file removal
-        Self::update_bsp_payment_and_cycles_after_file_removal(
-            bsp_id,
-            &file_owner,
-            size,
-            new_root,
+        <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
+            &bsp_id, total_size,
         )?;
 
-        // Emit the BSP file deletion completed event
-        Self::deposit_event(Event::BspFileDeletionCompleted {
-            user: file_owner,
-            file_key,
-            file_size: size,
+        // Update payment streams for each file owner
+        for (owner, size) in owner_sizes {
+            Self::update_bsp_payment_and_cycles_after_file_removal(bsp_id, &owner, size, new_root)?;
+        }
+
+        // Emit single event for the batch
+        Self::deposit_event(Event::BspFileDeletionsCompleted {
+            users,
+            file_keys,
             bsp_id,
             old_root,
             new_root,
