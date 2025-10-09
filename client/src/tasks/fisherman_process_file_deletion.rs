@@ -10,7 +10,7 @@ use shc_blockchain_service::{
 use shc_common::{
     traits::StorageEnableRuntime,
     types::{
-        Fingerprint, ForestProof as CommonForestProof, OffchainSignature,
+        FileDeletionRequest, Fingerprint, ForestProof as CommonForestProof, OffchainSignature,
         StorageProofsMerkleTrieLayout, StorageProviderId,
     },
 };
@@ -29,6 +29,8 @@ use crate::{
     handler::StorageHubHandler,
     types::{FishermanForestStorageHandlerT, ShNodeType},
 };
+
+// TODO: Refactor task to support batch file deletions
 
 /// Data structure holding common file deletion information retrieved from indexer database.
 ///
@@ -431,7 +433,7 @@ where
             )
             .await?;
 
-        // Build the delete_file_for_incomplete_storage_request extrinsic call
+        // Build the delete_files_for_incomplete_storage_request extrinsic call
         // Pass None for bucket deletion (MSP), Some(id) for BSP deletion
         let maybe_bsp_id = match provider_id {
             Some(StorageProviderId::BackupStorageProvider(id)) => Some(id),
@@ -447,11 +449,11 @@ where
 
         trace!(
             target: LOG_TARGET,
-            "Submitting delete_file extrinsic"
+            "Submitting delete_file extrinsic (batched with single file)"
         );
 
-        // Build the delete_file extrinsic call
-        let call = pallet_file_system::Call::<Runtime>::delete_file {
+        // Build the file deletion request
+        let file_deletion = FileDeletionRequest {
             file_owner: file_owner.clone(),
             signed_intention: event.signed_file_operation_intention.clone(),
             signature: signature.clone(),
@@ -461,6 +463,16 @@ where
                 .map_err(|_| anyhow!("Location too long"))?,
             size,
             fingerprint: H256::from_slice(fingerprint.as_ref()),
+        };
+
+        // TODO: Wrap in BoundedVec (single file for now)
+        let file_deletions = vec![file_deletion]
+            .try_into()
+            .expect("Single file fits in MaxFileDeletionsPerExtrinsic");
+
+        // Build the delete_file extrinsic call
+        let call = pallet_file_system::Call::<Runtime>::delete_files {
+            file_deletions,
             bsp_id: maybe_bsp_id,
             forest_proof: forest_proof.proof,
         };
@@ -533,19 +545,24 @@ where
 
         trace!(
             target: LOG_TARGET,
-            "Submitting delete_file_for_incomplete_storage_request extrinsic"
+            "Submitting delete_files_for_incomplete_storage_request extrinsic"
         );
 
-        // Build the delete_file_for_incomplete_storage_request extrinsic call
+        // Build the delete_files_for_incomplete_storage_request extrinsic call
         // Pass None for bucket deletion (MSP), Some(id) for BSP deletion
         let maybe_bsp_id = match provider_id {
             Some(StorageProviderId::BackupStorageProvider(id)) => Some(id),
             Some(StorageProviderId::MainStorageProvider(_)) | None => None,
         };
 
+        // Wrap file_key in BoundedVec (single file for now)
+        let file_keys = vec![(*file_key).into()]
+            .try_into()
+            .expect("Single file fits in MaxFileDeletionsPerExtrinsic");
+
         let call =
-            pallet_file_system::Call::<Runtime>::delete_file_for_incomplete_storage_request {
-                file_key: (*file_key).into(),
+            pallet_file_system::Call::<Runtime>::delete_files_for_incomplete_storage_request {
+                file_keys,
                 bsp_id: maybe_bsp_id,
                 forest_proof: forest_proof.proof,
             };
@@ -561,17 +578,17 @@ where
             .map_err(|e| {
                 error!(
                     target: LOG_TARGET,
-                    "Failed to submit delete_file_for_incomplete_storage_request extrinsic: {:?}", e
+                    "Failed to submit delete_files_for_incomplete_storage_request extrinsic: {:?}", e
                 );
                 anyhow!(
-                    "Failed to submit delete_file_for_incomplete_storage_request extrinsic: {:?}",
+                    "Failed to submit delete_files_for_incomplete_storage_request extrinsic: {:?}",
                     e
                 )
             })?;
 
         info!(
             target: LOG_TARGET,
-            "Successfully submitted delete_file_for_incomplete_storage_request extrinsic for file key {:?}",
+            "Successfully submitted delete_files_for_incomplete_storage_request extrinsic for file key {:?}",
             file_key
         );
 
@@ -670,12 +687,13 @@ where
         let service_state = shc_indexer_db::models::ServiceState::get(&mut conn)
             .await
             .map_err(|e| anyhow!("Failed to get service state from indexer: {:?}", e))?;
-        let last_indexed_block = (service_state.last_processed_block as u64).saturated_into();
+        let last_indexed_finalized_block =
+            (service_state.last_indexed_finalized_block as u64).saturated_into();
 
         trace!(
             target: LOG_TARGET,
             "Building ephemeral trie from indexer data at last processed block {}",
-            last_indexed_block
+            last_indexed_finalized_block
         );
 
         // Fetch all file keys for the deletion target from finalized data
@@ -745,12 +763,12 @@ where
         trace!(
             target: LOG_TARGET,
             "Applying catch-up from block {} to best block",
-            last_indexed_block
+            last_indexed_finalized_block
         );
 
         // Get file key changes since finalized block using the generated interface method
         let file_key_changes = fisherman_service
-            .get_file_key_changes_since_block(last_indexed_block, deletion_target.clone())
+            .get_file_key_changes_since_block(last_indexed_finalized_block, deletion_target.clone())
             .await
             .map_err(|e| anyhow!("Failed to get file key changes: {:?}", e))?;
 

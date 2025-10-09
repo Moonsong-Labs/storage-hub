@@ -11,8 +11,8 @@ use pallet_nfts::PalletFeatures;
 use shp_data_price_updater::NoUpdatePriceIndexUpdater;
 use shp_file_metadata::{ChunkId, FileMetadata};
 use shp_traits::{
-    CommitRevealRandomnessInterface, ProofSubmittersInterface, ProofsDealerInterface,
-    ReadUserSolvencyInterface, StorageHubTickGetter, TrieMutation,
+    CommitRevealRandomnessInterface, IdentityAdapter, ProofSubmittersInterface,
+    ProofsDealerInterface, ReadUserSolvencyInterface, StorageHubTickGetter, TrieMutation,
 };
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
@@ -277,6 +277,7 @@ impl pallet_file_system::Config for Test {
     type BspStopStoringFilePenalty = ConstU128<1>;
     type TreasuryAccount = TreasuryAccount;
     type MaxBatchConfirmStorageRequests = ConstU32<10>;
+    type MaxFileDeletionsPerExtrinsic = ConstU32<100>;
     type MaxFilePathSize = ConstU32<512u32>;
     type MaxPeerIdSize = ConstU32<100>;
     type MaxNumberOfPeerIds = MaxNumberOfPeerIds;
@@ -303,6 +304,7 @@ impl pallet_file_system::Config for Test {
     type TickRangeToMaximumThreshold = ConstU64<30>;
     type OffchainSignature = Signature;
     type OffchainPublicKey = <Signature as Verify>::Signer;
+    type IntentionMsgAdapter = IdentityAdapter;
 }
 
 pub struct MockUserSolvency;
