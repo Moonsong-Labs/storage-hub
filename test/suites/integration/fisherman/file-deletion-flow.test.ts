@@ -132,7 +132,7 @@ await describeMspNet(
       await waitForBspFileAssociation(sql, fileKey);
     });
 
-    it("user sends file deletion request and fisherman submits delete_file extrinsics", async () => {
+    it("user sends file deletion request and fisherman submits delete_files extrinsics", async () => {
       // Create file deletion request
       const fileOperationIntention = {
         fileKey: fileKey,
@@ -172,9 +172,9 @@ await describeMspNet(
 
       await waitForIndexing(userApi, false);
 
-      // Verify delete_file extrinsics are submitted
+      // Verify delete_files extrinsics are submitted
       await userApi.assert.extrinsicPresent({
-        method: "deleteFile",
+        method: "deleteFiles",
         module: "fileSystem",
         checkTxPool: true,
         assertLength: 2
@@ -187,18 +187,18 @@ await describeMspNet(
       assertEventPresent(
         userApi,
         "fileSystem",
-        "BucketFileDeletionCompleted",
+        "BucketFileDeletionsCompleted",
         deletionResult.events
       );
-      assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", deletionResult.events);
+      assertEventPresent(userApi, "fileSystem", "BspFileDeletionsCompleted", deletionResult.events);
 
       // Extract deletion events to verify root changes
       const mspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BucketFileDeletionCompleted,
+        userApi.events.fileSystem.BucketFileDeletionsCompleted,
         deletionResult.events
       );
       const bspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BspFileDeletionCompleted,
+        userApi.events.fileSystem.BspFileDeletionsCompleted,
         deletionResult.events
       );
 

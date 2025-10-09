@@ -174,3 +174,17 @@ export interface FileInfo {
   isPublic: boolean;
   uploadedAt: Date;
 }
+
+// Payments
+export type PaymentProviderType = "msp" | "bsp";
+
+export interface PaymentStreamInfo {
+  provider: string;
+  providerType: PaymentProviderType;
+  totalAmountPaid: string;
+  costPerTick: string;
+}
+
+export interface PaymentStreamsResponse {
+  streams: PaymentStreamInfo[];
+}

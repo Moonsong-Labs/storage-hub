@@ -375,7 +375,7 @@ async function generateBenchmarkProofs() {
     `${GREEN_TEXT} This is going to be used in extrinsics that allow a Provider to stop storing a file.${RESET_TEXT}`
   );
 
-  // * For a Provider that wants to stop storing a file (or a user that calls delete_file), we need to generate
+  // * For a Provider that wants to stop storing a file (or a user that calls delete_files), we need to generate
   // * an inclusion forest proof for a file key.
 
   // Get the file key for which to generate the inclusion proof. Since the BSP has all file keys, we can get the first one of the non-stored ones.
