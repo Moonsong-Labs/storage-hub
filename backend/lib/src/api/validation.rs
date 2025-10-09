@@ -1,9 +1,3 @@
-use axum_extra::headers::{authorization::Bearer, Authorization};
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
-use rand::Rng;
-use serde_json::Value;
-
 use crate::error::Error;
 
 /// Validates that the passed in ethereum address is:

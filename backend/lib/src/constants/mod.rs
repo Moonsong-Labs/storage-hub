@@ -70,12 +70,10 @@ pub mod auth {
     pub const AUTH_NONCE_ENDPOINT: &str = "/auth/nonce";
 
     /// The 'domain' to use for the SIWE message
-    // TODO: make configurable
-    pub const AUTH_SIWE_DOMAIN: &str = "localhost";
+    pub const DEFAULT_SIWE_DOMAIN: &str = "localhost";
 
-    /// Authentication nonce expiration, in seconds
-    // TODO: make configurable
-    pub const AUTH_NONCE_EXPIRATION_SECONDS: u64 = 300; // 5 minutes
+    /// Default nonce expiration, in seconds
+    pub const DEFAULT_AUTH_NONCE_EXPIRATION_SECONDS: usize = 300; // 5 minutes
 
     /// Default authentication JWT token expiration (in minutes)
     // TODO: temporarily set to 5 hours to extend sessions

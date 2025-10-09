@@ -17,10 +17,7 @@ use crate::{
     api::validation::validate_eth_address,
     config::AuthConfig,
     constants::{
-        auth::{
-            AUTH_NONCE_ENDPOINT, AUTH_NONCE_EXPIRATION_SECONDS, AUTH_SIWE_DOMAIN,
-            DEFAULT_JWT_EXPIRY_OFFSET, MOCK_ENS,
-        },
+        auth::{AUTH_NONCE_ENDPOINT, MOCK_ENS},
         mocks::MOCK_ADDRESS,
     },
     data::storage::BoxedStorage,
@@ -44,7 +41,12 @@ pub struct AuthService {
     validate_signature: bool,
     storage: Arc<dyn BoxedStorage>,
 
+    /// The duration for generated JWTs
     session_duration: Duration,
+    /// The duration for the stored nonces
+    nonce_duration: Duration,
+    /// The SIWE domain to use when generating messages
+    siwe_domain: String,
 }
 
 impl AuthService {
@@ -77,9 +79,23 @@ impl AuthService {
             .expect("JWT secret configuration should be valid");
 
         let session_duration = Duration::minutes(config.session_expiration_minutes as _);
+        let nonce_duration = Duration::seconds(config.nonce_expiration_seconds as _);
+
+        // `Validation` is used by the underlying lib to determine how to decode
+        // the JWT passed in
+        let validation = Validation::default();
 
         #[allow(unused_mut)] // triggers warning without mocks feature
-        let mut this = Self::new(secret.as_slice(), storage, session_duration);
+        let mut this = Self {
+            encoding_key: EncodingKey::from_secret(secret.as_slice()),
+            decoding_key: DecodingKey::from_secret(secret.as_slice()),
+            validation,
+            storage,
+            validate_signature: true,
+            session_duration,
+            nonce_duration,
+            siwe_domain: config.siwe_domain.clone(),
+        };
 
         #[cfg(feature = "mocks")]
         {
@@ -89,27 +105,6 @@ impl AuthService {
         }
 
         this
-    }
-
-    /// Crete a new instance of `AuthService` with the configured secret.
-    ///
-    /// Arguments:
-    /// * `secret`: secret to use to initialize the JWT encoding and decoding keys
-    /// * `storage`: reference to the storage service to use to store nonce information
-    /// * `session_duration`: the JWT duration before expiry
-    pub fn new(secret: &[u8], storage: Arc<dyn BoxedStorage>, session_duration: Duration) -> Self {
-        // `Validation` is used by the underlying lib to determine how to decode
-        // the JWT passed in
-        let validation = Validation::default();
-
-        Self {
-            encoding_key: EncodingKey::from_secret(secret),
-            decoding_key: DecodingKey::from_secret(secret),
-            validation,
-            storage,
-            validate_signature: true,
-            session_duration,
-        }
     }
 
     /// Returns the configured JWT decoding key
@@ -165,7 +160,7 @@ impl AuthService {
     /// The resulting JWT is already base64 encoded and signed by the service
     fn generate_jwt(&self, address: &str) -> Result<String, Error> {
         let now = Utc::now();
-        let exp = now + DEFAULT_JWT_EXPIRY_OFFSET;
+        let exp = now + self.session_duration;
 
         let claims = JwtClaims {
             address: address.to_string(),
@@ -186,7 +181,7 @@ impl AuthService {
         validate_eth_address(address)?;
 
         let nonce = Self::generate_random_nonce();
-        let message = Self::construct_auth_message(address, AUTH_SIWE_DOMAIN, &nonce, chain_id);
+        let message = Self::construct_auth_message(address, &self.siwe_domain, &nonce, chain_id);
 
         // Store message paired with address in storage
         // Using message as key and address as value
@@ -194,7 +189,7 @@ impl AuthService {
             .store_nonce(
                 message.clone(),
                 address.to_string(),
-                AUTH_NONCE_EXPIRATION_SECONDS,
+                self.nonce_duration.num_seconds() as _,
             )
             .await
             .map_err(|_| Error::Internal)?;
@@ -246,7 +241,7 @@ impl AuthService {
                     .store_nonce(
                         message.to_string(),
                         address.clone(),
-                        AUTH_NONCE_EXPIRATION_SECONDS,
+                        self.nonce_duration.num_seconds() as _,
                     )
                     .await
                     .map_err(|_| Error::Internal)?;

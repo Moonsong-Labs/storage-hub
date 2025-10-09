@@ -3,7 +3,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::constants::{
     api::{DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE},
-    auth::DEFAULT_JWT_EXPIRY_OFFSET_MINUTES,
+    auth::{
+        DEFAULT_AUTH_NONCE_EXPIRATION_SECONDS, DEFAULT_JWT_EXPIRY_OFFSET_MINUTES,
+        DEFAULT_SIWE_DOMAIN,
+    },
     database::DEFAULT_DATABASE_URL,
     rpc::{
         DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_MSP_CALLBACK_URL, DEFAULT_RPC_URL,
@@ -55,6 +58,17 @@ pub struct AuthConfig {
     ///
     /// Recommended a relatively short duration (10 minutes) to represent a typical user session with the backend
     pub session_expiration_minutes: usize,
+
+    /// The expiration time (in seconds) for user nonces
+    ///
+    /// Recommended a short duration (a few minutes) to allow users to authenticate themselves,
+    /// whilst also cleaning up abandoned sessions
+    pub nonce_expiration_seconds: usize,
+
+    /// The domain to use for the generated SIWE message
+    ///
+    /// Recommended to match the domain which this backend is reachable at
+    pub siwe_domain: String,
 }
 
 impl AuthConfig {
@@ -122,6 +136,8 @@ impl Default for Config {
                 #[cfg(feature = "mocks")]
                 mock_mode: true,
                 session_expiration_minutes: DEFAULT_JWT_EXPIRY_OFFSET_MINUTES,
+                nonce_expiration_seconds: DEFAULT_AUTH_NONCE_EXPIRATION_SECONDS,
+                siwe_domain: DEFAULT_SIWE_DOMAIN.to_string(),
             },
             storage_hub: StorageHubConfig {
                 rpc_url: DEFAULT_RPC_URL.to_string(),
