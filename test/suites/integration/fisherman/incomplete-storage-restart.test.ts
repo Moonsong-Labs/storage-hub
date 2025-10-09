@@ -319,8 +319,10 @@ await describeMspNet(
         deletionResult.events
       );
 
-      const bspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BspFileDeletionCompleted,
+      const {
+        data: { oldRoot, newRoot }
+      } = userApi.assert.fetchEvent(
+        userApi.events.fileSystem.BspFileDeletionsCompleted,
         deletionResult.events
       );
 
@@ -328,14 +330,14 @@ await describeMspNet(
       await waitFor({
         lambda: async () => {
           notEqual(
-            bspDeletionEvent.data.oldRoot.toString(),
-            bspDeletionEvent.data.newRoot.toString(),
+            oldRoot.toString(),
+            newRoot.toString(),
             "BSP forest root should have changed after file deletion"
           );
           const currentBspRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
           strictEqual(
             currentBspRoot.toString(),
-            bspDeletionEvent.data.newRoot.toString(),
+            newRoot.toString(),
             "Current BSP forest root should match the new root from deletion event"
           );
           return true;
