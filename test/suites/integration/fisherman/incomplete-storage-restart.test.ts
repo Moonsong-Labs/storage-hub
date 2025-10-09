@@ -83,76 +83,6 @@ await describeMspNet(
     };
 
     /**
-     * Creates multiple storage requests for files and ensures they are properly stored by BSPs.
-     * This function orchestrates the complete storage flow:
-     * 1. Creates a storage request for each destination
-     * 2. Waits for MSP to respond to the request
-     * 3. Waits for BSP to volunteer to store the file
-     * 4. Verifies file is available in BSP's storage
-     * 5. Confirms BSP has marked the file as stored on-chain
-     *
-     * @param options Configuration for storage requests
-     * @param options.bucketId - The H256 bucket ID where files should be stored
-     * @param options.source - Path to the source file to be stored (e.g., "res/image.jpg")
-     * @param options.destinations - Array of destination paths for the stored files
-     * @returns Array of file keys (identifiers) for all created storage requests
-     *
-     * @example
-     * const fileKeys = await createStorageRequests({
-     *   bucketId: myBucketId,
-     *   source: "res/data.txt",
-     *   destinations: ["backup-1.txt", "backup-2.txt"]
-     * });
-     */
-    const createStorageRequests = async (options: {
-      bucketId: H256;
-      source: string;
-      destinations: string[];
-    }) => {
-      const createdFileKeys: string[] = [];
-      const bspAccount = userApi.createType("Address", bspKey.address);
-      const requestCount = options.destinations.length;
-
-      // Step 1: Create all storage requests first
-      for (const destination of options.destinations) {
-        const { fileKey } = await userApi.file.newStorageRequest(
-          options.source,
-          destination,
-          options.bucketId,
-          undefined,
-          undefined,
-          1 // Create storage requests that will expire to never reaching the replication target
-        );
-        createdFileKeys.push(fileKey);
-      }
-
-      await userApi.wait.bspVolunteer();
-
-      await waitFor({
-        lambda: async () => {
-          for (const fileKey of createdFileKeys) {
-            const isStored = (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey))
-              .isFileFound;
-            if (!isStored) {
-              return false;
-            }
-          }
-          return true;
-        },
-        iterations: 30,
-        delay: 1000
-      });
-
-      // Step 5: Wait for all BSP stored confirmations
-      await userApi.wait.bspStored({
-        bspAccount,
-        expectedExts: requestCount
-      });
-
-      return createdFileKeys;
-    };
-
-    /**
      * Advances the blockchain past the expiry blocks of given storage requests.
      * Storage requests have an expiration block after which they become "incomplete"
      * and eligible for fisherman processing. This function finds the latest expiry
@@ -253,10 +183,45 @@ await describeMspNet(
       // Pause MSP container so that we trigger the incomplete storage request
       await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
       // Create more incomplete requests while fisherman is down
-      const initialRequests = await createStorageRequests({
-        bucketId,
-        source,
-        destinations: buildDestinations("test/restart-basic-new", 1, 5)
+      const destinations = buildDestinations("test/restart-basic-new", 1, 5);
+      const initialRequests: string[] = [];
+      const bspAccount = userApi.createType("Address", bspKey.address);
+      const requestCount = destinations.length;
+
+      // Step 1: Create all storage requests first
+      for (const destination of destinations) {
+        const { fileKey } = await userApi.file.newStorageRequest(
+          source,
+          destination,
+          bucketId,
+          undefined,
+          undefined,
+          1 // Create storage requests that will expire to never reaching the replication target
+        );
+        initialRequests.push(fileKey);
+      }
+
+      await userApi.wait.bspVolunteer();
+
+      await waitFor({
+        lambda: async () => {
+          for (const fileKey of initialRequests) {
+            const isStored = (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey))
+              .isFileFound;
+            if (!isStored) {
+              return false;
+            }
+          }
+          return true;
+        },
+        iterations: 30,
+        delay: 1000
+      });
+
+      // Step 5: Wait for all BSP stored confirmations
+      await userApi.wait.bspStored({
+        bspAccount,
+        expectedExts: requestCount
       });
 
       await advancePastExpiry(initialRequests);

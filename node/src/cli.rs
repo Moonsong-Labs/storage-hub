@@ -573,7 +573,7 @@ pub struct FishermanConfigurations {
     #[arg(long, value_name = "SIZE", default_value = "256", value_parser = clap::value_parser!(u32).range(1..))]
     pub fisherman_incomplete_sync_page_size: u32,
 
-    /// The minimum number of blocks behind the current best block to consider the fisherman out of sync.
+    /// The minimum number of blocks between the last processed block and the current best block to consider the fisherman out of sync.
     #[arg(long, default_value = "5")]
     pub fisherman_sync_mode_min_blocks_behind: u32,
 }

@@ -231,8 +231,8 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
 
         let best_block_hash = self.client.info().best_hash;
 
-        loop {
-            // Call the new runtime API to get a page of incomplete storage request keys
+        'sync_loop: while processed < cap {
+            // Call the runtime API to get a page of incomplete storage request keys
             let keys = self
                 .client
                 .runtime_api()
@@ -254,6 +254,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
 
             for key in &keys {
                 // Emit the event for each key
+                // TODO: Emit batch of file keys per BSP/Bucket
                 self.emit(crate::events::ProcessIncompleteStorageRequest {
                     file_key: (*key).into(),
                 });
@@ -267,17 +268,12 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                         "🎣 Initial incomplete requests sync reached cap: {}",
                         cap
                     );
-                    break;
+                    break 'sync_loop;
                 }
             }
 
             // Advance cursor to last processed key
             cursor = keys.last().cloned();
-
-            // Check if we've hit the cap
-            if processed >= cap {
-                break;
-            }
         }
 
         info!(target: LOG_TARGET, "🎣 Completed initial incomplete storage requests sync - processed {} requests", processed);
