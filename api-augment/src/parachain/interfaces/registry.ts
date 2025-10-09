@@ -74,6 +74,7 @@ import type {
   PalletFileSystemEitherAccountIdOrMspId,
   PalletFileSystemError,
   PalletFileSystemEvent,
+  PalletFileSystemFileDeletionRequest,
   PalletFileSystemFileKeyWithProof,
   PalletFileSystemFileOperation,
   PalletFileSystemFileOperationIntention,
@@ -383,6 +384,7 @@ declare module "@polkadot/types/types/registry" {
     PalletFileSystemEitherAccountIdOrMspId: PalletFileSystemEitherAccountIdOrMspId;
     PalletFileSystemError: PalletFileSystemError;
     PalletFileSystemEvent: PalletFileSystemEvent;
+    PalletFileSystemFileDeletionRequest: PalletFileSystemFileDeletionRequest;
     PalletFileSystemFileKeyWithProof: PalletFileSystemFileKeyWithProof;
     PalletFileSystemFileOperation: PalletFileSystemFileOperation;
     PalletFileSystemFileOperationIntention: PalletFileSystemFileOperationIntention;
