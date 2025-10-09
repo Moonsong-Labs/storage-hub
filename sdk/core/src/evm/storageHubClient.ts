@@ -8,10 +8,10 @@
  * Binary data (signatures) are passed as Uint8Array. Hex values are 0x-prefixed strings (32-byte IDs).
  */
 
-import { filesystemAbi } from '../abi/filesystem';
-import type { FileInfo } from '../types';
-import type { EvmWriteOptions, StorageHubClientOptions } from './types';
-import { FileOperation, ReplicationLevel } from './types';
+import { filesystemAbi } from "../abi/filesystem";
+import type { FileInfo } from "../types";
+import type { EvmWriteOptions, StorageHubClientOptions } from "./types";
+import { FileOperation, type ReplicationLevel } from "./types";
 import {
   type Address,
   createPublicClient,
@@ -24,8 +24,8 @@ import {
   type PublicClient,
   stringToBytes,
   stringToHex,
-  type WalletClient,
-} from 'viem';
+  type WalletClient
+} from "viem";
 
 // Re-export filesystemAbi for external use
 export { filesystemAbi };
@@ -168,7 +168,7 @@ export class StorageHubClient {
    */
   private async signIntention(
     fileKey: `0x${string}`,
-    operation: FileOperation,
+    operation: FileOperation
   ): Promise<{
     signedIntention: readonly [`0x${string}`, number];
     signature: `0x${string}`;
@@ -184,7 +184,7 @@ export class StorageHubClient {
     // const hash = keccak256(serialized);
     // const signature = await this.walletClient.account!.sign!({ hash });
     if (!this.walletClient.account) {
-      throw new Error('Wallet client must have an account to sign messages');
+      throw new Error("Wallet client must have an account to sign messages");
     }
 
     const signature = await this.walletClient.signMessage({
@@ -194,7 +194,7 @@ export class StorageHubClient {
 
     return {
       signedIntention: [fileKey, operation],
-      signature,
+      signature
     };
   }
 
@@ -421,14 +421,14 @@ export class StorageHubClient {
   async requestDeleteFile(
     fileInfo: FileInfo,
     operation: FileOperation = FileOperation.Delete,
-    options?: EvmWriteOptions,
+    options?: EvmWriteOptions
   ): Promise<`0x${string}`> {
     // Create signed intention and execute transaction
     const { signedIntention, signature } = await this.signIntention(fileInfo.fileKey, operation);
     const locationHex = this.validateStringLength(
       fileInfo.location,
       StorageHubClient.MAX_LOCATION_BYTES,
-      'File location',
+      "File location"
     );
     const args = [
       signedIntention,
@@ -436,7 +436,7 @@ export class StorageHubClient {
       fileInfo.bucketId,
       locationHex,
       fileInfo.size,
-      fileInfo.fingerprint,
+      fileInfo.fingerprint
     ] as const;
 
     const gasLimit = await this.estimateGas("requestDeleteFile", args, options);

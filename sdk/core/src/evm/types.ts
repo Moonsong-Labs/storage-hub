@@ -85,5 +85,5 @@ export enum ReplicationLevel {
  */
 export enum FileOperation {
   /** Delete operation for a file */
-  Delete = 0,
+  Delete = 0
 }
