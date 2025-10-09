@@ -33,10 +33,11 @@ use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettin
 use shp_constants::GIGAUNIT;
 use shp_file_metadata::ChunkId;
 use shp_traits::{
-    CommitRevealRandomnessInterface, MutateBucketsInterface, MutateProvidersInterface,
-    MutateStorageProvidersInterface, PaymentStreamsInterface, PricePerGigaUnitPerTickInterface,
-    ProofsDealerInterface, ReadBucketsInterface, ReadProvidersInterface,
-    ReadStorageProvidersInterface, ReadUserSolvencyInterface, TrieAddMutation, TrieRemoveMutation,
+    CommitRevealRandomnessInterface, MessageAdapter, MutateBucketsInterface,
+    MutateProvidersInterface, MutateStorageProvidersInterface, PaymentStreamsInterface,
+    PricePerGigaUnitPerTickInterface, ProofsDealerInterface, ReadBucketsInterface,
+    ReadProvidersInterface, ReadStorageProvidersInterface, ReadUserSolvencyInterface,
+    TrieAddMutation, TrieRemoveMutation,
 };
 
 use crate::{
@@ -1288,8 +1289,12 @@ where
 
         // Encode the intention for signature verification
         let signed_intention_encoded = signed_intention.encode();
+        // Adapt the bytes to verify depending on the runtime configuration
+        let to_verify = <T as crate::pallet::Config>::IntentionMsgAdapter::bytes_to_verify(
+            &signed_intention_encoded,
+        );
 
-        let is_valid = signature.verify(&signed_intention_encoded[..], &who);
+        let is_valid = signature.verify(&to_verify[..], &who);
         ensure!(is_valid, Error::<T>::InvalidSignature);
 
         // Compute file key from the provided metadata
@@ -1347,10 +1352,14 @@ where
 
             // Encode the intention for signature verification
             let signed_intention_encoded = deletion_request.signed_intention.encode();
+            // Adapt the bytes to verify depending on the runtime configuration
+            let to_verify = <T as crate::pallet::Config>::IntentionMsgAdapter::bytes_to_verify(
+                &signed_intention_encoded,
+            );
 
             let is_valid = deletion_request
                 .signature
-                .verify(&signed_intention_encoded[..], &deletion_request.file_owner);
+                .verify(&to_verify[..], &deletion_request.file_owner);
             ensure!(is_valid, Error::<T>::InvalidSignature);
 
             // Compute file key from the provided metadata
