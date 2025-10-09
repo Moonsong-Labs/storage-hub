@@ -1,499 +1,252 @@
-import "@polkadot/types/types/registry";
-import type {
-  EthbloomBloom,
-  EthereumBlock,
-  EthereumHeader,
-  EthereumLog,
-  EthereumReceiptEip658ReceiptData,
-  EthereumReceiptReceiptV3,
-  EthereumTransactionEip1559Eip1559Transaction,
-  EthereumTransactionEip2930AccessListItem,
-  EthereumTransactionEip2930Eip2930Transaction,
-  EthereumTransactionLegacyLegacyTransaction,
-  EthereumTransactionLegacyTransactionAction,
-  EthereumTransactionLegacyTransactionSignature,
-  EthereumTransactionTransactionV2,
-  EthereumTypesHashH64,
-  EvmCoreErrorExitError,
-  EvmCoreErrorExitFatal,
-  EvmCoreErrorExitReason,
-  EvmCoreErrorExitRevert,
-  EvmCoreErrorExitSucceed,
-  FinalityGrandpaEquivocationPrecommit,
-  FinalityGrandpaEquivocationPrevote,
-  FinalityGrandpaPrecommit,
-  FinalityGrandpaPrevote,
-  FpAccountEthereumSignature,
-  FpRpcTransactionStatus,
-  FrameMetadataHashExtensionCheckMetadataHash,
-  FrameMetadataHashExtensionMode,
-  FrameSupportDispatchDispatchClass,
-  FrameSupportDispatchPays,
-  FrameSupportDispatchPerDispatchClassU32,
-  FrameSupportDispatchPerDispatchClassWeight,
-  FrameSupportDispatchPerDispatchClassWeightsPerClass,
-  FrameSupportTokensMiscBalanceStatus,
-  FrameSupportTokensMiscIdAmountRuntimeFreezeReason,
-  FrameSupportTokensMiscIdAmountRuntimeHoldReason,
-  FrameSystemAccountInfo,
-  FrameSystemCall,
-  FrameSystemCodeUpgradeAuthorization,
-  FrameSystemDispatchEventInfo,
-  FrameSystemError,
-  FrameSystemEvent,
-  FrameSystemEventRecord,
-  FrameSystemExtensionsCheckGenesis,
-  FrameSystemExtensionsCheckNonZeroSender,
-  FrameSystemExtensionsCheckNonce,
-  FrameSystemExtensionsCheckSpecVersion,
-  FrameSystemExtensionsCheckTxVersion,
-  FrameSystemExtensionsCheckWeight,
-  FrameSystemLastRuntimeUpgradeInfo,
-  FrameSystemLimitsBlockLength,
-  FrameSystemLimitsBlockWeights,
-  FrameSystemLimitsWeightsPerClass,
-  FrameSystemPhase,
-  PalletBabeCall,
-  PalletBabeError,
-  PalletBalancesAccountData,
-  PalletBalancesAdjustmentDirection,
-  PalletBalancesBalanceLock,
-  PalletBalancesCall,
-  PalletBalancesError,
-  PalletBalancesEvent,
-  PalletBalancesReasons,
-  PalletBalancesReserveData,
-  PalletBucketNftsCall,
-  PalletBucketNftsError,
-  PalletBucketNftsEvent,
-  PalletEthereumCall,
-  PalletEthereumError,
-  PalletEthereumEvent,
-  PalletEvmCall,
-  PalletEvmCodeMetadata,
-  PalletEvmError,
-  PalletEvmEvent,
-  PalletFileSystemBucketMoveRequestResponse,
-  PalletFileSystemCall,
-  PalletFileSystemEitherAccountIdOrMspId,
-  PalletFileSystemError,
-  PalletFileSystemEvent,
-  PalletFileSystemFileKeyWithProof,
-  PalletFileSystemFileOperation,
-  PalletFileSystemFileOperationIntention,
-  PalletFileSystemHoldReason,
-  PalletFileSystemIncompleteStorageRequestMetadata,
-  PalletFileSystemMoveBucketRequestMetadata,
-  PalletFileSystemPendingFileDeletionRequest,
-  PalletFileSystemPendingStopStoringRequest,
-  PalletFileSystemRejectedStorageRequest,
-  PalletFileSystemRejectedStorageRequestReason,
-  PalletFileSystemReplicationTarget,
-  PalletFileSystemStorageRequestBspsMetadata,
-  PalletFileSystemStorageRequestMetadata,
-  PalletFileSystemStorageRequestMspAcceptedFileKeys,
-  PalletFileSystemStorageRequestMspBucketResponse,
-  PalletGrandpaCall,
-  PalletGrandpaError,
-  PalletGrandpaEvent,
-  PalletGrandpaStoredPendingChange,
-  PalletGrandpaStoredState,
-  PalletNftsAttributeDeposit,
-  PalletNftsAttributeNamespace,
-  PalletNftsCall,
-  PalletNftsCancelAttributesApprovalWitness,
-  PalletNftsCollectionConfig,
-  PalletNftsCollectionDetails,
-  PalletNftsCollectionMetadata,
-  PalletNftsCollectionRole,
-  PalletNftsCollectionSetting,
-  PalletNftsDestroyWitness,
-  PalletNftsError,
-  PalletNftsEvent,
-  PalletNftsItemConfig,
-  PalletNftsItemDeposit,
-  PalletNftsItemDetails,
-  PalletNftsItemMetadata,
-  PalletNftsItemMetadataDeposit,
-  PalletNftsItemSetting,
-  PalletNftsItemTip,
-  PalletNftsMintSettings,
-  PalletNftsMintType,
-  PalletNftsMintWitness,
-  PalletNftsPalletAttributes,
-  PalletNftsPalletFeature,
-  PalletNftsPendingSwap,
-  PalletNftsPreSignedAttributes,
-  PalletNftsPreSignedMint,
-  PalletNftsPriceDirection,
-  PalletNftsPriceWithDirection,
-  PalletOffencesEvent,
-  PalletParametersCall,
-  PalletParametersEvent,
-  PalletPaymentStreamsCall,
-  PalletPaymentStreamsDynamicRatePaymentStream,
-  PalletPaymentStreamsError,
-  PalletPaymentStreamsEvent,
-  PalletPaymentStreamsFixedRatePaymentStream,
-  PalletPaymentStreamsHoldReason,
-  PalletPaymentStreamsProviderLastChargeableInfo,
-  PalletProofsDealerCall,
-  PalletProofsDealerCustomChallenge,
-  PalletProofsDealerError,
-  PalletProofsDealerEvent,
-  PalletProofsDealerKeyProof,
-  PalletProofsDealerProof,
-  PalletProofsDealerProofSubmissionRecord,
-  PalletRandomnessCall,
-  PalletRandomnessEvent,
-  PalletSessionCall,
-  PalletSessionError,
-  PalletSessionEvent,
-  PalletStorageProvidersBackupStorageProvider,
-  PalletStorageProvidersBucket,
-  PalletStorageProvidersCall,
-  PalletStorageProvidersError,
-  PalletStorageProvidersEvent,
-  PalletStorageProvidersHoldReason,
-  PalletStorageProvidersMainStorageProvider,
-  PalletStorageProvidersMainStorageProviderSignUpRequest,
-  PalletStorageProvidersSignUpRequest,
-  PalletStorageProvidersSignUpRequestSpParams,
-  PalletStorageProvidersStorageProviderId,
-  PalletStorageProvidersTopUpMetadata,
-  PalletStorageProvidersValueProposition,
-  PalletStorageProvidersValuePropositionWithId,
-  PalletSudoCall,
-  PalletSudoError,
-  PalletSudoEvent,
-  PalletTimestampCall,
-  PalletTransactionPaymentChargeTransactionPayment,
-  PalletTransactionPaymentEvent,
-  PalletTransactionPaymentReleases,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBasicReplicationTarget,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBspStopStoringFilePenalty,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigDecayRate,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigHighSecurityReplicationTarget,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxReplicationTarget,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaximumTreasuryCut,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinSeedPeriod,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinWaitForStopStoring,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinimumTreasuryCut,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMostlyStablePrice,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigProviderTopUpTtl,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToSeedPeriod,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStandardReplicationTarget,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStorageRequestTtl,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSuperHighSecurityReplicationTarget,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigTickRangeToMaximumThreshold,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUltraHighSecurityReplicationTarget,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpfrontTicksToPay,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigZeroSizeBucketFixedRate,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParameters,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParametersKey,
-  ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParametersValue,
-  ShSolochainEvmRuntimeRuntime,
-  ShSolochainEvmRuntimeRuntimeFreezeReason,
-  ShSolochainEvmRuntimeRuntimeHoldReason,
-  ShSolochainEvmRuntimeSessionKeys,
-  ShpFileKeyVerifierFileKeyProof,
-  ShpFileMetadataFileMetadata,
-  ShpFileMetadataFingerprint,
-  ShpTraitsTrieAddMutation,
-  ShpTraitsTrieMutation,
-  ShpTraitsTrieRemoveMutation,
-  SpArithmeticArithmeticError,
-  SpConsensusBabeAllowedSlots,
-  SpConsensusBabeAppPublic,
-  SpConsensusBabeBabeEpochConfiguration,
-  SpConsensusBabeDigestsNextConfigDescriptor,
-  SpConsensusBabeDigestsPreDigest,
-  SpConsensusBabeDigestsPrimaryPreDigest,
-  SpConsensusBabeDigestsSecondaryPlainPreDigest,
-  SpConsensusBabeDigestsSecondaryVRFPreDigest,
-  SpConsensusGrandpaAppPublic,
-  SpConsensusGrandpaAppSignature,
-  SpConsensusGrandpaEquivocation,
-  SpConsensusGrandpaEquivocationProof,
-  SpConsensusSlotsEquivocationProof,
-  SpCoreCryptoKeyTypeId,
-  SpCoreSr25519VrfVrfSignature,
-  SpRuntimeDigest,
-  SpRuntimeDigestDigestItem,
-  SpRuntimeDispatchError,
-  SpRuntimeHeader,
-  SpRuntimeModuleError,
-  SpRuntimeProvingTrieTrieError,
-  SpRuntimeTokenError,
-  SpRuntimeTransactionalError,
-  SpSessionMembershipProof,
-  SpStakingOffenceOffenceDetails,
-  SpTrieStorageProofCompactProof,
-  SpVersionRuntimeVersion,
-  SpWeightsRuntimeDbWeight,
-  SpWeightsWeightV2Weight
-} from "@polkadot/types/lookup";
-declare module "@polkadot/types/types/registry" {
-  interface InterfaceTypes {
-    EthbloomBloom: EthbloomBloom;
-    EthereumBlock: EthereumBlock;
-    EthereumHeader: EthereumHeader;
-    EthereumLog: EthereumLog;
-    EthereumReceiptEip658ReceiptData: EthereumReceiptEip658ReceiptData;
-    EthereumReceiptReceiptV3: EthereumReceiptReceiptV3;
-    EthereumTransactionEip1559Eip1559Transaction: EthereumTransactionEip1559Eip1559Transaction;
-    EthereumTransactionEip2930AccessListItem: EthereumTransactionEip2930AccessListItem;
-    EthereumTransactionEip2930Eip2930Transaction: EthereumTransactionEip2930Eip2930Transaction;
-    EthereumTransactionLegacyLegacyTransaction: EthereumTransactionLegacyLegacyTransaction;
-    EthereumTransactionLegacyTransactionAction: EthereumTransactionLegacyTransactionAction;
-    EthereumTransactionLegacyTransactionSignature: EthereumTransactionLegacyTransactionSignature;
-    EthereumTransactionTransactionV2: EthereumTransactionTransactionV2;
-    EthereumTypesHashH64: EthereumTypesHashH64;
-    EvmCoreErrorExitError: EvmCoreErrorExitError;
-    EvmCoreErrorExitFatal: EvmCoreErrorExitFatal;
-    EvmCoreErrorExitReason: EvmCoreErrorExitReason;
-    EvmCoreErrorExitRevert: EvmCoreErrorExitRevert;
-    EvmCoreErrorExitSucceed: EvmCoreErrorExitSucceed;
-    FinalityGrandpaEquivocationPrecommit: FinalityGrandpaEquivocationPrecommit;
-    FinalityGrandpaEquivocationPrevote: FinalityGrandpaEquivocationPrevote;
-    FinalityGrandpaPrecommit: FinalityGrandpaPrecommit;
-    FinalityGrandpaPrevote: FinalityGrandpaPrevote;
-    FpAccountEthereumSignature: FpAccountEthereumSignature;
-    FpRpcTransactionStatus: FpRpcTransactionStatus;
-    FrameMetadataHashExtensionCheckMetadataHash: FrameMetadataHashExtensionCheckMetadataHash;
-    FrameMetadataHashExtensionMode: FrameMetadataHashExtensionMode;
-    FrameSupportDispatchDispatchClass: FrameSupportDispatchDispatchClass;
-    FrameSupportDispatchPays: FrameSupportDispatchPays;
-    FrameSupportDispatchPerDispatchClassU32: FrameSupportDispatchPerDispatchClassU32;
-    FrameSupportDispatchPerDispatchClassWeight: FrameSupportDispatchPerDispatchClassWeight;
-    FrameSupportDispatchPerDispatchClassWeightsPerClass: FrameSupportDispatchPerDispatchClassWeightsPerClass;
-    FrameSupportTokensMiscBalanceStatus: FrameSupportTokensMiscBalanceStatus;
-    FrameSupportTokensMiscIdAmountRuntimeFreezeReason: FrameSupportTokensMiscIdAmountRuntimeFreezeReason;
-    FrameSupportTokensMiscIdAmountRuntimeHoldReason: FrameSupportTokensMiscIdAmountRuntimeHoldReason;
-    FrameSystemAccountInfo: FrameSystemAccountInfo;
-    FrameSystemCall: FrameSystemCall;
-    FrameSystemCodeUpgradeAuthorization: FrameSystemCodeUpgradeAuthorization;
-    FrameSystemDispatchEventInfo: FrameSystemDispatchEventInfo;
-    FrameSystemError: FrameSystemError;
-    FrameSystemEvent: FrameSystemEvent;
-    FrameSystemEventRecord: FrameSystemEventRecord;
-    FrameSystemExtensionsCheckGenesis: FrameSystemExtensionsCheckGenesis;
-    FrameSystemExtensionsCheckNonZeroSender: FrameSystemExtensionsCheckNonZeroSender;
-    FrameSystemExtensionsCheckNonce: FrameSystemExtensionsCheckNonce;
-    FrameSystemExtensionsCheckSpecVersion: FrameSystemExtensionsCheckSpecVersion;
-    FrameSystemExtensionsCheckTxVersion: FrameSystemExtensionsCheckTxVersion;
-    FrameSystemExtensionsCheckWeight: FrameSystemExtensionsCheckWeight;
-    FrameSystemLastRuntimeUpgradeInfo: FrameSystemLastRuntimeUpgradeInfo;
-    FrameSystemLimitsBlockLength: FrameSystemLimitsBlockLength;
-    FrameSystemLimitsBlockWeights: FrameSystemLimitsBlockWeights;
-    FrameSystemLimitsWeightsPerClass: FrameSystemLimitsWeightsPerClass;
-    FrameSystemPhase: FrameSystemPhase;
-    PalletBabeCall: PalletBabeCall;
-    PalletBabeError: PalletBabeError;
-    PalletBalancesAccountData: PalletBalancesAccountData;
-    PalletBalancesAdjustmentDirection: PalletBalancesAdjustmentDirection;
-    PalletBalancesBalanceLock: PalletBalancesBalanceLock;
-    PalletBalancesCall: PalletBalancesCall;
-    PalletBalancesError: PalletBalancesError;
-    PalletBalancesEvent: PalletBalancesEvent;
-    PalletBalancesReasons: PalletBalancesReasons;
-    PalletBalancesReserveData: PalletBalancesReserveData;
-    PalletBucketNftsCall: PalletBucketNftsCall;
-    PalletBucketNftsError: PalletBucketNftsError;
-    PalletBucketNftsEvent: PalletBucketNftsEvent;
-    PalletEthereumCall: PalletEthereumCall;
-    PalletEthereumError: PalletEthereumError;
-    PalletEthereumEvent: PalletEthereumEvent;
-    PalletEvmCall: PalletEvmCall;
-    PalletEvmCodeMetadata: PalletEvmCodeMetadata;
-    PalletEvmError: PalletEvmError;
-    PalletEvmEvent: PalletEvmEvent;
-    PalletFileSystemBucketMoveRequestResponse: PalletFileSystemBucketMoveRequestResponse;
-    PalletFileSystemCall: PalletFileSystemCall;
-    PalletFileSystemEitherAccountIdOrMspId: PalletFileSystemEitherAccountIdOrMspId;
-    PalletFileSystemError: PalletFileSystemError;
-    PalletFileSystemEvent: PalletFileSystemEvent;
-    PalletFileSystemFileKeyWithProof: PalletFileSystemFileKeyWithProof;
-    PalletFileSystemFileOperation: PalletFileSystemFileOperation;
-    PalletFileSystemFileOperationIntention: PalletFileSystemFileOperationIntention;
-    PalletFileSystemHoldReason: PalletFileSystemHoldReason;
-    PalletFileSystemIncompleteStorageRequestMetadata: PalletFileSystemIncompleteStorageRequestMetadata;
-    PalletFileSystemMoveBucketRequestMetadata: PalletFileSystemMoveBucketRequestMetadata;
-    PalletFileSystemPendingFileDeletionRequest: PalletFileSystemPendingFileDeletionRequest;
-    PalletFileSystemPendingStopStoringRequest: PalletFileSystemPendingStopStoringRequest;
-    PalletFileSystemRejectedStorageRequest: PalletFileSystemRejectedStorageRequest;
-    PalletFileSystemRejectedStorageRequestReason: PalletFileSystemRejectedStorageRequestReason;
-    PalletFileSystemReplicationTarget: PalletFileSystemReplicationTarget;
-    PalletFileSystemStorageRequestBspsMetadata: PalletFileSystemStorageRequestBspsMetadata;
-    PalletFileSystemStorageRequestMetadata: PalletFileSystemStorageRequestMetadata;
-    PalletFileSystemStorageRequestMspAcceptedFileKeys: PalletFileSystemStorageRequestMspAcceptedFileKeys;
-    PalletFileSystemStorageRequestMspBucketResponse: PalletFileSystemStorageRequestMspBucketResponse;
-    PalletGrandpaCall: PalletGrandpaCall;
-    PalletGrandpaError: PalletGrandpaError;
-    PalletGrandpaEvent: PalletGrandpaEvent;
-    PalletGrandpaStoredPendingChange: PalletGrandpaStoredPendingChange;
-    PalletGrandpaStoredState: PalletGrandpaStoredState;
-    PalletNftsAttributeDeposit: PalletNftsAttributeDeposit;
-    PalletNftsAttributeNamespace: PalletNftsAttributeNamespace;
-    PalletNftsCall: PalletNftsCall;
-    PalletNftsCancelAttributesApprovalWitness: PalletNftsCancelAttributesApprovalWitness;
-    PalletNftsCollectionConfig: PalletNftsCollectionConfig;
-    PalletNftsCollectionDetails: PalletNftsCollectionDetails;
-    PalletNftsCollectionMetadata: PalletNftsCollectionMetadata;
-    PalletNftsCollectionRole: PalletNftsCollectionRole;
-    PalletNftsCollectionSetting: PalletNftsCollectionSetting;
-    PalletNftsDestroyWitness: PalletNftsDestroyWitness;
-    PalletNftsError: PalletNftsError;
-    PalletNftsEvent: PalletNftsEvent;
-    PalletNftsItemConfig: PalletNftsItemConfig;
-    PalletNftsItemDeposit: PalletNftsItemDeposit;
-    PalletNftsItemDetails: PalletNftsItemDetails;
-    PalletNftsItemMetadata: PalletNftsItemMetadata;
-    PalletNftsItemMetadataDeposit: PalletNftsItemMetadataDeposit;
-    PalletNftsItemSetting: PalletNftsItemSetting;
-    PalletNftsItemTip: PalletNftsItemTip;
-    PalletNftsMintSettings: PalletNftsMintSettings;
-    PalletNftsMintType: PalletNftsMintType;
-    PalletNftsMintWitness: PalletNftsMintWitness;
-    PalletNftsPalletAttributes: PalletNftsPalletAttributes;
-    PalletNftsPalletFeature: PalletNftsPalletFeature;
-    PalletNftsPendingSwap: PalletNftsPendingSwap;
-    PalletNftsPreSignedAttributes: PalletNftsPreSignedAttributes;
-    PalletNftsPreSignedMint: PalletNftsPreSignedMint;
-    PalletNftsPriceDirection: PalletNftsPriceDirection;
-    PalletNftsPriceWithDirection: PalletNftsPriceWithDirection;
-    PalletOffencesEvent: PalletOffencesEvent;
-    PalletParametersCall: PalletParametersCall;
-    PalletParametersEvent: PalletParametersEvent;
-    PalletPaymentStreamsCall: PalletPaymentStreamsCall;
-    PalletPaymentStreamsDynamicRatePaymentStream: PalletPaymentStreamsDynamicRatePaymentStream;
-    PalletPaymentStreamsError: PalletPaymentStreamsError;
-    PalletPaymentStreamsEvent: PalletPaymentStreamsEvent;
-    PalletPaymentStreamsFixedRatePaymentStream: PalletPaymentStreamsFixedRatePaymentStream;
-    PalletPaymentStreamsHoldReason: PalletPaymentStreamsHoldReason;
-    PalletPaymentStreamsProviderLastChargeableInfo: PalletPaymentStreamsProviderLastChargeableInfo;
-    PalletProofsDealerCall: PalletProofsDealerCall;
-    PalletProofsDealerCustomChallenge: PalletProofsDealerCustomChallenge;
-    PalletProofsDealerError: PalletProofsDealerError;
-    PalletProofsDealerEvent: PalletProofsDealerEvent;
-    PalletProofsDealerKeyProof: PalletProofsDealerKeyProof;
-    PalletProofsDealerProof: PalletProofsDealerProof;
-    PalletProofsDealerProofSubmissionRecord: PalletProofsDealerProofSubmissionRecord;
-    PalletRandomnessCall: PalletRandomnessCall;
-    PalletRandomnessEvent: PalletRandomnessEvent;
-    PalletSessionCall: PalletSessionCall;
-    PalletSessionError: PalletSessionError;
-    PalletSessionEvent: PalletSessionEvent;
-    PalletStorageProvidersBackupStorageProvider: PalletStorageProvidersBackupStorageProvider;
-    PalletStorageProvidersBucket: PalletStorageProvidersBucket;
-    PalletStorageProvidersCall: PalletStorageProvidersCall;
-    PalletStorageProvidersError: PalletStorageProvidersError;
-    PalletStorageProvidersEvent: PalletStorageProvidersEvent;
-    PalletStorageProvidersHoldReason: PalletStorageProvidersHoldReason;
-    PalletStorageProvidersMainStorageProvider: PalletStorageProvidersMainStorageProvider;
-    PalletStorageProvidersMainStorageProviderSignUpRequest: PalletStorageProvidersMainStorageProviderSignUpRequest;
-    PalletStorageProvidersSignUpRequest: PalletStorageProvidersSignUpRequest;
-    PalletStorageProvidersSignUpRequestSpParams: PalletStorageProvidersSignUpRequestSpParams;
-    PalletStorageProvidersStorageProviderId: PalletStorageProvidersStorageProviderId;
-    PalletStorageProvidersTopUpMetadata: PalletStorageProvidersTopUpMetadata;
-    PalletStorageProvidersValueProposition: PalletStorageProvidersValueProposition;
-    PalletStorageProvidersValuePropositionWithId: PalletStorageProvidersValuePropositionWithId;
-    PalletSudoCall: PalletSudoCall;
-    PalletSudoError: PalletSudoError;
-    PalletSudoEvent: PalletSudoEvent;
-    PalletTimestampCall: PalletTimestampCall;
-    PalletTransactionPaymentChargeTransactionPayment: PalletTransactionPaymentChargeTransactionPayment;
-    PalletTransactionPaymentEvent: PalletTransactionPaymentEvent;
-    PalletTransactionPaymentReleases: PalletTransactionPaymentReleases;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBasicReplicationTarget: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBasicReplicationTarget;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBspStopStoringFilePenalty: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBspStopStoringFilePenalty;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigDecayRate: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigDecayRate;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigHighSecurityReplicationTarget: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigHighSecurityReplicationTarget;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxReplicationTarget: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxReplicationTarget;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaximumTreasuryCut: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaximumTreasuryCut;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinSeedPeriod: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinSeedPeriod;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinWaitForStopStoring: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinWaitForStopStoring;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinimumTreasuryCut: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinimumTreasuryCut;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMostlyStablePrice: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMostlyStablePrice;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigProviderTopUpTtl: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigProviderTopUpTtl;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToSeedPeriod: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToSeedPeriod;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStandardReplicationTarget: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStandardReplicationTarget;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStorageRequestTtl: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStorageRequestTtl;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSuperHighSecurityReplicationTarget: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSuperHighSecurityReplicationTarget;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigTickRangeToMaximumThreshold: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigTickRangeToMaximumThreshold;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUltraHighSecurityReplicationTarget: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUltraHighSecurityReplicationTarget;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpfrontTicksToPay: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpfrontTicksToPay;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigZeroSizeBucketFixedRate: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigZeroSizeBucketFixedRate;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParameters: ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParameters;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParametersKey: ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParametersKey;
-    ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParametersValue: ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParametersValue;
-    ShSolochainEvmRuntimeRuntime: ShSolochainEvmRuntimeRuntime;
-    ShSolochainEvmRuntimeRuntimeFreezeReason: ShSolochainEvmRuntimeRuntimeFreezeReason;
-    ShSolochainEvmRuntimeRuntimeHoldReason: ShSolochainEvmRuntimeRuntimeHoldReason;
-    ShSolochainEvmRuntimeSessionKeys: ShSolochainEvmRuntimeSessionKeys;
-    ShpFileKeyVerifierFileKeyProof: ShpFileKeyVerifierFileKeyProof;
-    ShpFileMetadataFileMetadata: ShpFileMetadataFileMetadata;
-    ShpFileMetadataFingerprint: ShpFileMetadataFingerprint;
-    ShpTraitsTrieAddMutation: ShpTraitsTrieAddMutation;
-    ShpTraitsTrieMutation: ShpTraitsTrieMutation;
-    ShpTraitsTrieRemoveMutation: ShpTraitsTrieRemoveMutation;
-    SpArithmeticArithmeticError: SpArithmeticArithmeticError;
-    SpConsensusBabeAllowedSlots: SpConsensusBabeAllowedSlots;
-    SpConsensusBabeAppPublic: SpConsensusBabeAppPublic;
-    SpConsensusBabeBabeEpochConfiguration: SpConsensusBabeBabeEpochConfiguration;
-    SpConsensusBabeDigestsNextConfigDescriptor: SpConsensusBabeDigestsNextConfigDescriptor;
-    SpConsensusBabeDigestsPreDigest: SpConsensusBabeDigestsPreDigest;
-    SpConsensusBabeDigestsPrimaryPreDigest: SpConsensusBabeDigestsPrimaryPreDigest;
-    SpConsensusBabeDigestsSecondaryPlainPreDigest: SpConsensusBabeDigestsSecondaryPlainPreDigest;
-    SpConsensusBabeDigestsSecondaryVRFPreDigest: SpConsensusBabeDigestsSecondaryVRFPreDigest;
-    SpConsensusGrandpaAppPublic: SpConsensusGrandpaAppPublic;
-    SpConsensusGrandpaAppSignature: SpConsensusGrandpaAppSignature;
-    SpConsensusGrandpaEquivocation: SpConsensusGrandpaEquivocation;
-    SpConsensusGrandpaEquivocationProof: SpConsensusGrandpaEquivocationProof;
-    SpConsensusSlotsEquivocationProof: SpConsensusSlotsEquivocationProof;
-    SpCoreCryptoKeyTypeId: SpCoreCryptoKeyTypeId;
-    SpCoreSr25519VrfVrfSignature: SpCoreSr25519VrfVrfSignature;
-    SpRuntimeDigest: SpRuntimeDigest;
-    SpRuntimeDigestDigestItem: SpRuntimeDigestDigestItem;
-    SpRuntimeDispatchError: SpRuntimeDispatchError;
-    SpRuntimeHeader: SpRuntimeHeader;
-    SpRuntimeModuleError: SpRuntimeModuleError;
-    SpRuntimeProvingTrieTrieError: SpRuntimeProvingTrieTrieError;
-    SpRuntimeTokenError: SpRuntimeTokenError;
-    SpRuntimeTransactionalError: SpRuntimeTransactionalError;
-    SpSessionMembershipProof: SpSessionMembershipProof;
-    SpStakingOffenceOffenceDetails: SpStakingOffenceOffenceDetails;
-    SpTrieStorageProofCompactProof: SpTrieStorageProofCompactProof;
-    SpVersionRuntimeVersion: SpVersionRuntimeVersion;
-    SpWeightsRuntimeDbWeight: SpWeightsRuntimeDbWeight;
-    SpWeightsWeightV2Weight: SpWeightsWeightV2Weight;
-  }
+import '@polkadot/types/types/registry';
+import type { EthbloomBloom, EthereumBlock, EthereumHeader, EthereumLog, EthereumReceiptEip658ReceiptData, EthereumReceiptReceiptV3, EthereumTransactionEip1559Eip1559Transaction, EthereumTransactionEip2930AccessListItem, EthereumTransactionEip2930Eip2930Transaction, EthereumTransactionLegacyLegacyTransaction, EthereumTransactionLegacyTransactionAction, EthereumTransactionLegacyTransactionSignature, EthereumTransactionTransactionV2, EthereumTypesHashH64, EvmCoreErrorExitError, EvmCoreErrorExitFatal, EvmCoreErrorExitReason, EvmCoreErrorExitRevert, EvmCoreErrorExitSucceed, FinalityGrandpaEquivocationPrecommit, FinalityGrandpaEquivocationPrevote, FinalityGrandpaPrecommit, FinalityGrandpaPrevote, FpAccountEthereumSignature, FpRpcTransactionStatus, FrameMetadataHashExtensionCheckMetadataHash, FrameMetadataHashExtensionMode, FrameSupportDispatchDispatchClass, FrameSupportDispatchPays, FrameSupportDispatchPerDispatchClassU32, FrameSupportDispatchPerDispatchClassWeight, FrameSupportDispatchPerDispatchClassWeightsPerClass, FrameSupportTokensMiscBalanceStatus, FrameSupportTokensMiscIdAmountRuntimeFreezeReason, FrameSupportTokensMiscIdAmountRuntimeHoldReason, FrameSystemAccountInfo, FrameSystemCall, FrameSystemCodeUpgradeAuthorization, FrameSystemDispatchEventInfo, FrameSystemError, FrameSystemEvent, FrameSystemEventRecord, FrameSystemExtensionsCheckGenesis, FrameSystemExtensionsCheckNonZeroSender, FrameSystemExtensionsCheckNonce, FrameSystemExtensionsCheckSpecVersion, FrameSystemExtensionsCheckTxVersion, FrameSystemExtensionsCheckWeight, FrameSystemLastRuntimeUpgradeInfo, FrameSystemLimitsBlockLength, FrameSystemLimitsBlockWeights, FrameSystemLimitsWeightsPerClass, FrameSystemPhase, PalletBabeCall, PalletBabeError, PalletBalancesAccountData, PalletBalancesAdjustmentDirection, PalletBalancesBalanceLock, PalletBalancesCall, PalletBalancesError, PalletBalancesEvent, PalletBalancesReasons, PalletBalancesReserveData, PalletBucketNftsCall, PalletBucketNftsError, PalletBucketNftsEvent, PalletEthereumCall, PalletEthereumError, PalletEthereumEvent, PalletEvmCall, PalletEvmCodeMetadata, PalletEvmError, PalletEvmEvent, PalletFileSystemBucketMoveRequestResponse, PalletFileSystemCall, PalletFileSystemEitherAccountIdOrMspId, PalletFileSystemError, PalletFileSystemEvent, PalletFileSystemFileKeyWithProof, PalletFileSystemFileOperation, PalletFileSystemFileOperationIntention, PalletFileSystemHoldReason, PalletFileSystemIncompleteStorageRequestMetadata, PalletFileSystemMoveBucketRequestMetadata, PalletFileSystemPendingFileDeletionRequest, PalletFileSystemPendingStopStoringRequest, PalletFileSystemRejectedStorageRequest, PalletFileSystemRejectedStorageRequestReason, PalletFileSystemReplicationTarget, PalletFileSystemStorageRequestBspsMetadata, PalletFileSystemStorageRequestMetadata, PalletFileSystemStorageRequestMspAcceptedFileKeys, PalletFileSystemStorageRequestMspBucketResponse, PalletGrandpaCall, PalletGrandpaError, PalletGrandpaEvent, PalletGrandpaStoredPendingChange, PalletGrandpaStoredState, PalletNftsAttributeDeposit, PalletNftsAttributeNamespace, PalletNftsCall, PalletNftsCancelAttributesApprovalWitness, PalletNftsCollectionConfig, PalletNftsCollectionDetails, PalletNftsCollectionMetadata, PalletNftsCollectionRole, PalletNftsCollectionSetting, PalletNftsDestroyWitness, PalletNftsError, PalletNftsEvent, PalletNftsItemConfig, PalletNftsItemDeposit, PalletNftsItemDetails, PalletNftsItemMetadata, PalletNftsItemMetadataDeposit, PalletNftsItemSetting, PalletNftsItemTip, PalletNftsMintSettings, PalletNftsMintType, PalletNftsMintWitness, PalletNftsPalletAttributes, PalletNftsPalletFeature, PalletNftsPendingSwap, PalletNftsPreSignedAttributes, PalletNftsPreSignedMint, PalletNftsPriceDirection, PalletNftsPriceWithDirection, PalletOffencesEvent, PalletParametersCall, PalletParametersEvent, PalletPaymentStreamsCall, PalletPaymentStreamsDynamicRatePaymentStream, PalletPaymentStreamsError, PalletPaymentStreamsEvent, PalletPaymentStreamsFixedRatePaymentStream, PalletPaymentStreamsHoldReason, PalletPaymentStreamsProviderLastChargeableInfo, PalletProofsDealerCall, PalletProofsDealerCustomChallenge, PalletProofsDealerError, PalletProofsDealerEvent, PalletProofsDealerKeyProof, PalletProofsDealerProof, PalletProofsDealerProofSubmissionRecord, PalletRandomnessCall, PalletRandomnessEvent, PalletSessionCall, PalletSessionError, PalletSessionEvent, PalletStorageProvidersBackupStorageProvider, PalletStorageProvidersBucket, PalletStorageProvidersCall, PalletStorageProvidersError, PalletStorageProvidersEvent, PalletStorageProvidersHoldReason, PalletStorageProvidersMainStorageProvider, PalletStorageProvidersMainStorageProviderSignUpRequest, PalletStorageProvidersSignUpRequest, PalletStorageProvidersSignUpRequestSpParams, PalletStorageProvidersStorageProviderId, PalletStorageProvidersTopUpMetadata, PalletStorageProvidersValueProposition, PalletStorageProvidersValuePropositionWithId, PalletSudoCall, PalletSudoError, PalletSudoEvent, PalletTimestampCall, PalletTransactionPaymentChargeTransactionPayment, PalletTransactionPaymentEvent, PalletTransactionPaymentReleases, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBasicReplicationTarget, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBspStopStoringFilePenalty, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigDecayRate, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigHighSecurityReplicationTarget, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxReplicationTarget, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaximumTreasuryCut, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinSeedPeriod, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinWaitForStopStoring, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinimumTreasuryCut, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMostlyStablePrice, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigProviderTopUpTtl, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToSeedPeriod, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStandardReplicationTarget, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStorageRequestTtl, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSuperHighSecurityReplicationTarget, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigTickRangeToMaximumThreshold, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUltraHighSecurityReplicationTarget, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpfrontTicksToPay, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor, ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigZeroSizeBucketFixedRate, ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParameters, ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParametersKey, ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParametersValue, ShSolochainEvmRuntimeRuntime, ShSolochainEvmRuntimeRuntimeFreezeReason, ShSolochainEvmRuntimeRuntimeHoldReason, ShSolochainEvmRuntimeSessionKeys, ShpFileKeyVerifierFileKeyProof, ShpFileMetadataFileMetadata, ShpFileMetadataFingerprint, ShpTraitsTrieAddMutation, ShpTraitsTrieMutation, ShpTraitsTrieRemoveMutation, SpArithmeticArithmeticError, SpConsensusBabeAllowedSlots, SpConsensusBabeAppPublic, SpConsensusBabeBabeEpochConfiguration, SpConsensusBabeDigestsNextConfigDescriptor, SpConsensusBabeDigestsPreDigest, SpConsensusBabeDigestsPrimaryPreDigest, SpConsensusBabeDigestsSecondaryPlainPreDigest, SpConsensusBabeDigestsSecondaryVRFPreDigest, SpConsensusGrandpaAppPublic, SpConsensusGrandpaAppSignature, SpConsensusGrandpaEquivocation, SpConsensusGrandpaEquivocationProof, SpConsensusSlotsEquivocationProof, SpCoreCryptoKeyTypeId, SpCoreSr25519VrfVrfSignature, SpRuntimeDigest, SpRuntimeDigestDigestItem, SpRuntimeDispatchError, SpRuntimeHeader, SpRuntimeModuleError, SpRuntimeProvingTrieTrieError, SpRuntimeTokenError, SpRuntimeTransactionalError, SpSessionMembershipProof, SpStakingOffenceOffenceDetails, SpTrieStorageProofCompactProof, SpVersionRuntimeVersion, SpWeightsRuntimeDbWeight, SpWeightsWeightV2Weight } from '@polkadot/types/lookup';
+declare module '@polkadot/types/types/registry' {
+    interface InterfaceTypes {
+        EthbloomBloom: EthbloomBloom;
+        EthereumBlock: EthereumBlock;
+        EthereumHeader: EthereumHeader;
+        EthereumLog: EthereumLog;
+        EthereumReceiptEip658ReceiptData: EthereumReceiptEip658ReceiptData;
+        EthereumReceiptReceiptV3: EthereumReceiptReceiptV3;
+        EthereumTransactionEip1559Eip1559Transaction: EthereumTransactionEip1559Eip1559Transaction;
+        EthereumTransactionEip2930AccessListItem: EthereumTransactionEip2930AccessListItem;
+        EthereumTransactionEip2930Eip2930Transaction: EthereumTransactionEip2930Eip2930Transaction;
+        EthereumTransactionLegacyLegacyTransaction: EthereumTransactionLegacyLegacyTransaction;
+        EthereumTransactionLegacyTransactionAction: EthereumTransactionLegacyTransactionAction;
+        EthereumTransactionLegacyTransactionSignature: EthereumTransactionLegacyTransactionSignature;
+        EthereumTransactionTransactionV2: EthereumTransactionTransactionV2;
+        EthereumTypesHashH64: EthereumTypesHashH64;
+        EvmCoreErrorExitError: EvmCoreErrorExitError;
+        EvmCoreErrorExitFatal: EvmCoreErrorExitFatal;
+        EvmCoreErrorExitReason: EvmCoreErrorExitReason;
+        EvmCoreErrorExitRevert: EvmCoreErrorExitRevert;
+        EvmCoreErrorExitSucceed: EvmCoreErrorExitSucceed;
+        FinalityGrandpaEquivocationPrecommit: FinalityGrandpaEquivocationPrecommit;
+        FinalityGrandpaEquivocationPrevote: FinalityGrandpaEquivocationPrevote;
+        FinalityGrandpaPrecommit: FinalityGrandpaPrecommit;
+        FinalityGrandpaPrevote: FinalityGrandpaPrevote;
+        FpAccountEthereumSignature: FpAccountEthereumSignature;
+        FpRpcTransactionStatus: FpRpcTransactionStatus;
+        FrameMetadataHashExtensionCheckMetadataHash: FrameMetadataHashExtensionCheckMetadataHash;
+        FrameMetadataHashExtensionMode: FrameMetadataHashExtensionMode;
+        FrameSupportDispatchDispatchClass: FrameSupportDispatchDispatchClass;
+        FrameSupportDispatchPays: FrameSupportDispatchPays;
+        FrameSupportDispatchPerDispatchClassU32: FrameSupportDispatchPerDispatchClassU32;
+        FrameSupportDispatchPerDispatchClassWeight: FrameSupportDispatchPerDispatchClassWeight;
+        FrameSupportDispatchPerDispatchClassWeightsPerClass: FrameSupportDispatchPerDispatchClassWeightsPerClass;
+        FrameSupportTokensMiscBalanceStatus: FrameSupportTokensMiscBalanceStatus;
+        FrameSupportTokensMiscIdAmountRuntimeFreezeReason: FrameSupportTokensMiscIdAmountRuntimeFreezeReason;
+        FrameSupportTokensMiscIdAmountRuntimeHoldReason: FrameSupportTokensMiscIdAmountRuntimeHoldReason;
+        FrameSystemAccountInfo: FrameSystemAccountInfo;
+        FrameSystemCall: FrameSystemCall;
+        FrameSystemCodeUpgradeAuthorization: FrameSystemCodeUpgradeAuthorization;
+        FrameSystemDispatchEventInfo: FrameSystemDispatchEventInfo;
+        FrameSystemError: FrameSystemError;
+        FrameSystemEvent: FrameSystemEvent;
+        FrameSystemEventRecord: FrameSystemEventRecord;
+        FrameSystemExtensionsCheckGenesis: FrameSystemExtensionsCheckGenesis;
+        FrameSystemExtensionsCheckNonZeroSender: FrameSystemExtensionsCheckNonZeroSender;
+        FrameSystemExtensionsCheckNonce: FrameSystemExtensionsCheckNonce;
+        FrameSystemExtensionsCheckSpecVersion: FrameSystemExtensionsCheckSpecVersion;
+        FrameSystemExtensionsCheckTxVersion: FrameSystemExtensionsCheckTxVersion;
+        FrameSystemExtensionsCheckWeight: FrameSystemExtensionsCheckWeight;
+        FrameSystemLastRuntimeUpgradeInfo: FrameSystemLastRuntimeUpgradeInfo;
+        FrameSystemLimitsBlockLength: FrameSystemLimitsBlockLength;
+        FrameSystemLimitsBlockWeights: FrameSystemLimitsBlockWeights;
+        FrameSystemLimitsWeightsPerClass: FrameSystemLimitsWeightsPerClass;
+        FrameSystemPhase: FrameSystemPhase;
+        PalletBabeCall: PalletBabeCall;
+        PalletBabeError: PalletBabeError;
+        PalletBalancesAccountData: PalletBalancesAccountData;
+        PalletBalancesAdjustmentDirection: PalletBalancesAdjustmentDirection;
+        PalletBalancesBalanceLock: PalletBalancesBalanceLock;
+        PalletBalancesCall: PalletBalancesCall;
+        PalletBalancesError: PalletBalancesError;
+        PalletBalancesEvent: PalletBalancesEvent;
+        PalletBalancesReasons: PalletBalancesReasons;
+        PalletBalancesReserveData: PalletBalancesReserveData;
+        PalletBucketNftsCall: PalletBucketNftsCall;
+        PalletBucketNftsError: PalletBucketNftsError;
+        PalletBucketNftsEvent: PalletBucketNftsEvent;
+        PalletEthereumCall: PalletEthereumCall;
+        PalletEthereumError: PalletEthereumError;
+        PalletEthereumEvent: PalletEthereumEvent;
+        PalletEvmCall: PalletEvmCall;
+        PalletEvmCodeMetadata: PalletEvmCodeMetadata;
+        PalletEvmError: PalletEvmError;
+        PalletEvmEvent: PalletEvmEvent;
+        PalletFileSystemBucketMoveRequestResponse: PalletFileSystemBucketMoveRequestResponse;
+        PalletFileSystemCall: PalletFileSystemCall;
+        PalletFileSystemEitherAccountIdOrMspId: PalletFileSystemEitherAccountIdOrMspId;
+        PalletFileSystemError: PalletFileSystemError;
+        PalletFileSystemEvent: PalletFileSystemEvent;
+        PalletFileSystemFileKeyWithProof: PalletFileSystemFileKeyWithProof;
+        PalletFileSystemFileOperation: PalletFileSystemFileOperation;
+        PalletFileSystemFileOperationIntention: PalletFileSystemFileOperationIntention;
+        PalletFileSystemHoldReason: PalletFileSystemHoldReason;
+        PalletFileSystemIncompleteStorageRequestMetadata: PalletFileSystemIncompleteStorageRequestMetadata;
+        PalletFileSystemMoveBucketRequestMetadata: PalletFileSystemMoveBucketRequestMetadata;
+        PalletFileSystemPendingFileDeletionRequest: PalletFileSystemPendingFileDeletionRequest;
+        PalletFileSystemPendingStopStoringRequest: PalletFileSystemPendingStopStoringRequest;
+        PalletFileSystemRejectedStorageRequest: PalletFileSystemRejectedStorageRequest;
+        PalletFileSystemRejectedStorageRequestReason: PalletFileSystemRejectedStorageRequestReason;
+        PalletFileSystemReplicationTarget: PalletFileSystemReplicationTarget;
+        PalletFileSystemStorageRequestBspsMetadata: PalletFileSystemStorageRequestBspsMetadata;
+        PalletFileSystemStorageRequestMetadata: PalletFileSystemStorageRequestMetadata;
+        PalletFileSystemStorageRequestMspAcceptedFileKeys: PalletFileSystemStorageRequestMspAcceptedFileKeys;
+        PalletFileSystemStorageRequestMspBucketResponse: PalletFileSystemStorageRequestMspBucketResponse;
+        PalletGrandpaCall: PalletGrandpaCall;
+        PalletGrandpaError: PalletGrandpaError;
+        PalletGrandpaEvent: PalletGrandpaEvent;
+        PalletGrandpaStoredPendingChange: PalletGrandpaStoredPendingChange;
+        PalletGrandpaStoredState: PalletGrandpaStoredState;
+        PalletNftsAttributeDeposit: PalletNftsAttributeDeposit;
+        PalletNftsAttributeNamespace: PalletNftsAttributeNamespace;
+        PalletNftsCall: PalletNftsCall;
+        PalletNftsCancelAttributesApprovalWitness: PalletNftsCancelAttributesApprovalWitness;
+        PalletNftsCollectionConfig: PalletNftsCollectionConfig;
+        PalletNftsCollectionDetails: PalletNftsCollectionDetails;
+        PalletNftsCollectionMetadata: PalletNftsCollectionMetadata;
+        PalletNftsCollectionRole: PalletNftsCollectionRole;
+        PalletNftsCollectionSetting: PalletNftsCollectionSetting;
+        PalletNftsDestroyWitness: PalletNftsDestroyWitness;
+        PalletNftsError: PalletNftsError;
+        PalletNftsEvent: PalletNftsEvent;
+        PalletNftsItemConfig: PalletNftsItemConfig;
+        PalletNftsItemDeposit: PalletNftsItemDeposit;
+        PalletNftsItemDetails: PalletNftsItemDetails;
+        PalletNftsItemMetadata: PalletNftsItemMetadata;
+        PalletNftsItemMetadataDeposit: PalletNftsItemMetadataDeposit;
+        PalletNftsItemSetting: PalletNftsItemSetting;
+        PalletNftsItemTip: PalletNftsItemTip;
+        PalletNftsMintSettings: PalletNftsMintSettings;
+        PalletNftsMintType: PalletNftsMintType;
+        PalletNftsMintWitness: PalletNftsMintWitness;
+        PalletNftsPalletAttributes: PalletNftsPalletAttributes;
+        PalletNftsPalletFeature: PalletNftsPalletFeature;
+        PalletNftsPendingSwap: PalletNftsPendingSwap;
+        PalletNftsPreSignedAttributes: PalletNftsPreSignedAttributes;
+        PalletNftsPreSignedMint: PalletNftsPreSignedMint;
+        PalletNftsPriceDirection: PalletNftsPriceDirection;
+        PalletNftsPriceWithDirection: PalletNftsPriceWithDirection;
+        PalletOffencesEvent: PalletOffencesEvent;
+        PalletParametersCall: PalletParametersCall;
+        PalletParametersEvent: PalletParametersEvent;
+        PalletPaymentStreamsCall: PalletPaymentStreamsCall;
+        PalletPaymentStreamsDynamicRatePaymentStream: PalletPaymentStreamsDynamicRatePaymentStream;
+        PalletPaymentStreamsError: PalletPaymentStreamsError;
+        PalletPaymentStreamsEvent: PalletPaymentStreamsEvent;
+        PalletPaymentStreamsFixedRatePaymentStream: PalletPaymentStreamsFixedRatePaymentStream;
+        PalletPaymentStreamsHoldReason: PalletPaymentStreamsHoldReason;
+        PalletPaymentStreamsProviderLastChargeableInfo: PalletPaymentStreamsProviderLastChargeableInfo;
+        PalletProofsDealerCall: PalletProofsDealerCall;
+        PalletProofsDealerCustomChallenge: PalletProofsDealerCustomChallenge;
+        PalletProofsDealerError: PalletProofsDealerError;
+        PalletProofsDealerEvent: PalletProofsDealerEvent;
+        PalletProofsDealerKeyProof: PalletProofsDealerKeyProof;
+        PalletProofsDealerProof: PalletProofsDealerProof;
+        PalletProofsDealerProofSubmissionRecord: PalletProofsDealerProofSubmissionRecord;
+        PalletRandomnessCall: PalletRandomnessCall;
+        PalletRandomnessEvent: PalletRandomnessEvent;
+        PalletSessionCall: PalletSessionCall;
+        PalletSessionError: PalletSessionError;
+        PalletSessionEvent: PalletSessionEvent;
+        PalletStorageProvidersBackupStorageProvider: PalletStorageProvidersBackupStorageProvider;
+        PalletStorageProvidersBucket: PalletStorageProvidersBucket;
+        PalletStorageProvidersCall: PalletStorageProvidersCall;
+        PalletStorageProvidersError: PalletStorageProvidersError;
+        PalletStorageProvidersEvent: PalletStorageProvidersEvent;
+        PalletStorageProvidersHoldReason: PalletStorageProvidersHoldReason;
+        PalletStorageProvidersMainStorageProvider: PalletStorageProvidersMainStorageProvider;
+        PalletStorageProvidersMainStorageProviderSignUpRequest: PalletStorageProvidersMainStorageProviderSignUpRequest;
+        PalletStorageProvidersSignUpRequest: PalletStorageProvidersSignUpRequest;
+        PalletStorageProvidersSignUpRequestSpParams: PalletStorageProvidersSignUpRequestSpParams;
+        PalletStorageProvidersStorageProviderId: PalletStorageProvidersStorageProviderId;
+        PalletStorageProvidersTopUpMetadata: PalletStorageProvidersTopUpMetadata;
+        PalletStorageProvidersValueProposition: PalletStorageProvidersValueProposition;
+        PalletStorageProvidersValuePropositionWithId: PalletStorageProvidersValuePropositionWithId;
+        PalletSudoCall: PalletSudoCall;
+        PalletSudoError: PalletSudoError;
+        PalletSudoEvent: PalletSudoEvent;
+        PalletTimestampCall: PalletTimestampCall;
+        PalletTransactionPaymentChargeTransactionPayment: PalletTransactionPaymentChargeTransactionPayment;
+        PalletTransactionPaymentEvent: PalletTransactionPaymentEvent;
+        PalletTransactionPaymentReleases: PalletTransactionPaymentReleases;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBasicReplicationTarget: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBasicReplicationTarget;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBspStopStoringFilePenalty: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBspStopStoringFilePenalty;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigDecayRate: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigDecayRate;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigHighSecurityReplicationTarget: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigHighSecurityReplicationTarget;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxReplicationTarget: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxReplicationTarget;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaximumTreasuryCut: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaximumTreasuryCut;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinSeedPeriod: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinSeedPeriod;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinWaitForStopStoring: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinWaitForStopStoring;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinimumTreasuryCut: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinimumTreasuryCut;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMostlyStablePrice: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMostlyStablePrice;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigProviderTopUpTtl: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigProviderTopUpTtl;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToSeedPeriod: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToSeedPeriod;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStandardReplicationTarget: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStandardReplicationTarget;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStorageRequestTtl: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStorageRequestTtl;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSuperHighSecurityReplicationTarget: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSuperHighSecurityReplicationTarget;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigTickRangeToMaximumThreshold: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigTickRangeToMaximumThreshold;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUltraHighSecurityReplicationTarget: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUltraHighSecurityReplicationTarget;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpfrontTicksToPay: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpfrontTicksToPay;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigZeroSizeBucketFixedRate: ShSolochainEvmRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigZeroSizeBucketFixedRate;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParameters: ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParameters;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParametersKey: ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParametersKey;
+        ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParametersValue: ShSolochainEvmRuntimeConfigsRuntimeParamsRuntimeParametersValue;
+        ShSolochainEvmRuntimeRuntime: ShSolochainEvmRuntimeRuntime;
+        ShSolochainEvmRuntimeRuntimeFreezeReason: ShSolochainEvmRuntimeRuntimeFreezeReason;
+        ShSolochainEvmRuntimeRuntimeHoldReason: ShSolochainEvmRuntimeRuntimeHoldReason;
+        ShSolochainEvmRuntimeSessionKeys: ShSolochainEvmRuntimeSessionKeys;
+        ShpFileKeyVerifierFileKeyProof: ShpFileKeyVerifierFileKeyProof;
+        ShpFileMetadataFileMetadata: ShpFileMetadataFileMetadata;
+        ShpFileMetadataFingerprint: ShpFileMetadataFingerprint;
+        ShpTraitsTrieAddMutation: ShpTraitsTrieAddMutation;
+        ShpTraitsTrieMutation: ShpTraitsTrieMutation;
+        ShpTraitsTrieRemoveMutation: ShpTraitsTrieRemoveMutation;
+        SpArithmeticArithmeticError: SpArithmeticArithmeticError;
+        SpConsensusBabeAllowedSlots: SpConsensusBabeAllowedSlots;
+        SpConsensusBabeAppPublic: SpConsensusBabeAppPublic;
+        SpConsensusBabeBabeEpochConfiguration: SpConsensusBabeBabeEpochConfiguration;
+        SpConsensusBabeDigestsNextConfigDescriptor: SpConsensusBabeDigestsNextConfigDescriptor;
+        SpConsensusBabeDigestsPreDigest: SpConsensusBabeDigestsPreDigest;
+        SpConsensusBabeDigestsPrimaryPreDigest: SpConsensusBabeDigestsPrimaryPreDigest;
+        SpConsensusBabeDigestsSecondaryPlainPreDigest: SpConsensusBabeDigestsSecondaryPlainPreDigest;
+        SpConsensusBabeDigestsSecondaryVRFPreDigest: SpConsensusBabeDigestsSecondaryVRFPreDigest;
+        SpConsensusGrandpaAppPublic: SpConsensusGrandpaAppPublic;
+        SpConsensusGrandpaAppSignature: SpConsensusGrandpaAppSignature;
+        SpConsensusGrandpaEquivocation: SpConsensusGrandpaEquivocation;
+        SpConsensusGrandpaEquivocationProof: SpConsensusGrandpaEquivocationProof;
+        SpConsensusSlotsEquivocationProof: SpConsensusSlotsEquivocationProof;
+        SpCoreCryptoKeyTypeId: SpCoreCryptoKeyTypeId;
+        SpCoreSr25519VrfVrfSignature: SpCoreSr25519VrfVrfSignature;
+        SpRuntimeDigest: SpRuntimeDigest;
+        SpRuntimeDigestDigestItem: SpRuntimeDigestDigestItem;
+        SpRuntimeDispatchError: SpRuntimeDispatchError;
+        SpRuntimeHeader: SpRuntimeHeader;
+        SpRuntimeModuleError: SpRuntimeModuleError;
+        SpRuntimeProvingTrieTrieError: SpRuntimeProvingTrieTrieError;
+        SpRuntimeTokenError: SpRuntimeTokenError;
+        SpRuntimeTransactionalError: SpRuntimeTransactionalError;
+        SpSessionMembershipProof: SpSessionMembershipProof;
+        SpStakingOffenceOffenceDetails: SpStakingOffenceOffenceDetails;
+        SpTrieStorageProofCompactProof: SpTrieStorageProofCompactProof;
+        SpVersionRuntimeVersion: SpVersionRuntimeVersion;
+        SpWeightsRuntimeDbWeight: SpWeightsRuntimeDbWeight;
+        SpWeightsWeightV2Weight: SpWeightsWeightV2Weight;
+    }
 }
