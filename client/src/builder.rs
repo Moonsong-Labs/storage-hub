@@ -852,7 +852,7 @@ pub struct FishermanOptions {
     /// Deserializing as "fisherman_database_url" to match the expected field name in the toml file.
     #[serde(rename = "fisherman_database_url")]
     pub database_url: String,
-    /// Maximum number of incomplete storage requests to process during initial sync.
+    /// Maximum number of incomplete storage requests to process after the first block processed coming out of syncing mode.
     pub incomplete_sync_max: u32,
     /// Page size for incomplete storage request pagination.
     pub incomplete_sync_page_size: u32,

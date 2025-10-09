@@ -563,8 +563,7 @@ pub struct FishermanConfigurations {
     )]
     pub fisherman_database_url: Option<String>,
 
-    /// Maximum number of incomplete storage requests to process during initial sync.
-    /// Must be at least 1.
+    /// Maximum number of incomplete storage requests to process after the first block processed coming out of syncing mode.
     #[arg(long, value_name = "COUNT", default_value = "10000", value_parser = clap::value_parser!(u32).range(1..))]
     pub fisherman_incomplete_sync_max: u32,
 
