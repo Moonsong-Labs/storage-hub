@@ -79,3 +79,11 @@ export enum ReplicationLevel {
   /** Custom replication (requires specifying exact replica count) */
   Custom = 5
 }
+
+/**
+ * File operations supported by the StorageHub protocol.
+ */
+export enum FileOperation {
+  /** Delete operation for a file */
+  Delete = 0
+}
