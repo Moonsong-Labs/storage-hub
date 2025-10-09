@@ -370,6 +370,9 @@ await describeMspNet(
       const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
       assert(receipt.status === "success", "Request delete file transaction failed");
 
+      // Verify the deletion request was enqueued on-chain
+      await userApi.assert.eventPresent("fileSystem", "FileDeletionRequested");
+
       // TODO: Complete deletion verification
       // - Wait for MSP backend to process the deletion request from blockchain events
       // - Verify file is marked as deleted in on-chain state
