@@ -879,8 +879,12 @@ impl Convert<StorageDataUnit, Balance> for StorageDataUnitToBalance {
         storage_data_unit.into()
     }
 }
+
+// Converts a given signed message in a EIP-191 compliant message bytes to verify.
+/// EIP-191: https://eips.ethereum.org/EIPS/eip-191
+/// "\x19Ethereum Signed Message:\n" + len(message) + message"
 pub struct Eip191Adapter;
-impl shp_traits::IntentionMessageAdapter for Eip191Adapter {
+impl shp_traits::MessageAdapter for Eip191Adapter {
     fn bytes_to_verify(message: &[u8]) -> Vec<u8> {
         const PREFIX: &str = "\x19Ethereum Signed Message:\n";
         let len = message.len();

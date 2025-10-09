@@ -30,7 +30,7 @@ use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettin
 use shp_constants::GIGAUNIT;
 use shp_file_metadata::ChunkId;
 use shp_traits::{
-    CommitRevealRandomnessInterface, IntentionMessageAdapter, MutateBucketsInterface,
+    CommitRevealRandomnessInterface, MessageAdapter, MutateBucketsInterface,
     MutateProvidersInterface, MutateStorageProvidersInterface, PaymentStreamsInterface,
     PricePerGigaUnitPerTickInterface, ProofsDealerInterface, ReadBucketsInterface,
     ReadProvidersInterface, ReadStorageProvidersInterface, ReadUserSolvencyInterface,
@@ -1253,8 +1253,6 @@ where
         // Encode the intention for signature verification
         let signed_intention_encoded = signed_intention.encode();
         // Adapt the bytes to verify depending on the runtime configuration
-        // e.g: in the case of Solochain EVM, we need to adapt the bytes to verify to comply with EIP-191
-        // EIP-191: https://eips.ethereum.org/EIPS/eip-191
         let to_verify = <T as crate::pallet::Config>::IntentionMsgAdapter::bytes_to_verify(
             &signed_intention_encoded,
         );
