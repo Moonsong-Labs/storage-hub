@@ -154,6 +154,16 @@ export class StorageHubClient {
   }
 
   /**
+   * Assert that a value is present (non-null and non-undefined).
+   */
+  private assertPresent<T>(
+    value: T | null | undefined,
+    message: string
+  ): asserts value is NonNullable<T> {
+    if (value == null) throw new Error(message);
+  }
+
+  /**
    * Serialize FileOperationIntention and sign it
    */
   private async signIntention(
@@ -433,6 +443,8 @@ export class StorageHubClient {
     const txOpts = this.buildTxOptions(gasLimit, options);
 
     const contract = this.getWriteContract();
-    return await contract.write.requestDeleteFile!(args, txOpts);
+    const fn = contract.write.requestDeleteFile;
+    this.assertPresent(fn, "requestDeleteFile not available on this contract/ABI");
+    return await fn(args, txOpts);
   }
 }
