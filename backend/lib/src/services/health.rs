@@ -1,7 +1,3 @@
-//! TODO(MOCK): this service returns pretty rough health status of the underlying services
-//! it doesn't check ALL services in use by the backend, nor does an accurate analysis
-//! of all the parts that it does check
-
 use std::sync::Arc;
 
 use serde::Serialize;
@@ -31,8 +27,6 @@ pub struct ComponentHealth {
     pub message: Option<String>,
 }
 
-// TODO(SCAFFOLDING): This health service is a stub and should be replaced with
-// logic more appropriate to the final usecase
 pub struct HealthService {
     storage: Arc<dyn BoxedStorage>,
     db: Arc<DBClient>,
@@ -43,12 +37,7 @@ impl HealthService {
     pub const HEALTHY: &str = "healthy";
     pub const UNHEALTHY: &str = "unhealthy";
 
-    /// Instantiate a new [`HealthService`]
-    ///
-    /// This service uses the following services:
-    /// * storage: determine if storage is healthy
-    /// * db: determine if the db connection is healthy
-    /// * rpc: determine if the rpc connection is healthy
+    /// Creates a new health service instance
     pub fn new(
         storage: Arc<dyn BoxedStorage>,
         db: Arc<DBClient>,
@@ -86,8 +75,8 @@ impl HealthService {
     async fn check_storage(&self) -> ComponentHealth {
         let (status, message) = match self.storage.health_check().await {
             Ok(true) => (Self::HEALTHY, None),
-            Ok(false) => (Self::UNHEALTHY, None),
-            Err(e) => (Self::UNHEALTHY, Some(format!("Storage error: {e}"))),
+            Ok(false) => (Self::UNHEALTHY, Some("Storage is not healthy".to_string())),
+            Err(e) => (Self::UNHEALTHY, Some(format!("Storage health check failed: {e}"))),
         };
 
         ComponentHealth {
@@ -99,7 +88,7 @@ impl HealthService {
     async fn check_postgres(&self) -> ComponentHealth {
         let (status, message) = match self.db.test_connection().await {
             Ok(_) => (Self::HEALTHY, None),
-            Err(e) => (Self::UNHEALTHY, Some(format!("Database error: {e}"))),
+            Err(e) => (Self::UNHEALTHY, Some(format!("Database connection failed: {e}"))),
         };
 
         ComponentHealth {
@@ -109,7 +98,6 @@ impl HealthService {
     }
 
     async fn check_rpc(&self) -> ComponentHealth {
-        // First check if the connection to the RPC is established
         if !self.rpc.is_connected().await {
             return ComponentHealth {
                 status: Self::UNHEALTHY.to_string(),
@@ -117,19 +105,17 @@ impl HealthService {
             };
         }
 
-        // Then to make sure everything works test actual RPC functionality
-        // by getting the provider ID of the connected node.
         let (status, message) = match self.rpc.get_provider_id().await {
             Ok(RpcProviderId::Msp(_)) => (Self::HEALTHY, None),
             Ok(RpcProviderId::Bsp(_)) => (
                 Self::UNHEALTHY,
-                Some("The node that we are connected to is a BSP, expected an MSP".to_string()),
+                Some("Connected to BSP node, expected MSP node".to_string()),
             ),
             Ok(RpcProviderId::NotAProvider) => (
                 Self::UNHEALTHY,
-                Some("The node that we are connected to is not a storage provider".to_string()),
+                Some("Connected node is not a storage provider".to_string()),
             ),
-            Err(e) => (Self::UNHEALTHY, Some(format!("RPC call failed: {}", e))),
+            Err(e) => (Self::UNHEALTHY, Some(format!("RPC provider ID check failed: {e}"))),
         };
 
         ComponentHealth {
