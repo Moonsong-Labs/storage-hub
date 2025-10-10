@@ -267,7 +267,7 @@ await describeMspNet(
 
       // Verify delete extrinsic is submitted for the BSP
       await userApi.assert.extrinsicPresent({
-        method: "deleteFileForIncompleteStorageRequest",
+        method: "deleteFilesForIncompleteStorageRequest",
         module: "fileSystem",
         checkTxPool: true,
         assertLength: 1
