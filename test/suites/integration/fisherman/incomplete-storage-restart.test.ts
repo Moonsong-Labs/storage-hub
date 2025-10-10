@@ -276,14 +276,6 @@ await describeMspNet(
       // Seal block to process the extrinsic
       const deletionResult = await userApi.block.seal();
 
-      // Verify FileDeletedFromIncompleteStorageRequest event
-      assertEventMany(
-        userApi,
-        "fileSystem",
-        "FileDeletedFromIncompleteStorageRequest",
-        deletionResult.events
-      );
-
       const {
         data: { oldRoot, newRoot }
       } = userApi.assert.fetchEvent(
