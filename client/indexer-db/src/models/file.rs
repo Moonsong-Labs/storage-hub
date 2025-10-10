@@ -133,11 +133,29 @@ impl File {
         conn: &mut DbConnection<'a>,
         file_key: impl AsRef<[u8]>,
     ) -> Result<(), diesel::result::Error> {
+        use crate::models::Bucket;
+
         let file_key = file_key.as_ref().to_vec();
+
+        // Get file info before deletion
+        let file_info: Option<(i64, i64)> = file::table
+            .filter(file::file_key.eq(&file_key))
+            .select((file::bucket_id, file::size))
+            .first(conn)
+            .await
+            .optional()?;
+
+        // Delete the file
         diesel::delete(file::table)
             .filter(file::file_key.eq(file_key))
             .execute(conn)
             .await?;
+
+        // Update bucket counts if file was found
+        if let Some((bucket_id, file_size)) = file_info {
+            Bucket::decrement_file_count_and_size(conn, bucket_id, file_size).await?;
+        }
+
         Ok(())
     }
 

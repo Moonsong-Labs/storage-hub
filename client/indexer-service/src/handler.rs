@@ -215,11 +215,14 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 name,
                 collection_id,
                 private,
-                value_prop_id: _,
+                value_prop_id,
                 root,
             } => {
                 let msp =
                     Some(Msp::get_by_onchain_msp_id(conn, OnchainMspId::from(*msp_id)).await?);
+
+                // Store the value_prop_id as a string
+                let value_prop_id_str = value_prop_id.map(ToString::to_string);
 
                 Bucket::create(
                     conn,
@@ -230,6 +233,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     collection_id.map(|id| id.to_string()),
                     *private,
                     root.as_ref().to_vec(),
+                    value_prop_id_str,
                 )
                 .await?;
             }
@@ -333,6 +337,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 }
 
                 let size: u64 = (*size).saturated_into();
+                let size: i64 = size.saturated_into();
                 let who = who.as_ref().to_vec();
                 File::create(
                     conn,
@@ -342,11 +347,14 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     bucket_id.as_ref().to_vec(),
                     location.to_vec(),
                     fingerprint.as_ref().to_vec(),
-                    size.saturated_into(),
+                    size,
                     FileStorageRequestStep::Requested,
                     sql_peer_ids,
                 )
                 .await?;
+
+                // Update bucket total size and file count
+                Bucket::increment_file_count_and_size(conn, bucket.id, size).await?;
             }
             pallet_file_system::Event::MoveBucketRequested { .. } => {}
             pallet_file_system::Event::NewCollectionAndAssociation { .. } => {}
