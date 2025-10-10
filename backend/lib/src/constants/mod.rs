@@ -61,6 +61,9 @@ pub mod database {
 
     /// Default limit for requests with pagination
     pub const DEFAULT_PAGE_LIMIT: i64 = 100;
+
+    /// MSP cache time-to-live in seconds
+    pub const MSP_CACHE_TTL_SECS: u64 = 300; // 5 minutes
 }
 
 /// API configuration constants
