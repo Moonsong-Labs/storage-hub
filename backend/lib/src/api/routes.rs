@@ -104,7 +104,7 @@ mod tests {
             // Create MSP with the ID that matches the default config
             let msp = client
                 .create_msp(
-                    MOCK_ADDRESS,
+                    &MOCK_ADDRESS.to_string(),
                     OnchainMspId::new(Hash::from_slice(&DUMMY_MSP_ID)),
                 )
                 .await
@@ -114,7 +114,7 @@ mod tests {
             let bucket_onchain_id = random_bytes_32();
             let bucket = client
                 .create_bucket(
-                    MOCK_ADDRESS,
+                    &MOCK_ADDRESS.to_string(),
                     Some(msp.id),
                     DEFAULT_BUCKET_NAME.as_bytes(),
                     &bucket_onchain_id,
@@ -127,7 +127,7 @@ mod tests {
             let file_key = random_bytes_32();
             let file = client
                 .create_file(
-                    MOCK_ADDRESS.as_bytes(),
+                    MOCK_ADDRESS.to_string().as_bytes(),
                     file_key.as_slice(),
                     bucket.id,
                     &bucket_onchain_id,

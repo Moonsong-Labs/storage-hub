@@ -97,7 +97,7 @@ impl MockRepository {
         let bucket1_hash = Hash::from_slice(&test::bucket::BUCKET1_BUCKET_ID);
         let bucket1 = this
             .create_bucket(
-                MOCK_ADDRESS,
+                &MOCK_ADDRESS.to_string(),
                 Some(msp1.id),
                 b"Documents",
                 &bucket1_hash,
@@ -140,7 +140,7 @@ impl MockRepository {
         // File 1: /Reports/Q1-2024.pdf
         let bucket1_file1_key = Hash::from_slice(&test::file::BUCKET1_FILE1_KEY);
         this.create_file(
-            MOCK_ADDRESS.as_bytes(),
+            MOCK_ADDRESS.to_string().as_bytes(),
             &bucket1_file1_key,
             bucket1.id,
             &bucket1_hash,
@@ -154,7 +154,7 @@ impl MockRepository {
         // File 2: /Thesis/chapter1.pdf
         let bucket1_file2_key = random_hash();
         this.create_file(
-            MOCK_ADDRESS.as_bytes(),
+            MOCK_ADDRESS.to_string().as_bytes(),
             &bucket1_file2_key,
             bucket1.id,
             &bucket1_hash,
@@ -195,7 +195,7 @@ impl MockRepository {
 
         // Create some sample payment streams
         this.create_payment_stream(
-            MOCK_ADDRESS,
+            &MOCK_ADDRESS.to_string(),
             &hex::encode(DUMMY_MSP_ID),
             BigDecimal::from(500000),
             PaymentStreamKind::Fixed {
@@ -206,7 +206,7 @@ impl MockRepository {
         .expect("should create fixed payment stream");
 
         this.create_payment_stream(
-            MOCK_ADDRESS,
+            &MOCK_ADDRESS.to_string(),
             &hex::encode(random_bytes_32()),
             BigDecimal::from(200000),
             PaymentStreamKind::Dynamic {

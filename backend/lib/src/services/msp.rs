@@ -2,6 +2,7 @@
 
 use std::{collections::HashSet, str::FromStr, sync::Arc};
 
+use alloy_core::primitives::Address;
 use axum_extra::extract::multipart::Field;
 use bigdecimal::BigDecimal;
 use chrono::Utc;
@@ -216,7 +217,7 @@ impl MspService {
     /// List buckets for a user
     pub async fn list_user_buckets(
         &self,
-        user_address: &str,
+        user_address: &Address,
     ) -> Result<impl Iterator<Item = Bucket>, Error> {
         // Paginate through all buckets
         let mut all_pages = Vec::new();
@@ -225,7 +226,7 @@ impl MspService {
         loop {
             let buckets = self
                 .postgres
-                .get_user_buckets(&self.msp_id, user_address, Some(DEFAULT_PAGE_LIMIT), Some(offset))
+                .get_user_buckets(&self.msp_id, &user_address.to_string(), Some(DEFAULT_PAGE_LIMIT), Some(offset))
                 .await?;
 
             let fetched_count = buckets.len();
@@ -251,7 +252,7 @@ impl MspService {
     /// Get a specific bucket by ID
     ///
     /// Verifies ownership of bucket is `user`
-    pub async fn get_bucket(&self, bucket_id: &str, user: &str) -> Result<Bucket, Error> {
+    pub async fn get_bucket(&self, bucket_id: &str, user: &Address) -> Result<Bucket, Error> {
         self.get_db_bucket(bucket_id, user).await.map(|bucket| {
             // Convert BigDecimal to u64 for size (may lose precision)
             let size_bytes = bucket.total_size.to_string().parse::<u64>().unwrap_or(0);
@@ -275,7 +276,7 @@ impl MspService {
     pub async fn get_file_tree(
         &self,
         bucket_id: &str,
-        user: &str,
+        user: &Address,
         path: &str,
     ) -> Result<FileTree, Error> {
         // first, get the bucket from the db and determine if user can view the bucket
@@ -311,7 +312,7 @@ impl MspService {
     /// Get file information
     ///
     /// Verifies ownership of bucket that the file belongs to is `user`
-    pub async fn get_file_info(&self, user: &str, file_key: &str) -> Result<FileInfo, Error> {
+    pub async fn get_file_info(&self, user: &Address, file_key: &str) -> Result<FileInfo, Error> {
         let file_key_hex = file_key.trim_start_matches("0x");
 
         let file_key = hex::decode(file_key_hex)
@@ -347,12 +348,12 @@ impl MspService {
     /// Get all payment streams for a user
     pub async fn get_payment_streams(
         &self,
-        user_address: &str,
+        user_address: &Address,
     ) -> Result<PaymentStreamsResponse, Error> {
         // Get all payment streams for the user from the database
         let payment_stream_data = self
             .postgres
-            .get_payment_streams_for_user(user_address)
+            .get_payment_streams_for_user(&user_address.to_string())
             .await?;
 
         // Get current price per giga unit per tick from RPC (for dynamic rate calculations)
@@ -405,7 +406,7 @@ impl MspService {
     /// We also implemented the internal_upload_by_key handler to handle this temporary file upload.
     pub async fn get_file_from_key(
         &self,
-        user: &str,
+        user: &Address,
         file_key: &str,
     ) -> Result<FileDownloadResult, Error> {
         // Retrieve file info, this will also authenticate the user
@@ -465,7 +466,7 @@ impl MspService {
     /// Verifies ownership of bucket that the file belongs to is `user`
     pub async fn process_and_upload_file(
         &self,
-        user: &str,
+        user: &Address,
         file_key: &str,
         mut file_data_stream: Field,
         file_metadata: FileMetadata,
@@ -768,10 +769,10 @@ impl MspService {
 
 impl MspService {
     /// Verifies user can access the given bucket
-    fn can_user_view_bucket(&self, bucket: DBBucket, user: &str) -> Result<DBBucket, Error> {
+    fn can_user_view_bucket(&self, bucket: DBBucket, user: &Address) -> Result<DBBucket, Error> {
         // TODO: NFT ownership
         if bucket.private {
-            if bucket.account.as_str() == user {
+            if bucket.account.as_str() == user.to_string() {
                 Ok(bucket)
             } else {
                 Err(Error::Unauthorized(format!(
@@ -787,7 +788,7 @@ impl MspService {
     async fn get_db_bucket(
         &self,
         bucket_id: &str,
-        user: &str,
+        user: &Address,
     ) -> Result<shc_indexer_db::models::Bucket, Error> {
         let bucket_id_hex = bucket_id.trim_start_matches("0x");
 
@@ -919,7 +920,7 @@ mod tests {
                     // Create MSP with the ID that matches the default config
                     let msp = client
                         .create_msp(
-                            MOCK_ADDRESS,
+                            &MOCK_ADDRESS.to_string(),
                             OnchainMspId::new(Hash::from_slice(&DUMMY_MSP_ID)),
                         )
                         .await
@@ -928,7 +929,7 @@ mod tests {
                     // Create a test bucket for the mock user
                     client
                         .create_bucket(
-                            MOCK_ADDRESS,
+                            &MOCK_ADDRESS.to_string(),
                             Some(msp.id),
                             DEFAULT_BUCKET_NAME.as_bytes(),
                             random_bytes_32().as_slice(),
@@ -943,7 +944,7 @@ mod tests {
             .await;
 
         let buckets = service
-            .list_user_buckets(MOCK_ADDRESS)
+            .list_user_buckets(&MOCK_ADDRESS)
             .await
             .unwrap()
             .collect::<Vec<_>>();
@@ -962,7 +963,7 @@ mod tests {
                     // Create MSP with the ID that matches the default config
                     let msp = client
                         .create_msp(
-                            MOCK_ADDRESS,
+                            &MOCK_ADDRESS.to_string(),
                             OnchainMspId::new(Hash::from_slice(&DUMMY_MSP_ID)),
                         )
                         .await
@@ -971,7 +972,7 @@ mod tests {
                     // Create a test bucket for the mock user
                     let bucket = client
                         .create_bucket(
-                            MOCK_ADDRESS,
+                            &MOCK_ADDRESS.to_string(),
                             Some(msp.id),
                             bucket_name.as_bytes(),
                             &bucket_id,
@@ -982,7 +983,7 @@ mod tests {
 
                     client
                         .create_file(
-                            MOCK_ADDRESS.as_bytes(),
+                            MOCK_ADDRESS.to_string().as_bytes(),
                             random_bytes_32().as_slice(),
                             bucket.id,
                             &bucket_id,
@@ -999,7 +1000,7 @@ mod tests {
             .await;
 
         let bucket_id = hex::encode(bucket_id);
-        let bucket = service.get_bucket(&bucket_id, MOCK_ADDRESS).await.unwrap();
+        let bucket = service.get_bucket(&bucket_id, &MOCK_ADDRESS).await.unwrap();
 
         assert_eq!(bucket.bucket_id, bucket_id);
         assert_eq!(bucket.name, bucket_name);
@@ -1015,7 +1016,7 @@ mod tests {
                     // Create MSP with the ID that matches the default config
                     let msp = client
                         .create_msp(
-                            MOCK_ADDRESS,
+                            &MOCK_ADDRESS.to_string(),
                             OnchainMspId::new(Hash::from_slice(&DUMMY_MSP_ID)),
                         )
                         .await
@@ -1024,7 +1025,7 @@ mod tests {
                     // Create a test bucket for the mock user
                     let bucket = client
                         .create_bucket(
-                            MOCK_ADDRESS,
+                            &MOCK_ADDRESS.to_string(),
                             Some(msp.id),
                             DEFAULT_BUCKET_NAME.as_bytes(),
                             &bucket_id,
@@ -1035,7 +1036,7 @@ mod tests {
 
                     client
                         .create_file(
-                            MOCK_ADDRESS.as_bytes(),
+                            MOCK_ADDRESS.to_string().as_bytes(),
                             random_bytes_32().as_slice(),
                             bucket.id,
                             &bucket_id,
@@ -1053,7 +1054,7 @@ mod tests {
 
         let filter = "/";
         let tree = service
-            .get_file_tree(hex::encode(bucket_id).as_ref(), MOCK_ADDRESS, filter)
+            .get_file_tree(hex::encode(bucket_id).as_ref(), &MOCK_ADDRESS, filter)
             .await
             .unwrap();
 
@@ -1076,7 +1077,7 @@ mod tests {
                     // Create MSP with the ID that matches the default config
                     let msp = client
                         .create_msp(
-                            MOCK_ADDRESS,
+                            &MOCK_ADDRESS.to_string(),
                             OnchainMspId::new(Hash::from_slice(&DUMMY_MSP_ID)),
                         )
                         .await
@@ -1085,7 +1086,7 @@ mod tests {
                     // Create a test bucket for the mock user
                     let bucket = client
                         .create_bucket(
-                            MOCK_ADDRESS,
+                            &MOCK_ADDRESS.to_string(),
                             Some(msp.id),
                             DEFAULT_BUCKET_NAME.as_bytes(),
                             &bucket_id,
@@ -1096,7 +1097,7 @@ mod tests {
 
                     client
                         .create_file(
-                            MOCK_ADDRESS.as_bytes(),
+                            MOCK_ADDRESS.to_string().as_bytes(),
                             &file_key,
                             bucket.id,
                             &bucket_id,
@@ -1116,7 +1117,7 @@ mod tests {
         let file_key = hex::encode(file_key);
 
         let info = service
-            .get_file_info(MOCK_ADDRESS, &file_key)
+            .get_file_info(&MOCK_ADDRESS, &file_key)
             .await
             .expect("get_file_info should succeed");
 
@@ -1140,7 +1141,7 @@ mod tests {
                     // Create 2 payment streams for MOCK_ADDRESS, one for MSP and one for BSP
                     client
                         .create_payment_stream(
-                            MOCK_ADDRESS,
+                            &MOCK_ADDRESS.to_string(),
                             "0x1234567890abcdef1234567890abcdef12345678",
                             BigDecimal::from(500000),
                             PaymentStreamKind::Fixed { rate },
@@ -1150,7 +1151,7 @@ mod tests {
 
                     client
                         .create_payment_stream(
-                            MOCK_ADDRESS,
+                            &MOCK_ADDRESS.to_string(),
                             "0xabcdef1234567890abcdef1234567890abcdef12",
                             BigDecimal::from(200000),
                             PaymentStreamKind::Dynamic { amount_provided },
@@ -1164,7 +1165,7 @@ mod tests {
             .await;
 
         let ps = service
-            .get_payment_streams(MOCK_ADDRESS)
+            .get_payment_streams(&MOCK_ADDRESS)
             .await
             .expect("get_payment_stream should succeed");
 
