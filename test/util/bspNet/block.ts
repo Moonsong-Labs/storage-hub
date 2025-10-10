@@ -280,7 +280,6 @@ export const sealBlock = async (
  * @returns A Promise that resolves when all blocks have been skipped.
  */
 export const skipBlocks = async (api: ApiPromise, blocksToSkip: number, paddingMs = 50) => {
-  console.log(`\tSkipping ${blocksToSkip} blocks...`);
   for (let i = 0; i < blocksToSkip; i++) {
     await sealBlock(api);
     await sleep(paddingMs);

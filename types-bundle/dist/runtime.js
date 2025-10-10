@@ -100,6 +100,20 @@ const FILE_SYSTEM_V1 = {
             }
         ],
         type: "Result<IncompleteStorageRequestMetadataResponse, QueryIncompleteStorageRequestMetadataError>"
+    },
+    list_incomplete_storage_request_keys: {
+        description: "List incomplete storage request keys with pagination.",
+        params: [
+            {
+                name: "startAfter",
+                type: "Option<H256>"
+            },
+            {
+                name: "limit",
+                type: "u32"
+            }
+        ],
+        type: "Vec<H256>"
     }
 };
 const PROOFS_DEALER_V1 = {

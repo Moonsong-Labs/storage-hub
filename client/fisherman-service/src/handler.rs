@@ -21,13 +21,24 @@ use crate::{
 
 pub(crate) const LOG_TARGET: &str = "fisherman-service";
 
-/// Represents an operation that occurred on a file key
-#[derive(Debug, Clone)]
-pub enum FileKeyOperation {
-    /// File key was added with complete metadata
-    Add(shc_common::types::FileMetadata),
-    /// File key was removed
-    Remove,
+/// The main FishermanService actor
+///
+/// This service monitors the StorageHub blockchain for file deletion requests,
+/// constructs proofs of inclusion from Bucket/BSP forests, and submits these proofs
+/// to the StorageHub protocol to permissionlessly mutate (delete the file key) the merkle forest on chain.
+pub struct FishermanService<Runtime: StorageEnableRuntime> {
+    /// Substrate client for blockchain interaction
+    client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+    /// Last processed block number to avoid reprocessing
+    last_processed_block: BlockNumber<Runtime>,
+    /// Event bus provider for emitting fisherman events
+    event_bus_provider: FishermanServiceEventBusProvider<Runtime>,
+    /// The minimum number of blocks behind the current best block to consider the fisherman out of sync
+    sync_mode_min_blocks_behind: BlockNumber<Runtime>,
+    /// Maximum number of incomplete storage requests to process during initial sync
+    incomplete_sync_max: u32,
+    /// Page size for incomplete storage request pagination
+    incomplete_sync_page_size: u32,
 }
 
 /// Represents a change to a file key between blocks
@@ -39,27 +50,30 @@ pub struct FileKeyChange {
     pub operation: FileKeyOperation,
 }
 
-/// The main FishermanService actor
-///
-/// This service monitors the StorageHub blockchain for file deletion requests,
-/// constructs proofs of inclusion from Bucket/BSP forests, and submits these proofs
-/// to the StorageHub protocol to permissionlessly mutate (delete the file key) the merkle forest on chain.
-pub struct FishermanService<Runtime: StorageEnableRuntime> {
-    /// Substrate client for blockchain interaction
-    client: Arc<ParachainClient<Runtime::RuntimeApi>>,
-    /// Last processed block number to avoid reprocessing
-    last_processed_block: Option<BlockNumber<Runtime>>,
-    /// Event bus provider for emitting fisherman events
-    event_bus_provider: FishermanServiceEventBusProvider<Runtime>,
+/// Represents an operation that occurred on a file key
+#[derive(Debug, Clone)]
+pub enum FileKeyOperation {
+    /// File key was added with complete metadata
+    Add(shc_common::types::FileMetadata),
+    /// File key was removed
+    Remove,
 }
 
 impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
     /// Create a new FishermanService instance
-    pub fn new(client: Arc<ParachainClient<Runtime::RuntimeApi>>) -> Self {
+    pub fn new(
+        client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+        incomplete_sync_max: u32,
+        incomplete_sync_page_size: u32,
+        sync_mode_min_blocks_behind: u32,
+    ) -> Self {
         Self {
             client,
-            last_processed_block: None,
+            last_processed_block: 0u32.into(),
             event_bus_provider: FishermanServiceEventBusProvider::<Runtime>::new(),
+            sync_mode_min_blocks_behind: sync_mode_min_blocks_behind.into(),
+            incomplete_sync_max,
+            incomplete_sync_page_size,
         }
     }
 
@@ -136,6 +150,17 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
     ) -> Result<(), FishermanServiceError> {
         debug!(target: LOG_TARGET, "🎣 Monitoring block #{}: {}", block_number, block_hash);
 
+        // Check if we just came out of syncing mode
+        // On initial startup, last_processed_block is 0, so if current block > sync_mode_min_blocks_behind,
+        // we trigger the sync. This matches the blockchain service behavior.
+        if block_number.saturating_sub(self.last_processed_block) > self.sync_mode_min_blocks_behind
+        {
+            info!(target: LOG_TARGET, "🎣 Handling coming out of sync mode (synced to #{}: {})", block_number, block_hash);
+            if let Err(e) = self.initial_incomplete_requests_sync().await {
+                error!(target: LOG_TARGET, "Failed initial incomplete requests sync: {:?}", e);
+            }
+        }
+
         let events = get_events_at_block::<Runtime>(&self.client, &block_hash)?;
 
         for event_record in events.iter() {
@@ -191,7 +216,68 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
             }
         }
 
-        self.last_processed_block = Some(block_number);
+        self.last_processed_block = block_number;
+        Ok(())
+    }
+
+    /// Perform initial catch-up for incomplete storage requests
+    async fn initial_incomplete_requests_sync(&mut self) -> Result<(), FishermanServiceError> {
+        info!(target: LOG_TARGET, "🎣 Starting initial incomplete storage requests sync");
+
+        let page_size = self.incomplete_sync_page_size;
+        let cap = self.incomplete_sync_max;
+        let mut processed: u32 = 0;
+        let mut cursor: Option<Runtime::Hash> = None;
+
+        let best_block_hash = self.client.info().best_hash;
+
+        'sync_loop: while processed < cap {
+            // Call the runtime API to get a page of incomplete storage request keys
+            let keys = self
+                .client
+                .runtime_api()
+                .list_incomplete_storage_request_keys(best_block_hash, cursor, page_size)
+                .map_err(|e| {
+                    FishermanServiceError::Client(format!("Runtime API error: {:?}", e))
+                })?;
+
+            if keys.is_empty() {
+                break;
+            }
+
+            let page_count = keys.len();
+            debug!(
+                target: LOG_TARGET,
+                "🎣 Processing page of {} incomplete storage requests",
+                page_count
+            );
+
+            for key in &keys {
+                // Emit the event for each key
+                // TODO: Emit batch of file keys per BSP/Bucket
+                self.emit(crate::events::ProcessIncompleteStorageRequest {
+                    file_key: (*key).into(),
+                });
+
+                processed = processed.saturating_add(1);
+
+                // Check if we've hit the cap
+                if processed >= cap {
+                    info!(
+                        target: LOG_TARGET,
+                        "🎣 Initial incomplete requests sync reached cap: {}",
+                        cap
+                    );
+                    break 'sync_loop;
+                }
+            }
+
+            // Advance cursor to last processed key
+            cursor = keys.last().cloned();
+        }
+
+        info!(target: LOG_TARGET, "🎣 Completed initial incomplete storage requests sync - processed {} requests", processed);
+
         Ok(())
     }
 
@@ -221,11 +307,9 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
         // Process blocks from `from_block` (excluding) to `best_block_number`
         let mut block_num = from_block.saturating_add(One::one());
         while block_num <= best_block_number {
-            let num: u32 = (block_num.into()).as_u64().saturated_into();
-            // Get block hash
-            let block_hash = self
-                .client
-                .hash(num)
+            // Get block hash using HeaderBackend trait method
+            let block_num_u32: u32 = block_num.saturated_into();
+            let block_hash = HeaderBackend::hash(&*self.client, block_num_u32)
                 .map_err(|e| FishermanServiceError::Client(e.to_string()))?
                 .ok_or_else(|| {
                     FishermanServiceError::Client(format!("Block {} not found", block_num))
@@ -419,7 +503,6 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
     }
 }
 
-/// Implement the Actor trait for FishermanService
 impl<Runtime: StorageEnableRuntime> Actor for FishermanService<Runtime> {
     type Message = FishermanServiceCommand<Runtime>;
     type EventLoop = FishermanServiceEventLoop<Runtime>;
