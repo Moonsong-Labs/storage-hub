@@ -22,7 +22,7 @@ use shp_types::Hash;
 
 use crate::{
     config::MspConfig,
-    constants::mocks::{PLACEHOLDER_BUCKET_FILE_COUNT, PLACEHOLDER_BUCKET_SIZE_BYTES},
+    constants::database::DEFAULT_PAGE_LIMIT,
     data::{
         indexer_db::{client::DBClient, repository::PaymentStreamKind},
         rpc::StorageHubRpcClient,
@@ -218,19 +218,34 @@ impl MspService {
         &self,
         user_address: &str,
     ) -> Result<impl Iterator<Item = Bucket>, Error> {
-        // TODO: request by page
-        self.postgres
-            .get_user_buckets(&self.msp_id, user_address, None, None)
-            .await
-            .map(|buckets| {
-                buckets.into_iter().map(|entry| {
-                    Bucket::from_db(
-                        &entry,
-                        PLACEHOLDER_BUCKET_SIZE_BYTES,
-                        PLACEHOLDER_BUCKET_FILE_COUNT,
-                    )
-                })
-            })
+        // Paginate through all buckets
+        let mut all_pages = Vec::new();
+        let mut offset = 0;
+
+        loop {
+            let buckets = self
+                .postgres
+                .get_user_buckets(&self.msp_id, user_address, Some(DEFAULT_PAGE_LIMIT), Some(offset))
+                .await?;
+
+            let fetched_count = buckets.len();
+            all_pages.push(buckets);
+
+            // If we got fewer items than the page size, we've reached the end
+            if fetched_count < DEFAULT_PAGE_LIMIT as usize {
+                break;
+            }
+
+            offset += DEFAULT_PAGE_LIMIT;
+        }
+
+        Ok(all_pages.into_iter().flatten().map(|entry| {
+            // Convert BigDecimal to u64 for size (may lose precision)
+            let size_bytes = entry.total_size.to_string().parse::<u64>().unwrap_or(0);
+            let file_count = entry.file_count as u64;
+
+            Bucket::from_db(&entry, size_bytes, file_count)
+        }))
     }
 
     /// Get a specific bucket by ID
@@ -238,11 +253,11 @@ impl MspService {
     /// Verifies ownership of bucket is `user`
     pub async fn get_bucket(&self, bucket_id: &str, user: &str) -> Result<Bucket, Error> {
         self.get_db_bucket(bucket_id, user).await.map(|bucket| {
-            Bucket::from_db(
-                &bucket,
-                PLACEHOLDER_BUCKET_SIZE_BYTES,
-                PLACEHOLDER_BUCKET_FILE_COUNT,
-            )
+            // Convert BigDecimal to u64 for size (may lose precision)
+            let size_bytes = bucket.total_size.to_string().parse::<u64>().unwrap_or(0);
+            let file_count = bucket.file_count as u64;
+
+            Bucket::from_db(&bucket, size_bytes, file_count)
         })
     }
 
@@ -266,15 +281,31 @@ impl MspService {
         // first, get the bucket from the db and determine if user can view the bucket
         let bucket = self.get_db_bucket(bucket_id, user).await?;
 
-        // TODO: request by page
+        // Paginate through all files
         // TODO: optimize query by requesting only matching paths
-        let files = self
-            .postgres
-            .get_bucket_files(bucket.id, None, None)
-            .await?;
+        let mut all_pages = Vec::new();
+        let mut offset = 0;
+
+        loop {
+            let files = self
+                .postgres
+                .get_bucket_files(bucket.id, Some(DEFAULT_PAGE_LIMIT), Some(offset))
+                .await?;
+
+            let fetched_count = files.len();
+            all_pages.push(files);
+
+            // If we got fewer items than the page size, we've reached the end
+            if fetched_count < DEFAULT_PAGE_LIMIT as usize {
+                break;
+            }
+
+            offset += DEFAULT_PAGE_LIMIT;
+        }
 
         // Create hierarchy based on location segments
-        Ok(FileTree::from_files_filtered(files, path))
+        let all_files: Vec<_> = all_pages.into_iter().flatten().collect();
+        Ok(FileTree::from_files_filtered(all_files, path))
     }
 
     /// Get file information
