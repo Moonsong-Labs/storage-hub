@@ -207,11 +207,7 @@ impl DBClient {
 impl DBClient {
     /// Create a new MSP
     pub async fn create_msp(&self, account: &str, onchain_msp_id: OnchainMspId) -> Result<Msp> {
-        let msp = self
-            .repository
-            .create_msp(account, onchain_msp_id)
-            .await
-            .map_err(Into::into)?;
+        let msp = self.repository.create_msp(account, onchain_msp_id).await?;
 
         // Invalidate cache after creating a new MSP
         self.invalidate_msp_cache().await;
@@ -221,11 +217,7 @@ impl DBClient {
 
     /// Delete an MSP
     pub async fn delete_msp(&self, onchain_msp_id: &OnchainMspId) -> Result<()> {
-        let result = self
-            .repository
-            .delete_msp(onchain_msp_id)
-            .await
-            .map_err(Into::into)?;
+        let result = self.repository.delete_msp(onchain_msp_id).await?;
 
         // Invalidate cache after deleting an MSP
         self.invalidate_msp_cache().await;

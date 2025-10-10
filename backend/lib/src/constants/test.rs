@@ -71,6 +71,12 @@ pub mod bucket {
 
     /// Default merkle root for repository (single zero byte)
     pub const DEFAULT_MERKLE_ROOT: &[u8] = &[0u8];
+
+    /// Default number of files in a bucket for new buckets
+    pub const DEFAULT_FILE_COUNT: i64 = 0;
+
+    /// Default bucket size in bytes for new buckets
+    pub const DEFAULT_BUCKET_SIZE: i64 = 0;
 }
 
 /// Test file data

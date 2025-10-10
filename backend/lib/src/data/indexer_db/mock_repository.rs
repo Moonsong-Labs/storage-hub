@@ -431,6 +431,9 @@ impl IndexerOpsMut for MockRepository {
             merkle_root: test::bucket::DEFAULT_MERKLE_ROOT.to_vec(),
             created_at: now,
             updated_at: now,
+            file_count: test::bucket::DEFAULT_FILE_COUNT,
+            total_size: test::bucket::DEFAULT_BUCKET_SIZE.into(),
+            value_prop_id: None,
         };
 
         self.buckets.write().await.insert(id, bucket.clone());
@@ -481,6 +484,7 @@ impl IndexerOpsMut for MockRepository {
             updated_at: now,
         };
 
+        // TODO: increase bucket size and file count
         self.files.write().await.insert(id, file.clone());
         Ok(file)
     }
@@ -493,6 +497,7 @@ impl IndexerOpsMut for MockRepository {
             .map(|f| f.id);
 
         if let Some(id) = id_to_remove {
+            // TODO: decrease bucket size and file count
             files.remove(&id);
             Ok(())
         } else {
