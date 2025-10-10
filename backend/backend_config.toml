@@ -24,9 +24,6 @@ jwt_secret = "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef
 # WebSocket RPC endpoint for the StorageHub node
 # Use ws:// for unencrypted or wss:// for TLS-encrypted connections
 rpc_url = "ws://localhost:9944"
-# URL for node to communicate with the backend (e.g for uploading a file)
-# e.g: if running an msp in a container: http://host.docker.internal:8080
-msp_callback_url = "http://localhost:8080"
 # Request timeout in seconds (optional, default: 30)
 # Increase this value for slower networks or heavy operations
 timeout_secs = 30
@@ -36,9 +33,25 @@ max_concurrent_requests = 100
 # Whether to verify TLS certificates when using wss:// connections
 # Set to false only for development environments with self-signed certificates
 verify_tls = true
+# Number of retry attempts for RPC connection initialization (default: 30)
+# Useful when the RPC node might not be immediately available on startup
+rpc_retry_attempts = 30
+# Delay in seconds between RPC connection retry attempts (default: 2)
+rpc_retry_delay_secs = 2
 # Enable mock mode for testing (requires 'mocks' feature to be enabled at compile time)
 # When true, uses mock RPC connections instead of real network calls
 # mock_mode = false
+
+# MSP-specific configuration
+[msp]
+# URL for node to communicate with the backend (e.g for uploading a file)
+# e.g: if running an msp in a container: http://host.docker.internal:8080
+callback_url = "http://localhost:8080"
+# Number of retry attempts for file upload operations (default: 3)
+# Increase for unreliable network conditions
+upload_retry_attempts = 3
+# Delay in seconds between file upload retry attempts (default: 1)
+upload_retry_delay_secs = 1
 
 # Database configuration
 [database]

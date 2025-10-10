@@ -185,10 +185,9 @@ async fn create_rpc_client(config: &Config) -> Result<Arc<StorageHubRpcClient>> 
 }
 
 async fn create_rpc_client_with_retry(config: &Config) -> Result<Arc<StorageHubRpcClient>> {
-    // TODO: We should make these configurable.
     let mut attempts: u32 = 0;
-    let max_attempts: u32 = 30;
-    let delay_between_retries_secs: u64 = 2;
+    let max_attempts = config.storage_hub.rpc_retry_attempts;
+    let delay_between_retries_secs = config.storage_hub.rpc_retry_delay_secs;
     loop {
         match create_rpc_client(config).await {
             Ok(client) => return Ok(client),

@@ -21,6 +21,7 @@ use shc_indexer_db::{models::Bucket as DBBucket, OnchainMspId};
 use shp_types::Hash;
 
 use crate::{
+    config::MspConfig,
     constants::mocks::{PLACEHOLDER_BUCKET_FILE_COUNT, PLACEHOLDER_BUCKET_SIZE_BYTES},
     data::{
         indexer_db::{client::DBClient, repository::PaymentStreamKind},
@@ -54,7 +55,7 @@ pub struct MspService {
 
     postgres: Arc<DBClient>,
     rpc: Arc<StorageHubRpcClient>,
-    msp_callback_url: String,
+    msp_config: MspConfig,
 }
 
 impl MspService {
@@ -63,7 +64,7 @@ impl MspService {
     pub async fn new(
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
-        msp_callback_url: String,
+        msp_config: MspConfig,
     ) -> Result<Self, Error> {
         // Discover provider id from the connected node.
         // If the node is not yet an MSP (which happens in integration tests), retry with
@@ -109,9 +110,7 @@ impl MspService {
             msp_id,
             postgres,
             rpc,
-            // TODO: dedicated config struct
-            // see: https://github.com/Moonsong-Labs/storage-hub/pull/459/files#r2369596519
-            msp_callback_url,
+            msp_config,
         })
     }
 
@@ -389,7 +388,7 @@ impl MspService {
         // the client connecting to it is the MSP Node
         let upload_url = format!(
             "{}/internal/uploads/{}",
-            self.msp_callback_url, file.file_key
+            self.msp_config.callback_url, file.file_key
         );
 
         // Make the RPC call to download file and get metadata
@@ -676,7 +675,6 @@ impl MspService {
     }
 
     /// Send an upload request to a specific peer ID of the MSP with retry logic.
-    /// TODO: Make the number of retries configurable.
     async fn send_upload_request_to_msp_peer(
         &self,
         peer_id: PeerId,
@@ -697,10 +695,9 @@ impl MspService {
         // Encode the FileKeyProof as SCALE for transport
         let encoded_proof = file_key_proof.encode();
 
-        // TODO: We should make these configurable.
         let mut retry_attempts = 0;
-        let max_retries = 3;
-        let delay_between_retries_secs = 1;
+        let max_retries = self.msp_config.upload_retry_attempts;
+        let delay_between_retries_secs = self.msp_config.upload_retry_delay_secs;
 
         while retry_attempts < max_retries {
             debug!("receive file chunks");
@@ -850,7 +847,7 @@ mod tests {
         pub async fn build(self) -> MspService {
             let cfg = Config::default();
 
-            MspService::new(self.postgres, self.rpc, cfg.storage_hub.msp_callback_url)
+            MspService::new(self.postgres, self.rpc, cfg.msp)
                 .await
                 .expect("Mocked MSP service builder should succeed")
         }

@@ -9,8 +9,9 @@ use crate::constants::{
     },
     database::DEFAULT_DATABASE_URL,
     rpc::{
-        DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_MSP_CALLBACK_URL, DEFAULT_RPC_URL,
-        DEFAULT_TIMEOUT_SECS,
+        DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_MSP_CALLBACK_URL, DEFAULT_RPC_RETRY_ATTEMPTS,
+        DEFAULT_RPC_RETRY_DELAY_SECS, DEFAULT_RPC_URL, DEFAULT_TIMEOUT_SECS,
+        DEFAULT_UPLOAD_RETRY_ATTEMPTS, DEFAULT_UPLOAD_RETRY_DELAY_SECS,
     },
     server::{DEFAULT_HOST, DEFAULT_PORT},
 };
@@ -25,6 +26,7 @@ pub struct Config {
     pub api: ApiConfig,
     pub auth: AuthConfig,
     pub storage_hub: StorageHubConfig,
+    pub msp: MspConfig,
     pub database: DatabaseConfig,
 }
 
@@ -98,11 +100,26 @@ pub struct StorageHubConfig {
     pub max_concurrent_requests: Option<usize>,
     /// Whether to verify TLS certificates for secure connections
     pub verify_tls: bool,
-    /// URL for the node to reach the MSP backend
-    pub msp_callback_url: String,
+    /// Number of retry attempts for RPC connection initialization
+    pub rpc_retry_attempts: u32,
+    /// Delay in seconds between RPC connection retry attempts
+    pub rpc_retry_delay_secs: u64,
     /// When enabled, uses mock RPC operations for testing
     #[cfg(feature = "mocks")]
     pub mock_mode: bool,
+}
+
+/// MSP-specific configuration
+///
+/// Configures MSP service behavior including upload retries and callback URLs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MspConfig {
+    /// URL for the node to reach the MSP backend
+    pub callback_url: String,
+    /// Number of retry attempts for file upload operations
+    pub upload_retry_attempts: u32,
+    /// Delay in seconds between file upload retry attempts
+    pub upload_retry_delay_secs: u64,
 }
 
 /// Database configuration for PostgreSQL connection
@@ -144,9 +161,15 @@ impl Default for Config {
                 timeout_secs: Some(DEFAULT_TIMEOUT_SECS),
                 max_concurrent_requests: Some(DEFAULT_MAX_CONCURRENT_REQUESTS),
                 verify_tls: true,
-                msp_callback_url: DEFAULT_MSP_CALLBACK_URL.to_string(),
+                rpc_retry_attempts: DEFAULT_RPC_RETRY_ATTEMPTS,
+                rpc_retry_delay_secs: DEFAULT_RPC_RETRY_DELAY_SECS,
                 #[cfg(feature = "mocks")]
                 mock_mode: true,
+            },
+            msp: MspConfig {
+                callback_url: DEFAULT_MSP_CALLBACK_URL.to_string(),
+                upload_retry_attempts: DEFAULT_UPLOAD_RETRY_ATTEMPTS,
+                upload_retry_delay_secs: DEFAULT_UPLOAD_RETRY_DELAY_SECS,
             },
             database: DatabaseConfig {
                 url: DEFAULT_DATABASE_URL.to_string(),

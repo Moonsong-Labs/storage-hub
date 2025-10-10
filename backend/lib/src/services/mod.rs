@@ -53,13 +53,9 @@ impl Services {
         ));
 
         let msp = Arc::new(
-            MspService::new(
-                postgres.clone(),
-                rpc.clone(),
-                config.storage_hub.msp_callback_url.clone(),
-            )
-            .await
-            .expect("MSP must be available when starting the backend's services"),
+            MspService::new(postgres.clone(), rpc.clone(), config.msp.clone())
+                .await
+                .expect("MSP must be available when starting the backend's services"),
         );
 
         Self {

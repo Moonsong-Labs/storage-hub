@@ -34,6 +34,18 @@ pub mod rpc {
 
     /// Timeout multiplier for simulating network delays in mocks
     pub const TIMEOUT_MULTIPLIER: u64 = 10;
+
+    /// Default number of retry attempts for RPC connection
+    pub const DEFAULT_RPC_RETRY_ATTEMPTS: u32 = 30;
+
+    /// Default delay between RPC connection retries in seconds
+    pub const DEFAULT_RPC_RETRY_DELAY_SECS: u64 = 2;
+
+    /// Default number of retry attempts for file upload operations
+    pub const DEFAULT_UPLOAD_RETRY_ATTEMPTS: u32 = 3;
+
+    /// Default delay between file upload retries in seconds
+    pub const DEFAULT_UPLOAD_RETRY_DELAY_SECS: u64 = 1;
 }
 
 /// Database configuration
