@@ -35,7 +35,9 @@ use polkadot_runtime_common::{prod_or_fast, BlockHashCount, SlowAdjustingFeeUpda
 use runtime_params::RuntimeParameters;
 use shp_data_price_updater::NoUpdatePriceIndexUpdater;
 use shp_file_metadata::ChunkId;
-use shp_traits::{CommitmentVerifier, MaybeDebug, TrieMutation, TrieProofDeltaApplier};
+use shp_traits::{
+    CommitmentVerifier, IdentityAdapter, MaybeDebug, TrieMutation, TrieProofDeltaApplier,
+};
 use shp_treasury_funding::{
     LinearThenPowerOfTwoTreasuryCutCalculator, LinearThenPowerOfTwoTreasuryCutCalculatorConfig,
 };
@@ -891,6 +893,7 @@ impl pallet_file_system::Config for Runtime {
     type Nfts = Nfts;
     type CollectionInspector = BucketNfts;
     type MaxBatchConfirmStorageRequests = MaxBatchConfirmStorageRequests;
+    type MaxFileDeletionsPerExtrinsic = ConstU32<100>;
     type BspStopStoringFilePenalty = ConstU128<1>;
     type TreasuryAccount = TreasuryAccount;
     type MaxFilePathSize = ConstU32<512u32>;
@@ -927,6 +930,7 @@ impl pallet_file_system::Config for Runtime {
         runtime_params::dynamic_params::runtime_config::TickRangeToMaximumThreshold;
     type OffchainSignature = Signature;
     type OffchainPublicKey = <Signature as Verify>::Signer;
+    type IntentionMsgAdapter = IdentityAdapter;
 }
 
 // Converter from the Balance type to the BlockNumber type for math.

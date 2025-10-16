@@ -206,6 +206,7 @@
         <button id="get-info">Get Info</button>
         <button id="get-stats">Get Stats</button>
         <button id="get-value-props">Get Value Props</button>
+        <button id="get-payment-streams">Get Payment Streams</button>
       </div>
       <div class="row">
         <div><strong>Info:</strong></div>
@@ -219,6 +220,10 @@
         <div><strong>Value Props:</strong></div>
       </div>
       <pre id="valuePropsJson" class="mono" style="white-space: pre-wrap; word-break: break-word;"></pre>
+      <div class="row">
+        <div><strong>Payment Streams:</strong></div>
+      </div>
+      <pre id="paymentStreamsJson" class="mono" style="white-space: pre-wrap; word-break: break-word;"></pre>
     </section>
 
     <!-- File Info section -->
@@ -434,7 +439,7 @@
         const blob = await loadAdolphusBlob();
         const metadata = await client.formFileMetadata(owner, bucketId, location, adolphusFingerprint, BigInt(blob.size));
         const fileKey = '0x' + Array.from(await client.computeFileKey(metadata)).map(b => b.toString(16).padStart(2, '0')).join('');
-        
+
         // Use a valid-looking mock JWT for mocked backend
         const jwt = generateMockJwt();
         client.setToken(jwt);
@@ -638,6 +643,27 @@
         setStatus('Get value props failed');
         window.__msp.error = e?.message || String(e);
         console.error('[MSP][VALUE-PROPS][ERROR]', e);
+      }
+    };
+
+    document.getElementById('get-payment-streams').onclick = async () => {
+      try {
+        await ensureConnected();
+        setStatus('Getting payment streams...');
+        if (!window.__msp.token) {
+          const jwt = generateMockJwt();
+          client.setToken(jwt);
+          window.__msp.token = jwt;
+        }
+        const streams = await client.getPaymentStreams();
+        window.__msp.paymentStreams = streams;
+        document.getElementById('paymentStreamsJson').textContent = JSON.stringify(streams, null, 2);
+        console.log('[PAYMENT][STREAMS]', JSON.stringify(streams));
+        setStatus('Payment streams loaded');
+      } catch (e) {
+        setStatus('Get payment streams failed');
+        window.__msp.error = e?.message || String(e);
+        console.error('[PAYMENT][STREAMS][ERROR]', e);
       }
     };
 
