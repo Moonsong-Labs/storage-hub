@@ -256,6 +256,7 @@ pub trait StorageEnableRuntime:
             MaxNumberOfPeerIds: Send + Sync,
             MaxPeerIdSize: Send + Sync,
             MaxReplicationTarget: Send + Sync,
+            MaxFileDeletionsPerExtrinsic: Send + Sync,
         >
         + pallet_transaction_payment::Config
         + pallet_balances::Config<Balance: Into<BigDecimal> + Into<NumberOrHex> + MaybeDisplay>
