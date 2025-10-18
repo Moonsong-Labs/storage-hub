@@ -15,7 +15,7 @@ describe("FileManager fingerprint", () => {
     const path = resourcePath(TEST_FILE);
     const fm = new FileManager({
       size: statSync(path).size,
-      stream: () => Readable.toWeb(createReadStream(path)) as any
+      stream: () => Readable.toWeb(createReadStream(path)) as unknown as ReadableStream<Uint8Array>
     });
 
     // Compute fingerprint

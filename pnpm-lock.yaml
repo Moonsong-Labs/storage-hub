@@ -78,7 +78,7 @@ importers:
         specifier: ^6.15.0
         version: 6.15.0
       viem:
-        specifier: ^2.9.20
+        specifier: ^2.37.6
         version: 2.37.6(typescript@5.9.2)
     devDependencies:
       '@types/node':
@@ -93,6 +93,9 @@ importers:
       '@storagehub-sdk/core':
         specifier: workspace:*
         version: link:../core
+      viem:
+        specifier: 2.37.6
+        version: 2.37.6(typescript@5.9.2)
 
   test:
     dependencies:

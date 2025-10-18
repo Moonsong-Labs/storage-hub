@@ -60,21 +60,16 @@ const client = await MspClient.connect({
 });
 
 // 2. Check service health
-const health = await client.getHealth();
+const health = await client.info.getHealth();
 console.log('MSP service health:', health);
 
 // 3. Authenticate with wallet (SIWE-style)
-const walletAddress = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
-const chainId = 1; // Ethereum mainnet
-
-// Get authentication message to sign
-const { message } = await client.getNonce(walletAddress, chainId);
-console.log('Sign this message with your wallet:', message);
-
-// After signing with your wallet (e.g., MetaMask, WalletConnect, etc.)
-const signature = '0xYourWalletSignature...'; // Replace with actual signature
-const verified = await client.verify(message, signature);
-client.setToken(verified.token); // Set auth token for subsequent requests
+// Example with viem's WalletClient
+import { createWalletClient, http } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+const account = privateKeyToAccount('0x<your_dev_private_key>');
+const wallet = createWalletClient({ account, transport: http('http://127.0.0.1:8545') });
+await client.auth.SIWE(wallet);
 
 // 4. Upload a file
 const bucketId = '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef'; // StorageHub bucket identifier
@@ -83,11 +78,11 @@ const filePath = './myfile.txt';
 const owner = walletAddress;      // File owner
 const location = 'myfile.txt';    // File location/path within the bucket
 
-const receipt = await client.uploadFile(bucketId, fileKey, createReadStream(filePath), owner, location);
+const receipt = await client.files.uploadFile(bucketId, fileKey, createReadStream(filePath), owner, location);
 console.log('File uploaded successfully:', receipt);
 
 // 5. Download the file
-const download = await client.downloadByKey(fileKey);
+const download = await client.files.downloadByKey(fileKey);
 const outputPath = './downloaded-file.txt';
 
 // Stream the download to a file
@@ -103,19 +98,19 @@ console.log('File downloaded successfully to:', outputPath);
 console.log('Download status:', download.status);
 
 // 6. List the buckets of the currently authenticated user
-const buckets = await client.listBuckets();
+const buckets = await client.buckets.list();
 console.log('Buckets:', buckets);
 
 // 7. Get the metadata of a specific bucket
-const bucket = await client.getBucket(bucketId);
+const bucket = await client.buckets.get(bucketId);
 console.log('Bucket:', bucket);
 
 // 8. Get the files of the root folder of a specific bucket
-const files = await client.getFiles(bucketId);
+const files = await client.buckets.getFiles(bucketId);
 console.log('Root files:', files);
 
 // 9. Get the files of a specific folder of a specific bucket
-const files = await client.getFiles(bucketId, { path: '/path/to/folder' });
+const files = await client.buckets.getFiles(bucketId, { path: '/path/to/folder' });
 console.log('Folder files:', files);
 ```
 
@@ -128,30 +123,27 @@ console.log('Folder files:', files);
   - `config.defaultHeaders?: Record<string, string>` - Default HTTP headers
   - `config.fetchImpl?: typeof fetch` - Custom fetch implementation
 
-### Instance Methods
-- **`getHealth()`** - Check MSP service health and status
-- **`getNonce(address, chainId)`** - Get authentication message for wallet signing
-  - `address: string` - Wallet address (0x...)
-  - `chainId: number` - Blockchain chain ID (1 for Ethereum mainnet)
-- **`verify(message, signature)`** - Verify wallet signature and get auth token
-  - `message: string` - The message that was signed
-  - `signature: string` - Wallet signature (0x...)
-- **`setToken(token)`** - Set authentication token for subsequent requests
-- **`uploadFile(bucketId, fileKey, file, owner, location)`** - Upload file to storage
-  - `bucketId: string` - Storage bucket identifier
-  - `fileKey: string` - Unique file key/identifier
-  - `file: ReadStream | Blob | File | Uint8Array | ArrayBuffer` - File data to upload
-  - `owner: string` - File owner
-  - `location: string` - File location/path within the bucket
-- **`hexToBytes(hex)`** - Convert hex string to Uint8Array (handles 0x prefix) (TODO: Move to `core` package)
-- **`formFileMetadata(owner, bucketId, location, fingerprint, size)`** - Create FileMetadata instance (TODO: Move to `core` package under `FileMetadata`)
-- **`computeFileKey(metadata)`** - Compute file key from FileMetadata (TODO: This already exists in `core` package under `FileManager`, but requires a file stream to be provided, make it more flexible there and remove it here)
-- **`downloadByKey(fileKey)`** - Download file by key
-  - Returns: `{ stream: ReadableStream, status: string }`
-- **`listBuckets()`** - List all buckets of the currently authenticated user
-- **`getBucket(bucketId)`** - Get the metadata of a specific bucket
-- **`getFiles(bucketId, options?)`** - Get the files of a specific bucket
-  - `bucketId: string` - Storage bucket identifier
-  - `options?: { path?: string, signal?: AbortSignal }` - Optional parameters
-    - `path?: string` - Path to the folder to get the files from
-    - `signal?: AbortSignal` - Abort signal to cancel the request
+### Modules (instance properties)
+- **`auth`**: SIWE auth and session helpers
+  - `SIWE(wallet, signal?)` – runs full SIWE flow and stores session
+  - `getProfile(signal?)` – returns the authenticated user's profile
+  - `getAuthStatus()` – returns NotAuthenticated | TokenExpired | Authenticated
+- **`info`**: MSP info and stats
+  - `getHealth(signal?)` – returns service health and status
+  - `getInfo(signal?)` – returns general MSP info (id, version, owner, endpoints)
+  - `getStats(signal?)` – returns capacity and usage stats
+  - `getValuePropositions(signal?)` – returns available value props/pricing
+  - `getPaymentStreams(signal?)` – returns the authenticated user's payment streams
+- **`buckets`**: Buckets and file listings
+  - `list(signal?)` – returns all buckets for the current authenticated user
+  - `get(bucketId, signal?)` – returns metadata for a specific bucket
+  - `getFiles(bucketId, { path?, signal? })` – returns the file tree at root or at a subpath
+- **`files`**: File metadata, upload and download
+  - `getFileInfo(bucketId, fileKey, signal?)` – returns metadata for a specific file
+  - `uploadFile(...)` – uploads a file to the MSP
+  - `downloadByKey(fileKey, options?)` – downloads a file by key (supports range)
+
+### Utilities available via `files`
+- `hexToBytes(hex)`
+- `formFileMetadata(owner, bucketId, location, fingerprint, size)`
+- `computeFileKey(metadata)`
