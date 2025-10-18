@@ -34,6 +34,9 @@ pub use events::{
 pub async fn spawn_fisherman_service<Runtime: StorageEnableRuntime>(
     task_spawner: &TaskSpawner,
     client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+    incomplete_sync_max: u32,
+    incomplete_sync_page_size: u32,
+    sync_mode_min_blocks_behind: u32,
 ) -> ActorHandle<FishermanService<Runtime>> {
     // Create a named task spawner for the fisherman service
     let task_spawner = task_spawner
@@ -41,7 +44,12 @@ pub async fn spawn_fisherman_service<Runtime: StorageEnableRuntime>(
         .with_group("monitoring");
 
     // Create the fisherman service instance
-    let fisherman_service = FishermanService::new(client);
+    let fisherman_service = FishermanService::new(
+        client,
+        incomplete_sync_max,
+        incomplete_sync_page_size,
+        sync_mode_min_blocks_behind,
+    );
 
     // Spawn the actor and return the handle
     task_spawner.spawn_actor(fisherman_service)

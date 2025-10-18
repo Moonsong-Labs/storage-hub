@@ -17,7 +17,8 @@ export const sendNewStorageRequest = async (
   location: string,
   bucketId: H256,
   owner: KeyringPair,
-  mspId?: HexString
+  mspId?: HexString,
+  replicationTarget?: number | null
 ): Promise<FileMetadata> => {
   const ownerHexString = u8aToHex(decodeAddress(ShConsts.NODE_INFOS.user.AddressId));
   const { file_metadata: fileMetadata } = await api.rpc.storagehubclient.loadFileInStorage(
@@ -29,9 +30,16 @@ export const sendNewStorageRequest = async (
 
   const issueOwner = owner;
 
-  const replicationTarget = {
-    Basic: null
-  };
+  let replicationTargetToUse: { Custom: number } | { Basic: null };
+  if (replicationTarget) {
+    replicationTargetToUse = {
+      Custom: replicationTarget
+    };
+  } else {
+    replicationTargetToUse = {
+      Basic: null
+    };
+  }
 
   const issueStorageRequestResult = await sealBlock(
     api,
@@ -42,7 +50,7 @@ export const sendNewStorageRequest = async (
       fileMetadata.file_size,
       mspId ?? ShConsts.DUMMY_MSP_ID,
       [ShConsts.NODE_INFOS.user.expectedPeerId],
-      replicationTarget
+      replicationTargetToUse
     ),
     issueOwner
   );
