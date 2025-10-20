@@ -66,7 +66,7 @@ export async function runMspDemo(): Promise<void> {
   console.log("uploaded:", receipt);
 
   // Download the file to disk
-  const download: DownloadResult = await client.downloadByKey(fileKey);
+  const download: DownloadResult = await client.downloadFile(fileKey);
   const out = createWriteStream(new URL("../data/out.bin", import.meta.url));
   const nodeReadable = Readable.fromWeb(download.stream);
   nodeReadable.pipe(out);

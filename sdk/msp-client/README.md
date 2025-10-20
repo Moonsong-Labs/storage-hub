@@ -82,7 +82,7 @@ const receipt = await client.files.uploadFile(bucketId, fileKey, createReadStrea
 console.log('File uploaded successfully:', receipt);
 
 // 5. Download the file
-const download = await client.files.downloadByKey(fileKey);
+const download = await client.files.downloadFile(fileKey);
 const outputPath = './downloaded-file.txt';
 
 // Stream the download to a file
@@ -98,11 +98,11 @@ console.log('File downloaded successfully to:', outputPath);
 console.log('Download status:', download.status);
 
 // 6. List the buckets of the currently authenticated user
-const buckets = await client.buckets.list();
+const buckets = await client.buckets.listBuckets();
 console.log('Buckets:', buckets);
 
 // 7. Get the metadata of a specific bucket
-const bucket = await client.buckets.get(bucketId);
+const bucket = await client.buckets.getBucket(bucketId);
 console.log('Bucket:', bucket);
 
 // 8. Get the files of the root folder of a specific bucket
@@ -110,8 +110,8 @@ const files = await client.buckets.getFiles(bucketId);
 console.log('Root files:', files);
 
 // 9. Get the files of a specific folder of a specific bucket
-const files = await client.buckets.getFiles(bucketId, { path: '/path/to/folder' });
-console.log('Folder files:', files);
+const folderFiles = await client.buckets.getFiles(bucketId, { path: '/path/to/folder' });
+console.log('Folder files:', folderFiles);
 ```
 
 ## API Reference
@@ -135,13 +135,13 @@ console.log('Folder files:', files);
   - `getValuePropositions(signal?)` – returns available value props/pricing
   - `getPaymentStreams(signal?)` – returns the authenticated user's payment streams
 - **`buckets`**: Buckets and file listings
-  - `list(signal?)` – returns all buckets for the current authenticated user
-  - `get(bucketId, signal?)` – returns metadata for a specific bucket
+  - `listBuckets(signal?)` – returns all buckets for the current authenticated user
+  - `getBucket(bucketId, signal?)` – returns metadata for a specific bucket
   - `getFiles(bucketId, { path?, signal? })` – returns the file tree at root or at a subpath
 - **`files`**: File metadata, upload and download
   - `getFileInfo(bucketId, fileKey, signal?)` – returns metadata for a specific file
   - `uploadFile(...)` – uploads a file to the MSP
-  - `downloadByKey(fileKey, options?)` – downloads a file by key (supports range)
+  - `downloadFile(fileKey, options?)` – downloads a file by key (supports range)
 
 ### Utilities available via `files`
 - `hexToBytes(hex)`

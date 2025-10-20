@@ -322,7 +322,7 @@ await describeMspNet(
 
     it("Should download the file from the MSP through the backend using the SDK's MspClient", async () => {
       // Try to download the file from the MSP through the SDK's MspClient that uses the MSP backend
-      const downloadResponse = await mspClient.files.downloadByKey(fileKey.toHex());
+      const downloadResponse = await mspClient.files.downloadFile(fileKey.toHex());
 
       // Check that the download was successful
       strictEqual(downloadResponse.status, 200, "Download should return success");

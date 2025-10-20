@@ -366,7 +366,7 @@
         const fileKey = '0xde4a17999bc1482ba71737367e5d858a133ed1e13327a29c495ab976004a138f';
         const auth = await client.auth.getAuthStatus();
         if (!auth || auth.status !== 'Authenticated') throw new Error('Not authenticated');
-        const dl = await client.files.downloadByKey(fileKey);
+        const dl = await client.files.downloadFile(fileKey);
         window.__msp.downloadMeta = { status: dl?.status, contentType: dl?.contentType, contentLength: dl?.contentLength, contentRange: dl?.contentRange };
         console.log('[DOWNLOAD][KEY][META]', window.__msp.downloadMeta);
         // Save to user-selected location (browsers cannot write to /tmp)
@@ -396,7 +396,7 @@
         setStatus('Listing buckets...');
         const auth = await client.auth.getAuthStatus();
         if (!auth || auth.status !== 'Authenticated') throw new Error('Not authenticated');
-        const buckets = await client.buckets.list();
+        const buckets = await client.buckets.listBuckets();
         window.__msp.buckets = buckets;
         document.getElementById('bucketsCount').textContent = String(buckets.length);
         console.log('[BUCKETS][LIST]', buckets);
@@ -423,7 +423,7 @@
         const auth = await client.auth.getAuthStatus();
         if (!auth || auth.status !== 'Authenticated') throw new Error('Not authenticated');
         const bucketId = await getSelectedBucketId();
-        const bucket = await client.buckets.get(bucketId);
+        const bucket = await client.buckets.getBucket(bucketId);
         window.__msp.lastBucket = bucket;
         document.getElementById('bucketJson').textContent = JSON.stringify(bucket);
         console.log('[BUCKETS][GET]', bucket);
