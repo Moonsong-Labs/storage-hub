@@ -34,8 +34,7 @@ where
                     self.index_file_system_event(conn, fs_event).await?
                 }
                 pallet_file_system::Event::StorageRequestRevoked { .. }
-                | pallet_file_system::Event::SpStopStoringInsolventUser { .. }
-                | pallet_file_system::Event::FileDeletedFromIncompleteStorageRequest { .. } => {
+                | pallet_file_system::Event::SpStopStoringInsolventUser { .. } => {
                     trace!(target: LOG_TARGET, "Indexing file deletion event");
                     self.index_file_system_event(conn, fs_event).await?
                 }
@@ -73,29 +72,27 @@ where
                         bucket_id, old_msp_id, new_msp_id, value_prop_id);
                     self.index_file_system_event(conn, fs_event).await?
                 }
-                pallet_file_system::Event::BucketFileDeletionCompleted {
+                pallet_file_system::Event::BucketFileDeletionsCompleted {
                     user,
-                    file_key,
-                    file_size,
+                    file_keys,
                     bucket_id,
                     msp_id,
                     old_root,
                     new_root,
                 } => {
-                    trace!(target: LOG_TARGET, "Indexing MSP file deletion completed event for user: {:?}, file key: {:?}, file size: {}, bucket ID: {:?}, MSP ID: {:?}, old root: {:?}, new root: {:?}",
-                        user, file_key, file_size, bucket_id, msp_id, old_root, new_root);
+                    trace!(target: LOG_TARGET, "Indexing MSP file deletion completed event for user: {:?}, file keys: {:?}, bucket ID: {:?}, MSP ID: {:?}, old root: {:?}, new root: {:?}",
+                        user, file_keys, bucket_id, msp_id, old_root, new_root);
                     self.index_file_system_event(conn, fs_event).await?
                 }
-                pallet_file_system::Event::BspFileDeletionCompleted {
-                    user,
-                    file_key,
-                    file_size,
+                pallet_file_system::Event::BspFileDeletionsCompleted {
+                    users,
+                    file_keys,
                     bsp_id,
                     old_root,
                     new_root,
                 } => {
-                    trace!(target: LOG_TARGET, "Indexing BSP file deletion completed event for user: {:?}, file key: {:?}, file size: {}, BSP ID: {:?}, old root: {:?}, new root: {:?}",
-                        user, file_key, file_size, bsp_id, old_root, new_root);
+                    trace!(target: LOG_TARGET, "Indexing BSP file deletion completed event for users: {:?}, file keys: {:?}, BSP ID: {:?}, old root: {:?}, new root: {:?}",
+                        users, file_keys, bsp_id, old_root, new_root);
                     self.index_file_system_event(conn, fs_event).await?
                 }
                 pallet_file_system::Event::FileDeletionRequested {

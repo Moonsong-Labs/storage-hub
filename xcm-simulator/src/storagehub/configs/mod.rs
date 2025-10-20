@@ -891,6 +891,7 @@ impl pallet_file_system::Config for Runtime {
     type Nfts = Nfts;
     type CollectionInspector = BucketNfts;
     type MaxBatchConfirmStorageRequests = MaxBatchConfirmStorageRequests;
+    type MaxFileDeletionsPerExtrinsic = ConstU32<100>;
     type BspStopStoringFilePenalty = ConstU128<1>;
     type TreasuryAccount = TreasuryAccount;
     type MaxFilePathSize = ConstU32<512u32>;

@@ -3,7 +3,7 @@ import type { ApiTypes, AugmentedSubmittable, SubmittableExtrinsic, SubmittableE
 import type { Bytes, Compact, Option, Vec, bool, u128, u32, u64 } from '@polkadot/types-codec';
 import type { AnyNumber, IMethod, ITuple } from '@polkadot/types-codec/types';
 import type { AccountId32, Call, H256, MultiAddress } from '@polkadot/types/interfaces/runtime';
-import type { CumulusPrimitivesCoreAggregateMessageOrigin, CumulusPrimitivesParachainInherentParachainInherentData, PalletBalancesAdjustmentDirection, PalletFileSystemBucketMoveRequestResponse, PalletFileSystemFileKeyWithProof, PalletFileSystemFileOperationIntention, PalletFileSystemReplicationTarget, PalletFileSystemStorageRequestMspBucketResponse, PalletNftsAttributeNamespace, PalletNftsCancelAttributesApprovalWitness, PalletNftsCollectionConfig, PalletNftsDestroyWitness, PalletNftsItemConfig, PalletNftsItemTip, PalletNftsMintSettings, PalletNftsMintWitness, PalletNftsPreSignedAttributes, PalletNftsPreSignedMint, PalletNftsPriceWithDirection, PalletProofsDealerProof, ShParachainRuntimeConfigsRuntimeParamsRuntimeParameters, ShParachainRuntimeSessionKeys, SpRuntimeMultiSignature, SpTrieStorageProofCompactProof, SpWeightsWeightV2Weight, StagingXcmExecutorAssetTransferTransferType, StagingXcmV5Location, XcmV3WeightLimit, XcmVersionedAssetId, XcmVersionedAssets, XcmVersionedLocation, XcmVersionedXcm } from '@polkadot/types/lookup';
+import type { CumulusPrimitivesCoreAggregateMessageOrigin, CumulusPrimitivesParachainInherentParachainInherentData, PalletBalancesAdjustmentDirection, PalletFileSystemBucketMoveRequestResponse, PalletFileSystemFileDeletionRequest, PalletFileSystemFileKeyWithProof, PalletFileSystemFileOperationIntention, PalletFileSystemReplicationTarget, PalletFileSystemStorageRequestMspBucketResponse, PalletNftsAttributeNamespace, PalletNftsCancelAttributesApprovalWitness, PalletNftsCollectionConfig, PalletNftsDestroyWitness, PalletNftsItemConfig, PalletNftsItemTip, PalletNftsMintSettings, PalletNftsMintWitness, PalletNftsPreSignedAttributes, PalletNftsPreSignedMint, PalletNftsPriceWithDirection, PalletProofsDealerProof, ShParachainRuntimeConfigsRuntimeParamsRuntimeParameters, ShParachainRuntimeSessionKeys, SpRuntimeMultiSignature, SpTrieStorageProofCompactProof, SpWeightsWeightV2Weight, StagingXcmExecutorAssetTransferTransferType, StagingXcmV5Location, XcmV3WeightLimit, XcmVersionedAssetId, XcmVersionedAssets, XcmVersionedLocation, XcmVersionedXcm } from '@polkadot/types/lookup';
 export type __AugmentedSubmittable = AugmentedSubmittable<() => unknown>;
 export type __SubmittableExtrinsic<ApiType extends ApiTypes> = SubmittableExtrinsic<ApiType>;
 export type __SubmittableExtrinsicFunction<ApiType extends ApiTypes> = SubmittableExtrinsicFunction<ApiType>;
@@ -347,37 +347,41 @@ declare module '@polkadot/api-base/types/submittable' {
              **/
             deleteBucket: AugmentedSubmittable<(bucketId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256]>;
             /**
-             * Deletes a file from a provider's forest, changing its root
+             * Deletes files from a provider's forest, changing its root
              *
              * This extrinsic allows any actor to execute file deletion based on signed intentions
-             * from the `FileDeletionRequested` event. It requires a valid forest proof showing that the
-             * file exists in the specified provider's forest before allowing deletion.
+             * from the `FileDeletionRequested` event. It requires a valid forest proof showing that
+             * all files exist in the specified provider's forest before allowing deletion.
              *
-             * If `bsp_id` is `None`, the file will be deleted from the bucket forest.
-             * If `bsp_id` is `Some(id)`, the file will be deleted from the specified BSP's forest.
+             * Multiple files can be deleted in a single call using one forest proof bounded by [`MaxFileDeletionsPerExtrinsic`](Config::MaxFileDeletionsPerExtrinsic).
+             *
+             * If `bsp_id` is `None`, files will be deleted from the bucket forest.
+             * If `bsp_id` is `Some(id)`, files will be deleted from the specified BSP's forest.
              **/
-            deleteFile: AugmentedSubmittable<(fileOwner: AccountId32 | string | Uint8Array, signedIntention: PalletFileSystemFileOperationIntention | {
-                fileKey?: any;
-                operation?: any;
-            } | string | Uint8Array, signature: SpRuntimeMultiSignature | {
-                Ed25519: any;
-            } | {
-                Sr25519: any;
-            } | {
-                Ecdsa: any;
-            } | string | Uint8Array, bucketId: H256 | string | Uint8Array, location: Bytes | string | Uint8Array, size: u64 | AnyNumber | Uint8Array, fingerprint: H256 | string | Uint8Array, bspId: Option<H256> | null | Uint8Array | H256 | string, forestProof: SpTrieStorageProofCompactProof | {
+            deleteFiles: AugmentedSubmittable<(fileDeletions: Vec<PalletFileSystemFileDeletionRequest> | (PalletFileSystemFileDeletionRequest | {
+                fileOwner?: any;
+                signedIntention?: any;
+                signature?: any;
+                bucketId?: any;
+                location?: any;
+                size_?: any;
+                fingerprint?: any;
+            } | string | Uint8Array)[], bspId: Option<H256> | null | Uint8Array | H256 | string, forestProof: SpTrieStorageProofCompactProof | {
                 encodedNodes?: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [AccountId32, PalletFileSystemFileOperationIntention, SpRuntimeMultiSignature, H256, Bytes, u64, H256, Option<H256>, SpTrieStorageProofCompactProof]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Vec<PalletFileSystemFileDeletionRequest>, Option<H256>, SpTrieStorageProofCompactProof]>;
             /**
-             * Delete a file from an incomplete (rejected, expired or revoked) storage request.
+             * Delete files from an incomplete (rejected, expired or revoked) storage request.
              *
-             * This extrinsic allows fisherman nodes to delete files from providers when an IncompleteStorageRequestMetadata for the given file_key
-             * exist in the IncompleteStorageRequests mapping. It validates that the IncompleteStorageRequestMetadata exists,
-             * that the provider has the file in its Merkle Patricia Forest, and verifies the file key matches the metadata.
+             * This extrinsic allows fisherman nodes to delete files from providers when IncompleteStorageRequestMetadata
+             * for the given file keys exist in the IncompleteStorageRequests mapping. It validates that the metadata exists
+             * for each file, that the provider has the files in its Merkle Patricia Forest, and verifies the file keys match
+             * the metadata.
+             *
+             * Multiple files can be deleted in a single call using one forest proof bounded by [`MaxFileDeletionsPerExtrinsic`](Config::MaxFileDeletionsPerExtrinsic).
              **/
-            deleteFileForIncompleteStorageRequest: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array, bspId: Option<H256> | null | Uint8Array | H256 | string, forestProof: SpTrieStorageProofCompactProof | {
+            deleteFilesForIncompleteStorageRequest: AugmentedSubmittable<(fileKeys: Vec<H256> | (H256 | string | Uint8Array)[], bspId: Option<H256> | null | Uint8Array | H256 | string, forestProof: SpTrieStorageProofCompactProof | {
                 encodedNodes?: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, Option<H256>, SpTrieStorageProofCompactProof]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Vec<H256>, Option<H256>, SpTrieStorageProofCompactProof]>;
             /**
              * Issue a new storage request for a file
              **/

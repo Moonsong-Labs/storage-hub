@@ -167,6 +167,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       AboveThreshold: AugmentedError<ApiType>;
       /**
+       * Batch file deletion must contain files from a single bucket only.
+       **/
+      BatchFileDeletionMustContainSingleBucket: AugmentedError<ApiType>;
+      /**
        * BSP has already confirmed storing the given file.
        **/
       BspAlreadyConfirmed: AugmentedError<ApiType>;
@@ -223,6 +227,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       DividedByZero: AugmentedError<ApiType>;
       /**
+       * Duplicate file key detected within the same batch deletion request.
+       **/
+      DuplicateFileKeyInBatchFileDeletion: AugmentedError<ApiType>;
+      /**
        * Failed to fetch the dynamic-rate payment stream.
        **/
       DynamicRatePaymentStreamNotFound: AugmentedError<ApiType>;
@@ -262,6 +270,18 @@ declare module "@polkadot/api-base/types/errors" {
        * Failed to get the payment account of the provider.
        **/
       FailedToGetPaymentAccount: AugmentedError<ApiType>;
+      /**
+       * Failed to push file key to bounded vector during BSP file deletion
+       **/
+      FailedToPushFileKeyToBspDeletionVector: AugmentedError<ApiType>;
+      /**
+       * Failed to push file key to bounded vector during bucket file deletion
+       **/
+      FailedToPushFileKeyToBucketDeletionVector: AugmentedError<ApiType>;
+      /**
+       * Failed to push user to bounded vector during BSP file deletion
+       **/
+      FailedToPushUserToBspDeletionVector: AugmentedError<ApiType>;
       /**
        * Failed to query earliest volunteer tick
        **/
@@ -379,6 +399,10 @@ declare module "@polkadot/api-base/types/errors" {
        * No file keys to confirm storing
        **/
       NoFileKeysToConfirm: AugmentedError<ApiType>;
+      /**
+       * Requires at least 1 file key to be deleted.
+       **/
+      NoFileKeysToDelete: AugmentedError<ApiType>;
       /**
        * No global reputation weight set.
        **/
