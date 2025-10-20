@@ -15,13 +15,17 @@ export abstract class ModuleBase {
   /**
    * Normalize a user-provided path for HTTP query usage.
    * - Removes all leading '/' characters to avoid double slashes in URLs.
+   * - Collapses any repeated slashes in the middle or at the end to a single '/'.
    * Examples:
    *   "/foo/bar"  -> "foo/bar"
    *   "///docs"   -> "docs"
+   *   "foo//bar"  -> "foo/bar"
+   *   "///a//b///" -> "a/b/"
    *   "foo/bar"   -> "foo/bar" (unchanged)
    *   "/"         -> ""
    */
   protected normalizePath(path: string): string {
-    return path.replace(/^\/+/, "");
+    // Drop leading slashes (offset === 0), collapse others to '/'
+    return path.replace(/^\/+|\/{2,}/g, (_m, offset: number) => (offset === 0 ? "" : "/"));
   }
 }
