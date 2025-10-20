@@ -42,7 +42,9 @@ export class AuthModule extends ModuleBase {
     const account = wallet.account;
     const resolvedAddress = typeof account === "string" ? account : account?.address;
     if (!resolvedAddress || !account) {
-      throw new Error("Wallet client has no active account; set wallet.account before calling SIWE");
+      throw new Error(
+        "Wallet client has no active account; set wallet.account before calling SIWE"
+      );
     }
     // Get the checksummed address
     const address = getAddress(resolvedAddress);

@@ -53,5 +53,3 @@ describe("ModuleBase.normalizePath", () => {
     );
   });
 });
-
-

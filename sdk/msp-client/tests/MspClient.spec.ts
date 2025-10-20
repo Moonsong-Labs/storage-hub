@@ -8,5 +8,3 @@ describe("MspClient", () => {
     expect(client).toBeInstanceOf(MspClient);
   });
 });
-
-
