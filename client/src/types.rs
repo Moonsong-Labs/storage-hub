@@ -1,3 +1,9 @@
+use std::{
+    borrow::Borrow,
+    fmt::{Display, Error, Formatter},
+    ops::{Deref, DerefMut},
+};
+
 use kvdb::KeyValueDB;
 use shc_common::{traits::StorageEnableRuntime, types::StorageProofsMerkleTrieLayout};
 use shc_file_manager::{
@@ -22,7 +28,7 @@ pub trait ShNodeType<Runtime: StorageEnableRuntime> {
 impl<Runtime: StorageEnableRuntime> ShNodeType<Runtime> for (BspProvider, InMemoryStorageLayer) {
     type FL = InMemoryFileStorage<StorageProofsMerkleTrieLayout>;
     type FSH = ForestStorageCaching<
-        Vec<u8>,
+        ForestStorageKey,
         InMemoryForestStorage<StorageProofsMerkleTrieLayout>,
         Runtime,
     >;
@@ -31,7 +37,7 @@ impl<Runtime: StorageEnableRuntime> ShNodeType<Runtime> for (BspProvider, InMemo
 impl<Runtime: StorageEnableRuntime> ShNodeType<Runtime> for (BspProvider, RocksDbStorageLayer) {
     type FL = RocksDbFileStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>;
     type FSH = ForestStorageCaching<
-        Vec<u8>,
+        ForestStorageKey,
         RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>,
         Runtime,
     >;
@@ -40,7 +46,7 @@ impl<Runtime: StorageEnableRuntime> ShNodeType<Runtime> for (BspProvider, RocksD
 impl<Runtime: StorageEnableRuntime> ShNodeType<Runtime> for (MspProvider, InMemoryStorageLayer) {
     type FL = InMemoryFileStorage<StorageProofsMerkleTrieLayout>;
     type FSH = ForestStorageCaching<
-        Vec<u8>,
+        ForestStorageKey,
         InMemoryForestStorage<StorageProofsMerkleTrieLayout>,
         Runtime,
     >;
@@ -49,7 +55,7 @@ impl<Runtime: StorageEnableRuntime> ShNodeType<Runtime> for (MspProvider, InMemo
 impl<Runtime: StorageEnableRuntime> ShNodeType<Runtime> for (MspProvider, RocksDbStorageLayer) {
     type FL = RocksDbFileStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>;
     type FSH = ForestStorageCaching<
-        Vec<u8>,
+        ForestStorageKey,
         RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>,
         Runtime,
     >;
@@ -132,16 +138,20 @@ impl<DB> FileStorageT for RocksDbFileStorage<StorageProofsMerkleTrieLayout, DB> 
 
 /// The type of Forest Storage handler used by a BSP implements this trait.
 pub trait BspForestStorageHandlerT<Runtime: StorageEnableRuntime>:
-    ForestStorageHandler<Runtime, Key = Vec<u8>> + Clone + Send + Sync + 'static
-{
-}
-impl<Runtime: StorageEnableRuntime> BspForestStorageHandlerT<Runtime>
-    for ForestStorageCaching<Vec<u8>, InMemoryForestStorage<StorageProofsMerkleTrieLayout>, Runtime>
+    ForestStorageHandler<Runtime, Key = ForestStorageKey> + Clone + Send + Sync + 'static
 {
 }
 impl<Runtime: StorageEnableRuntime> BspForestStorageHandlerT<Runtime>
     for ForestStorageCaching<
-        Vec<u8>,
+        ForestStorageKey,
+        InMemoryForestStorage<StorageProofsMerkleTrieLayout>,
+        Runtime,
+    >
+{
+}
+impl<Runtime: StorageEnableRuntime> BspForestStorageHandlerT<Runtime>
+    for ForestStorageCaching<
+        ForestStorageKey,
         RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>,
         Runtime,
     >
@@ -150,16 +160,20 @@ impl<Runtime: StorageEnableRuntime> BspForestStorageHandlerT<Runtime>
 
 /// The type of Forest Storage handler used by an MSP implements this trait.
 pub trait MspForestStorageHandlerT<Runtime: StorageEnableRuntime>:
-    ForestStorageHandler<Runtime, Key = Vec<u8>> + Clone + Send + Sync + 'static
-{
-}
-impl<Runtime: StorageEnableRuntime> MspForestStorageHandlerT<Runtime>
-    for ForestStorageCaching<Vec<u8>, InMemoryForestStorage<StorageProofsMerkleTrieLayout>, Runtime>
+    ForestStorageHandler<Runtime, Key = ForestStorageKey> + Clone + Send + Sync + 'static
 {
 }
 impl<Runtime: StorageEnableRuntime> MspForestStorageHandlerT<Runtime>
     for ForestStorageCaching<
-        Vec<u8>,
+        ForestStorageKey,
+        InMemoryForestStorage<StorageProofsMerkleTrieLayout>,
+        Runtime,
+    >
+{
+}
+impl<Runtime: StorageEnableRuntime> MspForestStorageHandlerT<Runtime>
+    for ForestStorageCaching<
+        ForestStorageKey,
         RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>,
         Runtime,
     >
@@ -174,4 +188,58 @@ pub trait FishermanForestStorageHandlerT<Runtime: StorageEnableRuntime>:
 impl<Runtime: StorageEnableRuntime> FishermanForestStorageHandlerT<Runtime>
     for ForestStorageSingle<InMemoryForestStorage<StorageProofsMerkleTrieLayout>, Runtime>
 {
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ForestStorageKey(Vec<u8>);
+
+impl Deref for ForestStorageKey {
+    type Target = Vec<u8>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for ForestStorageKey {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl AsRef<[u8]> for ForestStorageKey {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl AsMut<[u8]> for ForestStorageKey {
+    fn as_mut(&mut self) -> &mut [u8] {
+        &mut self.0
+    }
+}
+
+impl Borrow<[u8]> for ForestStorageKey {
+    fn borrow(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl From<Vec<u8>> for ForestStorageKey {
+    fn from(value: Vec<u8>) -> Self {
+        Self(value)
+    }
+}
+
+impl From<ForestStorageKey> for Vec<u8> {
+    fn from(value: ForestStorageKey) -> Self {
+        value.0
+    }
+}
+
+impl Display for ForestStorageKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        let hex_string = hex::encode(self.0.clone());
+        write!(f, "0x{}", hex_string)
+    }
 }
