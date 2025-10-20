@@ -326,6 +326,7 @@
         }
         window.__msp.status = auth.status;
         setText('authStatus', auth.status);
+        console.log('[SIWE]', auth.status);
         setStatus('Authenticated');
       } catch (e) {
         setStatus('SIWE failed');

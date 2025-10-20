@@ -23,6 +23,7 @@ test.describe("MSP Web Page Flow", () => {
       if (text.startsWith("[MSP][VALUE-PROPS]")) seen.add("msp-value-props");
       if (text.startsWith("[MSP][FILE-INFO]")) seen.add("msp-file-info");
       if (text.startsWith("[PAYMENT][STREAMS]")) seen.add("payment-streams");
+      if (text.startsWith("[SIWE]")) seen.add("siwe");
     });
 
     const waitForConsoleTag = async (tag: string, action: () => Promise<void>) => {
@@ -50,8 +51,9 @@ test.describe("MSP Web Page Flow", () => {
 
     // SIWE authenticate and confirm status
     console.log("[TEST] click SIWE");
-    await page.getByRole("button", { name: "SIWE" }).click();
-    await expect.poll(async () => (await page.locator('#authStatus').textContent()) === 'Authenticated').toBeTruthy();
+    await waitForConsoleTag("siwe", async () => {
+      await page.getByRole("button", { name: "SIWE" }).click();
+    });
     console.log("✅ SIWE authenticated");
 
     // Upload adolphus.jpg
