@@ -3,8 +3,6 @@ import type {
   DownloadOptions,
   DownloadResult,
   FileInfo,
-  FileListResponse,
-  GetFilesOptions,
   UploadOptions,
   UploadReceipt
 } from "../types.js";
@@ -27,17 +25,6 @@ export class FilesModule extends ModuleBase {
           uploadedAt: new Date(wire.uploadedAt)
         })
       );
-  }
-
-  /** List files under a bucket path (root if no path) */
-  getFiles(bucketId: string, options?: GetFilesOptions): Promise<FileListResponse> {
-    const headers = this.withAuth();
-    const path = `/buckets/${encodeURIComponent(bucketId)}/files`;
-    return this.ctx.http.get<FileListResponse>(path, {
-      ...(headers ? { headers } : {}),
-      ...(options?.signal ? { signal: options.signal } : {}),
-      ...(options?.path ? { query: { path: this.normalizePath(options.path) } } : {})
-    });
   }
 
   /** Upload a file to a bucket with a specific key */
@@ -105,7 +92,7 @@ export class FilesModule extends ModuleBase {
   }
 
   /** Download a file by key */
-  async downloadByKey(fileKey: string, options?: DownloadOptions): Promise<DownloadResult> {
+  async downloadFile(fileKey: string, options?: DownloadOptions): Promise<DownloadResult> {
     const path = `/download/${encodeURIComponent(fileKey)}`;
     const baseHeaders: Record<string, string> = { Accept: "*/*" };
     if (options?.range) {

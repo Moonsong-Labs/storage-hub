@@ -3,7 +3,7 @@ import { ModuleBase } from "../base.js";
 
 export class BucketsModule extends ModuleBase {
   /** List all buckets for the current authenticated user */
-  list(signal?: AbortSignal): Promise<Bucket[]> {
+  listBuckets(signal?: AbortSignal): Promise<Bucket[]> {
     const headers = this.withAuth();
     return this.ctx.http.get<Bucket[]>("/buckets", {
       ...(headers ? { headers } : {}),
@@ -12,7 +12,7 @@ export class BucketsModule extends ModuleBase {
   }
 
   /** Get a specific bucket's metadata by its bucket ID */
-  get(bucketId: string, signal?: AbortSignal): Promise<Bucket> {
+  getBucket(bucketId: string, signal?: AbortSignal): Promise<Bucket> {
     const headers = this.withAuth();
     const path = `/buckets/${encodeURIComponent(bucketId)}`;
     return this.ctx.http.get<Bucket>(path, {
