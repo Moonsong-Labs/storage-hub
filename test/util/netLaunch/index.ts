@@ -160,18 +160,6 @@ export class NetworkLauncher {
         // biome-ignore lint/suspicious/noTemplateCurlyInString: It's for the yaml file that takes this syntax
         "--storage-path=/tmp/bsp/${BSP_IP:-default_bsp_ip}"
       );
-      if (this.type === "fullnet") {
-        composeYaml.services["sh-msp-1"].command.push("--storage-layer=rocks-db");
-        composeYaml.services["sh-msp-1"].command.push(
-          // biome-ignore lint/suspicious/noTemplateCurlyInString: It's for the yaml file that takes this syntax
-          "--storage-path=/tmp/msp/${MSP_IP:-default_msp_ip}"
-        );
-        composeYaml.services["sh-msp-2"].command.push("--storage-layer=rocks-db");
-      }
-      composeYaml.services["sh-msp-2"].command.push(
-        // biome-ignore lint/suspicious/noTemplateCurlyInString: It's for the yaml file that takes this syntax
-        "--storage-path=/tmp/msp/${MSP_IP:-default_msp_ip}"
-      );
     }
 
     if (this.config.indexer) {
