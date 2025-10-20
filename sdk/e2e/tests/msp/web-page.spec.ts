@@ -12,9 +12,6 @@ test.describe("MSP Web Page Flow", () => {
       // Echo page console to terminal for debugging
       console.log("[PAGE]", text);
       if (text.startsWith("[HEALTH]")) seen.add("health");
-      if (text.startsWith("[NONCE]")) seen.add("nonce");
-      if (text.startsWith("[SIGN]")) seen.add("sign");
-      if (text.startsWith("[VERIFY]")) seen.add("verify");
       if (text.startsWith("[UPLOAD][RECEIPT]")) seen.add("upload");
       if (text.startsWith("[DOWNLOAD][KEY][META]")) seen.add("dl-key");
       if (text.startsWith("[DOWNLOAD][PATH][META]")) seen.add("dl-path");
@@ -26,6 +23,7 @@ test.describe("MSP Web Page Flow", () => {
       if (text.startsWith("[MSP][VALUE-PROPS]")) seen.add("msp-value-props");
       if (text.startsWith("[MSP][FILE-INFO]")) seen.add("msp-file-info");
       if (text.startsWith("[PAYMENT][STREAMS]")) seen.add("payment-streams");
+      if (text.startsWith("[SIWE]")) seen.add("siwe");
     });
 
     const waitForConsoleTag = async (tag: string, action: () => Promise<void>) => {
@@ -51,23 +49,12 @@ test.describe("MSP Web Page Flow", () => {
     await expect.poll(() => seen.has("health")).toBeTruthy();
     console.log("✅ Get Health");
 
-    // Get Nonce
-    console.log("[TEST] click Get Nonce");
-    await page.getByRole("button", { name: "Get Nonce" }).click();
-    await expect.poll(() => seen.has("nonce")).toBeTruthy();
-    console.log("✅ Get Nonce");
-
-    // Sign Message
-    console.log("[TEST] click Sign Message");
-    await page.getByRole("button", { name: "Sign Message" }).click();
-    await expect.poll(() => seen.has("sign")).toBeTruthy();
-    console.log("✅ Sign Message");
-
-    // Verify (set token)
-    console.log("[TEST] click Verify (set token)");
-    await page.getByRole("button", { name: "Verify (set token)" }).click();
-    await expect.poll(() => seen.has("verify")).toBeTruthy();
-    console.log("✅ Verify");
+    // SIWE authenticate and confirm status
+    console.log("[TEST] click SIWE");
+    await waitForConsoleTag("siwe", async () => {
+      await page.getByRole("button", { name: "SIWE" }).click();
+    });
+    console.log("✅ SIWE authenticated");
 
     // Upload adolphus.jpg
     console.log("[TEST] click Upload adolphus.jpg");
