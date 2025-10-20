@@ -23,7 +23,10 @@ use shp_types::Hash;
 
 use crate::{
     config::MspConfig,
-    constants::database::DEFAULT_PAGE_LIMIT,
+    constants::{
+        database::DEFAULT_PAGE_LIMIT,
+        retry::get_retry_delay,
+    },
     data::{
         indexer_db::{client::DBClient, repository::PaymentStreamKind},
         rpc::StorageHubRpcClient,
@@ -61,21 +64,21 @@ pub struct MspService {
 
 impl MspService {
     /// Create a new MSP service
-    /// Only MSP nodes are supported so it returns an error if the node is not an MSP.
+    ///
+    /// This function tries to discover the MSP's provider ID and, if the node is not yet
+    /// registered as an MSP, it retries indefinitely with a stepped backoff strategy.
+    ///
+    /// Note: Keep in mind that if the node is never registered as an MSP, this function
+    /// will keep retrying indefinitely and the backend will fail to start. Monitor the
+    /// retry attempt count in logs to detect potential configuration issues.
     pub async fn new(
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
         msp_config: MspConfig,
     ) -> Result<Self, Error> {
-        // Discover provider id from the connected node.
-        // If the node is not yet an MSP (which happens in integration tests), retry with
-        // a bounded number of attempts.
-        // TODO: Think about making it so in integration tests we spin up the backend
-        // only after the MSP has been registered on-chain, to avoid having this retry logic.
-        let mut retry_attempts = 0;
-        let max_retries = 10;
-        let delay_between_retries_secs = 5;
+        let mut attempt = 0;
 
+        // Discover the Provider ID of the connected node.
         let msp_id = loop {
             let provider_id: RpcProviderId = rpc
                 .get_provider_id()
@@ -90,18 +93,15 @@ impl MspService {
                     ))
                 }
                 RpcProviderId::NotAProvider => {
-                    if retry_attempts >= max_retries {
-                        return Err(Error::BadRequest(
-                            "Connected node not a registered MSP after timeout".to_string(),
-                        ));
-                    }
+                    // Calculate the retry delay before the next attempt based on the attempt number
+                    let delay_secs = get_retry_delay(attempt);
                     warn!(
-                        "Connected node is not yet a registered MSP; retrying provider discovery... (attempt {})",
-                        retry_attempts + 1
+                        "Connected node is not yet a registered MSP; retrying provider discovery in {} seconds... (attempt {})",
+                        delay_secs,
+                        attempt + 1
                     );
-                    tokio::time::sleep(std::time::Duration::from_secs(delay_between_retries_secs))
-                        .await;
-                    retry_attempts += 1;
+                    tokio::time::sleep(std::time::Duration::from_secs(delay_secs)).await;
+                    attempt += 1;
                     continue;
                 }
             }

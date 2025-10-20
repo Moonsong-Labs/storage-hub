@@ -880,6 +880,25 @@ impl Convert<StorageDataUnit, Balance> for StorageDataUnitToBalance {
     }
 }
 
+// Converts a given signed message in a EIP-191 compliant message bytes to verify.
+/// EIP-191: https://eips.ethereum.org/EIPS/eip-191
+/// "\x19Ethereum Signed Message:\n" + len(message) + message"
+pub struct Eip191Adapter;
+impl shp_traits::MessageAdapter for Eip191Adapter {
+    fn bytes_to_verify(message: &[u8]) -> Vec<u8> {
+        const PREFIX: &str = "\x19Ethereum Signed Message:\n";
+        let len = message.len();
+        let mut len_string_buffer = itoa::Buffer::new();
+        let len_string = len_string_buffer.format(len);
+
+        let mut eth_message = Vec::with_capacity(PREFIX.len() + len_string.len() + len);
+        eth_message.extend_from_slice(PREFIX.as_bytes());
+        eth_message.extend_from_slice(len_string.as_bytes());
+        eth_message.extend_from_slice(message);
+        eth_message
+    }
+}
+
 impl pallet_file_system::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type WeightInfo = pallet_file_system::weights::SubstrateWeight<Runtime>;
@@ -941,6 +960,7 @@ impl pallet_file_system::Config for Runtime {
         runtime_params::dynamic_params::runtime_config::TickRangeToMaximumThreshold;
     type OffchainSignature = Signature;
     type OffchainPublicKey = <Signature as Verify>::Signer;
+    type IntentionMsgAdapter = Eip191Adapter;
 }
 
 const RANDOM_CHALLENGES_PER_BLOCK: u32 = 10;
