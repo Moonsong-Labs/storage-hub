@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Settings, Wallet, Database, CheckCircle, AlertCircle, ExternalLink } from 'lucide-react';
 import { createWalletClient, createPublicClient, custom, formatEther, getAddress, type WalletClient, type PublicClient } from 'viem';
 import { StorageHubClient } from '@storagehub-sdk/core';
@@ -31,12 +31,12 @@ export function OnePageDemo() {
   const [mspError, setMspError] = useState<string | null>(null);
 
   // Define the StorageHub chain configuration
-  const storageHubChain = {
+  const storageHubChain = useMemo(() => ({
     id: config.chainId,
     name: 'StorageHub Solochain EVM',
     nativeCurrency: { name: 'StorageHub', symbol: 'SH', decimals: 18 },
     rpcUrls: { default: { http: [config.rpcUrl] } },
-  };
+  }), [config.chainId, config.rpcUrl]);
 
   // Check if MetaMask is available (client-side only to avoid hydration mismatch)
   const [isMetaMaskAvailable, setIsMetaMaskAvailable] = useState<boolean | null>(null);
@@ -90,9 +90,9 @@ export function OnePageDemo() {
             params: [{ chainId: `0x${config.chainId.toString(16)}` }],
           });
           console.log('✅ Network switched successfully');
-        } catch (switchError: any) {
+        } catch (switchError: unknown) {
           // If chain doesn't exist, add it
-          if (switchError.code === 4902) {
+          if (switchError && typeof switchError === 'object' && 'code' in switchError && (switchError as { code: number }).code === 4902) {
             console.log('🔄 Network not found, adding StorageHub network...');
             await window.ethereum!.request({
               method: 'wallet_addEthereumChain',
@@ -156,19 +156,20 @@ export function OnePageDemo() {
         balance: formattedBalance
       });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('❌ Wallet connection failed:', error);
 
       // Provide more specific error messages
       let errorMessage = 'Failed to connect wallet';
-      if (error.message?.includes('User rejected')) {
+      const errorMsg = error && typeof error === 'object' && 'message' in error ? (error as { message: string }).message : '';
+      if (errorMsg.includes('User rejected')) {
         errorMessage = 'Connection cancelled by user';
-      } else if (error.message?.includes('network')) {
+      } else if (errorMsg.includes('network')) {
         errorMessage = 'Network configuration error. Please check your MetaMask settings.';
-      } else if (error.message?.includes('JSON-RPC')) {
+      } else if (errorMsg.includes('JSON-RPC')) {
         errorMessage = 'RPC connection error. Please ensure the StorageHub node is running.';
-      } else if (error.message) {
-        errorMessage = error.message;
+      } else if (errorMsg) {
+        errorMessage = errorMsg;
       }
 
       setWalletError(errorMessage);
@@ -188,8 +189,6 @@ export function OnePageDemo() {
       // Create MSP client
       const mspClient = await MspClient.connect({ baseUrl: config.mspUrl });
 
-      let authToken: string;
-
       if (config.mockAuth) {
         // MOCK AUTHENTICATION PATH
         const mockAddress = '0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac'; // Address that has buckets
@@ -198,7 +197,8 @@ export function OnePageDemo() {
         console.log('- Mock Address (with buckets):', mockAddress);
         console.log('- Mock mode enabled, skipping SIWE flow');
 
-        authToken = generateMockJWT(mockAddress); // Use mock address instead of wallet address
+        const mockToken = generateMockJWT(mockAddress); // Use mock address instead of wallet address
+        mspClient.setToken(mockToken);
         console.log('✅ Mock JWT generated for address with existing buckets');
 
       } else {
@@ -216,13 +216,9 @@ export function OnePageDemo() {
 
         // Note: authenticateSIWE handles token management internally
         // No need to extract token manually
-        authToken = 'authenticated'; // Placeholder since token is managed internally
       }
 
-      // Set the token (only needed for mock auth, real auth handles it internally)
-      if (config.mockAuth) {
-        // mspClient.setToken(authToken);
-      }
+      // Token management is handled internally by the SDK
       console.log(`✅ MSP client authenticated successfully (${config.mockAuth ? 'Mock' : 'Real'} auth)`);
 
       // Create StorageHub client

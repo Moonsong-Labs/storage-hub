@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Wallet, AlertCircle, ExternalLink, Copy, CheckCircle } from 'lucide-react';
 import { createWalletClient, createPublicClient, custom, defineChain, formatEther, type WalletClient, type PublicClient } from 'viem';
 
@@ -27,8 +27,6 @@ export function WalletConnection({
   onClientsReady,
   onAddressChange
 }: WalletConnectionProps) {
-  const [walletClient, setWalletClient] = useState<WalletClient | null>(null);
-  const [publicClient, setPublicClient] = useState<PublicClient | null>(null);
   const [walletState, setWalletState] = useState<WalletState>({
     address: null,
     balance: null,
@@ -98,7 +96,7 @@ export function WalletConnection({
   };
 
   // Connect to MetaMask using Viem
-  const connectWallet = async () => {
+  const connectWallet = useCallback(async () => {
     if (!isMetaMaskAvailable()) {
       setWalletState(prev => ({
         ...prev,
@@ -156,8 +154,6 @@ export function WalletConnection({
         transport
       });
 
-      setPublicClient(publicClientInstance);
-      setWalletClient(walletClientInstance);
       console.log('Viem clients created successfully');
 
       // Notify parent about ready clients
@@ -204,12 +200,10 @@ export function WalletConnection({
       }));
       onWalletConnected(false);
     }
-  };
+  }, [onWalletConnected, onClientsReady, onAddressChange, storageHubChain]);
 
   // Disconnect wallet
-  const disconnectWallet = () => {
-    setWalletClient(null);
-    setPublicClient(null);
+  const disconnectWallet = useCallback(() => {
     setWalletState({
       address: null,
       balance: null,
@@ -228,7 +222,7 @@ export function WalletConnection({
     if (onAddressChange) {
       onAddressChange(null);
     }
-  };
+  }, [onWalletConnected, onClientsReady, onAddressChange]);
 
 
   // Get chain ID
@@ -301,7 +295,7 @@ export function WalletConnection({
         }
       };
     }
-  }, [walletState.address]);
+  }, [walletState.address, connectWallet, disconnectWallet, onWalletConnected]);
 
   // Check for existing connection on mount
   useEffect(() => {
@@ -316,7 +310,7 @@ export function WalletConnection({
         })
         .catch(console.error);
     }
-  }, [configurationValid]);
+  }, [configurationValid, connectWallet]);
 
   const formatAddress = (address: string) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;

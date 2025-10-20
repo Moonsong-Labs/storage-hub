@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Play, Square, RefreshCcw } from 'lucide-react';
 
 interface EnvironmentSetupProps {
@@ -109,7 +109,7 @@ export function EnvironmentSetup({ onEnvironmentReady, environmentReady }: Envir
     return { ...service, status: 'error' };
   };
 
-  const checkAllServices = async () => {
+  const checkAllServices = useCallback(async () => {
     setIsChecking(true);
 
     const updatedServices = await Promise.all(
@@ -122,14 +122,14 @@ export function EnvironmentSetup({ onEnvironmentReady, environmentReady }: Envir
     onEnvironmentReady(allRunning);
 
     setIsChecking(false);
-  };
+  }, [services, onEnvironmentReady]);
 
   useEffect(() => {
     checkAllServices();
     // Check services every 30 seconds
     const interval = setInterval(checkAllServices, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [checkAllServices]);
 
   const getStatusColor = (status: ServiceStatus['status']) => {
     switch (status) {

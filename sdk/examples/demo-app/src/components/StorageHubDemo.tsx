@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { type WalletClient, type PublicClient } from 'viem';
-import { Upload, Download, Info, Settings } from 'lucide-react';
+import { Upload, Info, Settings } from 'lucide-react';
 import { MspClient } from '@storagehub-sdk/msp-client';
 import { StorageHubClient } from '@storagehub-sdk/core';
 import { FileManager } from './FileManager';
@@ -195,7 +195,7 @@ export function StorageHubDemo({ walletClient, publicClient, walletAddress }: St
                   <li>• Viem clients connected to StorageHub blockchain</li>
                   <li>• MSP backend authenticated and ready</li>
                   <li>• File upload/download functionality available</li>
-                  <li>• Switch to "File Management" tab to start</li>
+                  <li>• Switch to &quot;File Management&quot; tab to start</li>
                 </ul>
               </div>
             )}

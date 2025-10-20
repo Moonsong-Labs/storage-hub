@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
-import { Upload, Download, File, Folder, Hash, Info, X, CheckCircle, AlertCircle, Plus, Database, ArrowLeft } from 'lucide-react';
-import { type WalletClient, type PublicClient, formatEther } from 'viem';
+import { useState, useRef, useCallback } from 'react';
+import { Upload, Download, File, Folder, Hash, X, CheckCircle, AlertCircle, Plus, Database, ArrowLeft } from 'lucide-react';
+import { type WalletClient, type PublicClient } from 'viem';
 import { FileManager as StorageHubFileManager, initWasm, StorageHubClient, ReplicationLevel } from '@storagehub-sdk/core';
-import { MspClient, type UploadReceipt, type DownloadResult, type Bucket, type FileListResponse, type FileTree, type DownloadOptions } from '@storagehub-sdk/msp-client';
+import { MspClient, type UploadReceipt, type Bucket, type FileTree } from '@storagehub-sdk/msp-client';
 import { TypeRegistry } from '@polkadot/types';
 import type { AccountId20, H256 } from '@polkadot/types/interfaces';
 
@@ -59,7 +59,7 @@ interface FileDownloadState {
   downloadError: string | null;
 }
 
-export function FileManager({ walletClient, publicClient, walletAddress, mspClient, storageHubClient }: FileManagerProps) {
+export function FileManager({ publicClient, walletAddress, mspClient, storageHubClient }: FileManagerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [uploadState, setUploadState] = useState<FileUploadState>({
@@ -93,7 +93,6 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
 
   const [buckets, setBuckets] = useState<Bucket[]>([]);
   const [selectedBucketId, setSelectedBucketId] = useState<string>('');
-  const [walletBalance, setWalletBalance] = useState<string | null>(null);
   const [isLoadingBuckets, setIsLoadingBuckets] = useState<boolean>(false);
 
   // File Browser State
@@ -111,21 +110,6 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
     downloadingFiles: new Set(),
     downloadError: null,
   });
-
-  // Get wallet balance
-  useEffect(() => {
-    const getBalance = async () => {
-      if (publicClient && walletAddress) {
-        try {
-          const balance = await publicClient.getBalance({ address: walletAddress as `0x${string}` });
-          setWalletBalance(formatEther(balance));
-        } catch (error) {
-          console.error('Failed to get balance:', error);
-        }
-      }
-    };
-    getBalance();
-  }, [publicClient, walletAddress]);
 
   // File selection handler
   const handleFileSelect = useCallback(async (file: File) => {
@@ -224,7 +208,7 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
       } else {
         throw new Error('Bucket creation transaction failed');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Bucket creation failed:', error);
       setBucketState(prev => ({
         ...prev,
@@ -245,11 +229,11 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
 
     try {
 
-      let bucketList: any[] = [];
+      let bucketList: Bucket[] = [];
       try {
         bucketList = await mspClient.buckets.listBuckets();
-      } catch (sdkError: any) {
-        console.error('❌ Failed to load buckets:', sdkError?.message || sdkError);
+      } catch (sdkError: unknown) {
+        console.error('❌ Failed to load buckets:', sdkError instanceof Error ? sdkError.message : sdkError);
         bucketList = []; // Fallback to empty array
       }
 
@@ -257,8 +241,8 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
       const freshBuckets = bucketList || [];
       setBuckets(freshBuckets);
 
-    } catch (error: any) {
-      console.error('❌ Failed to refresh buckets:', error?.message || error);
+    } catch (error: unknown) {
+      console.error('❌ Failed to refresh buckets:', error instanceof Error ? error.message : error);
     } finally {
       setIsLoadingBuckets(false);
     }
@@ -308,7 +292,7 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
 
       console.log(`📁 Loaded ${extractedFiles.length} files`);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('❌ Failed to load files:', error);
       setFileBrowserState(prev => ({
         ...prev,
@@ -385,9 +369,8 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
       }
 
       const bucketIdH256 = registry.createType("H256", bucketIdForH256) as H256;
-      const fileKey = await fileManager.computeFileKey(owner, bucketIdH256, fileLocation);
-
-
+      // File key is computed by the MSP backend during upload
+      await fileManager.computeFileKey(owner, bucketIdH256, fileLocation);
 
       setUploadState(prev => ({ ...prev, uploadProgress: 25 }));
 
@@ -413,8 +396,8 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
           0 // replicas (used only when ReplicationLevel = Custom, like sdk-precompiles)
           // No gas options - let it estimate naturally like sdk-precompiles
         );
-      } catch (error: any) {
-        console.error('❌ Storage request failed:', error?.message || error);
+      } catch (error: unknown) {
+        console.error('❌ Storage request failed:', error instanceof Error ? error.message : error);
         throw error;
       }
 
@@ -451,8 +434,8 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
           fileLocation // location parameter like sdk-precompiles
         );
 
-      } catch (error: any) {
-        console.error('❌ MSP upload failed:', error?.message || error);
+      } catch (error: unknown) {
+        console.error('❌ MSP upload failed:', error instanceof Error ? error.message : error);
         throw error;
       }
 
@@ -465,7 +448,7 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
         uploadProgress: 100
       }));
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Upload failed:', error);
       setUploadState(prev => ({
         ...prev,
@@ -803,7 +786,7 @@ export function FileManager({ walletClient, publicClient, walletAddress, mspClie
 
       console.log('✅ File download completed:', file.name);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('❌ Download failed:', error);
       setDownloadState(prev => ({
         ...prev,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { CheckCircle, AlertCircle, Settings, Globe, Database } from 'lucide-react';
 
 interface ConfigurationPanelProps {
@@ -53,7 +53,7 @@ export function ConfigurationPanel({
   const [customHeaders, setCustomHeaders] = useState('');
 
   // Test MSP connection
-  const testMspConnection = async () => {
+  const testMspConnection = useCallback(async () => {
     if (!environmentReady) {
       setMspStatus('error');
       return false;
@@ -68,7 +68,7 @@ export function ConfigurationPanel({
       } as RequestInit);
 
       if (response.ok) {
-        const health = await response.json();
+        await response.json(); // Verify response is valid JSON
         setMspStatus('connected');
         return true;
       } else {
@@ -80,10 +80,10 @@ export function ConfigurationPanel({
       setMspStatus('error');
       return false;
     }
-  };
+  }, [mspConfig, environmentReady]);
 
   // Test blockchain connection
-  const testBlockchainConnection = async () => {
+  const testBlockchainConnection = useCallback(async () => {
     if (!environmentReady) {
       setBlockchainStatus('error');
       return false;
@@ -135,10 +135,10 @@ export function ConfigurationPanel({
       setBlockchainStatus('error');
       return false;
     }
-  };
+  }, [blockchainConfig, environmentReady]);
 
   // Test all connections
-  const testConnections = async () => {
+  const testConnections = useCallback(async () => {
     const [mspOk, blockchainOk] = await Promise.all([
       testMspConnection(),
       testBlockchainConnection()
@@ -146,7 +146,7 @@ export function ConfigurationPanel({
 
     const allValid = mspOk && blockchainOk;
     onConfigurationValid(allValid);
-  };
+  }, [onConfigurationValid, testMspConnection, testBlockchainConnection]);
 
   // Parse custom headers
   const parseCustomHeaders = (headersString: string): Record<string, string> => {
@@ -171,7 +171,7 @@ export function ConfigurationPanel({
       const timeoutId = setTimeout(testConnections, 1000);
       return () => clearTimeout(timeoutId);
     }
-  }, [mspConfig, blockchainConfig, environmentReady]);
+  }, [mspConfig, blockchainConfig, environmentReady, testConnections]);
 
   const getStatusIcon = (status: 'checking' | 'connected' | 'error') => {
     switch (status) {
