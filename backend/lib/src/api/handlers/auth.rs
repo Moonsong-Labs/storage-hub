@@ -1,4 +1,5 @@
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use tracing::info;
 
 use crate::{
     error::Error,
@@ -10,6 +11,7 @@ pub async fn nonce(
     State(services): State<Services>,
     Json(payload): Json<NonceRequest>,
 ) -> Result<impl IntoResponse, Error> {
+    info!("POST /auth/nonce - address: {}", payload.address);
     let response = services
         .auth
         .challenge(&payload.address, payload.chain_id)
@@ -21,6 +23,7 @@ pub async fn verify(
     State(services): State<Services>,
     Json(payload): Json<VerifyRequest>,
 ) -> Result<impl IntoResponse, Error> {
+    info!("POST /auth/verify");
     let response = services
         .auth
         .login(&payload.message, &payload.signature)
@@ -32,6 +35,7 @@ pub async fn refresh(
     State(services): State<Services>,
     AuthenticatedUser { address }: AuthenticatedUser,
 ) -> Result<impl IntoResponse, Error> {
+    info!("POST /auth/refresh - user: {}", address);
     let response = services.auth.refresh(&address).await?;
     Ok(Json(response))
 }
@@ -40,6 +44,7 @@ pub async fn logout(
     State(services): State<Services>,
     AuthenticatedUser { address }: AuthenticatedUser,
 ) -> Result<impl IntoResponse, Error> {
+    info!("POST /auth/logout - user: {}", address);
     services.auth.logout(&address).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -48,6 +53,7 @@ pub async fn profile(
     State(services): State<Services>,
     AuthenticatedUser { address }: AuthenticatedUser,
 ) -> Result<impl IntoResponse, Error> {
+    info!("GET /auth/profile - user: {}", address);
     let response = services.auth.profile(&address).await?;
     Ok(Json(response))
 }

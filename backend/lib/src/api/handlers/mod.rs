@@ -1,4 +1,5 @@
 use axum::{extract::State, response::IntoResponse, Json};
+use tracing::info;
 
 use crate::{
     error::Error,
@@ -12,21 +13,25 @@ pub mod files;
 // ==================== MSP Info Handlers ====================
 
 pub async fn info(State(services): State<Services>) -> Result<impl IntoResponse, Error> {
+    info!("GET /info");
     let response = services.msp.get_info().await?;
     Ok(Json(response))
 }
 
 pub async fn stats(State(services): State<Services>) -> Result<impl IntoResponse, Error> {
+    info!("GET /stats");
     let response = services.msp.get_stats().await?;
     Ok(Json(response))
 }
 
 pub async fn value_props(State(services): State<Services>) -> Result<impl IntoResponse, Error> {
+    info!("GET /value-props");
     let response = services.msp.get_value_props().await?;
     Ok(Json(response))
 }
 
 pub async fn msp_health(State(services): State<Services>) -> Result<impl IntoResponse, Error> {
+    info!("GET /health");
     let response = services.health.check_health().await;
     Ok(Json(response))
 }
@@ -37,6 +42,7 @@ pub async fn payment_streams(
     State(services): State<Services>,
     AuthenticatedUser { address }: AuthenticatedUser,
 ) -> Result<impl IntoResponse, Error> {
+    info!("GET /payment_streams - user: {}", address);
     let response = services.msp.get_payment_streams(&address).await?;
     Ok(Json(response))
 }
