@@ -33,11 +33,6 @@ max_concurrent_requests = 100
 # Whether to verify TLS certificates when using wss:// connections
 # Set to false only for development environments with self-signed certificates
 verify_tls = true
-# Number of retry attempts for RPC connection initialization (default: 30)
-# Useful when the RPC node might not be immediately available on startup
-rpc_retry_attempts = 30
-# Delay in seconds between RPC connection retry attempts (default: 2)
-rpc_retry_delay_secs = 2
 # Enable mock mode for testing (requires 'mocks' feature to be enabled at compile time)
 # When true, uses mock RPC connections instead of real network calls
 # mock_mode = false

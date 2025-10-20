@@ -9,9 +9,8 @@ use crate::constants::{
     },
     database::DEFAULT_DATABASE_URL,
     rpc::{
-        DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_MSP_CALLBACK_URL, DEFAULT_RPC_RETRY_ATTEMPTS,
-        DEFAULT_RPC_RETRY_DELAY_SECS, DEFAULT_RPC_URL, DEFAULT_TIMEOUT_SECS,
-        DEFAULT_UPLOAD_RETRY_ATTEMPTS, DEFAULT_UPLOAD_RETRY_DELAY_SECS,
+        DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_MSP_CALLBACK_URL, DEFAULT_RPC_URL,
+        DEFAULT_TIMEOUT_SECS, DEFAULT_UPLOAD_RETRY_ATTEMPTS, DEFAULT_UPLOAD_RETRY_DELAY_SECS,
     },
     server::{DEFAULT_HOST, DEFAULT_PORT},
 };
@@ -100,10 +99,6 @@ pub struct StorageHubConfig {
     pub max_concurrent_requests: Option<usize>,
     /// Whether to verify TLS certificates for secure connections
     pub verify_tls: bool,
-    /// Number of retry attempts for RPC connection initialization
-    pub rpc_retry_attempts: u32,
-    /// Delay in seconds between RPC connection retry attempts
-    pub rpc_retry_delay_secs: u64,
     /// When enabled, uses mock RPC operations for testing
     #[cfg(feature = "mocks")]
     pub mock_mode: bool,
@@ -161,8 +156,6 @@ impl Default for Config {
                 timeout_secs: Some(DEFAULT_TIMEOUT_SECS),
                 max_concurrent_requests: Some(DEFAULT_MAX_CONCURRENT_REQUESTS),
                 verify_tls: true,
-                rpc_retry_attempts: DEFAULT_RPC_RETRY_ATTEMPTS,
-                rpc_retry_delay_secs: DEFAULT_RPC_RETRY_DELAY_SECS,
                 #[cfg(feature = "mocks")]
                 mock_mode: true,
             },
