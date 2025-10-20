@@ -290,7 +290,7 @@
         window.__msp.status = h?.status;
         window.__msp.health = h;
         console.log('[HEALTH]', h);
-        setStatus(`Health: ${h?.status || 'unknown'}`);
+        setStatus(`Health: ${h.status}`);
       } catch (e) {
         setStatus('Health failed');
         window.__msp.error = e?.message || String(e);
@@ -321,8 +321,11 @@
 
         await client.auth.SIWE(wallet);
         const auth = await client.auth.getAuthStatus();
-        window.__msp.status = auth?.status;
-        setText('authStatus', auth?.status || 'unknown');
+        if (!auth || auth.status !== 'Authenticated') {
+          throw new Error('Authentication failed');
+        }
+        window.__msp.status = auth.status;
+        setText('authStatus', auth.status);
         setStatus('Authenticated');
       } catch (e) {
         setStatus('SIWE failed');
