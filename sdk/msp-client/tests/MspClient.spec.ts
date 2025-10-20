@@ -1,4 +1,4 @@
-import { MspClient } from "../index.js";
+import { MspClient } from "../src/index.js";
 import { describe, expect, it } from "vitest";
 
 // Dummy test to satisfy Vitest until real client-side tests are implemented.

@@ -20,6 +20,7 @@ docify = "0.2.8"
 
 [dependencies]
 codec = { workspace = true }
+itoa = { workspace = true }
 num-bigint = { workspace = true }
 hex-literal = { workspace = true }
 log = { workspace = true }

@@ -74,7 +74,23 @@ export interface NonceResponse {
   message: string;
 }
 
-export interface VerifyResponse {
+export enum AuthState {
+  NotAuthenticated = "NotAuthenticated",
+  TokenExpired = "TokenExpired",
+  Authenticated = "Authenticated"
+}
+
+export interface AuthStatus {
+  status: AuthState;
+  [k: string]: unknown;
+}
+
+export interface UserInfo {
+  address: string;
+  ens: string;
+}
+
+export interface Session {
   token: string;
   user: {
     address: string;
