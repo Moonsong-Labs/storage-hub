@@ -110,15 +110,12 @@ export interface Bucket {
 
 export type FileTree = {
   name: string;
-} & (
-    | { type: "file"; sizeBytes: number; fileKey: string }
-    | { type: "folder" }
-  );
+} & ({ type: "file"; sizeBytes: number; fileKey: string } | { type: "folder" });
 
 export type FileTreeRoot = {
   name: string;
   children: FileTree[];
-}
+};
 
 export interface FileListResponse {
   bucketId: string;
