@@ -36,15 +36,21 @@ export class AuthModule extends ModuleBase {
    * - Derives address, fetches nonce, signs message, verifies and stores session.
    */
   async SIWE(wallet: WalletClient, signal?: AbortSignal): Promise<void> {
-    const rawAddress = (await wallet.getAddresses())?.[0];
-    if (!rawAddress) throw new Error("No wallet addresses found");
-    if (!wallet.account) throw new Error("Wallet client has no active account");
-
+    // Resolve the current active account from the WalletClient.
+    // - Browser wallets (e.g., MetaMask) surface the user-selected address here.
+    // - Viem/local wallets must set `wallet.account` explicitly before calling.
+    const account = wallet.account;
+    const resolvedAddress = typeof account === "string" ? account : account?.address;
+    if (!resolvedAddress || !account) {
+      throw new Error("Wallet client has no active account; set wallet.account before calling SIWE");
+    }
     // Get the checksummed address
-    const address = getAddress(rawAddress);
+    const address = getAddress(resolvedAddress);
     const chainId = await wallet.getChainId();
     const { message } = await this.getNonce(address, chainId, signal);
-    const signature = await wallet.signMessage({ account: wallet.account, message });
+
+    // Sign using the active account resolved above (string or Account object)
+    const signature = await wallet.signMessage({ account, message });
 
     this.ctx.session = await this.verify(message, signature, signal);
   }
