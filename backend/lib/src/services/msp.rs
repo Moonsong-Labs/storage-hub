@@ -226,7 +226,12 @@ impl MspService {
         loop {
             let buckets = self
                 .postgres
-                .get_user_buckets(&self.msp_id, &user_address.to_string(), Some(DEFAULT_PAGE_LIMIT), Some(offset))
+                .get_user_buckets(
+                    &self.msp_id,
+                    &user_address.to_string(),
+                    Some(DEFAULT_PAGE_LIMIT),
+                    Some(offset),
+                )
                 .await?;
 
             let fetched_count = buckets.len();

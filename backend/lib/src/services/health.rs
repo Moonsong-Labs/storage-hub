@@ -76,7 +76,10 @@ impl HealthService {
         let (status, message) = match self.storage.health_check().await {
             Ok(true) => (Self::HEALTHY, None),
             Ok(false) => (Self::UNHEALTHY, Some("Storage is not healthy".to_string())),
-            Err(e) => (Self::UNHEALTHY, Some(format!("Storage health check failed: {e}"))),
+            Err(e) => (
+                Self::UNHEALTHY,
+                Some(format!("Storage health check failed: {e}")),
+            ),
         };
 
         ComponentHealth {
@@ -88,7 +91,10 @@ impl HealthService {
     async fn check_postgres(&self) -> ComponentHealth {
         let (status, message) = match self.db.test_connection().await {
             Ok(_) => (Self::HEALTHY, None),
-            Err(e) => (Self::UNHEALTHY, Some(format!("Database connection failed: {e}"))),
+            Err(e) => (
+                Self::UNHEALTHY,
+                Some(format!("Database connection failed: {e}")),
+            ),
         };
 
         ComponentHealth {
@@ -115,7 +121,10 @@ impl HealthService {
                 Self::UNHEALTHY,
                 Some("Connected node is not a storage provider".to_string()),
             ),
-            Err(e) => (Self::UNHEALTHY, Some(format!("RPC provider ID check failed: {e}"))),
+            Err(e) => (
+                Self::UNHEALTHY,
+                Some(format!("RPC provider ID check failed: {e}")),
+            ),
         };
 
         ComponentHealth {

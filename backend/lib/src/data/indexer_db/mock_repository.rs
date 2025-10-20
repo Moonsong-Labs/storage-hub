@@ -484,21 +484,43 @@ impl IndexerOpsMut for MockRepository {
             updated_at: now,
         };
 
-        // TODO: increase bucket size and file count
+        // Update bucket statistics
+        let mut buckets = self.buckets.write().await;
+        if let Some(bucket) = buckets.get_mut(&bucket_id) {
+            bucket.file_count += 1;
+            bucket.total_size += BigDecimal::from(size);
+            bucket.updated_at = now;
+        } else {
+            return Err(RepositoryError::not_found("Bucket"));
+        }
+        drop(buckets);
+
         self.files.write().await.insert(id, file.clone());
         Ok(file)
     }
 
     async fn delete_file(&self, file_key: &Hash) -> RepositoryResult<()> {
         let mut files = self.files.write().await;
-        let id_to_remove = files
+        let file_to_remove = files
             .values()
             .find(|f| f.file_key == file_key.as_bytes())
-            .map(|f| f.id);
+            .map(|f| (f.id, f.bucket_id, f.size));
 
-        if let Some(id) = id_to_remove {
-            // TODO: decrease bucket size and file count
+        if let Some((id, bucket_id, size)) = file_to_remove {
             files.remove(&id);
+            drop(files);
+
+            // Update bucket statistics
+            let now = Utc::now().naive_utc();
+            let mut buckets = self.buckets.write().await;
+            if let Some(bucket) = buckets.get_mut(&bucket_id) {
+                bucket.file_count = bucket.file_count.saturating_sub(1);
+                bucket.total_size -= BigDecimal::from(size);
+                bucket.updated_at = now;
+            } else {
+                return Err(RepositoryError::not_found("Bucket"));
+            }
+
             Ok(())
         } else {
             Err(RepositoryError::not_found("File"))
