@@ -28,7 +28,7 @@ pub struct Bucket {
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
     pub merkle_root: Vec<u8>,
-    pub value_prop_id: Option<String>,
+    pub value_prop_id: String,
     pub total_size: BigDecimal,
     pub file_count: i64,
 }
@@ -43,7 +43,7 @@ impl Bucket {
         collection_id: Option<String>,
         private: bool,
         merkle_root: Vec<u8>,
-        value_prop_id: Option<String>,
+        value_prop_id: String,
     ) -> Result<Self, diesel::result::Error> {
         let bucket = diesel::insert_into(bucket::table)
             .values((

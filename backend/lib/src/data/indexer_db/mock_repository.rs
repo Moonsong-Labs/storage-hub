@@ -433,7 +433,7 @@ impl IndexerOpsMut for MockRepository {
             updated_at: now,
             file_count: test::bucket::DEFAULT_FILE_COUNT,
             total_size: test::bucket::DEFAULT_BUCKET_SIZE.into(),
-            value_prop_id: None,
+            value_prop_id: format!("{:#?}", test::bucket::DEFAULT_VALUE_PROP_ID),
         };
 
         self.buckets.write().await.insert(id, bucket.clone());

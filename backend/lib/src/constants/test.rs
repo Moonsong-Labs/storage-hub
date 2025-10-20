@@ -58,6 +58,7 @@ pub mod merkle {
 /// Test bucket data
 pub mod bucket {
     use hex_literal::hex;
+    use shp_types::Hash;
 
     /// Default bucket name
     pub const DEFAULT_BUCKET_NAME: &str = "test_bucket";
@@ -71,6 +72,9 @@ pub mod bucket {
 
     /// Default merkle root for repository (single zero byte)
     pub const DEFAULT_MERKLE_ROOT: &[u8] = &[0u8];
+
+    /// Default value prop id (Hash::zero)
+    pub const DEFAULT_VALUE_PROP_ID: Hash = Hash::zero();
 
     /// Default number of files in a bucket for new buckets
     pub const DEFAULT_FILE_COUNT: i64 = 0;

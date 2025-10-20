@@ -31,9 +31,7 @@ impl Bucket {
             root: hex::encode(&db.merkle_root),
             is_public: !db.private,
             size_bytes,
-            // TODO: the value_prop_id is not stored by the indexer, it's discarded
-            // see [index_file_system_event](client/indexer-service/src/handler.rs:async fn index_file_system_event)
-            value_prop_id: "unknown".to_owned(),
+            value_prop_id: db.value_prop_id.clone(),
             file_count,
         }
     }

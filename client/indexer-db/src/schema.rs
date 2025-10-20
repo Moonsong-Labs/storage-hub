@@ -40,7 +40,7 @@ diesel::table! {
         created_at -> Timestamp,
         updated_at -> Timestamp,
         merkle_root -> Bytea,
-        value_prop_id -> Nullable<Varchar>,
+        value_prop_id -> Varchar,
         total_size -> Numeric,
         file_count -> Int8,
     }

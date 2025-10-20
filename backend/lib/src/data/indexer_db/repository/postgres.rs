@@ -257,7 +257,7 @@ impl IndexerOpsMut for Repository {
             None, // No collection_id
             private,
             test::bucket::DEFAULT_MERKLE_ROOT.to_vec(),
-            None, // No value prop id
+            format!("{:#?}", test::bucket::DEFAULT_VALUE_PROP_ID),
         )
         .await?;
 

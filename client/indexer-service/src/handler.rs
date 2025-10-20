@@ -230,7 +230,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     collection_id.map(|id| id.to_string()),
                     *private,
                     root.as_ref().to_vec(),
-                    Some(format!("{:#?}", value_prop_id)), // using .to_string() leads to truncation
+                    format!("{:#?}", value_prop_id), // using .to_string() leads to truncation
                 )
                 .await?;
             }
