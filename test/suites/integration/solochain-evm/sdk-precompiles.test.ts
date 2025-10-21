@@ -262,7 +262,7 @@ await describeMspNet(
         "Upload should return expected bucket ID"
       );
       strictEqual(
-        uploadResponse.fingerprint,
+        `0x${uploadResponse.fingerprint}`,
         (await fileManager.getFingerprint()).toString(),
         "Upload should return expected fingerprint"
       );
