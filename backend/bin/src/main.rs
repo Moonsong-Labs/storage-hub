@@ -64,14 +64,19 @@ async fn main() -> Result<()> {
     // Initialize services
     let config = load_config()?;
     let (host, port) = (config.host.clone(), config.port);
-    info!("Server will run on {}:{}", host, port);
+    info!("Configuration loaded - host: {}, port: {}", host, port);
+    debug!(target: "main", "Database URL: {}", config.database.url);
+    debug!(target: "main", "RPC URL: {}", config.storage_hub.rpc_url);
+    debug!(target: "main", "MSP callback URL: {}", config.storage_hub.msp_callback_url);
 
     let memory_storage = InMemoryStorage::new();
     let storage = Arc::new(BoxedStorageWrapper::new(memory_storage));
 
+    info!("Initializing services...");
     let postgres_client = create_postgres_client(&config).await?;
     let rpc_client = create_rpc_client_with_retry(&config).await?;
     let services = Services::new(storage, postgres_client, rpc_client, config.clone()).await;
+    info!("All services initialized successfully");
 
     // Start server
     let app = create_app(services);
@@ -83,6 +88,7 @@ async fn main() -> Result<()> {
 
     axum::serve(listener, app).await.context("Server error")?;
 
+    info!("Shutting down StorageHub Backend");
     Ok(())
 }
 
@@ -93,7 +99,7 @@ fn load_config() -> Result<Config> {
         Some(path) => Config::from_file(&path)
             .with_context(|| format!("Failed to read config file: {}", path))?,
         None => {
-            debug!("No config file specified, using defaults");
+            debug!(target: "main::load_config", "No config file specified, using defaults");
             Config::default()
         }
     };
@@ -119,6 +125,8 @@ fn load_config() -> Result<Config> {
 }
 
 async fn create_postgres_client(config: &Config) -> Result<Arc<DBClient>> {
+    debug!(target: "main::create_postgres_client", "Creating PostgreSQL client");
+
     #[cfg(feature = "mocks")]
     {
         if config.database.mock_mode {
@@ -155,6 +163,8 @@ async fn create_postgres_client(config: &Config) -> Result<Arc<DBClient>> {
 }
 
 async fn create_rpc_client(config: &Config) -> Result<Arc<StorageHubRpcClient>> {
+    debug!(target: "main::create_rpc_client", "Creating RPC client");
+
     #[cfg(feature = "mocks")]
     {
         if config.storage_hub.mock_mode {
@@ -202,6 +212,7 @@ async fn create_rpc_client_with_retry(config: &Config) -> Result<Arc<StorageHubR
                 // Calculate the retry delay before the next attempt based on the attempt number
                 let delay_secs = get_retry_delay(attempt);
                 warn!(
+                    target: "main::create_rpc_client_with_retry",
                     "RPC not ready yet (attempt {}), retrying in {} seconds. Error: {:?}",
                     attempt + 1,
                     delay_secs,
