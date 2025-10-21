@@ -173,7 +173,7 @@ impl DBClient {
             user_account = %user_account,
             "Fetching payment streams for user"
         );
-				
+
         self.repository
             .get_payment_streams_for_user(user_account)
             .await
