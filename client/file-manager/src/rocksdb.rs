@@ -933,8 +933,18 @@ where
             }
         }
 
+        info!(target: LOG_TARGET, "Deleting {} file keys with prefix {:?}", file_keys_to_delete.len(), bucket_id_prefix);
+
         for h_file_key in file_keys_to_delete {
-            self.delete_file(&h_file_key)?;
+            debug!(target: LOG_TARGET, "Deleting file key {:?}", h_file_key);
+
+            let result = self.delete_file(&h_file_key);
+            if let Err(e) = result {
+                error!(target: LOG_TARGET, "Failed to delete file key {:?}: {:?}", h_file_key, e);
+                return Err(e);
+            }
+
+            debug!(target: LOG_TARGET, "Successfully deleted file key {:?}", h_file_key);
         }
 
         Ok(())
