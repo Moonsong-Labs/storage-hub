@@ -23,10 +23,7 @@ use shp_types::Hash;
 
 use crate::{
     config::MspConfig,
-    constants::{
-        database::DEFAULT_PAGE_LIMIT,
-        retry::get_retry_delay,
-    },
+    constants::{database::DEFAULT_PAGE_LIMIT, retry::get_retry_delay},
     data::{
         indexer_db::{client::DBClient, repository::PaymentStreamKind},
         rpc::StorageHubRpcClient,
