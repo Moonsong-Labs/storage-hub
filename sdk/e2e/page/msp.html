@@ -10,8 +10,8 @@
       "imports": {
         "@storagehub-sdk/msp-client": "/msp-client/dist/index.browser.js",
         "@storagehub-sdk/core": "/core/dist/index.browser.js",
-        "@polkadot/types": "https://cdn.jsdelivr.net/npm/@polkadot/types@10.9.1/+esm",
-        "@polkadot/types/interfaces": "https://cdn.jsdelivr.net/npm/@polkadot/types@10.9.1/interfaces/+esm",
+        "@polkadot/types": "https://cdn.jsdelivr.net/npm/@polkadot/types@16.4.7/+esm",
+        "@polkadot/types/interfaces": "https://cdn.jsdelivr.net/npm/@polkadot/types@16.4.7/interfaces/+esm",
         "ethers": "https://cdn.jsdelivr.net/npm/ethers@6.15.0/+esm",
         "viem": "https://cdn.jsdelivr.net/npm/viem@2.9.20/+esm",
         "viem/accounts": "https://cdn.jsdelivr.net/npm/viem@2.9.20/accounts/+esm"
@@ -121,41 +121,10 @@
     <section class="card">
       <h3>3) Auth</h3>
       <div class="row">
-        <button id="get-nonce">Get Nonce</button>
-        <button id="sign-message">Sign Message</button>
-        <button id="verify">Verify (set token)</button>
+        <button id="siwe-auth">SIWE</button>
       </div>
       <div class="row">
-        <div><strong>Nonce:</strong> <span id="nonce" class="mono"></span></div>
-      </div>
-      <div class="row">
-        <div><strong>Message:</strong> <span id="message" class="mono"></span></div>
-      </div>
-      <div class="row">
-        <div><strong>Nonce Response:</strong></div>
-      </div>
-      <pre id="nonceJson" class="mono" style="white-space: pre-wrap; word-break: break-word;"></pre>
-      <div class="row">
-        <div><strong>Signature:</strong> <span id="signature" class="mono"></span></div>
-      </div>
-      <div class="row">
-        <div><strong>Sign Response:</strong></div>
-      </div>
-      <pre id="signJson" class="mono" style="white-space: pre-wrap; word-break: break-word;"></pre>
-      <div class="row">
-        <div><strong>Token:</strong> <span id="token" class="mono"></span></div>
-      </div>
-      <div class="row">
-        <div><strong>User:</strong> <span id="user" class="mono"></span></div>
-      </div>
-      <div class="row">
-        <div><strong>Verify Response:</strong></div>
-      </div>
-      <pre id="verifyJson" class="mono" style="white-space: pre-wrap; word-break: break-word;"></pre>
-      <div class="row">
-        <label for="manualToken">Manual Token</label>
-        <input id="manualToken" type="text" placeholder="paste dummy token here" />
-        <button id="set-token-manual">Set Token (Manual)</button>
+        <div><strong>Auth Status:</strong> <span id="authStatus" class="mono"></span></div>
       </div>
     </section>
 
@@ -167,7 +136,6 @@
       </div>
       <div class="row">
         <button id="download-key">Download by Key</button>
-        <button id="download-path">Download by Path</button>
       </div>
       <div class="row">
         <div><strong>Upload Receipt:</strong> <span id="uploadReceipt" class="mono"></span></div>
@@ -269,21 +237,6 @@
         .replace(/=+$/g, '');
     }
 
-    function generateMockJwt(address) {
-      const header = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9'; // {"alg":"HS256","typ":"JWT"}
-      const now = Math.floor(Date.now() / 1000);
-      const user = address || '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
-      const payload = {
-        sub: user,
-        iat: now,
-        exp: now + 3600,
-        address: user
-      };
-      const payloadB64 = toBase64Url(JSON.stringify(payload));
-      const signatureB64 = toBase64Url('mock_signature');
-      return `${header}.${payloadB64}.${signatureB64}`;
-    }
-
     async function loadAdolphusBlob() {
       const candidates = ['/e2e/page/adolphus.jpg', '/docker/resource/adolphus.jpg'];
       for (const url of candidates) {
@@ -333,11 +286,11 @@
       try {
         await ensureConnected();
         setStatus('Health...');
-        const h = await client.getHealth();
+        const h = await client.info.getHealth();
         window.__msp.status = h?.status;
         window.__msp.health = h;
         console.log('[HEALTH]', h);
-        setStatus(`Health: ${h?.status || 'unknown'}`);
+        setStatus(`Health: ${h.status}`);
       } catch (e) {
         setStatus('Health failed');
         window.__msp.error = e?.message || String(e);
@@ -345,86 +298,40 @@
       }
     };
 
-    document.getElementById('get-nonce').onclick = async () => {
+    document.getElementById('siwe-auth').onclick = async () => {
       try {
         await ensureConnected();
-        setStatus('Requesting nonce...');
-        let address = document.getElementById('address').value.trim();
-        const chainId = 1;
-        // Auto-fill a valid address if none/invalid is provided
-        const isValidEth = /^0x[a-fA-F0-9]{40}$/.test(address);
-        if (!isValidEth) {
-          const { LocalWallet } = await import('@storagehub-sdk/core');
-          const wallet = LocalWallet.fromMnemonic('test test test test test test test test test test test junk');
-          address = await wallet.getAddress();
-          const addrInput = document.getElementById('address');
-          if (addrInput) addrInput.value = address;
+        setStatus('Authenticating (SIWE)...');
+        const { createWalletClient, custom } = await import('viem');
+        const { privateKeyToAccount } = await import('viem/accounts');
+
+        // Deterministic dev key (Hardhat default first account)
+        const account = privateKeyToAccount('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80');
+
+        // Minimal transport: only eth_chainId is needed by authenticateSIWE
+        const wallet = createWalletClient({
+          account,
+          transport: custom({
+            async request({ method }) {
+              if (method === 'eth_chainId') return '0x2c3e6'; // 181222
+              throw new Error('Unsupported JSON-RPC method in test transport');
+            }
+          })
+        });
+
+        await client.auth.SIWE(wallet);
+        const auth = await client.auth.getAuthStatus();
+        if (!auth || auth.status !== 'Authenticated') {
+          throw new Error('Authentication failed');
         }
-        const res = await client.getNonce(address, chainId);
-        const { message } = res;
-        window.__msp.message = message; window.__msp.nonceResponse = res;
-        console.log('[NONCE]', res);
-        setStatus('Nonce ready');
+        window.__msp.status = auth.status;
+        setText('authStatus', auth.status);
+        console.log('[SIWE]', auth.status);
+        setStatus('Authenticated');
       } catch (e) {
-        setStatus('Get nonce failed');
+        setStatus('SIWE failed');
         window.__msp.error = e?.message || String(e);
-        console.error('[NONCE][ERROR]', e);
-      }
-    };
-
-    document.getElementById('sign-message').onclick = async () => {
-      try {
-        setStatus('Signing message...');
-        const msg = window.__msp.message;
-        if (!msg) throw new Error('No message to sign. Click Get Nonce first.');
-        const { LocalWallet } = await import('@storagehub-sdk/core');
-        const wallet = LocalWallet.fromMnemonic('test test test test test test test test test test test junk');
-        const address = await wallet.getAddress();
-        const sig = await wallet.signMessage(msg);
-        window.__msp.signature = sig;
-        window.__msp.signResponse = { address, message: msg, signature: sig };
-        console.log('[SIGN]', window.__msp.signResponse);
-        setStatus('Signed');
-      } catch (e) {
-        setStatus('Sign failed');
-        window.__msp.error = e?.message || String(e);
-        console.error('[SIGN][ERROR]', e);
-      }
-    };
-
-    document.getElementById('verify').onclick = async () => {
-      try {
-        await ensureConnected();
-        setStatus('Verifying...');
-        const { message, signature } = window.__msp;
-        if (!message || !signature) throw new Error('Need message and signature.');
-        const res = await client.verify(message, signature);
-        const { token, user } = res;
-        window.__msp.token = token; window.__msp.user = user;
-        client.setToken(token);
-        console.log('[VERIFY]', res);
-        setStatus('Verified / token set');
-      } catch (e) {
-        setStatus('Verify failed');
-        window.__msp.error = e?.message || String(e);
-        console.error('[VERIFY][ERROR]', e);
-      }
-    };
-
-    document.getElementById('set-token-manual').onclick = async () => {
-      try {
-        await ensureConnected();
-        const inputEl = document.getElementById('manualToken');
-        const val = inputEl && typeof (inputEl).value === 'string' ? inputEl.value.trim() : '';
-        if (!val) throw new Error('Enter a token first');
-        client.setToken(val);
-        window.__msp.token = val;
-        console.log('[TOKEN][SET-MANUAL]', val);
-        setStatus('Token set (manual)');
-      } catch (e) {
-        setStatus('Set token failed');
-        window.__msp.error = e?.message || String(e);
-        console.error('[TOKEN][ERROR]', e);
+        console.error('[SIWE][ERROR]', e);
       }
     };
 
@@ -432,20 +339,16 @@
       try {
         if (!client) throw new Error('Connect MSP first');
         setStatus('Uploading...');
+        const auth = await client.auth.getAuthStatus();
+        if (!auth || auth.status !== 'Authenticated') throw new Error('Not authenticated');
         const owner = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
         const bucketId = '0x34eb5f637e05fc18f857ccb013250076534192189894d174ee3aa6d3525f6970';
-        const adolphusFingerprint = client.hexToBytes('0x34eb5f637e05fc18f857ccb013250076534192189894d174ee3aa6d3525f6970');
+        const adolphusFingerprint = client.files.hexToBytes('0x34eb5f637e05fc18f857ccb013250076534192189894d174ee3aa6d3525f6970');
         const location = 'files/e2e-bucket/adolphus.jpg';
         const blob = await loadAdolphusBlob();
-        const metadata = await client.formFileMetadata(owner, bucketId, location, adolphusFingerprint, BigInt(blob.size));
-        const fileKey = '0x' + Array.from(await client.computeFileKey(metadata)).map(b => b.toString(16).padStart(2, '0')).join('');
-
-        // Use a valid-looking mock JWT for mocked backend
-        const jwt = generateMockJwt();
-        client.setToken(jwt);
-        window.__msp.token = jwt;
-        console.log('[TOKEN][AUTO]', window.__msp.token);
-        const receipt = await client.uploadFile(bucketId, fileKey, blob, owner, location);
+        const metadata = await client.files.formFileMetadata(owner, bucketId, location, adolphusFingerprint, BigInt(blob.size));
+        const fileKey = '0x' + Array.from(await client.files.computeFileKey(metadata)).map(b => b.toString(16).padStart(2, '0')).join('');
+        const receipt = await client.files.uploadFile(bucketId, fileKey, blob, owner, location);
         window.__msp.uploadReceipt = receipt;
         console.log('[UPLOAD][RECEIPT]', receipt);
         setStatus('Upload done');
@@ -461,13 +364,9 @@
         if (!client) throw new Error('Connect MSP first');
         setStatus('Downloading by key...');
         const fileKey = '0xde4a17999bc1482ba71737367e5d858a133ed1e13327a29c495ab976004a138f';
-        if (!window.__msp.token) {
-          const jwt = generateMockJwt();
-          client.setToken(jwt);
-          window.__msp.token = jwt;
-          console.log('[TOKEN][AUTO]', jwt);
-        }
-        const dl = await client.downloadByKey(fileKey);
+        const auth = await client.auth.getAuthStatus();
+        if (!auth || auth.status !== 'Authenticated') throw new Error('Not authenticated');
+        const dl = await client.files.downloadFile(fileKey);
         window.__msp.downloadMeta = { status: dl?.status, contentType: dl?.contentType, contentLength: dl?.contentLength, contentRange: dl?.contentRange };
         console.log('[DOWNLOAD][KEY][META]', window.__msp.downloadMeta);
         // Save to user-selected location (browsers cannot write to /tmp)
@@ -488,50 +387,16 @@
       }
     };
 
-    document.getElementById('download-path').onclick = async () => {
-      try {
-        if (!client) throw new Error('Connect MSP first');
-        setStatus('Downloading by path...');
-        const bucketId = 'e2e-bucket';
-        const path = 'files/e2e-bucket/adolphus.jpg';
-        if (!window.__msp.token) {
-          const jwt = generateMockJwt();
-          client.setToken(jwt);
-          window.__msp.token = jwt;
-          console.log('[TOKEN][AUTO]', jwt);
-        }
-        const dl = await client.downloadByLocation(bucketId, path);
-        window.__msp.downloadMeta = { status: dl?.status, contentType: dl?.contentType, contentLength: dl?.contentLength, contentRange: dl?.contentRange };
-        console.log('[DOWNLOAD][PATH][META]', window.__msp.downloadMeta);
-        // Save to user-selected location (browsers cannot write to /tmp)
-        const blob = await new Response(dl.stream).blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = '/tmp/download_by_location.txt';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-        setStatus('Download (path) done');
-      } catch (e) {
-        setStatus('Download (path) failed');
-        window.__msp.error = e?.message || String(e);
-        console.error('[DOWNLOAD][PATH][ERROR]', e);
-      }
-    };
+
 
     // Buckets
     document.getElementById('list-buckets').onclick = async () => {
       try {
         if (!client) throw new Error('Connect MSP first');
         setStatus('Listing buckets...');
-        if (!window.__msp.token) {
-          const jwt = generateMockJwt();
-          client.setToken(jwt);
-          window.__msp.token = jwt;
-        }
-        const buckets = await client.listBuckets();
+        const auth = await client.auth.getAuthStatus();
+        if (!auth || auth.status !== 'Authenticated') throw new Error('Not authenticated');
+        const buckets = await client.buckets.listBuckets();
         window.__msp.buckets = buckets;
         document.getElementById('bucketsCount').textContent = String(buckets.length);
         console.log('[BUCKETS][LIST]', buckets);
@@ -555,13 +420,10 @@
       try {
         if (!client) throw new Error('Connect MSP first');
         setStatus('Getting bucket...');
-        if (!window.__msp.token) {
-          const jwt = generateMockJwt();
-          client.setToken(jwt);
-          window.__msp.token = jwt;
-        }
+        const auth = await client.auth.getAuthStatus();
+        if (!auth || auth.status !== 'Authenticated') throw new Error('Not authenticated');
         const bucketId = await getSelectedBucketId();
-        const bucket = await client.getBucket(bucketId);
+        const bucket = await client.buckets.getBucket(bucketId);
         window.__msp.lastBucket = bucket;
         document.getElementById('bucketJson').textContent = JSON.stringify(bucket);
         console.log('[BUCKETS][GET]', bucket);
@@ -577,15 +439,12 @@
       try {
         if (!client) throw new Error('Connect MSP first');
         setStatus('Getting files...');
-        if (!window.__msp.token) {
-          const jwt = generateMockJwt();
-          client.setToken(jwt);
-          window.__msp.token = jwt;
-        }
+        const auth = await client.auth.getAuthStatus();
+        if (!auth || auth.status !== 'Authenticated') throw new Error('Not authenticated');
         const bucketId = await getSelectedBucketId();
         const pathEl = document.getElementById('pathInput');
         const pathVal = pathEl && typeof pathEl.value === 'string' ? pathEl.value.trim() : '';
-        const files = await client.getFiles(bucketId, pathVal ? { path: pathVal } : undefined);
+        const files = await client.buckets.getFiles(bucketId, pathVal ? { path: pathVal } : undefined);
         window.__msp.files = files;
         document.getElementById('filesJson').textContent = JSON.stringify(files, null, 2);
         console.log('[BUCKETS][FILES]', files);
@@ -602,7 +461,7 @@
       try {
         await ensureConnected();
         setStatus('Getting info...');
-        const info = await client.getInfo();
+        const info = await client.info.getInfo();
         window.__msp.info = info;
         document.getElementById('infoJson').textContent = JSON.stringify(info, null, 2);
         console.log('[MSP][INFO]', info);
@@ -618,7 +477,7 @@
       try {
         await ensureConnected();
         setStatus('Getting stats...');
-        const stats = await client.getStats();
+        const stats = await client.info.getStats();
         window.__msp.stats = stats;
         document.getElementById('statsJson').textContent = JSON.stringify(stats, null, 2);
         console.log('[MSP][STATS]', stats);
@@ -634,7 +493,7 @@
       try {
         await ensureConnected();
         setStatus('Getting value props...');
-        const valueProps = await client.getValuePropositions();
+        const valueProps = await client.info.getValuePropositions();
         window.__msp.valueProps = valueProps;
         document.getElementById('valuePropsJson').textContent = JSON.stringify(valueProps, null, 2);
         console.log('[MSP][VALUE-PROPS]', `count=${Array.isArray(valueProps) ? valueProps.length : 0}`, JSON.stringify(valueProps, null, 2));
@@ -650,12 +509,7 @@
       try {
         await ensureConnected();
         setStatus('Getting payment streams...');
-        if (!window.__msp.token) {
-          const jwt = generateMockJwt();
-          client.setToken(jwt);
-          window.__msp.token = jwt;
-        }
-        const streams = await client.getPaymentStreams();
+        const streams = await client.info.getPaymentStreams();
         window.__msp.paymentStreams = streams;
         document.getElementById('paymentStreamsJson').textContent = JSON.stringify(streams, null, 2);
         console.log('[PAYMENT][STREAMS]', JSON.stringify(streams));
@@ -671,16 +525,13 @@
       try {
         await ensureConnected();
         setStatus('Getting file info...');
-        if (!window.__msp.token) {
-          const jwt = generateMockJwt();
-          client.setToken(jwt);
-          window.__msp.token = jwt;
-        }
+        const auth = await client.auth.getAuthStatus();
+        if (!auth || auth.status !== 'Authenticated') throw new Error('Not authenticated');
         const bucketEl = document.getElementById('bucketInfoIdInput');
         const fileKeyEl = document.getElementById('fileKeyInput');
         const bucketId = bucketEl && typeof bucketEl.value === 'string' && bucketEl.value.trim() ? bucketEl.value.trim() : 'd8793e4187f5642e96016a96fb33849a7e03eda91358b311bbd426ed38b26692';
         const fileKey = fileKeyEl && typeof fileKeyEl.value === 'string' && fileKeyEl.value.trim() ? fileKeyEl.value.trim() : 'e901c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f7';
-        const info = await client.getFileInfo(bucketId, fileKey);
+        const info = await client.files.getFileInfo(bucketId, fileKey);
         window.__msp.fileInfo = info;
         document.getElementById('fileInfoJson').textContent = JSON.stringify(info, null, 2);
         console.log('[MSP][FILE-INFO]', info);
