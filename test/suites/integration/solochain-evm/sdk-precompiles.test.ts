@@ -92,15 +92,11 @@ await describeMspNet(
       });
 
       // Ensure the connection works
-      const healthResponse = await mspClient.getHealth();
+      const healthResponse = await mspClient.info.getHealth();
       assert(healthResponse.status === "healthy", "MSP health response should be healthy");
 
       // Set up the authentication with the MSP backend
-      const chainId = SH_EVM_SOLOCHAIN_CHAIN_ID;
-      const { message } = await mspClient.getNonce(account.address, chainId);
-      const signature = await walletClient.signMessage({ account, message });
-      const verified = await mspClient.verify(message, signature);
-      mspClient.setToken(verified.token);
+      await mspClient.auth.SIWE(walletClient);
     });
 
     it("Postgres DB is ready", async () => {
@@ -241,7 +237,7 @@ await describeMspNet(
 
     it("Should upload the file to the MSP through the backend using the SDK's StorageHubClient", async () => {
       // Try to upload the file to the MSP through the SDK's MspClient that uses the MSP backend
-      const uploadResponse = await mspClient.uploadFile(
+      const uploadResponse = await mspClient.files.uploadFile(
         bucketId,
         fileKey.toHex(),
         await fileManager.getFileBlob(),
@@ -316,7 +312,7 @@ await describeMspNet(
       const onChain = maybeOnChain.unwrap();
 
       // Retrieve payment streams for the authenticated using the SDK
-      const { streams } = await mspClient.getPaymentStreams();
+      const { streams } = await mspClient.info.getPaymentStreams();
       const sdkPs = streams.find((s) => s.provider.toLowerCase() === mspId.toLowerCase());
       assert(sdkPs, "SDK did not return a payment stream for the expected MSP");
 
@@ -330,7 +326,7 @@ await describeMspNet(
 
     it("Should download the file from the MSP through the backend using the SDK's MspClient", async () => {
       // Try to download the file from the MSP through the SDK's MspClient that uses the MSP backend
-      const downloadResponse = await mspClient.downloadByKey(fileKey.toHex());
+      const downloadResponse = await mspClient.files.downloadFile(fileKey.toHex());
 
       // Check that the download was successful
       strictEqual(downloadResponse.status, 200, "Download should return success");
