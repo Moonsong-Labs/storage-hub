@@ -125,5 +125,6 @@ sp_api::decl_runtime_apis! {
         fn storage_requests_by_msp(msp_id: MainStorageProviderId) -> BTreeMap<H256, StorageRequestMetadata>;
         fn pending_storage_requests_by_msp(msp_id: MainStorageProviderId) -> BTreeMap<H256, StorageRequestMetadata>;
         fn query_incomplete_storage_request_metadata(file_key: FileKey) -> Result<IncompleteStorageRequestMetadataResponse<AccountId, BucketId, StorageDataUnit, Fingerprint, BackupStorageProviderId>, QueryIncompleteStorageRequestMetadataError>;
+        fn list_incomplete_storage_request_keys(start_after: Option<FileKey>, limit: u32) -> Vec<FileKey>;
     }
 }
