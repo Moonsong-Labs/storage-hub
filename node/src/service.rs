@@ -362,7 +362,9 @@ where
             builder.with_indexer_db_pool(Some(db_pool));
 
             // Spawn the fisherman service
-            builder.with_fisherman(client.clone()).await;
+            builder
+                .with_fisherman(client.clone(), &fisherman_options)
+                .await;
 
             RpcConfig::default()
         }
