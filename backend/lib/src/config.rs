@@ -60,14 +60,14 @@ impl Default for LogFormat {
 impl LogFormat {
     /// Parse log format from environment variable
     pub fn from_env() -> Self {
-        std::env::var("STORAGEHUB_LOG_FORMAT")
+        std::env::var("SH_BACKEND_LOG_FORMAT")
             .ok()
             .and_then(|s| match s.to_lowercase().as_str() {
                 "text" => Some(Self::Text),
                 "json" => Some(Self::Json),
                 "auto" => Some(Self::Auto),
                 _ => {
-                    warn!(value = %s, "Invalid STORAGEHUB_LOG_FORMAT value, using default");
+                    warn!(value = %s, "Invalid SH_BACKEND_LOG_FORMAT value, using default");
                     None
                 }
             })
