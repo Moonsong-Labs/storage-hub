@@ -31,8 +31,10 @@ pub async fn get_file_info(
     Path((bucket_id, file_key)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, Error> {
     info!(
-        "GET /buckets/{}/info/{} - user: {}",
-        bucket_id, file_key, address
+        bucket_id = %bucket_id,
+        file_key = %file_key,
+        user = %address,
+        "GET file info"
     );
     let response = services
         .msp
@@ -48,7 +50,7 @@ pub async fn internal_upload_by_key(
     Path(file_key): Path<String>,
     body: Bytes,
 ) -> (StatusCode, impl IntoResponse) {
-    info!("PUT /internal/uploads/{}", file_key);
+    info!(file_key = %file_key, "PUT internal upload");
     // TODO: re-add auth
     // FIXME: make this only callable by the rpc itself
     // let _auth = extract_bearer_token(&auth)?;
@@ -73,7 +75,7 @@ pub async fn download_by_key(
     AuthenticatedUser { address }: AuthenticatedUser,
     Path(file_key): Path<String>,
 ) -> Result<impl IntoResponse, Error> {
-    info!("GET /download/{} - user: {}", file_key, address);
+    info!(file_key = %file_key, user = %address, "GET download file");
     // Validate file_key is a hex string
     let key = file_key.trim_start_matches("0x");
     if hex::decode(key).is_err() {
@@ -135,8 +137,10 @@ pub async fn upload_file(
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, Error> {
     info!(
-        "PUT /buckets/{}/upload/{} - user: {}",
-        bucket_id, file_key, address
+        bucket_id = %bucket_id,
+        file_key = %file_key,
+        user = %address,
+        "PUT upload file"
     );
     // TODO(AUTH): verify that user has permissions to access this file
 
@@ -211,8 +215,10 @@ pub async fn distribute_file(
     Path((bucket_id, file_key)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, Error> {
     info!(
-        "POST /buckets/{}/distribute/{} - user: {}",
-        bucket_id, file_key, address
+        bucket_id = %bucket_id,
+        file_key = %file_key,
+        user = %address,
+        "POST distribute file"
     );
     // TODO(AUTH): verify that user has permissions to access this file
 

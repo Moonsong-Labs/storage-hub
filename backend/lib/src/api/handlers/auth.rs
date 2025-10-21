@@ -11,7 +11,7 @@ pub async fn nonce(
     State(services): State<Services>,
     Json(payload): Json<NonceRequest>,
 ) -> Result<impl IntoResponse, Error> {
-    info!("POST /auth/nonce - address: {}", payload.address);
+    info!(address = %payload.address, chain_id = payload.chain_id, "POST auth nonce");
     let response = services
         .auth
         .challenge(&payload.address, payload.chain_id)
@@ -23,7 +23,7 @@ pub async fn verify(
     State(services): State<Services>,
     Json(payload): Json<VerifyRequest>,
 ) -> Result<impl IntoResponse, Error> {
-    info!("POST /auth/verify");
+    info!("POST auth verify");
     let response = services
         .auth
         .login(&payload.message, &payload.signature)
@@ -35,7 +35,7 @@ pub async fn refresh(
     State(services): State<Services>,
     AuthenticatedUser { address }: AuthenticatedUser,
 ) -> Result<impl IntoResponse, Error> {
-    info!("POST /auth/refresh - user: {}", address);
+    info!(user = %address, "POST auth refresh");
     let response = services.auth.refresh(&address).await?;
     Ok(Json(response))
 }
@@ -44,7 +44,7 @@ pub async fn logout(
     State(services): State<Services>,
     AuthenticatedUser { address }: AuthenticatedUser,
 ) -> Result<impl IntoResponse, Error> {
-    info!("POST /auth/logout - user: {}", address);
+    info!(user = %address, "POST auth logout");
     services.auth.logout(&address).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -53,7 +53,7 @@ pub async fn profile(
     State(services): State<Services>,
     AuthenticatedUser { address }: AuthenticatedUser,
 ) -> Result<impl IntoResponse, Error> {
-    info!("GET /auth/profile - user: {}", address);
+    info!(user = %address, "GET auth profile");
     let response = services.auth.profile(&address).await?;
     Ok(Json(response))
 }

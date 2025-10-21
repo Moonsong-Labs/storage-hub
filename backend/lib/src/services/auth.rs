@@ -102,7 +102,7 @@ impl AuthService {
         let scheme = "https";
 
         // TODO: make uri match endpoint
-        let uri = format!("{scheme}://{domain}/{AUTH_NONCE_ENDPOINT}");
+        let uri = format!("{scheme}://{domain}{AUTH_NONCE_ENDPOINT}");
         let statement = "I authenticate to this MSP Backend with my address";
         let version = 1;
         let issued_at = chrono::Utc::now().to_rfc3339();
@@ -165,7 +165,7 @@ impl AuthService {
             .await
             .map_err(|_| Error::Internal)?;
 
-        info!("Generated auth challenge for address: {}", address);
+        info!(address = %address, "Generated auth challenge");
         Ok(NonceResponse { message })
     }
 
@@ -231,7 +231,7 @@ impl AuthService {
         // Finally, generate JWT token
         let token = self.generate_jwt(&address)?;
 
-        info!("Successful login for address: {}", address);
+        info!(address = %address, "Successful login");
 
         // TODO: Store the session token in database
         // to allow users to logout (invalidate their session)
@@ -251,7 +251,7 @@ impl AuthService {
 
         let token = self.generate_jwt(user_address)?;
 
-        info!("Token refreshed for address: {}", user_address);
+        info!(address = %user_address, "Token refreshed");
         Ok(TokenResponse { token })
     }
 
@@ -267,7 +267,7 @@ impl AuthService {
     }
 
     pub async fn logout(&self, user_address: &str) -> Result<(), Error> {
-        info!("User logged out: {}", user_address);
+        info!(address = %user_address, "User logged out");
         // TODO: Invalidate the token in session storage
         // For now, the nonce cleanup happens automatically on expiration
         // or during verification (one-time use)

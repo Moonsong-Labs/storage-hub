@@ -613,8 +613,10 @@ impl MspService {
             .to_string();
 
         info!(
-            "File upload completed - bucket: {}, file_key: {}, chunks: {}",
-            bucket_id, file_key, total_chunks
+            bucket_id = %bucket_id,
+            file_key = %file_key,
+            chunks = total_chunks,
+            "File upload completed"
         );
 
         Ok(FileUploadResponse {
@@ -772,7 +774,7 @@ impl MspService {
 
             match result {
                 Ok(_raw) => {
-                    info!("Successfully sent upload request to MSP peer {:?}", peer_id);
+                    info!(peer_id = ?peer_id, "Successfully sent upload request to MSP peer");
                     return Ok(());
                 }
                 Err(e) => {
