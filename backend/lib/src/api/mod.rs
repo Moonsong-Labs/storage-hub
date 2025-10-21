@@ -11,7 +11,7 @@ use axum::{
     },
     Router,
 };
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use crate::services::Services;
 
@@ -21,7 +21,7 @@ pub fn create_app(services: Services) -> Router {
 
     // Add CORS layer for permissive access
     let cors = CorsLayer::new()
-        .allow_origin(tower_http::cors::Any)
+        .allow_origin(AllowOrigin::any())
         .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
         .allow_headers([AUTHORIZATION, CONTENT_TYPE, ACCEPT, CONTENT_RANGE])
         .allow_credentials(false);
