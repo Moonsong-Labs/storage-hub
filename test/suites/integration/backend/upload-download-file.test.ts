@@ -252,7 +252,7 @@ await describeMspNet(
       const uploadResult = JSON.parse(responseBody);
       uploadedFileKeyHex = u8aToHex(fileKey);
       strictEqual(
-        uploadResult.fileKey,
+        `0x${uploadResult.fileKey}`,
         uploadedFileKeyHex,
         "Response should contain correct file key"
       );
