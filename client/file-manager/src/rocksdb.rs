@@ -497,6 +497,19 @@ where
     DB: KeyValueDB,
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
+    /// Helper to build the bucket-prefixed file key used for efficient prefix scans.
+    fn build_bucket_prefixed_file_key(
+        metadata: &FileMetadata,
+        file_key: &HasherOutT<T>,
+    ) -> Vec<u8> {
+        metadata
+            .bucket_id()
+            .iter()
+            .copied()
+            .chain(file_key.as_ref().iter().copied())
+            .collect::<Vec<_>>()
+    }
+
     /// Creates a new file storage instance with the given storage backend.
     pub fn new(storage: StorageDb<T, DB>) -> Self {
         Self { storage }
@@ -535,19 +548,29 @@ where
                 error!(target: LOG_TARGET, "{:?}", e);
                 FileStorageError::FailedToParseFingerprint
             })?;
+
+        debug!(target: LOG_TARGET, "Reading partial root for fingerprint {:?}", h_fingerprint);
+
+        // We call this root "partial root" because a file trie can exist while not all
+        // chunks have been written to it. When all chunks are written, this root is
+        // in fact the final root of the file trie.
         let raw_partial_root = self
             .storage
             .read(Column::Roots.into(), h_fingerprint.as_ref())
             .map_err(|e| {
-                error!(target: LOG_TARGET, "{:?}", e);
+                error!(target: LOG_TARGET, "Failed to read partial root for fingerprint {:?}: {:?}", h_fingerprint, e);
                 FileStorageError::FailedToReadStorage
-            })?
-            .expect("Failed to find partial root");
+            })?.ok_or_else(|| {
+                error!(target: LOG_TARGET, "Partial root returned None for fingerprint {:?}", h_fingerprint);
+                FileStorageError::PartialRootNotFound
+            })?;
+
         let mut partial_root =
             convert_raw_bytes_to_hasher_out::<T>(raw_partial_root).map_err(|e| {
                 error!(target: LOG_TARGET, "{:?}", e);
                 FileStorageError::FailedToParsePartialRoot
             })?;
+
         let file_trie =
             RocksDbFileDataTrie::<T, DB>::from_existing(self.storage.clone(), &mut partial_root);
         Ok(file_trie)
@@ -723,6 +746,14 @@ where
             &0u64.to_le_bytes(),
         );
 
+        // Also store the bucket-prefixed key to support efficient deletions by bucket prefix.
+        let bucket_prefixed_file_key = Self::build_bucket_prefixed_file_key(&metadata, &file_key);
+        transaction.put(
+            Column::BucketPrefix.into(),
+            bucket_prefixed_file_key.as_ref(),
+            &[],
+        );
+
         self.storage.write(transaction).map_err(|e| {
             error!(target: LOG_TARGET,"{:?}", e);
             FileStorageError::FailedToWriteToStorage
@@ -780,12 +811,7 @@ where
             &chunk_count.to_le_bytes(),
         );
 
-        let bucket_prefixed_file_key = metadata
-            .bucket_id()
-            .iter()
-            .copied()
-            .chain(file_key.as_ref().iter().copied())
-            .collect::<Vec<_>>();
+        let bucket_prefixed_file_key = Self::build_bucket_prefixed_file_key(&metadata, &file_key);
 
         // Store the key prefixed by bucket id
         transaction.put(
@@ -1574,5 +1600,70 @@ mod tests {
         assert!(file_storage.get_metadata(&key_3).is_ok());
         assert!(file_storage.get_chunk(&key_2, &chunk_ids_2[0]).is_ok());
         assert!(file_storage.get_chunk(&key_3, &chunk_ids_3[0]).is_ok());
+    }
+
+    #[test]
+    fn delete_files_with_prefix_after_insert_file_and_writes_works() {
+        let storage = StorageDb {
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
+            _marker: Default::default(),
+        };
+
+        let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>, InMemory>::new(storage);
+
+        // Create a file via insert_file (which now also writes BucketPrefix) and then write chunks.
+        let mut tmp_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(
+            file_storage.storage.clone(),
+        );
+        // Write 3 chunks to derive a fingerprint for the metadata
+        for i in 0..3u64 {
+            tmp_trie
+                .write_chunk(
+                    &ChunkId::new(i),
+                    &Chunk::from([i as u8; FILE_CHUNK_SIZE as usize]),
+                )
+                .unwrap();
+        }
+        let fingerprint = Fingerprint::from(tmp_trie.get_root().as_ref());
+
+        let file_metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            [7u8; 32].to_vec(),
+            "location_after_insert_file".to_string().into_bytes(),
+            FILE_CHUNK_SIZE * 3,
+            fingerprint,
+        )
+        .unwrap();
+        let file_key = file_metadata.file_key::<BlakeTwo256>();
+
+        // Insert only metadata (path under test)
+        file_storage.insert_file(file_key, file_metadata).unwrap();
+
+        // Then write chunks using the storage API
+        for i in 0..3u64 {
+            file_storage
+                .write_chunk(
+                    &file_key,
+                    &ChunkId::new(i),
+                    &Chunk::from([i as u8; FILE_CHUNK_SIZE as usize]),
+                )
+                .unwrap();
+        }
+
+        // Sanity: metadata and chunk are accessible
+        assert!(file_storage.get_metadata(&file_key).is_ok());
+        assert!(file_storage
+            .get_chunk(&file_key, &ChunkId::new(0u64))
+            .is_ok());
+
+        // Now delete by bucket prefix and ensure it is removed
+        file_storage.delete_files_with_prefix(&[7u8; 32]).unwrap();
+
+        assert!(file_storage
+            .get_metadata(&file_key)
+            .is_ok_and(|m| m.is_none()));
+        assert!(file_storage
+            .get_chunk(&file_key, &ChunkId::new(0u64))
+            .is_err());
     }
 }

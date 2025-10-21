@@ -70,6 +70,8 @@ pub enum FileStorageError {
     IncompleteFile,
     /// Failed to access storage for reading.
     FailedToReadStorage,
+    /// Failed to read partial root from storage.
+    PartialRootNotFound,
     /// Failed to access storage for writing.
     FailedToWriteToStorage,
     /// Failed to convert raw bytes into [`FileKey`].
