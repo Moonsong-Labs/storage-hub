@@ -100,9 +100,9 @@ impl MspService {
                     let delay_secs = get_retry_delay(attempt);
                     warn!(
                         target: "msp_service::new",
-                        "Connected node is not yet a registered MSP; retrying provider discovery in {} seconds... (attempt {})",
-                        delay_secs,
-                        attempt + 1
+                                                delay_secs = delay_secs,
+                                                attempt = attempt + 1,
+                        "Connected node is not yet a registered MSP; retrying provider discovery in {delay_secs} seconds... (attempt {attempt})"
                     );
                     tokio::time::sleep(std::time::Duration::from_secs(delay_secs)).await;
                     attempt += 1;
@@ -203,7 +203,7 @@ impl MspService {
         &self,
         user_address: &str,
     ) -> Result<impl Iterator<Item = Bucket>, Error> {
-        debug!(target: "msp_service::list_user_buckets", "Listing user buckets for user: {}", user_address);
+        debug!(target: "msp_service::list_user_buckets", user = %user_address, "Listing user buckets");
 
         // TODO: request by page
         self.postgres
@@ -224,7 +224,7 @@ impl MspService {
     ///
     /// Verifies ownership of bucket is `user`
     pub async fn get_bucket(&self, bucket_id: &str, user: &str) -> Result<Bucket, Error> {
-        debug!(target: "msp_service::get_bucket", "Getting bucket: {} for user: {}", bucket_id, user);
+        debug!(target: "msp_service::get_bucket", bucket_id = %bucket_id, user = %user, "Getting bucket");
 
         self.get_db_bucket(bucket_id, user).await.map(|bucket| {
             Bucket::from_db(
@@ -252,7 +252,7 @@ impl MspService {
         user: &str,
         path: &str,
     ) -> Result<FileTree, Error> {
-        debug!(target: "msp_service::get_file_tree", "Getting file tree for bucket: {} for user: {}", bucket_id, user);
+        debug!(target: "msp_service::get_file_tree", bucket_id = %bucket_id, user = %user, "Getting file tree");
 
         // first, get the bucket from the db and determine if user can view the bucket
         let bucket = self.get_db_bucket(bucket_id, user).await?;
@@ -275,7 +275,7 @@ impl MspService {
         user: &str,
         file_key: &str,
     ) -> Result<FileInfo, Error> {
-        debug!(target: "msp_service::get_file_info", "Getting file info for bucket: {} for user: {} and file_key: {}", bucket_id, user, file_key);
+        debug!(target: "msp_service::get_file_info", bucket_id = %bucket_id, user = %user, file_key = %file_key, "Getting file info");
 
         let file_key_hex = file_key.trim_start_matches("0x");
 
@@ -300,14 +300,14 @@ impl MspService {
 
     /// Check via MSP RPC if this node is expecting to receive the given file key
     pub async fn is_msp_expecting_file_key(&self, file_key: &str) -> Result<bool, Error> {
-        debug!(target: "msp_service::is_msp_expecting_file_key", "Checking if MSP is expecting file key: {}", file_key);
+        debug!(target: "msp_service::is_msp_expecting_file_key", file_key = %file_key, "Checking if MSP is expecting file key");
 
         let expected: bool = self.rpc.is_file_key_expected(file_key).await.map_err(|e| {
             Error::BadRequest(format!("Failed to check if file key is expected: {}", e))
         })?;
 
         if !expected {
-            warn!(target: "msp_service::is_msp_expecting_file_key", "MSP not expecting file_key: {}", file_key);
+            warn!(target: "msp_service::is_msp_expecting_file_key", file_key = %file_key, "MSP not expecting file_key");
         }
 
         Ok(expected)
@@ -332,7 +332,7 @@ impl MspService {
         &self,
         user_address: &str,
     ) -> Result<PaymentStreamsResponse, Error> {
-        debug!(target: "msp_service::get_payment_streams", "Getting payment streams for user: {}", user_address);
+        debug!(target: "msp_service::get_payment_streams", user = %user_address, "Getting payment streams");
 
         // Get all payment streams for the user from the database
         let payment_stream_data = self
@@ -387,7 +387,7 @@ impl MspService {
     /// We provide an URL as saveFileToDisk RPC requires it to stream the file.
     /// We also implemented the internal_upload_by_key handler to handle this temporary file upload.
     pub async fn get_file_from_key(&self, file_key: &str) -> Result<FileDownloadResult, Error> {
-        debug!(target: "msp_service::get_file_from_key", "Downloading file by key: {}", file_key);
+        debug!(target: "msp_service::get_file_from_key", file_key = %file_key, "Downloading file by key");
 
         // TODO: authenticate user
 
@@ -406,14 +406,14 @@ impl MspService {
 
         match rpc_response {
             SaveFileToDisk::FileNotFound => {
-                warn!(target: "msp_service::get_file_from_key", "File not found for download - file_key: {}", file_key);
+                warn!(target: "msp_service::get_file_from_key", file_key = %file_key, "File not found for download");
                 Err(Error::NotFound("File not found".to_string()))
             }
             SaveFileToDisk::IncompleteFile(_status) => {
                 warn!(
                     target: "msp_service::get_file_from_key",
-                    "Incomplete file requested for download - file_key: {}",
-                    file_key
+                    file_key = %file_key,
+                    "Incomplete file requested for download"
                 );
                 Err(Error::BadRequest("File is incomplete".to_string()))
             }
@@ -448,10 +448,10 @@ impl MspService {
     ) -> Result<FileUploadResponse, Error> {
         debug!(
             target: "msp_service::process_and_upload_file",
-            "Starting file upload - bucket: {}, file_key: {}, size: {}",
-            bucket_id,
-            file_key,
-            file_metadata.file_size()
+            bucket_id = %bucket_id,
+            file_key = %file_key,
+            file_size = file_metadata.file_size(),
+            "Starting file upload"
         );
 
         // Validate bucket id and file key against metadata
@@ -540,7 +540,7 @@ impl MspService {
         )));
         }
 
-        debug!(target: "msp_service::process_and_upload_file", "File chunking completed - total_chunks: {}", total_chunks);
+        debug!(target: "msp_service::process_and_upload_file", total_chunks = total_chunks, "File chunking completed");
 
         // At this point, the trie contains the entire file data and we can start generating the proofs for the chunk batches
         // and sending them to the MSP.
@@ -564,11 +564,11 @@ impl MspService {
 
             debug!(
                 target: "msp_service::process_and_upload_file",
-                "Processing batch {}/{} - chunks: {}-{}",
-                batch_number,
-                total_batches,
-                batch_start_chunk_index,
-                batch_start_chunk_index + chunks_in_batch - 1
+                batch_number = batch_number,
+                total_batches = total_batches,
+                chunk_start = batch_start_chunk_index,
+                chunk_end = batch_start_chunk_index + chunks_in_batch - 1,
+                "Processing batch"
             );
 
             // Generate the proof for the batch.
@@ -596,9 +596,9 @@ impl MspService {
 
             debug!(
                 target: "msp_service::process_and_upload_file",
-                "Batch {}/{} uploaded successfully",
-                batch_number,
-                total_batches
+                batch_number = batch_number,
+                total_batches = total_batches,
+                "Batch uploaded successfully"
             );
 
             // Update the initial chunk index for the next batch.
@@ -644,8 +644,8 @@ impl MspService {
     ) -> Result<(), Error> {
         debug!(
             target: "msp_service::upload_to_msp",
-            "Uploading {} chunks to MSP",
-            chunk_ids.len()
+            chunk_count = chunk_ids.len(),
+            "Uploading chunks to MSP"
         );
 
         // Ensure we are not incorrectly trying to upload an empty file.
@@ -672,16 +672,16 @@ impl MspService {
                 Ok(()) => {
                     debug!(
                         target: "msp_service::upload_to_msp",
-                        "Successfully uploaded {} chunks to MSP {} for file {} in bucket {}",
-                        chunk_ids.len(),
-                        msp_info.msp_id,
-                        format!("0x{}", hex::encode(file_key_proof.file_metadata.file_key::<Blake2Hasher>())),
-                        format!("0x{}", hex::encode(file_key_proof.file_metadata.bucket_id()))
+                        chunk_count = chunk_ids.len(),
+                        msp_id = %msp_info.msp_id,
+                        file_key = %format!("0x{}", hex::encode(file_key_proof.file_metadata.file_key::<Blake2Hasher>())),
+                        bucket_id = %format!("0x{}", hex::encode(file_key_proof.file_metadata.bucket_id())),
+                        "Successfully uploaded chunks to MSP"
                     );
                     return Ok(());
                 }
                 Err(e) => {
-                    warn!(target: "msp_service::upload_to_msp", "Failed to send chunks to peer {:?}: {:?}", peer_id, e);
+                    warn!(target: "msp_service::upload_to_msp", peer_id = ?peer_id, error = ?e, "Failed to send chunks to peer");
                     last_err = Some(e);
                     continue;
                 }
@@ -710,21 +710,23 @@ impl MspService {
                     Ok(peer_id) => {
                         debug!(
                             target: "msp_service::extract_peer_ids_from_multiaddresses",
-                            "Extracted peer ID {:?} from multiaddress {}",
-                            peer_id, multiaddr_str
+                            peer_id = ?peer_id,
+                            multiaddress = %multiaddr_str,
+                            "Extracted peer ID from multiaddress"
                         );
                         peer_ids.insert(peer_id);
                     }
                     Err(e) => {
                         warn!(
                             target: "msp_service::extract_peer_ids_from_multiaddresses",
-                            "Failed to parse peer ID from multiaddress {}: {:?}",
-                            multiaddr_str, e
+                            multiaddress = %multiaddr_str,
+                            error = ?e,
+                            "Failed to parse peer ID from multiaddress"
                         );
                     }
                 }
             } else {
-                warn!(target: "msp_service::extract_peer_ids_from_multiaddresses", "No /p2p/ section found in multiaddress: {}", multiaddr_str);
+                warn!(target: "msp_service::extract_peer_ids_from_multiaddresses", multiaddress = %multiaddr_str, "No /p2p/ section found in multiaddress");
             }
         }
 
@@ -746,8 +748,8 @@ impl MspService {
     ) -> Result<(), Error> {
         debug!(
             target: "msp_service::send_upload_request_to_msp_peer",
-            "Attempting to send upload request to MSP peer {:?} with file key proof",
-            peer_id
+            peer_id = ?peer_id,
+            "Attempting to send upload request to MSP peer"
         );
 
         // Get fhe file metadata from the received FileKeyProof.
@@ -766,7 +768,7 @@ impl MspService {
         let delay_between_retries_secs = 1;
 
         while retry_attempts < max_retries {
-            debug!(target: "msp_service::send_upload_request_to_msp_peer", "Sending file chunks to MSP peer {:?} via RPC", peer_id);
+            debug!(target: "msp_service::send_upload_request_to_msp_peer", peer_id = ?peer_id, retry_attempt = retry_attempts, "Sending file chunks to MSP peer via RPC");
             let result: Result<Vec<u8>, _> = self
                 .rpc
                 .receive_file_chunks(&file_key_hexstr, encoded_proof.clone())
@@ -782,10 +784,10 @@ impl MspService {
                     if retry_attempts < max_retries {
                         warn!(
                             target: "msp_service::send_upload_request_to_msp_peer",
-                            "Upload request to MSP peer {:?} failed via RPC, retrying... (attempt {}): {:?}",
-                            peer_id,
-                            retry_attempts,
-                            e
+                            peer_id = ?peer_id,
+                            retry_attempt = retry_attempts,
+                            error = ?e,
+                            "Upload request to MSP peer {peer_id} failed via RPC, retrying... (attempt {retry_attempts})",
                         );
                         tokio::time::sleep(std::time::Duration::from_secs(
                             delay_between_retries_secs,

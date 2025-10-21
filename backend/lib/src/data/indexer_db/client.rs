@@ -72,7 +72,7 @@ impl DBClient {
     pub async fn get_all_bsps(&self, limit: Option<i64>, offset: Option<i64>) -> Result<Vec<Bsp>> {
         let limit = limit.unwrap_or(DEFAULT_PAGE_LIMIT);
         let offset = offset.unwrap_or(0);
-        debug!(target: "indexer_db::client::get_all_bsps", "Fetching BSPs - limit: {}, offset: {}", limit, offset);
+        debug!(target: "indexer_db::client::get_all_bsps", limit = limit, offset = offset, "Fetching BSPs");
 
         self.repository
             .list_bsps(limit, offset)
@@ -82,7 +82,7 @@ impl DBClient {
 
     /// Retrieve a given MSP's entry by its onchain ID
     pub async fn get_msp(&self, msp_onchain_id: &OnchainMspId) -> Result<Msp> {
-        debug!(target: "indexer_db::client::get_msp", "Fetching MSP - onchain_id: {}", msp_onchain_id);
+        debug!(target: "indexer_db::client::get_msp", onchain_id = %msp_onchain_id, "Fetching MSP");
 
         // TODO: should we cache this?
         // since we always reference the same msp
@@ -95,7 +95,7 @@ impl DBClient {
     /// Retrieve info on a specific bucket given its onchain ID
     pub async fn get_bucket(&self, bucket_onchain_id: &[u8]) -> Result<Bucket> {
         let hash = shp_types::Hash::from_slice(bucket_onchain_id);
-        debug!(target: "indexer_db::client::get_bucket", "Fetching bucket - onchain_id: {}", hash);
+        debug!(target: "indexer_db::client::get_bucket", onchain_id = %hash, "Fetching bucket");
 
         self.repository
             .get_bucket_by_onchain_id(&hash)
@@ -114,8 +114,10 @@ impl DBClient {
         let offset = offset.unwrap_or(0);
         debug!(
             target: "indexer_db::client::get_bucket_files",
-            "Fetching bucket files - bucket_id: {}, limit: {}, offset: {}",
-            bucket, limit, offset
+            bucket_id = bucket,
+            limit = limit,
+            offset = offset,
+            "Fetching bucket files"
         );
 
         self.repository
@@ -136,8 +138,11 @@ impl DBClient {
         let offset = offset.unwrap_or(0);
         debug!(
             target: "indexer_db::client::get_user_buckets",
-            "Fetching user buckets - msp: {}, user: {}, limit: {}, offset: {}",
-            msp, user, limit, offset
+            msp = %msp,
+            user = %user,
+            limit = limit,
+            offset = offset,
+            "Fetching user buckets"
         );
 
         let msp = self.get_msp(msp).await?;
@@ -150,7 +155,7 @@ impl DBClient {
 
     pub async fn get_file_info(&self, file_key: &[u8]) -> Result<File> {
         let hash = shp_types::Hash::from_slice(file_key);
-        debug!(target: "indexer_db::client::get_file_info", "Fetching file info - file_key: {}", hash);
+        debug!(target: "indexer_db::client::get_file_info", file_key = %hash, "Fetching file info");
 
         self.repository
             .get_file_by_file_key(&hash)
@@ -165,8 +170,8 @@ impl DBClient {
     ) -> Result<Vec<PaymentStreamData>> {
         debug!(
             target: "indexer_db::client::get_payment_streams_for_user",
-            "Fetching payment streams for user - user_account: {}",
-            user_account
+            user_account = %user_account,
+            "Fetching payment streams for user"
         );
 				
         self.repository

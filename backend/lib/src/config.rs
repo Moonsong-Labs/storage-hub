@@ -1,6 +1,7 @@
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::io::IsTerminal;
+use tracing::warn;
 
 use crate::constants::{
     api::{DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE},
@@ -66,7 +67,7 @@ impl LogFormat {
                 "json" => Some(Self::Json),
                 "auto" => Some(Self::Auto),
                 _ => {
-                    tracing::warn!("Invalid STORAGEHUB_LOG_FORMAT value: {}, using default", s);
+                    warn!(value = %s, "Invalid STORAGEHUB_LOG_FORMAT value, using default");
                     None
                 }
             })
@@ -176,7 +177,7 @@ impl Default for Config {
             },
             auth: AuthConfig {
                 jwt_secret: std::env::var("JWT_SECRET").ok().or_else(|| {
-                    tracing::warn!("JWT_SECRET not set, using random secret for development");
+                    warn!("JWT_SECRET not set, using random secret for development");
                     Some(AuthConfig::generate_random_secret())
                 }),
                 #[cfg(feature = "mocks")]

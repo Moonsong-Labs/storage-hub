@@ -266,10 +266,10 @@ async fn create_rpc_client_with_retry(config: &Config) -> Result<Arc<StorageHubR
                 let delay_secs = get_retry_delay(attempt);
                 warn!(
                     target: "main::create_rpc_client_with_retry",
-                    "RPC not ready yet (attempt {}), retrying in {} seconds. Error: {:?}",
-                    attempt + 1,
-                    delay_secs,
-                    e
+                    attempt = attempt + 1,
+                    delay_secs = delay_secs,
+                    error = ?e,
+                    "RPC not ready yet, retrying in {delay_secs} seconds",
                 );
                 tokio::time::sleep(std::time::Duration::from_secs(delay_secs)).await;
                 attempt += 1;

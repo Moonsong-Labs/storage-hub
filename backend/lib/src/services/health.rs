@@ -73,8 +73,10 @@ impl HealthService {
         } else {
             error!(
                 target: "health_service::check_health",
-                "Health check FAILED - storage: {}, postgres: {}, rpc: {}",
-                storage_health.status, postgres_health.status, rpc_health.status
+                storage_status = %storage_health.status,
+                postgres_status = %postgres_health.status,
+                rpc_status = %rpc_health.status,
+                "Health check FAILED",
             );
             Self::UNHEALTHY
         };
@@ -151,7 +153,7 @@ impl HealthService {
                 )
             }
             Err(e) => {
-                error!(target: "health_service::check_rpc", "RPC health check failed - RPC call error: {}", e);
+                error!(target: "health_service::check_rpc", error = %e, "RPC health check failed - RPC call error");
                 (Self::UNHEALTHY, Some(format!("RPC call failed: {}", e)))
             }
         };

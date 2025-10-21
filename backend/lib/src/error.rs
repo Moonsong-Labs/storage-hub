@@ -4,7 +4,7 @@ use axum::{
     Json,
 };
 use serde_json::json;
-use tracing::{debug, error, warn};
+use tracing::{error, warn};
 
 use crate::data::indexer_db::repository::error::RepositoryError;
 
@@ -47,39 +47,39 @@ impl IntoResponse for Error {
     fn into_response(self) -> Response {
         let (status, message) = match self {
             Error::Config(ref msg) => {
-                error!("Configuration error: {}", msg);
+                error!(error_msg = %msg, "Configuration error");
                 (StatusCode::INTERNAL_SERVER_ERROR, msg.clone())
             }
             Error::Rpc(ref err) => {
-                warn!("RPC error (Bad Gateway): {}", err);
+                error!(error = %err, "RPC error (Bad Gateway)");
                 (StatusCode::BAD_GATEWAY, err.to_string())
             }
             Error::Storage(ref err) => {
-                error!("Storage error: {}", err);
+                error!(error = %err, "Storage error");
                 (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
             }
             Error::Database(ref msg) => {
-                error!("Database error: {}", msg);
+                error!(error_msg = %msg, "Database error");
                 (StatusCode::INTERNAL_SERVER_ERROR, msg.clone())
             }
             Error::NotFound(ref msg) => {
-                debug!("Resource not found: {}", msg);
+                warn!(error_msg = %msg, "Resource not found");
                 (StatusCode::NOT_FOUND, msg.clone())
             }
             Error::BadRequest(ref msg) => {
-                debug!("Bad request: {}", msg);
+                warn!(error_msg = %msg, "Bad request");
                 (StatusCode::BAD_REQUEST, msg.clone())
             }
             Error::Unauthorized(ref msg) => {
-                warn!("Unauthorized access attempt: {}", msg);
+                warn!(error_msg = %msg, "Unauthorized access attempt");
                 (StatusCode::UNAUTHORIZED, msg.clone())
             }
             Error::Forbidden(ref msg) => {
-                warn!("Forbidden access attempt: {}", msg);
+                warn!(error_msg = %msg, "Forbidden access attempt");
                 (StatusCode::FORBIDDEN, msg.clone())
             }
             Error::Conflict(ref msg) => {
-                warn!("Conflict: {}", msg);
+                warn!(error_msg = %msg, "Conflict");
                 (StatusCode::CONFLICT, msg.clone())
             }
             Error::Internal => {

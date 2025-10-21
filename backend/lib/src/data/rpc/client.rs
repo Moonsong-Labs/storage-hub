@@ -57,7 +57,7 @@ impl StorageHubRpcClient {
 
     /// Returns whether the given `file_key` is expected to be received by the MSP node
     pub async fn is_file_key_expected(&self, file_key: &str) -> RpcResult<bool> {
-        debug!(target: "rpc::client::is_file_key_expected", "RPC call: is_file_key_expected - file_key: {}", file_key);
+        debug!(target: "rpc::client::is_file_key_expected", file_key = %file_key, "RPC call: is_file_key_expected");
 
         self.connection
             .call(methods::FILE_KEY_EXPECTED, jsonrpsee::rpc_params![file_key])
@@ -68,8 +68,9 @@ impl StorageHubRpcClient {
     pub async fn save_file_to_disk(&self, file_key: &str, url: &str) -> RpcResult<SaveFileToDisk> {
         debug!(
             target: "rpc::client::save_file_to_disk",
-            "RPC call: save_file_to_disk - file_key: {}, url: {}",
-            file_key, url
+            file_key = %file_key,
+            url = %url,
+            "RPC call: save_file_to_disk"
         );
 
         self.connection
@@ -84,9 +85,9 @@ impl StorageHubRpcClient {
     pub async fn receive_file_chunks(&self, file_key: &str, proof: Vec<u8>) -> RpcResult<Vec<u8>> {
         debug!(
             target: "rpc::client::receive_file_chunks",
-            "RPC call: receive_file_chunks - file_key: {}, proof_size: {} bytes",
-            file_key,
-            proof.len()
+            file_key = %file_key,
+            proof_size = proof.len(),
+            "RPC call: receive_file_chunks"
         );
 
         self.connection
