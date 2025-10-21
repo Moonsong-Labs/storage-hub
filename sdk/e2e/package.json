@@ -9,9 +9,9 @@
     "serve:web": "bash -lc 'PIDS=\"$(lsof -ti tcp:3000 || true)\"; if [ -n \"$PIDS\" ]; then kill -9 $PIDS || true; fi; python3 -m http.server 3000 --directory ..'"
   },
   "devDependencies": {
-    "@playwright/test": "^1.54.2",
-    "@tenkeylabs/dappwright": "^2.11.2",
-    "playwright": "^1.54.2"
+    "@playwright/test": "^1.56.1",
+    "@tenkeylabs/dappwright": "^2.11.3",
+    "playwright": "^1.56.1"
   },
   "engines": {
     "node": ">=22"
