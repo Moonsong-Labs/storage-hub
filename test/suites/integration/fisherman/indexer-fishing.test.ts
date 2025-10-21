@@ -59,8 +59,7 @@ await describeMspNet(
         timeout: 10000
       });
 
-      await userApi.rpc.engine.createBlock(true, true);
-
+      await userApi.block.seal({ finaliseBlock: true });
       await waitForIndexing(userApi);
     });
 

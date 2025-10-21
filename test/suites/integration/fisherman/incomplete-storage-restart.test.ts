@@ -16,12 +16,6 @@ import {
  *
  * Purpose: Tests the fisherman's ability to handle incomplete storage requests across
  *          container restarts, including initial sync behavior with pagination and limits.
- *
- * What makes this test unique:
- * - Tests fisherman restart scenarios with various configurations
- * - Validates initial sync behavior with page size and max limit parameters
- * - Ensures no duplicate processing after restarts
- * - Verifies state persistence across container lifecycle events
  */
 await describeMspNet(
   "Fisherman Incomplete Storage Restart Tests",
@@ -169,10 +163,10 @@ await describeMspNet(
       assert(valuePropAddedEventData, "ValuePropAdded event data doesn't match expected type");
       valuePropId = valuePropAddedEventData.valuePropId;
 
-      await userApi.rpc.engine.createBlock(true, true);
+      await userApi.block.seal({ finaliseBlock: true });
     });
 
-    it("Test 1: Basic restart with pending incomplete requests", async () => {
+    it("Basic restart with pending incomplete requests", async () => {
       const bucketName = "test-restart-basic";
       const source = "res/whatsup.jpg";
 
@@ -235,9 +229,8 @@ await describeMspNet(
 
       // Create enough blocks to trigger sync mode detection (more than sync_mode_min_blocks_behind)
       // Default sync_mode_min_blocks_behind is 5, so we need at least 6 blocks
-      console.log("Creating blocks to trigger sync mode detection...");
       for (let i = 0; i < 6; i++) {
-        await userApi.rpc.engine.createBlock(true, true);
+        await userApi.block.seal({ finaliseBlock: true });
       }
 
       await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-fisherman-1" });
@@ -249,8 +242,7 @@ await describeMspNet(
       });
 
       // Waiting for the fisherman node to be in sync with the chain.
-      await userApi.rpc.engine.createBlock(true, true);
-
+      await userApi.block.seal({ finaliseBlock: true });
       // Wait for fisherman to detect it's out of sync and start syncing
       await userApi.docker.waitForLog({
         searchString: "🎣 Handling coming out of sync mode",
