@@ -136,6 +136,8 @@ export async function describeMspNet<
     fullNetConfig.indexerMode = options.indexerMode;
     fullNetConfig.fisherman = options.fisherman;
     fullNetConfig.backend = options.backend;
+    fullNetConfig.fishermanIncompleteSyncMax = options.fishermanIncompleteSyncMax;
+    fullNetConfig.fishermanIncompleteSyncPageSize = options.fishermanIncompleteSyncPageSize;
 
     const describeFunc = options?.only ? describe.only : options?.skip ? describe.skip : describe;
 
