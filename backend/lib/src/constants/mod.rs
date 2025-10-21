@@ -69,7 +69,7 @@ pub mod auth {
     /// This is here as a constant because it is used both in the
     /// routing of the API, and in the construction of the SIWE message.
     /// This way, if we change the endpoint, we only need to change it in one place.
-    pub const AUTH_NONCE_ENDPOINT: &str = "/auth/nonce";
+    pub const AUTH_NONCE_ENDPOINT: &str = "auth/nonce";
 
     /// The 'domain' to use for the SIWE message
     // TODO: make configurable

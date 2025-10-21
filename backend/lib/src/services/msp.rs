@@ -673,8 +673,8 @@ impl MspService {
                         "Successfully uploaded {} chunks to MSP {} for file {} in bucket {}",
                         chunk_ids.len(),
                         msp_info.msp_id,
-                        hex::encode(file_key_proof.file_metadata.file_key::<Blake2Hasher>()),
-                        hex::encode(file_key_proof.file_metadata.bucket_id())
+                        format!("0x{}", hex::encode(file_key_proof.file_metadata.file_key::<Blake2Hasher>())),
+                        format!("0x{}", hex::encode(file_key_proof.file_metadata.bucket_id()))
                     );
                     return Ok(());
                 }
