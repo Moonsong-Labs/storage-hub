@@ -256,7 +256,11 @@ await describeMspNet(
         uploadedFileKeyHex,
         "Response should contain correct file key"
       );
-      strictEqual(uploadResult.bucketId, bucketId, "Response should contain correct bucket ID");
+      strictEqual(
+        `0x${uploadResult.bucketId}`,
+        bucketId,
+        "Response should contain correct bucket ID"
+      );
 
       // Wait until the MSP has received and stored the file
       await msp1Api.wait.fileStorageComplete(fileKey);
