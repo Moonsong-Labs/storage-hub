@@ -109,8 +109,7 @@ await describeMspNet(
         console.log("Connected");
 
         // Waiting for the MSP node to be in sync with the chain.
-        await userApi.rpc.engine.createBlock(true, true);
-
+        await userApi.block.seal({ finaliseBlock: true });
         await userApi.docker.waitForLog({
           searchString: "🥱 Handling coming out of sync mode",
           containerName: "storage-hub-sh-msp-1"

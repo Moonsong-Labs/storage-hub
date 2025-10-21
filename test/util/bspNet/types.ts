@@ -187,6 +187,18 @@ export type BspNetConfig = {
    * Requires indexer to be enabled.
    */
   backend?: boolean;
+
+  /**
+   * Maximum number of incomplete storage requests to process during initial sync.
+   * Must be at least 1.
+   */
+  fishermanIncompleteSyncMax?: number;
+
+  /**
+   * Page size for incomplete storage request pagination.
+   * Must be at least 1.
+   */
+  fishermanIncompleteSyncPageSize?: number;
 };
 
 /**
@@ -395,6 +407,16 @@ export type TestOptions = {
    * 'solochain' - Solochain EVM runtime
    */
   runtimeType?: "parachain" | "solochain";
+  /**
+   * Maximum number of incomplete storage requests to process during initial sync.
+   * Must be at least 1.
+   */
+  fishermanIncompleteSyncMax?: number;
+  /**
+   * Page size for incomplete storage request pagination.
+   * Must be at least 1.
+   */
+  fishermanIncompleteSyncPageSize?: number;
 };
 
 /**
