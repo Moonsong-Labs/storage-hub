@@ -14781,6 +14781,230 @@ mod delete_files_for_incomplete_storage_request_tests {
     }
 }
 
+mod list_incomplete_storage_request_keys_tests {
+    use super::*;
+    use crate::{types::IncompleteStorageRequestMetadata, IncompleteStorageRequests};
+
+    #[test]
+    fn list_with_empty_storage() {
+        new_test_ext().execute_with(|| {
+            // Test with no incomplete storage requests
+            let keys = FileSystem::list_incomplete_storage_request_keys(None, 10);
+            assert_eq!(
+                keys.len(),
+                0,
+                "Should return empty list when no incomplete storage requests exist"
+            );
+        });
+    }
+
+    #[test]
+    fn list_with_single_item() {
+        new_test_ext().execute_with(|| {
+            let owner = Keyring::Alice.to_account_id();
+            let msp = Keyring::Charlie.to_account_id();
+            let (bucket_id, _, location, size, fingerprint, _, _) =
+                setup_file_in_msp_bucket(&owner, &msp);
+
+            let file_key = H256::from_low_u64_be(1);
+
+            // Insert a single incomplete storage request
+            IncompleteStorageRequests::<Test>::insert(
+                file_key,
+                IncompleteStorageRequestMetadata {
+                    owner: owner.clone(),
+                    bucket_id,
+                    location: location.clone(),
+                    fingerprint,
+                    file_size: size,
+                    pending_bsp_removals: BoundedVec::default(),
+                    pending_bucket_removal: false,
+                },
+            );
+
+            // List without start_after
+            let keys = FileSystem::list_incomplete_storage_request_keys(None, 10);
+            assert_eq!(keys.len(), 1, "Should return one item");
+            assert_eq!(keys[0], file_key, "Should return the correct file key");
+        });
+    }
+
+    #[test]
+    fn list_with_multiple_items_respects_limit() {
+        new_test_ext().execute_with(|| {
+            let owner = Keyring::Alice.to_account_id();
+            let msp = Keyring::Charlie.to_account_id();
+            let (bucket_id, _, location, size, fingerprint, _, _) =
+                setup_file_in_msp_bucket(&owner, &msp);
+
+            // Insert multiple incomplete storage requests
+            let file_keys: Vec<H256> = (1..=5).map(|i| H256::from_low_u64_be(i)).collect();
+
+            for file_key in &file_keys {
+                IncompleteStorageRequests::<Test>::insert(
+                    file_key,
+                    IncompleteStorageRequestMetadata {
+                        owner: owner.clone(),
+                        bucket_id,
+                        location: location.clone(),
+                        fingerprint,
+                        file_size: size,
+                        pending_bsp_removals: BoundedVec::default(),
+                        pending_bucket_removal: false,
+                    },
+                );
+            }
+
+            // Test with limit smaller than total items
+            let keys = FileSystem::list_incomplete_storage_request_keys(None, 3);
+            assert_eq!(keys.len(), 3, "Should respect the limit of 3");
+
+            // Test with limit larger than total items
+            let keys = FileSystem::list_incomplete_storage_request_keys(None, 10);
+            assert_eq!(
+                keys.len(),
+                5,
+                "Should return all 5 items when limit is larger"
+            );
+
+            // Test with limit of 0
+            let keys = FileSystem::list_incomplete_storage_request_keys(None, 0);
+            assert_eq!(keys.len(), 0, "Should return empty list when limit is 0");
+        });
+    }
+
+    #[test]
+    fn list_with_start_after_pagination() {
+        new_test_ext().execute_with(|| {
+            let owner = Keyring::Alice.to_account_id();
+            let msp = Keyring::Charlie.to_account_id();
+            let (bucket_id, _, location, size, fingerprint, _, _) =
+                setup_file_in_msp_bucket(&owner, &msp);
+
+            // Insert multiple incomplete storage requests with predictable keys
+            let file_keys: Vec<H256> = (1..=10).map(|i| H256::from_low_u64_be(i)).collect();
+
+            for file_key in &file_keys {
+                IncompleteStorageRequests::<Test>::insert(
+                    file_key,
+                    IncompleteStorageRequestMetadata {
+                        owner: owner.clone(),
+                        bucket_id,
+                        location: location.clone(),
+                        fingerprint,
+                        file_size: size,
+                        pending_bsp_removals: BoundedVec::default(),
+                        pending_bucket_removal: false,
+                    },
+                );
+            }
+
+            // Get all keys to understand the ordering
+            let all_keys = FileSystem::list_incomplete_storage_request_keys(None, 10);
+            assert_eq!(all_keys.len(), 10, "Should have 10 items total");
+
+            // Test pagination by starting after the third key
+            let keys_after_third =
+                FileSystem::list_incomplete_storage_request_keys(Some(all_keys[2]), 5);
+
+            // The result should exclude the start_after key (third key) and return the next 5
+            assert!(
+                !keys_after_third.contains(&all_keys[2]),
+                "Should not include the start_after key"
+            );
+            assert_eq!(
+                keys_after_third.len(),
+                5,
+                "Should return 5 items after the third key"
+            );
+
+            // Verify the keys are in the expected order (should be keys after the third one)
+            for (i, key) in keys_after_third.iter().enumerate() {
+                assert_eq!(*key, all_keys[3 + i], "Key at position {} should match", i);
+            }
+        });
+    }
+
+    #[test]
+    fn list_with_start_after_non_existent_key() {
+        new_test_ext().execute_with(|| {
+            let owner = Keyring::Alice.to_account_id();
+            let msp = Keyring::Charlie.to_account_id();
+            let (bucket_id, _, location, size, fingerprint, _, _) =
+                setup_file_in_msp_bucket(&owner, &msp);
+
+            // Insert some incomplete storage requests
+            let file_keys: Vec<H256> = (1..=5).map(|i| H256::from_low_u64_be(i)).collect();
+
+            for file_key in &file_keys {
+                IncompleteStorageRequests::<Test>::insert(
+                    file_key,
+                    IncompleteStorageRequestMetadata {
+                        owner: owner.clone(),
+                        bucket_id,
+                        location: location.clone(),
+                        fingerprint,
+                        file_size: size,
+                        pending_bsp_removals: BoundedVec::default(),
+                        pending_bucket_removal: false,
+                    },
+                );
+            }
+
+            // Use a key that doesn't exist in storage
+            let non_existent_key = H256::from_low_u64_be(999);
+            let keys = FileSystem::list_incomplete_storage_request_keys(Some(non_existent_key), 10);
+
+            // `iter_from_key` will start iterating from the next key after the non-existent key.
+            // We expect to get at most 5 keys.
+            assert!(
+                keys.len() <= 5,
+                "Should handle non-existent start_after key gracefully"
+            );
+        });
+    }
+
+    #[test]
+    fn list_with_start_after_last_key() {
+        new_test_ext().execute_with(|| {
+            let owner = Keyring::Alice.to_account_id();
+            let msp = Keyring::Charlie.to_account_id();
+            let (bucket_id, _, location, size, fingerprint, _, _) =
+                setup_file_in_msp_bucket(&owner, &msp);
+
+            // Insert some incomplete storage requests
+            let file_keys: Vec<H256> = (1..=5).map(|i| H256::from_low_u64_be(i)).collect();
+
+            for file_key in &file_keys {
+                IncompleteStorageRequests::<Test>::insert(
+                    file_key,
+                    IncompleteStorageRequestMetadata {
+                        owner: owner.clone(),
+                        bucket_id,
+                        location: location.clone(),
+                        fingerprint,
+                        file_size: size,
+                        pending_bsp_removals: BoundedVec::default(),
+                        pending_bucket_removal: false,
+                    },
+                );
+            }
+
+            // Get all keys to find the last one
+            let all_keys = FileSystem::list_incomplete_storage_request_keys(None, 10);
+            let last_key = all_keys.last().unwrap();
+
+            // Start after the last key
+            let keys = FileSystem::list_incomplete_storage_request_keys(Some(*last_key), 10);
+            assert_eq!(
+                keys.len(),
+                0,
+                "Should return empty list when starting after the last key"
+            );
+        });
+    }
+}
+
 /// Helper function that registers an account as a Backup Storage Provider
 fn bsp_sign_up(
     bsp_signed: RuntimeOrigin,
