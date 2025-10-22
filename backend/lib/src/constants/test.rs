@@ -91,6 +91,14 @@ pub mod file {
     pub const BUCKET1_FILE1_KEY: [u8; 32] =
         hex!("e901c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f7");
 
+    /// File key expected by the SDK tests to be in [`super::bucket::BUCKET1_BUCKET_ID`]
+    pub const BUCKET1_FILE3_KEY: [u8; 32] =
+        hex!("b738bce3726580a31a936b1782209c1df92ced746685eddfb95bc8679499ad08");
+
+    /// File fingerprint expected by the SDK tests for FILE3
+    pub const BUCKET1_FILE3_FINGERPRINT: [u8; 32] =
+        hex!("34eb5f637e05fc18f857ccb013250076534192189894d174ee3aa6d3525f6970");
+
     /// Default file location
     pub const DEFAULT_LOCATION: &str = "/files/test_file.txt";
 

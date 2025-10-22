@@ -342,7 +342,7 @@
         const auth = await client.auth.getAuthStatus();
         if (!auth || auth.status !== 'Authenticated') throw new Error('Not authenticated');
         const owner = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
-        const bucketId = '0x34eb5f637e05fc18f857ccb013250076534192189894d174ee3aa6d3525f6970';
+        const bucketId = '0xd8793e4187f5642e96016a96fb33849a7e03eda91358b311bbd426ed38b26692';
         const adolphusFingerprint = client.files.hexToBytes('0x34eb5f637e05fc18f857ccb013250076534192189894d174ee3aa6d3525f6970');
         const location = 'files/e2e-bucket/adolphus.jpg';
         const blob = await loadAdolphusBlob();

@@ -163,7 +163,22 @@ impl MockRepository {
             1048576, // 1MB
         )
         .await
-        .expect("should create file 1");
+        .expect("should create file 2");
+
+        // File 3: files/e2e-bucket/adolphus.jpg
+        // expected by the SDK tests
+        let bucket1_file3_key = Hash::from_slice(&test::file::BUCKET1_FILE3_KEY);
+        this.create_file(
+            MOCK_ADDRESS.to_string().as_bytes(),
+            &bucket1_file3_key,
+            bucket1.id,
+            &bucket1_hash,
+            b"files/e2e-bucket/adolphus.jpg", // expected by the SDK tests
+            &test::file::BUCKET1_FILE3_FINGERPRINT,
+            1048576, // 1MB
+        )
+        .await
+        .expect("should create file 3");
 
         // File 2: In bucket 2
         let file2_key = random_hash();
