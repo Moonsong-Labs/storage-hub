@@ -16774,6 +16774,7 @@ dependencies = [
  "futures",
  "hex",
  "log",
+ "parity-scale-codec",
  "rustls 0.23.32",
  "rustls-pemfile 2.2.0",
  "rustls-platform-verifier 0.5.3",

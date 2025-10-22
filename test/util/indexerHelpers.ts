@@ -141,6 +141,22 @@ export const waitForFileDeleted = async (sql: SqlClient, fileKey: string) => {
   });
 };
 
+export const waitForFileDeletionSignature = async (
+  sql: SqlClient,
+  fileKey: string
+): Promise<void> => {
+  await waitFor({
+    lambda: async () => {
+      const files = await sql`
+        SELECT deletion_signature FROM file
+        WHERE file_key = ${hexToBuffer(fileKey)}
+        AND deletion_signature IS NOT NULL
+      `;
+      return files.length > 0;
+    }
+  });
+};
+
 export const waitForBspFileAssociationRemoved = async (
   sql: SqlClient,
   fileKey: string,

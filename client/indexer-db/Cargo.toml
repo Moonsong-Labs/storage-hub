@@ -17,6 +17,7 @@ workspace = true
 [dependencies]
 bigdecimal = { workspace = true }
 chrono = { workspace = true }
+codec = { workspace = true }
 diesel = { workspace = true }
 diesel-async = { workspace = true }
 diesel_migrations = { workspace = true }
