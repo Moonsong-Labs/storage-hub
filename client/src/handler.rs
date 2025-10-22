@@ -13,10 +13,10 @@ use shc_blockchain_service::{
     capacity_manager::CapacityConfig,
     events::{
         AcceptedBspVolunteer, DistributeFileToBsp, FinalisedBucketMovedAway,
-        FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
-        LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
-        MoveBucketRequested, MoveBucketRequestedForMsp, MultipleNewChallengeSeeds,
-        NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
+        FinalisedBucketMutationsApplied, FinalisedMspStopStoringBucketInsolventUser,
+        FinalisedMspStoppedStoringBucket, LastChargeableInfoUpdated, MoveBucketAccepted,
+        MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MoveBucketRequestedForMsp,
+        MultipleNewChallengeSeeds, NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
         ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
         ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser,
         StartMovedBucketDownload, UserWithoutFunds,
@@ -49,6 +49,7 @@ use crate::{
         msp_delete_bucket::MspDeleteBucketTask,
         msp_distribute_file::MspDistributeFileTask,
         msp_move_bucket::{MspMoveBucketConfig, MspRespondMoveBucketTask},
+        msp_remove_finalised_files::MspRemoveFinalisedFilesTask,
         msp_retry_bucket_move::MspRetryBucketMoveTask,
         msp_stop_storing_insolvent_user::MspStopStoringInsolventUserTask,
         msp_upload_file::MspUploadFileTask,
@@ -313,6 +314,8 @@ where
                     MspStopStoringInsolventUserTask,
                 NotifyPeriod => MspChargeFeesTask,
                 DistributeFileToBsp<Runtime> => MspDistributeFileTask,
+                // MspRemoveFinalisedFilesTask handles events for removing files from file storage after mutations are finalised.
+                FinalisedBucketMutationsApplied<Runtime> => MspRemoveFinalisedFilesTask,
             ]
         );
     }

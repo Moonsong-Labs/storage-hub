@@ -11,6 +11,7 @@ pub mod msp_charge_fees;
 pub mod msp_delete_bucket;
 pub mod msp_distribute_file;
 pub mod msp_move_bucket;
+pub mod msp_remove_finalised_files;
 pub mod msp_retry_bucket_move;
 pub mod msp_stop_storing_insolvent_user;
 pub mod msp_upload_file;
