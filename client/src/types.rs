@@ -15,6 +15,9 @@ use shc_forest_manager::{
 
 use super::forest_storage::{ForestStorageCaching, ForestStorageSingle, NoKey};
 
+pub const FOREST_STORAGE_PATH: &str = "storagehub/forest_storage/";
+pub const FILE_STORAGE_PATH: &str = "storagehub/file_storage/";
+
 /// A StorageHub node must [`FileStorage`](shc_file_manager::traits::FileStorage) and a [`ForestStorageHandler`]
 /// to store and retrieve Files and Forests, respectively.
 ///

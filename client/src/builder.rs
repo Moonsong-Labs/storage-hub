@@ -36,7 +36,7 @@ use super::{
     types::{
         BspForestStorageHandlerT, BspProvider, FishermanForestStorageHandlerT, FishermanRole,
         InMemoryStorageLayer, MspForestStorageHandlerT, MspProvider, NoStorageLayer,
-        RocksDbStorageLayer, ShNodeType, ShRole, ShStorageLayer, UserRole,
+        RocksDbStorageLayer, ShNodeType, ShRole, ShStorageLayer, UserRole, FILE_STORAGE_PATH,
     },
 };
 
@@ -410,7 +410,7 @@ where
 
         let mut path = PathBuf::new();
         path.push(&storage_path);
-        path.push("storagehub/file_storage/");
+        path.push(FILE_STORAGE_PATH);
 
         let file_storage = RocksDbFileStorage::<_, kvdb_rocksdb::Database>::rocksdb_storage(
             path.to_string_lossy().to_string(),
@@ -449,7 +449,7 @@ where
 
         let mut path = PathBuf::new();
         path.push(&storage_path);
-        path.push("storagehub/file_storage/");
+        path.push(FILE_STORAGE_PATH);
 
         self.storage_path = Some(storage_path.clone());
 

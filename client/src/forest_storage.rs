@@ -17,6 +17,8 @@ use shc_forest_manager::{
 };
 use tokio::sync::RwLock;
 
+use crate::types::FOREST_STORAGE_PATH;
+
 const LOG_TARGET: &str = "forest-storage-handler";
 
 /// Forest storage handler that manages a single forest storage instance.
@@ -70,7 +72,7 @@ where
     pub fn new(storage_path: String) -> Self {
         let mut path = PathBuf::new();
         path.push(storage_path.clone());
-        path.push("storagehub/forest_storage/");
+        path.push(FOREST_STORAGE_PATH);
 
         let path_str = path.to_string_lossy().to_string();
         debug!(target: LOG_TARGET, "Creating RocksDB at path: {}", path_str);
@@ -152,7 +154,7 @@ where
                 .clone()
                 .expect("Storage path should be set for RocksDB implementation"),
         );
-        path.push("storagehub/forest_storage/");
+        path.push(FOREST_STORAGE_PATH);
 
         let path_str = path.to_string_lossy().to_string();
         debug!(target: LOG_TARGET, "Creating RocksDB at path: {}", path_str);
@@ -337,7 +339,7 @@ where
 
         let mut path = PathBuf::new();
         path.push(storage_path);
-        path.push("storagehub/forest_storage/");
+        path.push(FOREST_STORAGE_PATH);
         path.push(key.to_string());
 
         let path_str = path.to_string_lossy().to_string();
