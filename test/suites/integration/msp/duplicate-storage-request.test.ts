@@ -14,8 +14,7 @@ await describeMspNet(
     initialised: true,
     indexer: true,
     fisherman: true,
-    indexerMode: "fishing",
-    networkConfig: "standard"
+    indexerMode: "fishing"
   },
   ({ before, createMsp1Api, it, createUserApi, getLaunchResponse }) => {
     let userApi: EnrichedBspApi;
