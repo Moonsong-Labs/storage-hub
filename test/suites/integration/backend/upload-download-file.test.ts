@@ -59,7 +59,7 @@ await describeMspNet(
     it("Backend service is ready", async () => {
       await userApi.docker.waitForLog({
         containerName: "storage-hub-sh-backend-1",
-        searchString: "Server listening on",
+        searchString: "Server listening",
         timeout: 15000
       });
     });

@@ -63,7 +63,7 @@ export async function initWasm(): Promise<void> {
       throw new Error("Embedded WASM is missing or empty. Ensure build generated _wasm_embed.ts.");
     }
     const bytes = decodeBase64ToBytes(b64);
-    await wasmInit({ module_or_path: bytes });
+    await wasmInit({ module_or_path: bytes as BufferSource });
     return;
   })();
 
