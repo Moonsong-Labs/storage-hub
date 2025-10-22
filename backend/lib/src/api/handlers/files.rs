@@ -3,7 +3,7 @@
 //! TODO: move the rest of the endpoints as they are implemented
 
 use axum::{
-    body::Bytes,
+    body::{Body, Bytes},
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
@@ -16,9 +16,10 @@ use axum_extra::{
 use codec::Decode;
 use shc_common::types::FileMetadata;
 use tokio::sync::mpsc;
-use tokio_stream::wrappers::ReceiverStream;
+use tokio_stream::{wrappers::ReceiverStream, StreamExt};
 
 use crate::{
+    constants::download::QUEUE_BUFFER_SIZE,
     error::Error,
     services::{auth::AuthenticatedUser, Services},
 };
@@ -38,27 +39,56 @@ pub async fn get_file_info(
 // Internal endpoint used by the MSP RPC to upload a file to the backend
 // The file is only temporary and will be deleted after the stream is closed
 pub async fn internal_upload_by_key(
-    State(_services): State<Services>,
+    State(services): State<Services>,
     Path(file_key): Path<String>,
-    body: Bytes,
+    body: Body,
 ) -> (StatusCode, impl IntoResponse) {
     // TODO: re-add auth
     // FIXME: make this only callable by the rpc itself
     // let _auth = extract_bearer_token(&auth)?;
-    if let Err(e) = tokio::fs::create_dir_all("/tmp/uploads").await {
-        return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
-    }
+
     // Validate file_key is a hex string
     let key = file_key.trim_start_matches("0x");
     if hex::decode(key).is_err() {
         return (StatusCode::BAD_REQUEST, "Invalid file key".to_string());
     }
 
-    let file_path = format!("/tmp/uploads/{}", file_key);
-    match tokio::fs::write(&file_path, body).await {
-        Ok(_) => (StatusCode::OK, "Upload successful".to_string()),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    // Get session
+    let Some(tx) = services.download_sessions.get_session(&file_key) else {
+        return (StatusCode::NOT_FOUND, "Session not found".to_string());
+    };
+
+    // Stream chunks to channel
+    let mut stream = body.into_data_stream();
+    while let Some(chunk_result) = stream.next().await {
+        match chunk_result {
+            Ok(chunk) => {
+                if tx.send(Ok(chunk)).await.is_err() {
+                    // Client disconnected
+                    tracing::info!("Client disconnected for session {}", file_key);
+                    services.download_sessions.remove_session(&file_key);
+                    return (StatusCode::OK, "Client disconnected".to_string());
+                }
+            }
+            Err(e) => {
+                tracing::error!("Stream error: {:?}", e);
+                let _ = tx
+                    .send(Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        e.to_string(),
+                    )))
+                    .await;
+                services.download_sessions.remove_session(&file_key);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Stream error".to_string(),
+                );
+            }
+        }
     }
+
+    services.download_sessions.remove_session(&file_key);
+    (StatusCode::OK, "Upload successful".to_string())
 }
 
 pub async fn download_by_key(
@@ -72,9 +102,10 @@ pub async fn download_by_key(
         return Err(Error::BadRequest("Invalid file key".to_string()));
     }
 
-    // A 16-byte buffered queue that receives streamed chunks from the MSP
+    // A buffered queue that receives streamed chunks from the MSP
+    // QUEUE_BUFFER_SIZE is calculated based on the node FILE_CHUCK_SIZE so we dont have more than 1 Mb
     // via the RPC call, which streams data to the internal_upload_by_key endpoint.
-    let (tx, rx) = mpsc::channel::<Result<Bytes, std::io::Error>>(16);
+    let (tx, rx) = mpsc::channel::<Result<Bytes, std::io::Error>>(QUEUE_BUFFER_SIZE);
 
     // Add the transmitter to the active download sessions
     services.download_sessions.add_session(file_key.clone(), tx);

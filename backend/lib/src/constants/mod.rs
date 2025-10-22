@@ -87,6 +87,17 @@ pub mod auth {
     pub const MOCK_ENS: &str = "user.eth";
 }
 
+pub mod download {
+    use shc_common::types::FILE_CHUNK_SIZE;
+
+    /// The maximum number of download sessions that can be active at any given time.
+    pub const MAX_DOWNLOAD_SESSIONS: usize = 100;
+
+    /// The buffer size in chunks for the download queue not exceeding 1Mb
+    const MAX_BUFFER_BYTES: u64 = 2u64.pow(20); // 1Mb
+    pub const QUEUE_BUFFER_SIZE: usize = (MAX_BUFFER_BYTES / FILE_CHUNK_SIZE) as usize;
+}
+
 /// Retry and backoff configuration
 pub mod retry {
     /// Stepped backoff delays (in seconds) for retry operations.
