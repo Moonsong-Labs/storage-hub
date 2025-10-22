@@ -464,7 +464,9 @@ where
 
         // If we do not have the file already in forest storage, we must take into account the
         // available storage capacity.
-        if !read_fs.contains_file_key(&file_key.into())? {
+        let file_in_forest_storage = read_fs.contains_file_key(&file_key.into())?;
+        if !file_in_forest_storage {
+            info!(target: LOG_TARGET, "File key {:?} not found in forest storage. Checking available storage capacity.", file_key);
             let available_capacity = self
                 .storage_hub_handler
                 .blockchain
@@ -574,6 +576,8 @@ where
                     return Err(anyhow::anyhow!(err_msg));
                 }
             }
+        } else {
+            debug!(target: LOG_TARGET, "File key {:?} found in forest storage.", file_key);
         }
 
         self.file_key_cleanup = Some(file_key.into());
@@ -581,25 +585,55 @@ where
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
 
         // Create file in file storage if it is not present so we can write uploaded chunks as soon as possible.
-        if write_file_storage
+        let file_in_file_storage = write_file_storage
             .get_metadata(&file_key.into())
             .map_err(|e| anyhow!("Failed to get metadata from file storage: {:?}", e))?
-            .is_none()
-        {
+            .is_some();
+        if !file_in_file_storage {
+            debug!(target: LOG_TARGET, "File key {:?} not found in file storage. Inserting file.", file_key);
             write_file_storage
                 .insert_file(
                     metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>(),
                     metadata,
                 )
                 .map_err(|e| anyhow!("Failed to insert file in file storage: {:?}", e))?;
+        } else {
+            debug!(target: LOG_TARGET, "File key {:?} found in file storage.", file_key);
         }
+
+        // If the file is in both file storage and forest storage, we can skip the file transfer,
+        // and proceed to accepting the storage request directly, provided that we have the entire file in file storage.
+        if file_in_file_storage && file_in_forest_storage {
+            info!(target: LOG_TARGET, "File key {:?} found in both file storage and forest storage. No need to receive the file from the user.", file_key);
+
+            // Check if the file is complete in file storage.
+            let file_complete = match write_file_storage.is_file_complete(&file_key.into()) {
+                Ok(is_complete) => is_complete,
+                Err(e) => {
+                    warn!(target: LOG_TARGET, "Failed to check if file is complete. The file key {:?} is in a bad state with error: {:?}", file_key, e);
+                    warn!(target: LOG_TARGET, "Assuming the file is not complete.");
+                    false
+                }
+            };
+
+            if file_complete {
+                info!(target: LOG_TARGET, "File key {:?} is complete in file storage. Proceeding to accept storage request.", file_key);
+                self.on_file_complete(&file_key.into()).await?;
+
+                // This finishes the task, as we already have the entire file in file storage and we queued
+                // the accept transaction to the blockchain, so we can finish the task early.
+                return Ok(());
+            } else {
+                debug!(target: LOG_TARGET, "File key {:?} is not complete in file storage. Need to receive the file from the user.", file_key);
+            }
+        };
 
         drop(write_file_storage);
 
         // Register the file for upload in the file transfer service.
         // Even though we could already have the entire file in file storage, we
         // allow the user to connect to us and upload the file. Once they do, we will
-        // send back the `file_complete` flag to true signaling to the user that we have
+        // send back the `file_complete` flag to true signalling to the user that we have
         // the entire file so that the file uploading process is complete.
         for peer_id in event.user_peer_ids.iter() {
             let peer_id = match std::str::from_utf8(&peer_id.as_slice()) {
@@ -924,11 +958,16 @@ where
         info!(target: LOG_TARGET, "File upload complete (file_key {:x})", file_key);
 
         // Unregister the file from the file transfer service.
-        self.storage_hub_handler
+        if let Err(e) = self
+            .storage_hub_handler
             .file_transfer
             .unregister_file((*file_key).into())
             .await
-            .map_err(|e| anyhow!("File is not registered. This should not happen!: {:?}", e))?;
+        {
+            warn!(target: LOG_TARGET, "Failed to unregister file {:x} from file transfer service: {:?}", file_key, e);
+        }
+
+        trace!(target: LOG_TARGET, "File unregistered from file transfer service.");
 
         // Queue a request to confirm the storing of the file.
         self.storage_hub_handler
@@ -938,6 +977,8 @@ where
                 MspRespondStorageRequest::Accept,
             ))
             .await?;
+
+        trace!(target: LOG_TARGET, "File queued for confirmation.");
 
         Ok(())
     }
