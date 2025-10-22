@@ -10,7 +10,13 @@ import {
 
 await describeMspNet(
   "Single MSP accepting subsequent storage request for same file key",
-  { initialised: true, indexer: true, fisherman: true, indexerMode: "fishing" },
+  {
+    initialised: true,
+    indexer: true,
+    fisherman: true,
+    indexerMode: "fishing",
+    networkConfig: "standard"
+  },
   ({ before, createMsp1Api, it, createUserApi, getLaunchResponse }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
@@ -150,12 +156,15 @@ await describeMspNet(
       );
       await mspApi.wait.fileStorageComplete(file1.fileKey);
       await userApi.wait.mspResponseInTxPool();
-      await userApi.block.seal();
+      await userApi.wait.bspVolunteer(1); // This seals the block as well
 
       const { event: storageRequestAccepted } = await userApi.assert.eventPresent(
         "fileSystem",
         "MspAcceptedStorageRequest"
       );
+
+      const bspAccount = userApi.createType("Address", userApi.accounts.bspKey.address);
+      await userApi.wait.bspStored({ expectedExts: 1, bspAccount });
 
       const storageRequestAcceptedDataBlob =
         userApi.events.fileSystem.MspAcceptedStorageRequest.is(storageRequestAccepted) &&
@@ -179,12 +188,14 @@ await describeMspNet(
       );
       await mspApi.wait.fileStorageComplete(file2.fileKey);
       await userApi.wait.mspResponseInTxPool();
-      await userApi.block.seal();
+      await userApi.wait.bspVolunteer(1); // This seals the block as well
 
       const { event: storageRequestAccepted2 } = await userApi.assert.eventPresent(
         "fileSystem",
         "MspAcceptedStorageRequest"
       );
+
+      await userApi.wait.bspStored({ expectedExts: 1, bspAccount });
 
       const storageRequestAcceptedDataBlob2 =
         userApi.events.fileSystem.MspAcceptedStorageRequest.is(storageRequestAccepted2) &&
@@ -257,7 +268,12 @@ await describeMspNet(
         checkTxPool: true,
         assertLength: 2 // 1 for MSP and 1 for BSP
       });
-      await userApi.block.seal();
+      const block = await userApi.block.seal({ finaliseBlock: true });
+
+      // Finalising block in MSP node to trigger the event to delete the file.
+      // First we make sure the MSP is caught up to the block.
+      await mspApi.wait.nodeCatchUpToChainTip(userApi);
+      await mspApi.block.finaliseBlock(block.blockReceipt.blockHash.toString());
 
       // Wait until MSP file storage no longer contains the file
       await waitFor({
