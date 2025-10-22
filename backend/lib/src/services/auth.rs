@@ -12,7 +12,7 @@ use axum_jwt::{
 };
 use chrono::{DateTime, Utc};
 use rand::{distributions::Alphanumeric, Rng};
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 use crate::{
     api::validation::validate_eth_address,
@@ -165,7 +165,7 @@ impl AuthService {
             .await
             .map_err(|_| Error::Internal)?;
 
-        info!(address = %address, "Generated auth challenge");
+        debug!(address = %address, "Generated auth challenge");
         Ok(NonceResponse { message })
     }
 
@@ -231,7 +231,7 @@ impl AuthService {
         // Finally, generate JWT token
         let token = self.generate_jwt(&address)?;
 
-        info!(address = %address, "Successful login");
+        debug!(address = %address, "Successful login");
 
         // TODO: Store the session token in database
         // to allow users to logout (invalidate their session)
@@ -251,7 +251,7 @@ impl AuthService {
 
         let token = self.generate_jwt(user_address)?;
 
-        info!(address = %user_address, "Token refreshed");
+        debug!(address = %user_address, "Token refreshed");
         Ok(TokenResponse { token })
     }
 
@@ -267,7 +267,7 @@ impl AuthService {
     }
 
     pub async fn logout(&self, user_address: &str) -> Result<(), Error> {
-        info!(address = %user_address, "User logged out");
+        debug!(address = %user_address, "User logged out");
         // TODO: Invalidate the token in session storage
         // For now, the nonce cleanup happens automatically on expiration
         // or during verification (one-time use)

@@ -6,7 +6,7 @@ use axum::{
     Json,
 };
 use serde::Deserialize;
-use tracing::info;
+use tracing::debug;
 
 use crate::{
     error::Error, models::files::FileListResponse, services::auth::AuthenticatedUser,
@@ -17,7 +17,7 @@ pub async fn list_buckets(
     State(services): State<Services>,
     AuthenticatedUser { address }: AuthenticatedUser,
 ) -> Result<impl IntoResponse, Error> {
-    info!(user = %address, "GET list buckets");
+    debug!(user = %address, "GET list buckets");
     let response = services
         .msp
         .list_user_buckets(&address)
@@ -31,7 +31,7 @@ pub async fn get_bucket(
     AuthenticatedUser { address }: AuthenticatedUser,
     Path(bucket_id): Path<String>,
 ) -> Result<impl IntoResponse, Error> {
-    info!(bucket_id = %bucket_id, user = %address, "GET bucket");
+    debug!(bucket_id = %bucket_id, user = %address, "GET bucket");
     let response = services.msp.get_bucket(&bucket_id, &address).await?;
 
     Ok(Json(response))
@@ -49,7 +49,7 @@ pub async fn get_files(
     Query(query): Query<FilesQuery>,
 ) -> Result<impl IntoResponse, Error> {
     let path = query.path.as_deref().unwrap_or("/");
-    info!(
+    debug!(
         bucket_id = %bucket_id,
         path = %path,
         user = %address,

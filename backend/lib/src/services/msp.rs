@@ -16,7 +16,7 @@ use shc_common::types::{
 use shc_file_manager::{in_memory::InMemoryFileDataTrie, traits::FileDataTrie};
 use shc_rpc::{GetValuePropositionsResult, RpcProviderId, SaveFileToDisk};
 use sp_core::{Blake2Hasher, H256};
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 use shc_indexer_db::{models::Bucket as DBBucket, OnchainMspId};
 use shp_types::Hash;
@@ -423,7 +423,7 @@ impl MspService {
                 let fingerprint: [u8; 32] = file_metadata.fingerprint().as_hash();
                 let file_size = file_metadata.file_size();
 
-                info!(
+                debug!(
                     "File download prepared - file_key: {}, size: {} bytes",
                     file_key, file_size
                 );
@@ -612,7 +612,7 @@ impl MspService {
             .unwrap_or(file_key)
             .to_string();
 
-        info!(
+        debug!(
             bucket_id = %bucket_id,
             file_key = %file_key,
             chunks = total_chunks,
@@ -776,7 +776,7 @@ impl MspService {
 
             match result {
                 Ok(_raw) => {
-                    info!(peer_id = ?peer_id, "Successfully sent upload request to MSP peer");
+                    debug!(peer_id = ?peer_id, "Successfully sent upload request to MSP peer");
                     return Ok(());
                 }
                 Err(e) => {

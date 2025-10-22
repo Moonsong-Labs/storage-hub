@@ -106,10 +106,7 @@ fn load_config() -> Result<Config> {
     let mut config = match args.config {
         Some(path) => Config::from_file(&path)
             .with_context(|| format!("Failed to read config file: {}", path))?,
-        None => {
-            debug!(target: "main::load_config", "No config file specified, using defaults");
-            Config::default()
-        }
+        None => Config::default(),
     };
 
     // Apply CLI overrides

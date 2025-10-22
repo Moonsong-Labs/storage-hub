@@ -16,7 +16,7 @@ use axum_extra::{
 use codec::Decode;
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
-use tracing::info;
+use tracing::debug;
 
 use shc_common::types::FileMetadata;
 
@@ -30,7 +30,7 @@ pub async fn get_file_info(
     AuthenticatedUser { address }: AuthenticatedUser,
     Path((bucket_id, file_key)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, Error> {
-    info!(
+    debug!(
         bucket_id = %bucket_id,
         file_key = %file_key,
         user = %address,
@@ -50,7 +50,7 @@ pub async fn internal_upload_by_key(
     Path(file_key): Path<String>,
     body: Bytes,
 ) -> (StatusCode, impl IntoResponse) {
-    info!(file_key = %file_key, "PUT internal upload");
+    debug!(file_key = %file_key, "PUT internal upload");
     // TODO: re-add auth
     // FIXME: make this only callable by the rpc itself
     // let _auth = extract_bearer_token(&auth)?;
@@ -75,7 +75,7 @@ pub async fn download_by_key(
     AuthenticatedUser { address }: AuthenticatedUser,
     Path(file_key): Path<String>,
 ) -> Result<impl IntoResponse, Error> {
-    info!(file_key = %file_key, user = %address, "GET download file");
+    debug!(file_key = %file_key, user = %address, "GET download file");
     // Validate file_key is a hex string
     let key = file_key.trim_start_matches("0x");
     if hex::decode(key).is_err() {
@@ -136,7 +136,7 @@ pub async fn upload_file(
     Path((bucket_id, file_key)): Path<(String, String)>,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, Error> {
-    info!(
+    debug!(
         bucket_id = %bucket_id,
         file_key = %file_key,
         user = %address,
@@ -214,7 +214,7 @@ pub async fn distribute_file(
     AuthenticatedUser { address }: AuthenticatedUser,
     Path((bucket_id, file_key)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, Error> {
-    info!(
+    debug!(
         bucket_id = %bucket_id,
         file_key = %file_key,
         user = %address,
