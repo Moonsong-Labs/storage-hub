@@ -93,7 +93,7 @@ pub mod file {
 
     /// File key expected by the SDK tests to be in [`super::bucket::BUCKET1_BUCKET_ID`]
     pub const BUCKET1_FILE3_KEY: [u8; 32] =
-        hex!("b738bce3726580a31a936b1782209c1df92ced746685eddfb95bc8679499ad08");
+        hex!("c4344065c2f4c1155008caf5d56bcbf59d2f37b276e566b2dcad4713904d88e8");
 
     /// File fingerprint expected by the SDK tests for FILE3
     pub const BUCKET1_FILE3_FINGERPRINT: [u8; 32] =
