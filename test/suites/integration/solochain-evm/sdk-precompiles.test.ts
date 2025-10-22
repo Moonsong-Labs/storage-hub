@@ -24,7 +24,8 @@ await describeMspNet(
     initialised: false,
     runtimeType: "solochain",
     indexer: true,
-    backend: true
+    backend: true,
+    fisherman: true
   },
   ({ before, it, createUserApi, createMsp1Api }) => {
     let userApi: EnrichedBspApi;
@@ -341,10 +342,9 @@ await describeMspNet(
     });
 
     it("Should request deletion and verify complete cleanup", async () => {
+      // Create the file info to request its deletion
       const registry = new TypeRegistry();
-      const owner = registry.createType("AccountId20", account.address) as AccountId20;
       const bucketIdH256 = registry.createType("H256", bucketId) as H256;
-
       const fingerprint = await fileManager.getFingerprint();
       const fileSize = BigInt(fileManager.getFileSize());
 
@@ -356,6 +356,7 @@ await describeMspNet(
         fingerprint: fingerprint.toHex() as `0x${string}`
       };
 
+      // Use the SDK's StorageHubClient to request the file deletion
       const txHash = await storageHubClient.requestDeleteFile(fileInfo);
       await userApi.wait.waitForTxInPool({
         module: "ethereum",
@@ -369,12 +370,58 @@ await describeMspNet(
       // Verify the deletion request was enqueued on-chain
       await userApi.assert.eventPresent("fileSystem", "FileDeletionRequested");
 
-      // TODO: Complete deletion verification
-      // - Wait for MSP backend to process the deletion request from blockchain events
-      // - Verify file is marked as deleted in on-chain state
-      // - Attempt to download the file using mspClient.downloadByKey(fileInfo.fileKey)
-      // - Expect download to fail with 404 or "not found" error
-      // - Verify MSP no longer serves the deleted file
+      // Wait for the fisherman node's delete_files extrinsic to be in the tx pool and seal it
+      // Two extrinsics are expected: one for the BSP and one for the MSP.
+      await userApi.wait.waitForTxInPool({
+        module: "fileSystem",
+        method: "deleteFiles",
+        checkQuantity: 2,
+        strictQuantity: true
+      });
+      const deleteFileBlock = await userApi.block.seal();
+
+      // Verify that the `BucketFileDeletionsCompleted` event was emitted and it contains the correct file key
+      const bucketFileDeletionsCompletedEvent = await userApi.assert.eventPresent(
+        "fileSystem",
+        "BucketFileDeletionsCompleted"
+      );
+      assert(bucketFileDeletionsCompletedEvent, "BucketFileDeletionsCompleted event not found");
+      const bucketFileDeletionsCompletedEventData =
+        userApi.events.fileSystem.BucketFileDeletionsCompleted.is(
+          bucketFileDeletionsCompletedEvent.event
+        ) && bucketFileDeletionsCompletedEvent.event.data;
+      assert(
+        bucketFileDeletionsCompletedEventData,
+        "BucketFileDeletionsCompleted event data not found"
+      );
+      strictEqual(
+        bucketFileDeletionsCompletedEventData.fileKeys.length,
+        1,
+        "Should have deleted 1 file"
+      );
+      strictEqual(
+        bucketFileDeletionsCompletedEventData.fileKeys[0].toString(),
+        fileKey.toHex(),
+        "File key should match the deleted file key"
+      );
+
+      // Wait until the MSP detects the on-chain deletion and updates its local bucket forest
+      await msp1Api.wait.mspBucketFileDeletionCompleted(fileKey.toHex(), bucketId);
+
+      // Finalise the block containing the `BucketFileDeletionsCompleted` event in the MSP node
+      // so that the `BucketFileDeletionsCompleted` event is finalised on-chain and the MSP deletes the
+      // file from its file storage.
+      await msp1Api.rpc.engine.finalizeBlock(deleteFileBlock.blockReceipt.blockHash);
+
+      // Wait until the MSP detects the now finalised deletion and correctly deletes the file from its file storage
+      await msp1Api.wait.fileDeletionFromFileStorage(fileKey.toHex());
+
+      // Attempt to download the file, it should fail with a 404 since the file was deleted
+      const downloadResponse = await mspClient.files.downloadFile(fileKey.toHex());
+      assert(
+        downloadResponse.status === 404,
+        "Download should fail after file deletion, but it succeeded"
+      );
     });
 
     it("Should create, verify, delete, and verify deletion of a bucket", async () => {
