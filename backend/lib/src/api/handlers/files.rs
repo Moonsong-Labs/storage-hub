@@ -14,10 +14,9 @@ use axum_extra::{
     response::FileStream,
 };
 use codec::Decode;
-use tokio::fs::File;
-use tokio_util::io::ReaderStream;
-
 use shc_common::types::FileMetadata;
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
 
 use crate::{
     error::Error,
@@ -73,32 +72,30 @@ pub async fn download_by_key(
         return Err(Error::BadRequest("Invalid file key".to_string()));
     }
 
-    // TODO(AUTH): verify that user has permissions to access this file
-    let download_result = services.msp.get_file_from_key(&file_key).await?;
+    // A 16-byte buffered queue that receives streamed chunks from the MSP
+    // via the RPC call, which streams data to the internal_upload_by_key endpoint.
+    let (tx, rx) = mpsc::channel::<Result<Bytes, std::io::Error>>(16);
+
+    // Add the transmitter to the active download sessions
+    services.download_sessions.add_session(file_key.clone(), tx);
+
+    tokio::spawn(async move {
+        // TODO(AUTH): verify that user has permissions to access this file
+        // We trigger the download process via RPC call
+        let _ = services.msp.get_file_from_key(&file_key).await;
+    });
 
     // Extract filename from location or use file_key as fallback
-    let filename = download_result
-        .location
-        .split('/')
-        .last()
-        .unwrap_or(&file_key)
-        .to_string();
+    // let filename = download_result
+    //     .location
+    //     .split('/')
+    //     .last()
+    //     .unwrap_or(&file_key)
+    //     .to_string();
+    let filename = "fix_this_filename.txt";
 
-    // Open file for streaming
-    let file = File::open(&download_result.temp_path)
-        .await
-        .map_err(|e| Error::BadRequest(format!("Failed to open downloaded file: {}", e)))?;
-
-    // On Unix, unlink the path immediately; the open fd remains valid for streaming
-    // TODO: we should implement proper cleanup after the stream is closed
-    // But as we will probably change implementation to just redirect the RPC stream to user, leaving it as is for now (not a problem if we run on unix).
-    #[cfg(unix)]
-    {
-        let _ = tokio::fs::remove_file(&download_result.temp_path).await;
-    }
-
-    let stream = ReaderStream::new(file);
-    let file_stream_resp = FileStream::new(stream).file_name(&filename).into_response();
+    let stream = ReceiverStream::new(rx);
+    let file_stream_resp = FileStream::new(stream).file_name(filename).into_response();
 
     Ok(file_stream_resp)
 }
