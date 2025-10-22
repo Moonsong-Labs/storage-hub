@@ -1,5 +1,4 @@
 use chrono::NaiveDateTime;
-use codec::Decode;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
@@ -43,16 +42,16 @@ pub struct File {
     pub step: i32,
     /// Deletion status of the file. NULL = normal, 1 = deletion in progress.
     pub deletion_status: Option<i32>,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
     /// User signature from [`FileDeletionRequested`](pallet_file_system::Event::FileDeletionRequested) event,
     /// stored as SCALE-encoded bytes.
     ///
     /// Required by fisherman nodes to construct valid proofs for the `delete_file` extrinsic.
-    /// Use [`decode_deletion_signature`](File::decode_deletion_signature) to decode the signature before use.
+    /// Must be decoded using [`codec::Decode`] before use to avoid double-encoding.
     ///
     /// NULL when file is deleted through automated processes (e.g., [`StorageRequestRevoked`](pallet_file_system::Event::StorageRequestRevoked)).
     pub deletion_signature: Option<Vec<u8>>,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
 }
 
 /// Association table between File and PeerId
