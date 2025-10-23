@@ -69,9 +69,6 @@ pub fn routes(services: Services) -> Router {
 #[cfg(all(test, feature = "mocks"))]
 mod tests {
     use crate::services::health::HealthService;
-
-    use std::path::Path;
-
     use axum::http::StatusCode;
     use axum_test::TestServer;
 
