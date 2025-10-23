@@ -400,29 +400,6 @@ pub struct ProcessFileDeletionRequest<Runtime: StorageEnableRuntime> {
     pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
 }
 
-/// Finalised proof submitted by an MSP for a pending file deletion request event.
-///
-/// Fields are identical
-#[derive(Debug, Clone, ActorEvent)]
-#[actor(actor = "blockchain_service")]
-pub struct FinalisedProofSubmittedForPendingFileDeletionRequest<Runtime: StorageEnableRuntime> {
-    /// Account ID of the user that requested the file deletion.
-    pub user: Runtime::AccountId,
-    /// File key that was requested to be deleted.
-    pub file_key: FileKey,
-    /// File size of the file that was requested to be deleted.
-    pub file_size: StorageDataUnit<Runtime>,
-    /// Bucket ID in which the file key belongs to.
-    pub bucket_id: BucketId<Runtime>,
-    /// The MSP ID that provided the proof of inclusion for a pending file deletion request.
-    pub msp_id: ProofsDealerProviderId<Runtime>,
-    /// Whether a proof of inclusion was provided by the MSP.
-    ///
-    /// This means that the file key requested to be deleted was responded to by the MSP with an inclusion forest proof,
-    /// which would have deleted the file key from the bucket's forest.
-    pub proof_of_inclusion: bool,
-}
-
 /// Event emitted when a bucket move is confirmed on-chain and the download process should start.
 /// This event is emitted by the blockchain service when it receives a MoveBucketAccepted event
 /// and the current node is the new MSP.

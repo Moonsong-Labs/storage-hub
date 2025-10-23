@@ -25,11 +25,11 @@ use crate::{
     events::{
         DistributeFileToBsp, FileDeletionRequest, FinalisedBucketMovedAway,
         FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
-        FinalisedProofSubmittedForPendingFileDeletionRequest, ForestWriteLockTaskData,
-        MoveBucketRequestedForMsp, NewStorageRequest, ProcessFileDeletionRequest,
-        ProcessFileDeletionRequestData, ProcessMspRespondStoringRequest,
-        ProcessMspRespondStoringRequestData, ProcessStopStoringForInsolventUserRequest,
-        ProcessStopStoringForInsolventUserRequestData, StartMovedBucketDownload,
+        ForestWriteLockTaskData, MoveBucketRequestedForMsp, NewStorageRequest,
+        ProcessFileDeletionRequest, ProcessFileDeletionRequestData,
+        ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData,
+        ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
+        StartMovedBucketDownload,
     },
     handler::LOG_TARGET,
     types::{FileDistributionInfo, ManagedProvider},
@@ -241,28 +241,6 @@ where
                         owner,
                         bucket_id,
                     })
-                }
-            }
-            StorageEnableEvents::FileSystem(
-                pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest {
-                    msp_id,
-                    user,
-                    file_key,
-                    file_size,
-                    bucket_id,
-                    proof_of_inclusion,
-                },
-            ) => {
-                // Only emit the event if the MSP provided a proof of inclusion, meaning the file key was deleted from the bucket's forest.
-                if managed_msp_id == &msp_id && proof_of_inclusion {
-                    self.emit(FinalisedProofSubmittedForPendingFileDeletionRequest {
-                        user,
-                        file_key: file_key.into(),
-                        file_size: file_size,
-                        bucket_id,
-                        msp_id,
-                        proof_of_inclusion,
-                    });
                 }
             }
             StorageEnableEvents::FileSystem(pallet_file_system::Event::MoveBucketRequested {
