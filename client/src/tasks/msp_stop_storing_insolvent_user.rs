@@ -18,7 +18,7 @@ use sp_core::H256;
 
 use crate::{
     handler::StorageHubHandler,
-    types::{MspForestStorageHandlerT, ShNodeType},
+    types::{ForestStorageKey, MspForestStorageHandlerT, ShNodeType},
 };
 
 const LOG_TARGET: &str = "msp-stop-storing-bucket-insolvent-user-task";
@@ -258,7 +258,7 @@ where
         // Delete the bucket from the forest storage.
         self.storage_hub_handler
             .forest_storage_handler
-            .remove_forest_storage(&event.bucket_id.as_bytes().to_vec())
+            .remove_forest_storage(&ForestStorageKey::from(event.bucket_id.as_ref().to_vec()))
             .await;
 
         Ok(())

@@ -28,7 +28,7 @@ use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
 use crate::{
     handler::StorageHubHandler,
-    types::{BspForestStorageHandlerT, ShNodeType},
+    types::{BspForestStorageHandlerT, ForestStorageKey, ShNodeType},
 };
 
 const LOG_TARGET: &str = "bsp-submit-proof-task";
@@ -201,7 +201,7 @@ where
         Self::check_if_proof_is_outdated(&self.storage_hub_handler.blockchain, &event).await?;
 
         // Get the current Forest key of the Provider running this node.
-        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+        let current_forest_key = ForestStorageKey::from(CURRENT_FOREST_KEY.to_vec());
 
         // Generate the Forest proof, i.e. the proof that some file keys belong to this Provider's Forest.
         let proven_file_keys = {
@@ -388,7 +388,7 @@ where
             let file_key = FileKey::from(mutation.0);
 
             // Check that the file_key is not in the Forest.
-            let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+            let current_forest_key = ForestStorageKey::from(CURRENT_FOREST_KEY.to_vec());
             let read_fs = self
                 .storage_hub_handler
                 .forest_storage_handler
@@ -627,7 +627,7 @@ where
             _ => return false,
         }
 
-        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+        let current_forest_key = ForestStorageKey::from(CURRENT_FOREST_KEY.to_vec());
         let is_proof_outdated = Self::check_if_proof_is_outdated(&sh_handler.blockchain, &event)
             .await
             .is_err();

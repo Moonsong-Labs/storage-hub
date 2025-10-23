@@ -58,8 +58,8 @@ use crate::{
     },
     types::{
         BspForestStorageHandlerT, BspProvider, FishermanForestStorageHandlerT, FishermanRole,
-        MspForestStorageHandlerT, MspProvider, NoStorageLayer, ShNodeType, ShStorageLayer,
-        UserRole,
+        ForestStorageKey, MspForestStorageHandlerT, MspProvider, NoStorageLayer, ShNodeType,
+        ShStorageLayer, UserRole,
     },
 };
 
@@ -330,7 +330,7 @@ where
     async fn initialise_bsp(&mut self) {
         // Create an empty Forest Storage instance.
         // A BSP is expected to always have at least one empty Forest Storage instance.
-        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+        let current_forest_key = ForestStorageKey::from(CURRENT_FOREST_KEY.to_vec());
         self.forest_storage_handler
             .create(&current_forest_key)
             .await;

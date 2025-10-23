@@ -34,7 +34,7 @@ use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
 use crate::{
     handler::StorageHubHandler,
-    types::{MspForestStorageHandlerT, ShNodeType},
+    types::{ForestStorageKey, MspForestStorageHandlerT, ShNodeType},
 };
 
 const LOG_TARGET: &str = "msp-upload-file-task";
@@ -301,7 +301,7 @@ where
             let fs = self
                 .storage_hub_handler
                 .forest_storage_handler
-                .get_or_create(&bucket_id.as_ref().to_vec())
+                .get_or_create(&ForestStorageKey::from(bucket_id.as_ref().to_vec()))
                 .await;
 
             let accept = if !accept.is_empty() {
@@ -458,7 +458,7 @@ where
         let fs = self
             .storage_hub_handler
             .forest_storage_handler
-            .get_or_create(&event.bucket_id.as_ref().to_vec())
+            .get_or_create(&ForestStorageKey::from(event.bucket_id.as_ref().to_vec()))
             .await;
         let read_fs = fs.read().await;
 
@@ -599,7 +599,7 @@ where
         // Register the file for upload in the file transfer service.
         // Even though we could already have the entire file in file storage, we
         // allow the user to connect to us and upload the file. Once they do, we will
-        // send back the `file_complete` flag to true signaling to the user that we have
+        // send back the `file_complete` flag to true signalling to the user that we have
         // the entire file so that the file uploading process is complete.
         for peer_id in event.user_peer_ids.iter() {
             let peer_id = match std::str::from_utf8(&peer_id.as_slice()) {
