@@ -192,7 +192,7 @@ export type BspNetConfig = {
    * If true, runs indexer as standalone service instead of embedded in user node (fullnet only).
    */
   standaloneIndexer?: boolean;
-  
+
   /**
    * Maximum number of incomplete storage requests to process during initial sync.
    * Must be at least 1.
