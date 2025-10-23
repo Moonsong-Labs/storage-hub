@@ -417,3 +417,14 @@ export const chargeUserUntilInsolvent = async (
     finalResult
   };
 };
+
+/**
+ * Get the last indexed block number from the service_state table.
+ *
+ * @param sql - The SQL client instance
+ * @returns The last indexed finalized block number
+ */
+export const getLastIndexedBlock = async (sql: SqlClient): Promise<number> => {
+  const result = await sql`SELECT last_indexed_finalized_block FROM service_state WHERE id = 1`;
+  return Number(result[0].last_indexed_finalized_block);
+};
