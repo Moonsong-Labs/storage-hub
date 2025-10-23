@@ -44,6 +44,14 @@ pub struct File {
     pub deletion_status: Option<i32>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
+    /// User signature from [`FileDeletionRequested`](pallet_file_system::Event::FileDeletionRequested) event,
+    /// stored as SCALE-encoded bytes.
+    ///
+    /// Required by fisherman nodes to construct valid proofs for the `delete_file` extrinsic.
+    /// Must be decoded using [`codec::Decode`] before use to avoid double-encoding.
+    ///
+    /// NULL when file is deleted through automated processes (e.g., [`StorageRequestRevoked`](pallet_file_system::Event::StorageRequestRevoked)).
+    pub deletion_signature: Option<Vec<u8>>,
 }
 
 /// Association table between File and PeerId
@@ -80,6 +88,7 @@ impl File {
                 file::size.eq(size),
                 file::step.eq(step as i32),
                 file::deletion_status.eq(None::<i32>),
+                file::deletion_signature.eq(None::<Vec<u8>>),
             ))
             .returning(File::as_select())
             .get_result(conn)
@@ -145,6 +154,7 @@ impl File {
         conn: &mut DbConnection<'a>,
         file_key: impl AsRef<[u8]>,
         status: FileDeletionStatus,
+        signature: Option<Vec<u8>>,
     ) -> Result<(), diesel::result::Error> {
         let file_key = file_key.as_ref().to_vec();
         let status_value = match status {
@@ -153,7 +163,10 @@ impl File {
         };
         diesel::update(file::table)
             .filter(file::file_key.eq(file_key))
-            .set(file::deletion_status.eq(status_value))
+            .set((
+                file::deletion_status.eq(status_value),
+                file::deletion_signature.eq(signature),
+            ))
             .execute(conn)
             .await?;
         Ok(())
