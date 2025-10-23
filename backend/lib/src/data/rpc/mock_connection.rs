@@ -11,21 +11,15 @@ use jsonrpsee::core::traits::ToRpcParams;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use tokio::{
-    fs,
     sync::{Mutex, RwLock},
     time::sleep,
 };
 
-use shc_common::types::FileMetadata;
-use shc_rpc::{GetValuePropositionsResult, RpcProviderId, SaveFileToDisk};
+use shc_rpc::{GetValuePropositionsResult, RpcProviderId};
 use sp_core::H256;
 
 use crate::{
-    constants::{
-        mocks::{DOWNLOAD_FILE_CONTENT, MOCK_PRICE_PER_GIGA_UNIT},
-        rpc::DUMMY_MSP_ID,
-        rpc::TIMEOUT_MULTIPLIER,
-    },
+    constants::{mocks::MOCK_PRICE_PER_GIGA_UNIT, rpc::DUMMY_MSP_ID, rpc::TIMEOUT_MULTIPLIER},
     data::rpc::{
         connection::error::{RpcConnectionError, RpcResult},
         methods, RpcConnection,
@@ -141,41 +135,6 @@ impl MockConnection {
             }
         }
     }
-
-    /// Build mock JSON response for `storagehubclient_saveFileToDisk` and write mock file
-    async fn mock_save_file_to_disk<P>(&self, params: P) -> Value
-    where
-        P: ToRpcParams + Send,
-    {
-        // We assume params are [file_key, upload_url]
-        let raw = params.to_rpc_params().unwrap().unwrap();
-        let (file_key, upload_url): (String, String) = serde_json::from_str(raw.get()).unwrap();
-
-        // Derive filename from upload_url
-        let file_name = upload_url
-            .rsplit('/')
-            .next()
-            .unwrap_or_else(|| file_key.as_str())
-            .to_string();
-        let local_path = format!("/tmp/uploads/{}", file_name);
-
-        // Create mock file content
-        let _ = fs::create_dir_all("/tmp/uploads").await;
-        let content = DOWNLOAD_FILE_CONTENT.as_bytes();
-        let _ = fs::write(&local_path, content).await;
-
-        // Return expected response shape
-        serde_json::json!(SaveFileToDisk::Success(
-            FileMetadata::new(
-                vec![0; 32],
-                vec![0; 32],
-                file_name.as_bytes().to_vec(),
-                content.len() as u64,
-                vec![0u8; 32].as_slice().into(),
-            )
-            .expect("a valid file metadata descriptor")
-        ))
-    }
 }
 
 impl Default for MockConnection {
@@ -192,7 +151,7 @@ impl Default for MockConnection {
 
 #[async_trait]
 impl RpcConnection for MockConnection {
-    async fn call<P, R>(&self, method: &str, params: P) -> RpcResult<R>
+    async fn call<P, R>(&self, method: &str, _params: P) -> RpcResult<R>
     where
         P: ToRpcParams + Send,
         R: DeserializeOwned,
@@ -214,8 +173,20 @@ impl RpcConnection for MockConnection {
 
         // Build JSON response by method
         let response: Value = match method {
-            methods::SAVE_FILE_TO_DISK => self.mock_save_file_to_disk(params).await,
             methods::FILE_KEY_EXPECTED => serde_json::json!(true),
+            methods::SAVE_FILE_TO_DISK => {
+                let location: Vec<u8> = b"my_file.jpg".to_vec();
+                let fingerprint: Vec<u8> = random_bytes_32().to_vec();
+                serde_json::json!({
+                    "Success": {
+                        "owner": [1],
+                        "bucket_id": [1],
+                        "location": location,
+                        "file_size": 1u64,
+                        "fingerprint": fingerprint
+                    }
+                })
+            }
             methods::PROVIDER_ID => serde_json::json!(RpcProviderId::Msp(
                 shp_types::Hash::from_slice(DUMMY_MSP_ID.as_slice())
             )),

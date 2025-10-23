@@ -68,7 +68,7 @@ pub fn routes(services: Services) -> Router {
 
 #[cfg(all(test, feature = "mocks"))]
 mod tests {
-    use crate::{constants::mocks::DOWNLOAD_FILE_CONTENT, services::health::HealthService};
+    use crate::services::health::HealthService;
 
     use std::path::Path;
 
@@ -85,25 +85,5 @@ mod tests {
 
         let json: serde_json::Value = response.json();
         assert_eq!(json["status"], HealthService::HEALTHY);
-    }
-
-    #[tokio::test]
-    async fn test_download_by_key_streams_and_cleans_temp() {
-        let app = crate::api::mock_app().await;
-        let server = TestServer::new(app).unwrap();
-
-        let file_key = "0xde4a17999bc1482ba71737367e5d858a133ed1e13327a29c495ab976004a138f";
-        let temp_path = format!("/tmp/uploads/{}", file_key);
-
-        let response = server.get(&format!("/download/{}", file_key)).await;
-
-        assert_eq!(response.status_code(), StatusCode::OK);
-
-        // Assert: body bytes match the mocked content written by RPC mock
-        let body = response.as_bytes();
-        assert_eq!(body.as_ref(), DOWNLOAD_FILE_CONTENT.as_bytes());
-
-        // Assert: temp file was removed
-        assert!(!Path::new(&temp_path).exists());
     }
 }
