@@ -232,18 +232,6 @@ pub struct FinalisedTrieRemoveMutationsAppliedForBsp<Runtime: StorageEnableRunti
     pub new_root: Runtime::Hash,
 }
 
-/// Mutations applied event in a finalised block.
-///
-/// This event is emitted when a finalised block is received by the Blockchain service,
-/// in which there is a `MutationsApplied` event for one of the providers that this node is tracking.
-#[derive(Debug, Clone, ActorEvent)]
-#[actor(actor = "blockchain_service")]
-pub struct FinalisedTrieRemoveMutationsAppliedForBucket<Runtime: StorageEnableRuntime> {
-    pub bucket_id: BucketId<Runtime>,
-    pub mutations: Vec<(Hash<Runtime>, TrieMutation)>,
-    pub new_root: Runtime::Hash,
-}
-
 /// Bucket mutations applied event in a finalised block.
 ///
 /// This event is emitted when a finalised block is received by the Blockchain service,
@@ -252,7 +240,7 @@ pub struct FinalisedTrieRemoveMutationsAppliedForBucket<Runtime: StorageEnableRu
 #[actor(actor = "blockchain_service")]
 pub struct FinalisedBucketMutationsApplied<Runtime: StorageEnableRuntime> {
     pub bucket_id: BucketId<Runtime>,
-    pub mutations: Vec<(ForestRoot<Runtime>, TrieMutation)>,
+    pub mutations: Vec<(Hash<Runtime>, TrieMutation)>,
     pub new_root: Runtime::Hash,
 }
 

@@ -4,7 +4,11 @@ use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::events::{
     FinalisedBspConfirmStoppedStoring, FinalisedTrieRemoveMutationsAppliedForBsp,
 };
-use shc_common::{traits::StorageEnableRuntime, types::FileKey, consts::CURRENT_FOREST_KEY};
+use shc_common::{
+    consts::CURRENT_FOREST_KEY,
+    traits::StorageEnableRuntime,
+    types::{FileKey, TrieMutation, TrieRemoveMutation},
+};
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use sp_core::H256;
@@ -119,6 +123,8 @@ where
     NT: ShNodeType<Runtime> + 'static,
     NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
+{
+    async fn handle_event(
         &mut self,
         event: FinalisedBspConfirmStoppedStoring<Runtime>,
     ) -> anyhow::Result<()> {
@@ -157,60 +163,6 @@ where
     }
 }
 
-/// Handles the [`FinalisedTrieRemoveMutationsApplied`] event.
-impl<NT, Runtime> EventHandler<FinalisedTrieRemoveMutationsApplied<Runtime>>
-    for BspDeleteFileTask<NT, Runtime>
-where
-    NT: ShNodeType<Runtime> + 'static,
-    NT::FSH: BspForestStorageHandlerT<Runtime>,
-    Runtime: StorageEnableRuntime,
-{
-    async fn handle_event(
-        &mut self,
-        event: FinalisedTrieRemoveMutationsApplied<Runtime>,
-    ) -> anyhow::Result<()> {
-        info!(
-            target: LOG_TARGET,
-            "Processing finalised mutations applied for provider [{:?}]",
-            event.provider_id
-        );
-        debug!(target: LOG_TARGET, "Mutations to apply: {:?}", event.mutations);
-
-        for mutation in event.mutations {
-            // Get the file key from the mutation.
-            let file_key = FileKey::from(mutation.0);
-
-            // Only process remove mutations in this task.
-            if mutation.1 != TrieMutation::Remove(TrieRemoveMutation::new()) {
-                debug!(target: LOG_TARGET, "Skipping non-remove mutation for file key {:?}", file_key);
-                continue;
-            }
-
-            // Check that the file key is not in the Forest.
-            let current_forest_key = ForestStorageKey::from(CURRENT_FOREST_KEY.to_vec());
-            let read_fs = self
-                .storage_hub_handler
-                .forest_storage_handler
-                .get(&current_forest_key)
-                .await
-                .ok_or_else(|| anyhow!("CRITICAL❗️❗️ Failed to get forest storage."))?;
-            if read_fs.read().await.contains_file_key(&file_key.into())? {
-                warn!(
-                    target: LOG_TARGET,
-                    "TrieRemoveMutation applied and finalised for file key {:?}, but file key is still in Forest. This can only happen if the same file key was added again after deleted by the user.\n Mutation: {:?}",
-                    file_key,
-                    mutation
-                );
-            } else {
-                // If file key is not in Forest, we can now safely remove it from the File Storage.
-                self.remove_file_from_file_storage(&file_key.into()).await?;
-            }
-        }
-
-        Ok(())
-    }
-}
-
 /// Handles the [`FinalisedTrieRemoveMutationsAppliedForBsp`] event.
 ///
 /// This event is triggered when mutations applied to the Forest of this BSP have been finalised,
@@ -237,16 +189,22 @@ where
     ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Processing finalised mutations applied for provider [{:?}] with mutations: {:?}",
-            event.provider_id,
-            event.mutations
+            "Processing finalised mutations applied for provider [{:?}]",
+            event.provider_id
         );
+        debug!(target: LOG_TARGET, "Mutations to apply: {:?}", event.mutations);
 
-        // For each mutation...
         for mutation in event.mutations {
+            // Get the file key from the mutation.
             let file_key = FileKey::from(mutation.0);
 
-            // Check that the file_key is not in the Forest.
+            // Only process remove mutations in this task.
+            if mutation.1 != TrieMutation::Remove(TrieRemoveMutation::new()) {
+                debug!(target: LOG_TARGET, "Skipping non-remove mutation for file key {:?}", file_key);
+                continue;
+            }
+
+            // Check that the file key is not in the Forest.
             let current_forest_key = ForestStorageKey::from(CURRENT_FOREST_KEY.to_vec());
             let read_fs = self
                 .storage_hub_handler
