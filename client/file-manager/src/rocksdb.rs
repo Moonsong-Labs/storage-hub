@@ -1,9 +1,8 @@
-use log::info;
-use std::{collections::HashSet, io, path::PathBuf, sync::Arc};
+use std::{collections::HashSet, io, sync::Arc};
 
 use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
-use log::{debug, error};
+use log::{debug, error, info};
 use shc_common::types::{
     Chunk, ChunkId, ChunkWithId, FileKeyProof, FileMetadata, FileProof, HashT, HasherOutT, H_LENGTH,
 };
@@ -12,7 +11,7 @@ use sp_trie::{prefixed_key, recorder::Recorder, PrefixedMemoryDB, TrieLayout, Tr
 use trie_db::{DBValue, Trie, TrieDBBuilder, TrieDBMutBuilder};
 
 use crate::{
-    error::{other_io_error, ErrorT},
+    error::ErrorT,
     traits::{
         ExcludeType, FileDataTrie, FileStorage, FileStorageError, FileStorageWriteError,
         FileStorageWriteOutcome,
@@ -73,18 +72,10 @@ fn get_exclude_type_db_column(exclude_type: ExcludeType) -> u32 {
 
 /// Open the database on disk, creating it if it doesn't exist.
 fn open_or_creating_rocksdb(db_path: String) -> io::Result<kvdb_rocksdb::Database> {
-    let mut path = PathBuf::new();
-    path.push(db_path.as_str());
-    path.push("storagehub/file_storage/");
-
     let db_config = kvdb_rocksdb::DatabaseConfig::with_columns(NUMBER_OF_COLUMNS);
 
-    let path_str = path
-        .to_str()
-        .ok_or_else(|| other_io_error(format!("Bad database path: {:?}", path)))?;
-
-    std::fs::create_dir_all(&path_str)?;
-    let db = kvdb_rocksdb::Database::open(&db_config, &path_str)?;
+    std::fs::create_dir_all(&db_path)?;
+    let db = kvdb_rocksdb::Database::open(&db_config, &db_path)?;
 
     Ok(db)
 }
