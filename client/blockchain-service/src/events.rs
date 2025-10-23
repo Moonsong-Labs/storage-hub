@@ -1,16 +1,16 @@
 use std::sync::Arc;
-use tokio::sync::{oneshot, Mutex};
 
 use codec::{Decode, Encode};
 use sc_network::Multiaddr;
-use shc_actors_derive::{ActorEvent, ActorEventBus};
+use tokio::sync::{oneshot, Mutex};
 
+use shc_actors_derive::{ActorEvent, ActorEventBus};
 use shc_common::{
     traits::StorageEnableRuntime,
     types::{
         BackupStorageProviderId, Balance, BlockNumber, BucketId, CustomChallenge, FileKey,
-        FileLocation, Fingerprint, ForestRoot, KeyProofs, PeerIds, ProofsDealerProviderId,
-        ProviderId, RandomnessOutput, StorageDataUnit, TickNumber, TrieMutation, ValuePropId,
+        FileLocation, Fingerprint, Hash, KeyProofs, PeerIds, ProofsDealerProviderId, ProviderId,
+        RandomnessOutput, StorageDataUnit, TickNumber, TrieMutation, ValuePropId,
     },
 };
 
@@ -228,7 +228,19 @@ pub struct SlashableProvider<Runtime: StorageEnableRuntime> {
 #[actor(actor = "blockchain_service")]
 pub struct FinalisedTrieRemoveMutationsAppliedForBsp<Runtime: StorageEnableRuntime> {
     pub provider_id: ProofsDealerProviderId<Runtime>,
-    pub mutations: Vec<(ForestRoot<Runtime>, TrieMutation)>,
+    pub mutations: Vec<(Hash<Runtime>, TrieMutation)>,
+    pub new_root: Runtime::Hash,
+}
+
+/// Mutations applied event in a finalised block.
+///
+/// This event is emitted when a finalised block is received by the Blockchain service,
+/// in which there is a `MutationsApplied` event for one of the providers that this node is tracking.
+#[derive(Debug, Clone, ActorEvent)]
+#[actor(actor = "blockchain_service")]
+pub struct FinalisedTrieRemoveMutationsAppliedForBucket<Runtime: StorageEnableRuntime> {
+    pub bucket_id: BucketId<Runtime>,
+    pub mutations: Vec<(Hash<Runtime>, TrieMutation)>,
     pub new_root: Runtime::Hash,
 }
 
