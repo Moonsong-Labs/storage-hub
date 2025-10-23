@@ -102,28 +102,31 @@ pub async fn download_by_key(
         return Err(Error::BadRequest("Invalid file key".to_string()));
     }
 
+    // Check if file exists in MSP storage
+    let file_metadata = services.msp.check_file_status(&file_key).await?;
+
     // A buffered queue that receives streamed chunks from the MSP
-    // QUEUE_BUFFER_SIZE is calculated based on the node FILE_CHUCK_SIZE so we dont have more than 1 Mb
     // via the RPC call, which streams data to the internal_upload_by_key endpoint.
+    // QUEUE_BUFFER_SIZE is calculated based on the node FILE_CHUCK_SIZE so we dont have more than 1 Mb
     let (tx, rx) = mpsc::channel::<Result<Bytes, std::io::Error>>(QUEUE_BUFFER_SIZE);
 
     // Add the transmitter to the active download sessions
-    services.download_sessions.add_session(file_key.clone(), tx);
+    services.download_sessions.add_session(&file_key, tx);
 
+    let file_key_clone = file_key.clone();
     tokio::spawn(async move {
         // TODO(AUTH): verify that user has permissions to access this file
         // We trigger the download process via RPC call
-        let _ = services.msp.get_file_from_key(&file_key).await;
+        let _ = services.msp.get_file_from_key(&file_key_clone).await;
     });
 
     // Extract filename from location or use file_key as fallback
-    // let filename = download_result
-    //     .location
-    //     .split('/')
-    //     .last()
-    //     .unwrap_or(&file_key)
-    //     .to_string();
-    let filename = "fix_this_filename.txt";
+    let file_location = String::from_utf8_lossy(file_metadata.location()).to_string();
+    let filename = file_location
+        .split('/')
+        .last()
+        .unwrap_or(&file_key)
+        .to_string();
 
     let stream = ReceiverStream::new(rx);
     let file_stream_resp = FileStream::new(stream).file_name(filename).into_response();

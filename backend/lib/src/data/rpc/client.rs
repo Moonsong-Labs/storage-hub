@@ -5,7 +5,9 @@ use std::sync::Arc;
 use jsonrpsee::core::traits::ToRpcParams;
 use serde::de::DeserializeOwned;
 
-use shc_rpc::{GetValuePropositionsResult, RpcProviderId, SaveFileToDisk};
+use shc_rpc::{
+    GetFileFromFileStorageResult, GetValuePropositionsResult, RpcProviderId, SaveFileToDisk,
+};
 
 use crate::data::rpc::{connection::error::RpcResult, methods, AnyRpcConnection, RpcConnection};
 
@@ -56,6 +58,24 @@ impl StorageHubRpcClient {
     pub async fn is_file_key_expected(&self, file_key: &str) -> RpcResult<bool> {
         self.connection
             .call(methods::FILE_KEY_EXPECTED, jsonrpsee::rpc_params![file_key])
+            .await
+    }
+
+    // Returns the status of a give file_key in the MSP storage.
+    // The possible results are:
+    //  FileNotFound
+    //  FileFound
+    //  IncompleteFile
+    //  FileFoundWithInconsistency
+    pub async fn is_file_in_file_storage(
+        &self,
+        file_key: &str,
+    ) -> RpcResult<GetFileFromFileStorageResult> {
+        self.connection
+            .call(
+                methods::IS_FILE_IN_FILE_STORAGE,
+                jsonrpsee::rpc_params![file_key],
+            )
             .await
     }
 

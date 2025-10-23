@@ -15,7 +15,9 @@ use shc_common::types::{
     BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE, FILE_CHUNK_SIZE,
 };
 use shc_file_manager::{in_memory::InMemoryFileDataTrie, traits::FileDataTrie};
-use shc_rpc::{GetValuePropositionsResult, RpcProviderId, SaveFileToDisk};
+use shc_rpc::{
+    GetFileFromFileStorageResult, GetValuePropositionsResult, RpcProviderId, SaveFileToDisk,
+};
 use sp_core::{Blake2Hasher, H256};
 use tracing::{debug, info, warn};
 
@@ -389,6 +391,37 @@ impl MspService {
         }
 
         Ok(PaymentStreamsResponse { streams })
+    }
+
+    /// Calls is_file_in_file_storage rpc to get file metadata if present
+    /// Resturns error in any other case
+    /// pub enum GetFileFromFileStorageResult {
+    //     FileNotFound,
+    //     IncompleteFile(IncompleteFileStatus),
+    //     FileFound(FileMetadata),
+    //     FileFoundWithInconsistency(FileMetadata),
+    // }
+    pub async fn check_file_status(&self, file_key: &str) -> Result<FileMetadata, Error> {
+        let file_status: GetFileFromFileStorageResult = self
+            .rpc
+            .is_file_in_file_storage(file_key)
+            .await
+            .map_err(|e| Error::BadRequest(e.to_string()))?;
+
+        match file_status {
+            GetFileFromFileStorageResult::FileNotFound => {
+                Err(Error::BadRequest("File not found".to_string()))
+            }
+            GetFileFromFileStorageResult::FileFoundWithInconsistency(_inconsistent_metadata) => {
+                Err(Error::BadRequest(
+                    "File found with inconsistency".to_string(),
+                ))
+            }
+            GetFileFromFileStorageResult::IncompleteFile(_status) => {
+                Err(Error::BadRequest("File is incomplete".to_string()))
+            }
+            GetFileFromFileStorageResult::FileFound(metadata) => Ok(metadata),
+        }
     }
 
     /// Download a file by `file_key` via the MSP RPC into `/tmp/uploads/<file_key>` and

@@ -17,11 +17,11 @@ impl DownloadSession {
         }
     }
 
-    pub fn add_session(&self, id: String, sender: mpsc::Sender<Result<Bytes, std::io::Error>>) {
+    pub fn add_session(&self, id: &String, sender: mpsc::Sender<Result<Bytes, std::io::Error>>) {
         self.sessions
             .write()
             .expect("Download sessions lock poisoned")
-            .insert(id, sender);
+            .insert(id.clone(), sender);
     }
 
     pub fn remove_session(&self, id: &str) {
