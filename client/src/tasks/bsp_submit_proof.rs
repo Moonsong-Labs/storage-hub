@@ -11,7 +11,8 @@ use shc_actors_framework::{actor::ActorHandle, event_bus::EventHandler};
 use shc_blockchain_service::{
     commands::{BlockchainServiceCommandInterface, BlockchainServiceCommandInterfaceExt},
     events::{
-        FinalisedTrieRemoveMutationsApplied, MultipleNewChallengeSeeds, ProcessSubmitProofRequest,
+        FinalisedTrieRemoveMutationsAppliedForBsp, MultipleNewChallengeSeeds,
+        ProcessSubmitProofRequest,
     },
     types::{RetryStrategy, SendExtrinsicOptions, SubmitProofRequest, WatchTransactionError},
     BlockchainService,
@@ -66,7 +67,7 @@ impl Default for BspSubmitProofConfig {
 ///   - Applies any necessary mutations to the Forest Storage (but not the File Storage).
 ///   - Verifies that the new Forest root matches the one recorded on-chain to ensure consistency.
 ///
-/// - **[`FinalisedTrieRemoveMutationsApplied`] Event:**
+/// - **[`FinalisedTrieRemoveMutationsAppliedForBsp`] Event:**
 ///   - Triggered when mutations applied to the Merkle Trie have been finalized, indicating that certain keys should be removed.
 ///   - Iterates over each file key that was part of the finalised mutations.
 ///   - Checks if the file key is still present in the Forest Storage:
@@ -352,7 +353,7 @@ where
     }
 }
 
-/// Handles the [`FinalisedTrieRemoveMutationsApplied`] event.
+/// Handles the [`FinalisedTrieRemoveMutationsAppliedForBsp`] event.
 ///
 /// This event is triggered when mutations applied to the Forest of this BSP have been finalised,
 /// signalling that certain keys (representing files) should be removed from the File Storage if they are
@@ -365,7 +366,7 @@ where
 ///   - If the key is still present, it logs a warning,
 ///     since this could indicate that the key has been re-added after being deleted.
 ///   - If the key is not present in the Forest Storage, it safely removes the key from the File Storage.
-impl<NT, Runtime> EventHandler<FinalisedTrieRemoveMutationsApplied<Runtime>>
+impl<NT, Runtime> EventHandler<FinalisedTrieRemoveMutationsAppliedForBsp<Runtime>>
     for BspSubmitProofTask<NT, Runtime>
 where
     NT: ShNodeType<Runtime> + 'static,
@@ -374,7 +375,7 @@ where
 {
     async fn handle_event(
         &mut self,
-        event: FinalisedTrieRemoveMutationsApplied<Runtime>,
+        event: FinalisedTrieRemoveMutationsAppliedForBsp<Runtime>,
     ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,

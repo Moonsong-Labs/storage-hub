@@ -23,7 +23,7 @@ use shc_forest_manager::traits::ForestStorageHandler;
 use crate::{
     events::{
         BspConfirmStoppedStoring, FinalisedBspConfirmStoppedStoring,
-        FinalisedTrieRemoveMutationsApplied, ForestWriteLockTaskData, MoveBucketAccepted,
+        FinalisedTrieRemoveMutationsAppliedForBsp, ForestWriteLockTaskData, MoveBucketAccepted,
         MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MultipleNewChallengeSeeds,
         ProcessConfirmStoringRequest, ProcessConfirmStoringRequestData,
         ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
@@ -200,7 +200,7 @@ where
             ) => {
                 // We only emit the event if the Provider ID is the one that this node is managing.
                 if provider_id == *managed_bsp_id {
-                    self.emit(FinalisedTrieRemoveMutationsApplied {
+                    self.emit(FinalisedTrieRemoveMutationsAppliedForBsp {
                         provider_id,
                         mutations: mutations.clone().into(),
                         new_root,

@@ -220,13 +220,13 @@ pub struct SlashableProvider<Runtime: StorageEnableRuntime> {
     pub next_challenge_deadline: BlockNumber<Runtime>,
 }
 
-/// Mutations applied event in a finalised block.
+/// Mutations applied event in a finalised block, for a BSP.
 ///
 /// This event is emitted when a finalised block is received by the Blockchain service,
-/// in which there is a `MutationsApplied` event for one of the providers that this node is tracking.
+/// in which there is a `MutationsAppliedForProvider` event for the BSP that this node is tracking.
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct FinalisedTrieRemoveMutationsApplied<Runtime: StorageEnableRuntime> {
+pub struct FinalisedTrieRemoveMutationsAppliedForBsp<Runtime: StorageEnableRuntime> {
     pub provider_id: ProofsDealerProviderId<Runtime>,
     pub mutations: Vec<(ForestRoot<Runtime>, TrieMutation)>,
     pub new_root: Runtime::Hash,
@@ -348,7 +348,7 @@ pub struct BspConfirmStoppedStoring<Runtime: StorageEnableRuntime> {
     pub new_root: Runtime::Hash,
 }
 
-/// Delete file event in a finalised block.
+/// Delete file event in a finalised block, for a BSP.
 ///
 /// This event is emitted when a finalised block is received by the Blockchain service,
 /// in which there is a `BspConfirmStoppedStoring` event for one of the providers that this node is tracking.
