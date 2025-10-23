@@ -20,7 +20,7 @@ use sp_runtime::traits::SaturatedConversion;
 
 use crate::{
     handler::StorageHubHandler,
-    types::{BspForestStorageHandlerT, ShNodeType},
+    types::{BspForestStorageHandlerT, ForestStorageKey, ShNodeType},
 };
 
 const LOG_TARGET: &str = "bsp-charge-fees-task";
@@ -168,7 +168,7 @@ where
         let insolvent_user = event.who;
 
         // Get the current Forest key of the Provider running this node.
-        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+        let current_forest_key = ForestStorageKey::from(CURRENT_FOREST_KEY.to_vec());
 
         // Check if we are storing any file for this user.
         let fs = self
@@ -220,7 +220,7 @@ where
         let insolvent_user = event.owner;
 
         // Get the current Forest key of the Provider running this node.
-        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+        let current_forest_key = ForestStorageKey::from(CURRENT_FOREST_KEY.to_vec());
 
         // Check if we are storing any file for this user.
         let fs = self
@@ -287,7 +287,7 @@ where
         };
 
         // Get the current Forest key of the Provider running this node.
-        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+        let current_forest_key = ForestStorageKey::from(CURRENT_FOREST_KEY.to_vec());
 
         // Get the forest storage.
         let fs = self

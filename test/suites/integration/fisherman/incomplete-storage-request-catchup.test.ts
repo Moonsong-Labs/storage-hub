@@ -54,7 +54,7 @@ await describeMspNet(
       assert(createFishermanApi, "Fisherman API not available for fisherman test");
       fishermanApi = await createFishermanApi();
 
-      await userApi.rpc.engine.createBlock(true, true);
+      await userApi.block.seal({ finaliseBlock: true });
     });
 
     it("processes expired request (BSP only) in unfinalized block", async () => {
