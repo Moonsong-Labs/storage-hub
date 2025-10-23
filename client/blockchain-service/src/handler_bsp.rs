@@ -548,7 +548,6 @@ where
             next_challenge_tick += challenge_period;
         }
 
-        // Emit the `MultipleNewChallengeSeeds` event.
         if challenge_seeds.len() > 0 {
             trace!(target: LOG_TARGET, "Emitting MultipleNewChallengeSeeds event for provider [{:?}] with challenge seeds: {:?}", bsp_id, challenge_seeds);
             self.emit(MultipleNewChallengeSeeds {
