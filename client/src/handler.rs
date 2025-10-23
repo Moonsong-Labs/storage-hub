@@ -47,9 +47,9 @@ use crate::{
         },
         msp_charge_fees::{MspChargeFeesConfig, MspChargeFeesTask},
         msp_delete_bucket::MspDeleteBucketTask,
+        msp_delete_file::MspDeleteFileTask,
         msp_distribute_file::MspDistributeFileTask,
         msp_move_bucket::{MspMoveBucketConfig, MspRespondMoveBucketTask},
-        msp_remove_finalised_files::MspRemoveFinalisedFilesTask,
         msp_retry_bucket_move::MspRetryBucketMoveTask,
         msp_stop_storing_insolvent_user::MspStopStoringInsolventUserTask,
         msp_upload_file::MspUploadFileTask,
@@ -315,7 +315,7 @@ where
                 NotifyPeriod => MspChargeFeesTask,
                 DistributeFileToBsp<Runtime> => MspDistributeFileTask,
                 // MspRemoveFinalisedFilesTask handles events for removing files from file storage after mutations are finalised.
-                FinalisedBucketMutationsApplied<Runtime> => MspRemoveFinalisedFilesTask,
+                FinalisedBucketMutationsApplied<Runtime> => MspDeleteFileTask,
             ]
         );
     }

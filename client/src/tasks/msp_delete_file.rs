@@ -14,7 +14,7 @@ use crate::{
     types::{MspForestStorageHandlerT, ShNodeType},
 };
 
-const LOG_TARGET: &str = "msp-remove-finalised-files-task";
+const LOG_TARGET: &str = "msp-delete_file-task";
 
 /// MSP Remove Finalised Files Task: Handles the removal of files from the MSP's File Storage after
 /// mutations have been applied and finalised on-chain for one of this MSP's buckets.
@@ -32,7 +32,7 @@ const LOG_TARGET: &str = "msp-remove-finalised-files-task";
 ///   - If the key is still present, it logs a warning,
 ///     since this could indicate that the key has been re-added after being deleted.
 ///   - If the key is not present in the Forest Storage, it safely removes the key from the File Storage.
-pub struct MspRemoveFinalisedFilesTask<NT, Runtime>
+pub struct MspDeleteFileTask<NT, Runtime>
 where
     NT: ShNodeType<Runtime> + 'static,
     NT::FSH: MspForestStorageHandlerT<Runtime>,
@@ -41,20 +41,20 @@ where
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
 }
 
-impl<NT, Runtime> Clone for MspRemoveFinalisedFilesTask<NT, Runtime>
+impl<NT, Runtime> Clone for MspDeleteFileTask<NT, Runtime>
 where
     NT: ShNodeType<Runtime> + 'static,
     NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    fn clone(&self) -> MspRemoveFinalisedFilesTask<NT, Runtime> {
+    fn clone(&self) -> MspDeleteFileTask<NT, Runtime> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<NT, Runtime> MspRemoveFinalisedFilesTask<NT, Runtime>
+impl<NT, Runtime> MspDeleteFileTask<NT, Runtime>
 where
     NT: ShNodeType<Runtime> + 'static,
     NT::FSH: MspForestStorageHandlerT<Runtime>,
@@ -83,7 +83,7 @@ where
 
 /// Handles the [`FinalisedBucketMutationsApplied`] event.
 impl<NT, Runtime> EventHandler<FinalisedBucketMutationsApplied<Runtime>>
-    for MspRemoveFinalisedFilesTask<NT, Runtime>
+    for MspDeleteFileTask<NT, Runtime>
 where
     NT: ShNodeType<Runtime> + 'static,
     NT::FSH: MspForestStorageHandlerT<Runtime>,
