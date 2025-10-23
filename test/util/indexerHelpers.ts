@@ -51,7 +51,7 @@ export const waitForBucketByIdIndexed = async (
     lambda: async () => {
       const query = mspId
         ? sql`
-            SELECT * FROM bucket WHERE onchain_bucket_id = ${hexToBuffer(bucketId)} AND 
+            SELECT * FROM bucket WHERE onchain_bucket_id = ${hexToBuffer(bucketId)} AND
             msp_id = ${mspId}
           `
         : sql`
@@ -88,7 +88,7 @@ export const waitForMspFileAssociation = async (
             SELECT mf.* FROM msp_file mf
             INNER JOIN file f ON mf.file_id = f.id
             INNER JOIN msp m ON mf.msp_id = m.id
-            WHERE f.file_key = ${hexToBuffer(fileKey)} 
+            WHERE f.file_key = ${hexToBuffer(fileKey)}
             AND m.onchain_msp_id = ${mspId}
           `
         : sql`
@@ -114,7 +114,7 @@ export const waitForBspFileAssociation = async (
             SELECT bf.* FROM bsp_file bf
             INNER JOIN file f ON bf.file_id = f.id
             INNER JOIN bsp b ON bf.bsp_id = b.id
-            WHERE f.file_key = ${hexToBuffer(fileKey)} 
+            WHERE f.file_key = ${hexToBuffer(fileKey)}
             AND b.onchain_bsp_id = ${bspId}
           `
         : sql`
@@ -141,21 +141,7 @@ export const waitForFileDeleted = async (sql: SqlClient, fileKey: string) => {
   });
 };
 
-export const waitForFileDeletionSignature = async (
-  sql: SqlClient,
-  fileKey: string
-): Promise<void> => {
-  await waitFor({
-    lambda: async () => {
-      const files = await sql`
-        SELECT deletion_signature FROM file
-        WHERE file_key = ${hexToBuffer(fileKey)}
-        AND deletion_signature IS NOT NULL
-      `;
-      return files.length > 0;
-    }
-  });
-};
+
 
 export const waitForBspFileAssociationRemoved = async (
   sql: SqlClient,
@@ -169,7 +155,7 @@ export const waitForBspFileAssociationRemoved = async (
             SELECT bf.* FROM bsp_file bf
             INNER JOIN file f ON bf.file_id = f.id
             INNER JOIN bsp b ON bf.bsp_id = b.id
-            WHERE f.file_key = ${hexToBuffer(fileKey)} 
+            WHERE f.file_key = ${hexToBuffer(fileKey)}
             AND b.onchain_bsp_id = ${bspId}
           `
         : sql`
@@ -195,7 +181,7 @@ export const waitForMspFileAssociationRemoved = async (
             SELECT mf.* FROM msp_file mf
             INNER JOIN file f ON mf.file_id = f.id
             INNER JOIN msp m ON mf.msp_id = m.id
-            WHERE f.file_key = ${hexToBuffer(fileKey)} 
+            WHERE f.file_key = ${hexToBuffer(fileKey)}
             AND m.onchain_msp_id = ${mspId}
           `
         : sql`

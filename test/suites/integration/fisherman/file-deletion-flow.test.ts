@@ -12,7 +12,6 @@ import {
 import {
   hexToBuffer,
   waitForFileIndexed,
-  waitForFileDeletionSignature,
   waitForMspFileAssociation,
   waitForBspFileAssociation
 } from "../../../util/indexerHelpers";
@@ -174,7 +173,16 @@ await describeMspNet(
       await waitForIndexing(userApi, false);
 
       // Verify that the deletion signature was stored in the database (SCALE-encoded)
-      await waitForFileDeletionSignature(sql, fileKey);
+      await waitFor({
+        lambda: async () => {
+          const files = await sql`
+            SELECT deletion_signature FROM file
+            WHERE file_key = ${hexToBuffer(fileKey)}
+            AND deletion_signature IS NOT NULL
+          `;
+          return files.length > 0;
+        }
+      });
 
       const filesWithSignature = await sql`
         SELECT deletion_signature FROM file
