@@ -1,5 +1,5 @@
 export { createEvmClients } from "./evm/clients.js";
-export { filesystemAbi } from "./evm/storageHubClient.js";
+export { filesystemAbi, FILE_SYSTEM_PRECOMPILE_ADDRESS } from "./evm/storageHubClient.js";
 export { StorageHubClient } from "./evm/storageHubClient.js";
 export type { EvmWriteOptions, StorageHubClientOptions } from "./evm/types.js";
 export { ReplicationLevel } from "./evm/types.js";

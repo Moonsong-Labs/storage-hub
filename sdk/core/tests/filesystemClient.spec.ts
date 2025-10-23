@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { StorageHubClient } from "../src/evm/storageHubClient.js";
+import { StorageHubClient, FILE_SYSTEM_PRECOMPILE_ADDRESS } from "../src/evm/storageHubClient.js";
 import { LocalWallet } from "../src/wallet/local.js";
 import { createWalletClient, defineChain, http, type Address } from "viem";
 import { mnemonicToAccount } from "viem/accounts";
@@ -26,7 +26,8 @@ describe("StorageHubClient", () => {
     const hubClient = new StorageHubClient({
       rpcUrl: "http://127.0.0.1:8545",
       chain,
-      walletClient
+      walletClient,
+      filesystemContractAddress: FILE_SYSTEM_PRECOMPILE_ADDRESS
     });
 
     const longName = "a".repeat(101); // String that's 101 bytes
@@ -53,7 +54,12 @@ describe("StorageHubClient", () => {
       account,
       transport: http(rpcUrl)
     });
-    const hubClient = new StorageHubClient({ rpcUrl, chain, walletClient });
+    const hubClient = new StorageHubClient({
+      rpcUrl,
+      chain,
+      walletClient,
+      filesystemContractAddress: FILE_SYSTEM_PRECOMPILE_ADDRESS
+    });
 
     const name = "bucket"; // Now a simple string
     // Attempt broadcast; on vanilla Hardhat this should reject (no precompile),
