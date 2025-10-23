@@ -363,7 +363,7 @@
       try {
         if (!client) throw new Error('Connect MSP first');
         setStatus('Downloading by key...');
-        const fileKey = '0xde4a17999bc1482ba71737367e5d858a133ed1e13327a29c495ab976004a138f';
+        const fileKey = '0xc4344065c2f4c1155008caf5d56bcbf59d2f37b276e566b2dcad4713904d88e8';
         const auth = await client.auth.getAuthStatus();
         if (!auth || auth.status !== 'Authenticated') throw new Error('Not authenticated');
         const dl = await client.files.downloadFile(fileKey);
