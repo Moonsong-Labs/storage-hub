@@ -10,11 +10,7 @@ use sp_state_machine::{warn, Storage};
 use sp_trie::{
     prefixed_key, recorder::Recorder, PrefixedMemoryDB, TrieDBBuilder, TrieLayout, TrieMut,
 };
-use std::{
-    fs, io,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{fs, io, path::Path, sync::Arc};
 use trie_db::{DBValue, Trie, TrieDBMutBuilder};
 
 use crate::{
@@ -27,10 +23,6 @@ use crate::{
 
 mod well_known_keys {
     pub const ROOT: &[u8] = b":root";
-}
-
-pub(crate) fn other_io_error(err: String) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, err)
 }
 
 /// Open the RocksDB database at `db_path` and return a new instance of [`StorageDb`].
@@ -73,18 +65,10 @@ where
 
 /// Open the database on disk, creating it if it doesn't exist.
 fn open_or_creating_rocksdb(db_path: String) -> io::Result<kvdb_rocksdb::Database> {
-    let mut path = PathBuf::new();
-    path.push(db_path.as_str());
-    path.push("storagehub/forest_storage/");
-
     let db_config = kvdb_rocksdb::DatabaseConfig::with_columns(1);
 
-    let path_str = path
-        .to_str()
-        .ok_or_else(|| other_io_error(format!("Bad database path: {:?}", path)))?;
-
-    std::fs::create_dir_all(&path_str)?;
-    let db = kvdb_rocksdb::Database::open(&db_config, &path_str)?;
+    std::fs::create_dir_all(&db_path)?;
+    let db = kvdb_rocksdb::Database::open(&db_config, &db_path)?;
 
     Ok(db)
 }

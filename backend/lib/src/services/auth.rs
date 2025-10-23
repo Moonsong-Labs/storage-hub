@@ -12,6 +12,7 @@ use axum_jwt::{
 };
 use chrono::{DateTime, Duration, Utc};
 use rand::{distributions::Alphanumeric, Rng};
+use tracing::{debug, error, warn};
 
 use crate::{
     config::AuthConfig,
@@ -57,19 +58,19 @@ impl AuthService {
             .jwt_secret
             .as_ref()
             .ok_or_else(|| {
-                tracing::error!("JWT_SECRET is not set. Please set it in the config file or as an environment variable.");
+                error!("JWT_SECRET is not set. Please set it in the config file or as an environment variable.");
                 "JWT_SECRET is not configured"
             })
             .and_then(|secret| {
                 hex::decode(secret.trim_start_matches("0x"))
                     .map_err(|e| {
-                        tracing::error!("Invalid JWT_SECRET format. Must be a valid hex string: {}", e);
+                        error!(error = %e, "Invalid JWT_SECRET format - must be a valid hex string");
                         "Invalid JWT_SECRET format"
                     })
             })
             .and_then(|decoded| {
                 if decoded.len() < 32 {
-                    tracing::error!("JWT_SECRET is too short. Must be at least 32 bytes (64 hex characters), got {} bytes", decoded.len());
+                    tracing::error!(length = decoded.len(), "JWT_SECRET is too short - must be at least 32 bytes (64 hex characters)");
                     Err("JWT_SECRET must be at least 32 bytes")
                 } else {
                     Ok(decoded)
@@ -108,16 +109,22 @@ impl AuthService {
 
     /// Returns the configured JWT decoding key
     pub(crate) fn jwt_decoding_key(&self) -> &DecodingKey {
+        debug!(target: "auth_service::jwt_decoding_key", "Returning JWT decoding key");
+
         &self.decoding_key
     }
 
     /// Returns the configured JWT validation parameter
     pub(crate) fn jwt_validation(&self) -> &Validation {
+        debug!(target: "auth_service::jwt_validation", "Returning JWT validation parameter");
+
         &self.validation
     }
 
     /// Generate a random SIWE-compliant nonce (at least 8 alphanumeric characters)
     fn generate_random_nonce() -> String {
+        debug!(target: "auth_service::generate_random_nonce", "Generating random nonce");
+
         rand::thread_rng()
             .sample_iter(&Alphanumeric)
             .take(16) // 16 characters for better security
@@ -137,9 +144,11 @@ impl AuthService {
         nonce: &str,
         chain_id: u64,
     ) -> String {
+        debug!(target: "auth_service::construct_auth_message", address = %address, domain = %domain, nonce = %nonce, chain_id = chain_id, "Constructing auth message");
+
         let scheme = "https";
 
-        let uri = format!("{scheme}://{domain}/{AUTH_NONCE_ENDPOINT}");
+        let uri = format!("{scheme}://{domain}{AUTH_NONCE_ENDPOINT}");
         let statement = "I authenticate to this MSP Backend with my address";
         let version = 1;
         let issued_at = chrono::Utc::now().to_rfc3339();
@@ -163,6 +172,8 @@ impl AuthService {
     ///
     /// The resulting JWT is already base64 encoded and signed by the service
     fn generate_jwt(&self, address: &Address) -> Result<String, Error> {
+        debug!(target: "auth_service::generate_jwt", address = %address, "Generating JWT");
+
         let now = Utc::now();
         let exp = now + self.session_duration;
 
@@ -185,6 +196,8 @@ impl AuthService {
         address: &Address,
         chain_id: u64,
     ) -> Result<NonceResponse, Error> {
+        debug!(target: "auth_service::challenge", address = %address, chain_id = chain_id, "Generating challenge");
+
         let nonce = Self::generate_random_nonce();
         let message = Self::construct_auth_message(address, &self.siwe_domain, &nonce, chain_id);
 
@@ -199,11 +212,14 @@ impl AuthService {
             .await
             .map_err(|_| Error::Internal)?;
 
+        debug!(address = %address, "Generated auth challenge");
         Ok(NonceResponse { message })
     }
 
     /// Recovers the ethereum address that signed the EIP191 `message` and produced `signature`
     fn recover_eth_address_from_sig(message: &str, signature: &str) -> Result<Address, Error> {
+        debug!(target: "auth_service::recover_eth_address_from_sig", message_len = message.len(), signature_len = signature.len(), "Recovering Ethereum address from signature");
+
         let sig = PrimitiveSignature::from_str(signature)
             .map_err(|_| Error::Unauthorized("Invalid signature format".to_string()))?;
 
@@ -211,8 +227,8 @@ impl AuthService {
         let message_hash = eip191_hash_message(message.as_bytes());
 
         // Recover the public key from the signature
-        let recovered_pubkey = sig.recover_from_prehash(&message_hash).map_err(|_| {
-            Error::Unauthorized("Failed to recover public key from signature".to_string())
+        let recovered_pubkey = sig.recover_from_prehash(&message_hash).map_err(|e| {
+            Error::Unauthorized(format!("Failed to recover public key from signature: {e}"))
         })?;
 
         let recovered_address = public_key_to_address(&recovered_pubkey);
@@ -225,6 +241,8 @@ impl AuthService {
     /// The signature should be a valid ETH signature. The message should be the same as the returned value from `generate_nonce`.
     /// The method will fail if `message` has expired
     pub async fn login(&self, message: &str, signature: &str) -> Result<VerifyResponse, Error> {
+        debug!(target: "auth_service::login", message_len = message.len(), signature_len = signature.len(), "Logging in");
+
         // Retrieve (and remove) the stored address for this message from storage
         let address = self
             .storage
@@ -250,13 +268,15 @@ impl AuthService {
                     .map_err(|_| Error::Internal)?;
 
                 return Err(Error::Unauthorized(
-                    "Signature doesn't match the provided address".to_string(),
+                    format!("Signature doesn't match the provided address: {recovered_address} != {address}"),
                 ));
             }
         }
 
         // Finally, generate JWT token
         let token = self.generate_jwt(&address)?;
+
+        debug!(address = %address, "Successful login");
 
         // TODO: Store the session token in database
         // to allow users to logout (invalidate their session)
@@ -272,13 +292,18 @@ impl AuthService {
     /// Generate a new JWT token, matching the same address as the valid token passed in
     // TODO: properly separate between the session and the refresh token
     pub async fn refresh(&self, user_address: &Address) -> Result<TokenResponse, Error> {
+        debug!(target: "auth_service::refresh", address = %user_address, "Refreshing token");
+
         let token = self.generate_jwt(user_address)?;
 
+        debug!(address = %user_address, "Token refreshed");
         Ok(TokenResponse { token })
     }
 
     /// Retrieve the user profile from the corresponding `JwtClaims`
     pub async fn profile(&self, user_address: &Address) -> Result<User, Error> {
+        debug!(target: "auth_service::profile", address = %user_address, "Profile requested");
+
         Ok(User {
             address: *user_address,
             // TODO: retrieve ENS (lookup or cache?)
@@ -286,7 +311,8 @@ impl AuthService {
         })
     }
 
-    pub async fn logout(&self, _user_address: &Address) -> Result<(), Error> {
+    pub async fn logout(&self, user_address: &Address) -> Result<(), Error> {
+        debug!(address = %user_address, "User logged out");
         // TODO: Invalidate the token in session storage
         // For now, the nonce cleanup happens automatically on expiration
         // or during verification (one-time use)
@@ -388,11 +414,11 @@ where
             Ok(ok) => Ok(ok),
             // if services are configured to not validate signature
             Err((claims, e)) if !services.auth.validate_signature => {
-                tracing::warn!("Authentication failed: {e:?}");
+                warn!(target: "auth_service::from_request_parts", error = ?e, "Authentication failed");
 
                 // if we were able to retrieve the claims then use the passed in address
                 let address = claims.map(|claims| claims.address).unwrap_or(MOCK_ADDRESS);
-                tracing::debug!("Bypassing authentication - authenticating user as {address}");
+                debug!(target: "auth_service::from_request_parts", address = %address, "Bypassing authentication");
 
                 return Ok(AuthenticatedUser { address });
             }

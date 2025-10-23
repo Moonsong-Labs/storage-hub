@@ -23,6 +23,7 @@ use tokio::{
     task::JoinHandle,
     time::{interval, Instant},
 };
+use tracing::warn;
 
 use super::Storage;
 
@@ -114,10 +115,10 @@ impl Drop for InMemoryStorage {
                 match tokio::time::timeout(Duration::from_secs(5), handle).await {
                     Ok(result) => {
                         if let Err(e) = result {
-                            tracing::warn!("Cleanup task failed during shutdown: {e}");
+                            warn!(error = ?e, "Cleanup task failed during shutdown");
                         }
                     }
-                    Err(_) => tracing::warn!("Cleanup task did not complete within timeout"),
+                    Err(_) => warn!("Cleanup task did not complete within timeout"),
                 }
             });
         }

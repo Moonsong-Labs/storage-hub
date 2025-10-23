@@ -14,6 +14,7 @@ use axum_extra::{
 use codec::Decode;
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
+use tracing::debug;
 
 use shc_common::types::FileMetadata;
 
@@ -27,6 +28,11 @@ pub async fn get_file_info(
     AuthenticatedUser { address }: AuthenticatedUser,
     Path((_bucket_id, file_key)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, Error> {
+    debug!(
+        file_key = %file_key,
+        user = %address,
+        "GET file info"
+    );
     let response = services.msp.get_file_info(&address, &file_key).await?;
     Ok(Json(response))
 }
@@ -41,6 +47,8 @@ pub async fn internal_upload_by_key(
     Path(file_key): Path<String>,
     body: Bytes,
 ) -> (StatusCode, impl IntoResponse) {
+    debug!(file_key = %file_key, "PUT internal upload");
+
     if let Err(e) = tokio::fs::create_dir_all("/tmp/uploads").await {
         return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
     }
@@ -63,6 +71,7 @@ pub async fn download_by_key(
     AuthenticatedUser { address }: AuthenticatedUser,
     Path(file_key): Path<String>,
 ) -> Result<impl IntoResponse, Error> {
+    debug!(file_key = %file_key, user = %address, "GET download file");
     // Validate file_key is a hex string
     let key = file_key.trim_start_matches("0x");
     if hex::decode(key).is_err() {
@@ -122,6 +131,12 @@ pub async fn upload_file(
     Path((_bucket_id, file_key)): Path<(String, String)>,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, Error> {
+    debug!(
+        file_key = %file_key,
+        user = %address,
+        "PUT upload file"
+    );
+
     // Pre-check with MSP whether this file key is expected before doing heavy processing
     let is_expected = services
         .msp
