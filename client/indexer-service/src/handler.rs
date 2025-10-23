@@ -1,4 +1,5 @@
 use bigdecimal::BigDecimal;
+use codec::Encode;
 use diesel_async::AsyncConnection;
 use futures::prelude::*;
 use log::{error, info};
@@ -379,10 +380,12 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
 
                 if has_msp || has_bsp {
                     // Mark file for deletion - will be deleted when all associations are removed
+                    // No signature for automated deletion
                     File::update_deletion_status(
                         conn,
                         file_key.as_ref(),
                         FileDeletionStatus::InProgress,
+                        None,
                     )
                     .await?;
                     log::debug!(
@@ -452,14 +455,16 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             }
             pallet_file_system::Event::FileDeletionRequested {
                 signed_delete_intention,
-                signature: _,
+                signature,
             } => {
-                // Mark file for deletion
+                // Mark file for deletion with user signature
                 let file_key = &signed_delete_intention.file_key;
+                let signature_bytes = signature.encode();
                 File::update_deletion_status(
                     conn,
                     file_key.as_ref(),
                     FileDeletionStatus::InProgress,
+                    Some(signature_bytes),
                 )
                 .await?;
             }

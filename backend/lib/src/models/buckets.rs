@@ -207,6 +207,7 @@ mod tests {
             size,
             step: 0,
             deletion_status: None,
+            deletion_signature: None,
             created_at: DateTime::from_timestamp(0, 0).unwrap().naive_utc(),
             updated_at: DateTime::from_timestamp(0, 0).unwrap().naive_utc(),
         }

@@ -495,6 +495,7 @@ impl IndexerOpsMut for MockRepository {
             size,
             step: test::file::DEFAULT_STEP,
             deletion_status: None,
+            deletion_signature: None,
             created_at: now,
             updated_at: now,
         };

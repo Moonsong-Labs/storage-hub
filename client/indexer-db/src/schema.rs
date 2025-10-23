@@ -60,6 +60,7 @@ diesel::table! {
         deletion_status -> Nullable<Int4>,
         created_at -> Timestamp,
         updated_at -> Timestamp,
+        deletion_signature -> Nullable<Bytea>,
     }
 }
 
