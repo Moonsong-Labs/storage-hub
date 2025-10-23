@@ -1,15 +1,22 @@
 import type { MspClientContext } from "./context.js";
+import type { SessionProvider } from "./types.js";
 
 export abstract class ModuleBase {
   protected readonly ctx: MspClientContext;
+  private readonly sessionProvider: SessionProvider;
 
-  constructor(ctx: MspClientContext) {
+  constructor(ctx: MspClientContext, sessionProvider: SessionProvider) {
     this.ctx = ctx;
+    this.sessionProvider = sessionProvider;
   }
 
   protected withAuth(headers?: Record<string, string>): Record<string, string> | undefined {
-    const token = this.ctx.session?.token;
-    return token ? { ...(headers ?? {}), Authorization: `Bearer ${token}` } : headers;
+    const session = this.sessionProvider();
+    const token = session?.token;
+    if (!token) return headers;
+    return headers
+      ? { ...headers, Authorization: `Bearer ${token}` }
+      : { Authorization: `Bearer ${token}` };
   }
 
   /**

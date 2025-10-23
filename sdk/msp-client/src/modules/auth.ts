@@ -27,7 +27,7 @@ export class AuthModule extends ModuleBase {
       headers: { "Content-Type": "application/json" },
       ...(signal ? { signal } : {})
     });
-    this.ctx.session = session;
+
     return session;
   }
 
@@ -35,7 +35,7 @@ export class AuthModule extends ModuleBase {
    * Full SIWE flow using a `WalletClient`.
    * - Derives address, fetches nonce, signs message, verifies and stores session.
    */
-  async SIWE(wallet: WalletClient, signal?: AbortSignal): Promise<void> {
+  async SIWE(wallet: WalletClient, signal?: AbortSignal): Promise<Session> {
     // Resolve the current active account from the WalletClient.
     // - Browser wallets (e.g., MetaMask) surface the user-selected address here.
     // - Viem/local wallets must set `wallet.account` explicitly before calling.
@@ -54,7 +54,7 @@ export class AuthModule extends ModuleBase {
     // Sign using the active account resolved above (string or Account object)
     const signature = await wallet.signMessage({ account, message });
 
-    this.ctx.session = await this.verify(message, signature, signal);
+    return this.verify(message, signature, signal);
   }
 
   /**
@@ -73,7 +73,9 @@ export class AuthModule extends ModuleBase {
    * Determine auth status by checking token presence and profile reachability.
    */
   async getAuthStatus(): Promise<AuthStatus> {
-    if (!this.ctx.session?.token) {
+    const headers = this.withAuth();
+    const hasAuth = !!headers && "Authorization" in headers;
+    if (!hasAuth) {
       return { status: AuthState.NotAuthenticated };
     }
     const profile = await this.getProfile().catch((err: any) =>

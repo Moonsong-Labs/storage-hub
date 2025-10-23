@@ -99,6 +99,9 @@ export interface Session {
   [k: string]: unknown;
 }
 
+// Session provider function
+export type SessionProvider = () => Readonly<Session> | undefined;
+
 // Download
 export interface DownloadOptions {
   range?: { start: number; end?: number };
