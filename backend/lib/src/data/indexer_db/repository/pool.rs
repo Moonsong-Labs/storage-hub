@@ -243,7 +243,7 @@ fn make_rustls_config_from_env() -> ClientConfig {
                         let mut roots = RootCertStore::empty();
                         for cert in pems {
                             if let Err(err) = roots.add(cert) {
-                                warn!("Failed to add certificate to root store: {}", err);
+                                warn!(error = %err, "Failed to add certificate to root store");
                             }
                         }
                         let provider = rustls::crypto::ring::default_provider();
@@ -254,19 +254,13 @@ fn make_rustls_config_from_env() -> ClientConfig {
                         builder.with_root_certificates(roots).with_no_client_auth()
                     }
                     Err(err) => {
-                        warn!(
-                            "Failed to parse PEM certs from {:?}: {}. Falling back to platform verifier.",
-                            path, err
-                        );
+                        warn!(path = ?path, error = %err, "Failed to parse PEM certs, falling back to platform verifier");
                         ClientConfig::with_platform_verifier()
                     }
                 }
             }
             Err(err) => {
-                warn!(
-                    "Failed to open CA file {:?}: {}. Falling back to platform verifier.",
-                    path, err
-                );
+                warn!(path = ?path, error = %err, "Failed to open CA file, falling back to platform verifier");
                 ClientConfig::with_platform_verifier()
             }
         }

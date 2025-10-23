@@ -5,6 +5,7 @@ use std::sync::Arc;
 use auth::AuthService;
 use axum::extract::FromRef;
 use axum_jwt::Decoder;
+use tracing::error;
 
 #[cfg(all(test, feature = "mocks"))]
 use crate::data::{
@@ -49,19 +50,19 @@ impl Services {
             .jwt_secret
             .as_ref()
             .ok_or_else(|| {
-                tracing::error!("JWT_SECRET is not set. Please set it in the config file or as an environment variable.");
+                error!("JWT_SECRET is not set. Please set it in the config file or as an environment variable.");
                 "JWT_SECRET is not configured"
             })
             .and_then(|secret| {
                 hex::decode(secret.trim_start_matches("0x"))
                     .map_err(|e| {
-                        tracing::error!("Invalid JWT_SECRET format. Must be a valid hex string: {}", e);
+                        error!(error = %e, "Invalid JWT_SECRET format - must be a valid hex string");
                         "Invalid JWT_SECRET format"
                     })
             })
             .and_then(|decoded| {
                 if decoded.len() < 32 {
-                    tracing::error!("JWT_SECRET is too short. Must be at least 32 bytes (64 hex characters), got {} bytes", decoded.len());
+                    error!(length = decoded.len(), "JWT_SECRET is too short - must be at least 32 bytes (64 hex characters)");
                     Err("JWT_SECRET must be at least 32 bytes")
                 } else {
                     Ok(decoded)

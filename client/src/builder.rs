@@ -36,7 +36,7 @@ use super::{
     types::{
         BspForestStorageHandlerT, BspProvider, FishermanForestStorageHandlerT, FishermanRole,
         InMemoryStorageLayer, MspForestStorageHandlerT, MspProvider, NoStorageLayer,
-        RocksDbStorageLayer, ShNodeType, ShRole, ShStorageLayer, UserRole,
+        RocksDbStorageLayer, ShNodeType, ShRole, ShStorageLayer, UserRole, FILE_STORAGE_PATH,
     },
 };
 
@@ -412,9 +412,14 @@ where
 
         let storage_path = storage_path.expect("Storage path not set");
 
-        let file_storage =
-            RocksDbFileStorage::<_, kvdb_rocksdb::Database>::rocksdb_storage(storage_path.clone())
-                .expect("Failed to create RocksDB");
+        let mut path = PathBuf::new();
+        path.push(&storage_path);
+        path.push(FILE_STORAGE_PATH);
+
+        let file_storage = RocksDbFileStorage::<_, kvdb_rocksdb::Database>::rocksdb_storage(
+            path.to_string_lossy().to_string(),
+        )
+        .expect("Failed to create RocksDB");
         self.file_storage = Some(Arc::new(RwLock::new(RocksDbFileStorage::new(file_storage))));
 
         self.forest_storage_handler = Some(<(BspProvider, RocksDbStorageLayer) as ShNodeType<
@@ -445,11 +450,17 @@ where
 {
     fn setup_storage_layer(&mut self, storage_path: Option<String>) -> &mut Self {
         let storage_path = storage_path.expect("Storage path not set");
+
+        let mut path = PathBuf::new();
+        path.push(&storage_path);
+        path.push(FILE_STORAGE_PATH);
+
         self.storage_path = Some(storage_path.clone());
 
-        let file_storage =
-            RocksDbFileStorage::<_, kvdb_rocksdb::Database>::rocksdb_storage(storage_path.clone())
-                .expect("Failed to create RocksDB");
+        let file_storage = RocksDbFileStorage::<_, kvdb_rocksdb::Database>::rocksdb_storage(
+            path.to_string_lossy().to_string(),
+        )
+        .expect("Failed to create RocksDB");
         self.file_storage = Some(Arc::new(RwLock::new(RocksDbFileStorage::new(file_storage))));
 
         self.forest_storage_handler = Some(<(MspProvider, RocksDbStorageLayer) as ShNodeType<
