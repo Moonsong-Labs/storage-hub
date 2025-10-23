@@ -15,7 +15,10 @@ use tokio::{
     time::sleep,
 };
 
-use shc_rpc::{GetValuePropositionsResult, RpcProviderId};
+use shc_common::types::FileMetadata;
+use shc_rpc::{
+    GetFileFromFileStorageResult, GetValuePropositionsResult, RpcProviderId, SaveFileToDisk,
+};
 use sp_core::H256;
 
 use crate::{
@@ -174,18 +177,27 @@ impl RpcConnection for MockConnection {
         // Build JSON response by method
         let response: Value = match method {
             methods::FILE_KEY_EXPECTED => serde_json::json!(true),
+            methods::IS_FILE_IN_FILE_STORAGE => {
+                let metadata = FileMetadata::new(
+                    vec![1],
+                    vec![1],
+                    b"mock_file.bin".to_vec(),
+                    1u64,
+                    random_bytes_32().into(),
+                )
+                .expect("valid dummy metadata");
+                serde_json::json!(GetFileFromFileStorageResult::FileFound(metadata))
+            }
             methods::SAVE_FILE_TO_DISK => {
-                let location: Vec<u8> = b"my_file.jpg".to_vec();
-                let fingerprint: Vec<u8> = random_bytes_32().to_vec();
-                serde_json::json!({
-                    "Success": {
-                        "owner": [1],
-                        "bucket_id": [1],
-                        "location": location,
-                        "file_size": 1u64,
-                        "fingerprint": fingerprint
-                    }
-                })
+                let metadata = FileMetadata::new(
+                    vec![1],
+                    vec![1],
+                    b"my_file.jpg".to_vec(),
+                    1u64,
+                    random_bytes_32().into(),
+                )
+                .expect("valid dummy metadata");
+                serde_json::json!(SaveFileToDisk::Success(metadata))
             }
             methods::PROVIDER_ID => serde_json::json!(RpcProviderId::Msp(
                 shp_types::Hash::from_slice(DUMMY_MSP_ID.as_slice())
