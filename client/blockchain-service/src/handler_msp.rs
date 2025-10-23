@@ -25,11 +25,11 @@ use crate::{
     events::{
         DistributeFileToBsp, FileDeletionRequest, FinalisedBucketMovedAway,
         FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
-        ForestWriteLockTaskData, MoveBucketRequestedForMsp, NewStorageRequest,
-        ProcessFileDeletionRequest, ProcessFileDeletionRequestData,
-        ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData,
-        ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
-        StartMovedBucketDownload,
+        FinalisedTrieRemoveMutationsAppliedForBucket, ForestWriteLockTaskData,
+        MoveBucketRequestedForMsp, NewStorageRequest, ProcessFileDeletionRequest,
+        ProcessFileDeletionRequestData, ProcessMspRespondStoringRequest,
+        ProcessMspRespondStoringRequestData, ProcessStopStoringForInsolventUserRequest,
+        ProcessStopStoringForInsolventUserRequestData, StartMovedBucketDownload,
     },
     handler::LOG_TARGET,
     types::{FileDistributionInfo, ManagedProvider},
@@ -216,7 +216,7 @@ where
     /// Processes finality events that are only relevant for an MSP.
     pub(crate) fn msp_process_finality_events(
         &self,
-        _block_hash: &Runtime::Hash,
+        block_hash: &Runtime::Hash,
         event: StorageEnableEvents<Runtime>,
     ) {
         let managed_msp_id = match &self.maybe_managed_provider {
@@ -287,6 +287,80 @@ where
                         });
                     }
                 }
+            }
+            StorageEnableEvents::ProofsDealer(pallet_proofs_dealer::Event::MutationsApplied {
+                mutations,
+                old_root: _,
+                new_root,
+                event_info,
+            }) => {
+                // Preemptively getting the Buckets managed by this MSP, so that we do the query just once,
+                // instead of doing it for every event.
+                let buckets_managed_by_msp =
+                    self.client
+                            .runtime_api()
+                            .query_buckets_for_msp(*block_hash, managed_msp_id)
+                            .inspect_err(|e| error!(target: LOG_TARGET, "Runtime API call failed while querying buckets for MSP [{:?}]: {:?}", managed_msp_id, e))
+                            .ok()
+                            .and_then(|api_result| {
+                                api_result
+                                    .inspect_err(|e| error!(target: LOG_TARGET, "Runtime API error while querying buckets for MSP [{:?}]: {:?}", managed_msp_id, e))
+                                    .ok()
+                            });
+
+                // The mutations are applied to a Bucket's Forest root.
+                // Check that this MSP is managing at least one bucket.
+                if buckets_managed_by_msp.is_none() {
+                    return;
+                }
+
+                let buckets_managed_by_msp = buckets_managed_by_msp
+                    .as_ref()
+                    .expect("Just checked that this is not None; qed");
+                if buckets_managed_by_msp.is_empty() {
+                    return;
+                }
+
+                // In StorageHub, we assume that all `MutationsApplied` events are emitted by bucket
+                // root changes, and they should contain the encoded `BucketId` of the bucket that was mutated
+                // in the `event_info` field.
+                if event_info.is_none() {
+                    error!(target: LOG_TARGET, "MutationsApplied event with `None` event info, when it is expected to contain the BucketId of the bucket that was mutated.");
+                    return;
+                }
+
+                let event_info = event_info
+                    .as_ref()
+                    .expect("Just checked that this is not None; qed");
+                let bucket_id = match self
+                    .client
+                    .runtime_api()
+                    .decode_generic_apply_delta_event_info(*block_hash, event_info.clone())
+                {
+                    Ok(runtime_api_result) => match runtime_api_result {
+                        Ok(bucket_id) => bucket_id,
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to decode BucketId from event info: {:?}", e);
+                            return;
+                        }
+                    },
+                    Err(e) => {
+                        error!(target: LOG_TARGET, "Error while calling runtime API to decode BucketId from event info: {:?}", e);
+                        return;
+                    }
+                };
+
+                // Check if Bucket is managed by this MSP.
+                if !buckets_managed_by_msp.contains(&bucket_id) {
+                    return;
+                }
+
+                // Emit event to apply mutations to the Bucket's Forest Storage.
+                self.emit(FinalisedTrieRemoveMutationsAppliedForBucket {
+                    bucket_id,
+                    mutations,
+                    new_root,
+                });
             }
 
             // Ignore all other events.
