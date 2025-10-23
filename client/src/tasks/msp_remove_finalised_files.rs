@@ -100,7 +100,6 @@ where
         );
         debug!(target: LOG_TARGET, "Mutations to apply: {:?}", event.mutations);
 
-        // For each mutation...
         for mutation in event.mutations {
             // Get the file key from the mutation.
             let file_key = FileKey::from(mutation.0);

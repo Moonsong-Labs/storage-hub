@@ -339,7 +339,6 @@ where
                     return;
                 };
 
-                // Emit the `FinalisedBucketMutationsApplied` event.
                 self.emit(FinalisedBucketMutationsApplied {
                     bucket_id,
                     mutations: mutations.clone().into(),
