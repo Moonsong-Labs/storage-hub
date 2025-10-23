@@ -244,6 +244,18 @@ pub struct FinalisedTrieRemoveMutationsAppliedForBucket<Runtime: StorageEnableRu
     pub new_root: Runtime::Hash,
 }
 
+/// Bucket mutations applied event in a finalised block.
+///
+/// This event is emitted when a finalised block is received by the Blockchain service,
+/// in which there is a `MutationsApplied` event for a bucket that this MSP is managing.
+#[derive(Debug, Clone, ActorEvent)]
+#[actor(actor = "blockchain_service")]
+pub struct FinalisedBucketMutationsApplied<Runtime: StorageEnableRuntime> {
+    pub bucket_id: BucketId<Runtime>,
+    pub mutations: Vec<(ForestRoot<Runtime>, TrieMutation)>,
+    pub new_root: Runtime::Hash,
+}
+
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
 pub struct ProofAccepted<Runtime: StorageEnableRuntime> {

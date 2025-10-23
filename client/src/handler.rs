@@ -13,14 +13,15 @@ use shc_blockchain_service::{
     capacity_manager::CapacityConfig,
     events::{
         AcceptedBspVolunteer, DistributeFileToBsp, FinalisedBspConfirmStoppedStoring,
-        FinalisedBucketMovedAway, FinalisedMspStopStoringBucketInsolventUser,
+        FinalisedBspConfirmStoppedStoring, FinalisedBucketMovedAway,
+        FinalisedBucketMutationsApplied, FinalisedMspStopStoringBucketInsolventUser,
         FinalisedMspStoppedStoringBucket, FinalisedTrieRemoveMutationsAppliedForBsp,
-        FinalisedTrieRemoveMutationsAppliedForBucket, LastChargeableInfoUpdated,
-        MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected, MoveBucketRequested,
-        MoveBucketRequestedForMsp, MultipleNewChallengeSeeds, NewStorageRequest, NotifyPeriod,
-        ProcessConfirmStoringRequest, ProcessMspRespondStoringRequest,
-        ProcessStopStoringForInsolventUserRequest, ProcessSubmitProofRequest, SlashableProvider,
-        SpStopStoringInsolventUser, StartMovedBucketDownload, UserWithoutFunds,
+        LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
+        MoveBucketRequested, MoveBucketRequestedForMsp, MultipleNewChallengeSeeds,
+        NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
+        ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
+        ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser,
+        StartMovedBucketDownload, UserWithoutFunds,
     },
     handler::BlockchainServiceConfig,
     BlockchainService,
@@ -306,7 +307,6 @@ where
             [
                 FinalisedBucketMovedAway<Runtime> => MspDeleteBucketTask,
                 FinalisedMspStoppedStoringBucket<Runtime> => MspDeleteBucketTask,
-                FinalisedTrieRemoveMutationsAppliedForBucket<Runtime> => MspDeleteFileTask,
                 NewStorageRequest<Runtime> => MspUploadFileTask,
                 ProcessMspRespondStoringRequest<Runtime> => MspUploadFileTask,
                 MoveBucketRequestedForMsp<Runtime> => MspRespondMoveBucketTask,
@@ -317,6 +317,8 @@ where
                     MspStopStoringInsolventUserTask,
                 NotifyPeriod => MspChargeFeesTask,
                 DistributeFileToBsp<Runtime> => MspDistributeFileTask,
+                // MspRemoveFinalisedFilesTask handles events for removing files from file storage after mutations are finalised.
+                FinalisedBucketMutationsApplied<Runtime> => MspDeleteFileTask,
             ]
         );
     }
