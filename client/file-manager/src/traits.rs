@@ -17,7 +17,7 @@ pub enum FileStorageWriteError {
     /// File metadata fingerprint does not match the stored file fingerprint.
     FingerprintAndStoredFileMismatch,
     /// Failed to construct file trie.
-    FailedToContructFileTrie,
+    FailedToConstructFileTrie,
     /// Failed to construct iterator for trie.
     FailedToConstructTrieIter,
     /// Failed to commit changes in overlay to disk.

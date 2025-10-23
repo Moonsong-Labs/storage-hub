@@ -853,7 +853,7 @@ where
                         )));
                     }
                     FileStorageWriteError::FailedToConstructTrieIter
-                    | FileStorageWriteError::FailedToContructFileTrie => {
+                    | FileStorageWriteError::FailedToConstructFileTrie => {
                         self.handle_rejected_storage_request(
                             &file_key,
                             bucket_id,

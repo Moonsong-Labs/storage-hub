@@ -636,7 +636,7 @@ where
 
         let mut file_trie = self.get_file_trie(&metadata).map_err(|e| {
             error!(target: LOG_TARGET, "{:?}", e);
-            FileStorageWriteError::FailedToContructFileTrie
+            FileStorageWriteError::FailedToConstructFileTrie
         })?;
 
         if let Err(e) = file_trie.write_chunk(chunk_id, data) {
