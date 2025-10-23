@@ -493,7 +493,7 @@ await describeMspNet(
       );
 
       // Wait for indexer to process the FileDeletionRequested event
-      await waitForIndexing(userApi);
+      await waitForIndexing(userApi, false);
 
       // Verify that the deletion signature was stored in the database (SCALE-encoded)
       await waitForFileDeletionSignature(sql, fileKey);
