@@ -38,6 +38,7 @@ rustls-platform-verifier = { workspace = true }
 tokio-postgres = { workspace = true }
 tokio-postgres-rustls = { workspace = true }
 rustls-pemfile = { workspace = true }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
 
 # Workspace dependencies
 codec = { workspace = true }
