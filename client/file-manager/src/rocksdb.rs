@@ -494,6 +494,8 @@ where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     /// Helper to build the bucket-prefixed file key used for efficient prefix scans.
+    ///
+    /// This is used, for instance, to delete all files in a bucket efficiently.
     fn build_bucket_prefixed_file_key(
         metadata: &FileMetadata,
         file_key: &HasherOutT<T>,
