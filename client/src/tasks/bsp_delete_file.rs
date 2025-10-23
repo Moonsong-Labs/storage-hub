@@ -178,7 +178,7 @@ where
             let file_key = FileKey::from(mutation.0);
 
             // Check that the file_key is not in the Forest.
-            let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+            let current_forest_key = ForestStorageKey::from(CURRENT_FOREST_KEY.to_vec());
             let read_fs = self
                 .storage_hub_handler
                 .forest_storage_handler
