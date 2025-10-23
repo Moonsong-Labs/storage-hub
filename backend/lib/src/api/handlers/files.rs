@@ -45,7 +45,7 @@ pub async fn get_file_info(
 }
 
 // Internal endpoint used by the MSP RPC to upload a file to the backend
-// The file is only temporary and will be deleted after the stream is closed
+// This function streams the file chunks via a channel to the thread running download_by_key.
 pub async fn internal_upload_by_key(
     State(services): State<Services>,
     Path(file_key): Path<String>,
@@ -62,7 +62,7 @@ pub async fn internal_upload_by_key(
         return (StatusCode::BAD_REQUEST, "Invalid file key".to_string());
     }
 
-    // Get session
+    // Get download session and early return if not found
     let Some(tx) = services.download_sessions.get_session(&file_key) else {
         return (StatusCode::NOT_FOUND, "Session not found".to_string());
     };
@@ -100,6 +100,11 @@ pub async fn internal_upload_by_key(
     (StatusCode::OK, "Upload successful".to_string())
 }
 
+/// Downloads a file by streaming it directly from MSP node to the client.
+///
+/// Creates a channel-based session where the MSP node streams file chunks to
+/// `/internal/uploads/{file_key}`, which are then forwarded to the client without
+/// intermediate storage. Maximum memory usage is limited by the channel buffer (~1 MB).
 pub async fn download_by_key(
     State(services): State<Services>,
     AuthenticatedUser { address }: AuthenticatedUser,

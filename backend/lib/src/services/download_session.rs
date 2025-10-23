@@ -3,9 +3,11 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use tokio::sync::mpsc;
 
-// struct that holds download sessions which are use to stream the file chunks
-// from the upload endpoint in which the node streams the file chunks
-// to the download endpoint, where we stream the file chunks to the client
+/// Manages active download sessions for streaming files from MSP nodes to clients.
+///
+/// Each session maps a file key to a channel sender, allowing the internal upload
+/// endpoint (which receives chunks from the MSP node) to forward them to the
+/// download endpoint (which streams them to the client).
 pub struct DownloadSession {
     sessions: Arc<RwLock<HashMap<String, mpsc::Sender<Result<Bytes, std::io::Error>>>>>,
 }

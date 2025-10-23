@@ -66,12 +66,13 @@ impl StorageHubRpcClient {
             .await
     }
 
-    // Returns the status of a give file_key in the MSP storage.
-    // The possible results are:
-    //  FileNotFound
-    //  FileFound
-    //  IncompleteFile
-    //  FileFoundWithInconsistency
+    /// Checks the status of a file in MSP storage by its file key.
+    ///
+    /// # Returns
+    /// - `FileNotFound`: File does not exist in storage
+    /// - `FileFound`: File exists and is complete
+    /// - `IncompleteFile`: File exists but is missing chunks
+    /// - `FileFoundWithInconsistency`: File exists but has data integrity issues
     pub async fn is_file_in_file_storage(
         &self,
         file_key: &str,

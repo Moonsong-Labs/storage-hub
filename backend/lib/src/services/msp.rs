@@ -42,13 +42,11 @@ use crate::{
     },
 };
 
-/// Placeholder
 #[derive(Debug, Deserialize, Serialize)]
 pub struct FileDownloadResult {
     pub file_size: u64,
     pub location: String,
     pub fingerprint: [u8; 32],
-    pub temp_path: String,
 }
 
 /// Service for handling MSP-related operations
@@ -421,11 +419,7 @@ impl MspService {
     /// We also implemented the internal_upload_by_key handler to handle this temporary file upload.
     pub async fn get_file_from_key(&self, file_key: &str) -> Result<FileDownloadResult, Error> {
         debug!(target: "msp_service::get_file_from_key", file_key = %file_key, "Downloading file by key");
-
         // TODO: authenticate user
-
-        // Create temp url for download
-        let temp_path = format!("/tmp/uploads/{}", file_key);
         let upload_url = format!("{}/internal/uploads/{}", self.msp_callback_url, file_key);
 
         // Make the RPC call to download file and get metadata
@@ -465,7 +459,6 @@ impl MspService {
                     file_size,
                     location,
                     fingerprint,
-                    temp_path,
                 })
             }
         }
