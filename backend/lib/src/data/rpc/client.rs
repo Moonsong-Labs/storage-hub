@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use jsonrpsee::core::traits::ToRpcParams;
 use serde::de::DeserializeOwned;
+use tracing::debug;
 
 use shc_rpc::{
     GetFileFromFileStorageResult, GetValuePropositionsResult, RpcProviderId, SaveFileToDisk,
@@ -51,11 +52,15 @@ impl StorageHubRpcClient {
     /// Returns the price value (u128) that represents the cost per giga unit per tick
     /// in the StorageHub network.
     pub async fn get_current_price_per_giga_unit_per_tick(&self) -> RpcResult<u128> {
+        debug!(target: "rpc::client::get_current_price_per_giga_unit_per_tick", "RPC call: get_current_price_per_giga_unit_per_tick");
+
         self.connection.call_no_params(methods::CURRENT_PRICE).await
     }
 
     /// Returns whether the given `file_key` is expected to be received by the MSP node
     pub async fn is_file_key_expected(&self, file_key: &str) -> RpcResult<bool> {
+        debug!(target: "rpc::client::is_file_key_expected", file_key = %file_key, "RPC call: is_file_key_expected");
+
         self.connection
             .call(methods::FILE_KEY_EXPECTED, jsonrpsee::rpc_params![file_key])
             .await
@@ -81,6 +86,13 @@ impl StorageHubRpcClient {
 
     /// Request the MSP node to export the given `file_key` to the given URL
     pub async fn save_file_to_disk(&self, file_key: &str, url: &str) -> RpcResult<SaveFileToDisk> {
+        debug!(
+            target: "rpc::client::save_file_to_disk",
+            file_key = %file_key,
+            url = %url,
+            "RPC call: save_file_to_disk"
+        );
+
         self.connection
             .call(
                 methods::SAVE_FILE_TO_DISK,
@@ -91,6 +103,13 @@ impl StorageHubRpcClient {
 
     /// Request the MSP to accept a FileKeyProof (`proof`) for the given `file_key`
     pub async fn receive_file_chunks(&self, file_key: &str, proof: Vec<u8>) -> RpcResult<Vec<u8>> {
+        debug!(
+            target: "rpc::client::receive_file_chunks",
+            file_key = %file_key,
+            proof_size = proof.len(),
+            "RPC call: receive_file_chunks"
+        );
+
         self.connection
             .call(
                 methods::RECEIVE_FILE_CHUNKS,
@@ -101,16 +120,22 @@ impl StorageHubRpcClient {
 
     /// Retrieve the Onchain Provider ID of the MSP Node (therefore the MSP ID)
     pub async fn get_provider_id(&self) -> RpcResult<RpcProviderId> {
+        debug!(target: "rpc::client::get_provider_id", "RPC call: get_provider_id");
+
         self.connection.call_no_params(methods::PROVIDER_ID).await
     }
 
     /// Retrieve the list of value propositions of the MSP Node
     pub async fn get_value_props(&self) -> RpcResult<GetValuePropositionsResult> {
+        debug!(target: "rpc::client::get_value_props", "RPC call: get_value_props");
+
         self.connection.call_no_params(methods::VALUE_PROPS).await
     }
 
     /// Retrieve the list of multiaddresses associated with the MSP Node
     pub async fn get_multiaddresses(&self) -> RpcResult<Vec<String>> {
+        debug!(target: "rpc::client::get_multiaddresses", "RPC call: get_multiaddresses");
+
         self.connection.call_no_params(methods::PEER_IDS).await
     }
 }

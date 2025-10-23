@@ -1,5 +1,3 @@
-use std::io;
-
 use shc_common::types::HasherOutT;
 use trie_db::CError;
 
@@ -39,8 +37,4 @@ impl<H, CodecError> From<FileStorageWriteError> for Error<H, CodecError> {
     fn from(x: FileStorageWriteError) -> Self {
         Error::FileStorageWrite(x)
     }
-}
-
-pub fn other_io_error(err: String) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, err)
 }

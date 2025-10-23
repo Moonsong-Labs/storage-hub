@@ -14,6 +14,8 @@ use axum_extra::{
     response::FileStream,
 };
 use codec::Decode;
+use tracing::debug;
+
 use shc_common::types::FileMetadata;
 use tokio::sync::mpsc;
 use tokio_stream::{wrappers::ReceiverStream, StreamExt};
@@ -29,6 +31,12 @@ pub async fn get_file_info(
     AuthenticatedUser { address }: AuthenticatedUser,
     Path((bucket_id, file_key)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, Error> {
+    debug!(
+        bucket_id = %bucket_id,
+        file_key = %file_key,
+        user = %address,
+        "GET file info"
+    );
     let response = services
         .msp
         .get_file_info(&bucket_id, &address, &file_key)
@@ -43,6 +51,7 @@ pub async fn internal_upload_by_key(
     Path(file_key): Path<String>,
     body: Body,
 ) -> (StatusCode, impl IntoResponse) {
+    debug!(file_key = %file_key, "PUT internal upload");
     // TODO: re-add auth
     // FIXME: make this only callable by the rpc itself
     // let _auth = extract_bearer_token(&auth)?;
@@ -93,9 +102,10 @@ pub async fn internal_upload_by_key(
 
 pub async fn download_by_key(
     State(services): State<Services>,
-    AuthenticatedUser { address: _ }: AuthenticatedUser,
+    AuthenticatedUser { address }: AuthenticatedUser,
     Path(file_key): Path<String>,
 ) -> Result<impl IntoResponse, Error> {
+    debug!(file_key = %file_key, user = %address, "GET download file");
     // Validate file_key is a hex string
     let key = file_key.trim_start_matches("0x");
     if hex::decode(key).is_err() {
@@ -154,10 +164,16 @@ pub async fn download_by_key(
 /// TODO: Further optimize this to avoid having to load the entire file into memory.
 pub async fn upload_file(
     State(services): State<Services>,
-    AuthenticatedUser { address: _ }: AuthenticatedUser,
+    AuthenticatedUser { address }: AuthenticatedUser,
     Path((bucket_id, file_key)): Path<(String, String)>,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, Error> {
+    debug!(
+        bucket_id = %bucket_id,
+        file_key = %file_key,
+        user = %address,
+        "PUT upload file"
+    );
     // TODO(AUTH): verify that user has permissions to access this file
 
     // Pre-check with MSP whether this file key is expected before doing heavy processing
@@ -227,9 +243,15 @@ pub async fn upload_file(
 
 pub async fn distribute_file(
     State(services): State<Services>,
-    AuthenticatedUser { address: _ }: AuthenticatedUser,
+    AuthenticatedUser { address }: AuthenticatedUser,
     Path((bucket_id, file_key)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, Error> {
+    debug!(
+        bucket_id = %bucket_id,
+        file_key = %file_key,
+        user = %address,
+        "POST distribute file"
+    );
     // TODO(AUTH): verify that user has permissions to access this file
 
     let response = services.msp.distribute_file(&bucket_id, &file_key).await?;

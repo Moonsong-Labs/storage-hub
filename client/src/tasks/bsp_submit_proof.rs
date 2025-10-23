@@ -10,9 +10,7 @@ use sp_runtime::traits::{SaturatedConversion, Saturating};
 use shc_actors_framework::{actor::ActorHandle, event_bus::EventHandler};
 use shc_blockchain_service::{
     commands::{BlockchainServiceCommandInterface, BlockchainServiceCommandInterfaceExt},
-    events::{
-        FinalisedTrieRemoveMutationsApplied, MultipleNewChallengeSeeds, ProcessSubmitProofRequest,
-    },
+    events::{MultipleNewChallengeSeeds, ProcessSubmitProofRequest},
     types::{RetryStrategy, SendExtrinsicOptions, SubmitProofRequest, WatchTransactionError},
     BlockchainService,
 };
@@ -20,15 +18,15 @@ use shc_common::{
     consts::CURRENT_FOREST_KEY,
     traits::StorageEnableRuntime,
     types::{
-        BlockNumber, CustomChallenge, FileKey, ForestRoot, KeyProof, KeyProofs,
-        ProofsDealerProviderId, Proven, RandomnessOutput, StorageProof,
+        BlockNumber, CustomChallenge, ForestRoot, KeyProof, KeyProofs, ProofsDealerProviderId,
+        Proven, RandomnessOutput, StorageProof,
     },
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
 use crate::{
     handler::StorageHubHandler,
-    types::{BspForestStorageHandlerT, ShNodeType},
+    types::{BspForestStorageHandlerT, ForestStorageKey, ShNodeType},
 };
 
 const LOG_TARGET: &str = "bsp-submit-proof-task";
@@ -65,14 +63,6 @@ impl Default for BspSubmitProofConfig {
 ///   - Submits the proofs to the runtime, with up to [`MAX_PROOF_SUBMISSION_ATTEMPTS`] retries on failure.
 ///   - Applies any necessary mutations to the Forest Storage (but not the File Storage).
 ///   - Verifies that the new Forest root matches the one recorded on-chain to ensure consistency.
-///
-/// - **[`FinalisedTrieRemoveMutationsApplied`] Event:**
-///   - Triggered when mutations applied to the Merkle Trie have been finalized, indicating that certain keys should be removed.
-///   - Iterates over each file key that was part of the finalised mutations.
-///   - Checks if the file key is still present in the Forest Storage:
-///     - If the key is still present, logs a warning, as this may indicate that the key was re-added after deletion.
-///     - If the key is absent from the Forest Storage, safely removes the corresponding file from the File Storage.
-///   - Ensures that no residual file keys remain in the File Storage when they should have been deleted.
 pub struct BspSubmitProofTask<NT, Runtime>
 where
     NT: ShNodeType<Runtime>,
@@ -201,7 +191,7 @@ where
         Self::check_if_proof_is_outdated(&self.storage_hub_handler.blockchain, &event).await?;
 
         // Get the current Forest key of the Provider running this node.
-        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+        let current_forest_key = ForestStorageKey::from(CURRENT_FOREST_KEY.to_vec());
 
         // Generate the Forest proof, i.e. the proof that some file keys belong to this Provider's Forest.
         let proven_file_keys = {
@@ -349,66 +339,6 @@ where
             .blockchain
             .release_forest_root_write_lock(forest_root_write_tx)
             .await
-    }
-}
-
-/// Handles the [`FinalisedTrieRemoveMutationsApplied`] event.
-///
-/// This event is triggered when mutations applied to the Forest of this BSP have been finalised,
-/// signalling that certain keys (representing files) should be removed from the File Storage if they are
-/// not present in the Forest Storage. If the key is still present in the Forest Storage, it sends out
-/// a warning, since it could indicate that the key has been re-added after being deleted.
-///
-/// This task performs the following actions:
-/// - Iterates over each removed file key.
-/// - Checks if the file key is present in the Forest Storage.
-///   - If the key is still present, it logs a warning,
-///     since this could indicate that the key has been re-added after being deleted.
-///   - If the key is not present in the Forest Storage, it safely removes the key from the File Storage.
-impl<NT, Runtime> EventHandler<FinalisedTrieRemoveMutationsApplied<Runtime>>
-    for BspSubmitProofTask<NT, Runtime>
-where
-    NT: ShNodeType<Runtime> + 'static,
-    NT::FSH: BspForestStorageHandlerT<Runtime>,
-    Runtime: StorageEnableRuntime,
-{
-    async fn handle_event(
-        &mut self,
-        event: FinalisedTrieRemoveMutationsApplied<Runtime>,
-    ) -> anyhow::Result<()> {
-        info!(
-            target: LOG_TARGET,
-            "Processing finalised mutations applied for provider [{:?}] with mutations: {:?}",
-            event.provider_id,
-            event.mutations
-        );
-
-        // For each mutation...
-        for mutation in event.mutations {
-            let file_key = FileKey::from(mutation.0);
-
-            // Check that the file_key is not in the Forest.
-            let current_forest_key = CURRENT_FOREST_KEY.to_vec();
-            let read_fs = self
-                .storage_hub_handler
-                .forest_storage_handler
-                .get(&current_forest_key)
-                .await
-                .ok_or_else(|| anyhow!("CRITICAL❗️❗️ Failed to get forest storage."))?;
-            if read_fs.read().await.contains_file_key(&file_key.into())? {
-                warn!(
-                    target: LOG_TARGET,
-                    "TrieRemoveMutation applied and finalised for file key {:?}, but file key is still in Forest. This can only happen if the same file key was added again after deleted by the user.\n Mutation: {:?}",
-                    file_key,
-                    mutation
-                );
-            } else {
-                // If file key is not in Forest, we can now safely remove it from the File Storage.
-                self.remove_file_from_file_storage(&file_key.into()).await?;
-            }
-        }
-
-        Ok(())
     }
 }
 
@@ -590,22 +520,6 @@ where
         })
     }
 
-    async fn remove_file_from_file_storage(&self, file_key: &H256) -> anyhow::Result<()> {
-        // Remove the file from the File Storage.
-        let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
-        write_file_storage.delete_file(file_key).map_err(|e| {
-            error!(target: LOG_TARGET, "Failed to remove file from File Storage after it was removed from the Forest. \nError: {:?}", e);
-            anyhow!(
-                "Failed to delete file from File Storage after it was removed from the Forest: {:?}",
-                e
-            )
-        })?;
-        // Release the file storage write lock.
-        drop(write_file_storage);
-
-        Ok(())
-    }
-
     /// Function to determine if a proof submission should be retried,
     /// sending the same proof again.
     ///
@@ -627,7 +541,7 @@ where
             _ => return false,
         }
 
-        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+        let current_forest_key = ForestStorageKey::from(CURRENT_FOREST_KEY.to_vec());
         let is_proof_outdated = Self::check_if_proof_is_outdated(&sh_handler.blockchain, &event)
             .await
             .is_err();

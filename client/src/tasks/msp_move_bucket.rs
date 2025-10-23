@@ -26,7 +26,7 @@ use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
 use crate::{
     handler::StorageHubHandler,
-    types::{MspForestStorageHandlerT, ShNodeType},
+    types::{ForestStorageKey, MspForestStorageHandlerT, ShNodeType},
 };
 
 // Constants
@@ -304,7 +304,7 @@ where
         let forest_storage = self
             .storage_hub_handler
             .forest_storage_handler
-            .get_or_create(&bucket)
+            .get_or_create(&ForestStorageKey::from(bucket))
             .await;
 
         // Calculate total size to check capacity
@@ -448,7 +448,7 @@ where
         if let Some(bucket_id) = self.pending_bucket_id {
             self.storage_hub_handler
                 .forest_storage_handler
-                .remove_forest_storage(&bucket_id.as_ref().to_vec())
+                .remove_forest_storage(&ForestStorageKey::from(bucket_id.as_ref().to_vec()))
                 .await;
         }
 
