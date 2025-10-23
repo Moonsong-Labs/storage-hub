@@ -853,7 +853,7 @@ impl MspService {
 
 #[cfg(all(test, feature = "mocks"))]
 mod tests {
-    use std::sync::Arc;
+    use std::{str::FromStr, sync::Arc};
 
     use bigdecimal::BigDecimal;
     use serde_json::Value;

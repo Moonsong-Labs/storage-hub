@@ -170,7 +170,11 @@ await describeMspNet(
         );
 
         const costPerTick = BigInt(apiStream.costPerTick);
-        strictEqual(costPerTick.toString(), apiStream.costPerTick, "costPerTick should be parseable as BigInt");
+        strictEqual(
+          costPerTick.toString(),
+          apiStream.costPerTick,
+          "costPerTick should be parseable as BigInt"
+        );
 
         assert(
           matchingChainStream,
