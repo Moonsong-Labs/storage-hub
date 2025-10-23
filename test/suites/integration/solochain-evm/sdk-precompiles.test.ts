@@ -37,6 +37,9 @@ await describeMspNet(
     let fileKey: H256;
     let fileLocation: string;
     let mspClient: MspClient;
+    let sessionToken: string | undefined;
+    const sessionProvider = () =>
+      sessionToken ? ({ token: sessionToken, user: { address: "" } } as const) : undefined;
 
     before(async () => {
       userApi = await createUserApi();
@@ -82,7 +85,7 @@ await describeMspNet(
       const mspBackendHttpConfig: HttpClientConfig = {
         baseUrl: "http://127.0.0.1:8080"
       };
-      mspClient = await MspClient.connect(mspBackendHttpConfig);
+      mspClient = await MspClient.connect(mspBackendHttpConfig, sessionProvider);
 
       // Wait for the backend to be ready
       await userApi.docker.waitForLog({
@@ -96,7 +99,8 @@ await describeMspNet(
       assert(healthResponse.status === "healthy", "MSP health response should be healthy");
 
       // Set up the authentication with the MSP backend
-      await mspClient.auth.SIWE(walletClient);
+      const siweSession = await mspClient.auth.SIWE(walletClient);
+      sessionToken = siweSession.token;
     });
 
     it("Postgres DB is ready", async () => {

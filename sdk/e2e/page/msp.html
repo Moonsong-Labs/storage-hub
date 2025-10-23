@@ -229,6 +229,7 @@
 
     let client = null;
     let connectedBaseUrl = null;
+    let sessionRef = undefined;
 
     function toBase64Url(str) {
       return btoa(unescape(encodeURIComponent(str)))
@@ -254,7 +255,8 @@
       const baseUrl = 'http://127.0.0.1:8080';
       if (client && connectedBaseUrl === baseUrl) return client;
       const { MspClient } = await import('@storagehub-sdk/msp-client');
-      client = await MspClient.connect({ baseUrl, timeoutMs: 60000 });
+      const sessionProvider = () => sessionRef;
+      client = await MspClient.connect({ baseUrl, timeoutMs: 60000 }, sessionProvider);
       connectedBaseUrl = baseUrl;
       return client;
     }
@@ -319,7 +321,8 @@
           })
         });
 
-        await client.auth.SIWE(wallet);
+        const session = await client.auth.SIWE(wallet);
+        sessionRef = session;
         const auth = await client.auth.getAuthStatus();
         if (!auth || auth.status !== 'Authenticated') {
           throw new Error('Authentication failed');

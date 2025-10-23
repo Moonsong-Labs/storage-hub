@@ -12,7 +12,7 @@ import {
   type FileInfo
 } from "@storagehub-sdk/msp-client";
 import { LocalWallet, initWasm } from "@storagehub-sdk/core";
-import type { Session, UploadReceipt } from "@storagehub-sdk/msp-client";
+import type { Session, UploadReceipt, SessionProvider } from "@storagehub-sdk/msp-client";
 
 export async function runMspDemo(): Promise<void> {
   // Initialize embedded WASM once
@@ -21,8 +21,10 @@ export async function runMspDemo(): Promise<void> {
   const baseUrl = process.env.BASE_URL || "http://127.0.0.1:8080";
   const chainId = Number(process.env.CHAIN_ID || "1");
 
-  // Connect MSP client
-  const client = await MspClient.connect({ baseUrl });
+  // Connect MSP client with session provider
+  let sessionRef: Session | undefined;
+  const sessionProvider: SessionProvider = () => sessionRef;
+  const client = await MspClient.connect({ baseUrl }, sessionProvider);
 
   // Health check
   const health: HealthStatus = await client.getHealth();
@@ -44,9 +46,9 @@ export async function runMspDemo(): Promise<void> {
   // SIWE-like: request message, sign, and verify to obtain JWT
   const { message } = await client.getNonce(address, chainId);
   const signature = await wallet.signMessage(message);
-  const verified: Session = await client.verify(message, signature);
-  client.setToken(verified.token);
-  console.log("verified user:", verified.user);
+  const session: Session = await client.verify(message, signature);
+  sessionRef = session;
+  console.log("verified user:", session.user);
 
   // Upload a file from disk
   const bucketId =
