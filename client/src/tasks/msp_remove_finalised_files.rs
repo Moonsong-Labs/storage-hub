@@ -2,8 +2,10 @@ use anyhow::anyhow;
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::events::FinalisedBucketMutationsApplied;
-use shc_common::traits::StorageEnableRuntime;
-use shc_common::types::FileKey;
+use shc_common::{
+    traits::StorageEnableRuntime,
+    types::{FileKey, TrieMutation, TrieRemoveMutation},
+};
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
@@ -21,7 +23,7 @@ const LOG_TARGET: &str = "msp-remove-finalised-files-task";
 /// - **[`FinalisedBucketMutationsApplied`] Event:**
 ///   - Triggered when mutations applied to a Bucket's Forest that's managed by this MSP have been finalised,
 ///     signalling that certain keys (representing files) should be removed from the File Storage if they are
-///     not present in the Bucket'sForest Storage. If the key is still present in the Forest Storage, it sends out
+///     not present in the Bucket's Forest Storage. If the key is still present in the Forest Storage, it sends out
 ///     a warning, since it could indicate that the key has been re-added after being deleted.
 ///
 /// This task performs the following actions:
@@ -74,8 +76,6 @@ where
 							e
 					)
 			})?;
-        // Release the file storage write lock.
-        drop(write_file_storage);
 
         Ok(())
     }
@@ -95,21 +95,28 @@ where
     ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Processing finalised bucket mutations applied for bucket [{:?}] with mutations: {:?}",
-            event.bucket_id,
-            event.mutations
+            "Processing finalised bucket mutations applied for bucket [{:?}]",
+            event.bucket_id
         );
+        debug!(target: LOG_TARGET, "Mutations to apply: {:?}", event.mutations);
 
         // For each mutation...
         for mutation in event.mutations {
+            // Get the file key from the mutation.
             let file_key = FileKey::from(mutation.0);
 
-            // Check that the file_key is not in the Bucket's Forest.
+            // Only process remove mutations in this task..
+            if mutation.1 != TrieMutation::Remove(TrieRemoveMutation::new()) {
+                debug!(target: LOG_TARGET, "Skipping non-remove mutation for file key {:?}", file_key);
+                continue;
+            }
+
+            // Check that the file key is not in the Bucket's Forest.
             let bucket_forest_key = event.bucket_id.as_ref().to_vec();
             let read_fs = self
                 .storage_hub_handler
                 .forest_storage_handler
-                .get(&bucket_forest_key)
+                .get(&bucket_forest_key.into())
                 .await
                 .ok_or_else(|| {
                     anyhow!(
