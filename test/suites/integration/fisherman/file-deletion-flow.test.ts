@@ -10,6 +10,7 @@ import {
   ShConsts
 } from "../../../util";
 import {
+  hexToBuffer,
   waitForFileIndexed,
   waitForMspFileAssociation,
   waitForBspFileAssociation
@@ -170,6 +171,29 @@ await describeMspNet(
       );
 
       await waitForIndexing(userApi, false);
+
+      // Verify that the deletion signature was stored in the database (SCALE-encoded)
+      await waitFor({
+        lambda: async () => {
+          const files = await sql`
+            SELECT deletion_signature FROM file
+            WHERE file_key = ${hexToBuffer(fileKey)}
+            AND deletion_signature IS NOT NULL
+          `;
+          return files.length > 0;
+        }
+      });
+
+      const filesWithSignature = await sql`
+        SELECT deletion_signature FROM file
+        WHERE file_key = ${hexToBuffer(fileKey)}
+        AND deletion_signature IS NOT NULL
+      `;
+      assert.equal(filesWithSignature.length, 1, "File should have deletion signature stored");
+      assert(
+        filesWithSignature[0].deletion_signature.length > 0,
+        "SCALE-encoded signature should not be empty"
+      );
 
       // Verify delete_files extrinsics are submitted
       await userApi.assert.extrinsicPresent({
