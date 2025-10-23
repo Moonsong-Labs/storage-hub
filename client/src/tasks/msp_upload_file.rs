@@ -34,7 +34,7 @@ use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
 use crate::{
     handler::StorageHubHandler,
-    types::{MspForestStorageHandlerT, ShNodeType},
+    types::{ForestStorageKey, MspForestStorageHandlerT, ShNodeType},
 };
 
 const LOG_TARGET: &str = "msp-upload-file-task";
@@ -301,7 +301,7 @@ where
             let fs = self
                 .storage_hub_handler
                 .forest_storage_handler
-                .get_or_create(&bucket_id.as_ref().to_vec())
+                .get_or_create(&ForestStorageKey::from(bucket_id.as_ref().to_vec()))
                 .await;
 
             let accept = if !accept.is_empty() {
@@ -458,7 +458,7 @@ where
         let fs = self
             .storage_hub_handler
             .forest_storage_handler
-            .get_or_create(&event.bucket_id.as_ref().to_vec())
+            .get_or_create(&ForestStorageKey::from(event.bucket_id.as_ref().to_vec()))
             .await;
         let read_fs = fs.read().await;
 

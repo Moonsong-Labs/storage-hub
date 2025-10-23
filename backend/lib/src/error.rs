@@ -4,6 +4,7 @@ use axum::{
     Json,
 };
 use serde_json::json;
+use tracing::{error, warn};
 
 use crate::data::indexer_db::repository::error::RepositoryError;
 
@@ -45,19 +46,49 @@ pub type Result<T> = std::result::Result<T, Error>;
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
         let (status, message) = match self {
-            Error::Config(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
-            Error::Rpc(err) => (StatusCode::BAD_GATEWAY, err.to_string()),
-            Error::Storage(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
-            Error::Database(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
-            Error::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
-            Error::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
-            Error::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg),
-            Error::Forbidden(msg) => (StatusCode::FORBIDDEN, msg),
-            Error::Conflict(msg) => (StatusCode::CONFLICT, msg),
-            Error::Internal => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Internal error".to_string(),
-            ),
+            Error::Config(ref msg) => {
+                error!(error_msg = %msg, "Configuration error");
+                (StatusCode::INTERNAL_SERVER_ERROR, msg.clone())
+            }
+            Error::Rpc(ref err) => {
+                error!(error = %err, "RPC error (Bad Gateway)");
+                (StatusCode::BAD_GATEWAY, err.to_string())
+            }
+            Error::Storage(ref err) => {
+                error!(error = %err, "Storage error");
+                (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+            }
+            Error::Database(ref msg) => {
+                error!(error_msg = %msg, "Database error");
+                (StatusCode::INTERNAL_SERVER_ERROR, msg.clone())
+            }
+            Error::NotFound(ref msg) => {
+                warn!(error_msg = %msg, "Resource not found");
+                (StatusCode::NOT_FOUND, msg.clone())
+            }
+            Error::BadRequest(ref msg) => {
+                warn!(error_msg = %msg, "Bad request");
+                (StatusCode::BAD_REQUEST, msg.clone())
+            }
+            Error::Unauthorized(ref msg) => {
+                warn!(error_msg = %msg, "Unauthorized access attempt");
+                (StatusCode::UNAUTHORIZED, msg.clone())
+            }
+            Error::Forbidden(ref msg) => {
+                warn!(error_msg = %msg, "Forbidden access attempt");
+                (StatusCode::FORBIDDEN, msg.clone())
+            }
+            Error::Conflict(ref msg) => {
+                warn!(error_msg = %msg, "Conflict");
+                (StatusCode::CONFLICT, msg.clone())
+            }
+            Error::Internal => {
+                error!("Internal server error");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Internal error".to_string(),
+                )
+            }
         };
 
         let body = Json(json!({

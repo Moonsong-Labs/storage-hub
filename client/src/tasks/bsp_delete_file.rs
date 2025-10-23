@@ -12,7 +12,7 @@ use sp_core::H256;
 
 use crate::{
     handler::StorageHubHandler,
-    types::{BspForestStorageHandlerT, ShNodeType},
+    types::{BspForestStorageHandlerT, ForestStorageKey, ShNodeType},
 };
 
 const LOG_TARGET: &str = "bsp-delete-file-task";
@@ -116,7 +116,7 @@ where
         );
 
         // Check that the file_key is not in the Forest.
-        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+        let current_forest_key = ForestStorageKey::from(CURRENT_FOREST_KEY.to_vec());
         let read_fs = self
             .storage_hub_handler
             .forest_storage_handler

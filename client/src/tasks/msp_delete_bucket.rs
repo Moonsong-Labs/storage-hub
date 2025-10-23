@@ -9,7 +9,7 @@ use shc_forest_manager::traits::ForestStorageHandler;
 
 use crate::{
     handler::StorageHubHandler,
-    types::{MspForestStorageHandlerT, ShNodeType},
+    types::{ForestStorageKey, MspForestStorageHandlerT, ShNodeType},
 };
 
 const LOG_TARGET: &str = "msp-stopped-storing-task";
@@ -160,7 +160,7 @@ where
 
         self.storage_hub_handler
             .forest_storage_handler
-            .remove_forest_storage(&bucket_id.as_ref().to_vec())
+            .remove_forest_storage(&ForestStorageKey::from(bucket_id.as_ref().to_vec()))
             .await;
 
         Ok(())
