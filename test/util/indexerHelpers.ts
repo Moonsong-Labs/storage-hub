@@ -428,24 +428,3 @@ export const getLastIndexedBlock = async (sql: SqlClient): Promise<number> => {
   const result = await sql`SELECT last_indexed_finalized_block FROM service_state WHERE id = 1`;
   return Number(result[0].last_indexed_finalized_block);
 };
-
-/**
- * Wait for the indexer to catch up to a target block number.
- *
- * @param api - The enriched API instance
- * @param sql - The SQL client instance
- * @param targetBlock - The target block number to wait for
- */
-export const waitForIndexerSyncToBlock = async (
-  sql: SqlClient,
-  targetBlock: number
-): Promise<void> => {
-  await waitFor({
-    lambda: async () => {
-      const lastIndexed = await getLastIndexedBlock(sql);
-      return lastIndexed >= targetBlock;
-    },
-    iterations: 100,
-    delay: 500
-  });
-};

@@ -1,10 +1,6 @@
 import assert from "node:assert";
-import { describeMspNet, type EnrichedBspApi, type SqlClient } from "../../../util";
-import {
-  getLastIndexedBlock,
-  waitForBucketIndexed,
-  waitForIndexerSyncToBlock
-} from "../../../util/indexerHelpers";
+import { describeMspNet, type EnrichedBspApi, type SqlClient, waitFor } from "../../../util";
+import { getLastIndexedBlock, waitForBucketIndexed } from "../../../util/indexerHelpers";
 
 await describeMspNet(
   "Indexer Service - Block Notification Sync (Genesis Pause)",
@@ -88,7 +84,14 @@ await describeMspNet(
       await indexerApi.block.finaliseBlock(finalisedBlockHash.toString());
 
       // Block until indexer catches up - verifies finality notification pipeline works under load
-      await waitForIndexerSyncToBlock(sql, finalBlockNumber);
+      await waitFor({
+        lambda: async () => {
+          const lastIndexed = await getLastIndexedBlock(sql);
+          return lastIndexed >= finalBlockNumber;
+        },
+        iterations: 100,
+        delay: 500
+      });
 
       // Verify data consistency - all events from missed blocks should be present in database
       for (const bucketName of buckets) {

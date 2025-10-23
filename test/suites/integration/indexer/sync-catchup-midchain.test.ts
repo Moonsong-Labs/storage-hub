@@ -1,10 +1,6 @@
 import assert from "node:assert";
-import { describeMspNet, type EnrichedBspApi, type SqlClient } from "../../../util";
-import {
-  getLastIndexedBlock,
-  waitForBucketIndexed,
-  waitForIndexerSyncToBlock
-} from "../../../util/indexerHelpers";
+import { describeMspNet, type EnrichedBspApi, type SqlClient, waitFor } from "../../../util";
+import { getLastIndexedBlock, waitForBucketIndexed } from "../../../util/indexerHelpers";
 
 await describeMspNet(
   "Indexer Service - Block Notification Sync (Mid-Chain Pause)",
@@ -75,7 +71,14 @@ await describeMspNet(
       await indexerApi.block.finaliseBlock(initialFinalizedHash.toString());
 
       // Wait for indexer to catch up to initial buckets
-      await waitForIndexerSyncToBlock(sql, initialBlockNumber);
+      await waitFor({
+        lambda: async () => {
+          const lastIndexed = await getLastIndexedBlock(sql);
+          return lastIndexed >= initialBlockNumber;
+        },
+        iterations: 100,
+        delay: 500
+      });
 
       // Verify indexer processed initial buckets - establishes non-genesis baseline
       for (const bucketName of initialBuckets) {
@@ -122,7 +125,14 @@ await describeMspNet(
       await indexerApi.block.finaliseBlock(finalBlockHash);
 
       // Block until indexer processes backlog from mid-chain position
-      await waitForIndexerSyncToBlock(sql, finalBlockNumber);
+      await waitFor({
+        lambda: async () => {
+          const lastIndexed = await getLastIndexedBlock(sql);
+          return lastIndexed >= finalBlockNumber;
+        },
+        iterations: 100,
+        delay: 500
+      });
 
       // Verify both initial and catchup buckets are present - tests full consistency
       for (const bucketName of [...initialBuckets, ...catchupBuckets]) {
