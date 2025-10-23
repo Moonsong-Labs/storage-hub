@@ -141,8 +141,6 @@ export const waitForFileDeleted = async (sql: SqlClient, fileKey: string) => {
   });
 };
 
-
-
 export const waitForBspFileAssociationRemoved = async (
   sql: SqlClient,
   fileKey: string,
