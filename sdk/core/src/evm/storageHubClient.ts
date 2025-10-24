@@ -36,10 +36,11 @@ type FileSystemContract<TClient extends EvmClient> = GetContractReturnType<
 >;
 
 /**
- * Internal constant precompile address for FileSystem on StorageHub runtimes.
+ * Default precompile address for FileSystem on StorageHub runtimes.
  * If a chain uses a different address, this constant should be updated accordingly.
  */
-const FILE_SYSTEM_PRECOMPILE_ADDRESS = "0x0000000000000000000000000000000000000064" as Address;
+export const SH_FILE_SYSTEM_PRECOMPILE_ADDRESS =
+  "0x0000000000000000000000000000000000000064" as Address;
 
 export class StorageHubClient {
   private readonly publicClient: PublicClient; // Internal for gas estimation
@@ -157,7 +158,7 @@ export class StorageHubClient {
    * @param opts.rpcUrl - RPC endpoint URL for the StorageHub chain
    * @param opts.chain - Viem chain configuration
    * @param opts.walletClient - Wallet client for transaction signing
-   * @param opts.filesystemContractAddress - Optional filesystem precompile address
+   * @param opts.filesystemContractAddress - Filesystem precompile address
    */
   constructor(opts: StorageHubClientOptions) {
     // Create internal PublicClient for gas estimation
@@ -166,10 +167,7 @@ export class StorageHubClient {
       transport: http(opts.rpcUrl)
     });
     this.walletClient = opts.walletClient;
-
-    // Store the filesystem contract address with default fallback
-    this.filesystemContractAddress =
-      opts.filesystemContractAddress ?? FILE_SYSTEM_PRECOMPILE_ADDRESS;
+    this.filesystemContractAddress = opts.filesystemContractAddress;
   }
 
   // -------- Reads --------
