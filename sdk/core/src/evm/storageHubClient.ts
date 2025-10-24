@@ -39,7 +39,7 @@ type FileSystemContract<TClient extends EvmClient> = GetContractReturnType<
  * Default precompile address for FileSystem on StorageHub runtimes.
  * If a chain uses a different address, this constant should be updated accordingly.
  */
-export const FILE_SYSTEM_PRECOMPILE_ADDRESS =
+export const SH_FILE_SYSTEM_PRECOMPILE_ADDRESS =
   "0x0000000000000000000000000000000000000064" as Address;
 
 export class StorageHubClient {

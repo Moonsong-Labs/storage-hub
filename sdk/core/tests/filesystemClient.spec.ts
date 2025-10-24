@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { StorageHubClient, FILE_SYSTEM_PRECOMPILE_ADDRESS } from "../src/evm/storageHubClient.js";
+import {
+  StorageHubClient,
+  SH_FILE_SYSTEM_PRECOMPILE_ADDRESS
+} from "../src/evm/storageHubClient.js";
 import { LocalWallet } from "../src/wallet/local.js";
 import { createWalletClient, defineChain, http, type Address } from "viem";
 import { mnemonicToAccount } from "viem/accounts";
@@ -27,7 +30,7 @@ describe("StorageHubClient", () => {
       rpcUrl: "http://127.0.0.1:8545",
       chain,
       walletClient,
-      filesystemContractAddress: FILE_SYSTEM_PRECOMPILE_ADDRESS
+      filesystemContractAddress: SH_FILE_SYSTEM_PRECOMPILE_ADDRESS
     });
 
     const longName = "a".repeat(101); // String that's 101 bytes
@@ -58,7 +61,7 @@ describe("StorageHubClient", () => {
       rpcUrl,
       chain,
       walletClient,
-      filesystemContractAddress: FILE_SYSTEM_PRECOMPILE_ADDRESS
+      filesystemContractAddress: SH_FILE_SYSTEM_PRECOMPILE_ADDRESS
     });
 
     const name = "bucket"; // Now a simple string
