@@ -134,7 +134,7 @@ impl MspService {
 
     /// Get MSP statistics
     pub async fn get_stats(&self) -> Result<StatsResponse, Error> {
-        // TODO(MOCK): replace with actual values retrieved from the RPC
+        // TODO(MOCK): replace with actual values retrieved from the RPC/DB
         debug!(target: "msp_service::get_stats", "Getting MSP stats");
 
         Ok(StatsResponse {

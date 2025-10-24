@@ -350,9 +350,6 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     sql_peer_ids,
                 )
                 .await?;
-
-                // Update bucket total size and file count
-                Bucket::increment_file_count_and_size(conn, bucket.id, size).await?;
             }
             pallet_file_system::Event::MoveBucketRequested { .. } => {}
             pallet_file_system::Event::NewCollectionAndAssociation { .. } => {}

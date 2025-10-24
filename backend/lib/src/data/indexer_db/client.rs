@@ -133,13 +133,20 @@ impl DBClient {
         Ok(msp)
     }
 
-    /// Invalidate the MSP cache
+    /// Invalidate the MSP cache if it matches the given MSP
     ///
-    /// This can be called when you know the MSP data has changed
-    /// and want to force a refresh on the next access.
-    pub async fn invalidate_msp_cache(&self) {
+    /// # Arguments
+    /// * expected_id: the MSP for which the cache should be invalidated
+    ///
+    /// If no MSP was specified the cache is always invalidated.
+    pub async fn invalidate_msp_cache(&self, expected_id: Option<&OnchainMspId>) {
         let mut cache = self.msp_cache.write().await;
-        *cache = None;
+
+        match expected_id {
+            None => *cache = None,
+            Some(id) if cache.msp.onchain_msp_id == id => *cache = None,
+            _ => {}
+        }
     }
 
     /// Retrieve info on a specific bucket given its onchain ID
@@ -238,8 +245,9 @@ impl DBClient {
     pub async fn create_msp(&self, account: &str, onchain_msp_id: OnchainMspId) -> Result<Msp> {
         let msp = self.repository.create_msp(account, onchain_msp_id).await?;
 
-        // Invalidate cache after creating a new MSP
-        self.invalidate_msp_cache().await;
+        // Invalidate cache after creating the cached MSP
+        // NOTE: the operation described above is technically incorrect (creating an existing msp)
+        self.invalidate_msp_cache(Some(&onchain_msp_id)).await;
 
         Ok(msp)
     }
@@ -248,8 +256,8 @@ impl DBClient {
     pub async fn delete_msp(&self, onchain_msp_id: &OnchainMspId) -> Result<()> {
         let result = self.repository.delete_msp(onchain_msp_id).await?;
 
-        // Invalidate cache after deleting an MSP
-        self.invalidate_msp_cache().await;
+        // Invalidate cache after deleting the cached MSP
+        self.invalidate_msp_cache(Some(&onchain_msp_id)).await;
 
         Ok(result)
     }

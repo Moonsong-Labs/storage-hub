@@ -7,7 +7,7 @@ use sc_network::{Multiaddr, PeerId};
 use shc_common::types::{FileMetadata, Fingerprint};
 
 use crate::{
-    models::MultiAddress,
+    models::{Bucket, MultiAddress},
     schema::{bucket, file, file_peer_id},
     DbConnection,
 };
@@ -109,6 +109,9 @@ impl File {
             .execute(conn)
             .await?;
 
+        // Update bucket total size and file count
+        Bucket::increment_file_count_and_size(conn, bucket_id, size).await?;
+
         Ok(file)
     }
 
@@ -142,8 +145,6 @@ impl File {
         conn: &mut DbConnection<'a>,
         file_key: impl AsRef<[u8]>,
     ) -> Result<(), diesel::result::Error> {
-        use crate::models::Bucket;
-
         let file_key = file_key.as_ref().to_vec();
 
         // Get file info before deletion

@@ -10,7 +10,7 @@ use crate::models::buckets::FileTree;
 pub struct FileInfo {
     #[serde(rename = "fileKey")]
     pub file_key: String,
-    #[serde(serialize_with = "crate::serde_utils::ser::hex_string")]
+    #[serde(serialize_with = "crate::utils::serde::hex_string")]
     pub fingerprint: [u8; 32],
     #[serde(rename = "bucketId")]
     pub bucket_id: String,

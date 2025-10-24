@@ -58,19 +58,19 @@ impl AuthService {
             .jwt_secret
             .as_ref()
             .ok_or_else(|| {
-                error!("JWT_SECRET is not set. Please set it in the config file or as an environment variable.");
+                error!(target: "auth_service::from_config", "JWT_SECRET is not set. Please set it in the config file or as an environment variable.");
                 "JWT_SECRET is not configured"
             })
             .and_then(|secret| {
                 hex::decode(secret.trim_start_matches("0x"))
                     .map_err(|e| {
-                        error!(error = %e, "Invalid JWT_SECRET format - must be a valid hex string");
+                        error!(target: "auth_service::from_config", error = %e, "Invalid JWT_SECRET format - must be a valid hex string");
                         "Invalid JWT_SECRET format"
                     })
             })
             .and_then(|decoded| {
                 if decoded.len() < 32 {
-                    tracing::error!(length = decoded.len(), "JWT_SECRET is too short - must be at least 32 bytes (64 hex characters)");
+                    error!(target: "auth_service::from_config", length = decoded.len(), "JWT_SECRET is too short - must be at least 32 bytes (64 hex characters)");
                     Err("JWT_SECRET must be at least 32 bytes")
                 } else {
                     Ok(decoded)
@@ -85,7 +85,7 @@ impl AuthService {
         // the JWT passed in
         let validation = Validation::default();
 
-        #[allow(unused_mut)] // triggers warning without mocks feature
+        #[cfg_attr(not(feature = "mocks"), allow(unused_mut))]
         let mut this = Self {
             encoding_key: EncodingKey::from_secret(secret.as_slice()),
             decoding_key: DecodingKey::from_secret(secret.as_slice()),
