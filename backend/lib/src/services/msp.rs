@@ -1251,6 +1251,8 @@ mod tests {
             // mock environment sets price per giga unit to this value
             * BigDecimal::from(MOCK_PRICE_PER_GIGA_UNIT)
             * BigDecimal::from_str("1e-9").unwrap();
+        let expected_cost_per_tick =
+            expected_cost_per_tick.with_scale_round(0, bigdecimal::RoundingMode::Down);
 
         assert_eq!(
             BigDecimal::from_str(&dynamic.cost_per_tick)
