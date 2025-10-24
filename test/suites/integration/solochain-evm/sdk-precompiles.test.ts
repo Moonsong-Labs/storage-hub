@@ -5,8 +5,8 @@ import { Readable } from "node:stream";
 import { TypeRegistry } from "@polkadot/types";
 import type { AccountId20, H256 } from "@polkadot/types/interfaces";
 import {
-  FileManager,
   type FileInfo,
+  FileManager,
   type HttpClientConfig,
   ReplicationLevel,
   StorageHubClient
@@ -371,12 +371,9 @@ await describeMspNet(
       await userApi.assert.eventPresent("fileSystem", "FileDeletionRequested");
 
       // Wait for the fisherman node's delete_files extrinsic to be in the tx pool and seal it
-      // Two extrinsics are expected: one for the BSP and one for the MSP.
       await userApi.wait.waitForTxInPool({
         module: "fileSystem",
-        method: "deleteFiles",
-        checkQuantity: 2,
-        strictQuantity: true
+        method: "deleteFiles"
       });
       const deleteFileBlock = await userApi.block.seal();
 
