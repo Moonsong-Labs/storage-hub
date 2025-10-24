@@ -493,6 +493,63 @@ where
     DB: KeyValueDB,
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
+    /// Helper to increment the fingerprint refcount within the provided transaction.
+    /// Returns the new refcount value.
+    fn increment_fingerprint_refcount(
+        &self,
+        fingerprint: &[u8],
+        transaction: &mut DBTransaction,
+    ) -> Result<u64, FileStorageError> {
+        let current = self
+            .storage
+            .read(Column::FingerprintRefCount.into(), fingerprint)
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "{:?}", e);
+                FileStorageError::FailedToReadStorage
+            })?
+            .map(|bytes| u64::from_le_bytes(bytes.try_into().unwrap()))
+            .unwrap_or(0);
+
+        let new_count = current
+            .checked_add(1)
+            .ok_or(FileStorageError::FailedToWriteToStorage)?;
+
+        transaction.put(
+            Column::FingerprintRefCount.into(),
+            fingerprint,
+            &new_count.to_le_bytes(),
+        );
+
+        Ok(new_count)
+    }
+
+    /// Helper to decrement the fingerprint refcount within the provided transaction.
+    /// Returns the new refcount value (saturating at 0).
+    fn decrement_fingerprint_refcount(
+        &self,
+        fingerprint: &[u8],
+        transaction: &mut DBTransaction,
+    ) -> Result<u64, FileStorageError> {
+        let current = self
+            .storage
+            .read(Column::FingerprintRefCount.into(), fingerprint)
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "{:?}", e);
+                FileStorageError::FailedToReadStorage
+            })?
+            .map(|bytes| u64::from_le_bytes(bytes.try_into().unwrap()))
+            .unwrap_or(0);
+
+        let new_count = current.saturating_sub(1);
+
+        transaction.put(
+            Column::FingerprintRefCount.into(),
+            fingerprint,
+            &new_count.to_le_bytes(),
+        );
+
+        Ok(new_count)
+    }
     /// Helper to build the bucket-prefixed file key used for efficient prefix scans.
     ///
     /// This is used, for instance, to delete all files in a bucket efficiently.
@@ -774,26 +831,7 @@ where
         );
 
         // Increment fingerprint refcount
-        let current = self
-            .storage
-            .read(
-                Column::FingerprintRefCount.into(),
-                metadata.fingerprint().as_ref(),
-            )
-            .map_err(|e| {
-                error!(target: LOG_TARGET, "{:?}", e);
-                FileStorageError::FailedToReadStorage
-            })?
-            .map(|bytes| u64::from_le_bytes(bytes.try_into().unwrap()))
-            .unwrap_or(0);
-        let new_count = current
-            .checked_add(1)
-            .ok_or(FileStorageError::FailedToWriteToStorage)?;
-        transaction.put(
-            Column::FingerprintRefCount.into(),
-            metadata.fingerprint().as_ref(),
-            &new_count.to_le_bytes(),
-        );
+        self.increment_fingerprint_refcount(metadata.fingerprint().as_ref(), &mut transaction)?;
 
         self.storage.write(transaction).map_err(|e| {
             error!(target: LOG_TARGET,"{:?}", e);
@@ -860,27 +898,9 @@ where
             bucket_prefixed_file_key.as_ref(),
             &[],
         );
+
         // Increment fingerprint refcount
-        let current = self
-            .storage
-            .read(
-                Column::FingerprintRefCount.into(),
-                metadata.fingerprint().as_ref(),
-            )
-            .map_err(|e| {
-                error!(target: LOG_TARGET, "{:?}", e);
-                FileStorageError::FailedToReadStorage
-            })?
-            .map(|bytes| u64::from_le_bytes(bytes.try_into().unwrap()))
-            .unwrap_or(0);
-        let new_count = current
-            .checked_add(1)
-            .ok_or(FileStorageError::FailedToWriteToStorage)?;
-        transaction.put(
-            Column::FingerprintRefCount.into(),
-            metadata.fingerprint().as_ref(),
-            &new_count.to_le_bytes(),
-        );
+        self.increment_fingerprint_refcount(metadata.fingerprint().as_ref(), &mut transaction)?;
 
         self.storage.write(transaction).map_err(|e| {
             error!(target: LOG_TARGET,"{:?}", e);
@@ -961,17 +981,6 @@ where
                 FileStorageError::FailedToParseFingerprint
             })?;
 
-        // Read current refcount (treat missing as 0)
-        let current_refcount = self
-            .storage
-            .read(Column::FingerprintRefCount.into(), b_fingerprint)
-            .map_err(|e| {
-                error!(target: LOG_TARGET, "{:?}", e);
-                FileStorageError::FailedToReadStorage
-            })?
-            .map(|bytes| u64::from_le_bytes(bytes.try_into().unwrap()))
-            .unwrap_or(0);
-
         // Transaction 1: remove per-file metadata and decrement refcount
         let mut txn1 = DBTransaction::new();
         txn1.delete(Column::Metadata.into(), file_key.as_ref());
@@ -987,12 +996,7 @@ where
             bucket_prefixed_file_key.as_ref(),
         );
 
-        let new_refcount = current_refcount.saturating_sub(1);
-        txn1.put(
-            Column::FingerprintRefCount.into(),
-            b_fingerprint,
-            &new_refcount.to_le_bytes(),
-        );
+        let new_refcount = self.decrement_fingerprint_refcount(b_fingerprint, &mut txn1)?;
         self.storage.write(txn1).map_err(|e| {
             error!(target: LOG_TARGET, "{:?}", e);
             FileStorageError::FailedToWriteToStorage
