@@ -187,6 +187,10 @@ await describeMspNet(
         1,
         true
       );
+
+      // Check that both files have the same fingerprint.
+      strictEqual(file2.fingerprint.toString(), file1.fingerprint.toString());
+
       await mspApi.wait.fileStorageComplete(file2.fileKey);
       await userApi.wait.mspResponseInTxPool();
       await userApi.wait.bspVolunteer(1); // This seals the block as well
@@ -290,6 +294,34 @@ await describeMspNet(
       });
     });
 
+    it("Second file can still be downloaded from the MSP and BSP", async () => {
+      // Download the file to the disk of the MSP.
+      const saveFileToDiskMsp = await mspApi.rpc.storagehubclient.saveFileToDisk(
+        file2.fileKey,
+        "/storage/test/cloud-b-msp.jpg"
+      );
+      assert(saveFileToDiskMsp.isSuccess);
+
+      // Check that the file checksum is correct.
+      const shaMsp = await mspApi.docker.checkFileChecksum("test/cloud-b-msp.jpg", {
+        containerName: userApi.shConsts.NODE_INFOS.msp1.containerName
+      });
+      strictEqual(shaMsp, userApi.shConsts.TEST_ARTEFACTS["res/cloud.jpg"].checksum);
+
+      // Download the file to the disk of the BSP.
+      const saveFileToDiskBsp = await bspApi.rpc.storagehubclient.saveFileToDisk(
+        file2.fileKey,
+        "/storage/test/cloud-b-bsp.jpg"
+      );
+      assert(saveFileToDiskBsp.isSuccess);
+
+      // Check that the file checksum is correct.
+      const shaBsp = await bspApi.docker.checkFileChecksum("test/cloud-b-bsp.jpg", {
+        containerName: userApi.shConsts.NODE_INFOS.bsp.containerName
+      });
+      strictEqual(shaBsp, userApi.shConsts.TEST_ARTEFACTS["res/cloud.jpg"].checksum);
+    });
+
     it("User deletes second file and Fisherman deletes it from Bucket's forest and BSP's forest", async () => {
       const { fileOperationIntention, userSignature } = buildSignedDelete(file2.fileKey);
       await userApi.block.seal({
@@ -352,6 +384,22 @@ await describeMspNet(
         lambda: async () =>
           (await bspApi.rpc.storagehubclient.isFileInFileStorage(file2.fileKey)).isFileNotFound
       });
+    });
+
+    it("Second file can no longer be downloaded from the MSP and BSP", async () => {
+      // Download the file to the disk of the MSP.
+      const saveFileToDiskMsp = await mspApi.rpc.storagehubclient.saveFileToDisk(
+        file2.fileKey,
+        "/storage/test/cloud-b-msp.jpg"
+      );
+      assert(saveFileToDiskMsp.isFileNotFound);
+
+      // Download the file to the disk of the BSP.
+      const saveFileToDiskBsp = await bspApi.rpc.storagehubclient.saveFileToDisk(
+        file2.fileKey,
+        "/storage/test/cloud-b-bsp.jpg"
+      );
+      assert(saveFileToDiskBsp.isFileNotFound);
     });
   }
 );
