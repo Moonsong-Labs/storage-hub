@@ -21,9 +21,9 @@ export type StorageHubClientOptions = {
    */
   walletClient: WalletClient;
   /**
-   * Filesystem precompile contract address (optional, defaults to standard address)
+   * Filesystem precompile contract address
    */
-  filesystemContractAddress?: Address;
+  filesystemContractAddress: Address;
 };
 
 /**
