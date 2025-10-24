@@ -373,25 +373,16 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 let has_msp = File::has_msp_associations(conn, file_key.as_ref()).await?;
                 let has_bsp = File::has_bsp_associations(conn, file_key.as_ref()).await?;
 
-                if has_msp || has_bsp {
-                    // Mark file for deletion - will be deleted when all associations are removed
-                    // No signature for automated deletion
-                    File::update_deletion_status(
-                        conn,
-                        file_key.as_ref(),
-                        FileDeletionStatus::InProgress,
-                        None,
-                    )
-                    .await?;
-                    log::debug!(
-                        "Storage request revoked for file {:?} with existing associations (MSP: {}, BSP: {}), marked for deletion",
-                        file_key, has_msp, has_bsp
-                    );
-                } else {
+                if !has_msp && !has_bsp {
                     // No associations, safe to delete immediately
+                    // This happens when storage request is revoked before any BSPs or MSP confirms
                     File::delete(conn, file_key.as_ref().to_vec()).await?;
-                    log::debug!("Storage request revoked for file {:?} with no associations, deleted immediately", file_key);
+                    log::debug!(
+                        "Storage request revoked for file {:?} with no associations, deleted immediately",
+                        file_key
+                    );
                 }
+                // If the file has associations, the `IncompleteStorageRequest` event will handle it
             }
             pallet_file_system::Event::MspAcceptedStorageRequest {
                 file_key,
@@ -537,7 +528,36 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 )
                 .await?;
             }
-            pallet_file_system::Event::IncompleteStorageRequest { .. } => {}
+            // This event covers all scenarios where a storage request was unfulfilled while there were BSPs and/or the MSP who have confirmed to store the file
+            // and necessitates a fisherman to delete this file.
+            pallet_file_system::Event::IncompleteStorageRequest { file_key } => {
+                // Check if file has any provider associations
+                let has_msp = File::has_msp_associations(conn, file_key.as_ref()).await?;
+                let has_bsp = File::has_bsp_associations(conn, file_key.as_ref()).await?;
+
+                if has_msp || has_bsp {
+                    // File has associations, mark for deletion by fisherman
+                    File::update_deletion_status(
+                        conn,
+                        file_key.as_ref(),
+                        FileDeletionStatus::InProgress,
+                        None,
+                    )
+                    .await?;
+
+                    log::debug!(
+                        "Incomplete storage request for file {:?} with existing associations (MSP: {}, BSP: {}), marked for deletion without signature",
+                        file_key, has_msp, has_bsp
+                    );
+                } else {
+                    // No associations, safe to delete immediately
+                    File::delete(conn, file_key.as_ref().to_vec()).await?;
+                    log::debug!(
+                        "Incomplete storage request for file {:?} with no associations, deleted immediately",
+                        file_key
+                    );
+                }
+            }
             pallet_file_system::Event::__Ignore(_, _) => {}
         }
         Ok(())
