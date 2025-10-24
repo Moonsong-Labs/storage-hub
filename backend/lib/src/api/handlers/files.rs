@@ -126,7 +126,10 @@ pub async fn download_by_key(
     let (tx, rx) = mpsc::channel::<Result<Bytes, std::io::Error>>(QUEUE_BUFFER_SIZE);
 
     // Add the transmitter to the active download sessions
-    services.download_sessions.add_session(&file_key, tx);
+    let _ = services
+        .download_sessions
+        .add_session(&file_key, tx)
+        .map_err(|_| Error::BadRequest("File is already being downloaded".to_string()))?;
 
     let file_key_clone = file_key.clone();
     tokio::spawn(async move {

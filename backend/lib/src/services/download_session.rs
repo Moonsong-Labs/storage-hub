@@ -1,5 +1,5 @@
 use axum::body::Bytes;
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap};
 use std::sync::{Arc, RwLock};
 use tokio::sync::mpsc;
 
@@ -19,11 +19,25 @@ impl DownloadSession {
         }
     }
 
-    pub fn add_session(&self, id: &String, sender: mpsc::Sender<Result<Bytes, std::io::Error>>) {
-        self.sessions
+    /// Atomically adds a new download session for the given file key.
+    /// Fails if there is already an active session for the file.
+    pub fn add_session(
+        &self,
+        id: &String,
+        sender: mpsc::Sender<Result<Bytes, std::io::Error>>,
+    ) -> Result<(), String> {
+        let mut sessions = self
+            .sessions
             .write()
-            .expect("Download sessions lock poisoned")
-            .insert(id.clone(), sender);
+            .expect("Download sessions lock poisoned");
+
+        match sessions.entry(id.clone()) {
+            Entry::Occupied(_) => Err("File is already being downloaded".to_string()),
+            Entry::Vacant(entry) => {
+                entry.insert(sender);
+                Ok(())
+            }
+        }
     }
 
     pub fn remove_session(&self, id: &str) {
