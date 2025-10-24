@@ -29,7 +29,7 @@ export interface Bucket {
   fileCount: number;
 }
 
-export type FileStatus = "inProgress" | "ready" | "expired" | "deletionInProgress"
+export type FileStatus = "inProgress" | "ready" | "expired" | "deletionInProgress";
 
 export type FileTree = {
   name: string;
