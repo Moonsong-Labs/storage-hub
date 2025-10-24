@@ -235,6 +235,7 @@ await describeMspNet(
       assert(whatsup, `Should have a file named '${fileLocationBasename}'`);
 
       assert(whatsup.type === "file", "Child entry should be file");
+      assert(whatsup.status === "ready", "Child entry should be a 'ready' file");
       strictEqual(
         whatsup.fileKey,
         fileKey.toHex().slice(2),
@@ -264,6 +265,7 @@ await describeMspNet(
       strictEqual(file.bucketId, bucketId, "Should have same bucket id as queried");
 
       strictEqual(file.location, fileLocation, "Should have same location as creation");
+      strictEqual(file.status, "ready", "Should have been fulfilled");
     });
   }
 );

@@ -18,6 +18,18 @@ pub enum FileStorageRequestStep {
     Expired = 2,
 }
 
+impl TryFrom<i32> for FileStorageRequestStep {
+    type Error = i32;
+    fn try_from(v: i32) -> Result<Self, Self::Error> {
+        match v {
+            0 => Ok(Self::Requested),
+            1 => Ok(Self::Stored),
+            2 => Ok(Self::Expired),
+            _ => Err(v),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileDeletionStatus {
     None = 0,
