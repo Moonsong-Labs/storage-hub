@@ -147,6 +147,11 @@ export class NetworkLauncher {
       }
     }
 
+    // Remove standalone indexer service if not enabled or not using standalone mode
+    if (!this.config.indexer || !this.config.standaloneIndexer || this.type !== "fullnet") {
+      delete composeYaml.services["sh-indexer"];
+    }
+
     if (this.config.extrinsicRetryTimeout) {
       composeYaml.services["sh-bsp"].command.push(
         `--extrinsic-retry-timeout=${this.config.extrinsicRetryTimeout}`
@@ -175,24 +180,40 @@ export class NetworkLauncher {
     }
 
     if (this.config.indexer) {
-      composeYaml.services["sh-user"].command.push("--indexer");
-      composeYaml.services["sh-user"].environment =
-        composeYaml.services["sh-user"].environment ?? {};
-      composeYaml.services["sh-user"].environment.SH_INDEXER_DB_AUTO_MIGRATE = "false";
-      composeYaml.services["sh-user"].command.push(
-        "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
-      );
-      if (this.type === "fullnet") {
-        composeYaml.services["sh-msp-1"].command.push(
+      // If using standalone indexer, configure the sh-indexer service
+      if (this.config.standaloneIndexer && this.type === "fullnet") {
+        // Add indexer mode if specified
+        if (this.config.indexerMode) {
+          composeYaml.services["sh-indexer"].command.push(
+            `--indexer-mode=${this.config.indexerMode}`
+          );
+        }
+      } else {
+        // Embedded mode: add indexer flags to sh-user
+        composeYaml.services["sh-user"].command.push("--indexer");
+        composeYaml.services["sh-user"].environment =
+          composeYaml.services["sh-user"].environment ?? {};
+        composeYaml.services["sh-user"].environment.SH_INDEXER_DB_AUTO_MIGRATE = "false";
+        composeYaml.services["sh-user"].command.push(
           "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
         );
-        composeYaml.services["sh-msp-2"].command.push("--indexer");
-        composeYaml.services["sh-msp-2"].environment =
-          composeYaml.services["sh-msp-2"].environment ?? {};
-        composeYaml.services["sh-msp-2"].environment.SH_INDEXER_DB_AUTO_MIGRATE = "false";
-        composeYaml.services["sh-msp-2"].command.push(
-          "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
-        );
+        if (this.config.indexerMode) {
+          composeYaml.services["sh-user"].command.push(`--indexer-mode=${this.config.indexerMode}`);
+        }
+
+        // For fullnet, also configure MSPs
+        if (this.type === "fullnet") {
+          composeYaml.services["sh-msp-1"].command.push(
+            "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+          );
+          composeYaml.services["sh-msp-2"].command.push("--indexer");
+          composeYaml.services["sh-msp-2"].environment =
+            composeYaml.services["sh-msp-2"].environment ?? {};
+          composeYaml.services["sh-msp-2"].environment.SH_INDEXER_DB_AUTO_MIGRATE = "false";
+          composeYaml.services["sh-msp-2"].command.push(
+            "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+          );
+        }
       }
     }
 
@@ -360,6 +381,20 @@ export class NetworkLauncher {
         log: verbose,
         env: {
           ...process.env
+        }
+      });
+    }
+
+    // Only start standalone indexer service if it's enabled and we're using fullnet
+    if (this.config.indexer && this.config.standaloneIndexer && this.type === "fullnet") {
+      await compose.upOne("sh-indexer", {
+        cwd: cwd,
+        config: tmpFile,
+        log: verbose,
+        env: {
+          ...process.env,
+          BSP_IP: bspIp,
+          BSP_PEER_ID: bspPeerId
         }
       });
     }
@@ -925,6 +960,14 @@ export type NetLaunchConfig = {
    * This will also launch the environment with an attached postgres db
    */
   indexer?: boolean;
+
+  /**
+   * Optional parameter to run the indexer as a standalone service.
+   * When true, indexer runs in a separate container (sh-indexer) instead of embedded in sh-user.
+   * This allows independent control (pause/resume) of the indexer service.
+   * Requires indexer to be true and only applies to fullnet.
+   */
+  standaloneIndexer?: boolean;
 
   /**
    * Optional parameter to define what toxics to apply to the network.

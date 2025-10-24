@@ -134,6 +134,7 @@ export async function describeMspNet<
     fullNetConfig.extrinsicRetryTimeout = options.extrinsicRetryTimeout;
     fullNetConfig.indexer = options.indexer;
     fullNetConfig.indexerMode = options.indexerMode;
+    fullNetConfig.standaloneIndexer = options.standaloneIndexer;
     fullNetConfig.fisherman = options.fisherman;
     fullNetConfig.backend = options.backend;
     fullNetConfig.fishermanIncompleteSyncMax = options.fishermanIncompleteSyncMax;
