@@ -569,6 +569,8 @@ where
                 FileStorageError::FailedToParsePartialRoot
             })?;
 
+        debug!(target: LOG_TARGET, "Constructing file trie from partial root {:?}", partial_root);
+
         let file_trie =
             RocksDbFileDataTrie::<T, DB>::from_existing(self.storage.clone(), &mut partial_root);
         Ok(file_trie)
@@ -643,6 +645,7 @@ where
             match e {
                 FileStorageWriteError::FileChunkAlreadyExists => {
                     // Treat as no-op: chunk already present (e.g., shared trie across buckets)
+                    debug!(target: LOG_TARGET, "Chunk {:?} already exists in file storage for file key {:?}", chunk_id, file_key);
                 }
                 other => {
                     error!(target: LOG_TARGET, "{:?}", other);
@@ -660,7 +663,7 @@ where
             new_partial_root.as_ref(),
         );
 
-        // Get current chunk count or initialize to 0
+        // Get current chunk count or initialise to 0
         let current_count = self.stored_chunks_count(file_key).map_err(|e| {
             error!(target: LOG_TARGET, "{:?}", e);
             FileStorageWriteError::FailedToGetStoredChunksCount
@@ -738,12 +741,23 @@ where
             file_key.as_ref(),
             &serialized_metadata,
         );
-        // Stores an empty root to allow for later initialization of the trie.
-        transaction.put(
-            Column::Roots.into(),
-            metadata.fingerprint().as_ref(),
-            empty_root.as_ref(),
-        );
+
+        // Ensure a partial root exists for this fingerprint, but do not overwrite if it already exists
+        let existing_partial_root = self
+            .storage
+            .read(Column::Roots.into(), metadata.fingerprint().as_ref())
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "{:?}", e);
+                FileStorageError::FailedToReadStorage
+            })?;
+        if existing_partial_root.is_none() {
+            // Stores an empty root to allow for later initialization of the trie.
+            transaction.put(
+                Column::Roots.into(),
+                metadata.fingerprint().as_ref(),
+                empty_root.as_ref(),
+            );
+        }
         // Initialize chunk count to 0
         transaction.put(
             Column::ChunkCount.into(),
