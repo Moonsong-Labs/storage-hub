@@ -772,6 +772,7 @@ where
             bucket_prefixed_file_key.as_ref(),
             &[],
         );
+
         // Increment fingerprint refcount
         let current = self
             .storage

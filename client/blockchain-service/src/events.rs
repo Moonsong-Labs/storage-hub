@@ -9,7 +9,7 @@ use shc_common::{
     traits::StorageEnableRuntime,
     types::{
         BackupStorageProviderId, Balance, BlockNumber, BucketId, CustomChallenge, FileKey,
-        FileLocation, Fingerprint, Hash, KeyProofs, PeerIds, ProofsDealerProviderId, ProviderId,
+        FileLocation, Fingerprint, Hash, PeerIds, ProofsDealerProviderId, ProviderId,
         RandomnessOutput, StorageDataUnit, TickNumber, TrieMutation, ValuePropId,
     },
 };
@@ -19,19 +19,6 @@ use crate::types::{
 };
 
 // TODO: Add the events from the `pallet-cr-randomness` here to process them in the BlockchainService.
-
-/// New random challenge emitted by the StorageHub runtime.
-///
-/// This event is emitted when there's a new random challenge seed that affects this
-/// BSP. In other words, it only pays attention to the random seeds in the challenge
-/// period of this BSP.
-#[derive(Debug, Clone, Encode, Decode, ActorEvent)]
-#[actor(actor = "blockchain_service")]
-pub struct NewChallengeSeed<Runtime: StorageEnableRuntime> {
-    pub provider_id: ProofsDealerProviderId<Runtime>,
-    pub tick: BlockNumber<Runtime>,
-    pub seed: RandomnessOutput<Runtime>,
-}
 
 /// Multiple new challenge seeds that have to be responded in order.
 ///
@@ -105,7 +92,6 @@ pub enum ForestWriteLockTaskData<Runtime: StorageEnableRuntime> {
     ConfirmStoringRequest(ProcessConfirmStoringRequestData<Runtime>),
     MspRespondStorageRequest(ProcessMspRespondStoringRequestData<Runtime>),
     StopStoringForInsolventUserRequest(ProcessStopStoringForInsolventUserRequestData<Runtime>),
-    FileDeletionRequest(ProcessFileDeletionRequestData<Runtime>),
 }
 
 impl<Runtime: StorageEnableRuntime> From<ProcessSubmitProofRequestData<Runtime>>
@@ -137,14 +123,6 @@ impl<Runtime: StorageEnableRuntime> From<ProcessStopStoringForInsolventUserReque
 {
     fn from(data: ProcessStopStoringForInsolventUserRequestData<Runtime>) -> Self {
         Self::StopStoringForInsolventUserRequest(data)
-    }
-}
-
-impl<Runtime: StorageEnableRuntime> From<ProcessFileDeletionRequestData<Runtime>>
-    for ForestWriteLockTaskData<Runtime>
-{
-    fn from(data: ProcessFileDeletionRequestData<Runtime>) -> Self {
-        Self::FileDeletionRequest(data)
     }
 }
 
@@ -246,13 +224,6 @@ pub struct FinalisedBucketMutationsApplied<Runtime: StorageEnableRuntime> {
 
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct ProofAccepted<Runtime: StorageEnableRuntime> {
-    pub provider_id: ProofsDealerProviderId<Runtime>,
-    pub proofs: KeyProofs<Runtime>,
-}
-
-#[derive(Debug, Clone, ActorEvent)]
-#[actor(actor = "blockchain_service")]
 pub struct LastChargeableInfoUpdated<Runtime: StorageEnableRuntime> {
     pub provider_id: ProofsDealerProviderId<Runtime>,
     pub last_chargeable_tick: BlockNumber<Runtime>,
@@ -349,17 +320,6 @@ pub struct MoveBucketExpired<Runtime: StorageEnableRuntime> {
     pub bucket_id: BucketId<Runtime>,
 }
 
-/// BSP stopped storing a specific file.
-///
-/// This event is emitted when a BSP confirm stop storing a file.
-#[derive(Debug, Clone, ActorEvent)]
-#[actor(actor = "blockchain_service")]
-pub struct BspConfirmStoppedStoring<Runtime: StorageEnableRuntime> {
-    pub bsp_id: Runtime::Hash,
-    pub file_key: FileKey,
-    pub new_root: Runtime::Hash,
-}
-
 /// Delete file event in a finalised block, for a BSP.
 ///
 /// This event is emitted when a finalised block is received by the Blockchain service,
@@ -379,37 +339,9 @@ pub struct FinalisedBspConfirmStoppedStoring<Runtime: StorageEnableRuntime> {
 #[actor(actor = "blockchain_service")]
 pub struct NotifyPeriod {}
 
-/// File deletion request event.
-#[derive(Debug, Clone, Encode, Decode, ActorEvent)]
-#[actor(actor = "blockchain_service")]
-pub struct FileDeletionRequest<Runtime: StorageEnableRuntime> {
-    /// Account ID of the user that requested the file deletion.
-    pub user: Runtime::AccountId,
-    /// File key that was requested to be deleted.
-    pub file_key: FileKey,
-    /// File size of the file that was requested to be deleted.
-    pub file_size: StorageDataUnit<Runtime>,
-    /// Bucket ID in which the file key belongs to.
-    pub bucket_id: BucketId<Runtime>,
-    /// The MSP ID that provided the proof of inclusion for a pending file deletion request.
-    pub msp_id: ProofsDealerProviderId<Runtime>,
-    /// Whether a proof of inclusion was provided by the user.
-    ///
-    /// This means that the file key requested to be deleted was included in the user's submitted inclusion forest proof.
-    /// The key would have been
-    pub proof_of_inclusion: bool,
-}
-
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct ProcessFileDeletionRequestData<Runtime: StorageEnableRuntime> {
     pub file_deletion_requests: Vec<FileDeletionRequestType<Runtime>>,
-}
-
-#[derive(Debug, Clone, ActorEvent)]
-#[actor(actor = "blockchain_service")]
-pub struct ProcessFileDeletionRequest<Runtime: StorageEnableRuntime> {
-    pub data: ProcessFileDeletionRequestData<Runtime>,
-    pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
 }
 
 /// Event emitted when a bucket move is confirmed on-chain and the download process should start.
