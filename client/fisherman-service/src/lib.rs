@@ -19,6 +19,7 @@ use std::sync::Arc;
 use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::ParachainClient;
+use shc_indexer_db::DbPool;
 
 pub use self::commands::{FishermanServiceCommand, FishermanServiceError};
 pub use self::handler::{FileKeyChange, FileKeyOperation, FishermanService};
@@ -31,12 +32,16 @@ pub use events::{
 ///
 /// This function creates and spawns a new FishermanService actor that will monitor
 /// the StorageHub network for file deletion requests and construct proofs of inclusion to delete file keys from Bucket and BSP forests.
+///
+/// # Arguments
+/// * `indexer_db_pool` - Indexer database pool for querying pending file deletions
 pub async fn spawn_fisherman_service<Runtime: StorageEnableRuntime>(
     task_spawner: &TaskSpawner,
     client: Arc<ParachainClient<Runtime::RuntimeApi>>,
     incomplete_sync_max: u32,
     incomplete_sync_page_size: u32,
     sync_mode_min_blocks_behind: u32,
+    indexer_db_pool: DbPool,
 ) -> ActorHandle<FishermanService<Runtime>> {
     // Create a named task spawner for the fisherman service
     let task_spawner = task_spawner
@@ -49,6 +54,7 @@ pub async fn spawn_fisherman_service<Runtime: StorageEnableRuntime>(
         incomplete_sync_max,
         incomplete_sync_page_size,
         sync_mode_min_blocks_behind,
+        indexer_db_pool,
     );
 
     // Spawn the actor and return the handle
