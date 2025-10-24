@@ -542,12 +542,6 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
             deletion_type, bucket_id, bsp_id, limit, offset
         );
 
-        // Convert bucket_id from Runtime type to DB type
-        let bucket_id_bytes = bucket_id.as_ref().map(|id| id.as_ref() as &[u8]);
-
-        // Convert bsp_id from Runtime type to DB type
-        let bsp_id_db = bsp_id.map(OnchainBspId::new);
-
         // Clone connection pools for parallel tasks
         let pool_for_bucket = self.indexer_db_pool.clone();
         let pool_for_bsp = self.indexer_db_pool.clone();
@@ -556,8 +550,14 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
         let bucket_task = async move {
             // Get DB connection for concurrent query
             let mut bucket_conn = pool_for_bucket.get().await.map_err(|e| {
-                FishermanServiceError::Client(format!("Failed to get bucket DB connection: {:?}", e))
+                FishermanServiceError::Client(format!(
+                    "Failed to get bucket DB connection: {:?}",
+                    e
+                ))
             })?;
+
+            // Convert bucket_id from Runtime type to DB type
+            let bucket_id_bytes = bucket_id.as_ref().map(|id| id.as_ref() as &[u8]);
 
             // Query bucket files from DB
             let bucket_files = File::get_files_pending_deletion_grouped_by_bucket(
@@ -580,6 +580,9 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
             let mut bsp_conn = pool_for_bsp.get().await.map_err(|e| {
                 FishermanServiceError::Client(format!("Failed to get BSP DB connection: {:?}", e))
             })?;
+
+            // Convert bsp_id from Runtime type to DB type
+            let bsp_id_db = bsp_id.map(OnchainBspId::new);
 
             // Query BSP files from DB
             let bsp_files = BspFile::get_files_pending_deletion_grouped_by_bsp(
