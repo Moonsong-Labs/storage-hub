@@ -18,22 +18,22 @@ use tracing_subscriber::{
 
 use crate::config::LogFormat;
 
-/// Custom writer that replaces "log." prefix with "backend_log." in Bunyan logs
-/// to avoid conflicts with reserved fields in log ingestion tools and also
-/// expands the path_params field from a single string into individual fields
-struct PrefixReplacingWriter<W: Write> {
+/// Custom writer that post-processes Bunyan JSON logs by:
+/// 1. Replacing "log." prefix with "backend_log." to avoid conflicts with log ingestion tools
+/// 2. Expanding path_params from a single string into individual fields
+struct LogTransformWriter<W: Write> {
     inner: W,
 }
 
-impl<W: Write> PrefixReplacingWriter<W> {
+impl<W: Write> LogTransformWriter<W> {
     fn new(inner: W) -> Self {
         Self { inner }
     }
 }
 
-impl<W: Write> Write for PrefixReplacingWriter<W> {
+impl<W: Write> Write for LogTransformWriter<W> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        // Convert buffer to string, replace the prefix, and write
+        // Convert buffer to string, apply transformations, and write
         if let Ok(s) = std::str::from_utf8(buf) {
             // First, replace the log.* prefix
             let mut modified = s.replace("\"log.", "\"backend_log.");
@@ -54,14 +54,14 @@ impl<W: Write> Write for PrefixReplacingWriter<W> {
     }
 }
 
-/// Wrapper to make PrefixReplacingWriter implement MakeWriter
-struct PrefixReplacingMakeWriter;
+/// Wrapper to make LogTransformWriter implement MakeWriter
+struct LogTransformMakeWriter;
 
-impl<'a> MakeWriter<'a> for PrefixReplacingMakeWriter {
-    type Writer = PrefixReplacingWriter<std::io::Stdout>;
+impl<'a> MakeWriter<'a> for LogTransformMakeWriter {
+    type Writer = LogTransformWriter<std::io::Stdout>;
 
     fn make_writer(&'a self) -> Self::Writer {
-        PrefixReplacingWriter::new(std::io::stdout())
+        LogTransformWriter::new(std::io::stdout())
     }
 }
 
@@ -152,7 +152,7 @@ pub fn initialize_logging(log_format: LogFormat) {
                 .with(JsonStorageLayer)
                 .with(BunyanFormattingLayer::new(
                     "storage-hub-backend".to_string(),
-                    PrefixReplacingMakeWriter,
+                    LogTransformMakeWriter,
                 ))
                 .init();
         }
