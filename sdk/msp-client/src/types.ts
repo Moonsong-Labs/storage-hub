@@ -100,7 +100,7 @@ export interface Session {
 }
 
 // Session provider function
-export type SessionProvider = () => Readonly<Session> | undefined;
+export type SessionProvider = () => Promise<Readonly<Session> | undefined>;
 
 // Download
 export interface DownloadOptions {

@@ -1,5 +1,4 @@
-import type { NonceResponse, Session, UserInfo, AuthStatus } from "../types.js";
-import { AuthState } from "../types.js";
+import type { NonceResponse, Session, UserInfo } from "../types.js";
 import { getAddress, type WalletClient } from "viem";
 import { ModuleBase } from "../base.js";
 
@@ -61,26 +60,11 @@ export class AuthModule extends ModuleBase {
    * Fetch authenticated user's profile.
    * - Requires valid `session` (Authorization header added automatically).
    */
-  getProfile(signal?: AbortSignal): Promise<UserInfo> {
-    const headers = this.withAuth();
+  async getProfile(signal?: AbortSignal): Promise<UserInfo> {
+    const headers = await this.withAuth();
     return this.ctx.http.get<UserInfo>("/auth/profile", {
       ...(headers ? { headers } : {}),
       ...(signal ? { signal } : {})
     });
-  }
-
-  /**
-   * Determine auth status by checking token presence and profile reachability.
-   */
-  async getAuthStatus(): Promise<AuthStatus> {
-    const headers = this.withAuth();
-    const hasAuth = !!headers && "Authorization" in headers;
-    if (!hasAuth) {
-      return { status: AuthState.NotAuthenticated };
-    }
-    const profile = await this.getProfile().catch((err: any) =>
-      err?.response?.status === 401 ? null : Promise.reject(err)
-    );
-    return profile ? { status: AuthState.Authenticated } : { status: AuthState.TokenExpired };
   }
 }

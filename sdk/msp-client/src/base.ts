@@ -10,8 +10,10 @@ export abstract class ModuleBase {
     this.sessionProvider = sessionProvider;
   }
 
-  protected withAuth(headers?: Record<string, string>): Record<string, string> | undefined {
-    const session = this.sessionProvider();
+  protected async withAuth(
+    headers?: Record<string, string>
+  ): Promise<Record<string, string> | undefined> {
+    const session = await this.sessionProvider();
     const token = session?.token;
     if (!token) return headers;
     return headers
