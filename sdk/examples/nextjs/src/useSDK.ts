@@ -15,7 +15,7 @@ export const useSDK = (): string => {
       // Try MSP first (short timeout so UI doesn't hang)
       try {
         let sessionRef: { token: string; user: { address: string } } | undefined;
-        const sessionProvider = () => sessionRef;
+        const sessionProvider = async () => sessionRef;
         const client = await MspClient.connect({ baseUrl, timeoutMs: 3000 }, sessionProvider);
         try {
           const health = await client.getHealth();

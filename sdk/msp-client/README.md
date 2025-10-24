@@ -56,7 +56,7 @@ import { Readable } from 'node:stream';
 
 // 1. Connect to MSP service
 let sessionRef: { token: string; user: { address: string } } | undefined;
-const sessionProvider = () => sessionRef;
+const sessionProvider = async () => sessionRef;
 const client = await MspClient.connect({ 
   baseUrl: 'http://127.0.0.1:8080'
 }, sessionProvider);
@@ -125,13 +125,12 @@ console.log('Folder files:', folderFiles);
   - `config.timeoutMs?: number` - Request timeout in milliseconds
   - `config.defaultHeaders?: Record<string, string>` - Default HTTP headers
   - `config.fetchImpl?: typeof fetch` - Custom fetch implementation
-  - `sessionProvider: () => Session | undefined` - Returns the current session (or undefined)
+  - `sessionProvider: () => Promise<Session | undefined>` - Returns the current session (or undefined)
 
 ### Modules (instance properties)
 - **`auth`**: SIWE auth and session helpers
   - `SIWE(wallet, signal?)` – runs full SIWE flow and returns `Session`
   - `getProfile(signal?)` – returns the authenticated user's profile
-  - `getAuthStatus()` – returns NotAuthenticated | TokenExpired | Authenticated
 - **`info`**: MSP info and stats
   - `getHealth(signal?)` – returns service health and status
   - `getInfo(signal?)` – returns general MSP info (id, version, owner, endpoints)

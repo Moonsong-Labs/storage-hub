@@ -38,7 +38,7 @@ await describeMspNet(
     let fileLocation: string;
     let mspClient: MspClient;
     let sessionToken: string | undefined;
-    const sessionProvider = () =>
+    const sessionProvider = async () =>
       sessionToken ? ({ token: sessionToken, user: { address: "" } } as const) : undefined;
 
     before(async () => {

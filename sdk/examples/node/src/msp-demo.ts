@@ -23,7 +23,7 @@ export async function runMspDemo(): Promise<void> {
 
   // Connect MSP client with session provider
   let sessionRef: Session | undefined;
-  const sessionProvider: SessionProvider = () => sessionRef;
+  const sessionProvider: SessionProvider = async () => sessionRef;
   const client = await MspClient.connect({ baseUrl }, sessionProvider);
 
   // Health check
