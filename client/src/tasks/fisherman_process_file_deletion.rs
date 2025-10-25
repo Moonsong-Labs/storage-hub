@@ -857,3 +857,249 @@ where
         forest_proof,
     ))
 }
+
+/// Grouped pending deletions ready for batch processing.
+///
+/// Files are grouped by their deletion target (BSP or Bucket) to enable efficient
+/// parallel processing of deletions. Each target can be processed independently
+/// with its own forest proof.
+#[derive(Debug, Clone)]
+pub struct PendingDeletionsGrouped<Runtime: StorageEnableRuntime> {
+    /// Files to delete from BSP forests, grouped by BSP ID
+    pub bsp_deletions: std::collections::HashMap<
+        shc_common::types::BackupStorageProviderId<Runtime>,
+        Vec<BatchFileDeletionData<Runtime>>,
+    >,
+    /// Files to delete from bucket forests, grouped by bucket ID
+    pub bucket_deletions: std::collections::HashMap<
+        shc_common::types::BucketId<Runtime>,
+        Vec<BatchFileDeletionData<Runtime>>,
+    >,
+}
+
+/// Contains all metadata required to process file deletion operations.
+///
+/// Used by batch deletion coordinator to group files by target (BSP/Bucket) and
+/// includes decoded signatures for user deletions or None for incomplete deletions.
+#[derive(Debug, Clone)]
+pub struct BatchFileDeletionData<Runtime: StorageEnableRuntime> {
+    /// The file key (Merkle hash) uniquely identifying the file
+    pub file_key: Runtime::Hash,
+    /// File metadata (owner, bucket, location, size, fingerprint)
+    pub file_metadata: shc_common::types::FileMetadata,
+    /// Decoded signature for user deletions, [`None`] for incomplete deletions
+    pub signature: Option<OffchainSignature<Runtime>>,
+    /// Reconstructed signed file operation intention (only for user deletions)
+    pub signed_intention: Option<shc_common::types::FileOperationIntention<Runtime>>,
+}
+
+/// Get pending deletions grouped by BSP and Bucket.
+///
+/// Queries the indexer database for files marked with `deletion_status = InProgress`,
+/// filtered by the specified deletion type.
+///
+/// # Parameters
+/// * `indexer_db_pool` - Database pool to query from
+/// * `deletion_type` - Type of deletion to query ([`shc_indexer_db::models::FileDeletionType::User`] or [`shc_indexer_db::models::FileDeletionType::Incomplete`])
+/// * `bucket_id` - Optional filter to only return files from a specific bucket
+/// * `bsp_id` - Optional filter to only return files from a specific BSP
+/// * `limit` - Maximum number of files to return (default: 1000)
+/// * `offset` - Number of files to skip for pagination (default: 0)
+pub async fn get_pending_deletions<Runtime: StorageEnableRuntime>(
+    indexer_db_pool: &shc_indexer_db::DbPool,
+    deletion_type: shc_indexer_db::models::FileDeletionType,
+    bucket_id: Option<shc_common::types::BucketId<Runtime>>,
+    bsp_id: Option<shc_common::types::BackupStorageProviderId<Runtime>>,
+    limit: Option<i64>,
+    offset: Option<i64>,
+) -> anyhow::Result<PendingDeletionsGrouped<Runtime>> {
+    trace!(
+        target: LOG_TARGET,
+        "🎣 Fetching pending {:?} deletions (bucket_id: {:?}, bsp_id: {:?}, limit: {:?}, offset: {:?})",
+        deletion_type, bucket_id, bsp_id, limit, offset
+    );
+
+    // Clone connection pools for parallel tasks
+    let pool_for_bucket = indexer_db_pool.clone();
+    let pool_for_bsp = indexer_db_pool.clone();
+
+    // Execute both pipelines concurrently: each queries + converts its own data
+    let bucket_task = async move {
+        // Get DB connection for concurrent query
+        let mut bucket_conn = pool_for_bucket
+            .get()
+            .await
+            .map_err(|e| anyhow!("Failed to get bucket DB connection: {:?}", e))?;
+
+        // Convert bucket_id from Runtime type to DB type
+        let bucket_id_bytes = bucket_id.as_ref().map(|id| id.as_ref() as &[u8]);
+
+        // Query bucket files from DB
+        let bucket_files =
+            shc_indexer_db::models::File::get_files_pending_deletion_grouped_by_bucket(
+                &mut bucket_conn,
+                deletion_type,
+                bucket_id_bytes,
+                limit,
+                offset,
+            )
+            .await?;
+
+        drop(bucket_conn);
+
+        // Convert bucket files to Runtime types
+        convert_bucket_files_to_runtime::<Runtime>(bucket_files)
+    };
+
+    let bsp_task = async move {
+        // Get DB connection for concurrent query
+        let mut bsp_conn = pool_for_bsp
+            .get()
+            .await
+            .map_err(|e| anyhow!("Failed to get BSP DB connection: {:?}", e))?;
+
+        // Convert bsp_id from Runtime type to DB type
+        let bsp_id_db = bsp_id.map(shc_indexer_db::OnchainBspId::new);
+
+        // Query BSP files from DB
+        let bsp_files = BspFile::get_files_pending_deletion_grouped_by_bsp(
+            &mut bsp_conn,
+            deletion_type,
+            bsp_id_db,
+            limit,
+            offset,
+        )
+        .await?;
+
+        drop(bsp_conn);
+
+        // Convert BSP files to Runtime types
+        convert_bsp_files_to_runtime::<Runtime>(bsp_files)
+    };
+
+    // Execute both pipelines concurrently
+    let (bucket_deletions, bsp_deletions) = tokio::try_join!(bucket_task, bsp_task)?;
+
+    debug!(
+        target: LOG_TARGET,
+        "🎣 Found {} bucket groups and {} BSP groups with pending {:?} deletions",
+        bucket_deletions.len(),
+        bsp_deletions.len(),
+        deletion_type
+    );
+
+    Ok(PendingDeletionsGrouped {
+        bsp_deletions,
+        bucket_deletions,
+    })
+}
+
+/// Convert DB bucket files to Runtime types.
+///
+/// Transforms the database representation to runtime types and converts
+/// individual files to [`BatchFileDeletionData`].
+fn convert_bucket_files_to_runtime<Runtime: StorageEnableRuntime>(
+    db_files: std::collections::HashMap<Vec<u8>, Vec<shc_indexer_db::models::File>>,
+) -> anyhow::Result<
+    std::collections::HashMap<
+        shc_common::types::BucketId<Runtime>,
+        Vec<BatchFileDeletionData<Runtime>>,
+    >,
+> {
+    use codec::Decode;
+    let mut result = std::collections::HashMap::new();
+
+    for (bucket_id_bytes, files) in db_files {
+        // Convert bucket ID from database type to Runtime type using SCALE codec
+        let bucket_id =
+            shc_common::types::BucketId::<Runtime>::decode(&mut bucket_id_bytes.as_slice())
+                .map_err(|e| anyhow!("Failed to decode bucket ID: {:?}", e))?;
+
+        // Convert files
+        let file_data: Result<Vec<_>, _> = files
+            .into_iter()
+            .map(|file| convert_file_to_deletion_data::<Runtime>(file))
+            .collect();
+
+        result.insert(bucket_id, file_data?);
+    }
+
+    Ok(result)
+}
+
+/// Convert DB BSP files to Runtime types.
+///
+/// Transforms the database representation to runtime types and converts
+/// individual files to [`BatchFileDeletionData`].
+fn convert_bsp_files_to_runtime<Runtime: StorageEnableRuntime>(
+    db_files: std::collections::HashMap<
+        shc_indexer_db::OnchainBspId,
+        Vec<shc_indexer_db::models::File>,
+    >,
+) -> anyhow::Result<
+    std::collections::HashMap<
+        shc_common::types::BackupStorageProviderId<Runtime>,
+        Vec<BatchFileDeletionData<Runtime>>,
+    >,
+> {
+    let mut result = std::collections::HashMap::new();
+
+    for (bsp_id, files) in db_files {
+        // Convert BSP ID from database type to Runtime type
+        let provider_id = bsp_id.into_h256();
+
+        // Convert files
+        let file_data: Result<Vec<_>, _> = files
+            .into_iter()
+            .map(|file| convert_file_to_deletion_data::<Runtime>(file))
+            .collect();
+
+        result.insert(provider_id, file_data?);
+    }
+
+    Ok(result)
+}
+
+/// Convert single DB File to [`BatchFileDeletionData`].
+///
+/// Handles conversion of all file metadata and decodes signatures for user deletions.
+/// For user deletions, reconstructs the [`FileOperationIntention`] from the file key.
+fn convert_file_to_deletion_data<Runtime: StorageEnableRuntime>(
+    file: shc_indexer_db::models::File,
+) -> anyhow::Result<BatchFileDeletionData<Runtime>> {
+    use codec::Decode;
+
+    // Convert file key from database type to Runtime type using SCALE codec
+    let file_key = Runtime::Hash::decode(&mut file.file_key.as_slice())
+        .map_err(|e| anyhow!("Failed to decode file key: {:?}", e))?;
+
+    // Convert to FileMetadata
+    let file_metadata = file
+        .to_file_metadata(file.onchain_bucket_id.clone())
+        .map_err(|e| anyhow!("Failed to convert file to metadata: {:?}", e))?;
+
+    // Decode signature if present (user deletions)
+    let (signature, signed_intention) = if let Some(sig_bytes) = &file.deletion_signature {
+        // Decode signature from SCALE-encoded bytes
+        let signature = OffchainSignature::<Runtime>::decode(&mut &sig_bytes[..])
+            .map_err(|e| anyhow!("Failed to decode signature: {:?}", e))?;
+
+        // Reconstruct FileOperationIntention
+        let intention = shc_common::types::FileOperationIntention {
+            file_key,
+            operation: shc_common::types::FileOperation::Delete,
+        };
+
+        (Some(signature), Some(intention))
+    } else {
+        // No signature for incomplete deletions
+        (None, None)
+    };
+
+    Ok(BatchFileDeletionData {
+        file_key,
+        file_metadata,
+        signature,
+        signed_intention,
+    })
+}

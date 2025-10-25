@@ -12,21 +12,12 @@ use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
     blockchain_utils::get_events_at_block,
     traits::StorageEnableRuntime,
-    types::{
-        BackupStorageProviderId, BlockNumber, BucketId, FileOperation, FileOperationIntention,
-        OffchainSignature, OpaqueBlock, ParachainClient, StorageEnableEvents,
-    },
-};
-use shc_indexer_db::{
-    models::{BspFile, File, FileDeletionType},
-    DbPool, OnchainBspId,
+    types::{BlockNumber, FileOperation, OpaqueBlock, ParachainClient, StorageEnableEvents},
 };
 use shp_types::Hash;
 
 use crate::{
-    commands::{
-        FileDeletionData, FishermanServiceCommand, FishermanServiceError, PendingDeletionsGrouped,
-    },
+    commands::{FishermanServiceCommand, FishermanServiceError},
     events::{FileDeletionTarget, FishermanServiceEventBusProvider},
 };
 
@@ -50,8 +41,6 @@ pub struct FishermanService<Runtime: StorageEnableRuntime> {
     incomplete_sync_max: u32,
     /// Page size for incomplete storage request pagination
     incomplete_sync_page_size: u32,
-    /// Indexer database pool for querying pending file deletions
-    indexer_db_pool: DbPool,
 }
 
 /// Represents a change to a file key between blocks
@@ -79,7 +68,6 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
         incomplete_sync_max: u32,
         incomplete_sync_page_size: u32,
         sync_mode_min_blocks_behind: u32,
-        indexer_db_pool: DbPool,
     ) -> Self {
         Self {
             client,
@@ -88,7 +76,6 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
             sync_mode_min_blocks_behind: sync_mode_min_blocks_behind.into(),
             incomplete_sync_max,
             incomplete_sync_page_size,
-            indexer_db_pool,
         }
     }
 
@@ -516,214 +503,6 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
             bucket_id
         );
     }
-
-    /// Get pending deletions grouped by BSP and Bucket.
-    ///
-    /// Queries the indexer database for files marked with `deletion_status = InProgress`,
-    /// filtered by the specified deletion type.
-    ///
-    /// # Parameters
-    /// * `deletion_type` - Type of deletion to query ([`FileDeletionType::User`] or [`FileDeletionType::Incomplete`])
-    /// * `bucket_id` - Optional filter to only return files from a specific bucket
-    /// * `bsp_id` - Optional filter to only return files from a specific BSP
-    /// * `limit` - Maximum number of files to return (default: 1000)
-    /// * `offset` - Number of files to skip for pagination (default: 0)
-    async fn get_pending_deletions(
-        &self,
-        deletion_type: FileDeletionType,
-        bucket_id: Option<BucketId<Runtime>>,
-        bsp_id: Option<BackupStorageProviderId<Runtime>>,
-        limit: Option<i64>,
-        offset: Option<i64>,
-    ) -> Result<PendingDeletionsGrouped<Runtime>, FishermanServiceError> {
-        trace!(
-            target: LOG_TARGET,
-            "🎣 Fetching pending {:?} deletions (bucket_id: {:?}, bsp_id: {:?}, limit: {:?}, offset: {:?})",
-            deletion_type, bucket_id, bsp_id, limit, offset
-        );
-
-        // Clone connection pools for parallel tasks
-        let pool_for_bucket = self.indexer_db_pool.clone();
-        let pool_for_bsp = self.indexer_db_pool.clone();
-
-        // Execute both pipelines concurrently: each queries + converts its own data
-        let bucket_task = async move {
-            // Get DB connection for concurrent query
-            let mut bucket_conn = pool_for_bucket.get().await.map_err(|e| {
-                FishermanServiceError::Client(format!(
-                    "Failed to get bucket DB connection: {:?}",
-                    e
-                ))
-            })?;
-
-            // Convert bucket_id from Runtime type to DB type
-            let bucket_id_bytes = bucket_id.as_ref().map(|id| id.as_ref() as &[u8]);
-
-            // Query bucket files from DB
-            let bucket_files = File::get_files_pending_deletion_grouped_by_bucket(
-                &mut bucket_conn,
-                deletion_type,
-                bucket_id_bytes,
-                limit,
-                offset,
-            )
-            .await?;
-
-            drop(bucket_conn);
-
-            // Convert bucket files to Runtime types
-            Self::convert_bucket_files_to_runtime(bucket_files)
-        };
-
-        let bsp_task = async move {
-            // Get DB connection for concurrent query
-            let mut bsp_conn = pool_for_bsp.get().await.map_err(|e| {
-                FishermanServiceError::Client(format!("Failed to get BSP DB connection: {:?}", e))
-            })?;
-
-            // Convert bsp_id from Runtime type to DB type
-            let bsp_id_db = bsp_id.map(OnchainBspId::new);
-
-            // Query BSP files from DB
-            let bsp_files = BspFile::get_files_pending_deletion_grouped_by_bsp(
-                &mut bsp_conn,
-                deletion_type,
-                bsp_id_db,
-                limit,
-                offset,
-            )
-            .await?;
-
-            drop(bsp_conn);
-
-            // Convert BSP files to Runtime types
-            Self::convert_bsp_files_to_runtime(bsp_files)
-        };
-
-        // Execute both pipelines concurrently
-        let (bucket_deletions, bsp_deletions) = tokio::try_join!(bucket_task, bsp_task)?;
-
-        debug!(
-            target: LOG_TARGET,
-            "🎣 Found {} bucket groups and {} BSP groups with pending {:?} deletions",
-            bucket_deletions.len(),
-            bsp_deletions.len(),
-            deletion_type
-        );
-
-        Ok(PendingDeletionsGrouped {
-            bsp_deletions,
-            bucket_deletions,
-        })
-    }
-
-    /// Convert DB bucket files to Runtime types.
-    ///
-    /// Transforms the database representation to runtime types and converts
-    /// individual files to [`FileDeletionData`].
-    fn convert_bucket_files_to_runtime(
-        db_files: HashMap<Vec<u8>, Vec<File>>,
-    ) -> Result<HashMap<BucketId<Runtime>, Vec<FileDeletionData<Runtime>>>, FishermanServiceError>
-    {
-        let mut result = HashMap::new();
-
-        for (bucket_id_bytes, files) in db_files {
-            // Convert bucket ID from database type to Runtime type using SCALE codec
-            let bucket_id =
-                BucketId::<Runtime>::decode(&mut bucket_id_bytes.as_slice()).map_err(|e| {
-                    FishermanServiceError::DecodingError(format!(
-                        "Failed to decode bucket ID: {:?}",
-                        e
-                    ))
-                })?;
-
-            // Convert files
-            let file_data: Result<Vec<_>, _> = files
-                .into_iter()
-                .map(|file| Self::convert_file_to_deletion_data(file))
-                .collect();
-
-            result.insert(bucket_id, file_data?);
-        }
-
-        Ok(result)
-    }
-
-    /// Convert DB BSP files to Runtime types.
-    ///
-    /// Transforms the database representation to runtime types and converts
-    /// individual files to [`FileDeletionData`].
-    fn convert_bsp_files_to_runtime(
-        db_files: HashMap<OnchainBspId, Vec<File>>,
-    ) -> Result<
-        HashMap<BackupStorageProviderId<Runtime>, Vec<FileDeletionData<Runtime>>>,
-        FishermanServiceError,
-    > {
-        let mut result = HashMap::new();
-
-        for (bsp_id, files) in db_files {
-            // Convert BSP ID from database type to Runtime type
-            let provider_id = bsp_id.into_h256();
-
-            // Convert files
-            let file_data: Result<Vec<_>, _> = files
-                .into_iter()
-                .map(|file| Self::convert_file_to_deletion_data(file))
-                .collect();
-
-            result.insert(provider_id, file_data?);
-        }
-
-        Ok(result)
-    }
-
-    /// Convert single DB File to [`FileDeletionData`].
-    ///
-    /// Handles conversion of all file metadata and decodes signatures for user deletions.
-    /// For user deletions, reconstructs the [`FileOperationIntention`] from the file key.
-    fn convert_file_to_deletion_data(
-        file: File,
-    ) -> Result<FileDeletionData<Runtime>, FishermanServiceError> {
-        // Convert file key from database type to Runtime type using SCALE codec
-        let file_key = Runtime::Hash::decode(&mut file.file_key.as_slice()).map_err(|e| {
-            FishermanServiceError::DecodingError(format!("Failed to decode file key: {:?}", e))
-        })?;
-
-        // Convert to FileMetadata
-        let file_metadata = file
-            .to_file_metadata(file.onchain_bucket_id.clone())
-            .map_err(|e| FishermanServiceError::DecodingError(e))?;
-
-        // Decode signature if present (user deletions)
-        let (signature, signed_intention) = if let Some(sig_bytes) = &file.deletion_signature {
-            // Decode signature from SCALE-encoded bytes
-            let signature =
-                OffchainSignature::<Runtime>::decode(&mut &sig_bytes[..]).map_err(|e| {
-                    FishermanServiceError::DecodingError(format!(
-                        "Failed to decode signature: {:?}",
-                        e
-                    ))
-                })?;
-
-            // Reconstruct FileOperationIntention
-            let intention = FileOperationIntention {
-                file_key,
-                operation: FileOperation::Delete,
-            };
-
-            (Some(signature), Some(intention))
-        } else {
-            // No signature for incomplete deletions
-            (None, None)
-        };
-
-        Ok(FileDeletionData {
-            file_key,
-            file_metadata,
-            signature,
-            signed_intention,
-        })
-    }
 }
 
 impl<Runtime: StorageEnableRuntime> Actor for FishermanService<Runtime> {
@@ -775,32 +554,6 @@ impl<Runtime: StorageEnableRuntime> Actor for FishermanService<Runtime> {
                         warn!(
                             target: LOG_TARGET,
                             "Failed to send QueryIncompleteStorageRequest response - receiver dropped"
-                        );
-                    }
-                }
-                FishermanServiceCommand::GetPendingDeletions {
-                    deletion_type,
-                    bucket_id,
-                    bsp_id,
-                    limit,
-                    offset,
-                    callback,
-                } => {
-                    debug!(
-                        target: LOG_TARGET,
-                        "🎣 GetPendingDeletions command received (deletion_type: {:?}, bucket_id: {:?}, bsp_id: {:?}, limit: {:?}, offset: {:?})",
-                        deletion_type, bucket_id, bsp_id, limit, offset
-                    );
-
-                    let result = self
-                        .get_pending_deletions(deletion_type, bucket_id, bsp_id, limit, offset)
-                        .await;
-
-                    // Send the result back through the callback
-                    if let Err(_) = callback.send(result) {
-                        warn!(
-                            target: LOG_TARGET,
-                            "Failed to send GetPendingDeletions response - receiver dropped"
                         );
                     }
                 }

@@ -213,9 +213,6 @@ where
             fisherman_options.incomplete_sync_max,
             fisherman_options.incomplete_sync_page_size,
             fisherman_options.sync_mode_min_blocks_behind,
-            self.indexer_db_pool
-                .clone()
-                .expect("Indexer DB pool is required for fisherman service"),
         )
         .await;
 
