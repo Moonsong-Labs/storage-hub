@@ -84,6 +84,14 @@ where
         let file_key = event.file_key;
         let bsp_id = event.bsp_id;
 
+        // Register BSP as distributing file.
+        // This avoids a second instance of this task from being spawned.
+        // This can fail if the BSP is already registered as distributing file.
+        self.storage_hub_handler
+            .blockchain
+            .register_bsp_distributing(file_key, bsp_id)
+            .await?;
+
         // This function handles the whole process of distributing the file to the BSP.
         // If anything fails, we unregister the BSP as distributing file, thus allowing
         // for a retry.
@@ -121,13 +129,6 @@ where
         file_key: FileKey,
         bsp_id: BackupStorageProviderId<Runtime>,
     ) -> anyhow::Result<()> {
-        // Register BSP as distributing file.
-        // This avoids a second instance of this task from being spawned.
-        self.storage_hub_handler
-            .blockchain
-            .register_bsp_distributing(file_key, bsp_id)
-            .await?;
-
         // Get file metadata from local file storage.
         let file_metadata = self
             .storage_hub_handler
