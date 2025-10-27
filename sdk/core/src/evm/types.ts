@@ -21,9 +21,9 @@ export type StorageHubClientOptions = {
    */
   walletClient: WalletClient;
   /**
-   * Filesystem precompile contract address (optional, defaults to standard address)
+   * Filesystem precompile contract address
    */
-  filesystemContractAddress?: Address;
+  filesystemContractAddress: Address;
 };
 
 /**
@@ -78,4 +78,12 @@ export enum ReplicationLevel {
   UltraHighSecurity = 4,
   /** Custom replication (requires specifying exact replica count) */
   Custom = 5
+}
+
+/**
+ * File operations supported by the StorageHub protocol.
+ */
+export enum FileOperation {
+  /** Delete operation for a file */
+  Delete = 0
 }
