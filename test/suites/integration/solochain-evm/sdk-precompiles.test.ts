@@ -7,6 +7,7 @@ import type { AccountId20, H256 } from "@polkadot/types/interfaces";
 import {
   type FileInfo,
   FileManager,
+  SH_FILE_SYSTEM_PRECOMPILE_ADDRESS,
   type HttpClientConfig,
   ReplicationLevel,
   StorageHubClient
@@ -66,7 +67,8 @@ await describeMspNet(
       storageHubClient = new StorageHubClient({
         rpcUrl,
         chain,
-        walletClient
+        walletClient,
+        filesystemContractAddress: SH_FILE_SYSTEM_PRECOMPILE_ADDRESS
       });
 
       // Set up the FileManager instance for the file to manipulate

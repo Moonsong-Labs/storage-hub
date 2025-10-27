@@ -22,12 +22,12 @@ use shc_forest_manager::traits::ForestStorageHandler;
 
 use crate::{
     events::{
-        BspConfirmStoppedStoring, FinalisedBspConfirmStoppedStoring,
-        FinalisedTrieRemoveMutationsApplied, ForestWriteLockTaskData, MoveBucketAccepted,
-        MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MultipleNewChallengeSeeds,
-        ProcessConfirmStoringRequest, ProcessConfirmStoringRequestData,
-        ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
-        ProcessSubmitProofRequest, ProcessSubmitProofRequestData,
+        FinalisedBspConfirmStoppedStoring, FinalisedTrieRemoveMutationsAppliedForBsp,
+        ForestWriteLockTaskData, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
+        MoveBucketRequested, MultipleNewChallengeSeeds, ProcessConfirmStoringRequest,
+        ProcessConfirmStoringRequestData, ProcessStopStoringForInsolventUserRequest,
+        ProcessStopStoringForInsolventUserRequestData, ProcessSubmitProofRequest,
+        ProcessSubmitProofRequestData,
     },
     handler::LOG_TARGET,
     types::ManagedProvider,
@@ -129,21 +129,6 @@ where
             ) => {
                 self.emit(MoveBucketExpired { bucket_id });
             }
-            StorageEnableEvents::FileSystem(
-                pallet_file_system::Event::BspConfirmStoppedStoring {
-                    bsp_id,
-                    file_key,
-                    new_root,
-                },
-            ) => {
-                if managed_bsp_id == &bsp_id {
-                    self.emit(BspConfirmStoppedStoring {
-                        bsp_id,
-                        file_key: file_key.into(),
-                        new_root,
-                    });
-                }
-            }
             StorageEnableEvents::FileSystem(pallet_file_system::Event::MoveBucketRequested {
                 who: _,
                 bucket_id,
@@ -200,7 +185,7 @@ where
             ) => {
                 // We only emit the event if the Provider ID is the one that this node is managing.
                 if provider_id == *managed_bsp_id {
-                    self.emit(FinalisedTrieRemoveMutationsApplied {
+                    self.emit(FinalisedTrieRemoveMutationsAppliedForBsp {
                         provider_id,
                         mutations: mutations.clone().into(),
                         new_root,
@@ -597,9 +582,6 @@ where
             }
             ForestWriteLockTaskData::MspRespondStorageRequest(_) => {
                 unreachable!("BSPs do not respond to storage requests as MSPs do.")
-            }
-            ForestWriteLockTaskData::FileDeletionRequest(_) => {
-                unreachable!("BSPs do not respond to file deletions as MSPs do.")
             }
         }
     }
