@@ -227,7 +227,7 @@ await describeBspNet(
       await userApi.wait.waitForAvailabilityToSendTx(bspThreeKey.address.toString());
 
       // Confirm the request of deletion. Make sure the extrinsic doesn't fail and the root is updated correctly.
-      await userApi.block.seal({
+      const block = await userApi.block.seal({
         calls: [
           bspThreeApi.tx.fileSystem.bspConfirmStopStoring(
             fileMetadata.fileKey,
@@ -251,6 +251,18 @@ await describeBspNet(
       const newRoot = (await bspThreeApi.rpc.storagehubclient.getForestRoot(null)).unwrap();
       assert(userApi.events.fileSystem.BspConfirmStoppedStoring.is(confirmStopStoringEvent.event));
       const newRootInRuntime = confirmStopStoringEvent.event.data.newRoot;
+
+      // Make sure BSP three is caught up to the tip of the chain, and finalise the block
+      // to trigger the event to delete the file.
+      await bspThreeApi.wait.nodeCatchUpToChainTip(userApi);
+      await bspThreeApi.block.finaliseBlock(block.blockReceipt.blockHash.toString());
+
+      // Make sure the file is no longer in the file storage.
+      await waitFor({
+        lambda: async () =>
+          (await bspThreeApi.rpc.storagehubclient.isFileInFileStorage(fileMetadata.fileKey))
+            .isFileNotFound
+      });
 
       // Important! Keep the string conversion to avoid a recursive call that lead to a crash in javascript.
       strictEqual(
