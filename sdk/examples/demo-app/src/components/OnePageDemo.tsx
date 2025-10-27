@@ -15,7 +15,6 @@ export function OnePageDemo() {
     rpcUrl: 'http://127.0.0.1:9888',
     chainId: 181222,
     mspUrl: 'http://127.0.0.1:8080',
-    mockAuth: false, // Toggle for mock vs real authentication
     fsAddress: undefined as `0x${string}` | undefined
   });
 
@@ -28,7 +27,6 @@ export function OnePageDemo() {
           rpcUrl: appCfg.chain.evmRpcHttpUrl,
           chainId: appCfg.chain.id,
           mspUrl: appCfg.msp.baseUrl,
-          mockAuth: appCfg.defaults?.mockAuth ?? false,
           fsAddress: appCfg.chain.filesystemPrecompileAddress
         });
       } catch (e) {
@@ -212,37 +210,20 @@ export function OnePageDemo() {
       // Create MSP client
       const mspClient = await MspClient.connect({ baseUrl: config.mspUrl });
 
-      if (config.mockAuth) {
-        // MOCK AUTHENTICATION PATH
-        const mockAddress = '0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac'; // Address that has buckets
-        console.log('🧪 MOCK Authentication: Using test JWT token');
-        console.log('- Wallet Address:', walletAddress);
-        console.log('- Mock Address (with buckets):', mockAddress);
-        console.log('- Mock mode enabled, skipping SIWE flow');
+      // REAL SIWE AUTHENTICATION ONLY
+      console.log('🔐 MSP Authentication: Starting SIWE flow...');
+      console.log('- Address:', walletAddress);
+      console.log('- Chain ID:', config.chainId);
 
-        const mockToken = generateMockJWT(mockAddress); // Use mock address instead of wallet address
-        mspClient.setToken(mockToken);
-        console.log('✅ Mock JWT generated for address with existing buckets');
+      await mspClient.auth.SIWE(walletClient);
+      console.log('✅ Authentication completed successfully');
 
-      } else {
-        // REAL SIWE AUTHENTICATION PATH - Unified approach
-        console.log('🔐 MSP Authentication: Starting unified SIWE flow...');
-        console.log('- Address:', walletAddress);
-        console.log('- Chain ID:', config.chainId);
-
-        await mspClient.auth.SIWE(walletClient);
-        console.log('✅ Authentication completed successfully');
-
-        // Get user profile to verify authentication
-        const profile = await mspClient.auth.getProfile();
-        console.log('Authenticated user:', profile);
-
-        // Note: authenticateSIWE handles token management internally
-        // No need to extract token manually
-      }
+      // Get user profile to verify authentication
+      const profile = await mspClient.auth.getProfile();
+      console.log('Authenticated user:', profile);
 
       // Token management is handled internally by the SDK
-      console.log(`✅ MSP client authenticated successfully (${config.mockAuth ? 'Mock' : 'Real'} auth)`);
+      console.log('✅ MSP client authenticated successfully');
 
       // Create StorageHub client
       const storageHubClient = new StorageHubClient({
@@ -351,29 +332,7 @@ export function OnePageDemo() {
             </div>
           </div>
 
-          {/* Mock Authentication Toggle */}
-          <div className="mt-4 p-4 bg-gray-800 rounded-md border border-gray-700">
-            <div className="flex items-center justify-between">
-              <div>
-                <label className="block text-sm font-medium text-gray-300">Mock Authentication</label>
-                <p className="text-xs text-gray-500 mt-1">Skip SIWE authentication and use mock JWT token for testing</p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={config.mockAuth}
-                  onChange={(e) => setConfig(prev => ({ ...prev, mockAuth: e.target.checked }))}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-              </label>
-            </div>
-            {config.mockAuth && (
-              <div className="mt-2 p-2 bg-yellow-900/20 border border-yellow-900/50 rounded text-yellow-400 text-xs">
-                ⚠️ Mock mode enabled: Using test JWT token instead of real SIWE authentication
-              </div>
-            )}
-          </div>
+          {/* (Mock authentication removed) */}
         </section>
 
         {/* Wallet Section */}
@@ -494,16 +453,8 @@ export function OnePageDemo() {
               <div className="space-y-3">
                 <div className="flex items-center gap-2 p-3 bg-green-900/20 border border-green-900/50 rounded-md text-green-400">
                   <CheckCircle className="h-4 w-4" />
-                  <span className="text-sm">
-                    MSP connected and authenticated {config.mockAuth ? '(Mock Mode)' : '(SIWE)'}
-                  </span>
+                  <span className="text-sm">MSP connected and authenticated</span>
                 </div>
-                {config.mockAuth && (
-                  <div className="p-2 bg-blue-900/20 border border-blue-900/50 rounded text-blue-400 text-xs">
-                    🧪 Using mock JWT token for testing purposes<br />
-                    📋 Mock address (with test buckets): 0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac
-                  </div>
-                )}
               </div>
             )}
           </section>
