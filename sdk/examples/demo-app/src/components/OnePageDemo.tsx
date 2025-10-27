@@ -7,14 +7,37 @@ import { StorageHubClient } from '@storagehub-sdk/core';
 import { MspClient } from '@storagehub-sdk/msp-client';
 import { FileManager } from './FileManager';
 import { generateMockJWT } from '../utils/mockJwt';
+import { loadAppConfig } from '../config/load';
+import type { AppConfig } from '../config/types';
 
 export function OnePageDemo() {
   const [config, setConfig] = useState({
     rpcUrl: 'http://127.0.0.1:9888',
     chainId: 181222,
     mspUrl: 'http://127.0.0.1:8080',
-    mockAuth: false // Toggle for mock vs real authentication
+    mockAuth: false, // Toggle for mock vs real authentication
+    fsAddress: undefined as `0x${string}` | undefined
   });
+
+  // Load runtime configuration
+  useEffect(() => {
+    const run = async () => {
+      try {
+        const appCfg: AppConfig = await loadAppConfig();
+        setConfig({
+          rpcUrl: appCfg.chain.evmRpcHttpUrl,
+          chainId: appCfg.chain.id,
+          mspUrl: appCfg.msp.baseUrl,
+          mockAuth: appCfg.defaults?.mockAuth ?? false,
+          fsAddress: appCfg.chain.filesystemPrecompileAddress
+        });
+      } catch (e) {
+        // Keep defaults on failure
+        console.warn('Failed to load app config, using defaults', e);
+      }
+    };
+    run();
+  }, []);
 
   // Wallet state
   const [walletClient, setWalletClient] = useState<WalletClient | null>(null);
@@ -226,6 +249,7 @@ export function OnePageDemo() {
         rpcUrl: config.rpcUrl,
         chain: storageHubChain,
         walletClient,
+        filesystemContractAddress: config.fsAddress ? (config.fsAddress as `0x${string}`) : undefined
       });
 
       setMspClient(mspClient);

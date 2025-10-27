@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Wallet, AlertCircle, ExternalLink, Copy, CheckCircle } from 'lucide-react';
 import { createWalletClient, createPublicClient, custom, defineChain, formatEther, type WalletClient, type PublicClient } from 'viem';
+import { loadAppConfig } from '../config/load';
+import type { AppConfig } from '../config/types';
 
 interface WalletConnectionProps {
   onWalletConnected: (connected: boolean) => void;
@@ -41,13 +43,30 @@ export function WalletConnection({
     return typeof window !== 'undefined' && window.ethereum;
   };
 
-  // Define StorageHub chain
-  const storageHubChain = defineChain({
-    id: 181222,
-    name: 'StorageHub Solochain EVM',
-    nativeCurrency: { name: 'StorageHub', symbol: 'SH', decimals: 18 },
-    rpcUrls: { default: { http: ['http://127.0.0.1:9888'] } }
-  });
+  // Load app config and derive expected network
+  const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
+  useEffect(() => {
+    const run = async () => {
+      try {
+        const cfg = await loadAppConfig();
+        setAppConfig(cfg);
+      } catch (e) {
+        console.warn('Failed to load app config in WalletConnection; using defaults', e);
+      }
+    };
+    run();
+  }, []);
+
+  const expectedChainId = appConfig?.chain.id ?? 181222;
+  const expectedRpcUrl = appConfig?.chain.evmRpcHttpUrl ?? 'http://127.0.0.1:9888';
+
+  // Define StorageHub chain from config (fallback to local defaults)
+  const storageHubChain = useMemo(() => defineChain({
+    id: expectedChainId,
+    name: appConfig?.chain.name ?? 'StorageHub Solochain EVM',
+    nativeCurrency: appConfig?.chain.nativeCurrency ?? { name: 'StorageHub', symbol: 'SH', decimals: 18 },
+    rpcUrls: { default: { http: [expectedRpcUrl] } }
+  }), [appConfig, expectedChainId, expectedRpcUrl]);
 
   // Switch to StorageHub network
   const switchToStorageHubNetwork = async () => {
@@ -58,7 +77,7 @@ export function WalletConnection({
       // Try to switch to the network first
       await window.ethereum.request({
         method: 'wallet_switchEthereumChain',
-        params: [{ chainId: '0x2C3E6' }] // 181222 in hex
+        params: [{ chainId: `0x${expectedChainId.toString(16)}` }]
       });
       console.log('Successfully switched to existing network');
       return true;
@@ -71,14 +90,10 @@ export function WalletConnection({
           await window.ethereum.request({
             method: 'wallet_addEthereumChain',
             params: [{
-              chainId: '0x2C3E6', // 181222 in hex
-              chainName: 'StorageHub Solochain EVM',
-              nativeCurrency: {
-                name: 'StorageHub',
-                symbol: 'SH',
-                decimals: 18
-              },
-              rpcUrls: ['http://127.0.0.1:9888'],
+              chainId: `0x${expectedChainId.toString(16)}`,
+              chainName: appConfig?.chain.name ?? 'StorageHub Solochain EVM',
+              nativeCurrency: appConfig?.chain.nativeCurrency ?? { name: 'StorageHub', symbol: 'SH', decimals: 18 },
+              rpcUrls: [expectedRpcUrl],
               blockExplorerUrls: null
             }]
           });
@@ -127,7 +142,7 @@ export function WalletConnection({
       console.log('Current Chain ID:', chainId);
 
       // If not on StorageHub network, try to switch
-      if (chainId !== 181222) {
+      if (chainId !== expectedChainId) {
         console.log('Not on StorageHub network, attempting to switch...');
         const switchSuccess = await switchToStorageHubNetwork();
 
@@ -180,13 +195,13 @@ export function WalletConnection({
       }
 
       // Check if we're on the correct network
-      const isCorrectNetwork = chainId === 181222;
+      const isCorrectNetwork = chainId === expectedChainId;
       onWalletConnected(isCorrectNetwork);
 
       if (!isCorrectNetwork) {
         setWalletState(prev => ({
           ...prev,
-          error: `Still on wrong network. Current Chain ID: ${chainId}. Expected: 181222. Please switch manually in MetaMask.`
+          error: `Still on wrong network. Current Chain ID: ${chainId}. Expected: ${expectedChainId}. Please switch manually in MetaMask.`
         }));
       } else {
         console.log('Successfully connected to StorageHub network with Viem!');
@@ -269,13 +284,13 @@ export function WalletConnection({
         setWalletState(prev => ({ ...prev, chainId: newChainId }));
 
         // Update connection status based on network
-        const isCorrectNetwork = newChainId === 181222;
+        const isCorrectNetwork = newChainId === expectedChainId;
         onWalletConnected(isCorrectNetwork && walletState.address !== null);
 
         if (!isCorrectNetwork && walletState.address) {
           setWalletState(prev => ({
             ...prev,
-            error: 'Please switch to StorageHub network (Chain ID: 181222) in MetaMask'
+            error: `Please switch to StorageHub network (Chain ID: ${expectedChainId}) in MetaMask`
           }));
         } else if (isCorrectNetwork && walletState.address) {
           setWalletState(prev => ({
@@ -317,7 +332,7 @@ export function WalletConnection({
   };
 
   const getChainStatus = () => {
-    if (walletState.chainId === 181222) {
+    if (walletState.chainId === expectedChainId) {
       return { status: 'correct', text: 'StorageHub Network', color: 'text-green-600' };
     } else if (walletState.chainId) {
       return { status: 'wrong', text: `Wrong Network (Chain ID: ${walletState.chainId})`, color: 'text-red-600' };
@@ -389,8 +404,8 @@ export function WalletConnection({
                 <p className="text-xs text-blue-700">Address: {walletState.address}</p>
                 <p className="text-xs text-blue-700">Chain ID: {walletState.chainId}</p>
                 <p className="text-xs text-blue-700">Balance: {walletState.balance} SH</p>
-                <p className="text-xs text-blue-700">Expected Chain ID: 181222</p>
-                <p className="text-xs text-blue-700">Network Match: {walletState.chainId === 181222 ? '✅ Yes' : '❌ No'}</p>
+                <p className="text-xs text-blue-700">Expected Chain ID: {expectedChainId}</p>
+                <p className="text-xs text-blue-700">Network Match: {walletState.chainId === expectedChainId ? '✅ Yes' : '❌ No'}</p>
               </div>
             )}
 
@@ -525,8 +540,8 @@ export function WalletConnection({
               <div className="text-xs text-red-700 font-mono bg-red-100 p-2 rounded">
                 <strong>Required Network:</strong><br />
                 Network: StorageHub Solochain EVM<br />
-                Chain ID: 181222<br />
-                RPC: http://127.0.0.1:9888<br />
+                Chain ID: {expectedChainId}<br />
+                RPC: {expectedRpcUrl}<br />
                 Symbol: SH
               </div>
             </div>
