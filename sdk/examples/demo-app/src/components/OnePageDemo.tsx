@@ -6,7 +6,6 @@ import { createWalletClient, createPublicClient, custom, formatEther, getAddress
 import { StorageHubClient } from '@storagehub-sdk/core';
 import { MspClient } from '@storagehub-sdk/msp-client';
 import { FileManager } from './FileManager';
-import { generateMockJWT } from '../utils/mockJwt';
 import { loadAppConfig } from '../config/load';
 import type { AppConfig } from '../config/types';
 
@@ -127,7 +126,11 @@ export function OnePageDemo() {
             console.log('✅ Network added successfully');
           } else {
             console.error('Network switch failed:', switchError);
-            throw new Error(`Failed to switch network: ${switchError.message}`);
+            const errMsg =
+              switchError && typeof switchError === 'object' && 'message' in switchError
+                ? (switchError as { message: string }).message
+                : String(switchError);
+            throw new Error(`Failed to switch network: ${errMsg}`);
           }
         }
       }
@@ -145,11 +148,12 @@ export function OnePageDemo() {
         transport,
       });
 
-      const walletClient = createWalletClient({
+      const viemWalletClient = createWalletClient({
         chain: storageHubChain,
         transport,
         account: address,
       });
+      const walletClient = (viemWalletClient as unknown) as WalletClient;
 
       console.log('✅ Step 4 Complete: Viem clients created');
 
@@ -215,7 +219,7 @@ export function OnePageDemo() {
       console.log('- Address:', walletAddress);
       console.log('- Chain ID:', config.chainId);
 
-      await mspClient.auth.SIWE(walletClient);
+      await mspClient.auth.SIWE(walletClient as WalletClient);
       console.log('✅ Authentication completed successfully');
 
       // Get user profile to verify authentication
@@ -229,7 +233,7 @@ export function OnePageDemo() {
       const storageHubClient = new StorageHubClient({
         rpcUrl: config.rpcUrl,
         chain: storageHubChain,
-        walletClient,
+        walletClient: (walletClient as unknown) as WalletClient,
         filesystemContractAddress: config.fsAddress ? (config.fsAddress as `0x${string}`) : undefined
       });
 
