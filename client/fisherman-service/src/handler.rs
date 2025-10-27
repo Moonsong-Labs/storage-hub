@@ -6,14 +6,20 @@ use sc_client_api::{BlockImportNotification, BlockchainEvents, HeaderBackend};
 use sp_api::ProvideRuntimeApi;
 use sp_core::H256;
 use sp_runtime::traits::{Header, One, SaturatedConversion, Saturating};
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+use tokio::sync::Mutex;
 
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
     blockchain_utils::get_events_at_block,
     traits::StorageEnableRuntime,
-    types::{BlockNumber, FileOperation, OpaqueBlock, ParachainClient, StorageEnableEvents},
+    types::{BlockNumber, OpaqueBlock, ParachainClient, StorageEnableEvents},
 };
+use shc_indexer_db::models::FileDeletionType;
 use shp_types::Hash;
 
 use crate::{
@@ -34,13 +40,23 @@ pub struct FishermanService<Runtime: StorageEnableRuntime> {
     /// Last processed block number to avoid reprocessing
     last_processed_block: BlockNumber<Runtime>,
     /// Event bus provider for emitting fisherman events
-    event_bus_provider: FishermanServiceEventBusProvider<Runtime>,
+    event_bus_provider: FishermanServiceEventBusProvider,
     /// The minimum number of blocks behind the current best block to consider the fisherman out of sync
     sync_mode_min_blocks_behind: BlockNumber<Runtime>,
     /// Maximum number of incomplete storage requests to process during initial sync
     incomplete_sync_max: u32,
     /// Page size for incomplete storage request pagination
     incomplete_sync_page_size: u32,
+    /// Global lock to prevent overlapping batch processing cycles
+    batch_processing_lock: Arc<Mutex<()>>,
+    /// Hold the lock guard while batch is processing
+    batch_lock_guard: Option<tokio::sync::OwnedMutexGuard<()>>,
+    /// Track last deletion type processed (for alternating User/Incomplete)
+    last_deletion_type: Option<FileDeletionType>,
+    /// Duration between batch deletion processing cycles
+    batch_interval_duration: Duration,
+    /// Timestamp of last batch emission
+    last_batch_time: Option<Instant>,
 }
 
 /// Represents a change to a file key between blocks
@@ -68,14 +84,20 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
         incomplete_sync_max: u32,
         incomplete_sync_page_size: u32,
         sync_mode_min_blocks_behind: u32,
+        batch_interval_seconds: u64,
     ) -> Self {
         Self {
             client,
             last_processed_block: 0u32.into(),
-            event_bus_provider: FishermanServiceEventBusProvider::<Runtime>::new(),
+            event_bus_provider: FishermanServiceEventBusProvider::new(),
             sync_mode_min_blocks_behind: sync_mode_min_blocks_behind.into(),
             incomplete_sync_max,
             incomplete_sync_page_size,
+            batch_processing_lock: Arc::new(Mutex::new(())),
+            batch_lock_guard: None,
+            last_deletion_type: None,
+            batch_interval_duration: Duration::from_secs(batch_interval_seconds),
+            last_batch_time: None,
         }
     }
 
@@ -163,58 +185,47 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
             }
         }
 
-        let events = get_events_at_block::<Runtime>(&self.client, &block_hash)?;
+        // Check if enough time has elapsed since last batch
+        let should_trigger = match self.last_batch_time {
+            // First run
+            None => true,
+            Some(last_time) => last_time.elapsed() >= self.batch_interval_duration,
+        };
 
-        for event_record in events.iter() {
-            let event: Result<StorageEnableEvents<Runtime>, _> =
-                event_record.event.clone().try_into();
-            let event = match event {
-                Ok(e) => e,
-                Err(e) => {
-                    warn!(
-                        target: LOG_TARGET,
-                        "Failed to decode event: {:?}",
-                        e
-                    );
-                    continue;
-                }
-            };
-            match event {
-                StorageEnableEvents::FileSystem(
-                    pallet_file_system::Event::FileDeletionRequested {
-                        signed_delete_intention,
-                        signature,
-                    },
-                ) if signed_delete_intention.operation == FileOperation::Delete => {
-                    info!(
-                        target: LOG_TARGET,
-                        "🎣 Found FileDeletionRequested event for file key: {:?}",
-                        signed_delete_intention.file_key
-                    );
-
-                    let event = crate::events::ProcessFileDeletionRequest {
-                        signed_file_operation_intention: signed_delete_intention,
-                        signature,
+        if should_trigger {
+            // Try to acquire the lock (non-blocking)
+            match self.batch_processing_lock.clone().try_lock_owned() {
+                Ok(guard) => {
+                    // Determine next deletion type (alternate User ↔ Incomplete)
+                    let deletion_type = match self.last_deletion_type {
+                        None => FileDeletionType::User, // First run defaults to User
+                        Some(FileDeletionType::User) => FileDeletionType::Incomplete,
+                        Some(FileDeletionType::Incomplete) => FileDeletionType::User,
                     };
 
-                    self.emit(event);
-                }
-                StorageEnableEvents::FileSystem(
-                    pallet_file_system::Event::IncompleteStorageRequest { file_key },
-                ) => {
-                    info!(
+                    debug!(
                         target: LOG_TARGET,
-                        "🎣 Found IncompleteStorageRequest event for file key: {:?}",
-                        file_key
+                        "🎣 Batch interval reached, emitting BatchFileDeletions event for {:?} deletions",
+                        deletion_type
                     );
 
-                    let event = crate::events::ProcessIncompleteStorageRequest {
-                        file_key: file_key.into(),
-                    };
+                    // Update state
+                    self.last_deletion_type = Some(deletion_type);
+                    self.last_batch_time = Some(Instant::now());
 
-                    self.emit(event);
+                    // Store the guard to keep lock held
+                    self.batch_lock_guard = Some(guard);
+
+                    // Emit event to trigger batch processing
+                    self.emit(crate::events::BatchFileDeletions { deletion_type });
                 }
-                _ => {}
+                Err(_) => {
+                    debug!(
+                        target: LOG_TARGET,
+                        "🎣 Batch interval reached but lock is held (previous batch still processing), will retry next block"
+                    );
+                    // Lock is busy - time keeps accumulating, will retry next block
+                }
             }
         }
 
@@ -254,12 +265,14 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                 page_count
             );
 
-            for key in &keys {
-                // Emit the event for each key
-                // TODO: Emit batch of file keys per BSP/Bucket
+            for _key in &keys {
+                // TODO: Phase 8 - Emit batch of file keys per BSP/Bucket
+                // Old event emission commented out for now
+                /*
                 self.emit(crate::events::ProcessIncompleteStorageRequest {
-                    file_key: (*key).into(),
+                    file_key: (*_key).into(),
                 });
+                */
 
                 processed = processed.saturating_add(1);
 
@@ -508,7 +521,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
 impl<Runtime: StorageEnableRuntime> Actor for FishermanService<Runtime> {
     type Message = FishermanServiceCommand<Runtime>;
     type EventLoop = FishermanServiceEventLoop<Runtime>;
-    type EventBusProvider = FishermanServiceEventBusProvider<Runtime>;
+    type EventBusProvider = FishermanServiceEventBusProvider;
 
     fn handle_message(
         &mut self,
@@ -554,6 +567,20 @@ impl<Runtime: StorageEnableRuntime> Actor for FishermanService<Runtime> {
                         warn!(
                             target: LOG_TARGET,
                             "Failed to send QueryIncompleteStorageRequest response - receiver dropped"
+                        );
+                    }
+                }
+                FishermanServiceCommand::ReleaseBatchLock { callback } => {
+                    debug!(target: LOG_TARGET, "🔓 Releasing batch processing lock");
+
+                    // Take and drop the guard to release the lock
+                    self.batch_lock_guard.take();
+
+                    // Send the result back through the callback
+                    if let Err(_) = callback.send(Ok(())) {
+                        warn!(
+                            target: LOG_TARGET,
+                            "Failed to send ReleaseBatchLock response - receiver dropped"
                         );
                     }
                 }

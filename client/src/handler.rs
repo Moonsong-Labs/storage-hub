@@ -29,7 +29,7 @@ use shc_file_transfer_service::{
     events::{RemoteDownloadRequest, RemoteUploadRequest, RetryBucketMoveDownload},
     FileTransferService,
 };
-use shc_fisherman_service::{ProcessFileDeletionRequest, ProcessIncompleteStorageRequest};
+use shc_fisherman_service::events::BatchFileDeletions;
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_indexer_db::DbPool;
 
@@ -42,9 +42,7 @@ use crate::{
         bsp_move_bucket::{BspMoveBucketConfig, BspMoveBucketTask},
         bsp_submit_proof::{BspSubmitProofConfig, BspSubmitProofTask},
         bsp_upload_file::{BspUploadFileConfig, BspUploadFileTask},
-        fisherman_process_file_deletion::{
-            FishermanProcessFileDeletionTask, FishermanProcessIncompleteStorageTask,
-        },
+        fisherman_process_batch_deletions::FishermanTask,
         msp_charge_fees::{MspChargeFeesConfig, MspChargeFeesTask},
         msp_delete_bucket::MspDeleteBucketTask,
         msp_delete_file::MspDeleteFileTask,
@@ -413,19 +411,18 @@ where
             .as_ref()
             .expect("Fisherman service not set for FishermanRole");
 
-        // Subscribe to ProcessFileDeletionRequest events from the FishermanService
-        // The fisherman monitors and processes file deletion requests
+        // Register FishermanTask to handle BatchFileDeletions events
+        // This task processes batched file deletions emitted every 5 blocks
         subscribe_actor_event_map!(
             service: fisherman,
             spawner: &self.task_spawner,
             context: self.clone(),
             critical: true,
             [
-                ProcessFileDeletionRequest<Runtime> => FishermanProcessFileDeletionTask,
-                ProcessIncompleteStorageRequest => FishermanProcessIncompleteStorageTask,
+                BatchFileDeletions => FishermanTask,
             ]
         );
 
-        log::info!("🎣 Fisherman service started");
+        log::info!("🎣 Fisherman batch processing task registered");
     }
 }
