@@ -175,6 +175,8 @@ export interface ValueProp {
   isAvailable: boolean;
 }
 
+// TODO we can extend FileInfo from the following type
+// import type { FileInfo } from '@storagehub-sdk/core';
 export interface FileInfo {
   fileKey: string;
   fingerprint: string;

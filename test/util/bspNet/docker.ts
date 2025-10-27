@@ -7,9 +7,9 @@ import Docker from "dockerode";
 import { DOCKER_IMAGE } from "../constants";
 import { sendCustomRpc } from "../rpc";
 import { sleep } from "../timer";
-import { waitFor } from "./waits";
 import * as NodeBspNet from "./node";
 import { BspNetTestApi } from "./test-api";
+import { waitFor } from "./waits";
 
 export const addCopypartyContainer = async (options?: { name?: string }) => {
   const docker = new Docker();
@@ -268,8 +268,8 @@ export const addCopypartyContainer = async (options?: { name?: string }) => {
   };
 };
 
-export const checkBspForFile = async (filePath: string) => {
-  const containerId = "storage-hub-sh-bsp-1";
+export const checkBspForFile = async (filePath: string, options?: { containerName?: string }) => {
+  const containerId = options?.containerName || "storage-hub-sh-bsp-1";
   const loc = path.join("/storage", filePath);
 
   for (let i = 0; i < 100; i++) {
@@ -284,8 +284,8 @@ export const checkBspForFile = async (filePath: string) => {
   throw `File not found: ${loc} in ${containerId}`;
 };
 
-export const checkFileChecksum = async (filePath: string) => {
-  const containerId = "storage-hub-sh-bsp-1";
+export const checkFileChecksum = async (filePath: string, options?: { containerName?: string }) => {
+  const containerId = options?.containerName || "storage-hub-sh-bsp-1";
   const loc = path.join("/storage", filePath);
   const output = execSync(`docker exec ${containerId} sha256sum ${loc}`);
   return output.toString().split(" ")[0];

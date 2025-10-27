@@ -25,7 +25,7 @@ use sp_runtime::{
     DispatchError, SaturatedConversion,
 };
 
-use crate::{events, handler::LOG_TARGET};
+use crate::handler::LOG_TARGET;
 
 /// A struct that holds the information to submit a storage proof.
 ///
@@ -176,21 +176,6 @@ impl<Runtime: StorageEnableRuntime> FileDeletionRequest<Runtime> {
 
     pub fn increment_try_count(&mut self) {
         self.try_count += 1;
-    }
-}
-
-impl<Runtime: StorageEnableRuntime> From<events::FileDeletionRequest<Runtime>>
-    for FileDeletionRequest<Runtime>
-{
-    fn from(event: events::FileDeletionRequest<Runtime>) -> Self {
-        Self::new(
-            event.user,
-            event.file_key.into(),
-            event.file_size,
-            event.bucket_id,
-            event.msp_id,
-            event.proof_of_inclusion,
-        )
     }
 }
 
