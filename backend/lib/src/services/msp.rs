@@ -378,10 +378,21 @@ impl MspService {
         }
 
         Ok(PaymentStreamsResponse { streams })
-    }
-
-    /// Calls is_file_in_file_storage rpc to get file metadata if present
-    /// Resturns error in any other case
+    /// Calls is_file_in_file_storage RPC method from the MSP substrate node
+    /// to get file metadata if present.
+    ///
+    /// Returns successfully only if the file is present and fully stored in
+    /// the MSP node (i.e. all chunks of the file are present).
+    /// Returns error in any other case, with descriptive message.
+    ///
+    /// ```ignore 
+    /// pub enum GetFileFromFileStorageResult {
+    ///     FileNotFound, // returns Error
+    ///     IncompleteFile(IncompleteFileStatus), // returns Error
+    ///     FileFound(FileMetadata), // returns Ok
+    ///     FileFoundWithInconsistency(FileMetadata), // returns Error
+    /// }
+    /// ```
     /// pub enum GetFileFromFileStorageResult {
     //     FileNotFound,
     //     IncompleteFile(IncompleteFileStatus),
