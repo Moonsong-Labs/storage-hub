@@ -5,7 +5,7 @@
 use std::{collections::HashSet, sync::Arc};
 
 use axum_extra::extract::multipart::Field;
-use bigdecimal::BigDecimal;
+use bigdecimal::{BigDecimal, RoundingMode};
 use codec::{Decode, Encode};
 use sc_network::PeerId;
 use serde::{Deserialize, Serialize};
@@ -367,8 +367,8 @@ impl MspService {
                     // (price * amount) / gigaunit
                     let cost = (price_bd * amount_provided) / shp_constants::GIGAUNIT;
 
-                    // we truncate the decimal digits of the cost per tick
-                    let cost = cost.with_scale_round(0, bigdecimal::RoundingMode::Down);
+                    // Truncate the decimal digits of the cost per tick
+                    let cost = cost.with_scale_round(0, RoundingMode::Down);
 
                     ("bsp".to_string(), cost.to_string())
                 }
@@ -1251,8 +1251,7 @@ mod tests {
             // mock environment sets price per giga unit to this value
             * BigDecimal::from(MOCK_PRICE_PER_GIGA_UNIT)
             * BigDecimal::from_str("1e-9").unwrap();
-        let expected_cost_per_tick =
-            expected_cost_per_tick.with_scale_round(0, bigdecimal::RoundingMode::Down);
+        let expected_cost_per_tick = expected_cost_per_tick.with_scale_round(0, RoundingMode::Down);
 
         assert_eq!(
             BigDecimal::from_str(&dynamic.cost_per_tick)
