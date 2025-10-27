@@ -144,7 +144,14 @@ impl DBClient {
 
         match expected_id {
             None => *cache = None,
-            Some(id) if cache.msp.onchain_msp_id == id => *cache = None,
+            Some(id)
+                if cache
+                    .as_ref()
+                    .map(|cache| &cache.msp.onchain_msp_id == id)
+                    .unwrap_or_default() =>
+            {
+                *cache = None
+            }
             _ => {}
         }
     }

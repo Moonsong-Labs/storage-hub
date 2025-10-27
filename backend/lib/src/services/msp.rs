@@ -22,7 +22,7 @@ use shp_types::Hash;
 
 use crate::{
     config::MspConfig,
-    constants::{database::DEFAULT_PAGE_LIMIT, retry::get_retry_delay},
+    constants::retry::get_retry_delay,
     data::{
         indexer_db::{client::DBClient, repository::PaymentStreamKind},
         rpc::StorageHubRpcClient,
@@ -190,42 +190,28 @@ impl MspService {
     pub async fn list_user_buckets(
         &self,
         user_address: &Address,
+        offset: i64,
+        limit: i64,
     ) -> Result<impl Iterator<Item = Bucket>, Error> {
-        debug!(target: "msp_service::list_user_buckets", user = %user_address, "Listing user buckets");
+        debug!(target: "msp_service::list_user_buckets", user = %user_address, %limit, %offset, "Listing user buckets");
 
-        // Paginate through all buckets
-        let mut all_pages = Vec::new();
-        let mut offset = 0;
+        Ok(self
+            .postgres
+            .get_user_buckets(
+                &self.msp_id,
+                &user_address.to_string(),
+                Some(limit),
+                Some(offset),
+            )
+            .await?
+            .into_iter()
+            .map(|entry| {
+                // Convert BigDecimal to u64 for size (may lose precision)
+                let size_bytes = entry.total_size.to_string().parse::<u64>().unwrap_or(0);
+                let file_count = entry.file_count as u64;
 
-        loop {
-            let buckets = self
-                .postgres
-                .get_user_buckets(
-                    &self.msp_id,
-                    &user_address.to_string(),
-                    Some(DEFAULT_PAGE_LIMIT),
-                    Some(offset),
-                )
-                .await?;
-
-            let fetched_count = buckets.len();
-            all_pages.push(buckets);
-
-            // If we got fewer items than the page size, we've reached the end
-            if fetched_count < DEFAULT_PAGE_LIMIT as usize {
-                break;
-            }
-
-            offset += DEFAULT_PAGE_LIMIT;
-        }
-
-        Ok(all_pages.into_iter().flatten().map(|entry| {
-            // Convert BigDecimal to u64 for size (may lose precision)
-            let size_bytes = entry.total_size.to_string().parse::<u64>().unwrap_or(0);
-            let file_count = entry.file_count as u64;
-
-            Bucket::from_db(&entry, size_bytes, file_count)
-        }))
+                Bucket::from_db(&entry, size_bytes, file_count)
+            }))
     }
 
     /// Get a specific bucket by ID
@@ -259,37 +245,23 @@ impl MspService {
         bucket_id: &str,
         user: &Address,
         path: &str,
+        offset: i64,
+        limit: i64,
     ) -> Result<FileTree, Error> {
-        debug!(target: "msp_service::get_file_tree", bucket_id = %bucket_id, user = %user, "Getting file tree");
+        debug!(target: "msp_service::get_file_tree", bucket_id = %bucket_id, user = %user, %limit, %offset,  "Getting file tree");
 
         // first, get the bucket from the db and determine if user can view the bucket
         let bucket = self.get_db_bucket(bucket_id, user).await?;
 
-        // Paginate through all files
         // TODO: optimize query by requesting only matching paths
-        let mut all_pages = Vec::new();
-        let mut offset = 0;
-
-        loop {
-            let files = self
-                .postgres
-                .get_bucket_files(bucket.id, Some(DEFAULT_PAGE_LIMIT), Some(offset))
-                .await?;
-
-            let fetched_count = files.len();
-            all_pages.push(files);
-
-            // If we got fewer items than the page size, we've reached the end
-            if fetched_count < DEFAULT_PAGE_LIMIT as usize {
-                break;
-            }
-
-            offset += DEFAULT_PAGE_LIMIT;
-        }
+        // TODO: pagination doesn't account for path filtering
+        let files = self
+            .postgres
+            .get_bucket_files(bucket.id, Some(limit), Some(offset))
+            .await?;
 
         // Create hierarchy based on location segments
-        let all_files: Vec<_> = all_pages.into_iter().flatten().collect();
-        Ok(FileTree::from_files_filtered(all_files, path))
+        Ok(FileTree::from_files_filtered(files, path))
     }
 
     /// Get file information

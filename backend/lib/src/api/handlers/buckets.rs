@@ -9,18 +9,19 @@ use serde::Deserialize;
 use tracing::debug;
 
 use crate::{
-    error::Error, models::files::FileListResponse, services::auth::AuthenticatedUser,
-    services::Services,
+    api::handlers::pagination::Pagination, error::Error, models::files::FileListResponse,
+    services::auth::AuthenticatedUser, services::Services,
 };
 
 pub async fn list_buckets(
     State(services): State<Services>,
     AuthenticatedUser { address }: AuthenticatedUser,
+    Pagination { limit, offset }: Pagination,
 ) -> Result<impl IntoResponse, Error> {
     debug!(user = %address, "GET list buckets");
     let response = services
         .msp
-        .list_user_buckets(&address)
+        .list_user_buckets(&address, offset, limit)
         .await?
         .collect::<Vec<_>>();
     Ok(Json(response))
@@ -47,6 +48,7 @@ pub async fn get_files(
     AuthenticatedUser { address }: AuthenticatedUser,
     Path(bucket_id): Path<String>,
     Query(query): Query<FilesQuery>,
+    Pagination { limit, offset }: Pagination,
 ) -> Result<impl IntoResponse, Error> {
     let path = query.path.as_deref().unwrap_or("/");
     debug!(
@@ -55,9 +57,10 @@ pub async fn get_files(
         user = %address,
         "GET bucket files"
     );
+
     let file_tree = services
         .msp
-        .get_file_tree(&bucket_id, &address, path)
+        .get_file_tree(&bucket_id, &address, path, offset, limit)
         .await?;
 
     let response = FileListResponse {
