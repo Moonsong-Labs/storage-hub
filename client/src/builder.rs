@@ -690,7 +690,7 @@ where
                 bsp_submit_proof: Default::default(),
                 blockchain_service: self.blockchain_service_config.unwrap_or_default(),
             },
-            self.indexer_db_pool.clone(),
+            Some(self.indexer_db_pool.expect("Indexer DB pool must be set for Fisherman role")),
             // Not needed by the fisherman service
             self.peer_manager.expect("Peer Manager not set"),
             self.fisherman,
