@@ -12,9 +12,10 @@ use shc_actors_framework::{
 use shc_blockchain_service::{
     capacity_manager::CapacityConfig,
     events::{
-        AcceptedBspVolunteer, DistributeFileToBsp, FinalisedBucketMovedAway,
-        FinalisedBucketMutationsApplied, FinalisedMspStopStoringBucketInsolventUser,
-        FinalisedMspStoppedStoringBucket, LastChargeableInfoUpdated, MoveBucketAccepted,
+        AcceptedBspVolunteer, DistributeFileToBsp, FinalisedBspConfirmStoppedStoring,
+        FinalisedBucketMovedAway, FinalisedBucketMutationsApplied,
+        FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
+        FinalisedTrieRemoveMutationsAppliedForBsp, LastChargeableInfoUpdated, MoveBucketAccepted,
         MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MoveBucketRequestedForMsp,
         MultipleNewChallengeSeeds, NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
         ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
@@ -38,6 +39,7 @@ use crate::{
     file_download_manager::FileDownloadManager,
     tasks::{
         bsp_charge_fees::{BspChargeFeesConfig, BspChargeFeesTask},
+        bsp_delete_file::BspDeleteFileTask,
         bsp_download_file::BspDownloadFileTask,
         bsp_move_bucket::{BspMoveBucketConfig, BspMoveBucketTask},
         bsp_submit_proof::{BspSubmitProofConfig, BspSubmitProofTask},
@@ -382,6 +384,8 @@ where
                 MoveBucketAccepted<Runtime> => BspMoveBucketTask,
                 MoveBucketRejected<Runtime> => BspMoveBucketTask,
                 MoveBucketExpired<Runtime> => BspMoveBucketTask,
+                FinalisedBspConfirmStoppedStoring<Runtime> => BspDeleteFileTask,
+                FinalisedTrieRemoveMutationsAppliedForBsp<Runtime> => BspDeleteFileTask,
             ]
         );
 

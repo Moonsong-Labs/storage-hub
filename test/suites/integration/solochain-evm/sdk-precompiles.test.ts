@@ -5,7 +5,9 @@ import { Readable } from "node:stream";
 import { TypeRegistry } from "@polkadot/types";
 import type { AccountId20, H256 } from "@polkadot/types/interfaces";
 import {
+  type FileInfo,
   FileManager,
+  SH_FILE_SYSTEM_PRECOMPILE_ADDRESS,
   type HttpClientConfig,
   ReplicationLevel,
   StorageHubClient
@@ -23,7 +25,8 @@ await describeMspNet(
     initialised: false,
     runtimeType: "solochain",
     indexer: true,
-    backend: true
+    backend: true,
+    fisherman: true
   },
   ({ before, it, createUserApi, createMsp1Api }) => {
     let userApi: EnrichedBspApi;
@@ -67,7 +70,8 @@ await describeMspNet(
       storageHubClient = new StorageHubClient({
         rpcUrl,
         chain,
-        walletClient
+        walletClient,
+        filesystemContractAddress: SH_FILE_SYSTEM_PRECOMPILE_ADDRESS
       });
 
       // Set up the FileManager instance for the file to manipulate
@@ -135,7 +139,7 @@ await describeMspNet(
 
       // Verify the bucket doesn't exist before creation
       const bucketBeforeCreation = await userApi.query.providers.buckets(bucketId);
-      assert(bucketBeforeCreation.isEmpty, "Bucket should not exist before creation");
+      assert(bucketBeforeCreation.isNone, "Bucket should not exist before creation");
 
       // Create the bucket using the SDK
       const txHash = await storageHubClient.createBucket(
@@ -159,7 +163,7 @@ await describeMspNet(
 
       // Verify bucket exists after creation
       const bucketAfterCreation = await userApi.query.providers.buckets(bucketId);
-      assert(!bucketAfterCreation.isEmpty, "Bucket should exist after creation");
+      assert(bucketAfterCreation.isSome, "Bucket should exist after creation");
       const bucketData = bucketAfterCreation.unwrap();
       assert(
         bucketData.userId.toString() === account.address,
@@ -341,6 +345,148 @@ await describeMspNet(
         ),
         "File should be the same as the one uploaded"
       );
+    });
+
+    it("Should request deletion and verify complete cleanup", async () => {
+      // Create the file info to request its deletion
+      const registry = new TypeRegistry();
+      const bucketIdH256 = registry.createType("H256", bucketId) as H256;
+      const fingerprint = await fileManager.getFingerprint();
+      const fileSize = BigInt(fileManager.getFileSize());
+
+      const fileInfo: FileInfo = {
+        fileKey: fileKey.toHex() as `0x${string}`,
+        bucketId: bucketIdH256.toHex() as `0x${string}`,
+        location: fileLocation,
+        size: fileSize,
+        fingerprint: fingerprint.toHex() as `0x${string}`
+      };
+
+      // Use the SDK's StorageHubClient to request the file deletion
+      const txHash = await storageHubClient.requestDeleteFile(fileInfo);
+      await userApi.wait.waitForTxInPool({
+        module: "ethereum",
+        method: "transact"
+      });
+      await userApi.block.seal();
+
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+      assert(receipt.status === "success", "Request delete file transaction failed");
+
+      // Verify the deletion request was enqueued on-chain
+      await userApi.assert.eventPresent("fileSystem", "FileDeletionRequested");
+
+      // Wait for the fisherman node's delete_files extrinsic to be in the tx pool and seal it
+      await userApi.wait.waitForTxInPool({
+        module: "fileSystem",
+        method: "deleteFiles"
+      });
+      const deleteFileBlock = await userApi.block.seal();
+
+      // Verify that the `BucketFileDeletionsCompleted` event was emitted and it contains the correct file key
+      const bucketFileDeletionsCompletedEvent = await userApi.assert.eventPresent(
+        "fileSystem",
+        "BucketFileDeletionsCompleted"
+      );
+      assert(bucketFileDeletionsCompletedEvent, "BucketFileDeletionsCompleted event not found");
+      const bucketFileDeletionsCompletedEventData =
+        userApi.events.fileSystem.BucketFileDeletionsCompleted.is(
+          bucketFileDeletionsCompletedEvent.event
+        ) && bucketFileDeletionsCompletedEvent.event.data;
+      assert(
+        bucketFileDeletionsCompletedEventData,
+        "BucketFileDeletionsCompleted event data not found"
+      );
+      strictEqual(
+        bucketFileDeletionsCompletedEventData.fileKeys.length,
+        1,
+        "Should have deleted 1 file"
+      );
+      strictEqual(
+        bucketFileDeletionsCompletedEventData.fileKeys[0].toString(),
+        fileKey.toHex(),
+        "File key should match the deleted file key"
+      );
+
+      // Wait until the MSP detects the on-chain deletion and updates its local bucket forest
+      await msp1Api.wait.mspBucketFileDeletionCompleted(fileKey.toHex(), bucketId);
+
+      // Finalise the block containing the `BucketFileDeletionsCompleted` event in the MSP node
+      // so that the `BucketFileDeletionsCompleted` event is finalised on-chain and the MSP deletes the
+      // file from its file storage.
+      await msp1Api.rpc.engine.finalizeBlock(deleteFileBlock.blockReceipt.blockHash);
+
+      // Wait until the MSP detects the now finalised deletion and correctly deletes the file from its file storage
+      await msp1Api.wait.fileDeletionFromFileStorage(fileKey.toHex());
+
+      // Attempt to download the file, it should fail with a 404 since the file was deleted
+      const downloadResponse = await mspClient.files.downloadFile(fileKey.toHex());
+      assert(
+        downloadResponse.status === 404,
+        "Download should fail after file deletion, but it succeeded"
+      );
+    });
+
+    it("Should create, verify, delete, and verify deletion of a bucket", async () => {
+      const testBucketName = "delete-bucket-test";
+
+      const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
+        userApi.shConsts.DUMMY_MSP_ID
+      );
+
+      assert(valueProps.length > 0, "No value propositions found for MSP");
+      assert(valueProps[0].id, "Value proposition ID is undefined");
+      const valuePropId = valueProps[0].id.toHex();
+
+      const testBucketId = (await storageHubClient.deriveBucketId(
+        account.address,
+        testBucketName
+      )) as string;
+
+      const bucketBeforeCreation = await userApi.query.providers.buckets(testBucketId);
+      assert(bucketBeforeCreation.isNone, "Test bucket should not exist before creation");
+
+      const createTxHash = await storageHubClient.createBucket(
+        userApi.shConsts.DUMMY_MSP_ID as `0x${string}`,
+        testBucketName,
+        false,
+        valuePropId as `0x${string}`
+      );
+
+      await userApi.wait.waitForTxInPool({
+        module: "ethereum",
+        method: "transact"
+      });
+      await userApi.block.seal();
+
+      const createReceipt = await publicClient.waitForTransactionReceipt({ hash: createTxHash });
+      assert(createReceipt.status === "success", "Create bucket transaction failed");
+
+      const bucketAfterCreation = await userApi.query.providers.buckets(testBucketId);
+      assert(bucketAfterCreation.isSome, "Bucket should exist after creation");
+      const bucketData = bucketAfterCreation.unwrap();
+      assert(
+        bucketData.userId.toString() === account.address,
+        "Bucket userId should match account address"
+      );
+      assert(
+        bucketData.mspId.toString() === userApi.shConsts.DUMMY_MSP_ID,
+        "Bucket mspId should match expected MSP ID"
+      );
+
+      const deleteTxHash = await storageHubClient.deleteBucket(testBucketId as `0x${string}`);
+
+      await userApi.wait.waitForTxInPool({
+        module: "ethereum",
+        method: "transact"
+      });
+      await userApi.block.seal();
+
+      const deleteReceipt = await publicClient.waitForTransactionReceipt({ hash: deleteTxHash });
+      assert(deleteReceipt.status === "success", "Delete bucket transaction failed");
+
+      const bucketAfterDeletion = await userApi.query.providers.buckets(testBucketId);
+      assert(bucketAfterDeletion.isNone, "Bucket should not exist after deletion");
     });
   }
 );

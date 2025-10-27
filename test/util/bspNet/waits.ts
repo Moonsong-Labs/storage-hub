@@ -310,6 +310,33 @@ export const waitForBspFileDeletionComplete = async (api: ApiPromise, fileKey: H
 };
 
 /**
+ * Waits for an MSP to complete deleting a file from a bucket in its forest.
+ * @param api - The ApiPromise instance to interact with the RPC.
+ * @param fileKey - The file key to check for deletion the forest storage.
+ * @param bucketId - The bucket ID to check for deletion the forest storage.
+ * @returns A Promise that resolves when the MSP has correctly deleted the file from its bucket forest storage.
+ */
+export const waitForMspBucketFileDeletionComplete = async (
+  api: ApiPromise,
+  fileKey: H256 | string,
+  bucketId: H256 | string
+) => {
+  // To allow time for file deletion to complete (10s)
+  const iterations = 20;
+  const delay = 500;
+  for (let i = 0; i < iterations + 1; i++) {
+    try {
+      await sleep(delay);
+      const fileDeletionResult = await api.rpc.storagehubclient.isFileInForest(bucketId, fileKey);
+      assert(fileDeletionResult.isFalse, "File still in forest storage");
+      break;
+    } catch {
+      assert(i !== iterations, `Failed to detect MSP file deletion after ${(i * delay) / 1000}s`);
+    }
+  }
+};
+
+/**
  * Waits for a MSP to complete deleting a bucket from its forest storage.
  *
  * This function performs the following steps:
