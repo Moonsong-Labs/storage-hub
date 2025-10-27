@@ -107,7 +107,7 @@ const txHash2 = await hub.updateBucketPrivacy('0xBucketId', true, {
 **Storage Operations:**
 - `issueStorageRequest(bucketId, location, fingerprint, size, mspId, peerIds, replicationTarget, customReplicationTarget, options?)`
 - `revokeStorageRequest(fileKey, options?)`
-- `requestDeleteFile(signedIntention, signature, bucketId, location, size, fingerprint, options?)`
+- `requestDeleteFile(fileInfo, options?)`
 
 **Collections:**
 - `createAndAssociateCollectionWithBucket(bucketId, options?)`

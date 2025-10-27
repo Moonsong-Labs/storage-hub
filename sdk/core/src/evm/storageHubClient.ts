@@ -414,17 +414,14 @@ export class StorageHubClient {
   /**
    * Request deletion of a file from the network.
    * @param fileInfo File information containing all required data
-   * @param operation File operation to perform (defaults to Delete)
    * @param options Optional transaction options
    * @returns Transaction hash
    */
-  async requestDeleteFile(
-    fileInfo: FileInfo,
-    operation: FileOperation = FileOperation.Delete,
-    options?: EvmWriteOptions
-  ): Promise<`0x${string}`> {
-    // Create signed intention and execute transaction
-    const { signedIntention, signature } = await this.signIntention(fileInfo.fileKey, operation);
+  async requestDeleteFile(fileInfo: FileInfo, options?: EvmWriteOptions): Promise<`0x${string}`> {
+    const { signedIntention, signature } = await this.signIntention(
+      fileInfo.fileKey,
+      FileOperation.Delete
+    );
     const locationHex = this.validateStringLength(
       fileInfo.location,
       StorageHubClient.MAX_LOCATION_BYTES,
@@ -438,7 +435,6 @@ export class StorageHubClient {
       fileInfo.size,
       fileInfo.fingerprint
     ] as const;
-
     const gasLimit = await this.estimateGas("requestDeleteFile", args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
