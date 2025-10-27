@@ -55,9 +55,11 @@ import { createReadStream, createWriteStream } from 'node:fs';
 import { Readable } from 'node:stream';
 
 // 1. Connect to MSP service
+let sessionRef: { token: string; user: { address: string } } | undefined;
+const sessionProvider = async () => sessionRef;
 const client = await MspClient.connect({ 
-  baseUrl: 'http://127.0.0.1:8080' // Your MSP backend URL
-});
+  baseUrl: 'http://127.0.0.1:8080'
+}, sessionProvider);
 
 // 2. Check service health
 const health = await client.info.getHealth();
@@ -69,7 +71,8 @@ import { createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 const account = privateKeyToAccount('0x<your_dev_private_key>');
 const wallet = createWalletClient({ account, transport: http('http://127.0.0.1:8545') });
-await client.auth.SIWE(wallet);
+const session = await client.auth.SIWE(wallet);
+sessionRef = session;
 
 // 4. Upload a file
 const bucketId = '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef'; // StorageHub bucket identifier
@@ -117,17 +120,17 @@ console.log('Folder files:', folderFiles);
 ## API Reference
 
 ### Static Methods
-- **`MspClient.connect(config)`** - Create and connect to MSP service
+- **`MspClient.connect(config, sessionProvider)`** - Create and connect to MSP service
   - `config.baseUrl: string` - MSP backend URL (e.g., `http://127.0.0.1:8080`)
   - `config.timeoutMs?: number` - Request timeout in milliseconds
   - `config.defaultHeaders?: Record<string, string>` - Default HTTP headers
   - `config.fetchImpl?: typeof fetch` - Custom fetch implementation
+  - `sessionProvider: () => Promise<Session | undefined>` - Returns the current session (or undefined)
 
 ### Modules (instance properties)
 - **`auth`**: SIWE auth and session helpers
-  - `SIWE(wallet, signal?)` – runs full SIWE flow and stores session
+  - `SIWE(wallet, signal?)` – runs full SIWE flow and returns `Session`
   - `getProfile(signal?)` – returns the authenticated user's profile
-  - `getAuthStatus()` – returns NotAuthenticated | TokenExpired | Authenticated
 - **`info`**: MSP info and stats
   - `getHealth(signal?)` – returns service health and status
   - `getInfo(signal?)` – returns general MSP info (id, version, owner, endpoints)

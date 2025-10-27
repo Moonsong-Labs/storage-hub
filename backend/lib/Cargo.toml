@@ -49,6 +49,7 @@ shc-file-manager = { workspace = true }
 shc-indexer-db = { workspace = true, default-features = true }
 shp-file-metadata = { workspace = true }
 shc-rpc = { workspace = true, features = ["std"] }
+shp-constants = { workspace = true }
 shp-types = { workspace = true }
 sp-core = { workspace = true }
 sp-runtime = { workspace = true }
