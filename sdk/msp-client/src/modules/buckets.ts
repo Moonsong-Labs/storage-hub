@@ -3,8 +3,8 @@ import { ModuleBase } from "../base.js";
 
 export class BucketsModule extends ModuleBase {
   /** List all buckets for the current authenticated user */
-  listBuckets(signal?: AbortSignal): Promise<Bucket[]> {
-    const headers = this.withAuth();
+  async listBuckets(signal?: AbortSignal): Promise<Bucket[]> {
+    const headers = await this.withAuth();
     return this.ctx.http.get<Bucket[]>("/buckets", {
       ...(headers ? { headers } : {}),
       ...(signal ? { signal } : {})
@@ -12,8 +12,8 @@ export class BucketsModule extends ModuleBase {
   }
 
   /** Get a specific bucket's metadata by its bucket ID */
-  getBucket(bucketId: string, signal?: AbortSignal): Promise<Bucket> {
-    const headers = this.withAuth();
+  async getBucket(bucketId: string, signal?: AbortSignal): Promise<Bucket> {
+    const headers = await this.withAuth();
     const path = `/buckets/${encodeURIComponent(bucketId)}`;
     return this.ctx.http.get<Bucket>(path, {
       ...(headers ? { headers } : {}),
@@ -22,8 +22,8 @@ export class BucketsModule extends ModuleBase {
   }
 
   /** List files/folders under a path for a bucket (root if no path) */
-  getFiles(bucketId: string, options?: GetFilesOptions): Promise<FileListResponse> {
-    const headers = this.withAuth();
+  async getFiles(bucketId: string, options?: GetFilesOptions): Promise<FileListResponse> {
+    const headers = await this.withAuth();
     const path = `/buckets/${encodeURIComponent(bucketId)}/files`;
     return this.ctx.http.get<FileListResponse>(path, {
       ...(headers ? { headers } : {}),
