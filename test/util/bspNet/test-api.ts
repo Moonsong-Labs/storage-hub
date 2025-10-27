@@ -324,6 +324,15 @@ export class BspNetTestApi implements AsyncDisposable {
         Waits.waitForBspFileDeletionComplete(this._api, fileKey),
 
       /**
+       * Waits for an MSP to complete deleting a file from a bucket in its forest.
+       * @param fileKey - Param to specify the file key to wait for deletion.
+       * @param bucketId - Param to specify the bucket ID to wait for deletion.
+       * @returns A promise that resolves when an MSP has correctly deleted the file from its bucket forest storage.
+       */
+      mspBucketFileDeletionCompleted: (fileKey: H256 | string, bucketId: H256 | string) =>
+        Waits.waitForMspBucketFileDeletionComplete(this._api, fileKey, bucketId),
+
+      /**
        * Waits for a MSP to complete deleting a bucket from its forest.
        * @param fileKey - Param to specify the bucket ID of the bucket to wait for deletion.
        * @returns A promise that resolves when the MSP has correctly deleted the bucket from its forest storage.
