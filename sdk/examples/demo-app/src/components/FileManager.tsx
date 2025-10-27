@@ -171,22 +171,23 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
     setBucketState(prev => ({ ...prev, isCreating: true, error: null }));
 
     try {
-      const TEST_MSP_ID = '0x0000000000000000000000000000000000000000000000000000000000000300' as `0x${string}`;
-      const TEST_VALUE_PROP_ID = '0x3dd8887de89f01cef28701feda1435cf0bb38e9d5cb38321a615c1a1e1d5d51b' as `0x${string}`;
+      // Derive MSP info dynamically via MSP client
+      if (!mspClient) throw new Error('MSP client not connected');
 
+      const info = await mspClient.info.getInfo();
+      const valueProps = await mspClient.info.getValuePropositions();
+      const mspId = (info.mspId || '') as `0x${string}`;
+      const valuePropId = (valueProps.find(v => v.isAvailable)?.id || valueProps[0]?.id || '') as `0x${string}`;
+      if (!mspId || !valuePropId) throw new Error('Missing MSP identifiers');
 
       const bucketId = await storageHubClient.deriveBucketId(walletAddress as `0x${string}`, bucketState.bucketName);
 
       const txHash = await storageHubClient.createBucket(
-        TEST_MSP_ID,
+        mspId,
         bucketState.bucketName,
-        false, // isPrivate
-        TEST_VALUE_PROP_ID,
-        {
-          // Explicit gas settings to avoid estimation issues
-          gas: BigInt(500000), // Explicit gas limit
-          gasPrice: BigInt('1000000000') // 1 gwei
-        }
+        false,
+        valuePropId,
+        undefined
       );
 
       console.log('Bucket creation transaction submitted:', txHash);
@@ -375,8 +376,26 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
       setUploadState(prev => ({ ...prev, uploadProgress: 25 }));
 
       // Issue storage request
-      const TEST_MSP_ID = '0x0000000000000000000000000000000000000000000000000000000000000300';
-      const MSP_PEER_ID = '12D3KooWSUvz8QM5X4tfAaSLErAZjR2puojo16pULBHyqTMGKtNV'; // MSP1 peer ID from consts (hardcoded)
+      // Derive IDs from MSP client
+      const info = await mspClient.info.getInfo();
+      const valueProps = await mspClient.info.getValuePropositions();
+      const mspId = info.mspId as `0x${string}`;
+      let mspPeerId = '';
+      if (Array.isArray(info.multiaddresses)) {
+        for (const ma of info.multiaddresses) {
+          const idx = ma.lastIndexOf('/p2p/');
+          if (idx !== -1) {
+            mspPeerId = ma.slice(idx + 5);
+            break;
+          }
+        }
+        if (!mspPeerId && info.multiaddresses.length > 0) {
+          const first = info.multiaddresses[0];
+          const idx = first.lastIndexOf('/p2p/');
+          mspPeerId = idx !== -1 ? first.slice(idx + 5) : first;
+        }
+      }
+      const valuePropId = (valueProps.find(v => v.isAvailable)?.id || valueProps[0]?.id || '') as `0x${string}`;
 
 
       // Ensure bucket ID has 0x prefix for storage request
@@ -390,10 +409,10 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
           fileLocation,
           fingerprint.toHex() as `0x${string}`, // Use hex string like sdk-precompiles
           fileSize,
-          TEST_MSP_ID as `0x${string}`,
-          [MSP_PEER_ID],
+          mspId,
+          mspPeerId ? [mspPeerId] : [],
           ReplicationLevel.Basic,
-          0 // replicas (used only when ReplicationLevel = Custom, like sdk-precompiles)
+          0
           // No gas options - let it estimate naturally like sdk-precompiles
         );
       } catch (error: unknown) {
