@@ -133,7 +133,7 @@ await describeMspNet(
 
       // Verify the bucket doesn't exist before creation
       const bucketBeforeCreation = await userApi.query.providers.buckets(bucketId);
-      assert(bucketBeforeCreation.isEmpty, "Bucket should not exist before creation");
+      assert(bucketBeforeCreation.isNone, "Bucket should not exist before creation");
 
       // Create the bucket using the SDK
       const txHash = await storageHubClient.createBucket(
@@ -157,7 +157,7 @@ await describeMspNet(
 
       // Verify bucket exists after creation
       const bucketAfterCreation = await userApi.query.providers.buckets(bucketId);
-      assert(!bucketAfterCreation.isEmpty, "Bucket should exist after creation");
+      assert(bucketAfterCreation.isSome, "Bucket should exist after creation");
       const bucketData = bucketAfterCreation.unwrap();
       assert(
         bucketData.userId.toString() === account.address,
@@ -438,7 +438,7 @@ await describeMspNet(
       )) as string;
 
       const bucketBeforeCreation = await userApi.query.providers.buckets(testBucketId);
-      assert(bucketBeforeCreation.isEmpty, "Test bucket should not exist before creation");
+      assert(bucketBeforeCreation.isNone, "Test bucket should not exist before creation");
 
       const createTxHash = await storageHubClient.createBucket(
         userApi.shConsts.DUMMY_MSP_ID as `0x${string}`,
@@ -457,7 +457,7 @@ await describeMspNet(
       assert(createReceipt.status === "success", "Create bucket transaction failed");
 
       const bucketAfterCreation = await userApi.query.providers.buckets(testBucketId);
-      assert(!bucketAfterCreation.isEmpty, "Bucket should exist after creation");
+      assert(bucketAfterCreation.isSome, "Bucket should exist after creation");
       const bucketData = bucketAfterCreation.unwrap();
       assert(
         bucketData.userId.toString() === account.address,
@@ -480,7 +480,7 @@ await describeMspNet(
       assert(deleteReceipt.status === "success", "Delete bucket transaction failed");
 
       const bucketAfterDeletion = await userApi.query.providers.buckets(testBucketId);
-      assert(bucketAfterDeletion.isEmpty, "Bucket should not exist after deletion");
+      assert(bucketAfterDeletion.isNone, "Bucket should not exist after deletion");
     });
   }
 );
