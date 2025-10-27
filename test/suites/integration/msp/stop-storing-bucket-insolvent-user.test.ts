@@ -392,6 +392,8 @@ await describeMspNet(
       assert(secondFileInFileStorage.isFileFound, "Second file should still be in file storage");
 
       // Finalise the block and check that the bucket roots are deleted.
+      // We make sure the MSP is caught up with the block before finalising it.
+      await mspApi.wait.nodeCatchUpToChainTip(userApi);
       await mspApi.rpc.engine.finalizeBlock(block.blockReceipt.blockHash);
 
       // Wait until the buckets are deleted from the forest storage of the MSP.
