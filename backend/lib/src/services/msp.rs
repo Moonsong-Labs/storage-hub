@@ -2,10 +2,10 @@
 //!
 //! TODO(MOCK): many of methods of the MspService returns mocked data
 
-use std::{collections::HashSet, str::FromStr, sync::Arc};
+use std::{collections::HashSet, sync::Arc};
 
 use axum_extra::extract::multipart::Field;
-use bigdecimal::BigDecimal;
+use bigdecimal::{BigDecimal, RoundingMode};
 use codec::{Decode, Encode};
 use sc_network::PeerId;
 use serde::{Deserialize, Serialize};
@@ -346,8 +346,6 @@ impl MspService {
             .get_current_price_per_giga_unit_per_tick()
             .await
             .map_err(|e| Error::BadRequest(format!("Failed to get price per unit: {}", e)))?;
-        let unit_to_giga_unit =
-            BigDecimal::from_str("1e-9").expect("Inverse of GIGA to be parsed correctly");
 
         // Process each payment stream
         let mut streams = Vec::new();
@@ -363,7 +361,14 @@ impl MspService {
 
                     // Convert u128 price to BigDecimal and multiply
                     let price_bd = BigDecimal::from(current_price_per_giga_unit_per_tick);
-                    let cost = amount_provided * &unit_to_giga_unit * price_bd;
+
+                    // Matches the computation done in the runtime
+                    //
+                    // (price * amount) / gigaunit
+                    let cost = (price_bd * amount_provided) / shp_constants::GIGAUNIT;
+
+                    // Truncate the decimal digits of the cost per tick
+                    let cost = cost.with_scale_round(0, RoundingMode::Down);
 
                     ("bsp".to_string(), cost.to_string())
                 }
@@ -848,7 +853,7 @@ impl MspService {
 
 #[cfg(all(test, feature = "mocks"))]
 mod tests {
-    use std::sync::Arc;
+    use std::{str::FromStr, sync::Arc};
 
     use bigdecimal::BigDecimal;
     use serde_json::Value;
@@ -1246,6 +1251,7 @@ mod tests {
             // mock environment sets price per giga unit to this value
             * BigDecimal::from(MOCK_PRICE_PER_GIGA_UNIT)
             * BigDecimal::from_str("1e-9").unwrap();
+        let expected_cost_per_tick = expected_cost_per_tick.with_scale_round(0, RoundingMode::Down);
 
         assert_eq!(
             BigDecimal::from_str(&dynamic.cost_per_tick)
