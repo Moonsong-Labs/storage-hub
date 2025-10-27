@@ -16078,6 +16078,7 @@ dependencies = [
  "shc-file-manager",
  "shc-indexer-db",
  "shc-rpc",
+ "shp-constants",
  "shp-file-metadata",
  "shp-types",
  "sp-core 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
