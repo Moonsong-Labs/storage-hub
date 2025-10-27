@@ -23,11 +23,9 @@ use shc_forest_manager::traits::ForestStorageHandler;
 
 use crate::{
     events::{
-        DistributeFileToBsp, FileDeletionRequest, FinalisedBucketMovedAway,
-        FinalisedBucketMutationsApplied, FinalisedMspStopStoringBucketInsolventUser,
-        FinalisedMspStoppedStoringBucket, FinalisedProofSubmittedForPendingFileDeletionRequest,
+        DistributeFileToBsp, FinalisedBucketMovedAway, FinalisedBucketMutationsApplied,
+        FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
         ForestWriteLockTaskData, MoveBucketRequestedForMsp, NewStorageRequest,
-        ProcessFileDeletionRequest, ProcessFileDeletionRequestData,
         ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData,
         ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
         StartMovedBucketDownload,
@@ -135,26 +133,6 @@ where
                     });
                 }
             }
-            StorageEnableEvents::FileSystem(pallet_file_system::Event::FileDeletionRequest {
-                user,
-                file_key,
-                file_size,
-                bucket_id,
-                msp_id,
-                proof_of_inclusion,
-            }) => {
-                // As an MSP, this node is interested in the event only if this node is the MSP being requested to delete a file.
-                if managed_msp_id == &msp_id {
-                    self.emit(FileDeletionRequest {
-                        user,
-                        file_key: file_key.into(),
-                        file_size,
-                        bucket_id,
-                        msp_id,
-                        proof_of_inclusion,
-                    });
-                }
-            }
             StorageEnableEvents::FileSystem(pallet_file_system::Event::BspConfirmedStoring {
                 who: _,
                 bsp_id,
@@ -242,28 +220,6 @@ where
                         owner,
                         bucket_id,
                     })
-                }
-            }
-            StorageEnableEvents::FileSystem(
-                pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest {
-                    msp_id,
-                    user,
-                    file_key,
-                    file_size,
-                    bucket_id,
-                    proof_of_inclusion,
-                },
-            ) => {
-                // Only emit the event if the MSP provided a proof of inclusion, meaning the file key was deleted from the bucket's forest.
-                if managed_msp_id == &msp_id && proof_of_inclusion {
-                    self.emit(FinalisedProofSubmittedForPendingFileDeletionRequest {
-                        user,
-                        file_key: file_key.into(),
-                        file_size: file_size,
-                        bucket_id,
-                        msp_id,
-                        proof_of_inclusion,
-                    });
                 }
             }
             StorageEnableEvents::FileSystem(pallet_file_system::Event::MoveBucketRequested {
@@ -418,34 +374,6 @@ where
             return;
         }
 
-        // We prioritize file deletion requests over respond storing requests since MSPs cannot charge
-        // any users while there are pending file deletion requests.
-        if next_event_data.is_none() {
-            // TODO: Update this to some greater value once batching is supported by the runtime.
-            let max_batch_delete: u32 = 1;
-            let mut file_deletion_requests = Vec::new();
-            for _ in 0..max_batch_delete {
-                if let Some(request) = state_store_context
-                    .pending_file_deletion_request_deque()
-                    .pop_front()
-                {
-                    file_deletion_requests.push(request);
-                } else {
-                    break;
-                }
-            }
-
-            // If we have at least 1 file deletion request, send the process event.
-            if file_deletion_requests.len() > 0 {
-                next_event_data = Some(
-                    ProcessFileDeletionRequestData {
-                        file_deletion_requests,
-                    }
-                    .into(),
-                );
-            }
-        }
-
         // If we have no pending file deletion requests, we can also check for pending respond storing requests.
         if next_event_data.is_none() {
             let max_batch_respond = MAX_BATCH_MSP_RESPOND_STORE_REQUESTS;
@@ -586,12 +514,6 @@ where
         match data.into() {
             ForestWriteLockTaskData::MspRespondStorageRequest(data) => {
                 self.emit(ProcessMspRespondStoringRequest {
-                    data,
-                    forest_root_write_tx,
-                });
-            }
-            ForestWriteLockTaskData::FileDeletionRequest(data) => {
-                self.emit(ProcessFileDeletionRequest {
                     data,
                     forest_root_write_tx,
                 });
