@@ -15,7 +15,10 @@ import {
   waitForMspFileAssociation,
   waitForBspFileAssociation
 } from "../../../util/indexerHelpers";
-import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
+import {
+  waitForIndexing,
+  waitForFishermanBatchDeletions
+} from "../../../util/fisherman/indexerTestHelpers";
 
 /**
  * FISHERMAN FILE DELETION FLOW - BASIC HAPPY PATH
@@ -194,6 +197,9 @@ await describeMspNet(
         filesWithSignature[0].deletion_signature.length > 0,
         "SCALE-encoded signature should not be empty"
       );
+
+      // Wait for fisherman to process user deletions
+      await waitForFishermanBatchDeletions(userApi, "User");
 
       // Verify delete_files extrinsics are submitted
       await userApi.assert.extrinsicPresent({

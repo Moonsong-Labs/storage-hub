@@ -10,7 +10,10 @@ import {
   shUser,
   waitFor
 } from "../../../util";
-import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
+import {
+  waitForIndexing,
+  waitForFishermanBatchDeletions
+} from "../../../util/fisherman/indexerTestHelpers";
 import {
   chargeUserUntilInsolvent,
   hexToBuffer,
@@ -516,6 +519,9 @@ await describeMspNet(
         filesWithSignature[0].deletion_signature.length > 0,
         "SCALE-encoded signature should not be empty"
       );
+
+      // Wait for fisherman to process user deletions
+      await waitForFishermanBatchDeletions(userApi, "User");
 
       await userApi.assert.extrinsicPresent({
         method: "deleteFiles",

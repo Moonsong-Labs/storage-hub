@@ -10,6 +10,7 @@ import {
   assertEventMany,
   ShConsts
 } from "../../../util";
+import { waitForFishermanBatchDeletions } from "../../../util/fisherman/indexerTestHelpers";
 
 /**
  * FISHERMAN INCOMPLETE STORAGE REQUESTS WITH RESTART SCENARIOS
@@ -256,6 +257,9 @@ await describeMspNet(
         containerName: "storage-hub-sh-fisherman-1",
         timeout: 30000
       });
+
+      // Wait for fisherman to process incomplete storage deletions
+      await waitForFishermanBatchDeletions(userApi, "Incomplete");
 
       // Verify delete extrinsic is submitted for the BSP
       await userApi.assert.extrinsicPresent({

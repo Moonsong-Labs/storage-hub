@@ -10,6 +10,7 @@ import {
   sleep,
   ShConsts
 } from "../../../util";
+import { waitForFishermanBatchDeletions } from "../../../util/fisherman/indexerTestHelpers";
 
 /**
  * FISHERMAN INCOMPLETE STORAGE REQUESTS WITH CATCHUP
@@ -120,6 +121,9 @@ await describeMspNet(
 
         await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
 
+        // Wait for fisherman to process incomplete storage deletions
+        await waitForFishermanBatchDeletions(userApi, "Incomplete");
+
         // No deletion should be sent for a bucket that has not been updated with this file key since the MSP did not accept it.
         // TODO: Add additional test case scenarios.
         await userApi.assert.extrinsicPresent({
@@ -199,6 +203,9 @@ await describeMspNet(
         "StorageRequestRevoked",
         revokeStorageRequestResult.events
       );
+
+      // Wait for fisherman to process incomplete storage deletions
+      await waitForFishermanBatchDeletions(userApi, "Incomplete");
 
       // Verify two delete extrinsics are submitted (for MSP and BSP)
       await userApi.assert.extrinsicPresent({
@@ -286,6 +293,9 @@ await describeMspNet(
 
       assertEventPresent(userApi, "fileSystem", "StorageRequestRevoked", revokeResult.events);
       assertEventPresent(userApi, "fileSystem", "IncompleteStorageRequest", revokeResult.events);
+
+      // Wait for fisherman to process incomplete storage deletions
+      await waitForFishermanBatchDeletions(userApi, "Incomplete");
 
       // Verify two delete extrinsics are submitted:
       // 1. For the bucket (no MSP present)

@@ -6,7 +6,6 @@ import {
   shUser,
   bspKey,
   waitFor,
-  assertEventPresent,
   ShConsts
 } from "../../../util";
 import {
@@ -15,7 +14,10 @@ import {
   waitForMspFileAssociation,
   waitForBspFileAssociation
 } from "../../../util/indexerHelpers";
-import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
+import {
+  waitForIndexing,
+  waitForFishermanBatchDeletions
+} from "../../../util/fisherman/indexerTestHelpers";
 
 /**
  * FISHERMAN BATCH FILE DELETION - COMPREHENSIVE BATCH PROCESSING TESTS
@@ -167,7 +169,8 @@ await describeMspNet(
         }
       }
 
-      // Request deletion for all 6 files
+      // Build all deletion request calls
+      const deletionCalls = [];
       for (let i = 0; i < fileKeys.length; i++) {
         const fileOperationIntention = {
           fileKey: fileKeys[i],
@@ -182,32 +185,42 @@ await describeMspNet(
         const rawSignature = shUser.sign(intentionPayload);
         const userSignature = userApi.createType("MultiSignature", { Sr25519: rawSignature });
 
-        const deletionRequestResult = await userApi.block.seal({
-          calls: [
-            userApi.tx.fileSystem.requestDeleteFile(
-              fileOperationIntention,
-              userSignature,
-              bucketIds[i],
-              locations[i],
-              fileSizes[i],
-              fingerprints[i]
-            )
-          ],
-          signer: shUser
-        });
-
-        assertEventPresent(
-          userApi,
-          "fileSystem",
-          "FileDeletionRequested",
-          deletionRequestResult.events
+        deletionCalls.push(
+          userApi.tx.fileSystem.requestDeleteFile(
+            fileOperationIntention,
+            userSignature,
+            bucketIds[i],
+            locations[i],
+            fileSizes[i],
+            fingerprints[i]
+          )
         );
       }
+
+      // Seal a single block with all deletion requests
+      const deletionRequestResult = await userApi.block.seal({
+        calls: deletionCalls,
+        signer: shUser
+      });
+
+      // Verify all FileDeletionRequested events are present (one per file)
+      const deletionRequestedEvents = (deletionRequestResult.events || []).filter((record) =>
+        userApi.events.fileSystem.FileDeletionRequested.is(record.event)
+      );
+
+      assert.equal(
+        deletionRequestedEvents.length,
+        fileKeys.length,
+        `Should have ${fileKeys.length} FileDeletionRequested events`
+      );
 
       await waitForIndexing(userApi, false);
 
       // Verify deletion signatures are stored in database
       await verifyDeletionSignaturesStored(sql, fileKeys);
+
+      // Wait for fisherman to process user deletions
+      await waitForFishermanBatchDeletions(userApi, "User");
 
       // Verify extrinsics are submitted (1 BSP + 3 Buckets = 4 total)
       await userApi.assert.extrinsicPresent({
@@ -296,6 +309,11 @@ await describeMspNet(
       const fileKeys: string[] = [];
       const bucketIds: string[] = [];
 
+      // Get value proposition before pausing MSP
+      const mspId = userApi.shConsts.DUMMY_MSP_ID;
+      const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
+      const valuePropId = valueProps[0].id;
+
       // Pause MSP to ensure only BSP confirms
       await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
 
@@ -305,7 +323,7 @@ await describeMspNet(
           const bucketName = `test-incomplete-bucket-${bucketIndex}`;
 
           // Create bucket
-          const newBucketEvent = await userApi.createBucket(bucketName, null);
+          const newBucketEvent = await userApi.createBucket(bucketName, valuePropId);
           const newBucketEventData =
             userApi.events.fileSystem.NewBucket.is(newBucketEvent) && newBucketEvent.data;
 
@@ -347,21 +365,38 @@ await describeMspNet(
           }
         }
 
-        // Revoke all 6 storage requests to create incomplete deletions
-        for (const fileKey of fileKeys) {
-          const revokeResult = await userApi.block.seal({
-            calls: [userApi.tx.fileSystem.revokeStorageRequest(fileKey)],
-            signer: shUser
-          });
+        // Build all revocation calls
+        const revocationCalls = fileKeys.map((fileKey) =>
+          userApi.tx.fileSystem.revokeStorageRequest(fileKey)
+        );
 
-          assertEventPresent(userApi, "fileSystem", "StorageRequestRevoked", revokeResult.events);
-          assertEventPresent(
-            userApi,
-            "fileSystem",
-            "IncompleteStorageRequest",
-            revokeResult.events
-          );
-        }
+        // Seal a single block with all revocation requests
+        const revokeResult = await userApi.block.seal({
+          calls: revocationCalls,
+          signer: shUser
+        });
+
+        // Verify all StorageRequestRevoked events are present (one per file)
+        const revokedEvents = (revokeResult.events || []).filter((record) =>
+          userApi.events.fileSystem.StorageRequestRevoked.is(record.event)
+        );
+
+        assert.equal(
+          revokedEvents.length,
+          fileKeys.length,
+          `Should have ${fileKeys.length} StorageRequestRevoked events`
+        );
+
+        // Verify all IncompleteStorageRequest events are present (one per file)
+        const incompleteEvents = (revokeResult.events || []).filter((record) =>
+          userApi.events.fileSystem.IncompleteStorageRequest.is(record.event)
+        );
+
+        assert.equal(
+          incompleteEvents.length,
+          fileKeys.length,
+          `Should have ${fileKeys.length} IncompleteStorageRequest events`
+        );
 
         // Verify incomplete storage request state
         const incompleteStorageRequests =
@@ -373,14 +408,16 @@ await describeMspNet(
         // Wait for fisherman to catch up with chain
         await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
 
+        // Wait for fisherman to process incomplete storage deletions
+        await waitForFishermanBatchDeletions(userApi, "Incomplete");
+
         // Verify incomplete deletion extrinsics are submitted (1 BSP + 3 Buckets = 4 total)
-        // Note: May need to wait for alternation cycle (User vs Incomplete)
         await userApi.assert.extrinsicPresent({
           method: "deleteFilesForIncompleteStorageRequest",
           module: "fileSystem",
           checkTxPool: true,
           assertLength: 4, // 1 BSP extrinsic (6 files) + 3 Bucket extrinsics (2 files each)
-          timeout: 60000 // Longer timeout to account for alternation between User/Incomplete types
+          timeout: 30000
         });
 
         // Seal block to process the extrinsics

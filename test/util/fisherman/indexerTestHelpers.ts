@@ -76,3 +76,39 @@ export const waitForFileInForest = async (api: ApiPromise, bucketId: string, fil
     }
   });
 };
+
+/**
+ * Waits for fisherman to process batch deletions by sealing blocks until
+ * the fisherman submits extrinsics for the specified deletion type.
+ *
+ * This handles the alternating User/Incomplete deletion cycle timing issue
+ * where fisherman might be on the wrong cycle when deletions are created.
+ *
+ * @param api - The enriched BSP API
+ * @param deletionType - Either "User" or "Incomplete" to determine which deletion cycle to wait for
+ */
+export const waitForFishermanBatchDeletions = async (
+  api: EnrichedBspApi,
+  deletionType: "User" | "Incomplete"
+): Promise<void> => {
+  const searchString =
+    deletionType === "User"
+      ? "🎣 Successfully submitted delete_files extrinsic for"
+      : "🎣 Successfully submitted delete_files_for_incomplete_storage_request extrinsic for";
+
+  const waitForDeletionCycle = api.docker.waitForLog({
+    searchString,
+    containerName: "storage-hub-sh-fisherman-1",
+    timeout: 60000
+  });
+
+  const sealBlocksInterval = setInterval(async () => {
+    await api.block.seal();
+  }, 2000);
+
+  try {
+    await waitForDeletionCycle;
+  } finally {
+    clearInterval(sealBlocksInterval);
+  }
+};

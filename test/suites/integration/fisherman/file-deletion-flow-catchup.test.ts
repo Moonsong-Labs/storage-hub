@@ -15,7 +15,10 @@ import {
   waitForMspFileAssociation,
   waitForBspFileAssociation
 } from "../../../util/indexerHelpers";
-import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
+import {
+  waitForIndexing,
+  waitForFishermanBatchDeletions
+} from "../../../util/fisherman/indexerTestHelpers";
 
 /**
  * FISHERMAN FILE DELETION FLOW WITH CATCHUP
@@ -268,6 +271,9 @@ await describeMspNet(
       assert(deletionEventData, "FileDeletionRequested event data not found");
       const eventFileKey = deletionEventData.signedDeleteIntention.fileKey;
       assert.equal(eventFileKey.toString(), fileToDelete.fileKey.toString());
+
+      // Wait for fisherman to process user deletions
+      await waitForFishermanBatchDeletions(userApi, "User");
 
       // Verify delete_files extrinsics are submitted (should be 2: one for BSP and one for MSP)
       await userApi.assert.extrinsicPresent({
