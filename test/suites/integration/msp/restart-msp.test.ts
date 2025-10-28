@@ -12,8 +12,7 @@ await describeMspNet(
   "Single MSP accepts storage request, stops, restarts and can still work with persistent bucket stored",
   {
     initialised: false,
-    networkConfig: [{ noisy: false, rocksdb: true }],
-    only: true
+    networkConfig: [{ noisy: false, rocksdb: true }]
   },
   ({ before, after, createUserApi, createBspApi, createMsp1Api, createApi, it }) => {
     let userApi: EnrichedBspApi;
