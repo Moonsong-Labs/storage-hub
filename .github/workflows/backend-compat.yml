@@ -24,7 +24,7 @@ on:
         type: string
   push:
     branches:
-      - 'stagenet-backend-compat'
+      - 'stagenet/backend-compat'
     tags:
       - 'backend-compat-*'
 
