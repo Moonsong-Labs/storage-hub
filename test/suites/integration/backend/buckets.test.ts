@@ -123,14 +123,13 @@ await describeMspNet(
             file_metadata.file_size,
             userApi.shConsts.DUMMY_MSP_ID,
             [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-            { Custom: 2 }
+            // match replication target with number of BSPs
+            // to ensure request can be fulfilled
+            { Custom: 1 }
           )
         ],
         signer: ethShUser
       });
-
-      // Wait until the MSP has received and stored the file
-      await msp1Api.wait.fileStorageComplete(file_key);
     });
 
     it("Should successfully get specific bucket info", async () => {
@@ -243,6 +242,20 @@ await describeMspNet(
       );
     });
 
+    it("Should be able to fulfill storage request", async () => {
+      assert(fileKey, "File should have been created");
+
+      // Wait until the MSP has received and stored the file
+      await msp1Api.wait.fileStorageComplete(fileKey);
+
+      // Seal block containing the MSP's first response.
+      await userApi.wait.mspResponseInTxPool();
+      await userApi.block.seal();
+
+      // Wait for the BSPs to volunteer and confirm storing the file so the storage request gets fulfilled.
+      await userApi.wait.storageRequestNotOnChain(fileKey);
+    });
+
     it("Should successfully get file info by key", async () => {
       assert(userJWT, "User token is initialized");
       assert(bucketId, "Bucket should have been created");
@@ -265,7 +278,7 @@ await describeMspNet(
       strictEqual(file.bucketId, bucketId, "Should have same bucket id as queried");
 
       strictEqual(file.location, fileLocation, "Should have same location as creation");
-      strictEqual(file.status, "inProgress", "Should not have been fulfilled yet"); // No BSPs received the file yet
+      strictEqual(file.status, "ready", "Should have been fulfilled");
     });
   }
 );
