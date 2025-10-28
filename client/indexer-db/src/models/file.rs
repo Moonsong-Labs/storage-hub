@@ -72,6 +72,14 @@ pub struct File {
     ///
     /// NULL when file is deleted through automated processes (e.g., [`StorageRequestRevoked`](pallet_file_system::Event::StorageRequestRevoked)).
     pub deletion_signature: Option<Vec<u8>>,
+    /// Timestamp when file was marked for deletion.
+    ///
+    /// Set automatically when [`deletion_status`] becomes [`FileDeletionStatus::InProgress`] via either
+    /// [`FileDeletionRequested`](pallet_file_system::Event::FileDeletionRequested) or
+    /// [`IncompleteStorageRequest`](pallet_file_system::Event::IncompleteStorageRequest) events.
+    ///
+    /// Used for FIFO ordering of deletion processing by fisherman nodes.
+    pub deletion_requested_at: Option<NaiveDateTime>,
 }
 
 /// Association table between File and PeerId
@@ -181,14 +189,32 @@ impl File {
             FileDeletionStatus::None => None,
             FileDeletionStatus::InProgress => Some(1),
         };
-        diesel::update(file::table)
-            .filter(file::file_key.eq(file_key))
-            .set((
-                file::deletion_status.eq(status_value),
-                file::deletion_signature.eq(signature),
-            ))
-            .execute(conn)
-            .await?;
+
+        // When marking for deletion, set current timestamp; otherwise clear it
+        match status {
+            FileDeletionStatus::InProgress => {
+                diesel::update(file::table)
+                    .filter(file::file_key.eq(file_key))
+                    .set((
+                        file::deletion_status.eq(status_value),
+                        file::deletion_signature.eq(signature),
+                        file::deletion_requested_at.eq(diesel::dsl::now),
+                    ))
+                    .execute(conn)
+                    .await?;
+            }
+            FileDeletionStatus::None => {
+                diesel::update(file::table)
+                    .filter(file::file_key.eq(file_key))
+                    .set((
+                        file::deletion_status.eq(status_value),
+                        file::deletion_signature.eq(signature),
+                        file::deletion_requested_at.eq(None::<chrono::NaiveDateTime>),
+                    ))
+                    .execute(conn)
+                    .await?;
+            }
+        }
         Ok(())
     }
 
@@ -418,7 +444,12 @@ impl File {
             query = query.filter(file::onchain_bucket_id.eq(bucket_id));
         }
 
-        let files = query.limit(limit).offset(offset).load(conn).await?;
+        let files = query
+            .order_by(file::deletion_requested_at.asc())
+            .limit(limit)
+            .offset(offset)
+            .load(conn)
+            .await?;
         Ok(files)
     }
 
@@ -450,7 +481,12 @@ impl File {
             query = query.filter(file::onchain_bucket_id.eq(bucket_id));
         }
 
-        let files = query.limit(limit).offset(offset).load(conn).await?;
+        let files = query
+            .order_by(file::deletion_requested_at.asc())
+            .limit(limit)
+            .offset(offset)
+            .load(conn)
+            .await?;
         Ok(files)
     }
 
@@ -500,7 +536,11 @@ impl File {
 
         let files: Vec<Self> = query
             .select(File::as_select())
-            .order_by((file::onchain_bucket_id.asc(), file::file_key.asc()))
+            .order_by((
+                file::onchain_bucket_id.asc(),
+                file::deletion_requested_at.asc(),
+                file::file_key.asc(),
+            ))
             .limit(limit)
             .offset(offset)
             .load(conn)

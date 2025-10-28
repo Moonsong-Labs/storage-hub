@@ -329,7 +329,11 @@ impl BspFile {
         // Load both file and BSP ID
         let results: Vec<(File, OnchainBspId)> = query
             .select((File::as_select(), bsp::onchain_bsp_id))
-            .order_by((bsp::onchain_bsp_id.asc(), file::file_key.asc()))
+            .order_by((
+                bsp::onchain_bsp_id.asc(),
+                file::deletion_requested_at.asc(),
+                file::file_key.asc(),
+            ))
             .limit(limit)
             .offset(offset)
             .load(conn)
