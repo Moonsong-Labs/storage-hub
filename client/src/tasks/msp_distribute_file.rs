@@ -84,7 +84,7 @@ where
         let file_key = event.file_key;
         let bsp_id = event.bsp_id;
 
-        // Register BSP as distributing file.
+        // Register that this task is distributing the file to the BSP.
         // This avoids a second instance of this task from being spawned.
         // This can fail if the BSP is already registered as distributing file.
         self.storage_hub_handler
