@@ -224,6 +224,14 @@ await describeMspNet(
       assert(valueProps[0].id, "Value proposition ID is undefined");
       const valuePropId = valueProps[0].id.toHex();
 
+      // Verify the selected on-chain value prop ID is present in the SDK response
+      const sdkValueProps = await mspClient.info.getValuePropositions();
+      assert(Array.isArray(sdkValueProps) && sdkValueProps.length > 0, "SDK value props should be present");
+      assert(
+        sdkValueProps.some((vp) => vp.id === valuePropId),
+        "SDK should include the selected on-chain value prop id"
+      );
+
       // Calculate and store the bucket ID for subsequent tests
       bucketId = (await storageHubClient.deriveBucketId(account.address, bucketName)) as string;
 
