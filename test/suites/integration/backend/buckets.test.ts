@@ -130,6 +130,9 @@ await describeMspNet(
         ],
         signer: ethShUser
       });
+
+      // Wait until the MSP has received and stored the file
+      await msp1Api.wait.fileStorageComplete(fileKey);
     });
 
     it("Should successfully get specific bucket info", async () => {
@@ -243,9 +246,6 @@ await describeMspNet(
     });
 
     it("Should be able to fulfill storage request", async () => {
-      // Wait until the MSP has received and stored the file
-      await msp1Api.wait.fileStorageComplete(fileKey);
-
       // Seal block containing the MSP's first response.
       await userApi.wait.mspResponseInTxPool();
       await userApi.block.seal();
