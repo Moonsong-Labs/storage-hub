@@ -7,9 +7,9 @@ import type { AccountId20, H256 } from "@polkadot/types/interfaces";
 import {
   type FileInfo,
   FileManager,
-  SH_FILE_SYSTEM_PRECOMPILE_ADDRESS,
   type HttpClientConfig,
   ReplicationLevel,
+  SH_FILE_SYSTEM_PRECOMPILE_ADDRESS,
   StorageHubClient
 } from "@storagehub-sdk/core";
 import { MspClient } from "@storagehub-sdk/msp-client";

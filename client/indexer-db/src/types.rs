@@ -10,7 +10,7 @@ use std::{fmt, io::Write};
 
 /// Wrapper for onchain BSP IDs that automatically handles DB encoding
 // TODO(Datahaven): Add `Runtime: StorageEnableRuntime` to be id length agnostic
-#[derive(Debug, Clone, Copy, PartialEq, AsExpression, FromSqlRow)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, AsExpression, FromSqlRow)]
 #[diesel(sql_type = Text)]
 pub struct OnchainBspId(H256);
 

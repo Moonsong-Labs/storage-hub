@@ -7,7 +7,7 @@ pub mod validation;
 use axum::Router;
 use tower_http::cors::CorsLayer;
 
-use crate::services::Services;
+use crate::{log, services::Services};
 
 /// Creates the axum application with all routes and middleware
 pub fn create_app(services: Services) -> Router {
@@ -16,7 +16,10 @@ pub fn create_app(services: Services) -> Router {
     // Add CORS layer for permissive access
     let cors = CorsLayer::permissive();
 
-    router.layer(cors)
+    // Add tracing layer to attach endpoint information to all logs within a request
+    let trace_layer = log::create_http_trace_layer();
+
+    router.layer(cors).layer(trace_layer)
 }
 
 #[cfg(all(test, feature = "mocks"))]
