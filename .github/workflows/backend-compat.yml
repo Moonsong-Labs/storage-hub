@@ -1,0 +1,140 @@
+# StorageHub: Backend Compatibility Image Workflow
+#
+# This workflow builds and publishes a backend Docker image with custom tagging
+# for compatibility with older indexer DB schemas (e.g., stagenet deployment).
+#
+# Trigger options:
+# 1. Manual workflow dispatch with custom tag input
+# 2. Push a git tag matching pattern: backend-compat-*
+#
+# Usage examples:
+# - Push tag: git tag backend-compat-stagenet-2025-10-28 && git push origin backend-compat-stagenet-2025-10-28
+# - Manual: Use GitHub Actions UI to run with custom tag
+#
+# Note: This workflow does NOT push to 'latest' tag - only custom tags are used.
+
+name: StorageHub Backend Compat
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Docker image tag (e.g., stagenet-compat-2025-10-28)'
+        required: true
+        type: string
+  push:
+    tags:
+      - 'backend-compat-*'
+
+jobs:
+  build_backend:
+    name: 'Build backend binary'
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: 'sccache'
+      CARGO_INCREMENTAL: '0'
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: actions-rust-lang/setup-rust-toolchain@v1.8
+        with:
+          cache: true
+      - name: Cache cargo registry and git index
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+      - uses: rui314/setup-mold@v1
+      - name: Set build flags (use mold linker)
+        run: echo "RUSTFLAGS=${{ env.RUSTFLAGS }} -C linker=clang -C link-arg=-fuse-ld=mold" >> $GITHUB_ENV
+      - uses: ./.github/workflow-templates/setup-pnpm
+      - name: Install libpq-dev
+        run: sudo apt-get update && sudo apt-get install -y libpq-dev libclang-dev
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build backend
+        run: cargo build -p sh-msp-backend --release --locked
+      - name: Build Stats
+        run: sccache --show-stats || true
+      - name: Check Backend Built By Mold
+        run: readelf -p .comment target/release/sh-msp-backend
+      - name: Prepare artefacts (backend)
+        run: |
+          mkdir -p build
+          cp target/release/sh-msp-backend build/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend
+          path: build/sh-msp-backend
+          if-no-files-found: error
+
+  push_backend_image:
+    needs: [build_backend]
+    name: 'Push backend Docker image to Docker Hub'
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download backend binary from artefacts
+        uses: actions/download-artifact@v4
+        with:
+          name: backend
+          path: build/
+      - name: Derive image tag
+        id: derive-tag
+        run: |
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "tag" ]]; then
+            # Extract tag name from ref (e.g., refs/tags/backend-compat-stagenet-2025-10-28)
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+            echo "image_tag=${TAG_NAME}" >> $GITHUB_OUTPUT
+          else
+            # Use manual input
+            echo "image_tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
+          fi
+      - name: Prepare Docker tags
+        id: prep
+        run: |
+          DOCKER_IMAGE=moonsonglabs/storage-hub-msp-backend
+          TAGS="${DOCKER_IMAGE}:${{ steps.derive-tag.outputs.image_tag }}"
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Blacksmith Builder
+        uses: useblacksmith/setup-docker-builder@v1
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+      - name: Build Docker image and push it to Docker Hub
+        uses: useblacksmith/build-push-action@v2
+        with:
+          context: .
+          file: ./docker/storage-hub-msp-backend.Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.prep.outputs.tags }}
+          labels: |
+            org.opencontainers.image.title=${{ github.event.repository.name }}-msp-backend
+            org.opencontainers.image.description=Storage Hub MSP Backend (Compatibility Build)
+            org.opencontainers.image.url=${{ github.event.repository.html_url }}
+            org.opencontainers.image.source=${{ github.event.repository.clone_url }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=${{ github.event.repository.license.spdx_id }}
+      - name: Output image information
+        run: |
+          echo "✅ Backend image published successfully!"
+          echo "🐳 Image: ${{ steps.prep.outputs.tags }}"
+          echo "📦 Pull command: docker pull ${{ steps.prep.outputs.tags }}"
+
