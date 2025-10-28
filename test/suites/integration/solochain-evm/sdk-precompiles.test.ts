@@ -155,8 +155,10 @@ await describeMspNet(
         "multiaddresses should be present"
       );
       assert(
-        info.multiaddresses.every((ma: string) => typeof ma === "string" && ma.includes("/p2p/")),
-        "every multiaddress should contain /p2p/"
+        info.multiaddresses.every((ma: string) =>
+          typeof ma === "string" && ma.includes(`/p2p/${userApi.shConsts.NODE_INFOS.msp1.expectedPeerId}`)
+        ),
+        "Every multiaddress should contain the expected MSP peer ID"
       );
 
       // accounts (EIP-55 checksummed constants)
