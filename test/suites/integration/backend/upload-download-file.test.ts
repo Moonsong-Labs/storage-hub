@@ -37,7 +37,6 @@ await describeMspNet(
     let fileKey: H256;
     let fileMetadata: any; // util/FileMetadata is not the same type returned by the RPC
     let form: FormData;
-
     let userJWT: string;
 
     before(async () => {
