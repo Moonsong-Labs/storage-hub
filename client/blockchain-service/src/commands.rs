@@ -205,6 +205,10 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
         file_key: FileKey,
         bsp_id: BackupStorageProviderId<Runtime>,
     },
+    #[command(success_type = Vec<BucketId<Runtime>>)]
+    QueryBucketsForMsp {
+        msp_id: ProviderId<Runtime>,
+    },
 }
 
 /// Interface for interacting with the BlockchainService actor.
