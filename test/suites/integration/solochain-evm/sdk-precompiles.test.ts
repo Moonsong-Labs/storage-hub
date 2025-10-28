@@ -174,6 +174,7 @@ await describeMspNet(
       strictEqual(info.status, "active", "status should be 'active'");
       strictEqual(info.activeSince, 123, "activeSince should match backend mock");
       assert(typeof info.uptime === "string" && info.uptime.length > 0, "uptime should be a non-empty string");
+
     });
 
     it("Should get MSP stats via the SDK's MspClient", async () => {
@@ -414,6 +415,20 @@ await describeMspNet(
 
       // Ensure the file is now stored in the MSP's file storage
       await msp1Api.wait.fileStorageComplete(hexFileKey);
+
+      // Ensure file tree and file info are available via backend for this bucket
+      const fileTree = await mspClient.buckets.getFiles(bucketId);
+      assert(
+        Array.isArray(fileTree.files) && fileTree.files.length > 0,
+        "file tree should not be empty"
+      );
+      const fileInfo = await mspClient.files.getFileInfo(bucketId, fileKey.toHex());
+      strictEqual(`0x${fileInfo.bucketId}`, bucketId, "bucketId should match");
+      strictEqual(
+        `0x${fileInfo.fileKey}`,
+        fileKey.toHex(),
+        "fileInfo.fileKey should match"
+      );
     });
 
     it("Should fetch payment streams using the SDK's MspClient", async () => {
