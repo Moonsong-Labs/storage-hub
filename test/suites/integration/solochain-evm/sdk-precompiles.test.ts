@@ -271,6 +271,19 @@ await describeMspNet(
         bucketData.mspId.toString() === userApi.shConsts.DUMMY_MSP_ID,
         "Bucket mspId should match expected MSP ID"
       );
+
+      // Also verify through SDK / MSP backend endpoints
+      const listedBuckets = await mspClient.buckets.listBuckets();
+      assert(
+        listedBuckets.some((b) => `0x${b.bucketId}` === bucketId),
+        "MSP listBuckets should include the created bucket"
+      );
+      const sdkBucket = await mspClient.buckets.getBucket(bucketId);
+      strictEqual(
+        `0x${sdkBucket.bucketId}`,
+        bucketId,
+        "MSP getBucket should return the created bucket"
+      );
     });
 
     it("Should issue a storage request for Adolphus.jpg using the SDK's StorageHubClient", async () => {
