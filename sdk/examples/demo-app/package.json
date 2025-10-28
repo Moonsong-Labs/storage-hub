@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "next dev --turbopack --port 3001",
-    "dev:local": "APP_CONFIG_FILE=/storagehub.local.json next dev --turbopack --port 3001",
-    "dev:stagenet": "APP_CONFIG_FILE=/storagehub.stagenet.json next dev --turbopack --port 3001",
+    "dev:local": "NEXT_PUBLIC_APP_CONFIG_FILE=/storagehub.local.json next dev --turbopack --port 3001",
+    "dev:stagenet": "NEXT_PUBLIC_APP_CONFIG_FILE=/storagehub.stagenet.json next dev --turbopack --port 3001",
     "build": "next build --turbopack",
     "start": "next start --port 3001",
     "lint": "biome lint .",

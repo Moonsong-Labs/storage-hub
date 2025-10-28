@@ -4,7 +4,7 @@ declare global {
   // Only include what we actually read
   namespace NodeJS {
     interface ProcessEnv {
-      APP_CONFIG_FILE?: string;
+      NEXT_PUBLIC_APP_CONFIG_FILE?: string;
     }
   }
   const process: { env: NodeJS.ProcessEnv };
