@@ -13,7 +13,7 @@ import {
   BALTATHAR_PRIVATE_KEY
 } from "../../../util/evmNet/keyring";
 import type { H256 } from "@polkadot/types/interfaces";
-import type { HealthResponse } from "../../../util/backend";
+import type { FileInfo, HealthResponse } from "../../../util/backend";
 
 await describeMspNet(
   "Backend file upload integration",
@@ -37,6 +37,7 @@ await describeMspNet(
     let fileKey: H256;
     let fileMetadata: any; // util/FileMetadata is not the same type returned by the RPC
     let form: FormData;
+    let userJWT: string;
 
     before(async () => {
       userApi = await createUserApi();
@@ -224,15 +225,35 @@ await describeMspNet(
       }
     );
 
+    it("Should be able to retrieve unfulfilled file info", async () => {
+      assert(fileKey, "File should have been created");
+      assert(bucketId, "Bucket should have been created");
+
+      // Generate a JWT token using the backend's auth endpoints
+      userJWT = await fetchJwtToken(ETH_SH_USER_PRIVATE_KEY, SH_EVM_SOLOCHAIN_CHAIN_ID);
+
+      const response = await fetch(
+        `http://localhost:8080/buckets/${bucketId}/info/${fileKey.toHex()}`,
+        {
+          headers: {
+            Authorization: `Bearer ${userJWT}`
+          }
+        }
+      );
+
+      strictEqual(response.status, 200, "/bucket/bucket_id/info/fileKey should return OK status");
+      const file = (await response.json()) as FileInfo;
+
+      strictEqual(file.status, "inProgress", "Should have not been fulfilled yet");
+    });
+
     it("Should successfully upload file via the backend API", async () => {
       // Ensure prerequisite data is present
       assert(bucketId, "Bucket should have been created");
       assert(freshBucketRoot, "Bucket should have been created");
       assert(fileKey, "File should have been created");
       assert(form, "Upload form should be ready");
-
-      // Generate a JWT token using the backend's auth endpoints
-      const token = await fetchJwtToken(ETH_SH_USER_PRIVATE_KEY, SH_EVM_SOLOCHAIN_CHAIN_ID);
+      assert(userJWT, "User authenticated with the backend");
 
       // Send the HTTP request to backend upload endpoint
       const uploadResponse = await fetch(
@@ -241,7 +262,7 @@ await describeMspNet(
           method: "PUT",
           body: form,
           headers: {
-            Authorization: `Bearer ${token}`
+            Authorization: `Bearer ${userJWT}`
           }
         }
       );
@@ -316,11 +337,11 @@ await describeMspNet(
       // Ensure the upload test completed successfully
       assert(uploadedFileKeyHex, "Upload test must complete successfully before download test");
       assert(originalFileBuffer, "Original file buffer must be available from upload test");
+      assert(userJWT, "User authenticated with the backend");
 
-      const token = await fetchJwtToken(ETH_SH_USER_PRIVATE_KEY, SH_EVM_SOLOCHAIN_CHAIN_ID);
       const response = await fetch(`http://localhost:8080/download/${uploadedFileKeyHex}`, {
         headers: {
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${userJWT}`
         }
       });
       strictEqual(response.status, 200, "Download endpoint should return 200 OK");
