@@ -8,6 +8,7 @@ import {
   FileManager,
   type HttpClientConfig,
   ReplicationLevel,
+  SH_FILE_SYSTEM_PRECOMPILE_ADDRESS,
   StorageHubClient
 } from "@storagehub-sdk/core";
 import { MspClient } from "@storagehub-sdk/msp-client";
