@@ -2,9 +2,8 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use tracing::error;
 
-use shc_indexer_db::models::File as DBFile;
-use shp_types::Hash;
 use shc_indexer_db::models::{File as DBFile, FileStorageRequestStep};
+use shp_types::Hash;
 
 use crate::models::buckets::FileTree;
 

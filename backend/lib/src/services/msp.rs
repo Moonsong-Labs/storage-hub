@@ -878,6 +878,7 @@ mod tests {
     use crate::{
         config::Config,
         constants::{
+            database::DEFAULT_PAGE_LIMIT,
             mocks::{MOCK_ADDRESS, MOCK_PRICE_PER_GIGA_UNIT},
             rpc::DUMMY_MSP_ID,
             test::{bucket::DEFAULT_BUCKET_NAME, file::DEFAULT_SIZE},
@@ -999,7 +1000,7 @@ mod tests {
             .await;
 
         let buckets = service
-            .list_user_buckets(&MOCK_ADDRESS)
+            .list_user_buckets(&MOCK_ADDRESS, 0, DEFAULT_PAGE_LIMIT)
             .await
             .unwrap()
             .collect::<Vec<_>>();
@@ -1109,7 +1110,13 @@ mod tests {
 
         let filter = "/";
         let tree = service
-            .get_file_tree(hex::encode(bucket_id).as_ref(), &MOCK_ADDRESS, filter)
+            .get_file_tree(
+                hex::encode(bucket_id).as_ref(),
+                &MOCK_ADDRESS,
+                filter,
+                0,
+                DEFAULT_PAGE_LIMIT,
+            )
             .await
             .unwrap();
 
