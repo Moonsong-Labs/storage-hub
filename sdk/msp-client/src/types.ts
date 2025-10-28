@@ -124,10 +124,12 @@ export interface Bucket {
   fileCount: number;
 }
 
+export type FileStatus = "inProgress" | "ready" | "expired" | "deletionInProgress";
+
 export type FileTree = {
   name: string;
 } & (
-  | { type: "file"; sizeBytes: number; fileKey: string }
+  | { type: "file"; sizeBytes: number; fileKey: string; status: FileStatus }
   | { type: "folder"; children: FileTree[] }
 );
 
@@ -184,6 +186,7 @@ export interface FileInfo {
   size: number;
   isPublic: boolean;
   uploadedAt: Date;
+  status: FileStatus;
 }
 
 // Payments

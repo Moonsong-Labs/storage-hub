@@ -75,6 +75,8 @@ pub mod bucket {
 
 /// Test file data
 pub mod file {
+    use shc_indexer_db::models::FileStorageRequestStep;
+
     /// Default file key
     pub const DEFAULT_FILE_KEY: &str = "test_file.txt";
 
@@ -90,8 +92,8 @@ pub mod file {
     /// Default file size
     pub const DEFAULT_SIZE: i64 = 1024;
 
-    /// Default file step (0 = requested, 1 = fulfilled)
-    pub const DEFAULT_STEP: i32 = 1;
+    /// By default, all files are fulfilled
+    pub const DEFAULT_STEP: i32 = FileStorageRequestStep::Stored as i32;
 }
 
 /// Mock connection test data
