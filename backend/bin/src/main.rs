@@ -17,11 +17,10 @@ use sh_msp_backend_lib::{
         rpc::{AnyRpcConnection, RpcConfig, StorageHubRpcClient, WsConnection},
         storage::{BoxedStorageWrapper, InMemoryStorage},
     },
+    log::initialize_logging,
     services::Services,
 };
 use tracing::{debug, info, warn};
-use tracing_bunyan_formatter::{BunyanFormattingLayer, JsonStorageLayer};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 #[derive(Parser, Debug)]
 #[command(name = "sh-msp-backend")]
@@ -140,38 +139,6 @@ fn load_config() -> Result<Config> {
     }
 
     Ok(config)
-}
-
-/// Initialize logging with the specified format
-fn initialize_logging(log_format: LogFormat) {
-    let env_filter = EnvFilter::from_default_env();
-    let format = log_format.resolve();
-
-    match format {
-        LogFormat::Json => {
-            // JSON logging using Bunyan format
-            tracing_subscriber::registry()
-                .with(env_filter)
-                .with(JsonStorageLayer)
-                .with(BunyanFormattingLayer::new(
-                    "storage-hub-backend".to_string(),
-                    std::io::stdout,
-                ))
-                .init();
-        }
-        LogFormat::Text => {
-            // Human-readable text logging
-            tracing_subscriber::registry()
-                .with(env_filter)
-                .with(tracing_subscriber::fmt::layer())
-                .init();
-        }
-        LogFormat::Auto => {
-            // This should have been resolved, but handle it just in case
-            let resolved = log_format.resolve();
-            initialize_logging(resolved);
-        }
-    }
 }
 
 async fn create_postgres_client(config: &Config) -> Result<Arc<DBClient>> {

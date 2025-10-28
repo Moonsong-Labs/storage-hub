@@ -16036,8 +16036,6 @@ dependencies = [
  "tokio",
  "toml 0.8.23",
  "tracing",
- "tracing-bunyan-formatter",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -16094,6 +16092,8 @@ dependencies = [
  "toml 0.8.23",
  "tower-http 0.5.2",
  "tracing",
+ "tracing-bunyan-formatter",
+ "tracing-subscriber",
  "trie-db 0.29.1",
 ]
 
@@ -20287,6 +20287,7 @@ dependencies = [
  "pin-project-lite",
  "tower-layer",
  "tower-service",
+ "tracing",
 ]
 
 [[package]]
