@@ -316,4 +316,19 @@ mod tests {
 
         assert!(response.len() > 0, "should have at least 1 multiaddress");
     }
+
+    #[tokio::test]
+    async fn is_file_in_file_storage() {
+        let client = mock_rpc();
+
+        let response = client
+            .is_file_in_file_storage(&hex::encode(random_bytes_32()))
+            .await
+            .expect("should be able to upload file");
+
+        assert!(
+            matches!(response, GetFileFromFileStorageResult::FileFound(_)),
+            "should be successfull"
+        );
+    }
 }

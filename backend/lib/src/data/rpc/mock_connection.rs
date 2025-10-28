@@ -159,13 +159,10 @@ impl MockConnection {
             .unwrap_or_else(|| file_key.as_str())
             .to_string();
 
-        // Send mock content to backend internal upload endpoint using the same file_key
-        let target_url = format!("{}/internal/uploads/{}", DEFAULT_MSP_CALLBACK_URL, file_key);
-
         // Best-effort: perform the request but don't fail hard if the server isn't running
         let client = reqwest::Client::new();
         let _ = client
-            .put(target_url)
+            .put(upload_url)
             .body(DOWNLOAD_FILE_CONTENT.as_bytes().to_vec())
             .send()
             .await;

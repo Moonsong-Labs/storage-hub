@@ -106,13 +106,14 @@ pub async fn internal_upload_by_key(
 /// Creates a channel-based session where the MSP node streams file chunks to
 /// `/internal/uploads/{session_id}/{file_key}`, which are then forwarded to the client without
 /// intermediate storage through the specific session_id.
-/// Maximum memory usage is limited by the channel buffer (~1 MB).
+/// Maximum memory usage is limited by the channel buffer defined by QUEUE_BUFFER_SIZE (~1 MB).
 pub async fn download_by_key(
     State(services): State<Services>,
     AuthenticatedUser { address }: AuthenticatedUser,
     Path(file_key): Path<String>,
 ) -> Result<impl IntoResponse, Error> {
     debug!(file_key = %file_key, user = %address, "GET download file");
+    // TODO(AUTH): verify that user has permissions to access this file
     // Validate file_key is a hex string
     let key = file_key.trim_start_matches("0x");
     if hex::decode(key).is_err() {
@@ -127,7 +128,8 @@ pub async fn download_by_key(
 
     // A buffered queue that receives streamed chunks from the MSP
     // via the RPC call, which streams data to the internal_upload_by_key endpoint.
-    // QUEUE_BUFFER_SIZE is calculated based on the node FILE_CHUCK_SIZE so we dont have more than 1 Mb
+    // QUEUE_BUFFER_SIZE is calculated based on the node FILE_CHUCK_SIZE so we don't
+    // have more than 1 Mb of allocated memory per download session (defined by MAX_BUFFER_BYTES)
     let (tx, rx) = mpsc::channel::<Result<Bytes, std::io::Error>>(QUEUE_BUFFER_SIZE);
 
     // Add the transmitter to the active download sessions
@@ -138,7 +140,6 @@ pub async fn download_by_key(
 
     let file_key_clone = file_key.clone();
     tokio::spawn(async move {
-        // TODO(AUTH): verify that user has permissions to access this file
         // We trigger the download process via RPC call
         let _ = services
             .msp

@@ -95,6 +95,7 @@ pub mod download {
 
     /// The buffer size in chunks for the download queue not exceeding 1Mb
     const MAX_BUFFER_BYTES: u64 = 2u64.pow(20); // 1Mb
+    /// The maximum number of `FILE_CHUNK_SIZE` bytes to buffer for a given download session
     pub const QUEUE_BUFFER_SIZE: usize = (MAX_BUFFER_BYTES / FILE_CHUNK_SIZE) as usize;
 }
 
