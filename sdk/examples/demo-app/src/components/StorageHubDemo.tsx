@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { type WalletClient, type PublicClient } from 'viem';
+import type { WalletClient, PublicClient } from 'viem';
 import { Upload, Info, Settings } from 'lucide-react';
 import { MspClient } from '@storagehub-sdk/msp-client';
 import { StorageHubClient } from '@storagehub-sdk/core';
@@ -15,7 +15,7 @@ interface StorageHubDemoProps {
 
 export function StorageHubDemo({ walletClient, publicClient, walletAddress }: StorageHubDemoProps) {
   const [status, setStatus] = useState<string>('');
-  const [mspClient, setMspClient] = useState<MspClient | null>(null);
+  const [mspClient, setMspClient] = useState<InstanceType<typeof MspClient> | null>(null);
   const [storageHubClient, setStorageHubClient] = useState<StorageHubClient | null>(null);
   const [mspConnecting, setMspConnecting] = useState(false);
   const [activeTab, setActiveTab] = useState<'test' | 'files'>('test');
@@ -61,21 +61,13 @@ export function StorageHubDemo({ walletClient, publicClient, walletAddress }: St
       });
 
       // Test connection
-      const health = await client.getHealth();
-      console.log('MSP health:', health);
+      const health = await client.info.getInfo();
+      console.log('MSP info:', health);
 
       // Authenticate with SIWE-style flow
-      const chainId = 181222; // StorageHub chain ID
-      const { message } = await client.getNonce(walletAddress, chainId);
-
-      setStatus('🔄 Please sign the authentication message...');
-      const signature = await walletClient.signMessage({
-        account: walletAddress as `0x${string}`,
-        message
-      });
-
-      const verified = await client.verify(message, signature);
-      client.setToken(verified.token);
+      setStatus('🔄 Authenticating with MSP...');
+      await client.auth.SIWE(walletClient);
+      const profile = await client.auth.getProfile();
 
       // Also create StorageHubClient for blockchain operations
       const storageClient = new StorageHubClient({
@@ -91,7 +83,7 @@ export function StorageHubDemo({ walletClient, publicClient, walletAddress }: St
 
       setMspClient(client);
       setStorageHubClient(storageClient);
-      setStatus(`✅ MSP connected and authenticated! User: ${verified.user}`);
+      setStatus(`✅ MSP connected and authenticated! User: ${profile.address}`);
     } catch (error) {
       console.error('MSP connection failed:', error);
       setStatus(`❌ MSP connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -117,7 +109,7 @@ export function StorageHubDemo({ walletClient, publicClient, walletAddress }: St
         {/* Tab Navigation */}
         <div className="border-b border-gray-200">
           <nav className="flex">
-            <button
+            <button type="button"
               onClick={() => setActiveTab('test')}
               className={`flex-1 py-3 px-4 text-center font-medium text-sm ${activeTab === 'test'
                 ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-500'
@@ -127,7 +119,7 @@ export function StorageHubDemo({ walletClient, publicClient, walletAddress }: St
               <Settings className="w-4 h-4 inline mr-2" />
               Connection Test
             </button>
-            <button
+            <button type="button"
               onClick={() => setActiveTab('files')}
               className={`flex-1 py-3 px-4 text-center font-medium text-sm ${activeTab === 'files'
                 ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-500'
@@ -151,7 +143,7 @@ export function StorageHubDemo({ walletClient, publicClient, walletAddress }: St
             <div className="space-y-4">
               {/* Viem Test */}
               <div className="flex items-center gap-4">
-                <button
+                <button type="button"
                   onClick={testViemConnection}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 >
@@ -162,7 +154,7 @@ export function StorageHubDemo({ walletClient, publicClient, walletAddress }: St
 
               {/* MSP Connection */}
               <div className="flex items-center gap-4">
-                <button
+                <button type="button"
                   onClick={connectToMsp}
                   disabled={mspConnecting || !!mspClient}
                   className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
@@ -220,7 +212,7 @@ export function StorageHubDemo({ walletClient, publicClient, walletAddress }: St
                 <p className="text-gray-600 mb-4">
                   Please connect to the MSP backend first to access file management features.
                 </p>
-                <button
+                <button type="button"
                   onClick={() => setActiveTab('test')}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 >

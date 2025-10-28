@@ -16,9 +16,8 @@ function encodeBase64url(str: string): string {
   // For browser compatibility, use btoa if available, otherwise use Buffer
   if (typeof btoa !== 'undefined') {
     return base64ToBase64url(btoa(str));
-  } else {
-    return base64ToBase64url(Buffer.from(str).toString('base64'));
   }
+  return base64ToBase64url(Buffer.from(str).toString('base64'));
 }
 
 /**

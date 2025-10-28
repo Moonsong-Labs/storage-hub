@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useId } from 'react';
 import { Settings, Wallet, Database, CheckCircle, AlertCircle, ExternalLink } from 'lucide-react';
 import { createWalletClient, createPublicClient, custom, formatEther, getAddress, type WalletClient, type PublicClient } from 'viem';
 import { StorageHubClient } from '@storagehub-sdk/core';
@@ -10,6 +10,10 @@ import { loadAppConfig } from '../config/load';
 import type { AppConfig } from '../config/types';
 
 export function OnePageDemo() {
+  const idRpcUrl = useId();
+  const idChainId = useId();
+  const idMspUrl = useId();
+
   const [config, setConfig] = useState({
     rpcUrl: 'http://127.0.0.1:9888',
     chainId: 181222,
@@ -33,7 +37,7 @@ export function OnePageDemo() {
         console.warn('Failed to load app config, using defaults', e);
       }
     };
-    run();
+    void run();
   }, []);
 
   // Wallet state
@@ -45,7 +49,7 @@ export function OnePageDemo() {
   const [walletError, setWalletError] = useState<string | null>(null);
 
   // MSP state
-  const [mspClient, setMspClient] = useState<MspClient | null>(null);
+  const [mspClient, setMspClient] = useState<InstanceType<typeof MspClient> | null>(null);
   const [storageHubClient, setStorageHubClient] = useState<StorageHubClient | null>(null);
   const [isMspConnecting, setIsMspConnecting] = useState(false);
   const [mspError, setMspError] = useState<string | null>(null);
@@ -84,7 +88,7 @@ export function OnePageDemo() {
     try {
       console.log('🔄 Step 1: Requesting account access...');
       // Request account access
-      const accounts = await window.ethereum!.request({ method: 'eth_requestAccounts' }) as string[];
+      const accounts = await window.ethereum?.request({ method: 'eth_requestAccounts' }) as string[];
 
       if (!accounts || accounts.length === 0) {
         throw new Error('No accounts returned from MetaMask');
@@ -97,15 +101,15 @@ export function OnePageDemo() {
 
       console.log('🔄 Step 2: Checking current network...');
       // Check current network directly via MetaMask
-      const currentChainIdHex = await window.ethereum!.request({ method: 'eth_chainId' }) as string;
-      const currentChainId = parseInt(currentChainIdHex, 16);
+      const currentChainIdHex = await window.ethereum?.request({ method: 'eth_chainId' }) as string;
+      const currentChainId = Number.parseInt(currentChainIdHex, 16);
       console.log('Current Chain ID:', currentChainId, 'Expected:', config.chainId);
 
       // Switch to StorageHub chain if needed
       if (currentChainId !== config.chainId) {
         console.log('🔄 Step 3: Switching to StorageHub network...');
         try {
-          await window.ethereum!.request({
+          await window.ethereum?.request({
             method: 'wallet_switchEthereumChain',
             params: [{ chainId: `0x${config.chainId.toString(16)}` }],
           });
@@ -114,7 +118,7 @@ export function OnePageDemo() {
           // If chain doesn't exist, add it
           if (switchError && typeof switchError === 'object' && 'code' in switchError && (switchError as { code: number }).code === 4902) {
             console.log('🔄 Network not found, adding StorageHub network...');
-            await window.ethereum!.request({
+            await window.ethereum?.request({
               method: 'wallet_addEthereumChain',
               params: [{
                 chainId: `0x${config.chainId.toString(16)}`,
@@ -137,8 +141,10 @@ export function OnePageDemo() {
 
       console.log('🔄 Step 4: Creating Viem clients...');
       // Create Viem clients with error handling
-      const transport = custom(window.ethereum!, {
-        // Add retries and timeout for better reliability
+      if (!window.ethereum) {
+        throw new Error('MetaMask provider not available');
+      }
+      const transport = custom(window.ethereum, {
         retryCount: 3,
         retryDelay: 1000,
       });
@@ -148,12 +154,11 @@ export function OnePageDemo() {
         transport,
       });
 
-      const viemWalletClient = createWalletClient({
+      const walletClient = createWalletClient({
         chain: storageHubChain,
         transport,
         account: address,
       });
-      const walletClient = (viemWalletClient as unknown) as WalletClient;
 
       console.log('✅ Step 4 Complete: Viem clients created');
 
@@ -219,7 +224,7 @@ export function OnePageDemo() {
       console.log('- Address:', walletAddress);
       console.log('- Chain ID:', config.chainId);
 
-      await mspClient.auth.SIWE(walletClient as WalletClient);
+      await mspClient.auth.SIWE(walletClient);
       console.log('✅ Authentication completed successfully');
 
       // Get user profile to verify authentication
@@ -233,7 +238,7 @@ export function OnePageDemo() {
       const storageHubClient = new StorageHubClient({
         rpcUrl: config.rpcUrl,
         chain: storageHubChain,
-        walletClient: (walletClient as unknown) as WalletClient,
+        walletClient,
         filesystemContractAddress: config.fsAddress ? (config.fsAddress as `0x${string}`) : undefined
       });
 
@@ -266,13 +271,13 @@ export function OnePageDemo() {
         setStorageHubClient(null);
       } else if (accountList[0] !== walletAddress) {
         // Account changed, reconnect
-        connectWallet();
+        void connectWallet();
       }
     };
 
     const handleChainChanged = () => {
       // Chain changed, reconnect
-      connectWallet();
+      void connectWallet();
     };
 
     if (window.ethereum) {
@@ -282,8 +287,8 @@ export function OnePageDemo() {
 
     return () => {
       if (window.ethereum) {
-        window.ethereum.removeListener!('accountsChanged', handleAccountsChanged);
-        window.ethereum.removeListener!('chainChanged', handleChainChanged);
+        window.ethereum.removeListener?.('accountsChanged', handleAccountsChanged);
+        window.ethereum.removeListener?.('chainChanged', handleChainChanged);
       }
     };
   }, [isMetaMaskAvailable, walletAddress, connectWallet]);
@@ -306,8 +311,9 @@ export function OnePageDemo() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">RPC URL</label>
+              <label htmlFor={idRpcUrl} className="block text-sm font-medium text-gray-300 mb-2">RPC URL</label>
               <input
+                id={idRpcUrl}
                 type="text"
                 value={config.rpcUrl}
                 onChange={(e) => setConfig(prev => ({ ...prev, rpcUrl: e.target.value }))}
@@ -316,18 +322,20 @@ export function OnePageDemo() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Chain ID</label>
+              <label htmlFor={idChainId} className="block text-sm font-medium text-gray-300 mb-2">Chain ID</label>
               <input
+                id={idChainId}
                 type="number"
                 value={config.chainId}
-                onChange={(e) => setConfig(prev => ({ ...prev, chainId: parseInt(e.target.value) }))}
+                onChange={(e) => setConfig(prev => ({ ...prev, chainId: Number.parseInt(e.target.value, 10) }))}
                 className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-gray-100 focus:border-blue-500 focus:outline-none"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">MSP URL</label>
+              <label htmlFor={idMspUrl} className="block text-sm font-medium text-gray-300 mb-2">MSP URL</label>
               <input
+                id={idMspUrl}
                 type="text"
                 value={config.mspUrl}
                 onChange={(e) => setConfig(prev => ({ ...prev, mspUrl: e.target.value }))}
@@ -346,7 +354,7 @@ export function OnePageDemo() {
             <h2 className="text-xl font-semibold">Wallet Connection</h2>
             {walletAddress && (
               <div className="flex items-center gap-1 ml-auto">
-                <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                <div className="w-2 h-2 bg-green-400 rounded-full" />
                 <span className="text-xs text-green-400">Connected</span>
               </div>
             )}
@@ -382,6 +390,7 @@ export function OnePageDemo() {
                 <div className="text-center py-8">
                   <p className="text-gray-400 mb-4">Connect your MetaMask wallet to continue</p>
                   <button
+                    type="button"
                     onClick={connectWallet}
                     disabled={isConnecting}
                     className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
@@ -407,7 +416,7 @@ export function OnePageDemo() {
                 </div>
                 <div className="p-3 bg-gray-800 rounded-md">
                   <div className="text-xs text-gray-400 mb-1">Balance</div>
-                  <div className="text-sm">{walletBalance ? `${parseFloat(walletBalance).toFixed(4)} SH` : 'Loading...'}</div>
+                  <div className="text-sm">{walletBalance ? `${Number.parseFloat(walletBalance).toFixed(4)} SH` : 'Loading...'}</div>
                 </div>
               </div>
 
@@ -427,7 +436,7 @@ export function OnePageDemo() {
               <h2 className="text-xl font-semibold">MSP Connection</h2>
               {mspClient && (
                 <div className="flex items-center gap-1 ml-auto">
-                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                  <div className="w-2 h-2 bg-green-400 rounded-full" />
                   <span className="text-xs text-green-400">Connected</span>
                 </div>
               )}
@@ -438,6 +447,7 @@ export function OnePageDemo() {
                 <div className="text-center py-8">
                   <p className="text-gray-400 mb-4">Connect to MSP backend to access storage features</p>
                   <button
+                    type="button"
                     onClick={connectMsp}
                     disabled={isMspConnecting}
                     className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"

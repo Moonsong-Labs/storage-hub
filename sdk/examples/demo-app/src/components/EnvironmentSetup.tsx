@@ -39,7 +39,7 @@ export function EnvironmentSetup({ onEnvironmentReady, environmentReady }: Envir
 
   const [isChecking, setIsChecking] = useState(false);
 
-  const checkServiceStatus = async (service: ServiceStatus): Promise<ServiceStatus> => {
+  const checkServiceStatus = useCallback(async (service: ServiceStatus): Promise<ServiceStatus> => {
     if (service.url === 'internal') {
       // For PostgreSQL, we check if MSP backend can connect to it via health endpoint
       try {
@@ -107,7 +107,7 @@ export function EnvironmentSetup({ onEnvironmentReady, environmentReady }: Envir
     }
 
     return { ...service, status: 'error' };
-  };
+  }, []);
 
   const checkAllServices = useCallback(async () => {
     setIsChecking(true);
@@ -122,10 +122,10 @@ export function EnvironmentSetup({ onEnvironmentReady, environmentReady }: Envir
     onEnvironmentReady(allRunning);
 
     setIsChecking(false);
-  }, [services, onEnvironmentReady]);
+  }, [services, onEnvironmentReady, checkServiceStatus]);
 
   useEffect(() => {
-    checkAllServices();
+    void checkAllServices();
     // Check services every 30 seconds
     const interval = setInterval(checkAllServices, 30000);
     return () => clearInterval(interval);
@@ -164,7 +164,7 @@ export function EnvironmentSetup({ onEnvironmentReady, environmentReady }: Envir
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold text-gray-900">Service Status</h3>
-          <button
+          <button type="button"
             onClick={checkAllServices}
             disabled={isChecking}
             className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 disabled:opacity-50"
@@ -175,9 +175,9 @@ export function EnvironmentSetup({ onEnvironmentReady, environmentReady }: Envir
         </div>
 
         <div className="grid gap-3">
-          {services.map((service, index) => (
+          {services.map((service) => (
             <div
-              key={index}
+              key={service.name}
               className={`p-4 rounded-lg border ${getStatusColor(service.status)}`}
             >
               <div className="flex items-center justify-between">
@@ -259,11 +259,11 @@ export function EnvironmentSetup({ onEnvironmentReady, environmentReady }: Envir
         <div className="bg-green-50 border border-green-200 rounded-lg p-4">
           <h4 className="font-medium text-green-900 mb-3">Quick Actions</h4>
           <div className="flex gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
+            <button type="button" className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
               <Play className="w-4 h-4" />
               View Logs
             </button>
-            <button className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">
+            <button type="button" className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">
               <Square className="w-4 h-4" />
               Stop Environment
             </button>

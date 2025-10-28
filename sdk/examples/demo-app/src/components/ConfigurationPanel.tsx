@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useId } from 'react';
 import { CheckCircle, AlertCircle, Settings, Globe, Database } from 'lucide-react';
 
 interface ConfigurationPanelProps {
@@ -31,6 +31,13 @@ export function ConfigurationPanel({
   configurationValid,
   environmentReady
 }: ConfigurationPanelProps) {
+  const idBaseUrl = useId();
+  const idTimeout = useId();
+  const idHeaders = useId();
+  const idRpcUrl = useId();
+  const idChainId = useId();
+  const idSymbol = useId();
+  const idChainName = useId();
   const [mspConfig, setMspConfig] = useState<MspConfig>({
     baseUrl: 'http://127.0.0.1:8080',
     timeout: 30000,
@@ -71,10 +78,9 @@ export function ConfigurationPanel({
         await response.json(); // Verify response is valid JSON
         setMspStatus('connected');
         return true;
-      } else {
-        setMspStatus('error');
-        return false;
       }
+      setMspStatus('error');
+      return false;
     } catch (error) {
       console.error('MSP connection test failed:', error);
       setMspStatus('error');
@@ -171,7 +177,7 @@ export function ConfigurationPanel({
       const timeoutId = setTimeout(testConnections, 1000);
       return () => clearTimeout(timeoutId);
     }
-  }, [mspConfig, blockchainConfig, environmentReady, testConnections]);
+  }, [environmentReady, testConnections]);
 
   const getStatusIcon = (status: 'checking' | 'connected' | 'error') => {
     switch (status) {
@@ -221,10 +227,11 @@ export function ConfigurationPanel({
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor={idBaseUrl}>
                 Base URL
               </label>
               <input
+                id={idBaseUrl}
                 type="url"
                 value={mspConfig.baseUrl}
                 onChange={(e) => setMspConfig(prev => ({ ...prev, baseUrl: e.target.value }))}
@@ -234,13 +241,14 @@ export function ConfigurationPanel({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor={idTimeout}>
                 Timeout (ms)
               </label>
               <input
+                id={idTimeout}
                 type="number"
                 value={mspConfig.timeout}
-                onChange={(e) => setMspConfig(prev => ({ ...prev, timeout: parseInt(e.target.value) || 30000 }))}
+                onChange={(e) => setMspConfig(prev => ({ ...prev, timeout: Number.parseInt(e.target.value, 10) || 30000 }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 min="1000"
                 max="60000"
@@ -248,10 +256,11 @@ export function ConfigurationPanel({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor={idHeaders}>
                 Custom Headers (JSON)
               </label>
               <textarea
+                id={idHeaders}
                 value={customHeaders}
                 onChange={(e) => handleCustomHeadersChange(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -260,7 +269,7 @@ export function ConfigurationPanel({
               />
             </div>
 
-            <button
+            <button type="button"
               onClick={testMspConnection}
               disabled={mspStatus === 'checking'}
               className="w-full py-2 px-4 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
@@ -280,10 +289,11 @@ export function ConfigurationPanel({
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor={idRpcUrl}>
                 RPC URL
               </label>
               <input
+                id={idRpcUrl}
                 type="url"
                 value={blockchainConfig.rpcUrl}
                 onChange={(e) => setBlockchainConfig(prev => ({ ...prev, rpcUrl: e.target.value }))}
@@ -294,21 +304,23 @@ export function ConfigurationPanel({
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor={idChainId}>
                   Chain ID
                 </label>
                 <input
+                  id={idChainId}
                   type="number"
                   value={blockchainConfig.chainId}
-                  onChange={(e) => setBlockchainConfig(prev => ({ ...prev, chainId: parseInt(e.target.value) || 181222 }))}
+                  onChange={(e) => setBlockchainConfig(prev => ({ ...prev, chainId: Number.parseInt(e.target.value, 10) || 181222 }))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor={idSymbol}>
                   Symbol
                 </label>
                 <input
+                  id={idSymbol}
                   type="text"
                   value={blockchainConfig.nativeCurrency.symbol}
                   onChange={(e) => setBlockchainConfig(prev => ({
@@ -321,10 +333,11 @@ export function ConfigurationPanel({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor={idChainName}>
                 Chain Name
               </label>
               <input
+                id={idChainName}
                 type="text"
                 value={blockchainConfig.chainName}
                 onChange={(e) => setBlockchainConfig(prev => ({ ...prev, chainName: e.target.value }))}
@@ -332,7 +345,7 @@ export function ConfigurationPanel({
               />
             </div>
 
-            <button
+            <button type="button"
               onClick={testBlockchainConnection}
               disabled={blockchainStatus === 'checking'}
               className="w-full py-2 px-4 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50"

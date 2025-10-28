@@ -38,10 +38,7 @@ export function WalletConnection({
   });
   const [copied, setCopied] = useState(false);
 
-  // Check if MetaMask is available
-  const isMetaMaskAvailable = () => {
-    return typeof window !== 'undefined' && window.ethereum;
-  };
+  // MetaMask availability checks are done inline with window?.ethereum
 
   // Load app config and derive expected network
   const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
@@ -54,7 +51,7 @@ export function WalletConnection({
         console.warn('Failed to load app config in WalletConnection; using defaults', e);
       }
     };
-    run();
+    void run();
   }, []);
 
   const expectedChainId = appConfig?.chain.id ?? 181222;
@@ -69,7 +66,7 @@ export function WalletConnection({
   }), [appConfig, expectedChainId, expectedRpcUrl]);
 
   // Switch to StorageHub network
-  const switchToStorageHubNetwork = async () => {
+  const switchToStorageHubNetwork = useCallback(async () => {
     if (!window.ethereum) return false;
 
     try {
@@ -108,11 +105,26 @@ export function WalletConnection({
         return false;
       }
     }
-  };
+  }, [appConfig, expectedChainId, expectedRpcUrl]);
+
+  // Get chain ID
+  const getChainId = useCallback(async (): Promise<number> => {
+    try {
+      if (window?.ethereum) {
+        const chainId = await window.ethereum.request({
+          method: 'eth_chainId'
+        }) as string;
+        return Number.parseInt(chainId, 16);
+      }
+      return 0;
+    } catch {
+      return 0;
+    }
+  }, []);
 
   // Connect to MetaMask using Viem
   const connectWallet = useCallback(async () => {
-    if (!isMetaMaskAvailable()) {
+    if (!window?.ethereum) {
       setWalletState(prev => ({
         ...prev,
         error: 'MetaMask not found. Please install MetaMask extension.'
@@ -126,7 +138,7 @@ export function WalletConnection({
       console.log('Attempting to connect to MetaMask with Viem...');
 
       // First, request account access
-      const accounts = await window.ethereum!.request({
+      const accounts = await window.ethereum?.request({
         method: 'eth_requestAccounts'
       }) as string[];
 
@@ -157,7 +169,11 @@ export function WalletConnection({
       }
 
       // Create Viem clients
-      const transport = custom(window.ethereum!);
+      const provider = window.ethereum;
+      if (!provider) {
+        throw new Error('MetaMask provider unavailable');
+      }
+      const transport = custom(provider);
 
       const publicClientInstance = createPublicClient({
         chain: storageHubChain,
@@ -215,7 +231,7 @@ export function WalletConnection({
       }));
       onWalletConnected(false);
     }
-  }, [onWalletConnected, onClientsReady, onAddressChange, storageHubChain]);
+  }, [onWalletConnected, onClientsReady, onAddressChange, storageHubChain, expectedChainId, switchToStorageHubNetwork, getChainId]);
 
   // Disconnect wallet
   const disconnectWallet = useCallback(() => {
@@ -240,22 +256,6 @@ export function WalletConnection({
   }, [onWalletConnected, onClientsReady, onAddressChange]);
 
 
-  // Get chain ID
-  const getChainId = async (): Promise<number> => {
-    try {
-      if (window.ethereum) {
-        const chainId = await window.ethereum.request({
-          method: 'eth_chainId'
-        }) as string;
-        return parseInt(chainId, 16);
-      }
-      return 0;
-    } catch {
-      return 0;
-    }
-  };
-
-
   // Copy address to clipboard
   const copyAddress = async () => {
     if (walletState.address) {
@@ -274,13 +274,13 @@ export function WalletConnection({
           disconnectWallet();
         } else if (accounts[0] !== walletState.address) {
           // Reconnect with new account
-          connectWallet();
+          void connectWallet();
         }
       };
 
       const handleChainChanged = (...args: unknown[]) => {
         const chainId = args[0] as string;
-        const newChainId = parseInt(chainId, 16);
+        const newChainId = Number.parseInt(chainId, 16);
         setWalletState(prev => ({ ...prev, chainId: newChainId }));
 
         // Update connection status based on network
@@ -310,17 +310,17 @@ export function WalletConnection({
         }
       };
     }
-  }, [walletState.address, connectWallet, disconnectWallet, onWalletConnected]);
+  }, [walletState.address, connectWallet, disconnectWallet, onWalletConnected, expectedChainId]);
 
   // Check for existing connection on mount
   useEffect(() => {
-    if (isMetaMaskAvailable() && configurationValid) {
+    if (window?.ethereum && configurationValid) {
       // Check if already connected
-      window.ethereum!.request({ method: 'eth_accounts' })
+      window.ethereum?.request({ method: 'eth_accounts' })
         .then((result: unknown) => {
           const accounts = result as string[];
           if (accounts.length > 0) {
-            connectWallet();
+            void connectWallet();
           }
         })
         .catch(console.error);
@@ -334,7 +334,8 @@ export function WalletConnection({
   const getChainStatus = () => {
     if (walletState.chainId === expectedChainId) {
       return { status: 'correct', text: 'StorageHub Network', color: 'text-green-600' };
-    } else if (walletState.chainId) {
+    }
+    if (walletState.chainId) {
       return { status: 'wrong', text: `Wrong Network (Chain ID: ${walletState.chainId})`, color: 'text-red-600' };
     }
     return { status: 'unknown', text: 'Unknown Network', color: 'text-gray-600' };
@@ -411,6 +412,7 @@ export function WalletConnection({
 
             <div className="space-y-3">
               <button
+                type="button"
                 onClick={connectWallet}
                 disabled={walletState.isConnecting}
                 className="w-full py-3 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
@@ -430,6 +432,7 @@ export function WalletConnection({
 
               {/* Debug Test Button */}
               <button
+                type="button"
                 onClick={async () => {
                   try {
                     console.log('=== MetaMask Debug Test ===');
@@ -439,7 +442,7 @@ export function WalletConnection({
                     if (window.ethereum) {
                       const chainId = await window.ethereum.request({ method: 'eth_chainId' });
                       const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-                      console.log('Current chainId:', chainId, '(decimal:', parseInt(chainId as string, 16), ')');
+                      console.log('Current chainId:', chainId, '(decimal:', Number.parseInt(chainId as string, 16), ')');
                       console.log('Current accounts:', accounts);
                     }
                   } catch (e) {
@@ -468,6 +471,7 @@ export function WalletConnection({
                 </div>
               </div>
               <button
+                type="button"
                 onClick={disconnectWallet}
                 className="px-3 py-1.5 text-sm bg-green-100 text-green-700 rounded-md hover:bg-green-200"
               >
@@ -477,14 +481,15 @@ export function WalletConnection({
 
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="block text-sm font-medium text-green-900 mb-1">
+                <div className="block text-sm font-medium text-green-900 mb-1">
                   Address
-                </label>
+                </div>
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-sm text-green-800">
                     {walletState.address ? formatAddress(walletState.address) : ''}
                   </span>
                   <button
+                    type="button"
                     onClick={copyAddress}
                     className="p-1 hover:bg-green-200 rounded"
                     title="Copy full address"
@@ -499,9 +504,9 @@ export function WalletConnection({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-green-900 mb-1">
+                <div className="block text-sm font-medium text-green-900 mb-1">
                   Balance
-                </label>
+                </div>
                 <span className="font-mono text-sm text-green-800">
                   {walletState.balance} SH
                 </span>

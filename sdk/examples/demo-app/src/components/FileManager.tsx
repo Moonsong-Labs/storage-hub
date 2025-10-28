@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useId } from 'react';
 import { Upload, Download, File, Folder, Hash, X, CheckCircle, AlertCircle, Plus, Database, ArrowLeft } from 'lucide-react';
-import { type WalletClient, type PublicClient } from 'viem';
-import { FileManager as StorageHubFileManager, initWasm, StorageHubClient, ReplicationLevel } from '@storagehub-sdk/core';
-import { MspClient, type UploadReceipt, type Bucket, type FileTree } from '@storagehub-sdk/msp-client';
+import type { WalletClient, PublicClient } from 'viem';
+import { FileManager as StorageHubFileManager, initWasm, type StorageHubClient, ReplicationLevel } from '@storagehub-sdk/core';
+import type { MspClient } from '@storagehub-sdk/msp-client';
+import type { UploadReceipt, Bucket, FileTree } from '@storagehub-sdk/msp-client';
+
 import { TypeRegistry } from '@polkadot/types';
-import type { AccountId20, H256 } from '@polkadot/types/interfaces';
 
 interface FileManagerProps {
   walletClient: WalletClient | null;
@@ -60,6 +61,8 @@ interface FileDownloadState {
 }
 
 export function FileManager({ publicClient, walletAddress, mspClient, storageHubClient }: FileManagerProps) {
+  const bucketSelectId = useId();
+  const folderNameInputId = useId();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [uploadState, setUploadState] = useState<FileUploadState>({
@@ -175,9 +178,9 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
       if (!mspClient) throw new Error('MSP client not connected');
 
       const info = await mspClient.info.getInfo();
-      const valueProps = await mspClient.info.getValuePropositions();
       const mspId = (info.mspId || '') as `0x${string}`;
-      const valuePropId = (valueProps.find(v => v.isAvailable)?.id || valueProps[0]?.id || '') as `0x${string}`;
+      const firstAvailable = (await mspClient.info.getValuePropositions()).find((v: { isAvailable: boolean }) => v.isAvailable);
+      const valuePropId = (firstAvailable?.id || '') as `0x${string}`;
       if (!mspId || !valuePropId) throw new Error('Missing MSP identifiers');
 
       const bucketId = await storageHubClient.deriveBucketId(walletAddress as `0x${string}`, bucketState.bucketName);
@@ -192,7 +195,15 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
 
       console.log('Bucket creation transaction submitted:', txHash);
 
-      const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
+      if (!txHash) {
+        throw new Error('createBucket did not return a transaction hash');
+      }
+
+      if (!publicClient) {
+        throw new Error('Public client not available');
+      }
+
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
 
       if (receipt.status === 'success') {
         setBucketState(prev => ({
@@ -253,7 +264,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
   // No automatic loading to avoid excessive API calls
 
   // Load files from selected bucket
-  const loadFiles = async (bucketId: string, path: string = '') => {
+  const loadFiles = async (bucketId: string, path = '') => {
     if (!mspClient) {
       console.warn('⚠️ MSP client not available, cannot load files');
       return;
@@ -337,7 +348,11 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
                 controller.close();
               };
               reader.onerror = () => controller.error(reader.error);
-              reader.readAsArrayBuffer(uploadState.file!);
+              if (uploadState.file) {
+                reader.readAsArrayBuffer(uploadState.file);
+              } else {
+                controller.error(new Error('File not available'));
+              }
             }
           });
         }
@@ -355,13 +370,16 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
 
       // Create TypeRegistry and types for file key computation (like sdk-precompiles)
       const registry = new TypeRegistry();
-      const owner = registry.createType("AccountId20", walletAddress) as AccountId20;
+      // Derive parameter types from the core FileManager method to avoid version mismatches
+      type FileManagerOwner = Parameters<StorageHubFileManager["computeFileKey"]>[0];
+      type FileManagerBucket = Parameters<StorageHubFileManager["computeFileKey"]>[1];
+      const owner = registry.createType("AccountId20", walletAddress) as unknown as FileManagerOwner;
 
 
       // Ensure bucket ID is properly formatted as 32-byte hex string
       let bucketIdForH256 = selectedBucketId;
       if (!bucketIdForH256.startsWith('0x')) {
-        bucketIdForH256 = '0x' + bucketIdForH256;
+        bucketIdForH256 = `0x${bucketIdForH256}`;
       }
       // H256 expects exactly 64 hex chars (32 bytes) after 0x
       if (bucketIdForH256.length !== 66) { // 0x + 64 hex chars = 66 total
@@ -369,7 +387,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
         throw new Error(`Invalid bucket ID format: ${bucketIdForH256} (length: ${bucketIdForH256.length})`);
       }
 
-      const bucketIdH256 = registry.createType("H256", bucketIdForH256) as H256;
+      const bucketIdH256 = registry.createType("H256", bucketIdForH256) as unknown as FileManagerBucket;
       // File key is computed by the MSP backend during upload
       await fileManager.computeFileKey(owner, bucketIdH256, fileLocation);
 
@@ -378,7 +396,6 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
       // Issue storage request
       // Derive IDs from MSP client
       const info = await mspClient.info.getInfo();
-      const valueProps = await mspClient.info.getValuePropositions();
       const mspId = info.mspId as `0x${string}`;
       let mspPeerId = '';
       if (Array.isArray(info.multiaddresses)) {
@@ -395,13 +412,10 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
           mspPeerId = idx !== -1 ? first.slice(idx + 5) : first;
         }
       }
-      const valuePropId = (valueProps.find(v => v.isAvailable)?.id || valueProps[0]?.id || '') as `0x${string}`;
-
-
       // Ensure bucket ID has 0x prefix for storage request
       const bucketIdForStorageRequest = selectedBucketId.startsWith('0x') ? selectedBucketId : `0x${selectedBucketId}`;
 
-      let storageRequestTxHash;
+      let storageRequestTxHash: `0x${string}` | undefined;
       try {
 
         storageRequestTxHash = await storageHubClient.issueStorageRequest(
@@ -420,7 +434,15 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
         throw error;
       }
 
-      const storageRequestReceipt = await publicClient!.waitForTransactionReceipt({
+      if (!storageRequestTxHash) {
+        throw new Error('No transaction hash returned from issueStorageRequest');
+      }
+
+      if (!publicClient) {
+        throw new Error('Public client not available');
+      }
+
+      const storageRequestReceipt = await publicClient.waitForTransactionReceipt({
         hash: storageRequestTxHash
       });
 
@@ -437,7 +459,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
       await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
       setUploadState(prev => ({ ...prev, uploadProgress: 40 }));
 
-      let uploadReceipt;
+      let uploadReceipt: UploadReceipt | undefined;
       try {
         // Upload file to MSP (use exact same pattern as sdk-precompiles line 245-251)
         const fileBlob = await fileManager.getFileBlob(); // Get Blob like sdk-precompiles
@@ -445,12 +467,16 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
 
         await new Promise(resolve => setTimeout(resolve, 3000)); // Add a 3 second delay before uploading
 
+        if (!walletAddress) {
+          throw new Error('Wallet address not available');
+        }
+
         uploadReceipt = await mspClient.files.uploadFile(
-          selectedBucketId, // MSP expects bucket ID without 0x prefix
-          fileKeyHex, // Use the final computed file key
-          fileBlob, // Use Blob instead of File object
-          walletAddress, // owner parameter like sdk-precompiles
-          fileLocation // location parameter like sdk-precompiles
+          selectedBucketId,
+          fileKeyHex,
+          fileBlob,
+          walletAddress,
+          fileLocation
         );
 
       } catch (error: unknown) {
@@ -505,7 +531,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
         console.log('Folder tree for current path', currentPath, ':', folderTree);
 
         if (folderTree?.type === 'folder' && folderTree.children) {
-          const subfolders = folderTree.children.filter(child => child.type === 'folder');
+          const subfolders = folderTree.children.filter((child: FileTree) => child.type === 'folder');
           console.log('Found subfolders in current path', currentPath, ':', subfolders);
 
           setUploadLocationState(prev => ({
@@ -561,7 +587,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
         console.log('Folder tree for path', newPath, ':', folderTree);
 
         if (folderTree?.type === 'folder' && folderTree.children) {
-          const subfolders = folderTree.children.filter(child => child.type === 'folder');
+          const subfolders = folderTree.children.filter((child: FileTree) => child.type === 'folder');
           console.log('Found subfolders in', newPath, ':', subfolders);
 
           setUploadLocationState(prev => ({
@@ -629,7 +655,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
               ...prev,
               selectedPath: newPath,
               navigationHistory: newHistory,
-              availableFolders: folderTree.children.filter(child => child.type === 'folder')
+              availableFolders: folderTree.children.filter((child: FileTree) => child.type === 'folder')
             }));
           } else {
             setUploadLocationState(prev => ({
@@ -697,7 +723,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
             ...prev,
             selectedPath: '',
             navigationHistory: ['/'],
-            availableFolders: rootTree.children.filter(child => child.type === 'folder')
+            availableFolders: rootTree.children.filter((child: FileTree) => child.type === 'folder')
           }));
         } else {
           setUploadLocationState(prev => ({
@@ -728,7 +754,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
 
   // File download function
   const downloadFile = async (file: FileTree) => {
-    if (!mspClient || !file.fileKey) {
+    if (!mspClient || !('fileKey' in file) || !file.fileKey) {
       console.error('Cannot download: missing MSP client or file key');
       return;
     }
@@ -854,6 +880,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
             className="flex-1 rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 placeholder-gray-400 focus:border-blue-500 focus:outline-none"
           />
           <button
+            type="button"
             onClick={createBucket}
             disabled={!bucketState.bucketName.trim() || bucketState.isCreating}
             className="flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed"
@@ -887,7 +914,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
 
         {/* Bucket Selection */}
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">
+          <label htmlFor={bucketSelectId} className="block text-sm font-medium text-gray-300 mb-2">
             Select Bucket ({buckets.length} available)
             {isLoadingBuckets && (
               <span className="text-xs text-blue-400 ml-2 animate-pulse">
@@ -907,6 +934,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
           </label>
           <div className="flex gap-3">
             <select
+              id={bucketSelectId}
               value={selectedBucketId}
               onChange={(e) => setSelectedBucketId(e.target.value)}
               className="flex-1 rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
@@ -922,6 +950,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
               ))}
             </select>
             <button
+              type="button"
               onClick={loadBuckets}
               disabled={isLoadingBuckets}
               className="px-4 py-2 text-sm bg-gray-700 text-gray-300 rounded-md hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed transition-colors"
@@ -939,7 +968,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
             onChange={(e) => {
               const files = e.target.files;
               if (files && files.length > 0) {
-                handleFileSelect(files[0]);
+                void handleFileSelect(files[0]);
               }
             }}
             className="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-700"
@@ -954,6 +983,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
                   <span className="text-xs text-gray-400">({(uploadState.file.size / 1024).toFixed(1)} KB)</span>
                 </div>
                 <button
+                  type="button"
                   onClick={clearUpload}
                   className="text-gray-400 hover:text-red-400"
                 >
@@ -998,6 +1028,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
 
                     <div className="flex gap-2">
                       <button
+                        type="button"
                         onClick={openFolderBrowser}
                         className="flex items-center gap-1 px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
                       >
@@ -1006,6 +1037,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
                       </button>
 
                       <button
+                        type="button"
                         onClick={() => setUploadLocationState(prev => ({ ...prev, showFolderCreator: true }))}
                         className="flex items-center gap-1 px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
                       >
@@ -1014,6 +1046,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
                       </button>
 
                       <button
+                        type="button"
                         onClick={resetToRoot}
                         className="flex items-center gap-1 px-3 py-1 text-xs bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors"
                       >
@@ -1027,6 +1060,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
 
               {uploadState.fingerprint && selectedBucketId && (
                 <button
+                  type="button"
                   onClick={uploadFile}
                   disabled={uploadState.isUploading}
                   className="w-full flex items-center justify-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed"
@@ -1067,7 +1101,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
               onChange={(e) => {
                 const bucketId = e.target.value;
                 if (bucketId) {
-                  loadFiles(bucketId);
+                  void loadFiles(bucketId);
                 }
               }}
               className="flex-1 rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
@@ -1083,7 +1117,12 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
             {fileBrowserState.selectedBucketId && (
               <>
                 <button
-                  onClick={() => loadFiles(fileBrowserState.selectedBucketId!, fileBrowserState.currentPath)}
+                  type="button"
+                  onClick={() => {
+                    if (fileBrowserState.selectedBucketId) {
+                      void loadFiles(fileBrowserState.selectedBucketId, fileBrowserState.currentPath);
+                    }
+                  }}
                   disabled={fileBrowserState.isLoading}
                   className="px-4 py-2 text-sm bg-gray-700 text-gray-300 rounded-md hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed transition-colors"
                 >
@@ -1093,11 +1132,14 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
                 {/* Back Button - only show if we're not at root */}
                 {fileBrowserState.currentPath && fileBrowserState.currentPath !== '/' && (
                   <button
+                    type="button"
                     onClick={() => {
                       // Navigate back one level
                       const pathParts = fileBrowserState.currentPath.split('/');
                       const parentPath = pathParts.slice(0, -1).join('/') || '';
-                      loadFiles(fileBrowserState.selectedBucketId!, parentPath);
+                      if (fileBrowserState.selectedBucketId) {
+                        void loadFiles(fileBrowserState.selectedBucketId, parentPath);
+                      }
                     }}
                     disabled={fileBrowserState.isLoading}
                     className="flex items-center gap-1 px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-800 disabled:cursor-not-allowed transition-colors"
@@ -1131,7 +1173,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
             <div className="border border-gray-700 rounded-lg overflow-hidden">
               {fileBrowserState.isLoading ? (
                 <div className="p-8 text-center text-gray-500">
-                  <div className="animate-spin h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2"></div>
+                  <div className="animate-spin h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2" />
                   Loading files...
                 </div>
               ) : fileBrowserState.error ? (
@@ -1148,9 +1190,10 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
               ) : (
                 <div className="divide-y divide-gray-700">
                   {fileBrowserState.files.map((file, index) => (
-                    <div
+                    <button
+                      type="button"
                       key={`${file.name}-${index}`}
-                      className={`p-4 hover:bg-gray-800 cursor-pointer transition-colors ${fileBrowserState.selectedFile === file ? 'bg-blue-900/20 border-l-4 border-blue-500' : ''
+                      className={`w-full text-left p-4 hover:bg-gray-800 cursor-pointer transition-colors ${fileBrowserState.selectedFile === file ? 'bg-blue-900/20 border-l-4 border-blue-500' : ''
                         }`}
                       onClick={() => setFileBrowserState(prev => ({
                         ...prev,
@@ -1169,8 +1212,8 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
                             <div className="text-xs text-gray-500">
                               {file.type === 'file' ? (
                                 <>
-                                  {file.sizeBytes ? `${(file.sizeBytes / 1024).toFixed(1)} KB` : 'Unknown size'}
-                                  {file.fileKey && (
+                                  {'sizeBytes' in file && typeof file.sizeBytes === 'number' ? `${(file.sizeBytes / 1024).toFixed(1)} KB` : 'Unknown size'}
+                                  {'fileKey' in file && typeof file.fileKey === 'string' && (
                                     <span className="ml-2">• Key: {file.fileKey.slice(0, 8)}...</span>
                                   )}
                                 </>
@@ -1182,18 +1225,19 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
                         </div>
 
                         <div className="flex items-center gap-2">
-                          {file.type === 'file' && file.fileKey && (
+                          {file.type === 'file' && 'fileKey' in file && file.fileKey && (
                             <button
+                              type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                downloadFile(file);
+                                void downloadFile(file);
                               }}
-                              disabled={downloadState.downloadingFiles.has(file.fileKey || '')}
+                              disabled={downloadState.downloadingFiles.has(('fileKey' in file && file.fileKey) ? file.fileKey : '')}
                               className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
                             >
-                              {downloadState.downloadingFiles.has(file.fileKey || '') ? (
+                              {downloadState.downloadingFiles.has(('fileKey' in file && file.fileKey) ? file.fileKey : '') ? (
                                 <>
-                                  <div className="animate-spin h-3 w-3 border border-white border-t-transparent rounded-full inline mr-1"></div>
+                                  <div className="animate-spin h-3 w-3 border border-white border-t-transparent rounded-full inline mr-1" />
                                   Downloading...
                                 </>
                               ) : (
@@ -1206,12 +1250,15 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
                           )}
                           {file.type === 'folder' && (
                             <button
+                              type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 const newPath = fileBrowserState.currentPath
                                   ? `${fileBrowserState.currentPath}/${file.name}`
                                   : file.name;
-                                loadFiles(fileBrowserState.selectedBucketId!, newPath);
+                                if (fileBrowserState.selectedBucketId) {
+                                  void loadFiles(fileBrowserState.selectedBucketId, newPath);
+                                }
                               }}
                               className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
                             >
@@ -1220,7 +1267,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
                           )}
                         </div>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -1234,6 +1281,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
                 <AlertCircle className="h-4 w-4" />
                 <span className="text-sm font-medium">Download Failed</span>
                 <button
+                  type="button"
                   onClick={() => setDownloadState(prev => ({ ...prev, downloadError: null }))}
                   className="ml-auto text-red-400 hover:text-red-300"
                 >
@@ -1251,10 +1299,10 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
               <div className="space-y-1 text-xs text-gray-400">
                 <div><strong>Name:</strong> {fileBrowserState.selectedFile.name}</div>
                 <div><strong>Type:</strong> {fileBrowserState.selectedFile.type}</div>
-                {fileBrowserState.selectedFile.sizeBytes && (
+                {'sizeBytes' in fileBrowserState.selectedFile && typeof fileBrowserState.selectedFile.sizeBytes === 'number' && (
                   <div><strong>Size:</strong> {(fileBrowserState.selectedFile.sizeBytes / 1024).toFixed(2)} KB</div>
                 )}
-                {fileBrowserState.selectedFile.fileKey && (
+                {'fileKey' in fileBrowserState.selectedFile && typeof fileBrowserState.selectedFile.fileKey === 'string' && (
                   <div><strong>File Key:</strong> {fileBrowserState.selectedFile.fileKey}</div>
                 )}
               </div>
@@ -1270,6 +1318,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-200">Select Upload Location</h3>
               <button
+                type="button"
                 onClick={() => {
                   setUploadLocationState(prev => ({
                     ...prev,
@@ -1287,6 +1336,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
             {/* Breadcrumb Navigation */}
             <div className="flex items-center gap-2 mb-4 p-2 bg-gray-800 rounded">
               <button
+                type="button"
                 onClick={resetToRoot}
                 className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
               >
@@ -1296,6 +1346,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
 
               {uploadLocationState.navigationHistory.length > 1 && (
                 <button
+                  type="button"
                   onClick={navigateBack}
                   className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-600 text-white rounded hover:bg-gray-700"
                 >
@@ -1316,7 +1367,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
             <div className="space-y-2 mb-4 max-h-60 overflow-y-auto">
               {uploadLocationState.isLoadingFolders ? (
                 <div className="text-center py-8 text-gray-500">
-                  <div className="animate-spin h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2"></div>
+                  <div className="animate-spin h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2" />
                   <p>Loading folders...</p>
                 </div>
               ) : uploadLocationState.availableFolders.length === 0 ? (
@@ -1326,10 +1377,11 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
                 </div>
               ) : (
                 uploadLocationState.availableFolders.map((folder, index) => (
-                  <div
+                  <button
                     key={`${folder.name}-${index}`}
+                    type="button"
                     onClick={() => navigateToFolder(folder.name)}
-                    className="flex items-center gap-3 p-3 bg-gray-800 rounded hover:bg-gray-700 cursor-pointer transition-colors"
+                    className="flex items-center gap-3 p-3 bg-gray-800 rounded hover:bg-gray-700 cursor-pointer transition-colors w-full text-left"
                   >
                     <Folder className="h-5 w-5 text-blue-400" />
                     <span className="text-sm text-gray-200">{folder.name}</span>
@@ -1337,7 +1389,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
                     <span className="text-xs text-gray-600 ml-2">
                       (in {uploadLocationState.selectedPath || 'root'})
                     </span>
-                  </div>
+                  </button>
                 ))
               )}
             </div>
@@ -1345,6 +1397,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
             {/* Action Buttons */}
             <div className="flex gap-2">
               <button
+                type="button"
                 onClick={() => setUploadLocationState(prev => ({ ...prev, showFolderCreator: true }))}
                 className="flex items-center gap-2 px-4 py-2 text-sm bg-green-600 text-white rounded hover:bg-green-700"
               >
@@ -1353,6 +1406,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
               </button>
 
               <button
+                type="button"
                 onClick={selectCurrentPath}
                 className="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
               >
@@ -1361,6 +1415,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
               </button>
 
               <button
+                type="button"
                 onClick={() => {
                   setUploadLocationState(prev => ({
                     ...prev,
@@ -1385,6 +1440,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-200">Create New Folder</h3>
               <button
+                type="button"
                 onClick={() => setUploadLocationState(prev => ({ ...prev, showFolderCreator: false, newFolderName: '' }))}
                 className="text-gray-400 hover:text-white"
               >
@@ -1394,16 +1450,16 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label htmlFor={folderNameInputId} className="block text-sm font-medium text-gray-300 mb-2">
                   Folder Name
                 </label>
                 <input
+                  id={folderNameInputId}
                   type="text"
                   value={uploadLocationState.newFolderName}
                   onChange={(e) => setUploadLocationState(prev => ({ ...prev, newFolderName: e.target.value }))}
                   placeholder="Enter folder name"
                   className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-gray-100 focus:border-blue-500 focus:outline-none"
-                  autoFocus
                 />
               </div>
 
@@ -1414,6 +1470,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
 
               <div className="flex gap-2">
                 <button
+                  type="button"
                   onClick={createNewFolder}
                   disabled={!uploadLocationState.newFolderName.trim()}
                   className="flex-1 px-4 py-2 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed"
@@ -1422,6 +1479,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
                 </button>
 
                 <button
+                  type="button"
                   onClick={() => setUploadLocationState(prev => ({ ...prev, showFolderCreator: false, newFolderName: '' }))}
                   className="px-4 py-2 text-sm bg-gray-600 text-white rounded hover:bg-gray-700"
                 >
