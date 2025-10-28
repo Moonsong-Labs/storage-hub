@@ -77,9 +77,6 @@ importers:
       ethers:
         specifier: ^6.15.0
         version: 6.15.0
-      viem:
-        specifier: 2.38.3
-        version: 2.38.3(typescript@5.9.2)
     devDependencies:
       '@types/node':
         specifier: ^20.11.19
@@ -87,6 +84,9 @@ importers:
       solc:
         specifier: ^0.8.26
         version: 0.8.30
+      viem:
+        specifier: '>=2.38.3'
+        version: 2.38.3(typescript@5.9.2)
 
   sdk/msp-client:
     devDependencies:
