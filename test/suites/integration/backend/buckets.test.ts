@@ -243,8 +243,6 @@ await describeMspNet(
     });
 
     it("Should be able to fulfill storage request", async () => {
-      assert(fileKey, "File should have been created");
-
       // Wait until the MSP has received and stored the file
       await msp1Api.wait.fileStorageComplete(fileKey);
 
@@ -259,7 +257,6 @@ await describeMspNet(
     it("Should successfully get file info by key", async () => {
       assert(userJWT, "User token is initialized");
       assert(bucketId, "Bucket should have been created");
-      assert(fileKey, "File should have been created");
 
       const response = await fetch(
         `http://localhost:8080/buckets/${bucketId}/info/${fileKey.toHex()}`,
