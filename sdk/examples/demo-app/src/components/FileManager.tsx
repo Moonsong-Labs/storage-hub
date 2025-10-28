@@ -177,11 +177,21 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
       // Derive MSP info dynamically via MSP client
       if (!mspClient) throw new Error('MSP client not connected');
 
+      // Get MSP information
       const info = await mspClient.info.getInfo();
       const mspId = (info.mspId || '') as `0x${string}`;
-      const firstAvailable = (await mspClient.info.getValuePropositions()).find((v: { isAvailable: boolean }) => v.isAvailable);
-      const valuePropId = (firstAvailable?.id || '') as `0x${string}`;
-      if (!mspId || !valuePropId) throw new Error('Missing MSP identifiers');
+
+      // Get available value propositions from the MSP
+      const valuePropositions = await mspClient.info.getValuePropositions();
+
+      // Use the first available value proposition
+      const valuePropId = (valuePropositions[0]?.id || '') as `0x${string}`;
+
+      // Validate we have all required identifiers
+      if (!mspId || !valuePropId) {
+        console.error('MSP ID:', mspId, 'Value Prop ID:', valuePropId);
+        throw new Error('Missing MSP identifiers');
+      }
 
       const bucketId = await storageHubClient.deriveBucketId(walletAddress as `0x${string}`, bucketState.bucketName);
 
