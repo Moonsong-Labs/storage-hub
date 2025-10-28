@@ -104,7 +104,7 @@ export const waitForFishermanBatchDeletions = async (
 
   const sealBlocksInterval = setInterval(async () => {
     await api.block.seal();
-  }, 2000);
+  }, 5000);
 
   try {
     await waitForDeletionCycle;
