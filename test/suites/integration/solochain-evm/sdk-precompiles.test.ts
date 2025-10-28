@@ -132,7 +132,11 @@ await describeMspNet(
         "Profile address should be checksummed and match wallet address"
       );
       // Assert the backend already returns a checksummed address
-      strictEqual(profile.address, getAddress(profile.address), "Profile address must be EIP-55 checksummed");
+      strictEqual(
+        profile.address,
+        getAddress(profile.address),
+        "Profile address must be EIP-55 checksummed"
+      );
     });
 
     it("Should get MSP general info via the SDK's MspClient", async () => {
@@ -152,7 +156,10 @@ await describeMspNet(
       );
 
       // multiaddresses shape
-      assert(Array.isArray(info.multiaddresses) && info.multiaddresses.length > 0, "multiaddresses should be present");
+      assert(
+        Array.isArray(info.multiaddresses) && info.multiaddresses.length > 0,
+        "multiaddresses should be present"
+      );
       assert(
         info.multiaddresses.every((ma: string) => typeof ma === "string" && ma.includes("/p2p/")),
         "every multiaddress should contain /p2p/"
@@ -173,8 +180,10 @@ await describeMspNet(
       // status/timing
       strictEqual(info.status, "active", "status should be 'active'");
       strictEqual(info.activeSince, 123, "activeSince should match backend mock");
-      assert(typeof info.uptime === "string" && info.uptime.length > 0, "uptime should be a non-empty string");
-
+      assert(
+        typeof info.uptime === "string" && info.uptime.length > 0,
+        "uptime should be a non-empty string"
+      );
     });
 
     it("Should get MSP stats via the SDK's MspClient", async () => {
@@ -190,11 +199,31 @@ await describeMspNet(
       const expectedLastCapacityChange = 123;
       const expectedValuePropsAmount = 42;
 
-      strictEqual(stats.capacity.totalBytes, expectedTotal, "MSP total capacity should match backend mock value");
-      strictEqual(stats.capacity.usedBytes, expectedUsed, "MSP used capacity should match backend mock value");
-      strictEqual(stats.capacity.availableBytes, expectedAvailable, "MSP available capacity should match backend mock value");
-      strictEqual(stats.bucketsAmount, expectedBuckets, "MSP buckets amount should match backend mock value");
-      strictEqual(stats.activeUsers, expectedActiveUsers, "MSP active users should match backend mock value");
+      strictEqual(
+        stats.capacity.totalBytes,
+        expectedTotal,
+        "MSP total capacity should match backend mock value"
+      );
+      strictEqual(
+        stats.capacity.usedBytes,
+        expectedUsed,
+        "MSP used capacity should match backend mock value"
+      );
+      strictEqual(
+        stats.capacity.availableBytes,
+        expectedAvailable,
+        "MSP available capacity should match backend mock value"
+      );
+      strictEqual(
+        stats.bucketsAmount,
+        expectedBuckets,
+        "MSP buckets amount should match backend mock value"
+      );
+      strictEqual(
+        stats.activeUsers,
+        expectedActiveUsers,
+        "MSP active users should match backend mock value"
+      );
       strictEqual(
         stats.lastCapacityChange,
         expectedLastCapacityChange,
@@ -227,7 +256,10 @@ await describeMspNet(
 
       // Verify the selected on-chain value prop ID is present in the SDK response
       const sdkValueProps = await mspClient.info.getValuePropositions();
-      assert(Array.isArray(sdkValueProps) && sdkValueProps.length > 0, "SDK value props should be present");
+      assert(
+        Array.isArray(sdkValueProps) && sdkValueProps.length > 0,
+        "SDK value props should be present"
+      );
       assert(
         sdkValueProps.some((vp) => vp.id === valuePropId),
         "SDK should include the selected on-chain value prop id"
@@ -424,11 +456,7 @@ await describeMspNet(
       );
       const fileInfo = await mspClient.files.getFileInfo(bucketId, fileKey.toHex());
       strictEqual(`0x${fileInfo.bucketId}`, bucketId, "bucketId should match");
-      strictEqual(
-        `0x${fileInfo.fileKey}`,
-        fileKey.toHex(),
-        "fileInfo.fileKey should match"
-      );
+      strictEqual(`0x${fileInfo.fileKey}`, fileKey.toHex(), "fileInfo.fileKey should match");
     });
 
     it("Should fetch payment streams using the SDK's MspClient", async () => {
