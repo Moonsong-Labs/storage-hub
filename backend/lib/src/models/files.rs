@@ -1,9 +1,23 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
+use tracing::error;
 
-use shc_indexer_db::models::File as DBFile;
+use shc_indexer_db::models::{File as DBFile, FileStorageRequestStep};
 
 use crate::models::buckets::FileTree;
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FileStatus {
+    /// Indicates that the file's storage request has not yet been fulfilled by the requested MSP
+    InProgress,
+    /// Indicates that the file's storage request has been fulfilled and the file is generally available with the requested replication target criteria met
+    Ready,
+    /// Indicates that the file's storage request has not been fulfilled completely but is still with the MSP
+    Expired,
+    /// Indicates that the file's has been marked for deletion and will be removed from the MSP soon
+    DeletionInProgress,
+}
 
 #[derive(Debug, Serialize)]
 pub struct FileInfo {
@@ -18,9 +32,24 @@ pub struct FileInfo {
     pub is_public: bool,
     #[serde(rename = "uploadedAt")]
     pub uploaded_at: DateTime<Utc>,
+    pub status: FileStatus,
 }
 
 impl FileInfo {
+    pub fn status_from_db(db: &DBFile) -> FileStatus {
+        db.deletion_status
+            .map(|_| FileStatus::DeletionInProgress)
+            .unwrap_or_else(|| match FileStorageRequestStep::try_from(db.step) {
+                Ok(FileStorageRequestStep::Requested) => FileStatus::InProgress,
+                Ok(FileStorageRequestStep::Stored) => FileStatus::Ready,
+                Ok(FileStorageRequestStep::Expired) => FileStatus::Expired,
+                Err(step) => {
+                    error!(step, "Unsupported File's StorageRequest step");
+                    unreachable!("unknown storage request step #{step} present in Indexer DB")
+                }
+            })
+    }
+
     pub fn from_db(db: &DBFile, is_public: bool) -> Self {
         Self {
             file_key: hex::encode(&db.file_key),
@@ -31,6 +60,7 @@ impl FileInfo {
             size: db.size as u64,
             is_public,
             uploaded_at: db.updated_at.and_utc(),
+            status: Self::status_from_db(&db),
         }
     }
 }
