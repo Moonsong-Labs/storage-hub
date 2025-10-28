@@ -13,7 +13,7 @@ import {
   StorageHubClient
 } from "@storagehub-sdk/core";
 import { MspClient } from "@storagehub-sdk/msp-client";
-import { createPublicClient, createWalletClient, defineChain, http } from "viem";
+import { createPublicClient, createWalletClient, defineChain, http, getAddress } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { describeMspNet, type EnrichedBspApi, ShConsts } from "../../../util";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
@@ -123,6 +123,124 @@ await describeMspNet(
       strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp1.expectedPeerId);
     });
 
+    it("Should fetch authenticated user profile from the MSP backend", async () => {
+      const profile = await mspClient.auth.getProfile();
+      // Compare using EIP-55 checksum-normalized addresses
+      strictEqual(
+        profile.address,
+        getAddress(account.address),
+        "Profile address should be checksummed and match wallet address"
+      );
+    });
+
+    it("Should get MSP general info via the SDK's MspClient", async () => {
+      const info = await mspClient.info.getInfo();
+      // TODO: Backend /info is mocked in msp.rs; assert exact fields to sanity-check wiring.
+      // When backend returns dynamic values, relax these assertions.
+
+      // client/version
+      strictEqual(info.client, "storagehub-node v1.0.0", "Client should match backend mock");
+      strictEqual(info.version, "StorageHub MSP v0.1.0", "Version should match backend mock");
+
+      // mspId must match the launched DUMMY_MSP_ID
+      strictEqual(
+        info.mspId.toLowerCase(),
+        userApi.shConsts.DUMMY_MSP_ID.toLowerCase(),
+        "mspId should match expected test MSP"
+      );
+
+      // multiaddresses shape
+      assert(
+        Array.isArray(info.multiaddresses) && info.multiaddresses.length > 0,
+        "multiaddresses should be present"
+      );
+      assert(
+        info.multiaddresses.every(
+          (ma: string) =>
+            typeof ma === "string" &&
+            ma.includes(`/p2p/${userApi.shConsts.NODE_INFOS.msp1.expectedPeerId}`)
+        ),
+        "Every multiaddress should contain the expected MSP peer ID"
+      );
+
+      // accounts (EIP-55 checksummed constants)
+      strictEqual(
+        info.ownerAccount,
+        getAddress("0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac"),
+        "ownerAccount should match backend mock"
+      );
+      strictEqual(
+        info.paymentAccount,
+        getAddress("0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac"),
+        "paymentAccount should match backend mock"
+      );
+
+      // status/timing
+      strictEqual(info.status, "active", "Status should be 'active'");
+      strictEqual(info.activeSince, 123, "ActiveSince should match backend mock");
+      assert(
+        typeof info.uptime === "string" && info.uptime.length > 0,
+        "uptime should be a non-empty string"
+      );
+    });
+
+    it("Should get MSP stats via the SDK's MspClient", async () => {
+      const stats = await mspClient.info.getStats();
+      // TODO: Backend returns mocked stats (see backend/lib/src/services/msp.rs).
+      // When the backend serves real values, replace these fixed expectations
+      // with config-driven or dynamic assertions.
+      const expectedTotal = 1_099_511_627_776; // 1 TiB
+      const expectedUsed = 219_902_325_556;
+      const expectedAvailable = 879_609_302_220;
+      const expectedBuckets = 1024;
+      const expectedActiveUsers = 152;
+      const expectedLastCapacityChange = 123;
+      const expectedValuePropsAmount = 42;
+
+      strictEqual(
+        stats.capacity.totalBytes,
+        expectedTotal,
+        "MSP total capacity should match backend mock value"
+      );
+      strictEqual(
+        stats.capacity.usedBytes,
+        expectedUsed,
+        "MSP used capacity should match backend mock value"
+      );
+      strictEqual(
+        stats.capacity.availableBytes,
+        expectedAvailable,
+        "MSP available capacity should match backend mock value"
+      );
+      strictEqual(
+        stats.bucketsAmount,
+        expectedBuckets,
+        "MSP buckets amount should match backend mock value"
+      );
+      strictEqual(
+        stats.activeUsers,
+        expectedActiveUsers,
+        "MSP active users should match backend mock value"
+      );
+      strictEqual(
+        stats.lastCapacityChange,
+        expectedLastCapacityChange,
+        "MSP last capacity change should match backend mock value"
+      );
+      strictEqual(
+        stats.valuePropsAmount,
+        expectedValuePropsAmount,
+        "MSP value props amount should match backend mock value"
+      );
+
+      // Sanity check invariants
+      strictEqual(
+        stats.capacity.availableBytes + stats.capacity.usedBytes,
+        stats.capacity.totalBytes,
+        "available + used should equal total capacity"
+      );
+    });
+
     it("Should create a new bucket using the SDK's StorageHubClient", async () => {
       const bucketName = "sdk-precompiles-test-bucket";
 
@@ -133,6 +251,17 @@ await describeMspNet(
       assert(valueProps.length > 0, "No value propositions found for MSP");
       assert(valueProps[0].id, "Value proposition ID is undefined");
       const valuePropId = valueProps[0].id.toHex();
+
+      // Verify the selected on-chain value prop ID is present in the SDK response
+      const sdkValueProps = await mspClient.info.getValuePropositions();
+      assert(
+        Array.isArray(sdkValueProps) && sdkValueProps.length > 0,
+        "SDK value props should be present"
+      );
+      assert(
+        sdkValueProps.some((vp) => vp.id === valuePropId),
+        "SDK should include the selected on-chain value prop id"
+      );
 
       // Calculate and store the bucket ID for subsequent tests
       bucketId = (await storageHubClient.deriveBucketId(account.address, bucketName)) as string;
@@ -172,6 +301,19 @@ await describeMspNet(
       assert(
         bucketData.mspId.toString() === userApi.shConsts.DUMMY_MSP_ID,
         "Bucket mspId should match expected MSP ID"
+      );
+
+      // Also verify through SDK / MSP backend endpoints
+      const listedBuckets = await mspClient.buckets.listBuckets();
+      assert(
+        listedBuckets.some((b) => `0x${b.bucketId}` === bucketId),
+        "MSP listBuckets should include the created bucket"
+      );
+      const sdkBucket = await mspClient.buckets.getBucket(bucketId);
+      strictEqual(
+        `0x${sdkBucket.bucketId}`,
+        bucketId,
+        "MSP getBucket should return the created bucket"
       );
     });
 
@@ -303,6 +445,16 @@ await describeMspNet(
 
       // Ensure the file is now stored in the MSP's file storage
       await msp1Api.wait.fileStorageComplete(hexFileKey);
+
+      // Ensure file tree and file info are available via backend for this bucket
+      const fileTree = await mspClient.buckets.getFiles(bucketId);
+      assert(
+        Array.isArray(fileTree.files) && fileTree.files.length > 0,
+        "file tree should not be empty"
+      );
+      const fileInfo = await mspClient.files.getFileInfo(bucketId, fileKey.toHex());
+      strictEqual(`0x${fileInfo.bucketId}`, bucketId, "BucketId should match");
+      strictEqual(`0x${fileInfo.fileKey}`, fileKey.toHex(), "FileKey should match");
     });
 
     it("Should fetch payment streams using the SDK's MspClient", async () => {
@@ -320,7 +472,7 @@ await describeMspNet(
       const sdkPs = streams.find((s) => s.provider.toLowerCase() === mspId.toLowerCase());
       assert(sdkPs, "SDK did not return a payment stream for the expected MSP");
 
-      strictEqual(sdkPs.providerType, "msp", "providerType should be 'msp'");
+      strictEqual(sdkPs.providerType, "msp", "ProviderType should be 'msp'");
       strictEqual(
         sdkPs.costPerTick,
         onChain.rate.toString(),

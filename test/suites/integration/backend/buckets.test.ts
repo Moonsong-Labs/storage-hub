@@ -123,14 +123,16 @@ await describeMspNet(
             file_metadata.file_size,
             userApi.shConsts.DUMMY_MSP_ID,
             [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-            { Custom: 2 }
+            // match replication target with number of BSPs
+            // to ensure request can be fulfilled
+            { Custom: 1 }
           )
         ],
         signer: ethShUser
       });
 
       // Wait until the MSP has received and stored the file
-      await msp1Api.wait.fileStorageComplete(file_key);
+      await msp1Api.wait.fileStorageComplete(fileKey);
     });
 
     it("Should successfully get specific bucket info", async () => {
@@ -235,6 +237,7 @@ await describeMspNet(
       assert(whatsup, `Should have a file named '${fileLocationBasename}'`);
 
       assert(whatsup.type === "file", "Child entry should be file");
+      strictEqual(whatsup.status, "inProgress", "Child entry should be 'inProgress'"); // No BSPs received file yet
       strictEqual(
         whatsup.fileKey,
         fileKey.toHex().slice(2),
@@ -242,10 +245,18 @@ await describeMspNet(
       );
     });
 
+    it("Should be able to fulfill storage request", async () => {
+      // Seal block containing the MSP's first response.
+      await userApi.wait.mspResponseInTxPool();
+      await userApi.block.seal();
+
+      // Wait for the BSPs to volunteer and confirm storing the file so the storage request gets fulfilled.
+      await userApi.wait.storageRequestNotOnChain(fileKey);
+    });
+
     it("Should successfully get file info by key", async () => {
       assert(userJWT, "User token is initialized");
       assert(bucketId, "Bucket should have been created");
-      assert(fileKey, "File should have been created");
 
       const response = await fetch(
         `http://localhost:8080/buckets/${bucketId}/info/${fileKey.toHex()}`,
@@ -264,6 +275,7 @@ await describeMspNet(
       strictEqual(file.bucketId, bucketId, "Should have same bucket id as queried");
 
       strictEqual(file.location, fileLocation, "Should have same location as creation");
+      strictEqual(file.status, "ready", "Should have been fulfilled");
     });
   }
 );
