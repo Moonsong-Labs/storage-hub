@@ -1,5 +1,4 @@
-import type { NonceResponse, Session, UserInfo, AuthStatus } from "../types.js";
-import { AuthState } from "../types.js";
+import type { NonceResponse, Session, UserInfo } from "../types.js";
 import { getAddress, type WalletClient } from "viem";
 import { ModuleBase } from "../base.js";
 
@@ -27,7 +26,7 @@ export class AuthModule extends ModuleBase {
       headers: { "Content-Type": "application/json" },
       ...(signal ? { signal } : {})
     });
-    this.ctx.session = session;
+
     return session;
   }
 
@@ -35,7 +34,7 @@ export class AuthModule extends ModuleBase {
    * Full SIWE flow using a `WalletClient`.
    * - Derives address, fetches nonce, signs message, verifies and stores session.
    */
-  async SIWE(wallet: WalletClient, signal?: AbortSignal): Promise<void> {
+  async SIWE(wallet: WalletClient, signal?: AbortSignal): Promise<Session> {
     // Resolve the current active account from the WalletClient.
     // - Browser wallets (e.g., MetaMask) surface the user-selected address here.
     // - Viem/local wallets must set `wallet.account` explicitly before calling.
@@ -54,31 +53,18 @@ export class AuthModule extends ModuleBase {
     // Sign using the active account resolved above (string or Account object)
     const signature = await wallet.signMessage({ account, message });
 
-    this.ctx.session = await this.verify(message, signature, signal);
+    return this.verify(message, signature, signal);
   }
 
   /**
    * Fetch authenticated user's profile.
    * - Requires valid `session` (Authorization header added automatically).
    */
-  getProfile(signal?: AbortSignal): Promise<UserInfo> {
-    const headers = this.withAuth();
+  async getProfile(signal?: AbortSignal): Promise<UserInfo> {
+    const headers = await this.withAuth();
     return this.ctx.http.get<UserInfo>("/auth/profile", {
       ...(headers ? { headers } : {}),
       ...(signal ? { signal } : {})
     });
-  }
-
-  /**
-   * Determine auth status by checking token presence and profile reachability.
-   */
-  async getAuthStatus(): Promise<AuthStatus> {
-    if (!this.ctx.session?.token) {
-      return { status: AuthState.NotAuthenticated };
-    }
-    const profile = await this.getProfile().catch((err: any) =>
-      err?.response?.status === 401 ? null : Promise.reject(err)
-    );
-    return profile ? { status: AuthState.Authenticated } : { status: AuthState.TokenExpired };
   }
 }

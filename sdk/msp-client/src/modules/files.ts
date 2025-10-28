@@ -10,21 +10,18 @@ import { FileMetadata, FileTrie, initWasm } from "@storagehub-sdk/core";
 
 export class FilesModule extends ModuleBase {
   /** Get metadata for a file in a bucket by fileKey */
-  getFileInfo(bucketId: string, fileKey: string, signal?: AbortSignal): Promise<FileInfo> {
-    const headers = this.withAuth();
+  async getFileInfo(bucketId: string, fileKey: string, signal?: AbortSignal): Promise<FileInfo> {
+    const headers = await this.withAuth();
     const path = `/buckets/${encodeURIComponent(bucketId)}/info/${encodeURIComponent(fileKey)}`;
     type FileInfoWire = Omit<FileInfo, "uploadedAt"> & { uploadedAt: string };
-    return this.ctx.http
-      .get<FileInfoWire>(path, {
-        ...(headers ? { headers } : {}),
-        ...(signal ? { signal } : {})
-      })
-      .then(
-        (wire): FileInfo => ({
-          ...wire,
-          uploadedAt: new Date(wire.uploadedAt)
-        })
-      );
+    const wire = await this.ctx.http.get<FileInfoWire>(path, {
+      ...(headers ? { headers } : {}),
+      ...(signal ? { signal } : {})
+    });
+    return {
+      ...wire,
+      uploadedAt: new Date(wire.uploadedAt)
+    };
   }
 
   /** Upload a file to a bucket with a specific key */
@@ -41,7 +38,7 @@ export class FilesModule extends ModuleBase {
     await initWasm();
 
     const backendPath = `/buckets/${encodeURIComponent(bucketId)}/upload/${encodeURIComponent(fileKey)}`;
-    const authHeaders = this.withAuth();
+    const authHeaders = await this.withAuth();
 
     // Convert the file to a blob and get its size
     const fileBlob = await this.coerceToFormPart(file);
@@ -100,7 +97,8 @@ export class FilesModule extends ModuleBase {
       const rangeValue = `bytes=${start}-${end ?? ""}`;
       baseHeaders.Range = rangeValue;
     }
-    const headers = this.withAuth(baseHeaders);
+
+    const headers = await this.withAuth(baseHeaders);
 
     try {
       const res = await this.ctx.http.getRaw(path, {
