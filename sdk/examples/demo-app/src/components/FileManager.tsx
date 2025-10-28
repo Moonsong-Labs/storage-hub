@@ -1200,15 +1200,26 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
               ) : (
                 <div className="divide-y divide-gray-700">
                   {fileBrowserState.files.map((file, index) => (
-                    <button
-                      type="button"
+                    // biome-ignore lint/a11y/useSemanticElements: Cannot use button here as it contains nested buttons for actions
+                    <div
                       key={`${file.name}-${index}`}
-                      className={`w-full text-left p-4 hover:bg-gray-800 cursor-pointer transition-colors ${fileBrowserState.selectedFile === file ? 'bg-blue-900/20 border-l-4 border-blue-500' : ''
+                      role="button"
+                      tabIndex={0}
+                      className={`p-4 hover:bg-gray-800 cursor-pointer transition-colors ${fileBrowserState.selectedFile === file ? 'bg-blue-900/20 border-l-4 border-blue-500' : ''
                         }`}
                       onClick={() => setFileBrowserState(prev => ({
                         ...prev,
                         selectedFile: prev.selectedFile === file ? null : file
                       }))}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setFileBrowserState(prev => ({
+                            ...prev,
+                            selectedFile: prev.selectedFile === file ? null : file
+                          }));
+                        }
+                      }}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -1277,7 +1288,7 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
                           )}
                         </div>
                       </div>
-                    </button>
+                    </div>
                   ))}
                 </div>
               )}
