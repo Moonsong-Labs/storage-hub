@@ -23,6 +23,8 @@ on:
         required: true
         type: string
   push:
+    branches:
+      - 'stagenet-backend-compat'
     tags:
       - 'backend-compat-*'
 
@@ -97,6 +99,11 @@ jobs:
             # Extract tag name from ref (e.g., refs/tags/backend-compat-stagenet-2025-10-28)
             TAG_NAME="${GITHUB_REF#refs/tags/}"
             echo "image_tag=${TAG_NAME}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "branch" ]]; then
+            # Push to branch: use branch name + short SHA
+            BRANCH_NAME=$(echo "${{ github.ref_name }}" | sed 's/\//-/g')
+            SHORT_SHA=$(git log -1 --format='%h')
+            echo "image_tag=${BRANCH_NAME}-${SHORT_SHA}" >> $GITHUB_OUTPUT
           else
             # Use manual input
             echo "image_tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
