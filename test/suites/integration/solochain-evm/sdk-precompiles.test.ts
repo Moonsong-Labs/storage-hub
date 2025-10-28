@@ -139,8 +139,8 @@ await describeMspNet(
       // When backend returns dynamic values, relax these assertions.
 
       // client/version
-      strictEqual(info.client, "storagehub-node v1.0.0", "client should match backend mock");
-      strictEqual(info.version, "StorageHub MSP v0.1.0", "version should match backend mock");
+      strictEqual(info.client, "storagehub-node v1.0.0", "Client should match backend mock");
+      strictEqual(info.version, "StorageHub MSP v0.1.0", "Version should match backend mock");
 
       // mspId must match the launched DUMMY_MSP_ID
       strictEqual(
@@ -172,8 +172,8 @@ await describeMspNet(
       );
 
       // status/timing
-      strictEqual(info.status, "active", "status should be 'active'");
-      strictEqual(info.activeSince, 123, "activeSince should match backend mock");
+      strictEqual(info.status, "active", "Status should be 'active'");
+      strictEqual(info.activeSince, 123, "ActiveSince should match backend mock");
       assert(
         typeof info.uptime === "string" && info.uptime.length > 0,
         "uptime should be a non-empty string"
@@ -449,8 +449,8 @@ await describeMspNet(
         "file tree should not be empty"
       );
       const fileInfo = await mspClient.files.getFileInfo(bucketId, fileKey.toHex());
-      strictEqual(`0x${fileInfo.bucketId}`, bucketId, "bucketId should match");
-      strictEqual(`0x${fileInfo.fileKey}`, fileKey.toHex(), "fileInfo.fileKey should match");
+      strictEqual(`0x${fileInfo.bucketId}`, bucketId, "BucketId should match");
+      strictEqual(`0x${fileInfo.fileKey}`, fileKey.toHex(), "FileKey should match");
     });
 
     it("Should fetch payment streams using the SDK's MspClient", async () => {
@@ -468,7 +468,7 @@ await describeMspNet(
       const sdkPs = streams.find((s) => s.provider.toLowerCase() === mspId.toLowerCase());
       assert(sdkPs, "SDK did not return a payment stream for the expected MSP");
 
-      strictEqual(sdkPs.providerType, "msp", "providerType should be 'msp'");
+      strictEqual(sdkPs.providerType, "msp", "ProviderType should be 'msp'");
       strictEqual(
         sdkPs.costPerTick,
         onChain.rate.toString(),
