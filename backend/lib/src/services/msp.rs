@@ -424,10 +424,17 @@ impl MspService {
     ///
     /// We provide an URL as saveFileToDisk RPC requires it to stream the file.
     /// We also implemented the internal_upload_by_key handler to handle this temporary file upload.
-    pub async fn get_file_from_key(&self, file_key: &str) -> Result<FileDownloadResult, Error> {
+    pub async fn get_file_from_key(
+        &self,
+        session_id: &str,
+        file_key: &str,
+    ) -> Result<FileDownloadResult, Error> {
         debug!(target: "msp_service::get_file_from_key", file_key = %file_key, "Downloading file by key");
         // TODO: authenticate user
-        let upload_url = format!("{}/internal/uploads/{}", self.msp_callback_url, file_key);
+        let upload_url = format!(
+            "{}/internal/uploads/{}/{}",
+            self.msp_callback_url, session_id, file_key
+        );
 
         // Make the RPC call to download file and get metadata
         let rpc_response: SaveFileToDisk = self

@@ -19,6 +19,7 @@ use tracing::debug;
 use shc_common::types::FileMetadata;
 use tokio::sync::mpsc;
 use tokio_stream::{wrappers::ReceiverStream, StreamExt};
+use uuid::Uuid;
 
 use crate::{
     constants::download::QUEUE_BUFFER_SIZE,
@@ -48,7 +49,7 @@ pub async fn get_file_info(
 // This function streams the file chunks via a channel to the thread running download_by_key.
 pub async fn internal_upload_by_key(
     State(services): State<Services>,
-    Path(file_key): Path<String>,
+    Path((session_id, file_key)): Path<(String, String)>,
     body: Body,
 ) -> (StatusCode, impl IntoResponse) {
     debug!(file_key = %file_key, "PUT internal upload");
@@ -63,7 +64,7 @@ pub async fn internal_upload_by_key(
     }
 
     // Get download session and early return if not found
-    let Some(tx) = services.download_sessions.get_session(&file_key) else {
+    let Some(tx) = services.download_sessions.get_session(&session_id) else {
         return (StatusCode::NOT_FOUND, "Session not found".to_string());
     };
 
@@ -74,8 +75,8 @@ pub async fn internal_upload_by_key(
             Ok(chunk) => {
                 if tx.send(Ok(chunk)).await.is_err() {
                     // Client disconnected
-                    tracing::info!("Client disconnected for session {}", file_key);
-                    services.download_sessions.remove_session(&file_key);
+                    tracing::info!("Client disconnected for session {}", session_id);
+                    services.download_sessions.remove_session(&session_id);
                     return (StatusCode::OK, "Client disconnected".to_string());
                 }
             }
@@ -87,7 +88,7 @@ pub async fn internal_upload_by_key(
                         e.to_string(),
                     )))
                     .await;
-                services.download_sessions.remove_session(&file_key);
+                services.download_sessions.remove_session(&session_id);
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Stream error".to_string(),
@@ -96,15 +97,16 @@ pub async fn internal_upload_by_key(
         }
     }
 
-    services.download_sessions.remove_session(&file_key);
+    services.download_sessions.remove_session(&session_id);
     (StatusCode::OK, "Upload successful".to_string())
 }
 
 /// Downloads a file by streaming it directly from MSP node to the client.
 ///
 /// Creates a channel-based session where the MSP node streams file chunks to
-/// `/internal/uploads/{file_key}`, which are then forwarded to the client without
-/// intermediate storage. Maximum memory usage is limited by the channel buffer (~1 MB).
+/// `/internal/uploads/{session_id}/{file_key}`, which are then forwarded to the client without
+/// intermediate storage through the specific session_id.
+/// Maximum memory usage is limited by the channel buffer (~1 MB).
 pub async fn download_by_key(
     State(services): State<Services>,
     AuthenticatedUser { address }: AuthenticatedUser,
@@ -120,6 +122,9 @@ pub async fn download_by_key(
     // Check if file exists in MSP storage
     let file_metadata = services.msp.check_file_status(&file_key).await?;
 
+    // Generate a unique session ID for the download session
+    let session_id = Uuid::now_v7().to_string();
+
     // A buffered queue that receives streamed chunks from the MSP
     // via the RPC call, which streams data to the internal_upload_by_key endpoint.
     // QUEUE_BUFFER_SIZE is calculated based on the node FILE_CHUCK_SIZE so we dont have more than 1 Mb
@@ -128,14 +133,17 @@ pub async fn download_by_key(
     // Add the transmitter to the active download sessions
     let _ = services
         .download_sessions
-        .add_session(&file_key, tx)
+        .add_session(&session_id, tx)
         .map_err(|_| Error::BadRequest("File is already being downloaded".to_string()))?;
 
     let file_key_clone = file_key.clone();
     tokio::spawn(async move {
         // TODO(AUTH): verify that user has permissions to access this file
         // We trigger the download process via RPC call
-        let _ = services.msp.get_file_from_key(&file_key_clone).await;
+        let _ = services
+            .msp
+            .get_file_from_key(&session_id, &file_key_clone)
+            .await;
     });
 
     // Extract filename from location or use file_key as fallback

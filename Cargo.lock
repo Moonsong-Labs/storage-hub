@@ -16096,6 +16096,7 @@ dependencies = [
  "tower-http 0.5.2",
  "tracing",
  "trie-db 0.29.1",
+ "uuid",
 ]
 
 [[package]]
