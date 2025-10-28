@@ -9,7 +9,7 @@
     "dev:stagenet": "APP_CONFIG_FILE=/storagehub.stagenet.json next dev --turbopack --port 3001",
     "build": "next build --turbopack",
     "start": "next start --port 3001",
-    "lint": "eslint",
+    "lint": "biome lint .",
     "type-check": "tsc --noEmit",
     "env:build": "cd ../../.. && cd test && pnpm docker:build && pnpm docker:build:backend",
     "env:start": "cd ../../.. && cd test && pnpm docker:start:solochain-evm:initialised",
@@ -31,16 +31,13 @@
     "next": "15.5.4",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "viem": "^2.37.8"
+    "viem": "2.38.3"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "15.5.4",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
