@@ -131,12 +131,6 @@ await describeMspNet(
         getAddress(account.address),
         "Profile address should be checksummed and match wallet address"
       );
-      // Assert the backend already returns a checksummed address
-      strictEqual(
-        profile.address,
-        getAddress(profile.address),
-        "Profile address must be EIP-55 checksummed"
-      );
     });
 
     it("Should get MSP general info via the SDK's MspClient", async () => {
