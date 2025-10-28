@@ -24,7 +24,7 @@ use sp_core::H256;
 use crate::{
     constants::{
         mocks::{DOWNLOAD_FILE_CONTENT, MOCK_PRICE_PER_GIGA_UNIT},
-        rpc::{DEFAULT_MSP_CALLBACK_URL, DUMMY_MSP_ID, TIMEOUT_MULTIPLIER},
+        rpc::{DUMMY_MSP_ID, TIMEOUT_MULTIPLIER},
     },
     data::rpc::{
         connection::error::{RpcConnectionError, RpcResult},
