@@ -86,6 +86,7 @@ pub mod bucket {
 /// Test file data
 pub mod file {
     use hex_literal::hex;
+    use shc_indexer_db::models::FileStorageRequestStep;
 
     /// File key expected by the SDK tests to be in [`super::bucket::BUCKET1_BUCKET_ID`]
     pub const BUCKET1_FILE1_KEY: [u8; 32] =
@@ -111,8 +112,8 @@ pub mod file {
     /// Default file size
     pub const DEFAULT_SIZE: i64 = 1024;
 
-    /// Default file step (0 = requested, 1 = fulfilled)
-    pub const DEFAULT_STEP: i32 = 1;
+    /// By default, all files are fulfilled
+    pub const DEFAULT_STEP: i32 = FileStorageRequestStep::Stored as i32;
 }
 
 /// Mock connection test data

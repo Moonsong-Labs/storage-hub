@@ -61,6 +61,7 @@ diesel::table! {
         created_at -> Timestamp,
         updated_at -> Timestamp,
         deletion_signature -> Nullable<Bytea>,
+        deletion_requested_at -> Nullable<Timestamp>,
     }
 }
 

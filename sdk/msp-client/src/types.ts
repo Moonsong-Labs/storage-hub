@@ -127,9 +127,11 @@ export interface Bucket {
   fileCount: number;
 }
 
+export type FileStatus = "inProgress" | "ready" | "expired" | "deletionInProgress";
+
 export type FileTree = {
   name: string;
-} & ({ type: "file"; sizeBytes: number; fileKey: string } | { type: "folder" });
+} & ({ type: "file"; sizeBytes: number; fileKey: string; status: FileStatus } | { type: "folder" });
 
 export type FileTreeRoot = {
   name: string;
@@ -191,6 +193,7 @@ export interface FileInfo {
   size: number;
   isPublic: boolean;
   uploadedAt: Date;
+  status: FileStatus;
 }
 
 // Payments
