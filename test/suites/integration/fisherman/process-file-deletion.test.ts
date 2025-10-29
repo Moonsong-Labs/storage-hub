@@ -15,10 +15,6 @@ import {
   waitForMspFileAssociation,
   waitForBspFileAssociation
 } from "../../../util/indexerHelpers";
-import {
-  waitForIndexing,
-  waitForFishermanBatchDeletions
-} from "../../../util/fisherman/indexerTestHelpers";
 
 /**
  * FISHERMAN PROCESS FILE DELETION - COMPREHENSIVE EVENT PROCESSING
@@ -78,7 +74,7 @@ await describeMspNet(
 
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",
-        containerName: "storage-hub-sh-user-1",
+        containerName: userApi.shConsts.NODE_INFOS.user.containerName,
         timeout: 10000
       });
 
@@ -87,7 +83,7 @@ await describeMspNet(
       fishermanApi = await createFishermanApi();
 
       await userApi.block.seal({ finaliseBlock: true });
-      await waitForIndexing(userApi);
+      await userApi.indexer.waitForIndexing({});
     });
 
     it("processes FileDeletionRequested event and prepares delete_files extrinsic", async () => {
@@ -133,7 +129,7 @@ await describeMspNet(
         bspAccount: bspAddress
       });
 
-      await waitForIndexing(userApi);
+      await userApi.indexer.waitForIndexing({});
       await waitForFileIndexed(sql, fileKey);
       await waitForMspFileAssociation(sql, fileKey);
       await waitForBspFileAssociation(sql, fileKey);
@@ -175,10 +171,10 @@ await describeMspNet(
         deletionRequestResult.events
       );
 
-      await waitForIndexing(userApi, false);
+      await userApi.indexer.waitForIndexing({ producerApi: userApi, sealBlock: false });
 
       // Wait for fisherman to process user deletions
-      await waitForFishermanBatchDeletions(userApi, "User");
+      await userApi.indexer.waitForFishermanBatchDeletions({ deletionType: "User" });
 
       // Verify delete_files extrinsics are submitted
       await userApi.assert.extrinsicPresent({
@@ -258,7 +254,7 @@ await describeMspNet(
       // Pause MSP containers to prevent them from accepting the storage request
       // We don't pause the BSP so that it confirms the storage request so that when we reach
       // the expired block, the storage request will be moved to incomplete.
-      await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
+      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.msp1.containerName);
 
       try {
         const tickRangeToMaximumThreshold = (
@@ -331,11 +327,11 @@ await describeMspNet(
         assert(incompleteStorageRequest.pendingBspRemovals.length === 1);
         assert(incompleteStorageRequest.pendingBucketRemoval.isFalse);
 
-        await waitForIndexing(userApi, false);
+        await userApi.indexer.waitForIndexing({ producerApi: userApi, sealBlock: false });
         await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
 
         // Wait for fisherman to process incomplete storage deletions
-        await waitForFishermanBatchDeletions(userApi, "Incomplete");
+        await userApi.indexer.waitForFishermanBatchDeletions({ deletionType: "Incomplete" });
 
         // Verify delete_files_for_incomplete_storage_request extrinsic is submitted
         await userApi.assert.extrinsicPresent({
@@ -358,7 +354,9 @@ await describeMspNet(
         );
       } finally {
         // Resume containers for cleanup - always execute
-        await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-msp-1" });
+        await userApi.docker.resumeContainer({
+          containerName: userApi.shConsts.NODE_INFOS.msp1.containerName
+        });
       }
     });
 
@@ -394,7 +392,7 @@ await describeMspNet(
         bspAccount: bspAddress
       });
 
-      await waitForIndexing(userApi);
+      await userApi.indexer.waitForIndexing({});
 
       // Revoke the storage request
       const revokeStorageRequestResult = await userApi.block.seal({
@@ -410,10 +408,10 @@ await describeMspNet(
       );
 
       // Do not seal block
-      await waitForIndexing(userApi, false);
+      await userApi.indexer.waitForIndexing({ producerApi: userApi, sealBlock: false });
 
       // Wait for fisherman to process incomplete storage deletions
-      await waitForFishermanBatchDeletions(userApi, "Incomplete");
+      await userApi.indexer.waitForFishermanBatchDeletions({ deletionType: "Incomplete" });
 
       // Verify 2 extrsinsics submitted for each MSP and BSP
       await userApi.assert.extrinsicPresent({
@@ -527,7 +525,7 @@ await describeMspNet(
         bspAccount: bspAddress
       });
 
-      await waitForIndexing(userApi);
+      await userApi.indexer.waitForIndexing({});
       await waitForFileIndexed(sql, fileKey);
       await waitForMspFileAssociation(sql, fileKey);
       await waitForBspFileAssociation(sql, fileKey);
@@ -568,10 +566,10 @@ await describeMspNet(
         deletionRequestResult.events
       );
 
-      await waitForIndexing(userApi, false);
+      await userApi.indexer.waitForIndexing({ producerApi: userApi, sealBlock: false });
 
       // Wait for fisherman to process user deletions
-      await waitForFishermanBatchDeletions(userApi, "User");
+      await userApi.indexer.waitForFishermanBatchDeletions({ deletionType: "User" });
 
       // Verify TWO delete_files extrinsics are submitted (one for BSP and one for MSP)
       await userApi.assert.extrinsicPresent({
@@ -686,7 +684,7 @@ await describeMspNet(
         bspAccount: bspAddress
       });
 
-      await waitForIndexing(userApi);
+      await userApi.indexer.waitForIndexing({});
       await waitForFileIndexed(sql, fileKey);
       await waitForMspFileAssociation(sql, fileKey);
       await waitForBspFileAssociation(sql, fileKey);
@@ -734,10 +732,10 @@ await describeMspNet(
       const bucketMsp = (await userApi.query.providers.buckets(bucketId)).unwrap().mspId;
       assert(bucketMsp.isNone, "Bucket should have no MSP after stop storing");
 
-      await waitForIndexing(userApi, false);
+      await userApi.indexer.waitForIndexing({ producerApi: userApi, sealBlock: false });
 
       // Wait for fisherman to process incomplete storage deletions
-      await waitForFishermanBatchDeletions(userApi, "Incomplete");
+      await userApi.indexer.waitForFishermanBatchDeletions({ deletionType: "Incomplete" });
 
       // Verify 2 delete extrinsics are submitted (bucket and BSP)
       await userApi.assert.extrinsicPresent({

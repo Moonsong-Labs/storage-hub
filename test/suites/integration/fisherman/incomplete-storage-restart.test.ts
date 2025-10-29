@@ -10,7 +10,6 @@ import {
   assertEventMany,
   ShConsts
 } from "../../../util";
-import { waitForFishermanBatchDeletions } from "../../../util/fisherman/indexerTestHelpers";
 
 /**
  * FISHERMAN INCOMPLETE STORAGE REQUESTS WITH RESTART SCENARIOS
@@ -115,7 +114,7 @@ await describeMspNet(
       // Wait for user node to be ready
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",
-        containerName: "storage-hub-sh-user-1",
+        containerName: userApi.shConsts.NODE_INFOS.user.containerName,
         timeout: 10000
       });
 
@@ -173,10 +172,10 @@ await describeMspNet(
 
       const { bucketId } = await ensureBucket(bucketName);
 
-      await userApi.docker.pauseContainer("storage-hub-sh-fisherman-1");
+      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.fisherman.containerName);
 
       // Pause MSP container so that we trigger the incomplete storage request
-      await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
+      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.msp1.containerName);
       // Create more incomplete requests while fisherman is down
       const destinations = buildDestinations("test/restart-basic-new", 1, 5);
       const initialRequests: string[] = [];
@@ -234,11 +233,13 @@ await describeMspNet(
         await userApi.block.seal({ finaliseBlock: true });
       }
 
-      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-fisherman-1" });
+      await userApi.docker.resumeContainer({
+        containerName: userApi.shConsts.NODE_INFOS.fisherman.containerName
+      });
 
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",
-        containerName: "storage-hub-sh-fisherman-1",
+        containerName: userApi.shConsts.NODE_INFOS.fisherman.containerName,
         tail: 10
       });
 
@@ -247,19 +248,19 @@ await describeMspNet(
       // Wait for fisherman to detect it's out of sync and start syncing
       await userApi.docker.waitForLog({
         searchString: "🎣 Handling coming out of sync mode",
-        containerName: "storage-hub-sh-fisherman-1",
+        containerName: userApi.shConsts.NODE_INFOS.fisherman.containerName,
         timeout: 30000
       });
 
       // Wait for sync to complete
       await userApi.docker.waitForLog({
         searchString: "🎣 Completed initial incomplete storage requests sync",
-        containerName: "storage-hub-sh-fisherman-1",
+        containerName: userApi.shConsts.NODE_INFOS.fisherman.containerName,
         timeout: 30000
       });
 
       // Wait for fisherman to process incomplete storage deletions
-      await waitForFishermanBatchDeletions(userApi, "Incomplete");
+      await userApi.indexer.waitForFishermanBatchDeletions({ deletionType: "Incomplete" });
 
       // Verify delete extrinsic is submitted for the BSP
       await userApi.assert.extrinsicPresent({
@@ -297,7 +298,9 @@ await describeMspNet(
         }
       });
 
-      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-msp-1" });
+      await userApi.docker.resumeContainer({
+        containerName: userApi.shConsts.NODE_INFOS.msp1.containerName
+      });
     });
   }
 );

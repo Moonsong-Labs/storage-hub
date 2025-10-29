@@ -1,12 +1,12 @@
 import assert, { strictEqual, notEqual } from "node:assert";
+import { u8aToHex } from "@polkadot/util";
+import { decodeAddress } from "@polkadot/util-crypto";
 import {
   describeMspNet,
   type EnrichedBspApi,
   type SqlClient,
   shUser,
-  bspKey,
-  waitFor,
-  ShConsts
+  waitFor
 } from "../../../util";
 import {
   hexToBuffer,
@@ -14,10 +14,6 @@ import {
   waitForMspFileAssociation,
   waitForBspFileAssociation
 } from "../../../util/indexerHelpers";
-import {
-  waitForIndexing,
-  waitForFishermanBatchDeletions
-} from "../../../util/fisherman/indexerTestHelpers";
 
 /**
  * FISHERMAN BATCH FILE DELETION - COMPREHENSIVE BATCH PROCESSING TESTS
@@ -56,7 +52,8 @@ await describeMspNet(
     initialised: false,
     indexer: true,
     fisherman: true,
-    indexerMode: "fishing"
+    indexerMode: "fishing",
+    standaloneIndexer: true
   },
   ({
     before,
@@ -65,12 +62,14 @@ await describeMspNet(
     createBspApi,
     createMsp1Api,
     createSqlClient,
-    createFishermanApi
+    createFishermanApi,
+    createIndexerApi
   }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
     let msp1Api: EnrichedBspApi;
     let fishermanApi: EnrichedBspApi;
+    let indexerApi: EnrichedBspApi;
     let sql: SqlClient;
 
     before(async () => {
@@ -84,16 +83,26 @@ await describeMspNet(
 
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",
-        containerName: "storage-hub-sh-user-1",
+        containerName: userApi.shConsts.NODE_INFOS.user.containerName,
         timeout: 10000
       });
 
       // Ensure fisherman node is ready
-      assert(createFishermanApi, "Fisherman API not available for fisherman test");
+      assert(
+        createFishermanApi,
+        "Fisherman API not available. Ensure `fisherman` is set to `true` in the network configuration."
+      );
       fishermanApi = await createFishermanApi();
 
+      // Connect to standalone indexer node
+      assert(
+        createIndexerApi,
+        "Indexer API not available. Ensure `standaloneIndexer` is set to `true` in the network configuration."
+      );
+      indexerApi = await createIndexerApi();
+
       await userApi.block.seal({ finaliseBlock: true });
-      await waitForIndexing(userApi);
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sealBlock: false });
     });
 
     it("batches user-requested file deletions across multiple buckets with parallel BSP and bucket processing", async () => {
@@ -108,7 +117,10 @@ await describeMspNet(
       const fingerprints: string[] = [];
       const fileSizes: number[] = [];
 
-      // Create 3 buckets, each with 2 files (6 files total)
+      // Create 3 buckets and prepare storage request transactions (6 files total)
+      const storageRequestTxs = [];
+      const ownerHex = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
+
       for (let bucketIndex = 0; bucketIndex < 3; bucketIndex++) {
         const bucketName = `test-batch-bucket-${bucketIndex}`;
 
@@ -123,50 +135,143 @@ await describeMspNet(
 
         const bucketId = newBucketEventData.bucketId;
 
-        // Create 2 files in this bucket
+        // Prepare 2 file storage requests for this bucket
         for (let fileIndex = 0; fileIndex < 2; fileIndex++) {
-          const result = await userApi.file.newStorageRequest(
+          const {
+            file_key,
+            file_metadata: { location, fingerprint, file_size }
+          } = await userApi.rpc.storagehubclient.loadFileInStorage(
             "res/smile.jpg",
             `test/batch-b${bucketIndex}-f${fileIndex}.txt`,
-            bucketId,
-            shUser,
-            ShConsts.DUMMY_MSP_ID,
-            1
+            ownerHex,
+            bucketId.toString()
           );
 
-          fileKeys.push(result.fileKey);
+          fileKeys.push(file_key.toString());
           bucketIds.push(bucketId.toString());
-          locations.push(result.location);
-          fingerprints.push(result.fingerprint);
-          fileSizes.push(result.fileSize);
+          locations.push(location.toHex());
+          fingerprints.push(fingerprint.toHex());
+          fileSizes.push(file_size.toNumber());
 
-          // Wait for MSP to store the file
-          await waitFor({
-            lambda: async () =>
-              (await msp1Api.rpc.storagehubclient.isFileInFileStorage(result.fileKey)).isFileFound
-          });
-
-          await userApi.wait.mspResponseInTxPool();
-
-          // Wait for BSP to volunteer and store
-          await userApi.wait.bspVolunteer();
-          await waitFor({
-            lambda: async () =>
-              (await bspApi.rpc.storagehubclient.isFileInFileStorage(result.fileKey)).isFileFound
-          });
-
-          const bspAddress = userApi.createType("Address", bspKey.address);
-          await userApi.wait.bspStored({
-            expectedExts: 1,
-            sealBlock: true,
-            bspAccount: bspAddress
-          });
-
-          await waitForIndexing(userApi);
-          await waitForFileIndexed(sql, result.fileKey);
-          await waitForMspFileAssociation(sql, result.fileKey);
-          await waitForBspFileAssociation(sql, result.fileKey);
+          storageRequestTxs.push(
+            userApi.tx.fileSystem.issueStorageRequest(
+              bucketId,
+              location,
+              fingerprint,
+              file_size,
+              userApi.shConsts.DUMMY_MSP_ID,
+              [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+              { Custom: 1 }
+            )
+          );
         }
+      }
+
+      // Pause MSP to control storage request flow
+      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.msp1.containerName);
+      // TODO: Figure out why MSP 2 responds to storage requests for MSP 1
+      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.msp2.containerName);
+
+      // Seal all storage requests in a single block
+      await userApi.block.seal({ calls: storageRequestTxs, signer: shUser });
+
+      // Wait for all BSP volunteers to appear in tx pool
+      await userApi.wait.bspVolunteer(fileKeys.length);
+      await userApi.block.seal();
+
+      // Wait for all BSP stored confirmations
+      // BSP batches extrinsics, so we need to iteratively seal blocks and count events
+      let totalConfirmations = 0;
+      const maxAttempts = 3;
+      for (
+        let attempt = 0;
+        attempt < maxAttempts && totalConfirmations < fileKeys.length;
+        attempt++
+      ) {
+        // Wait for at least one bspConfirmStoring extrinsic in tx pool (don't check exact count)
+        await userApi.wait.bspStored({
+          sealBlock: false,
+          timeoutMs: 5000
+        });
+
+        // Seal the block and count BspConfirmedStoring events
+        const { events } = await userApi.block.seal();
+        const confirmEvents = await userApi.assert.eventMany(
+          "fileSystem",
+          "BspConfirmedStoring",
+          events
+        );
+
+        // Count total file keys in all BspConfirmedStoring events
+        for (const eventRecord of confirmEvents) {
+          if (userApi.events.fileSystem.BspConfirmedStoring.is(eventRecord.event)) {
+            totalConfirmations += eventRecord.event.data.confirmedFileKeys.length;
+          }
+        }
+      }
+
+      assert.strictEqual(
+        totalConfirmations,
+        fileKeys.length,
+        `Expected ${fileKeys.length} BSP confirmations, but got ${totalConfirmations}`
+      );
+
+      // Unpause MSP to process responses
+      await userApi.docker.resumeContainer({
+        containerName: userApi.shConsts.NODE_INFOS.msp1.containerName
+      });
+
+      // Wait for it to catch up to the tip of the chain
+      await userApi.wait.nodeCatchUpToChainTip(msp1Api);
+
+      // Wait for all MSP acceptance
+      // MSP batches extrinsics, so we need to iteratively seal blocks and count events
+      let totalAcceptance = 0;
+      for (let attempt = 0; attempt < maxAttempts && totalAcceptance < fileKeys.length; attempt++) {
+        await userApi.wait.mspResponseInTxPool();
+
+        // Seal the block and count BspConfirmedStoring events
+        const { events } = await userApi.block.seal();
+
+        const acceptEvents = await userApi.assert.eventMany(
+          "fileSystem",
+          "MspAcceptedStorageRequest",
+          events
+        );
+
+        // Count total MspAcceptedStorageRequest events
+        totalAcceptance += acceptEvents.length;
+      }
+
+      assert.strictEqual(
+        totalAcceptance,
+        fileKeys.length,
+        `Expected ${fileKeys.length} MSP acceptance, but got ${totalAcceptance}`
+      );
+
+      // Wait for BSP to store all files locally
+      for (const fileKey of fileKeys) {
+        await waitFor({
+          lambda: async () =>
+            (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
+        });
+      }
+
+      // Wait for MSP to store all files
+      for (const fileKey of fileKeys) {
+        await waitFor({
+          lambda: async () =>
+            (await msp1Api.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
+        });
+      }
+
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+
+      // Wait for all files to be indexed
+      for (const fileKey of fileKeys) {
+        await waitForFileIndexed(sql, fileKey);
+        await waitForMspFileAssociation(sql, fileKey);
+        await waitForBspFileAssociation(sql, fileKey);
       }
 
       // Build all deletion request calls
@@ -214,21 +319,17 @@ await describeMspNet(
         `Should have ${fileKeys.length} FileDeletionRequested events`
       );
 
-      await waitForIndexing(userApi, false);
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sealBlock: false });
 
       // Verify deletion signatures are stored in database
       await verifyDeletionSignaturesStored(sql, fileKeys);
 
-      // Wait for fisherman to process user deletions
-      await waitForFishermanBatchDeletions(userApi, "User");
-
-      // Verify extrinsics are submitted (1 BSP + 3 Buckets = 4 total)
-      await userApi.assert.extrinsicPresent({
-        method: "deleteFiles",
-        module: "fileSystem",
-        checkTxPool: true,
-        assertLength: 4, // 1 BSP extrinsic (6 files) + 3 Bucket extrinsics (2 files each)
-        timeout: 30000
+      // Wait for fisherman to process user deletions and verify extrinsics are in tx pool
+      // (1 BSP + 3 Buckets = 4 total)
+      await userApi.indexer.waitForFishermanBatchDeletions({
+        deletionType: "User",
+        expectExt: 4, // 1 BSP extrinsic (6 files) + 3 Bucket extrinsics (2 files each)
+        sealBlock: false // Seal manually to capture events
       });
 
       // Seal block to process the extrinsics
@@ -314,192 +415,284 @@ await describeMspNet(
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
       const valuePropId = valueProps[0].id;
 
-      // Pause MSP to ensure only BSP confirms
-      await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
+      // Create 3 buckets and prepare storage request transactions (6 files total) that will become incomplete
+      const storageRequestTxs = [];
+      const ownerHex = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
 
-      try {
-        // Create 3 buckets, each with 2 files (6 files total) that will become incomplete
-        for (let bucketIndex = 0; bucketIndex < 3; bucketIndex++) {
-          const bucketName = `test-incomplete-bucket-${bucketIndex}`;
+      for (let bucketIndex = 0; bucketIndex < 3; bucketIndex++) {
+        const bucketName = `test-incomplete-bucket-${bucketIndex}`;
 
-          // Create bucket
-          const newBucketEvent = await userApi.createBucket(bucketName, valuePropId);
-          const newBucketEventData =
-            userApi.events.fileSystem.NewBucket.is(newBucketEvent) && newBucketEvent.data;
+        // Create bucket
+        const newBucketEvent = await userApi.createBucket(bucketName, valuePropId);
+        const newBucketEventData =
+          userApi.events.fileSystem.NewBucket.is(newBucketEvent) && newBucketEvent.data;
 
-          if (!newBucketEventData) {
-            throw new Error("NewBucket event data not found");
-          }
+        if (!newBucketEventData) {
+          throw new Error("NewBucket event data not found");
+        }
 
-          const bucketId = newBucketEventData.bucketId;
+        const bucketId = newBucketEventData.bucketId;
 
-          // Create 2 files in this bucket
-          for (let fileIndex = 0; fileIndex < 2; fileIndex++) {
-            const result = await userApi.file.newStorageRequest(
-              "res/whatsup.jpg",
-              `test/incomplete-b${bucketIndex}-f${fileIndex}.txt`,
+        // Prepare 2 file storage requests for this bucket
+        for (let fileIndex = 0; fileIndex < 2; fileIndex++) {
+          const {
+            file_key,
+            file_metadata: { location, fingerprint, file_size }
+          } = await userApi.rpc.storagehubclient.loadFileInStorage(
+            "res/whatsup.jpg",
+            `test/incomplete-b${bucketIndex}-f${fileIndex}.txt`,
+            ownerHex,
+            bucketId.toString()
+          );
+
+          fileKeys.push(file_key.toString());
+          bucketIds.push(bucketId.toString());
+
+          storageRequestTxs.push(
+            userApi.tx.fileSystem.issueStorageRequest(
               bucketId,
-              shUser,
-              ShConsts.DUMMY_MSP_ID,
-              2
-            );
+              location,
+              fingerprint,
+              file_size,
+              userApi.shConsts.DUMMY_MSP_ID,
+              [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+              { Custom: 2 } // Keep storage request alive so user can revoke it (assuming there is only a single BSP in the network)
+            )
+          );
+        }
+      }
 
-            fileKeys.push(result.fileKey);
-            bucketIds.push(bucketId.toString());
+      // Pause MSP to control storage request flow
+      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.msp1.containerName);
 
-            // Wait for BSP to volunteer and store
-            await userApi.wait.bspVolunteer();
-            await waitFor({
-              lambda: async () =>
-                (await bspApi.rpc.storagehubclient.isFileInFileStorage(result.fileKey)).isFileFound
-            });
+      // Seal all storage requests in a single block
+      await userApi.block.seal({ calls: storageRequestTxs, signer: shUser });
 
-            const bspAddress = userApi.createType("Address", bspKey.address);
-            await userApi.wait.bspStored({
-              expectedExts: 1,
-              sealBlock: true,
-              bspAccount: bspAddress
-            });
+      // Wait for all BSP volunteers to appear in tx pool
+      await userApi.wait.bspVolunteer(fileKeys.length);
+      await userApi.block.seal();
 
-            await waitForIndexing(userApi);
+      // Wait for all BSP stored confirmations
+      // BSP batches extrinsics, so we need to iteratively seal blocks and count events
+      let totalConfirmations = 0;
+      const maxAttempts = 3;
+      for (
+        let attempt = 0;
+        attempt < maxAttempts && totalConfirmations < fileKeys.length;
+        attempt++
+      ) {
+        // Wait for at least one bspConfirmStoring extrinsic in tx pool (don't check exact count)
+        await userApi.wait.bspStored({
+          sealBlock: false,
+          timeoutMs: 5000
+        });
+
+        // Seal the block and count BspConfirmedStoring events
+        const { events } = await userApi.block.seal();
+        const confirmEvents = await userApi.assert.eventMany(
+          "fileSystem",
+          "BspConfirmedStoring",
+          events
+        );
+
+        // Count total file keys in all BspConfirmedStoring events
+        for (const eventRecord of confirmEvents) {
+          if (userApi.events.fileSystem.BspConfirmedStoring.is(eventRecord.event)) {
+            totalConfirmations += eventRecord.event.data.confirmedFileKeys.length;
           }
         }
+      }
 
-        // Build all revocation calls
-        const revocationCalls = fileKeys.map((fileKey) =>
-          userApi.tx.fileSystem.revokeStorageRequest(fileKey)
+      assert.strictEqual(
+        totalConfirmations,
+        fileKeys.length,
+        `Expected ${fileKeys.length} BSP confirmations, but got ${totalConfirmations}`
+      );
+
+      // Unpause MSP to process responses
+      await userApi.docker.resumeContainer({
+        containerName: userApi.shConsts.NODE_INFOS.msp1.containerName
+      });
+
+      // Wait for it to catch up to the tip of the chain
+      await userApi.wait.nodeCatchUpToChainTip(msp1Api);
+
+      // Wait for all MSP acceptance
+      // MSP batches extrinsics, so we need to iteratively seal blocks and count events
+      let totalAcceptance = 0;
+      for (let attempt = 0; attempt < maxAttempts && totalAcceptance < fileKeys.length; attempt++) {
+        await userApi.wait.mspResponseInTxPool();
+
+        // Seal the block and count BspConfirmedStoring events
+        const { events } = await userApi.block.seal();
+
+        const acceptEvents = await userApi.assert.eventMany(
+          "fileSystem",
+          "MspAcceptedStorageRequest",
+          events
         );
 
-        // Seal a single block with all revocation requests
-        const revokeResult = await userApi.block.seal({
-          calls: revocationCalls,
-          signer: shUser
-        });
+        // Count total MspAcceptedStorageRequest events
+        totalAcceptance += acceptEvents.length;
+      }
 
-        // Verify all StorageRequestRevoked events are present (one per file)
-        const revokedEvents = (revokeResult.events || []).filter((record) =>
-          userApi.events.fileSystem.StorageRequestRevoked.is(record.event)
-        );
+      assert.strictEqual(
+        totalAcceptance,
+        fileKeys.length,
+        `Expected ${fileKeys.length} MSP acceptance, but got ${totalAcceptance}`
+      );
 
-        assert.equal(
-          revokedEvents.length,
-          fileKeys.length,
-          `Should have ${fileKeys.length} StorageRequestRevoked events`
-        );
-
-        // Verify all IncompleteStorageRequest events are present (one per file)
-        const incompleteEvents = (revokeResult.events || []).filter((record) =>
-          userApi.events.fileSystem.IncompleteStorageRequest.is(record.event)
-        );
-
-        assert.equal(
-          incompleteEvents.length,
-          fileKeys.length,
-          `Should have ${fileKeys.length} IncompleteStorageRequest events`
-        );
-
-        // Verify incomplete storage request state
-        const incompleteStorageRequests =
-          await userApi.query.fileSystem.incompleteStorageRequests.entries();
-        assert(incompleteStorageRequests.length > 0, "Should have incomplete storage requests");
-
-        await waitForIndexing(userApi, false);
-
-        // Wait for fisherman to catch up with chain
-        await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
-
-        // Wait for fisherman to process incomplete storage deletions
-        await waitForFishermanBatchDeletions(userApi, "Incomplete");
-
-        // Verify incomplete deletion extrinsics are submitted (1 BSP + 3 Buckets = 4 total)
-        await userApi.assert.extrinsicPresent({
-          method: "deleteFilesForIncompleteStorageRequest",
-          module: "fileSystem",
-          checkTxPool: true,
-          assertLength: 4, // 1 BSP extrinsic (6 files) + 3 Bucket extrinsics (2 files each)
-          timeout: 30000
-        });
-
-        // Seal block to process the extrinsics
-        const deletionResult = await userApi.block.seal();
-
-        // Verify BSP deletion event
-        const bspDeletionEvents = (deletionResult.events || []).filter((record) =>
-          userApi.events.fileSystem.BspFileDeletionsCompleted.is(record.event)
-        );
-
-        assert.equal(
-          bspDeletionEvents.length,
-          1,
-          "Should have exactly 1 BSP deletion event (batches all 6 files)"
-        );
-
-        // Verify bucket deletion events
-        const bucketDeletionEvents = (deletionResult.events || []).filter((record) =>
-          userApi.events.fileSystem.BucketFileDeletionsCompleted.is(record.event)
-        );
-
-        assert.equal(
-          bucketDeletionEvents.length,
-          3,
-          "Should have exactly 3 bucket deletion events (one per bucket with 2 files each)"
-        );
-
-        // Verify BSP root changed
-        const bspDeletionEvent = userApi.assert.fetchEvent(
-          userApi.events.fileSystem.BspFileDeletionsCompleted,
-          deletionResult.events
-        );
-
+      // Wait for BSP to store all files locally
+      for (const fileKey of fileKeys) {
         await waitFor({
-          lambda: async () => {
-            notEqual(
-              bspDeletionEvent.data.oldRoot.toString(),
-              bspDeletionEvent.data.newRoot.toString(),
-              "BSP forest root should have changed after file deletion"
-            );
-            const currentBspRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
-            strictEqual(
-              currentBspRoot.toString(),
-              bspDeletionEvent.data.newRoot.toString(),
-              "Current BSP forest root should match the new root from deletion event"
-            );
-            return true;
-          }
-        });
-
-        // Verify MSP roots changed for all 3 buckets
-        for (const bucketDeletionRecord of bucketDeletionEvents) {
-          const bucketDeletionEvent = bucketDeletionRecord.event;
-          if (userApi.events.fileSystem.BucketFileDeletionsCompleted.is(bucketDeletionEvent)) {
-            await waitFor({
-              lambda: async () => {
-                notEqual(
-                  bucketDeletionEvent.data.oldRoot.toString(),
-                  bucketDeletionEvent.data.newRoot.toString(),
-                  "MSP forest root should have changed after file deletion"
-                );
-                const currentBucketRoot = await msp1Api.rpc.storagehubclient.getForestRoot(
-                  bucketDeletionEvent.data.bucketId.toString()
-                );
-                strictEqual(
-                  currentBucketRoot.toString(),
-                  bucketDeletionEvent.data.newRoot.toString(),
-                  "Current bucket forest root should match the new root from deletion event"
-                );
-                return true;
-              }
-            });
-          }
-        }
-      } finally {
-        // Always resume MSP container
-        await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-msp-1" });
-        await userApi.docker.waitForLog({
-          searchString: "💤 Idle",
-          containerName: "storage-hub-sh-msp-1"
+          lambda: async () =>
+            (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
         });
       }
+
+      // Wait for MSP to store all files
+      for (const fileKey of fileKeys) {
+        await waitFor({
+          lambda: async () =>
+            (await msp1Api.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
+        });
+      }
+
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+
+      // Build all revocation calls
+      const revocationCalls = fileKeys.map((fileKey) =>
+        userApi.tx.fileSystem.revokeStorageRequest(fileKey)
+      );
+
+      // Seal a single block with all revocation requests
+      const revokeResult = await userApi.block.seal({
+        calls: revocationCalls,
+        signer: shUser
+      });
+
+      // Verify all StorageRequestRevoked events are present (one per file)
+      const revokedEvents = (revokeResult.events || []).filter((record) =>
+        userApi.events.fileSystem.StorageRequestRevoked.is(record.event)
+      );
+
+      assert.equal(
+        revokedEvents.length,
+        fileKeys.length,
+        `Should have ${fileKeys.length} StorageRequestRevoked events`
+      );
+
+      // Verify all IncompleteStorageRequest events are present (one per file)
+      const incompleteEvents = (revokeResult.events || []).filter((record) =>
+        userApi.events.fileSystem.IncompleteStorageRequest.is(record.event)
+      );
+
+      assert.equal(
+        incompleteEvents.length,
+        fileKeys.length,
+        `Should have ${fileKeys.length} IncompleteStorageRequest events`
+      );
+
+      // Verify incomplete storage request state
+      const incompleteStorageRequests =
+        await userApi.query.fileSystem.incompleteStorageRequests.entries();
+      assert(incompleteStorageRequests.length > 0, "Should have incomplete storage requests");
+
+      // Seal and finalize block
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+
+      // Wait for fisherman to catch up with chain
+      await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
+
+      // Wait for fisherman to process incomplete storage deletions and verify extrinsics are in tx pool
+      // (1 BSP + 3 Buckets = 4 total)
+      await userApi.indexer.waitForFishermanBatchDeletions({
+        deletionType: "Incomplete",
+        expectExt: 4, // 1 BSP extrinsic (6 files) + 3 Bucket extrinsics (2 files each)
+        sealBlock: false // Seal manually to capture events
+      });
+
+      // Seal block to process the extrinsics
+      const deletionResult = await userApi.block.seal();
+
+      // Verify BSP deletion event
+      const bspDeletionEvents = (deletionResult.events || []).filter((record) =>
+        userApi.events.fileSystem.BspFileDeletionsCompleted.is(record.event)
+      );
+
+      assert.equal(
+        bspDeletionEvents.length,
+        1,
+        "Should have exactly 1 BSP deletion event (batches all 6 files)"
+      );
+
+      // Verify bucket deletion events
+      const bucketDeletionEvents = (deletionResult.events || []).filter((record) =>
+        userApi.events.fileSystem.BucketFileDeletionsCompleted.is(record.event)
+      );
+
+      assert.equal(
+        bucketDeletionEvents.length,
+        3,
+        "Should have exactly 3 bucket deletion events (one per bucket with 2 files each)"
+      );
+
+      // Verify BSP root changed
+      const bspDeletionEvent = userApi.assert.fetchEvent(
+        userApi.events.fileSystem.BspFileDeletionsCompleted,
+        deletionResult.events
+      );
+
+      await waitFor({
+        lambda: async () => {
+          notEqual(
+            bspDeletionEvent.data.oldRoot.toString(),
+            bspDeletionEvent.data.newRoot.toString(),
+            "BSP forest root should have changed after file deletion"
+          );
+          const currentBspRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
+          strictEqual(
+            currentBspRoot.toString(),
+            bspDeletionEvent.data.newRoot.toString(),
+            "Current BSP forest root should match the new root from deletion event"
+          );
+          return true;
+        }
+      });
+
+      // Verify MSP roots changed for all 3 buckets
+      for (const bucketDeletionRecord of bucketDeletionEvents) {
+        const bucketDeletionEvent = bucketDeletionRecord.event;
+        if (userApi.events.fileSystem.BucketFileDeletionsCompleted.is(bucketDeletionEvent)) {
+          await waitFor({
+            lambda: async () => {
+              notEqual(
+                bucketDeletionEvent.data.oldRoot.toString(),
+                bucketDeletionEvent.data.newRoot.toString(),
+                "MSP forest root should have changed after file deletion"
+              );
+              const currentBucketRoot = await msp1Api.rpc.storagehubclient.getForestRoot(
+                bucketDeletionEvent.data.bucketId.toString()
+              );
+              strictEqual(
+                currentBucketRoot.toString(),
+                bucketDeletionEvent.data.newRoot.toString(),
+                "Current bucket forest root should match the new root from deletion event"
+              );
+              return true;
+            }
+          });
+        }
+      }
+
+      // Always resume MSP container
+      await userApi.docker.resumeContainer({
+        containerName: userApi.shConsts.NODE_INFOS.msp2.containerName
+      });
+      await userApi.docker.waitForLog({
+        searchString: "💤 Idle",
+        containerName: userApi.shConsts.NODE_INFOS.msp2.containerName
+      });
     });
   }
 );

@@ -10,7 +10,6 @@ import {
   sleep,
   ShConsts
 } from "../../../util";
-import { waitForFishermanBatchDeletions } from "../../../util/fisherman/indexerTestHelpers";
 
 /**
  * FISHERMAN INCOMPLETE STORAGE REQUESTS WITH CATCHUP
@@ -47,7 +46,7 @@ await describeMspNet(
       // Wait for user node to be ready
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",
-        containerName: "storage-hub-sh-user-1",
+        containerName: userApi.shConsts.NODE_INFOS.user.containerName,
         timeout: 10000
       });
 
@@ -64,7 +63,7 @@ await describeMspNet(
       const destination = "test/expired-bsp.txt";
 
       // Pause MSP container to ensure only BSP accepts
-      await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
+      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.msp1.containerName);
 
       try {
         const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
@@ -122,7 +121,7 @@ await describeMspNet(
         await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
 
         // Wait for fisherman to process incomplete storage deletions
-        await waitForFishermanBatchDeletions(userApi, "Incomplete");
+        await userApi.indexer.waitForFishermanBatchDeletions({ deletionType: "Incomplete" });
 
         // No deletion should be sent for a bucket that has not been updated with this file key since the MSP did not accept it.
         // TODO: Add additional test case scenarios.
@@ -146,10 +145,12 @@ await describeMspNet(
         );
       } finally {
         // Always resume MSP container even if test fails
-        await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-msp-1" });
+        await userApi.docker.resumeContainer({
+          containerName: userApi.shConsts.NODE_INFOS.msp1.containerName
+        });
         await userApi.docker.waitForLog({
           searchString: "💤 Idle",
-          containerName: "storage-hub-sh-msp-1"
+          containerName: userApi.shConsts.NODE_INFOS.msp1.containerName
         });
         await sleep(3000);
       }
@@ -205,7 +206,7 @@ await describeMspNet(
       );
 
       // Wait for fisherman to process incomplete storage deletions
-      await waitForFishermanBatchDeletions(userApi, "Incomplete");
+      await userApi.indexer.waitForFishermanBatchDeletions({ deletionType: "Incomplete" });
 
       // Verify two delete extrinsics are submitted (for MSP and BSP)
       await userApi.assert.extrinsicPresent({
@@ -295,7 +296,7 @@ await describeMspNet(
       assertEventPresent(userApi, "fileSystem", "IncompleteStorageRequest", revokeResult.events);
 
       // Wait for fisherman to process incomplete storage deletions
-      await waitForFishermanBatchDeletions(userApi, "Incomplete");
+      await userApi.indexer.waitForFishermanBatchDeletions({ deletionType: "Incomplete" });
 
       // Verify two delete extrinsics are submitted:
       // 1. For the bucket (no MSP present)

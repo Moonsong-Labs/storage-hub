@@ -15,10 +15,6 @@ import {
   waitForMspFileAssociation,
   waitForBspFileAssociation
 } from "../../../util/indexerHelpers";
-import {
-  waitForIndexing,
-  waitForFishermanBatchDeletions
-} from "../../../util/fisherman/indexerTestHelpers";
 
 /**
  * FISHERMAN FILE DELETION FLOW - BASIC HAPPY PATH
@@ -73,12 +69,12 @@ await describeMspNet(
 
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",
-        containerName: "storage-hub-sh-user-1",
+        containerName: userApi.shConsts.NODE_INFOS.user.containerName,
         timeout: 10000
       });
 
       await userApi.block.seal({ finaliseBlock: true });
-      await waitForIndexing(userApi);
+      await userApi.indexer.waitForIndexing({});
     });
 
     it("creates storage request, waits for MSP and BSP to accept and confirm, verifies indexer database", async () => {
@@ -129,7 +125,7 @@ await describeMspNet(
         bspAccount: bspAddress
       });
 
-      await waitForIndexing(userApi);
+      await userApi.indexer.waitForIndexing({});
       await waitForFileIndexed(sql, fileKey);
       await waitForMspFileAssociation(sql, fileKey);
       await waitForBspFileAssociation(sql, fileKey);
@@ -173,7 +169,7 @@ await describeMspNet(
         deletionRequestResult.events
       );
 
-      await waitForIndexing(userApi, false);
+      await userApi.indexer.waitForIndexing({ producerApi: userApi, sealBlock: false });
 
       // Verify that the deletion signature was stored in the database (SCALE-encoded)
       await waitFor({
@@ -199,7 +195,7 @@ await describeMspNet(
       );
 
       // Wait for fisherman to process user deletions
-      await waitForFishermanBatchDeletions(userApi, "User");
+      await userApi.indexer.waitForFishermanBatchDeletions({ deletionType: "User" });
 
       // Verify delete_files extrinsics are submitted
       await userApi.assert.extrinsicPresent({

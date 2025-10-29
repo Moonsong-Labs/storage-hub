@@ -304,6 +304,13 @@ export type FullNetContext = {
   createFishermanApi?: () => ReturnType<typeof BspNetTestApi.create>;
 
   /**
+   * Creates and returns a connected API instance for the indexer node.
+   * Only available when standalone indexer is enabled in test options.
+   * @returns A promise that resolves to an enriched api instance for indexer operations.
+   */
+  createIndexerApi?: () => ReturnType<typeof BspNetTestApi.create>;
+
+  /**
    * Creates and returns a connected API instance for a BSP node.
    * @returns A promise that resolves to  an enriched api instance for BSP operations.
    */

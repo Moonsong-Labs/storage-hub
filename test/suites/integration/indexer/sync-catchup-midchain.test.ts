@@ -37,7 +37,7 @@ await describeMspNet(
 
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",
-        containerName: "storage-hub-sh-user-1",
+        containerName: userApi.shConsts.NODE_INFOS.user.containerName,
         timeout: 10000
       });
 
@@ -88,7 +88,7 @@ await describeMspNet(
       const blockBeforePause = await getLastIndexedBlock(sql);
 
       // Simulate indexer failure mid-chain - more realistic than genesis pause
-      await userApi.docker.pauseContainer("storage-hub-sh-indexer-1");
+      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.indexer.containerName);
 
       // Produce additional blocks exceeding sync threshold while indexer is down
       // Capture block number after each seal to avoid race conditions
@@ -113,7 +113,9 @@ await describeMspNet(
       );
 
       // Resume indexer to trigger mid-chain catchup scenario
-      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-indexer-1" });
+      await userApi.docker.resumeContainer({
+        containerName: userApi.shConsts.NODE_INFOS.indexer.containerName
+      });
 
       // Non-producer nodes must explicitly finalize imported blocks to trigger indexing
       // We need to finalize the exact target block, not just the current finalized head
