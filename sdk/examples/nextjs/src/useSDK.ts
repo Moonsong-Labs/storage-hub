@@ -14,7 +14,9 @@ export const useSDK = (): string => {
 
       // Try MSP first (short timeout so UI doesn't hang)
       try {
-        const client = await MspClient.connect({ baseUrl, timeoutMs: 3000 });
+        let sessionRef: { token: string; user: { address: string } } | undefined;
+        const sessionProvider = async () => sessionRef;
+        const client = await MspClient.connect({ baseUrl, timeoutMs: 3000 }, sessionProvider);
         try {
           const health = await client.getHealth();
           msgs.push(`MSP Health: ${JSON.stringify(health)}`);

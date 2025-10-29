@@ -16036,8 +16036,6 @@ dependencies = [
  "tokio",
  "toml 0.8.23",
  "tracing",
- "tracing-bunyan-formatter",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -16079,6 +16077,7 @@ dependencies = [
  "shc-file-manager",
  "shc-indexer-db",
  "shc-rpc",
+ "shp-constants",
  "shp-file-metadata",
  "shp-types",
  "sp-core 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
@@ -16095,6 +16094,8 @@ dependencies = [
  "toml 0.8.23",
  "tower-http 0.5.2",
  "tracing",
+ "tracing-bunyan-formatter",
+ "tracing-subscriber",
  "trie-db 0.29.1",
  "uuid",
 ]
@@ -20289,6 +20290,7 @@ dependencies = [
  "pin-project-lite",
  "tower-layer",
  "tower-service",
+ "tracing",
 ]
 
 [[package]]

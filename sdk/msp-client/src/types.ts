@@ -99,6 +99,9 @@ export interface Session {
   [k: string]: unknown;
 }
 
+// Session provider function
+export type SessionProvider = () => Promise<Readonly<Session> | undefined>;
+
 // Download
 export interface DownloadOptions {
   range?: { start: number; end?: number };
@@ -124,10 +127,12 @@ export interface Bucket {
   fileCount: number;
 }
 
+export type FileStatus = "inProgress" | "ready" | "expired" | "deletionInProgress";
+
 export type FileTree = {
   name: string;
 } & (
-  | { type: "file"; sizeBytes: number; fileKey: string }
+  | { type: "file"; sizeBytes: number; fileKey: string; status: FileStatus }
   | { type: "folder"; children: FileTree[] }
 );
 
@@ -175,6 +180,8 @@ export interface ValueProp {
   isAvailable: boolean;
 }
 
+// TODO we can extend FileInfo from the following type
+// import type { FileInfo } from '@storagehub-sdk/core';
 export interface FileInfo {
   fileKey: string;
   fingerprint: string;
@@ -184,6 +191,7 @@ export interface FileInfo {
   size: number;
   isPublic: boolean;
   uploadedAt: Date;
+  status: FileStatus;
 }
 
 // Payments

@@ -1108,7 +1108,23 @@ where
                             .files_to_distribute
                             .entry(file_key.clone())
                             .or_insert(FileDistributionInfo::new());
-                        entry.bsps_distributing.insert(bsp_id);
+
+                        // Register BSP as one for which the file is being distributed already.
+                        // Error if the BSP is already registered.
+                        if !entry.bsps_distributing.insert(bsp_id) {
+                            error!(target: LOG_TARGET, "BSP {:?} is already registered as distributing file {:?}", bsp_id, file_key);
+                            match callback.send(Err(anyhow!(
+                                "BSP {:?} is already registered as distributing file {:?}",
+                                bsp_id,
+                                file_key
+                            ))) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                                }
+                            }
+                            return;
+                        }
 
                         match callback.send(Ok(())) {
                             Ok(_) => {}
@@ -1151,6 +1167,34 @@ where
                             Err(e) => {
                                 error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
                             }
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueryBucketsForMsp { msp_id, callback } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    // Query buckets managed by the given MSP.
+                    let buckets = self
+                        .client
+                        .runtime_api()
+                        .query_buckets_for_msp(current_block_hash, &msp_id)
+                        .map_err(|e| {
+                            error!(target: LOG_TARGET, "Failed to call runtime API query_buckets_for_msp: {:?}", e);
+                            e
+                        })
+                        .ok()
+                        .and_then(|api_result| {
+                            api_result.map_err(|e| {
+                                error!(target: LOG_TARGET, "Runtime API error in query_buckets_for_msp: {:?}", e);
+                                e
+                            }).ok()
+                        })
+                        .unwrap_or_default();
+
+                    match callback.send(Ok(buckets)) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send back buckets for MSP: {:?}", e);
                         }
                     }
                 }

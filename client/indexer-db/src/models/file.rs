@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
@@ -12,16 +14,46 @@ use crate::{
     DbConnection,
 };
 
+/// Default limit for single file queries (user or incomplete deletions)
+pub(crate) const DEFAULT_FILE_QUERY_LIMIT: i64 = 100;
+
+/// Default limit for batch queries that group by BSP or Bucket
+pub(crate) const DEFAULT_BATCH_QUERY_LIMIT: i64 = 1000;
+
 pub enum FileStorageRequestStep {
     Requested = 0,
     Stored = 1,
     Expired = 2,
 }
 
+impl TryFrom<i32> for FileStorageRequestStep {
+    type Error = i32;
+    fn try_from(v: i32) -> Result<Self, Self::Error> {
+        match v {
+            0 => Ok(Self::Requested),
+            1 => Ok(Self::Stored),
+            2 => Ok(Self::Expired),
+            _ => Err(v),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileDeletionStatus {
     None = 0,
     InProgress = 1,
+}
+
+/// Type of file deletion based on presence of user signature.
+///
+/// Used to distinguish between user-initiated deletions (which require signatures)
+/// and automated incomplete storage cleanup (which does not).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileDeletionType {
+    /// User-initiated deletion (has signature)
+    User,
+    /// Automated incomplete storage cleanup (no signature)
+    Incomplete,
 }
 
 /// Table that holds the Files (both ongoing requests and completed).
@@ -52,6 +84,14 @@ pub struct File {
     ///
     /// NULL when file is deleted through automated processes (e.g., [`StorageRequestRevoked`](pallet_file_system::Event::StorageRequestRevoked)).
     pub deletion_signature: Option<Vec<u8>>,
+    /// Timestamp when file was marked for deletion.
+    ///
+    /// Set automatically when [`deletion_status`] becomes [`FileDeletionStatus::InProgress`] via either
+    /// [`FileDeletionRequested`](pallet_file_system::Event::FileDeletionRequested) or
+    /// [`IncompleteStorageRequest`](pallet_file_system::Event::IncompleteStorageRequest) events.
+    ///
+    /// Used for FIFO ordering of deletion processing by fisherman nodes.
+    pub deletion_requested_at: Option<NaiveDateTime>,
 }
 
 /// Association table between File and PeerId
@@ -161,14 +201,32 @@ impl File {
             FileDeletionStatus::None => None,
             FileDeletionStatus::InProgress => Some(1),
         };
-        diesel::update(file::table)
-            .filter(file::file_key.eq(file_key))
-            .set((
-                file::deletion_status.eq(status_value),
-                file::deletion_signature.eq(signature),
-            ))
-            .execute(conn)
-            .await?;
+
+        // When marking for deletion, set current timestamp; otherwise clear it
+        match status {
+            FileDeletionStatus::InProgress => {
+                diesel::update(file::table)
+                    .filter(file::file_key.eq(file_key))
+                    .set((
+                        file::deletion_status.eq(status_value),
+                        file::deletion_signature.eq(signature),
+                        file::deletion_requested_at.eq(diesel::dsl::now),
+                    ))
+                    .execute(conn)
+                    .await?;
+            }
+            FileDeletionStatus::None => {
+                diesel::update(file::table)
+                    .filter(file::file_key.eq(file_key))
+                    .set((
+                        file::deletion_status.eq(status_value),
+                        file::deletion_signature.eq(signature),
+                        file::deletion_requested_at.eq(None::<chrono::NaiveDateTime>),
+                    ))
+                    .execute(conn)
+                    .await?;
+            }
+        }
         Ok(())
     }
 
@@ -368,6 +426,148 @@ impl File {
             .await?;
 
         Ok(file_keys)
+    }
+
+    /// Get all files pending user deletion (deletion_status = InProgress with signature).
+    ///
+    /// Returns files that were marked for deletion via [`FileDeletionRequested`] events,
+    /// which include user signatures required for proof construction.
+    ///
+    /// # Arguments
+    /// * `bucket_id` - Optional filter by specific bucket's onchain ID
+    /// * `limit` - Maximum number of results to return (default: 100)
+    /// * `offset` - Number of results to skip for pagination (default: 0)
+    pub async fn get_pending_user_deletions<'a>(
+        conn: &mut DbConnection<'a>,
+        bucket_id: Option<&[u8]>,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<Vec<Self>, diesel::result::Error> {
+        let limit = limit.unwrap_or(DEFAULT_FILE_QUERY_LIMIT);
+        let offset = offset.unwrap_or(0);
+
+        let mut query = file::table
+            .filter(file::deletion_status.eq(FileDeletionStatus::InProgress as i32))
+            .filter(file::deletion_signature.is_not_null())
+            .into_boxed();
+
+        // Filter by bucket ID if provided
+        if let Some(bucket_id) = bucket_id {
+            query = query.filter(file::onchain_bucket_id.eq(bucket_id));
+        }
+
+        let files = query
+            .order_by(file::deletion_requested_at.asc())
+            .limit(limit)
+            .offset(offset)
+            .load(conn)
+            .await?;
+        Ok(files)
+    }
+
+    /// Get all files pending incomplete storage deletion (deletion_status = InProgress without signature).
+    ///
+    /// Returns files that were marked for deletion via [`IncompleteStorageRequest`] events,
+    /// which do not include user signatures.
+    ///
+    /// # Arguments
+    /// * `bucket_id` - Optional filter by specific bucket's onchain ID
+    /// * `limit` - Maximum number of results to return (default: 100)
+    /// * `offset` - Number of results to skip for pagination (default: 0)
+    pub async fn get_pending_incomplete_deletions<'a>(
+        conn: &mut DbConnection<'a>,
+        bucket_id: Option<&[u8]>,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<Vec<Self>, diesel::result::Error> {
+        let limit = limit.unwrap_or(DEFAULT_FILE_QUERY_LIMIT);
+        let offset = offset.unwrap_or(0);
+
+        let mut query = file::table
+            .filter(file::deletion_status.eq(FileDeletionStatus::InProgress as i32))
+            .filter(file::deletion_signature.is_null())
+            .into_boxed();
+
+        // Filter by bucket ID if provided
+        if let Some(bucket_id) = bucket_id {
+            query = query.filter(file::onchain_bucket_id.eq(bucket_id));
+        }
+
+        let files = query
+            .order_by(file::deletion_requested_at.asc())
+            .limit(limit)
+            .offset(offset)
+            .load(conn)
+            .await?;
+        Ok(files)
+    }
+
+    /// Get files pending deletion grouped by bucket.
+    ///
+    /// Queries files with `deletion_status = InProgress` and groups them by their
+    /// `onchain_bucket_id`. The deletion type determines whether to include files
+    /// with or without user signatures.
+    ///
+    /// # Arguments
+    /// * `deletion_type` - Filter for user deletions (with signature) or incomplete deletions (without signature)
+    /// * `bucket_id` - Optional filter by specific bucket's onchain ID (returns only that bucket's files)
+    /// * `limit` - Maximum number of files to return across all buckets (default: 1000)
+    /// * `offset` - Number of files to skip for pagination (default: 0)
+    ///
+    /// # Returns
+    /// HashMap mapping bucket IDs (as `Vec<u8>`) to vectors of files pending deletion in that bucket.
+    ///
+    /// # Note
+    /// The limit/offset applies to the total number of files retrieved, not the number of buckets.
+    /// Files are ordered by bucket_id then file_key for consistent pagination.
+    pub async fn get_files_pending_deletion_grouped_by_bucket<'a>(
+        conn: &mut DbConnection<'a>,
+        deletion_type: FileDeletionType,
+        bucket_id: Option<&[u8]>,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<HashMap<Vec<u8>, Vec<Self>>, diesel::result::Error> {
+        let limit = limit.unwrap_or(DEFAULT_BATCH_QUERY_LIMIT);
+        let offset = offset.unwrap_or(0);
+
+        let mut query = file::table
+            .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
+            .filter(file::deletion_status.eq(FileDeletionStatus::InProgress as i32))
+            .into_boxed();
+
+        // Filter by signature presence based on deletion type
+        query = match deletion_type {
+            FileDeletionType::User => query.filter(file::deletion_signature.is_not_null()),
+            FileDeletionType::Incomplete => query.filter(file::deletion_signature.is_null()),
+        };
+
+        // Filter by specific bucket ID if provided
+        if let Some(bucket_id) = bucket_id {
+            query = query.filter(file::onchain_bucket_id.eq(bucket_id));
+        }
+
+        let files: Vec<Self> = query
+            .select(File::as_select())
+            .order_by((
+                file::onchain_bucket_id.asc(),
+                file::deletion_requested_at.asc(),
+                file::file_key.asc(),
+            ))
+            .limit(limit)
+            .offset(offset)
+            .load(conn)
+            .await?;
+
+        // Group files by onchain_bucket_id
+        let mut grouped: HashMap<Vec<u8>, Vec<Self>> = HashMap::new();
+        for file in files {
+            grouped
+                .entry(file.onchain_bucket_id.clone())
+                .or_insert_with(Vec::new)
+                .push(file);
+        }
+
+        Ok(grouped)
     }
 }
 

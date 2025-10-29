@@ -36,8 +36,8 @@ export class InfoModule extends ModuleBase {
   }
 
   /** Get payment streams for current authenticated user */
-  getPaymentStreams(signal?: AbortSignal): Promise<PaymentStreamsResponse> {
-    const headers = this.withAuth();
+  async getPaymentStreams(signal?: AbortSignal): Promise<PaymentStreamsResponse> {
+    const headers = await this.withAuth();
     return this.ctx.http.get<PaymentStreamsResponse>("/payment_streams", {
       ...(headers ? { headers } : {}),
       ...(signal ? { signal } : {})
