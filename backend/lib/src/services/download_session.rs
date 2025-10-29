@@ -9,13 +9,13 @@ use tokio::sync::mpsc;
 /// Each session maps a file key to a channel sender, allowing the internal upload
 /// endpoint (which receives chunks from the MSP node) to forward them to the
 /// download endpoint (which streams them to the client).
-pub struct DownloadSession {
+pub struct DownloadSessionManager {
     sessions: Arc<RwLock<HashMap<String, mpsc::Sender<Result<Bytes, std::io::Error>>>>>,
 }
 
-impl DownloadSession {
+impl DownloadSessionManager {
     pub fn new() -> Self {
-        DownloadSession {
+        DownloadSessionManager {
             sessions: Arc::new(RwLock::new(HashMap::new())),
         }
     }

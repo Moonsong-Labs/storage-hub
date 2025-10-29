@@ -23,7 +23,7 @@ pub mod download_session;
 pub mod health;
 pub mod msp;
 
-use download_session::DownloadSession;
+use download_session::DownloadSessionManager;
 use health::HealthService;
 use msp::MspService;
 
@@ -37,7 +37,7 @@ pub struct Services {
     pub storage: Arc<dyn BoxedStorage>,
     pub postgres: Arc<DBClient>,
     pub rpc: Arc<StorageHubRpcClient>,
-    pub download_sessions: Arc<DownloadSession>,
+    pub download_sessions: Arc<DownloadSessionManager>,
 }
 
 impl Services {
@@ -101,7 +101,7 @@ impl Services {
             .expect("MSP must be available when starting the backend's services"),
         );
 
-        let download_sessions = Arc::new(DownloadSession::new());
+        let download_sessions = Arc::new(DownloadSessionManager::new());
 
         Self {
             config,
