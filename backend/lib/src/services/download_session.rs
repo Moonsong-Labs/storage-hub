@@ -1,3 +1,4 @@
+use crate::constants::download::MAX_DOWNLOAD_SESSIONS;
 use axum::body::Bytes;
 use std::collections::{hash_map::Entry, HashMap};
 use std::sync::{Arc, RwLock};
@@ -30,6 +31,13 @@ impl DownloadSession {
             .sessions
             .write()
             .expect("Download sessions lock poisoned");
+
+        if sessions.len() >= MAX_DOWNLOAD_SESSIONS {
+            return Err(format!(
+                "Maximum number of {} download sessions reached",
+                MAX_DOWNLOAD_SESSIONS
+            ));
+        }
 
         match sessions.entry(id.clone()) {
             Entry::Occupied(_) => Err("File is already being downloaded".to_string()),

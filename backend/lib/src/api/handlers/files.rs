@@ -136,7 +136,7 @@ pub async fn download_by_key(
     let _ = services
         .download_sessions
         .add_session(&session_id, tx)
-        .map_err(|_| Error::BadRequest("File is already being downloaded".to_string()))?;
+        .map_err(|e| Error::BadRequest(e.to_string()))?;
 
     let file_key_clone = file_key.clone();
     tokio::spawn(async move {
