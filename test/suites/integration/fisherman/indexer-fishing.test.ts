@@ -178,7 +178,8 @@ await describeMspNet(
       await userApi.wait.bspStored({
         expectedExts: 1,
         sealBlock: true,
-        bspAccount: bspAddress
+        bspAccount: bspAddress,
+        timeoutMs: 30000
       });
     });
 

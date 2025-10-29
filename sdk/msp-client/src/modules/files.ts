@@ -10,21 +10,18 @@ import { FileMetadata, FileTrie, initWasm } from "@storagehub-sdk/core";
 
 export class FilesModule extends ModuleBase {
   /** Get metadata for a file in a bucket by fileKey */
-  getFileInfo(bucketId: string, fileKey: string, signal?: AbortSignal): Promise<FileInfo> {
-    const headers = this.withAuth();
+  async getFileInfo(bucketId: string, fileKey: string, signal?: AbortSignal): Promise<FileInfo> {
+    const headers = await this.withAuth();
     const path = `/buckets/${encodeURIComponent(bucketId)}/info/${encodeURIComponent(fileKey)}`;
     type FileInfoWire = Omit<FileInfo, "uploadedAt"> & { uploadedAt: string };
-    return this.ctx.http
-      .get<FileInfoWire>(path, {
-        ...(headers ? { headers } : {}),
-        ...(signal ? { signal } : {})
-      })
-      .then(
-        (wire): FileInfo => ({
-          ...wire,
-          uploadedAt: new Date(wire.uploadedAt)
-        })
-      );
+    const wire = await this.ctx.http.get<FileInfoWire>(path, {
+      ...(headers ? { headers } : {}),
+      ...(signal ? { signal } : {})
+    });
+    return {
+      ...wire,
+      uploadedAt: new Date(wire.uploadedAt)
+    };
   }
 
   /** Upload a file to a bucket with a specific key */
@@ -41,7 +38,7 @@ export class FilesModule extends ModuleBase {
     await initWasm();
 
     const backendPath = `/buckets/${encodeURIComponent(bucketId)}/upload/${encodeURIComponent(fileKey)}`;
-    const authHeaders = this.withAuth();
+    const authHeaders = await this.withAuth();
 
     // Convert the file to a blob and get its size
     const fileBlob = await this.coerceToFormPart(file);
@@ -100,30 +97,59 @@ export class FilesModule extends ModuleBase {
       const rangeValue = `bytes=${start}-${end ?? ""}`;
       baseHeaders.Range = rangeValue;
     }
-    const headers = this.withAuth(baseHeaders);
-    const res = await this.ctx.http.getRaw(path, {
-      ...(headers ? { headers } : {}),
-      ...(options?.signal ? { signal: options.signal } : {})
-    });
 
-    if (!res.body) {
-      throw new Error("Response body is null - unable to create stream");
+    const headers = await this.withAuth(baseHeaders);
+
+    try {
+      const res = await this.ctx.http.getRaw(path, {
+        ...(headers ? { headers } : {}),
+        ...(options?.signal ? { signal: options.signal } : {})
+      });
+
+      if (!res.body) {
+        throw new Error("Response body is null - unable to create stream");
+      }
+
+      const contentType = res.headers.get("content-type");
+      const contentRange = res.headers.get("content-range");
+      const contentLengthHeader = res.headers.get("content-length");
+      const parsedLength = contentLengthHeader !== null ? Number(contentLengthHeader) : undefined;
+      const contentLength =
+        typeof parsedLength === "number" && Number.isFinite(parsedLength) ? parsedLength : null;
+
+      return {
+        stream: res.body,
+        status: res.status,
+        contentType,
+        contentRange,
+        contentLength
+      };
+    } catch (error) {
+      // Handle HTTP errors by returning them as a DownloadResult with the error status
+      if (
+        error &&
+        typeof error === "object" &&
+        "status" in error &&
+        typeof error.status === "number"
+      ) {
+        // Create an empty stream for error responses
+        const emptyStream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.close();
+          }
+        });
+
+        return {
+          stream: emptyStream,
+          status: error.status,
+          contentType: null,
+          contentRange: null,
+          contentLength: null
+        };
+      }
+      // Re-throw non-HTTP errors
+      throw error;
     }
-
-    const contentType = res.headers.get("content-type");
-    const contentRange = res.headers.get("content-range");
-    const contentLengthHeader = res.headers.get("content-length");
-    const parsedLength = contentLengthHeader !== null ? Number(contentLengthHeader) : undefined;
-    const contentLength =
-      typeof parsedLength === "number" && Number.isFinite(parsedLength) ? parsedLength : null;
-
-    return {
-      stream: res.body,
-      status: res.status,
-      contentType,
-      contentRange,
-      contentLength
-    };
   }
 
   // Helpers

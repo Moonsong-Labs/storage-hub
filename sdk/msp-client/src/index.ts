@@ -19,5 +19,6 @@ export type {
   UploadOptions,
   UploadReceipt,
   ValueProp,
-  Session
+  Session,
+  SessionProvider
 } from "./types.js";

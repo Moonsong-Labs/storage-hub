@@ -12,14 +12,15 @@ use shc_actors_framework::{
 use shc_blockchain_service::{
     capacity_manager::CapacityConfig,
     events::{
-        AcceptedBspVolunteer, DistributeFileToBsp, FinalisedBucketMovedAway,
-        FinalisedBucketMutationsApplied, FinalisedMspStopStoringBucketInsolventUser,
-        FinalisedMspStoppedStoringBucket, LastChargeableInfoUpdated, MoveBucketAccepted,
+        AcceptedBspVolunteer, DistributeFileToBsp, FinalisedBspConfirmStoppedStoring,
+        FinalisedBucketMovedAway, FinalisedBucketMutationsApplied,
+        FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
+        FinalisedTrieRemoveMutationsAppliedForBsp, LastChargeableInfoUpdated, MoveBucketAccepted,
         MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MoveBucketRequestedForMsp,
         MultipleNewChallengeSeeds, NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
         ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
         ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser,
-        StartMovedBucketDownload, UserWithoutFunds,
+        StartMovedBucketDownload, UserWithoutFunds, VerifyMspBucketForests,
     },
     handler::BlockchainServiceConfig,
     BlockchainService,
@@ -38,6 +39,7 @@ use crate::{
     file_download_manager::FileDownloadManager,
     tasks::{
         bsp_charge_fees::{BspChargeFeesConfig, BspChargeFeesTask},
+        bsp_delete_file::BspDeleteFileTask,
         bsp_download_file::BspDownloadFileTask,
         bsp_move_bucket::{BspMoveBucketConfig, BspMoveBucketTask},
         bsp_submit_proof::{BspSubmitProofConfig, BspSubmitProofTask},
@@ -51,6 +53,7 @@ use crate::{
         msp_retry_bucket_move::MspRetryBucketMoveTask,
         msp_stop_storing_insolvent_user::MspStopStoringInsolventUserTask,
         msp_upload_file::MspUploadFileTask,
+        msp_verify_bucket_forests::MspVerifyBucketForestsTask,
         sp_slash_provider::SlashProviderTask,
         user_sends_file::UserSendsFileTask,
     },
@@ -314,6 +317,7 @@ where
                 DistributeFileToBsp<Runtime> => MspDistributeFileTask,
                 // MspRemoveFinalisedFilesTask handles events for removing files from file storage after mutations are finalised.
                 FinalisedBucketMutationsApplied<Runtime> => MspDeleteFileTask,
+                VerifyMspBucketForests => MspVerifyBucketForestsTask,
             ]
         );
     }
@@ -380,6 +384,8 @@ where
                 MoveBucketAccepted<Runtime> => BspMoveBucketTask,
                 MoveBucketRejected<Runtime> => BspMoveBucketTask,
                 MoveBucketExpired<Runtime> => BspMoveBucketTask,
+                FinalisedBspConfirmStoppedStoring<Runtime> => BspDeleteFileTask,
+                FinalisedTrieRemoveMutationsAppliedForBsp<Runtime> => BspDeleteFileTask,
             ]
         );
 

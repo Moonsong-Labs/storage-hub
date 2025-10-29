@@ -169,6 +169,13 @@ await describeMspNet(
           (s) => s.provider === apiStream.provider && s.type === expectedType
         );
 
+        const costPerTick = BigInt(apiStream.costPerTick);
+        strictEqual(
+          costPerTick.toString(),
+          apiStream.costPerTick,
+          "costPerTick should be parseable as BigInt"
+        );
+
         assert(
           matchingChainStream,
           `Stream for provider ${apiStream.provider} with type ${expectedType} should exist on chain`

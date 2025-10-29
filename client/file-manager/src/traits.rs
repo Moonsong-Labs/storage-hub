@@ -17,7 +17,7 @@ pub enum FileStorageWriteError {
     /// File metadata fingerprint does not match the stored file fingerprint.
     FingerprintAndStoredFileMismatch,
     /// Failed to construct file trie.
-    FailedToContructFileTrie,
+    FailedToConstructFileTrie,
     /// Failed to construct iterator for trie.
     FailedToConstructTrieIter,
     /// Failed to commit changes in overlay to disk.
@@ -70,6 +70,8 @@ pub enum FileStorageError {
     IncompleteFile,
     /// Failed to access storage for reading.
     FailedToReadStorage,
+    /// Failed to read partial root from storage.
+    PartialRootNotFound,
     /// Failed to access storage for writing.
     FailedToWriteToStorage,
     /// Failed to convert raw bytes into [`FileKey`].
