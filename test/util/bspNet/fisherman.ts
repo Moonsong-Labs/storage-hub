@@ -13,6 +13,16 @@ export interface WaitForFishermanBatchDeletionsOptions {
 }
 
 /**
+ * Result returned when sealBlock is true
+ */
+export interface FishermanBatchDeletionsResult {
+  /** Block hash of the sealed block */
+  blockHash: string;
+  /** Events from the sealed block */
+  events: any[];
+}
+
+/**
  * Waits for fisherman to process batch deletions by sealing blocks until
  * the fisherman submits extrinsics for the specified deletion type.
  *
@@ -28,12 +38,16 @@ export interface WaitForFishermanBatchDeletionsOptions {
  * If `expectExt` is provided, this function will verify that the expected
  * number of extrinsics are present in the transaction pool before returning.
  *
- * If `sealBlock` is true, a block will be sealed after verifying extrinsics.
+ * If `sealBlock` is true, a block will be sealed after verifying extrinsics
+ * and the result (with events) will be returned.
  * Defaults to false to allow manual block sealing in tests.
+ *
+ * @returns When sealBlock is true, returns the sealed block result with events.
+ *          When sealBlock is false, returns undefined.
  */
 export const waitForFishermanBatchDeletions = async (
   options: WaitForFishermanBatchDeletionsOptions
-): Promise<void> => {
+): Promise<FishermanBatchDeletionsResult | undefined> => {
   const { api, deletionType, expectExt, sealBlock = false } = options;
 
   const searchString =
@@ -83,8 +97,12 @@ export const waitForFishermanBatchDeletions = async (
     });
   }
 
-  // Optionally seal a block after verification
+  // Optionally seal a block after verification and return the result
   if (sealBlock) {
-    await api.block.seal();
+    const result = await api.block.seal();
+    return {
+      blockHash: result.blockHash,
+      events: result.events || []
+    };
   }
 };

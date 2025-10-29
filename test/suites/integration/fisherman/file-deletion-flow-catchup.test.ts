@@ -7,7 +7,6 @@ import {
   bspKey,
   sleep,
   waitFor,
-  assertEventPresent,
   ShConsts
 } from "../../../util";
 import {
@@ -269,17 +268,17 @@ await describeMspNet(
       assert.equal(eventFileKey.toString(), fileToDelete.fileKey.toString());
 
       // Wait for fisherman to process user deletions and verify extrinsics are in tx pool
-      await userApi.fisherman.waitForBatchDeletions({
+      const deletionResult = await userApi.fisherman.waitForBatchDeletions({
         deletionType: "User",
         expectExt: 2, // 1 BSP + 1 Bucket
-        sealBlock: false // Seal manually to capture events
+        sealBlock: true // Seal and return events for verification
       });
 
-      // Now finalize the blocks to process the extrinsics
-      const { events } = await userApi.block.seal();
+      assert(deletionResult, "Deletion result should be defined when sealBlock is true");
+      const { events } = deletionResult;
 
-      assertEventPresent(userApi, "fileSystem", "BucketFileDeletionsCompleted", events);
-      assertEventPresent(userApi, "fileSystem", "BspFileDeletionsCompleted", events);
+      await userApi.assert.eventPresent("fileSystem", "BucketFileDeletionsCompleted", events);
+      await userApi.assert.eventPresent("fileSystem", "BspFileDeletionsCompleted", events);
 
       // Extract deletion events to verify root changes
       const mspDeletionEvent = userApi.assert.fetchEvent(

@@ -1,7 +1,6 @@
 import assert, { notEqual, strictEqual } from "node:assert";
 import { BN } from "@polkadot/util";
 import {
-  assertEventPresent,
   bspKey,
   describeMspNet,
   type EnrichedBspApi,
@@ -209,8 +208,7 @@ await describeMspNet(
           signer: shUser
         });
 
-        assertEventPresent(
-          userApi,
+        await userApi.assert.eventPresent(
           "fileSystem",
           "StorageRequestRevoked",
           revokeStorageRequestResult.events
@@ -271,8 +269,7 @@ await describeMspNet(
         signer: bspKey
       });
 
-      assertEventPresent(
-        userApi,
+      await userApi.assert.eventPresent(
         "fileSystem",
         "BspRequestedToStopStoring",
         bspRequestStopStoringResult.events
@@ -305,8 +302,7 @@ await describeMspNet(
         signer: bspKey
       });
 
-      assertEventPresent(
-        userApi,
+      await userApi.assert.eventPresent(
         "fileSystem",
         "BspConfirmStoppedStoring",
         bspConfirmStopStoringResult.events
@@ -346,7 +342,7 @@ await describeMspNet(
         signer: shUser
       });
 
-      assertEventPresent(userApi, "fileSystem", "BucketDeleted", deleteBucketResult.events);
+      await userApi.assert.eventPresent("fileSystem", "BucketDeleted", deleteBucketResult.events);
 
       await userApi.indexer.waitForIndexing({});
 
@@ -488,8 +484,7 @@ await describeMspNet(
         signer: shUser
       });
 
-      assertEventPresent(
-        userApi,
+      await userApi.assert.eventPresent(
         "fileSystem",
         "FileDeletionRequested",
         deletionRequestResult.events
@@ -531,13 +526,16 @@ await describeMspNet(
       // Seal block to process the fisherman-submitted extrinsics
       const deletionResult = await userApi.block.seal();
 
-      assertEventPresent(
-        userApi,
+      await userApi.assert.eventPresent(
         "fileSystem",
         "BucketFileDeletionsCompleted",
         deletionResult.events
       );
-      assertEventPresent(userApi, "fileSystem", "BspFileDeletionsCompleted", deletionResult.events);
+      await userApi.assert.eventPresent(
+        "fileSystem",
+        "BspFileDeletionsCompleted",
+        deletionResult.events
+      );
 
       // Extract deletion events to verify root changes
       const bucketDeletionEvent = userApi.assert.fetchEvent(
@@ -650,8 +648,7 @@ await describeMspNet(
         finaliseBlock: true
       });
 
-      assertEventPresent(
-        userApi,
+      await userApi.assert.eventPresent(
         "fileSystem",
         "MoveBucketRequested",
         requestMoveBucketResult.events
@@ -669,7 +666,7 @@ await describeMspNet(
 
       const { events } = await userApi.block.seal();
 
-      assertEventPresent(userApi, "fileSystem", "MoveBucketAccepted", events);
+      await userApi.assert.eventPresent("fileSystem", "MoveBucketAccepted", events);
 
       await waitFor({
         lambda: async () => {

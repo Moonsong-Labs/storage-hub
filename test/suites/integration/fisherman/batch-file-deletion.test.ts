@@ -313,31 +313,32 @@ await describeMspNet(
       await indexerApi.indexer.verifyDeletionSignaturesStored({ sql, fileKeys });
 
       // Wait for fisherman to process user deletions and verify extrinsics are in tx pool
-      await userApi.fisherman.waitForBatchDeletions({
+      const deletionResult = await userApi.fisherman.waitForBatchDeletions({
         deletionType: "User",
         expectExt: 4, // 1 BSP + 3 Buckets
-        sealBlock: false // Seal manually to capture events
+        sealBlock: true // Seal and return events for verification
       });
 
-      // Seal block to process the extrinsics
-      const deletionResult = await userApi.block.seal();
+      assert(deletionResult, "Deletion result should be defined when sealBlock is true");
 
-      // Verify BSP deletion event
-      const bspDeletionEvents = (deletionResult.events || []).filter((record) =>
-        userApi.events.fileSystem.BspFileDeletionsCompleted.is(record.event)
+      // Verify BSP deletion event (should be exactly 1)
+      const bspDeletionEvents = await userApi.assert.eventMany(
+        "fileSystem",
+        "BspFileDeletionsCompleted",
+        deletionResult.events
       );
-
       assert.equal(
         bspDeletionEvents.length,
         1,
         "Should have exactly 1 BSP deletion event (batches all 6 files)"
       );
 
-      // Verify bucket deletion events
-      const bucketDeletionEvents = (deletionResult.events || []).filter((record) =>
-        userApi.events.fileSystem.BucketFileDeletionsCompleted.is(record.event)
+      // Verify bucket deletion events (should be exactly 3)
+      const bucketDeletionEvents = await userApi.assert.eventMany(
+        "fileSystem",
+        "BucketFileDeletionsCompleted",
+        deletionResult.events
       );
-
       assert.equal(
         bucketDeletionEvents.length,
         3,
@@ -592,31 +593,32 @@ await describeMspNet(
       await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
 
       // Wait for fisherman to process incomplete storage deletions and verify extrinsics are in tx pool
-      await userApi.fisherman.waitForBatchDeletions({
+      const deletionResult = await userApi.fisherman.waitForBatchDeletions({
         deletionType: "Incomplete",
         expectExt: 4, // 1 BSP + 3 Buckets
-        sealBlock: false // Seal manually to capture events
+        sealBlock: true // Seal and return events for verification
       });
 
-      // Seal block to process the extrinsics
-      const deletionResult = await userApi.block.seal();
+      assert(deletionResult, "Deletion result should be defined when sealBlock is true");
 
-      // Verify BSP deletion event
-      const bspDeletionEvents = (deletionResult.events || []).filter((record) =>
-        userApi.events.fileSystem.BspFileDeletionsCompleted.is(record.event)
+      // Verify BSP deletion event (should be exactly 1)
+      const bspDeletionEvents = await userApi.assert.eventMany(
+        "fileSystem",
+        "BspFileDeletionsCompleted",
+        deletionResult.events
       );
-
       assert.equal(
         bspDeletionEvents.length,
         1,
         "Should have exactly 1 BSP deletion event (batches all 6 files)"
       );
 
-      // Verify bucket deletion events
-      const bucketDeletionEvents = (deletionResult.events || []).filter((record) =>
-        userApi.events.fileSystem.BucketFileDeletionsCompleted.is(record.event)
+      // Verify bucket deletion events (should be exactly 3)
+      const bucketDeletionEvents = await userApi.assert.eventMany(
+        "fileSystem",
+        "BucketFileDeletionsCompleted",
+        deletionResult.events
       );
-
       assert.equal(
         bucketDeletionEvents.length,
         3,
