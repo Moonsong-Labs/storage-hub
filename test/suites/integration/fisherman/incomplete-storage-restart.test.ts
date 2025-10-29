@@ -259,15 +259,11 @@ await describeMspNet(
         timeout: 30000
       });
 
-      // Wait for fisherman to process incomplete storage deletions
-      await userApi.indexer.waitForFishermanBatchDeletions({ deletionType: "Incomplete" });
-
-      // Verify delete extrinsic is submitted for the BSP
-      await userApi.assert.extrinsicPresent({
-        method: "deleteFilesForIncompleteStorageRequest",
-        module: "fileSystem",
-        checkTxPool: true,
-        assertLength: 1
+      // Wait for fisherman to process incomplete storage deletions and verify extrinsics are in tx pool
+      await userApi.fisherman.waitForBatchDeletions({
+        deletionType: "Incomplete",
+        expectExt: 1, // 1 BSP only (MSP paused)
+        sealBlock: false // Seal manually to capture events
       });
 
       // Seal block to process the extrinsic

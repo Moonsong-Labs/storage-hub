@@ -9,42 +9,30 @@ import {
   waitFor
 } from "../../../util";
 import {
-  hexToBuffer,
   waitForFileIndexed,
   waitForMspFileAssociation,
   waitForBspFileAssociation
 } from "../../../util/indexerHelpers";
 
 /**
- * FISHERMAN BATCH FILE DELETION - COMPREHENSIVE BATCH PROCESSING TESTS
+ * FISHERMAN BATCH FILE DELETION INTEGRATION TESTS
  *
- * Purpose: Validates the fisherman's batch processing capabilities for file deletions,
- *          ensuring multiple files are grouped by target (BSP/Bucket) and processed
- *          in parallel with efficient batch extrinsics.
+ * Validates fisherman batch processing for file deletions, ensuring files are grouped by
+ * target (BSP/Bucket) and submitted in batched extrinsics.
  *
- * Test Structure:
- * 1. User Deletion Batching (deleteFiles extrinsic)
- *    - 3 buckets × 2 files each = 6 files total
- *    - Expected: 1 BSP extrinsic (6 files) + 3 Bucket extrinsics (2 files each)
- *    - Validates: Database signatures, BSP batching, bucket batching, parallel processing
+ * Test 1: User-Requested Deletions
+ * - Setup: 3 buckets × 2 files = 6 files, users submit `requestDeleteFile` extrinsics
+ * - Fisherman submits: 1 `deleteFiles` for BSP (6 files) + 3 `deleteFiles` for buckets (2 each)
+ * - Events: `FileDeletionRequested`, `BspFileDeletionsCompleted`, `BucketFileDeletionsCompleted`
+ * - Verifies: Database signatures, forest root updates, batch grouping
  *
- * 2. Incomplete Storage Deletion Batching (deleteFilesForIncompleteStorageRequest extrinsic)
- *    - 3 buckets × 2 files each = 6 files total (revoked storage requests)
- *    - Expected: 1 BSP extrinsic (6 files) + 3 Bucket extrinsics (2 files each)
- *    - Validates: Incomplete storage flow, fisherman catchup, BSP/bucket batching
+ * Test 2: Incomplete Storage Deletions
+ * - Setup: 3 buckets × 2 files = 6 files, users revoke via `revokeStorageRequest`
+ * - Fisherman submits: 1 `deleteFilesForIncompleteStorageRequest` for BSP (6 files) + 3 for buckets
+ * - Events: `StorageRequestRevoked`, `IncompleteStorageRequest`, `BspFileDeletionsCompleted`, `BucketFileDeletionsCompleted`
+ * - Verifies: Incomplete storage cleanup, forest root updates
  *
- * Key Features Tested:
- * - Batch interval timing (5 seconds configured in docker)
- * - Multiple files batched into single extrinsic per target
- * - Parallel processing across multiple targets (BSPs and Buckets)
- * - Alternating between User and Incomplete deletion types
- * - Forest root change verification for BSP and all buckets
- *
- * Architecture:
- * - Time-based batch intervals (5 seconds for tests, 60 default)
- * - Global lock prevents overlapping batches
- * - Single task processes all targets using parallel futures
- * - One extrinsic per target containing multiple file deletions
+ * Batch interval: 5 seconds (test config), 60 seconds (default)
  */
 await describeMspNet(
   "Fisherman Batch File Deletion",
@@ -321,14 +309,13 @@ await describeMspNet(
 
       await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sealBlock: false });
 
-      // Verify deletion signatures are stored in database
-      await verifyDeletionSignaturesStored(sql, fileKeys);
+      // Verify deletion signatures are stored in database for the User deletion type
+      await indexerApi.indexer.verifyDeletionSignaturesStored({ sql, fileKeys });
 
       // Wait for fisherman to process user deletions and verify extrinsics are in tx pool
-      // (1 BSP + 3 Buckets = 4 total)
-      await userApi.indexer.waitForFishermanBatchDeletions({
+      await userApi.fisherman.waitForBatchDeletions({
         deletionType: "User",
-        expectExt: 4, // 1 BSP extrinsic (6 files) + 3 Bucket extrinsics (2 files each)
+        expectExt: 4, // 1 BSP + 3 Buckets
         sealBlock: false // Seal manually to capture events
       });
 
@@ -605,10 +592,9 @@ await describeMspNet(
       await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
 
       // Wait for fisherman to process incomplete storage deletions and verify extrinsics are in tx pool
-      // (1 BSP + 3 Buckets = 4 total)
-      await userApi.indexer.waitForFishermanBatchDeletions({
+      await userApi.fisherman.waitForBatchDeletions({
         deletionType: "Incomplete",
-        expectExt: 4, // 1 BSP extrinsic (6 files) + 3 Bucket extrinsics (2 files each)
+        expectExt: 4, // 1 BSP + 3 Buckets
         sealBlock: false // Seal manually to capture events
       });
 
@@ -696,34 +682,3 @@ await describeMspNet(
     });
   }
 );
-
-/**
- * Helper function to verify deletion signatures are stored in database
- */
-async function verifyDeletionSignaturesStored(sql: SqlClient, fileKeys: string[]): Promise<void> {
-  // Wait for first file to have signature stored
-  await waitFor({
-    lambda: async () => {
-      const files = await sql`
-        SELECT deletion_signature FROM file
-        WHERE file_key = ${hexToBuffer(fileKeys[0])}
-        AND deletion_signature IS NOT NULL
-      `;
-      return files.length > 0;
-    }
-  });
-
-  // Verify all files have SCALE-encoded signatures
-  for (const fileKey of fileKeys) {
-    const filesWithSignature = await sql`
-      SELECT deletion_signature FROM file
-      WHERE file_key = ${hexToBuffer(fileKey)}
-      AND deletion_signature IS NOT NULL
-    `;
-    assert.equal(filesWithSignature.length, 1, "File should have deletion signature stored");
-    assert(
-      filesWithSignature[0].deletion_signature.length > 0,
-      "SCALE-encoded signature should not be empty"
-    );
-  }
-}

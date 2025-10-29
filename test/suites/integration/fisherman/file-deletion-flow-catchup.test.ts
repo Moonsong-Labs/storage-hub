@@ -268,15 +268,11 @@ await describeMspNet(
       const eventFileKey = deletionEventData.signedDeleteIntention.fileKey;
       assert.equal(eventFileKey.toString(), fileToDelete.fileKey.toString());
 
-      // Wait for fisherman to process user deletions
-      await userApi.indexer.waitForFishermanBatchDeletions({ deletionType: "User" });
-
-      // Verify delete_files extrinsics are submitted (should be 2: one for BSP and one for MSP)
-      await userApi.assert.extrinsicPresent({
-        method: "deleteFiles",
-        module: "fileSystem",
-        checkTxPool: true,
-        assertLength: 2
+      // Wait for fisherman to process user deletions and verify extrinsics are in tx pool
+      await userApi.fisherman.waitForBatchDeletions({
+        deletionType: "User",
+        expectExt: 2, // 1 BSP + 1 Bucket
+        sealBlock: false // Seal manually to capture events
       });
 
       // Now finalize the blocks to process the extrinsics

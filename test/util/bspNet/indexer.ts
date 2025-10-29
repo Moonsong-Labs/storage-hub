@@ -146,92 +146,55 @@ export const verifyProviderAssociation = async (options: VerifyProviderAssociati
 };
 
 /**
- * Options for waitForFishermanBatchDeletions
+ * Options for verifyDeletionSignaturesStored
  */
-export interface WaitForFishermanBatchDeletionsOptions {
-  /** The enriched BSP API */
-  api: any; // EnrichedBspApi type (avoiding circular dependency)
-  /** Either "User" or "Incomplete" to determine which deletion cycle to wait for */
-  deletionType: "User" | "Incomplete";
-  /** Optional. The number of expected extrinsics to verify in the transaction pool */
-  expectExt?: number;
-  /** Optional. Whether to seal a block after verifying extrinsics. Defaults to false. */
-  sealBlock?: boolean;
+export interface VerifyDeletionSignaturesStoredOptions {
+  /** The SQL client instance */
+  sql: SqlClient;
+  /** Array of file keys to verify have deletion signatures */
+  fileKeys: string[];
 }
 
 /**
- * Waits for fisherman to process batch deletions by sealing blocks until
- * the fisherman submits extrinsics for the specified deletion type.
+ * Verifies that deletion signatures are stored in the database for all specified file keys.
  *
- * This handles the alternating User/Incomplete deletion cycle timing issue
- * where fisherman might be on the wrong cycle when deletions are created.
+ * This function waits for the first file to have a deletion signature stored, then verifies
+ * that all files have non-empty SCALE-encoded deletion signatures in the database.
  *
- * The function uses a polling loop that:
- * 1. Seals a block
- * 2. Checks for the fisherman log message (with short timeout)
- * 3. If not found, waits and repeats
- * 4. Once found, optionally verifies extrinsics in tx pool
- *
- * If `expectExt` is provided, this function will verify that the expected
- * number of extrinsics are present in the transaction pool before returning.
- *
- * If `sealBlock` is true, a block will be sealed after verifying extrinsics.
- * Defaults to false to allow manual block sealing in tests.
+ * @throws Error if any file doesn't have a deletion signature stored or if the signature is empty.
  */
-export const waitForFishermanBatchDeletions = async (
-  options: WaitForFishermanBatchDeletionsOptions
+export const verifyDeletionSignaturesStored = async (
+  options: VerifyDeletionSignaturesStoredOptions
 ): Promise<void> => {
-  const { api, deletionType, expectExt, sealBlock = false } = options;
+  const { sql, fileKeys } = options;
 
-  const searchString =
-    deletionType === "User"
-      ? "🎣 Successfully submitted delete_files extrinsic for"
-      : "🎣 Successfully submitted delete_files_for_incomplete_storage_request extrinsic for";
-
-  // Poll for fisherman log message, sealing blocks between checks
-  // Wait 5 second interval (fisherman configuration "--fisherman-batch-interval-seconds=5")
-  // to leave time for the fisherman to switch processing deletion types
-  const maxAttempts = 5; // 5 attempts * 5 seconds = 25 seconds total timeout
-  let found = false;
-
-  for (let attempt = 0; attempt < maxAttempts && !found; attempt++) {
-    // Seal a block to trigger fisherman processing
-    await api.block.seal();
-
-    // Check if fisherman has submitted the extrinsics (with short timeout to avoid blocking)
-    try {
-      await api.docker.waitForLog({
-        searchString,
-        containerName: "storage-hub-sh-fisherman-1",
-        timeout: 5000 // 5 second timeout matches the fisherman batch interval
-      });
-      found = true;
-    } catch (error) {
-      // Log not found yet, continue to next iteration
-      if (attempt === maxAttempts - 1) {
-        throw new Error(
-          `Timeout waiting for fisherman to process ${deletionType} deletions after ${maxAttempts * 5} seconds`
-        );
-      }
+  // Wait for first file to have signature stored using waitFor utility
+  const { waitFor } = await import("../index");
+  await waitFor({
+    lambda: async () => {
+      const files = await sql`
+        SELECT deletion_signature FROM file
+        WHERE file_key = ${hexToBuffer(fileKeys[0])}
+        AND deletion_signature IS NOT NULL
+      `;
+      return files.length > 0;
     }
-  }
+  });
 
-  // If expectExt is provided, verify extrinsics are in the tx pool
-  if (expectExt !== undefined && expectExt > 0) {
-    const extrinsicMethod =
-      deletionType === "User" ? "deleteFiles" : "deleteFilesForIncompleteStorageRequest";
+  // Verify all files have SCALE-encoded signatures
+  for (const fileKey of fileKeys) {
+    const filesWithSignature = await sql`
+      SELECT deletion_signature FROM file
+      WHERE file_key = ${hexToBuffer(fileKey)}
+      AND deletion_signature IS NOT NULL
+    `;
 
-    await api.assert.extrinsicPresent({
-      method: extrinsicMethod,
-      module: "fileSystem",
-      checkTxPool: true,
-      assertLength: expectExt,
-      timeout: 500 // This is a small timeout since the fisherman should have already submitted the extrinsics by this point
-    });
-  }
+    if (filesWithSignature.length !== 1) {
+      throw new Error(`File should have deletion signature stored: ${fileKey}`);
+    }
 
-  // Optionally seal a block after verification
-  if (sealBlock) {
-    await api.block.seal();
+    if (filesWithSignature[0].deletion_signature.length === 0) {
+      throw new Error(`SCALE-encoded signature should not be empty for file: ${fileKey}`);
+    }
   }
 };

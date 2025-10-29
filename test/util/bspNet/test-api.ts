@@ -35,6 +35,7 @@ import * as BspNetBlock from "./block";
 import * as ShConsts from "./consts";
 import * as DockerBspNet from "./docker";
 import * as Files from "./fileHelpers";
+import * as BspNetFisherman from "./fisherman";
 import { addBsp } from "./helpers";
 import * as BspNetIndexer from "./indexer";
 import * as NodeBspNet from "./node";
@@ -756,6 +757,26 @@ export class BspNetTestApi implements AsyncDisposable {
       }) => BspNetIndexer.verifyProviderAssociation(options),
 
       /**
+       * Verifies that deletion signatures are stored in the database for all specified file keys.
+       *
+       * This function waits for the first file to have a deletion signature stored, then verifies
+       * that all files have non-empty SCALE-encoded deletion signatures in the database.
+       *
+       * @param options - Options object
+       * @param options.sql - The SQL client instance.
+       * @param options.fileKeys - Array of file keys to verify have deletion signatures.
+       * @throws Error if any file doesn't have a deletion signature stored or if the signature is empty.
+       */
+      verifyDeletionSignaturesStored: (options: { sql: any; fileKeys: string[] }) =>
+        BspNetIndexer.verifyDeletionSignaturesStored(options)
+    };
+
+    /**
+     * Fisherman operations namespace
+     * Contains methods for interacting with and testing fisherman node functionality.
+     */
+    const remappedFishermanNs = {
+      /**
        * Waits for fisherman to process batch deletions by sealing blocks until
        * the fisherman submits extrinsics for the specified deletion type.
        *
@@ -774,11 +795,11 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param options.expectExt - Optional. The number of expected extrinsics to verify in the transaction pool
        * @param options.sealBlock - Optional. Whether to seal a block after verifying extrinsics. Defaults to false.
        */
-      waitForFishermanBatchDeletions: (options: {
+      waitForBatchDeletions: (options: {
         deletionType: "User" | "Incomplete";
         expectExt?: number;
         sealBlock?: boolean;
-      }) => BspNetIndexer.waitForFishermanBatchDeletions({ api: this._api as any, ...options })
+      }) => BspNetFisherman.waitForFishermanBatchDeletions({ api: this._api as any, ...options })
     };
 
     return Object.assign(this._api, {
@@ -837,6 +858,11 @@ export class BspNetTestApi implements AsyncDisposable {
        * Contains methods for interacting with the indexer and verifying indexed data.
        */
       indexer: remappedIndexerNs,
+      /**
+       * Fisherman operations namespace
+       * Contains methods for interacting with and testing fisherman node functionality.
+       */
+      fisherman: remappedFishermanNs,
       /**
        * Accounts namespace
        * Provides runtime-dependent test accounts for convenience.

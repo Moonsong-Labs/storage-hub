@@ -194,15 +194,11 @@ await describeMspNet(
         "SCALE-encoded signature should not be empty"
       );
 
-      // Wait for fisherman to process user deletions
-      await userApi.indexer.waitForFishermanBatchDeletions({ deletionType: "User" });
-
-      // Verify delete_files extrinsics are submitted
-      await userApi.assert.extrinsicPresent({
-        method: "deleteFiles",
-        module: "fileSystem",
-        checkTxPool: true,
-        assertLength: 2
+      // Wait for fisherman to process user deletions and verify extrinsics are in tx pool
+      await userApi.fisherman.waitForBatchDeletions({
+        deletionType: "User",
+        expectExt: 2, // 1 BSP + 1 Bucket
+        sealBlock: false // Seal manually to capture events
       });
 
       // Seal block to process the extrinsics
