@@ -27,6 +27,7 @@ pub struct VerifyResponse {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct User {
+    #[serde(serialize_with = "crate::utils::serde::checksummed_address")]
     pub address: Address,
     pub ens: String,
 }
