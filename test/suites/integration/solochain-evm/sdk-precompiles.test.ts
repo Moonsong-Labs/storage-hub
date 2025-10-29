@@ -451,9 +451,9 @@ await describeMspNet(
       await msp1Api.wait.fileStorageComplete(hexFileKey);
 
       // Ensure file tree and file info are available via backend for this bucket
-      const fileTree = await mspClient.buckets.getFiles(bucketId);
+      const fileTree = (await mspClient.buckets.getFiles(bucketId)).tree;
       assert(
-        Array.isArray(fileTree.files) && fileTree.files.length > 0,
+        Array.isArray(fileTree.children) && fileTree.children.length > 0,
         "file tree should not be empty"
       );
       const fileInfo = await mspClient.files.getFileInfo(bucketId, fileKey.toHex());
