@@ -15,6 +15,7 @@ pub mod msp_move_bucket;
 pub mod msp_retry_bucket_move;
 pub mod msp_stop_storing_insolvent_user;
 pub mod msp_upload_file;
+pub mod msp_verify_bucket_forests;
 pub mod shared {
     pub mod chunk_uploader;
 }
