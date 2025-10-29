@@ -384,21 +384,6 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 }
                 // If the file has associations, the `IncompleteStorageRequest` event will handle it
             }
-            pallet_file_system::Event::StorageRequestRejected { file_key, reason } => {
-                // Check if the file has any BSP associations (it will not have MSP ones since the MSP did not accept it)
-                let has_bsp = File::has_bsp_associations(conn, file_key.as_ref()).await?;
-                if has_bsp {
-                    // If the file has BSP associations, the `IncompleteStorageRequest` event will handle it
-                    return Ok(());
-                }
-                // If the file does not have BSP associations, it's safe to delete immediately
-                File::delete(conn, file_key.as_ref().to_vec()).await?;
-                log::debug!(
-                    "Storage request rejected for file {:?} with reason {:?}, deleted immediately",
-                    file_key,
-                    reason
-                );
-            }
             pallet_file_system::Event::MspAcceptedStorageRequest {
                 file_key,
                 file_metadata: _,
@@ -409,6 +394,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     MspFile::create(conn, msp_id, file.id).await?;
                 }
             }
+            pallet_file_system::Event::StorageRequestRejected { .. } => {}
             pallet_file_system::Event::BspRequestedToStopStoring { .. } => {}
             pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. } => {}
             pallet_file_system::Event::MspStopStoringBucketInsolventUser {
