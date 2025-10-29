@@ -1,10 +1,16 @@
+use std::collections::HashMap;
+
 use bigdecimal::BigDecimal;
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
 use crate::{
-    models::multiaddress::MultiAddress,
+    models::{
+        file::{FileDeletionType, DEFAULT_BATCH_QUERY_LIMIT},
+        multiaddress::MultiAddress,
+        File,
+    },
     schema::{bsp, bsp_file, bsp_multiaddress, file},
     types::OnchainBspId,
     DbConnection,
@@ -271,5 +277,74 @@ impl BspFile {
             .await?;
 
         Ok(file_keys)
+    }
+
+    /// Get files pending deletion grouped by BSP.
+    ///
+    /// Queries the `bsp_file` association table joined with `file` and `bsp` tables
+    /// to find all files pending deletion, filtered by deletion type, and groups them
+    /// by their associated BSP ID.
+    ///
+    /// # Arguments
+    /// * `deletion_type` - Filter for user deletions (with signature) or incomplete deletions (without signature)
+    /// * `bsp_id` - Optional filter by specific BSP's onchain ID (returns only that BSP's files)
+    /// * `limit` - Maximum number of files to return across all BSPs (default: 1000)
+    /// * `offset` - Number of files to skip for pagination (default: 0)
+    ///
+    /// # Returns
+    /// HashMap mapping BSP IDs ([`OnchainBspId`]) to vectors of files pending deletion for that BSP.
+    ///
+    /// # Note
+    /// The limit/offset applies to the total number of files retrieved, not the number of BSPs.
+    /// Files are ordered by BSP ID then file_key for consistent pagination.
+    pub async fn get_files_pending_deletion_grouped_by_bsp<'a>(
+        conn: &mut DbConnection<'a>,
+        deletion_type: FileDeletionType,
+        bsp_id: Option<OnchainBspId>,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<HashMap<OnchainBspId, Vec<File>>, diesel::result::Error> {
+        use crate::models::file::FileDeletionStatus;
+
+        let limit = limit.unwrap_or(DEFAULT_BATCH_QUERY_LIMIT);
+        let offset = offset.unwrap_or(0);
+
+        let mut query = bsp_file::table
+            .inner_join(file::table.on(bsp_file::file_id.eq(file::id)))
+            .inner_join(bsp::table.on(bsp_file::bsp_id.eq(bsp::id)))
+            .filter(file::deletion_status.eq(FileDeletionStatus::InProgress as i32))
+            .into_boxed();
+
+        // Filter by signature presence based on deletion type
+        query = match deletion_type {
+            FileDeletionType::User => query.filter(file::deletion_signature.is_not_null()),
+            FileDeletionType::Incomplete => query.filter(file::deletion_signature.is_null()),
+        };
+
+        // Filter by specific BSP ID if provided
+        if let Some(bsp_id) = bsp_id {
+            query = query.filter(bsp::onchain_bsp_id.eq(bsp_id));
+        }
+
+        // Load both file and BSP ID
+        let results: Vec<(File, OnchainBspId)> = query
+            .select((File::as_select(), bsp::onchain_bsp_id))
+            .order_by((
+                bsp::onchain_bsp_id.asc(),
+                file::deletion_requested_at.asc(),
+                file::file_key.asc(),
+            ))
+            .limit(limit)
+            .offset(offset)
+            .load(conn)
+            .await?;
+
+        // Group files by BSP ID
+        let mut grouped: HashMap<OnchainBspId, Vec<File>> = HashMap::new();
+        for (file, bsp_id) in results {
+            grouped.entry(bsp_id).or_insert_with(Vec::new).push(file);
+        }
+
+        Ok(grouped)
     }
 }

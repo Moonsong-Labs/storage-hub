@@ -10,8 +10,8 @@
       "imports": {
         "@storagehub-sdk/msp-client": "/msp-client/dist/index.browser.js",
         "@storagehub-sdk/core": "/core/dist/index.browser.js",
-        "@polkadot/types": "https://cdn.jsdelivr.net/npm/@polkadot/types@10.9.1/+esm",
-        "@polkadot/types/interfaces": "https://cdn.jsdelivr.net/npm/@polkadot/types@10.9.1/interfaces/+esm",
+        "@polkadot/types": "https://cdn.jsdelivr.net/npm/@polkadot/types@16.4.7/+esm",
+        "@polkadot/types/interfaces": "https://cdn.jsdelivr.net/npm/@polkadot/types@16.4.7/interfaces/+esm",
         "ethers": "https://cdn.jsdelivr.net/npm/ethers@6.15.0/+esm",
         "viem": "https://cdn.jsdelivr.net/npm/viem@2.9.20/+esm",
         "viem/accounts": "https://cdn.jsdelivr.net/npm/viem@2.9.20/accounts/+esm"
@@ -229,6 +229,7 @@
 
     let client = null;
     let connectedBaseUrl = null;
+    let sessionRef = undefined;
 
     function toBase64Url(str) {
       return btoa(unescape(encodeURIComponent(str)))
@@ -254,7 +255,8 @@
       const baseUrl = 'http://127.0.0.1:8080';
       if (client && connectedBaseUrl === baseUrl) return client;
       const { MspClient } = await import('@storagehub-sdk/msp-client');
-      client = await MspClient.connect({ baseUrl, timeoutMs: 60000 });
+      const sessionProvider = async () => sessionRef;
+      client = await MspClient.connect({ baseUrl, timeoutMs: 60000 }, sessionProvider);
       connectedBaseUrl = baseUrl;
       return client;
     }
@@ -319,14 +321,13 @@
           })
         });
 
-        await client.auth.SIWE(wallet);
-        const auth = await client.auth.getAuthStatus();
-        if (!auth || auth.status !== 'Authenticated') {
-          throw new Error('Authentication failed');
-        }
-        window.__msp.status = auth.status;
-        setText('authStatus', auth.status);
-        console.log('[SIWE]', auth.status);
+        const session = await client.auth.SIWE(wallet);
+        sessionRef = session;
+        // Consider authenticated if session now exists and profile fetch succeeds
+        await client.auth.getProfile();
+        window.__msp.status = 'Authenticated';
+        setText('authStatus', 'Authenticated');
+        console.log('[SIWE]', 'Authenticated');
         setStatus('Authenticated');
       } catch (e) {
         setStatus('SIWE failed');
@@ -339,8 +340,7 @@
       try {
         if (!client) throw new Error('Connect MSP first');
         setStatus('Uploading...');
-        const auth = await client.auth.getAuthStatus();
-        if (!auth || auth.status !== 'Authenticated') throw new Error('Not authenticated');
+        await client.auth.getProfile();
         const owner = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
         const bucketId = '0x34eb5f637e05fc18f857ccb013250076534192189894d174ee3aa6d3525f6970';
         const adolphusFingerprint = client.files.hexToBytes('0x34eb5f637e05fc18f857ccb013250076534192189894d174ee3aa6d3525f6970');
@@ -364,8 +364,7 @@
         if (!client) throw new Error('Connect MSP first');
         setStatus('Downloading by key...');
         const fileKey = '0xde4a17999bc1482ba71737367e5d858a133ed1e13327a29c495ab976004a138f';
-        const auth = await client.auth.getAuthStatus();
-        if (!auth || auth.status !== 'Authenticated') throw new Error('Not authenticated');
+        await client.auth.getProfile();
         const dl = await client.files.downloadFile(fileKey);
         window.__msp.downloadMeta = { status: dl?.status, contentType: dl?.contentType, contentLength: dl?.contentLength, contentRange: dl?.contentRange };
         console.log('[DOWNLOAD][KEY][META]', window.__msp.downloadMeta);
@@ -394,8 +393,7 @@
       try {
         if (!client) throw new Error('Connect MSP first');
         setStatus('Listing buckets...');
-        const auth = await client.auth.getAuthStatus();
-        if (!auth || auth.status !== 'Authenticated') throw new Error('Not authenticated');
+        await client.auth.getProfile();
         const buckets = await client.buckets.listBuckets();
         window.__msp.buckets = buckets;
         document.getElementById('bucketsCount').textContent = String(buckets.length);
@@ -420,8 +418,7 @@
       try {
         if (!client) throw new Error('Connect MSP first');
         setStatus('Getting bucket...');
-        const auth = await client.auth.getAuthStatus();
-        if (!auth || auth.status !== 'Authenticated') throw new Error('Not authenticated');
+        await client.auth.getProfile();
         const bucketId = await getSelectedBucketId();
         const bucket = await client.buckets.getBucket(bucketId);
         window.__msp.lastBucket = bucket;
@@ -439,8 +436,7 @@
       try {
         if (!client) throw new Error('Connect MSP first');
         setStatus('Getting files...');
-        const auth = await client.auth.getAuthStatus();
-        if (!auth || auth.status !== 'Authenticated') throw new Error('Not authenticated');
+        await client.auth.getProfile();
         const bucketId = await getSelectedBucketId();
         const pathEl = document.getElementById('pathInput');
         const pathVal = pathEl && typeof pathEl.value === 'string' ? pathEl.value.trim() : '';
@@ -525,8 +521,7 @@
       try {
         await ensureConnected();
         setStatus('Getting file info...');
-        const auth = await client.auth.getAuthStatus();
-        if (!auth || auth.status !== 'Authenticated') throw new Error('Not authenticated');
+        await client.auth.getProfile();
         const bucketEl = document.getElementById('bucketInfoIdInput');
         const fileKeyEl = document.getElementById('fileKeyInput');
         const bucketId = bucketEl && typeof bucketEl.value === 'string' && bucketEl.value.trim() ? bucketEl.value.trim() : 'd8793e4187f5642e96016a96fb33849a7e03eda91358b311bbd426ed38b26692';

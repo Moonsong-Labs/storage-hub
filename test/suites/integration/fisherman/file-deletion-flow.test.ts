@@ -10,6 +10,7 @@ import {
   ShConsts
 } from "../../../util";
 import {
+  hexToBuffer,
   waitForFileIndexed,
   waitForMspFileAssociation,
   waitForBspFileAssociation
@@ -73,8 +74,7 @@ await describeMspNet(
         timeout: 10000
       });
 
-      await userApi.rpc.engine.createBlock(true, true);
-
+      await userApi.block.seal({ finaliseBlock: true });
       await waitForIndexing(userApi);
     });
 
@@ -132,7 +132,7 @@ await describeMspNet(
       await waitForBspFileAssociation(sql, fileKey);
     });
 
-    it("user sends file deletion request and fisherman submits delete_file extrinsics", async () => {
+    it("user sends file deletion request and fisherman submits delete_files extrinsics", async () => {
       // Create file deletion request
       const fileOperationIntention = {
         fileKey: fileKey,
@@ -172,9 +172,32 @@ await describeMspNet(
 
       await waitForIndexing(userApi, false);
 
-      // Verify delete_file extrinsics are submitted
+      // Verify that the deletion signature was stored in the database (SCALE-encoded)
+      await waitFor({
+        lambda: async () => {
+          const files = await sql`
+            SELECT deletion_signature FROM file
+            WHERE file_key = ${hexToBuffer(fileKey)}
+            AND deletion_signature IS NOT NULL
+          `;
+          return files.length > 0;
+        }
+      });
+
+      const filesWithSignature = await sql`
+        SELECT deletion_signature FROM file
+        WHERE file_key = ${hexToBuffer(fileKey)}
+        AND deletion_signature IS NOT NULL
+      `;
+      assert.equal(filesWithSignature.length, 1, "File should have deletion signature stored");
+      assert(
+        filesWithSignature[0].deletion_signature.length > 0,
+        "SCALE-encoded signature should not be empty"
+      );
+
+      // Verify delete_files extrinsics are submitted
       await userApi.assert.extrinsicPresent({
-        method: "deleteFile",
+        method: "deleteFiles",
         module: "fileSystem",
         checkTxPool: true,
         assertLength: 2
@@ -187,18 +210,18 @@ await describeMspNet(
       assertEventPresent(
         userApi,
         "fileSystem",
-        "BucketFileDeletionCompleted",
+        "BucketFileDeletionsCompleted",
         deletionResult.events
       );
-      assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", deletionResult.events);
+      assertEventPresent(userApi, "fileSystem", "BspFileDeletionsCompleted", deletionResult.events);
 
       // Extract deletion events to verify root changes
       const mspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BucketFileDeletionCompleted,
+        userApi.events.fileSystem.BucketFileDeletionsCompleted,
         deletionResult.events
       );
       const bspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BspFileDeletionCompleted,
+        userApi.events.fileSystem.BspFileDeletionsCompleted,
         deletionResult.events
       );
 

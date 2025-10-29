@@ -11,7 +11,6 @@ serde = { workspace = true, features = ["derive"] }
 tokio = { workspace = true, features = ["full"] }
 toml = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
 
 # Local dependencies
 sh-msp-backend-lib = { path = "../lib" }

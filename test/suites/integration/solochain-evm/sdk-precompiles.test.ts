@@ -5,13 +5,15 @@ import { Readable } from "node:stream";
 import { TypeRegistry } from "@polkadot/types";
 import type { AccountId20, H256 } from "@polkadot/types/interfaces";
 import {
+  type FileInfo,
   FileManager,
   type HttpClientConfig,
   ReplicationLevel,
+  SH_FILE_SYSTEM_PRECOMPILE_ADDRESS,
   StorageHubClient
 } from "@storagehub-sdk/core";
 import { MspClient } from "@storagehub-sdk/msp-client";
-import { createPublicClient, createWalletClient, defineChain, http } from "viem";
+import { createPublicClient, createWalletClient, defineChain, http, getAddress } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { describeMspNet, type EnrichedBspApi, ShConsts } from "../../../util";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
@@ -23,7 +25,8 @@ await describeMspNet(
     initialised: false,
     runtimeType: "solochain",
     indexer: true,
-    backend: true
+    backend: true,
+    fisherman: true
   },
   ({ before, it, createUserApi, createMsp1Api }) => {
     let userApi: EnrichedBspApi;
@@ -37,6 +40,9 @@ await describeMspNet(
     let fileKey: H256;
     let fileLocation: string;
     let mspClient: MspClient;
+    let sessionToken: string | undefined;
+    const sessionProvider = async () =>
+      sessionToken ? ({ token: sessionToken, user: { address: "" } } as const) : undefined;
 
     before(async () => {
       userApi = await createUserApi();
@@ -64,7 +70,8 @@ await describeMspNet(
       storageHubClient = new StorageHubClient({
         rpcUrl,
         chain,
-        walletClient
+        walletClient,
+        filesystemContractAddress: SH_FILE_SYSTEM_PRECOMPILE_ADDRESS
       });
 
       // Set up the FileManager instance for the file to manipulate
@@ -82,12 +89,12 @@ await describeMspNet(
       const mspBackendHttpConfig: HttpClientConfig = {
         baseUrl: "http://127.0.0.1:8080"
       };
-      mspClient = await MspClient.connect(mspBackendHttpConfig);
+      mspClient = await MspClient.connect(mspBackendHttpConfig, sessionProvider);
 
       // Wait for the backend to be ready
       await userApi.docker.waitForLog({
         containerName: "storage-hub-sh-backend-1",
-        searchString: "Server listening on",
+        searchString: "Server listening",
         timeout: 10000
       });
 
@@ -96,7 +103,8 @@ await describeMspNet(
       assert(healthResponse.status === "healthy", "MSP health response should be healthy");
 
       // Set up the authentication with the MSP backend
-      await mspClient.auth.SIWE(walletClient);
+      const siweSession = await mspClient.auth.SIWE(walletClient);
+      sessionToken = siweSession.token;
     });
 
     it("Postgres DB is ready", async () => {
@@ -115,6 +123,124 @@ await describeMspNet(
       strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp1.expectedPeerId);
     });
 
+    it("Should fetch authenticated user profile from the MSP backend", async () => {
+      const profile = await mspClient.auth.getProfile();
+      // Compare using EIP-55 checksum-normalized addresses
+      strictEqual(
+        profile.address,
+        getAddress(account.address),
+        "Profile address should be checksummed and match wallet address"
+      );
+    });
+
+    it("Should get MSP general info via the SDK's MspClient", async () => {
+      const info = await mspClient.info.getInfo();
+      // TODO: Backend /info is mocked in msp.rs; assert exact fields to sanity-check wiring.
+      // When backend returns dynamic values, relax these assertions.
+
+      // client/version
+      strictEqual(info.client, "storagehub-node v1.0.0", "Client should match backend mock");
+      strictEqual(info.version, "StorageHub MSP v0.1.0", "Version should match backend mock");
+
+      // mspId must match the launched DUMMY_MSP_ID
+      strictEqual(
+        info.mspId.toLowerCase(),
+        userApi.shConsts.DUMMY_MSP_ID.toLowerCase(),
+        "mspId should match expected test MSP"
+      );
+
+      // multiaddresses shape
+      assert(
+        Array.isArray(info.multiaddresses) && info.multiaddresses.length > 0,
+        "multiaddresses should be present"
+      );
+      assert(
+        info.multiaddresses.every(
+          (ma: string) =>
+            typeof ma === "string" &&
+            ma.includes(`/p2p/${userApi.shConsts.NODE_INFOS.msp1.expectedPeerId}`)
+        ),
+        "Every multiaddress should contain the expected MSP peer ID"
+      );
+
+      // accounts (EIP-55 checksummed constants)
+      strictEqual(
+        info.ownerAccount,
+        getAddress("0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac"),
+        "ownerAccount should match backend mock"
+      );
+      strictEqual(
+        info.paymentAccount,
+        getAddress("0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac"),
+        "paymentAccount should match backend mock"
+      );
+
+      // status/timing
+      strictEqual(info.status, "active", "Status should be 'active'");
+      strictEqual(info.activeSince, 123, "ActiveSince should match backend mock");
+      assert(
+        typeof info.uptime === "string" && info.uptime.length > 0,
+        "uptime should be a non-empty string"
+      );
+    });
+
+    it("Should get MSP stats via the SDK's MspClient", async () => {
+      const stats = await mspClient.info.getStats();
+      // TODO: Backend returns mocked stats (see backend/lib/src/services/msp.rs).
+      // When the backend serves real values, replace these fixed expectations
+      // with config-driven or dynamic assertions.
+      const expectedTotal = 1_099_511_627_776; // 1 TiB
+      const expectedUsed = 219_902_325_556;
+      const expectedAvailable = 879_609_302_220;
+      const expectedBuckets = 1024;
+      const expectedActiveUsers = 152;
+      const expectedLastCapacityChange = 123;
+      const expectedValuePropsAmount = 42;
+
+      strictEqual(
+        stats.capacity.totalBytes,
+        expectedTotal,
+        "MSP total capacity should match backend mock value"
+      );
+      strictEqual(
+        stats.capacity.usedBytes,
+        expectedUsed,
+        "MSP used capacity should match backend mock value"
+      );
+      strictEqual(
+        stats.capacity.availableBytes,
+        expectedAvailable,
+        "MSP available capacity should match backend mock value"
+      );
+      strictEqual(
+        stats.bucketsAmount,
+        expectedBuckets,
+        "MSP buckets amount should match backend mock value"
+      );
+      strictEqual(
+        stats.activeUsers,
+        expectedActiveUsers,
+        "MSP active users should match backend mock value"
+      );
+      strictEqual(
+        stats.lastCapacityChange,
+        expectedLastCapacityChange,
+        "MSP last capacity change should match backend mock value"
+      );
+      strictEqual(
+        stats.valuePropsAmount,
+        expectedValuePropsAmount,
+        "MSP value props amount should match backend mock value"
+      );
+
+      // Sanity check invariants
+      strictEqual(
+        stats.capacity.availableBytes + stats.capacity.usedBytes,
+        stats.capacity.totalBytes,
+        "available + used should equal total capacity"
+      );
+    });
+
     it("Should create a new bucket using the SDK's StorageHubClient", async () => {
       const bucketName = "sdk-precompiles-test-bucket";
 
@@ -126,12 +252,23 @@ await describeMspNet(
       assert(valueProps[0].id, "Value proposition ID is undefined");
       const valuePropId = valueProps[0].id.toHex();
 
+      // Verify the selected on-chain value prop ID is present in the SDK response
+      const sdkValueProps = await mspClient.info.getValuePropositions();
+      assert(
+        Array.isArray(sdkValueProps) && sdkValueProps.length > 0,
+        "SDK value props should be present"
+      );
+      assert(
+        sdkValueProps.some((vp) => vp.id === valuePropId),
+        "SDK should include the selected on-chain value prop id"
+      );
+
       // Calculate and store the bucket ID for subsequent tests
       bucketId = (await storageHubClient.deriveBucketId(account.address, bucketName)) as string;
 
       // Verify the bucket doesn't exist before creation
       const bucketBeforeCreation = await userApi.query.providers.buckets(bucketId);
-      assert(bucketBeforeCreation.isEmpty, "Bucket should not exist before creation");
+      assert(bucketBeforeCreation.isNone, "Bucket should not exist before creation");
 
       // Create the bucket using the SDK
       const txHash = await storageHubClient.createBucket(
@@ -155,7 +292,7 @@ await describeMspNet(
 
       // Verify bucket exists after creation
       const bucketAfterCreation = await userApi.query.providers.buckets(bucketId);
-      assert(!bucketAfterCreation.isEmpty, "Bucket should exist after creation");
+      assert(bucketAfterCreation.isSome, "Bucket should exist after creation");
       const bucketData = bucketAfterCreation.unwrap();
       assert(
         bucketData.userId.toString() === account.address,
@@ -164,6 +301,19 @@ await describeMspNet(
       assert(
         bucketData.mspId.toString() === userApi.shConsts.DUMMY_MSP_ID,
         "Bucket mspId should match expected MSP ID"
+      );
+
+      // Also verify through SDK / MSP backend endpoints
+      const listedBuckets = await mspClient.buckets.listBuckets();
+      assert(
+        listedBuckets.some((b) => `0x${b.bucketId}` === bucketId),
+        "MSP listBuckets should include the created bucket"
+      );
+      const sdkBucket = await mspClient.buckets.getBucket(bucketId);
+      strictEqual(
+        `0x${sdkBucket.bucketId}`,
+        bucketId,
+        "MSP getBucket should return the created bucket"
       );
     });
 
@@ -295,6 +445,16 @@ await describeMspNet(
 
       // Ensure the file is now stored in the MSP's file storage
       await msp1Api.wait.fileStorageComplete(hexFileKey);
+
+      // Ensure file tree and file info are available via backend for this bucket
+      const fileTree = await mspClient.buckets.getFiles(bucketId);
+      assert(
+        Array.isArray(fileTree.files) && fileTree.files.length > 0,
+        "file tree should not be empty"
+      );
+      const fileInfo = await mspClient.files.getFileInfo(bucketId, fileKey.toHex());
+      strictEqual(`0x${fileInfo.bucketId}`, bucketId, "BucketId should match");
+      strictEqual(`0x${fileInfo.fileKey}`, fileKey.toHex(), "FileKey should match");
     });
 
     it("Should fetch payment streams using the SDK's MspClient", async () => {
@@ -312,7 +472,7 @@ await describeMspNet(
       const sdkPs = streams.find((s) => s.provider.toLowerCase() === mspId.toLowerCase());
       assert(sdkPs, "SDK did not return a payment stream for the expected MSP");
 
-      strictEqual(sdkPs.providerType, "msp", "providerType should be 'msp'");
+      strictEqual(sdkPs.providerType, "msp", "ProviderType should be 'msp'");
       strictEqual(
         sdkPs.costPerTick,
         onChain.rate.toString(),
@@ -337,6 +497,148 @@ await describeMspNet(
         ),
         "File should be the same as the one uploaded"
       );
+    });
+
+    it("Should request deletion and verify complete cleanup", async () => {
+      // Create the file info to request its deletion
+      const registry = new TypeRegistry();
+      const bucketIdH256 = registry.createType("H256", bucketId) as H256;
+      const fingerprint = await fileManager.getFingerprint();
+      const fileSize = BigInt(fileManager.getFileSize());
+
+      const fileInfo: FileInfo = {
+        fileKey: fileKey.toHex() as `0x${string}`,
+        bucketId: bucketIdH256.toHex() as `0x${string}`,
+        location: fileLocation,
+        size: fileSize,
+        fingerprint: fingerprint.toHex() as `0x${string}`
+      };
+
+      // Use the SDK's StorageHubClient to request the file deletion
+      const txHash = await storageHubClient.requestDeleteFile(fileInfo);
+      await userApi.wait.waitForTxInPool({
+        module: "ethereum",
+        method: "transact"
+      });
+      await userApi.block.seal();
+
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+      assert(receipt.status === "success", "Request delete file transaction failed");
+
+      // Verify the deletion request was enqueued on-chain
+      await userApi.assert.eventPresent("fileSystem", "FileDeletionRequested");
+
+      // Wait for the fisherman node's delete_files extrinsic to be in the tx pool and seal it
+      await userApi.wait.waitForTxInPool({
+        module: "fileSystem",
+        method: "deleteFiles"
+      });
+      const deleteFileBlock = await userApi.block.seal();
+
+      // Verify that the `BucketFileDeletionsCompleted` event was emitted and it contains the correct file key
+      const bucketFileDeletionsCompletedEvent = await userApi.assert.eventPresent(
+        "fileSystem",
+        "BucketFileDeletionsCompleted"
+      );
+      assert(bucketFileDeletionsCompletedEvent, "BucketFileDeletionsCompleted event not found");
+      const bucketFileDeletionsCompletedEventData =
+        userApi.events.fileSystem.BucketFileDeletionsCompleted.is(
+          bucketFileDeletionsCompletedEvent.event
+        ) && bucketFileDeletionsCompletedEvent.event.data;
+      assert(
+        bucketFileDeletionsCompletedEventData,
+        "BucketFileDeletionsCompleted event data not found"
+      );
+      strictEqual(
+        bucketFileDeletionsCompletedEventData.fileKeys.length,
+        1,
+        "Should have deleted 1 file"
+      );
+      strictEqual(
+        bucketFileDeletionsCompletedEventData.fileKeys[0].toString(),
+        fileKey.toHex(),
+        "File key should match the deleted file key"
+      );
+
+      // Wait until the MSP detects the on-chain deletion and updates its local bucket forest
+      await msp1Api.wait.mspBucketFileDeletionCompleted(fileKey.toHex(), bucketId);
+
+      // Finalise the block containing the `BucketFileDeletionsCompleted` event in the MSP node
+      // so that the `BucketFileDeletionsCompleted` event is finalised on-chain and the MSP deletes the
+      // file from its file storage.
+      await msp1Api.rpc.engine.finalizeBlock(deleteFileBlock.blockReceipt.blockHash);
+
+      // Wait until the MSP detects the now finalised deletion and correctly deletes the file from its file storage
+      await msp1Api.wait.fileDeletionFromFileStorage(fileKey.toHex());
+
+      // Attempt to download the file, it should fail with a 404 since the file was deleted
+      const downloadResponse = await mspClient.files.downloadFile(fileKey.toHex());
+      assert(
+        downloadResponse.status === 404,
+        "Download should fail after file deletion, but it succeeded"
+      );
+    });
+
+    it("Should create, verify, delete, and verify deletion of a bucket", async () => {
+      const testBucketName = "delete-bucket-test";
+
+      const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
+        userApi.shConsts.DUMMY_MSP_ID
+      );
+
+      assert(valueProps.length > 0, "No value propositions found for MSP");
+      assert(valueProps[0].id, "Value proposition ID is undefined");
+      const valuePropId = valueProps[0].id.toHex();
+
+      const testBucketId = (await storageHubClient.deriveBucketId(
+        account.address,
+        testBucketName
+      )) as string;
+
+      const bucketBeforeCreation = await userApi.query.providers.buckets(testBucketId);
+      assert(bucketBeforeCreation.isNone, "Test bucket should not exist before creation");
+
+      const createTxHash = await storageHubClient.createBucket(
+        userApi.shConsts.DUMMY_MSP_ID as `0x${string}`,
+        testBucketName,
+        false,
+        valuePropId as `0x${string}`
+      );
+
+      await userApi.wait.waitForTxInPool({
+        module: "ethereum",
+        method: "transact"
+      });
+      await userApi.block.seal();
+
+      const createReceipt = await publicClient.waitForTransactionReceipt({ hash: createTxHash });
+      assert(createReceipt.status === "success", "Create bucket transaction failed");
+
+      const bucketAfterCreation = await userApi.query.providers.buckets(testBucketId);
+      assert(bucketAfterCreation.isSome, "Bucket should exist after creation");
+      const bucketData = bucketAfterCreation.unwrap();
+      assert(
+        bucketData.userId.toString() === account.address,
+        "Bucket userId should match account address"
+      );
+      assert(
+        bucketData.mspId.toString() === userApi.shConsts.DUMMY_MSP_ID,
+        "Bucket mspId should match expected MSP ID"
+      );
+
+      const deleteTxHash = await storageHubClient.deleteBucket(testBucketId as `0x${string}`);
+
+      await userApi.wait.waitForTxInPool({
+        module: "ethereum",
+        method: "transact"
+      });
+      await userApi.block.seal();
+
+      const deleteReceipt = await publicClient.waitForTransactionReceipt({ hash: deleteTxHash });
+      assert(deleteReceipt.status === "success", "Delete bucket transaction failed");
+
+      const bucketAfterDeletion = await userApi.query.providers.buckets(testBucketId);
+      assert(bucketAfterDeletion.isNone, "Bucket should not exist after deletion");
     });
   }
 );

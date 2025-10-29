@@ -6,7 +6,6 @@ import {
   bspKey,
   waitFor,
   assertEventPresent,
-  assertEventMany,
   mspKey,
   sleep,
   ShConsts
@@ -55,7 +54,7 @@ await describeMspNet(
       assert(createFishermanApi, "Fisherman API not available for fisherman test");
       fishermanApi = await createFishermanApi();
 
-      await userApi.rpc.engine.createBlock(true, true);
+      await userApi.block.seal({ finaliseBlock: true });
     });
 
     it("processes expired request (BSP only) in unfinalized block", async () => {
@@ -124,7 +123,7 @@ await describeMspNet(
         // No deletion should be sent for a bucket that has not been updated with this file key since the MSP did not accept it.
         // TODO: Add additional test case scenarios.
         await userApi.assert.extrinsicPresent({
-          method: "deleteFileForIncompleteStorageRequest",
+          method: "deleteFilesForIncompleteStorageRequest",
           module: "fileSystem",
           checkTxPool: true,
           assertLength: 1,
@@ -134,11 +133,11 @@ await describeMspNet(
         // Seal block to process the extrinsic
         const deletionResult = await userApi.block.seal();
 
-        // Verify FileDeletedFromIncompleteStorageRequest event
+        // Verify BspFileDeletionsCompleted event
         assertEventPresent(
           userApi,
           "fileSystem",
-          "FileDeletedFromIncompleteStorageRequest",
+          "BspFileDeletionsCompleted",
           deletionResult.events
         );
       } finally {
@@ -203,7 +202,7 @@ await describeMspNet(
 
       // Verify two delete extrinsics are submitted (for MSP and BSP)
       await userApi.assert.extrinsicPresent({
-        method: "deleteFileForIncompleteStorageRequest",
+        method: "deleteFilesForIncompleteStorageRequest",
         module: "fileSystem",
         checkTxPool: true,
         assertLength: 2
@@ -212,13 +211,14 @@ await describeMspNet(
       // Seal block to process the extrinsics
       const deletionResult = await userApi.block.seal();
 
-      // Verify FileDeletedFromIncompleteStorageRequest events
-      assertEventMany(
+      // Verify both deletion completion events
+      assertEventPresent(
         userApi,
         "fileSystem",
-        "FileDeletedFromIncompleteStorageRequest",
+        "BucketFileDeletionsCompleted",
         deletionResult.events
       );
+      assertEventPresent(userApi, "fileSystem", "BspFileDeletionsCompleted", deletionResult.events);
     });
 
     it("processes MSP stop storing bucket with incomplete request in unfinalized block", async () => {
@@ -291,7 +291,7 @@ await describeMspNet(
       // 1. For the bucket (no MSP present)
       // 2. For the BSP
       await userApi.assert.extrinsicPresent({
-        method: "deleteFileForIncompleteStorageRequest",
+        method: "deleteFilesForIncompleteStorageRequest",
         module: "fileSystem",
         checkTxPool: true,
         assertLength: 2
@@ -300,17 +300,18 @@ await describeMspNet(
       // Seal block to process the extrinsics
       const deletionResult = await userApi.block.seal();
 
-      // Verify FileDeletedFromIncompleteStorageRequest events
-      assertEventMany(
+      // Verify both deletion completion events
+      assertEventPresent(
         userApi,
         "fileSystem",
-        "FileDeletedFromIncompleteStorageRequest",
+        "BucketFileDeletionsCompleted",
         deletionResult.events
       );
+      assertEventPresent(userApi, "fileSystem", "BspFileDeletionsCompleted", deletionResult.events);
 
-      // Verify BucketFileDeletionCompleted event with no MSP ID
+      // Verify BucketFileDeletionsCompleted event with no MSP ID
       const mspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BucketFileDeletionCompleted,
+        userApi.events.fileSystem.BucketFileDeletionsCompleted,
         deletionResult.events
       );
 

@@ -34,7 +34,7 @@ use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
 use crate::{
     handler::StorageHubHandler,
-    types::{BspForestStorageHandlerT, ShNodeType},
+    types::{BspForestStorageHandlerT, ForestStorageKey, ShNodeType},
 };
 
 const LOG_TARGET: &str = "bsp-upload-file-task";
@@ -266,7 +266,7 @@ where
                 return Err(anyhow!("Failed to get own BSP ID."));
             }
         };
-        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+        let current_forest_key = ForestStorageKey::from(CURRENT_FOREST_KEY.to_vec());
 
         // Query runtime for the chunks to prove for the file.
         let mut confirm_storing_requests_with_chunks_to_prove = Vec::new();
@@ -446,7 +446,7 @@ where
         }
 
         // Get the current Forest key of the Provider running this node.
-        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+        let current_forest_key = ForestStorageKey::from(CURRENT_FOREST_KEY.to_vec());
 
         // Verify if file not already stored
         let fs = self
@@ -887,7 +887,7 @@ where
                         )));
                     }
                     FileStorageWriteError::FailedToConstructTrieIter
-                    | FileStorageWriteError::FailedToContructFileTrie => {
+                    | FileStorageWriteError::FailedToConstructFileTrie => {
                         return Err(anyhow::anyhow!(format!(
                             "This is a bug! Failed to construct trie iter for key {:?}.",
                             event.file_key

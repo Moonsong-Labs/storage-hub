@@ -1,4 +1,5 @@
 use bigdecimal::BigDecimal;
+use codec::Encode;
 use diesel_async::AsyncConnection;
 use futures::prelude::*;
 use log::{error, info};
@@ -372,23 +373,31 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 let has_msp = File::has_msp_associations(conn, file_key.as_ref()).await?;
                 let has_bsp = File::has_bsp_associations(conn, file_key.as_ref()).await?;
 
-                if has_msp || has_bsp {
-                    // Mark file for deletion - will be deleted when all associations are removed
-                    File::update_deletion_status(
-                        conn,
-                        file_key.as_ref(),
-                        FileDeletionStatus::InProgress,
-                    )
-                    .await?;
-                    log::debug!(
-                        "Storage request revoked for file {:?} with existing associations (MSP: {}, BSP: {}), marked for deletion",
-                        file_key, has_msp, has_bsp
-                    );
-                } else {
+                if !has_msp && !has_bsp {
                     // No associations, safe to delete immediately
+                    // This happens when storage request is revoked before any BSPs or MSP confirms
                     File::delete(conn, file_key.as_ref().to_vec()).await?;
-                    log::debug!("Storage request revoked for file {:?} with no associations, deleted immediately", file_key);
+                    log::debug!(
+                        "Storage request revoked for file {:?} with no associations, deleted immediately",
+                        file_key
+                    );
                 }
+                // If the file has associations, the `IncompleteStorageRequest` event will handle it
+            }
+            pallet_file_system::Event::StorageRequestRejected { file_key, reason } => {
+                // Check if the file has any BSP associations (it will not have MSP ones since the MSP did not accept it)
+                let has_bsp = File::has_bsp_associations(conn, file_key.as_ref()).await?;
+                if has_bsp {
+                    // If the file has BSP associations, the `IncompleteStorageRequest` event will handle it
+                    return Ok(());
+                }
+                // If the file does not have BSP associations, it's safe to delete immediately
+                File::delete(conn, file_key.as_ref().to_vec()).await?;
+                log::debug!(
+                    "Storage request rejected for file {:?} with reason {:?}, deleted immediately",
+                    file_key,
+                    reason
+                );
             }
             pallet_file_system::Event::MspAcceptedStorageRequest {
                 file_key,
@@ -400,7 +409,6 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     MspFile::create(conn, msp_id, file.id).await?;
                 }
             }
-            pallet_file_system::Event::StorageRequestRejected { .. } => {}
             pallet_file_system::Event::BspRequestedToStopStoring { .. } => {}
             pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. } => {}
             pallet_file_system::Event::MspStopStoringBucketInsolventUser {
@@ -447,14 +455,16 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             }
             pallet_file_system::Event::FileDeletionRequested {
                 signed_delete_intention,
-                signature: _,
+                signature,
             } => {
-                // Mark file for deletion
+                // Mark file for deletion with user signature
                 let file_key = &signed_delete_intention.file_key;
+                let signature_bytes = signature.encode();
                 File::update_deletion_status(
                     conn,
                     file_key.as_ref(),
                     FileDeletionStatus::InProgress,
+                    Some(signature_bytes),
                 )
                 .await?;
             }
@@ -469,28 +479,29 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             pallet_file_system::Event::FailedToTransferDepositFundsToBsp { .. } => {
                 // In the future we should monitor for this to detect eventual bugs in the pallets
             }
-            pallet_file_system::Event::FileDeletedFromIncompleteStorageRequest { .. } => {
-                // TODO: index this event
-            }
-            pallet_file_system::Event::BucketFileDeletionCompleted {
+            pallet_file_system::Event::BucketFileDeletionsCompleted {
                 user: _,
-                file_key,
-                file_size: _,
+                file_keys,
                 bucket_id,
                 msp_id: maybe_msp_id,
                 old_root: _,
                 new_root,
             } => {
-                // Delete MSP-file association
+                // Delete MSP-file associations for all files in the batch
                 if let Some(msp_id) = maybe_msp_id {
-                    MspFile::delete(conn, file_key.as_ref(), OnchainMspId::from(*msp_id)).await?;
+                    for file_key in file_keys.iter() {
+                        MspFile::delete(conn, file_key.as_ref(), OnchainMspId::from(*msp_id))
+                            .await?;
+                    }
                 }
 
-                // Check if file should be deleted (no more associations)
-                let deleted = File::delete_if_orphaned(conn, file_key.as_ref()).await?;
+                // Check if files should be deleted (no more associations)
+                for file_key in file_keys.iter() {
+                    let deleted = File::delete_if_orphaned(conn, file_key.as_ref()).await?;
 
-                if deleted {
-                    log::trace!("Deleted orphaned file after MSP deletion: {:?}", file_key);
+                    if deleted {
+                        log::trace!("Deleted orphaned file after MSP deletion: {:?}", file_key);
+                    }
                 }
 
                 // Update bucket merkle root
@@ -501,23 +512,26 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 )
                 .await?;
             }
-            pallet_file_system::Event::BspFileDeletionCompleted {
-                user: _,
-                file_key,
-                file_size: _,
+            pallet_file_system::Event::BspFileDeletionsCompleted {
+                users: _,
+                file_keys,
                 bsp_id,
                 old_root: _,
                 new_root,
             } => {
-                // Delete BSP-file association
-                BspFile::delete_for_bsp(conn, file_key.as_ref(), OnchainBspId::from(*bsp_id))
-                    .await?;
+                // Delete BSP-file associations for all files in the batch
+                for file_key in file_keys.iter() {
+                    BspFile::delete_for_bsp(conn, file_key.as_ref(), OnchainBspId::from(*bsp_id))
+                        .await?;
+                }
 
-                // Check if file should be deleted (no more associations)
-                let deleted = File::delete_if_orphaned(conn, file_key.as_ref()).await?;
+                // Check if files should be deleted (no more associations)
+                for file_key in file_keys.iter() {
+                    let deleted = File::delete_if_orphaned(conn, file_key.as_ref()).await?;
 
-                if deleted {
-                    log::trace!("Deleted orphaned file after BSP deletion: {:?}", file_key);
+                    if deleted {
+                        log::trace!("Deleted orphaned file after BSP deletion: {:?}", file_key);
+                    }
                 }
 
                 // Update BSP merkle root
@@ -528,7 +542,36 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 )
                 .await?;
             }
-            pallet_file_system::Event::IncompleteStorageRequest { .. } => {}
+            // This event covers all scenarios where a storage request was unfulfilled while there were BSPs and/or the MSP who have confirmed to store the file
+            // and necessitates a fisherman to delete this file.
+            pallet_file_system::Event::IncompleteStorageRequest { file_key } => {
+                // Check if file has any provider associations
+                let has_msp = File::has_msp_associations(conn, file_key.as_ref()).await?;
+                let has_bsp = File::has_bsp_associations(conn, file_key.as_ref()).await?;
+
+                if has_msp || has_bsp {
+                    // File has associations, mark for deletion by fisherman
+                    File::update_deletion_status(
+                        conn,
+                        file_key.as_ref(),
+                        FileDeletionStatus::InProgress,
+                        None,
+                    )
+                    .await?;
+
+                    log::debug!(
+                        "Incomplete storage request for file {:?} with existing associations (MSP: {}, BSP: {}), marked for deletion without signature",
+                        file_key, has_msp, has_bsp
+                    );
+                } else {
+                    // No associations, safe to delete immediately
+                    File::delete(conn, file_key.as_ref().to_vec()).await?;
+                    log::debug!(
+                        "Incomplete storage request for file {:?} with no associations, deleted immediately",
+                        file_key
+                    );
+                }
+            }
             pallet_file_system::Event::__Ignore(_, _) => {}
         }
         Ok(())

@@ -45,7 +45,7 @@ The Core SDK provides seamless integration with StorageHub's EVM precompiles, of
 #### StorageHubClient - Unified EVM Interface
 
 ```ts
-import { StorageHubClient } from '@storagehub-sdk/core';
+import { StorageHubClient, SH_FILE_SYSTEM_PRECOMPILE_ADDRESS } from '@storagehub-sdk/core';
 import { createWalletClient, defineChain, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 
@@ -69,7 +69,8 @@ const walletClient = createWalletClient({
 const hub = new StorageHubClient({
   rpcUrl: 'http://localhost:9944',
   chain: storageHubChain,
-  walletClient
+  walletClient,
+  filesystemContractAddress: SH_FILE_SYSTEM_PRECOMPILE_ADDRESS
 });
 ```
 
@@ -107,7 +108,7 @@ const txHash2 = await hub.updateBucketPrivacy('0xBucketId', true, {
 **Storage Operations:**
 - `issueStorageRequest(bucketId, location, fingerprint, size, mspId, peerIds, replicationTarget, customReplicationTarget, options?)`
 - `revokeStorageRequest(fileKey, options?)`
-- `requestDeleteFile(signedIntention, signature, bucketId, location, size, fingerprint, options?)`
+- `requestDeleteFile(fileInfo, options?)`
 
 **Collections:**
 - `createAndAssociateCollectionWithBucket(bucketId, options?)`

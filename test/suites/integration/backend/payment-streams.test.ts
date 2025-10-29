@@ -45,7 +45,7 @@ await describeMspNet(
     it("Backend service is ready", async () => {
       await userApi.docker.waitForLog({
         containerName: "storage-hub-sh-backend-1",
-        searchString: "Server listening on",
+        searchString: "Server listening",
         timeout: 10000
       });
     });
@@ -167,6 +167,13 @@ await describeMspNet(
         const expectedType = apiStream.providerType === "msp" ? "fixed" : "dynamic";
         const matchingChainStream = chainPaymentStreams.find(
           (s) => s.provider === apiStream.provider && s.type === expectedType
+        );
+
+        const costPerTick = BigInt(apiStream.costPerTick);
+        strictEqual(
+          costPerTick.toString(),
+          apiStream.costPerTick,
+          "costPerTick should be parseable as BigInt"
         );
 
         assert(

@@ -36,6 +36,7 @@ use shp_data_price_updater::{MostlyStablePriceIndexUpdater, MostlyStablePriceInd
 use shp_file_key_verifier::FileKeyVerifier;
 use shp_file_metadata::{ChunkId, FileMetadata};
 use shp_forest_verifier::ForestVerifier;
+use shp_traits::{CommitRevealRandomnessInterface, IdentityAdapter};
 use shp_treasury_funding::{
     LinearThenPowerOfTwoTreasuryCutCalculator, LinearThenPowerOfTwoTreasuryCutCalculatorConfig,
 };
@@ -849,6 +850,7 @@ impl pallet_file_system::Config for Runtime {
         runtime_params::dynamic_params::runtime_config::BspStopStoringFilePenalty;
     type TreasuryAccount = TreasuryAccount;
     type MaxBatchConfirmStorageRequests = ConstU32<10>;
+    type MaxFileDeletionsPerExtrinsic = ConstU32<100>;
     type MaxFilePathSize = ConstU32<512u32>;
     type MaxPeerIdSize = ConstU32<100>;
     type MaxNumberOfPeerIds = ConstU32<5>;
@@ -883,6 +885,7 @@ impl pallet_file_system::Config for Runtime {
         runtime_params::dynamic_params::runtime_config::TickRangeToMaximumThreshold;
     type OffchainSignature = Signature;
     type OffchainPublicKey = <Signature as Verify>::Signer;
+    type IntentionMsgAdapter = IdentityAdapter;
 }
 
 impl MostlyStablePriceIndexUpdaterConfig for Runtime {
@@ -1051,7 +1054,7 @@ impl pallet_cr_randomness::RandomSeedMixer<Seed> for RandomSeedMixer {
 // TODO: Replace this mock with the actual implementation above when it is ready
 // We need this mock since `pallet-file-system` requires something that implements the CommitRevealRandomnessInterface trait
 pub struct MockCrRandomness;
-impl shp_traits::CommitRevealRandomnessInterface for MockCrRandomness {
+impl CommitRevealRandomnessInterface for MockCrRandomness {
     type ProviderId = Hash;
 
     fn initialise_randomness_cycle(

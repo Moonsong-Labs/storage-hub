@@ -1,5 +1,5 @@
 use log::{debug, error, info, trace, warn};
-use std::{collections::BTreeMap, str, sync::Arc};
+use std::{str, sync::Arc};
 use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
 use sc_client_api::HeaderBackend;
@@ -15,21 +15,19 @@ use shc_common::{
     traits::StorageEnableRuntime,
     typed_store::CFDequeAPI,
     types::{
-        BackupStorageProviderId, BlockHash, BlockNumber, Fingerprint, ProviderId,
-        StorageEnableEvents, StorageRequestMetadata,
+        BackupStorageProviderId, BlockHash, BlockNumber, BucketId, ProviderId, StorageEnableEvents,
     },
 };
 use shc_forest_manager::traits::ForestStorageHandler;
 
 use crate::{
     events::{
-        DistributeFileToBsp, FileDeletionRequest, FinalisedBucketMovedAway,
+        DistributeFileToBsp, FinalisedBucketMovedAway, FinalisedBucketMutationsApplied,
         FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
-        FinalisedProofSubmittedForPendingFileDeletionRequest, ForestWriteLockTaskData,
-        MoveBucketRequestedForMsp, NewStorageRequest, ProcessFileDeletionRequest,
-        ProcessFileDeletionRequestData, ProcessMspRespondStoringRequest,
-        ProcessMspRespondStoringRequestData, ProcessStopStoringForInsolventUserRequest,
-        ProcessStopStoringForInsolventUserRequestData, StartMovedBucketDownload,
+        ForestWriteLockTaskData, MoveBucketRequestedForMsp, NewStorageRequest,
+        ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData,
+        ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
+        StartMovedBucketDownload, VerifyMspBucketForests,
     },
     handler::LOG_TARGET,
     types::{FileDistributionInfo, ManagedProvider},
@@ -49,42 +47,11 @@ where
     /// Steps:
     /// TODO
     pub(crate) fn msp_initial_sync(&self, block_hash: Runtime::Hash, msp_id: ProviderId<Runtime>) {
-        // TODO: Send events to check that this node has a Forest Storage for each Bucket this MSP manages.
         // TODO: Catch up to Forest root writes in the Bucket's Forests.
+        // Emit event to check that this node has a Forest Storage for each Bucket this MSP manages.
+        self.emit(VerifyMspBucketForests {});
 
-        info!(target: LOG_TARGET, "Checking for storage requests for this MSP");
-
-        let storage_requests: BTreeMap<Runtime::Hash, StorageRequestMetadata<Runtime>> = match self
-            .client
-            .runtime_api()
-            .pending_storage_requests_by_msp(block_hash, msp_id)
-        {
-            Ok(sr) => sr,
-            Err(_) => {
-                // If querying for pending storage requests fail, do not try to answer them
-                warn!(target: LOG_TARGET, "Failed to get pending storage request");
-                return;
-            }
-        };
-
-        info!(
-            "We have {} pending storage requests",
-            storage_requests.len()
-        );
-
-        // loop over each pending storage requests to start a new storage request task for the MSP
-        for (file_key, sr) in storage_requests {
-            self.emit(NewStorageRequest {
-                who: sr.owner,
-                file_key: file_key.into(),
-                bucket_id: sr.bucket_id,
-                location: sr.location,
-                fingerprint: Fingerprint::from(sr.fingerprint.as_ref()),
-                size: sr.size,
-                user_peer_ids: sr.user_peer_ids,
-                expires_at: sr.expires_at,
-            })
-        }
+        self.emit_pending_storage_requests_for_msp(block_hash, msp_id);
     }
 
     /// Initialises the block processing flow for a MSP.
@@ -131,26 +98,6 @@ where
                     self.emit(StartMovedBucketDownload {
                         bucket_id,
                         value_prop_id,
-                    });
-                }
-            }
-            StorageEnableEvents::FileSystem(pallet_file_system::Event::FileDeletionRequest {
-                user,
-                file_key,
-                file_size,
-                bucket_id,
-                msp_id,
-                proof_of_inclusion,
-            }) => {
-                // As an MSP, this node is interested in the event only if this node is the MSP being requested to delete a file.
-                if managed_msp_id == &msp_id {
-                    self.emit(FileDeletionRequest {
-                        user,
-                        file_key: file_key.into(),
-                        file_size,
-                        bucket_id,
-                        msp_id,
-                        proof_of_inclusion,
                     });
                 }
             }
@@ -216,7 +163,7 @@ where
     /// Processes finality events that are only relevant for an MSP.
     pub(crate) fn msp_process_finality_events(
         &self,
-        _block_hash: &Runtime::Hash,
+        block_hash: &Runtime::Hash,
         event: StorageEnableEvents<Runtime>,
     ) {
         let managed_msp_id = match &self.maybe_managed_provider {
@@ -241,28 +188,6 @@ where
                         owner,
                         bucket_id,
                     })
-                }
-            }
-            StorageEnableEvents::FileSystem(
-                pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest {
-                    msp_id,
-                    user,
-                    file_key,
-                    file_size,
-                    bucket_id,
-                    proof_of_inclusion,
-                },
-            ) => {
-                // Only emit the event if the MSP provided a proof of inclusion, meaning the file key was deleted from the bucket's forest.
-                if managed_msp_id == &msp_id && proof_of_inclusion {
-                    self.emit(FinalisedProofSubmittedForPendingFileDeletionRequest {
-                        user,
-                        file_key: file_key.into(),
-                        file_size: file_size,
-                        bucket_id,
-                        msp_id,
-                        proof_of_inclusion,
-                    });
                 }
             }
             StorageEnableEvents::FileSystem(pallet_file_system::Event::MoveBucketRequested {
@@ -309,6 +234,40 @@ where
                         });
                     }
                 }
+            }
+            StorageEnableEvents::ProofsDealer(pallet_proofs_dealer::Event::MutationsApplied {
+                mutations,
+                old_root: _,
+                new_root,
+                event_info,
+            }) => {
+                // The mutations are applied to a Bucket's Forest root.
+                // Check that this MSP is managing at least one bucket.
+                let buckets_managed_by_msp =
+                    self.client
+                            .runtime_api()
+                            .query_buckets_for_msp(*block_hash, managed_msp_id)
+                            .inspect_err(|e| error!(target: LOG_TARGET, "Runtime API call failed while querying buckets for MSP [{:?}]: {:?}", managed_msp_id, e))
+                            .ok()
+                            .and_then(|api_result| {
+                                api_result
+                                    .inspect_err(|e| error!(target: LOG_TARGET, "Runtime API error while querying buckets for MSP [{:?}]: {:?}", managed_msp_id, e))
+                                    .ok()
+                            });
+
+                let Some(bucket_id) = self.validate_bucket_mutations_for_msp(
+                    block_hash,
+                    buckets_managed_by_msp,
+                    event_info,
+                ) else {
+                    return;
+                };
+
+                self.emit(FinalisedBucketMutationsApplied {
+                    bucket_id,
+                    mutations: mutations.clone().into(),
+                    new_root,
+                });
             }
 
             // Ignore all other events.
@@ -381,34 +340,6 @@ where
         if self.maybe_managed_provider.is_none() {
             // If there's no Provider being managed, there's no point in checking for pending requests.
             return;
-        }
-
-        // We prioritize file deletion requests over respond storing requests since MSPs cannot charge
-        // any users while there are pending file deletion requests.
-        if next_event_data.is_none() {
-            // TODO: Update this to some greater value once batching is supported by the runtime.
-            let max_batch_delete: u32 = 1;
-            let mut file_deletion_requests = Vec::new();
-            for _ in 0..max_batch_delete {
-                if let Some(request) = state_store_context
-                    .pending_file_deletion_request_deque()
-                    .pop_front()
-                {
-                    file_deletion_requests.push(request);
-                } else {
-                    break;
-                }
-            }
-
-            // If we have at least 1 file deletion request, send the process event.
-            if file_deletion_requests.len() > 0 {
-                next_event_data = Some(
-                    ProcessFileDeletionRequestData {
-                        file_deletion_requests,
-                    }
-                    .into(),
-                );
-            }
         }
 
         // If we have no pending file deletion requests, we can also check for pending respond storing requests.
@@ -495,53 +426,13 @@ where
                 new_root,
                 event_info,
             }) => {
-                // The mutations are applied to a Bucket's Forest root.
-                // Check that this MSP is managing at least one bucket.
-                if buckets_managed_by_msp.is_none() {
-                    debug!(target: LOG_TARGET, "MSP is not managing any buckets. Skipping mutations applied event.");
-                    return;
-                }
-                let buckets_managed_by_msp = buckets_managed_by_msp
-                    .as_ref()
-                    .expect("Just checked that this is not None; qed");
-                if buckets_managed_by_msp.is_empty() {
-                    debug!(target: LOG_TARGET, "Buckets managed by MSP is an empty vector. Skipping mutations applied event.");
-                    return;
-                }
-
-                // In StorageHub, we assume that all `MutationsApplied` events are emitted by bucket
-                // root changes, and they should contain the encoded `BucketId` of the bucket that was mutated
-                // in the `event_info` field.
-                let Some(event_info) = event_info else {
-                    error!(
-                        target: LOG_TARGET,
-                        "MutationsApplied event with `None` event info, when it is expected to contain the BucketId of the bucket that was mutated."
-                    );
+                let Some(bucket_id) = self.validate_bucket_mutations_for_msp(
+                    block_hash,
+                    buckets_managed_by_msp,
+                    event_info,
+                ) else {
                     return;
                 };
-                let bucket_id = match self
-                    .client
-                    .runtime_api()
-                    .decode_generic_apply_delta_event_info(*block_hash, event_info)
-                {
-                    Ok(runtime_api_result) => match runtime_api_result {
-                        Ok(bucket_id) => bucket_id,
-                        Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to decode BucketId from event info: {:?}", e);
-                            return;
-                        }
-                    },
-                    Err(e) => {
-                        error!(target: LOG_TARGET, "Error while calling runtime API to decode BucketId from event info: {:?}", e);
-                        return;
-                    }
-                };
-
-                // Check if Bucket is managed by this MSP.
-                if !buckets_managed_by_msp.contains(&bucket_id) {
-                    debug!(target: LOG_TARGET, "Bucket [{:?}] is not managed by this MSP. Skipping mutations applied event.", bucket_id);
-                    return;
-                }
 
                 // Apply forest root changes to the Bucket's Forest Storage.
                 // At this point, we only apply the mutation of this file and its metadata to the Forest of this Bucket,
@@ -595,12 +486,6 @@ where
                     forest_root_write_tx,
                 });
             }
-            ForestWriteLockTaskData::FileDeletionRequest(data) => {
-                self.emit(ProcessFileDeletionRequest {
-                    data,
-                    forest_root_write_tx,
-                });
-            }
             ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
                 self.emit(ProcessStopStoringForInsolventUserRequest {
                     data,
@@ -614,6 +499,71 @@ where
                 unreachable!("MSPs do not submit proofs.")
             }
         }
+    }
+
+    /// Validates that a MutationsApplied event's bucket is managed by this MSP.
+    ///
+    /// This helper performs the following validation steps:
+    /// 1. Checks if this MSP is managing at least one bucket
+    /// 2. Validates that the event_info contains the BucketId of the bucket that was mutated
+    /// 3. Decodes the BucketId from the event_info
+    /// 4. Verifies that the BucketId is in the list of buckets managed by this MSP
+    ///
+    /// Returns Some(bucket_id) if all validations pass, None otherwise.
+    fn validate_bucket_mutations_for_msp(
+        &self,
+        block_hash: &Runtime::Hash,
+        buckets_managed_by_msp: Option<Vec<BucketId<Runtime>>>,
+        event_info: Option<Vec<u8>>,
+    ) -> Option<BucketId<Runtime>> {
+        // Check that this MSP is managing at least one bucket.
+        if buckets_managed_by_msp.is_none() {
+            debug!(target: LOG_TARGET, "MSP is not managing any buckets. Skipping mutations applied event.");
+            return None;
+        }
+        let buckets_managed_by_msp = buckets_managed_by_msp
+            .as_ref()
+            .expect("Just checked that this is not None; qed");
+        if buckets_managed_by_msp.is_empty() {
+            debug!(target: LOG_TARGET, "Buckets managed by MSP is an empty vector. Skipping mutations applied event.");
+            return None;
+        }
+
+        // In StorageHub, we assume that all `MutationsApplied` events are emitted by bucket
+        // root changes, and they should contain the encoded `BucketId` of the bucket that was mutated
+        // in the `event_info` field.
+        let Some(event_info) = event_info else {
+            error!(
+                target: LOG_TARGET,
+                "MutationsApplied event with `None` event info, when it is expected to contain the BucketId of the bucket that was mutated."
+            );
+            return None;
+        };
+        let bucket_id = match self
+            .client
+            .runtime_api()
+            .decode_generic_apply_delta_event_info(*block_hash, event_info)
+        {
+            Ok(runtime_api_result) => match runtime_api_result {
+                Ok(bucket_id) => bucket_id,
+                Err(e) => {
+                    error!(target: LOG_TARGET, "Failed to decode BucketId from event info: {:?}", e);
+                    return None;
+                }
+            },
+            Err(e) => {
+                error!(target: LOG_TARGET, "Error while calling runtime API to decode BucketId from event info: {:?}", e);
+                return None;
+            }
+        };
+
+        // Check if the bucket is managed by this MSP.
+        if !buckets_managed_by_msp.contains(&bucket_id) {
+            debug!(target: LOG_TARGET, "Bucket [{:?}] is not managed by this MSP. Skipping mutations applied event.", bucket_id);
+            return None;
+        }
+
+        Some(bucket_id)
     }
 
     /// Scans pending storage requests for this MSP and triggers distribution tasks.
@@ -802,6 +752,48 @@ where
                 file_key: file_key.into(),
                 bsp_id,
             });
+        }
+    }
+
+    /// Emits `NewStorageRequest` events for all pending storage requests assigned to an MSP.
+    fn emit_pending_storage_requests_for_msp(
+        &self,
+        block_hash: Runtime::Hash,
+        msp_id: ProviderId<Runtime>,
+    ) {
+        info!(target: LOG_TARGET, "Checking for storage requests for this MSP");
+
+        let storage_requests = match self
+            .client
+            .runtime_api()
+            .pending_storage_requests_by_msp(block_hash, msp_id)
+        {
+            Ok(sr) => sr,
+            Err(_) => {
+                // If querying for pending storage requests fail, do not try to answer them
+                warn!(target: LOG_TARGET, "Failed to get pending storage request");
+                return;
+            }
+        };
+
+        info!(
+            target: LOG_TARGET,
+            "We have {} pending storage requests",
+            storage_requests.len()
+        );
+
+        // Loop over each pending storage request to start a new storage request task for the MSP
+        for (file_key, sr) in storage_requests {
+            self.emit(NewStorageRequest {
+                who: sr.owner,
+                file_key: file_key.into(),
+                bucket_id: sr.bucket_id,
+                location: sr.location,
+                fingerprint: sr.fingerprint.as_ref().into(),
+                size: sr.size,
+                user_peer_ids: sr.user_peer_ids,
+                expires_at: sr.expires_at,
+            })
         }
     }
 }

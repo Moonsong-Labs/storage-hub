@@ -187,6 +187,23 @@ export type BspNetConfig = {
    * Requires indexer to be enabled.
    */
   backend?: boolean;
+
+  /**
+   * If true, runs indexer as standalone service instead of embedded in user node (fullnet only).
+   */
+  standaloneIndexer?: boolean;
+
+  /**
+   * Maximum number of incomplete storage requests to process during initial sync.
+   * Must be at least 1.
+   */
+  fishermanIncompleteSyncMax?: number;
+
+  /**
+   * Page size for incomplete storage request pagination.
+   * Must be at least 1.
+   */
+  fishermanIncompleteSyncPageSize?: number;
 };
 
 /**
@@ -385,6 +402,8 @@ export type TestOptions = {
    * 'lite' - indexes only essential events as defined in LITE_MODE_EVENTS.md
    */
   indexerMode?: "full" | "lite" | "fishing";
+  /** If true, runs indexer as standalone service instead of embedded in user node (fullnet only) */
+  standaloneIndexer?: boolean;
   /** If true, runs fisherman service */
   fisherman?: boolean;
   /** If true, runs backend service */
@@ -395,6 +414,16 @@ export type TestOptions = {
    * 'solochain' - Solochain EVM runtime
    */
   runtimeType?: "parachain" | "solochain";
+  /**
+   * Maximum number of incomplete storage requests to process during initial sync.
+   * Must be at least 1.
+   */
+  fishermanIncompleteSyncMax?: number;
+  /**
+   * Page size for incomplete storage request pagination.
+   * Must be at least 1.
+   */
+  fishermanIncompleteSyncPageSize?: number;
 };
 
 /**

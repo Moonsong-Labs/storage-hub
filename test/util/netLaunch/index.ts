@@ -130,9 +130,26 @@ export class NetworkLauncher {
       }
     }
 
-    // Remove fisherman service if not enabled
+    // Configure fisherman service
     if (!this.config.fisherman || this.type !== "fullnet") {
       delete composeYaml.services["sh-fisherman"];
+    } else {
+      // Add fisherman incomplete sync parameters if specified
+      if (this.config.fishermanIncompleteSyncMax !== undefined) {
+        composeYaml.services["sh-fisherman"].command.push(
+          `--fisherman-incomplete-sync-max=${this.config.fishermanIncompleteSyncMax}`
+        );
+      }
+      if (this.config.fishermanIncompleteSyncPageSize !== undefined) {
+        composeYaml.services["sh-fisherman"].command.push(
+          `--fisherman-incomplete-sync-page-size=${this.config.fishermanIncompleteSyncPageSize}`
+        );
+      }
+    }
+
+    // Remove standalone indexer service if not enabled or not using standalone mode
+    if (!this.config.indexer || !this.config.standaloneIndexer || this.type !== "fullnet") {
+      delete composeYaml.services["sh-indexer"];
     }
 
     if (this.config.extrinsicRetryTimeout) {
@@ -160,21 +177,55 @@ export class NetworkLauncher {
         // biome-ignore lint/suspicious/noTemplateCurlyInString: It's for the yaml file that takes this syntax
         "--storage-path=/tmp/bsp/${BSP_IP:-default_bsp_ip}"
       );
+      if (this.type === "fullnet") {
+        composeYaml.services["sh-msp-1"].command.push("--storage-layer=rocks-db");
+        composeYaml.services["sh-msp-1"].command.push(
+          // biome-ignore lint/suspicious/noTemplateCurlyInString: It's for the yaml file that takes this syntax
+          "--storage-path=/tmp/msp/${MSP_IP:-default_msp_ip}"
+        );
+        composeYaml.services["sh-msp-2"].command.push("--storage-layer=rocks-db");
+        composeYaml.services["sh-msp-2"].command.push(
+          // biome-ignore lint/suspicious/noTemplateCurlyInString: It's for the yaml file that takes this syntax
+          "--storage-path=/tmp/msp/${MSP_IP:-default_msp_ip}"
+        );
+      }
     }
 
     if (this.config.indexer) {
-      composeYaml.services["sh-user"].command.push("--indexer");
-      composeYaml.services["sh-user"].command.push(
-        "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
-      );
-      if (this.type === "fullnet") {
-        composeYaml.services["sh-msp-1"].command.push(
+      // If using standalone indexer, configure the sh-indexer service
+      if (this.config.standaloneIndexer && this.type === "fullnet") {
+        // Add indexer mode if specified
+        if (this.config.indexerMode) {
+          composeYaml.services["sh-indexer"].command.push(
+            `--indexer-mode=${this.config.indexerMode}`
+          );
+        }
+      } else {
+        // Embedded mode: add indexer flags to sh-user
+        composeYaml.services["sh-user"].command.push("--indexer");
+        composeYaml.services["sh-user"].environment =
+          composeYaml.services["sh-user"].environment ?? {};
+        composeYaml.services["sh-user"].environment.SH_INDEXER_DB_AUTO_MIGRATE = "false";
+        composeYaml.services["sh-user"].command.push(
           "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
         );
-        composeYaml.services["sh-msp-2"].command.push("--indexer");
-        composeYaml.services["sh-msp-2"].command.push(
-          "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
-        );
+        if (this.config.indexerMode) {
+          composeYaml.services["sh-user"].command.push(`--indexer-mode=${this.config.indexerMode}`);
+        }
+
+        // For fullnet, also configure MSPs
+        if (this.type === "fullnet") {
+          composeYaml.services["sh-msp-1"].command.push(
+            "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+          );
+          composeYaml.services["sh-msp-2"].command.push("--indexer");
+          composeYaml.services["sh-msp-2"].environment =
+            composeYaml.services["sh-msp-2"].environment ?? {};
+          composeYaml.services["sh-msp-2"].environment.SH_INDEXER_DB_AUTO_MIGRATE = "false";
+          composeYaml.services["sh-msp-2"].command.push(
+            "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+          );
+        }
       }
     }
 
@@ -342,6 +393,20 @@ export class NetworkLauncher {
         log: verbose,
         env: {
           ...process.env
+        }
+      });
+    }
+
+    // Only start standalone indexer service if it's enabled and we're using fullnet
+    if (this.config.indexer && this.config.standaloneIndexer && this.type === "fullnet") {
+      await compose.upOne("sh-indexer", {
+        cwd: cwd,
+        config: tmpFile,
+        log: verbose,
+        env: {
+          ...process.env,
+          BSP_IP: bspIp,
+          BSP_PEER_ID: bspPeerId
         }
       });
     }
@@ -909,6 +974,14 @@ export type NetLaunchConfig = {
   indexer?: boolean;
 
   /**
+   * Optional parameter to run the indexer as a standalone service.
+   * When true, indexer runs in a separate container (sh-indexer) instead of embedded in sh-user.
+   * This allows independent control (pause/resume) of the indexer service.
+   * Requires indexer to be true and only applies to fullnet.
+   */
+  standaloneIndexer?: boolean;
+
+  /**
    * Optional parameter to define what toxics to apply to the network.
    * Only applies when `noisy` is set to true.
    */
@@ -939,4 +1012,16 @@ export type NetLaunchConfig = {
    * 'solochain' - Solochain EVM runtime
    */
   runtimeType?: "parachain" | "solochain";
+
+  /**
+   * Maximum number of incomplete storage requests to process during initial sync.
+   * Must be at least 1.
+   */
+  fishermanIncompleteSyncMax?: number;
+
+  /**
+   * Page size for incomplete storage request pagination.
+   * Must be at least 1.
+   */
+  fishermanIncompleteSyncPageSize?: number;
 };

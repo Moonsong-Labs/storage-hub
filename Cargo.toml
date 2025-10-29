@@ -64,11 +64,13 @@ codec = { package = "parity-scale-codec", version = "3.0.0", features = [
 color-print = "0.3.4"
 diesel = { version = "2.2.4", features = ["postgres", "chrono", "numeric"] }
 diesel-async = { version = "0.5.0", features = ["bb8", "postgres", "tokio"] }
+diesel_migrations = { version = "2.2", features = ["postgres"] }
 futures-timer = "3.0.1"
 hash-db = "0.16.0"
 headers = "0.4.1"
 hex = { version = "0.4.3", default-features = false }
 hex-literal = { version = "0.4.1" }
+itoa = "1.0"
 jsonrpsee = { version = "0.24.9" }
 jsonrpsee-core = { version = "0.24.9" }
 jsonwebtoken = "9"
@@ -105,8 +107,9 @@ tokio-postgres = "0.7"
 tokio-postgres-rustls = "0.13"
 tokio-util = { version = "0.7", features = ["io"] }
 toml = "0.8.19"
-tower-http = { version = "0.5", features = ["cors"] }
+tower-http = { version = "0.5", features = ["cors", "trace"] }
 tracing = "0.1"
+tracing-bunyan-formatter = "0.3"
 tracing-subscriber = { version = "=0.3.19", features = [
 	"env-filter",
 ] } # Dependency pinned because 0.3.20 messes up text formatting in substrate logs

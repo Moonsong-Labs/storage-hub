@@ -4,6 +4,8 @@ use serde::Serialize;
 
 use shc_indexer_db::models::{Bucket as DBBucket, File as DBFile};
 
+use crate::models::files::{FileInfo, FileStatus};
+
 #[derive(Debug, Serialize)]
 pub struct Bucket {
     /// The onchain bucket identifier (hex string)
@@ -44,6 +46,7 @@ impl Bucket {
 pub struct FileTreeFile {
     pub size_bytes: u64,
     pub file_key: String,
+    pub status: FileStatus,
 }
 
 #[derive(Debug, Serialize)]
@@ -175,6 +178,7 @@ impl FileTree {
                     .push(FileTreeEntry::File(FileTreeFile {
                         size_bytes: file.size as u64,
                         file_key: hex::encode(&file.file_key),
+                        status: FileInfo::status_from_db(&file),
                     }));
             } else {
                 // This is a folder (has more segments after the first)
@@ -245,6 +249,7 @@ impl FileTree {
                 FileTreeEntry::File(FileTreeFile {
                     size_bytes: file.size as u64,
                     file_key: hex::encode(&file.file_key),
+                    status: FileInfo::status_from_db(file),
                 }),
             );
         } else {
@@ -314,6 +319,8 @@ mod tests {
             size,
             step: 0,
             deletion_status: None,
+            deletion_signature: None,
+            deletion_requested_at: None,
             created_at: DateTime::from_timestamp(0, 0).unwrap().naive_utc(),
             updated_at: DateTime::from_timestamp(0, 0).unwrap().naive_utc(),
         }

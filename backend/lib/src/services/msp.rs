@@ -2,11 +2,10 @@
 //!
 //! TODO(MOCK): many of methods of the MspService returns mocked data
 
-use std::{collections::HashSet, str::FromStr, sync::Arc};
+use std::{collections::HashSet, sync::Arc};
 
 use axum_extra::extract::multipart::Field;
-use bigdecimal::BigDecimal;
-use chrono::Utc;
+use bigdecimal::{BigDecimal, RoundingMode};
 use codec::{Decode, Encode};
 use sc_network::PeerId;
 use serde::{Deserialize, Serialize};
@@ -17,13 +16,16 @@ use shc_common::types::{
 use shc_file_manager::{in_memory::InMemoryFileDataTrie, traits::FileDataTrie};
 use shc_rpc::{GetValuePropositionsResult, RpcProviderId, SaveFileToDisk};
 use sp_core::{Blake2Hasher, H256};
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 use shc_indexer_db::{models::Bucket as DBBucket, OnchainMspId};
 use shp_types::Hash;
 
 use crate::{
-    constants::mocks::{PLACEHOLDER_BUCKET_FILE_COUNT, PLACEHOLDER_BUCKET_SIZE_BYTES},
+    constants::{
+        mocks::{PLACEHOLDER_BUCKET_FILE_COUNT, PLACEHOLDER_BUCKET_SIZE_BYTES},
+        retry::get_retry_delay,
+    },
     data::{
         indexer_db::{client::DBClient, repository::PaymentStreamKind},
         rpc::StorageHubRpcClient,
@@ -33,9 +35,7 @@ use crate::{
     models::{
         buckets::{Bucket, FileTree},
         files::{DistributeResponse, FileInfo, FileUploadResponse},
-        msp_info::{
-            Capacity, InfoResponse, MspHealthResponse, StatsResponse, ValuePropositionWithId,
-        },
+        msp_info::{Capacity, InfoResponse, StatsResponse, ValuePropositionWithId},
         payment::{PaymentStreamInfo, PaymentStreamsResponse},
     },
 };
@@ -67,48 +67,45 @@ pub struct MspService {
 
 impl MspService {
     /// Create a new MSP service
-    /// Only MSP nodes are supported so it returns an error if the node is not an MSP.
+    ///
+    /// This function tries to discover the MSP's provider ID and, if the node is not yet
+    /// registered as an MSP, it retries indefinitely with a stepped backoff strategy.
+    ///
+    /// Note: Keep in mind that if the node is never registered as an MSP, this function
+    /// will keep retrying indefinitely and the backend will fail to start. Monitor the
+    /// retry attempt count in logs to detect potential configuration issues.
     pub async fn new(
         storage: Arc<dyn BoxedStorage>,
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
         msp_callback_url: String,
     ) -> Result<Self, Error> {
-        // Discover provider id from the connected node.
-        // If the node is not yet an MSP (which happens in integration tests), retry with
-        // a bounded number of attempts.
-        // TODO: Think about making it so in integration tests we spin up the backend
-        // only after the MSP has been registered on-chain, to avoid having this retry logic.
-        let mut retry_attempts = 0;
-        let max_retries = 10;
-        let delay_between_retries_secs = 5;
+        let mut attempt = 0;
 
+        // Discover the Provider ID of the connected node.
         let msp_id = loop {
-            let provider_id: RpcProviderId = rpc
-                .get_provider_id()
-                .await
-                .map_err(|e| Error::BadRequest(e.to_string()))?;
+            let provider_id: RpcProviderId = rpc.get_provider_id().await.map_err(|e| {
+                Error::BadRequest(format!("Failed to get provider ID from RPC: {}", e))
+            })?;
 
             match provider_id {
                 RpcProviderId::Msp(id) => break OnchainMspId::new(Hash::from_slice(id.as_ref())),
                 RpcProviderId::Bsp(_) => {
                     return Err(Error::BadRequest(
                         "Connected node is a BSP; expected an MSP".to_string(),
-                    ))
+                    ));
                 }
                 RpcProviderId::NotAProvider => {
-                    if retry_attempts >= max_retries {
-                        return Err(Error::BadRequest(
-                            "Connected node not a registered MSP after timeout".to_string(),
-                        ));
-                    }
+                    // Calculate the retry delay before the next attempt based on the attempt number
+                    let delay_secs = get_retry_delay(attempt);
                     warn!(
-                        "Connected node is not yet a registered MSP; retrying provider discovery... (attempt {})",
-                        retry_attempts + 1
+                        target: "msp_service::new",
+                                                delay_secs = delay_secs,
+                                                attempt = attempt + 1,
+                        "Connected node is not yet a registered MSP; retrying provider discovery in {delay_secs} seconds... (attempt {attempt})"
                     );
-                    tokio::time::sleep(std::time::Duration::from_secs(delay_between_retries_secs))
-                        .await;
-                    retry_attempts += 1;
+                    tokio::time::sleep(std::time::Duration::from_secs(delay_secs)).await;
+                    attempt += 1;
                     continue;
                 }
             }
@@ -127,12 +124,13 @@ impl MspService {
 
     /// Get MSP information
     pub async fn get_info(&self) -> Result<InfoResponse, Error> {
+        debug!(target: "msp_service::get_info", "Getting MSP info");
+
         // Fetch the MSP's local listen multiaddresses via RPC
-        let multiaddresses: Vec<String> = self
-            .rpc
-            .get_multiaddresses()
-            .await
-            .map_err(|e| Error::BadRequest(e.to_string()))?;
+        let multiaddresses: Vec<String> =
+            self.rpc.get_multiaddresses().await.map_err(|e| {
+                Error::BadRequest(format!("Failed to get MSP multiaddresses: {}", e))
+            })?;
 
         Ok(InfoResponse {
             client: "storagehub-node v1.0.0".to_string(),
@@ -149,6 +147,8 @@ impl MspService {
 
     /// Get MSP statistics
     pub async fn get_stats(&self) -> Result<StatsResponse, Error> {
+        debug!(target: "msp_service::get_stats", "Getting MSP stats");
+
         Ok(StatsResponse {
             capacity: Capacity {
                 total_bytes: 1099511627776,
@@ -164,12 +164,12 @@ impl MspService {
 
     /// Get MSP value propositions
     pub async fn get_value_props(&self) -> Result<Vec<ValuePropositionWithId>, Error> {
+        debug!(target: "msp_service::get_value_props", "Getting MSP value propositions");
+
         // Call RPC to get the value propositions
-        let result: GetValuePropositionsResult = self
-            .rpc
-            .get_value_props()
-            .await
-            .map_err(|e| Error::BadRequest(e.to_string()))?;
+        let result: GetValuePropositionsResult = self.rpc.get_value_props().await.map_err(|e| {
+            Error::BadRequest(format!("Failed to get value propositions from RPC: {}", e))
+        })?;
 
         // Decode the SCALE-encoded ValuePropositionWithId entries
         match result {
@@ -198,37 +198,13 @@ impl MspService {
         }
     }
 
-    /// Get MSP health status
-    pub async fn get_health(&self) -> Result<MspHealthResponse, Error> {
-        Ok(MspHealthResponse {
-            status: "healthy".to_string(),
-            components: serde_json::json!({
-                "database": {
-                    "status": "healthy",
-                    "details": "PostgreSQL connection active"
-                },
-                "mspClient": {
-                    "status": "healthy",
-                    "details": "Connected to StorageHub MSP client"
-                },
-                "storageHubNetwork": {
-                    "status": "healthy",
-                    "details": "Node synced with network"
-                },
-                "diskSpace": {
-                    "status": "healthy",
-                    "details": "80% capacity available"
-                }
-            }),
-            last_checked: Utc::now(),
-        })
-    }
-
     /// List buckets for a user
     pub async fn list_user_buckets(
         &self,
         user_address: &str,
     ) -> Result<impl Iterator<Item = Bucket>, Error> {
+        debug!(target: "msp_service::list_user_buckets", user = %user_address, "Listing user buckets");
+
         // TODO: request by page
         self.postgres
             .get_user_buckets(&self.msp_id, user_address, None, None)
@@ -248,6 +224,8 @@ impl MspService {
     ///
     /// Verifies ownership of bucket is `user`
     pub async fn get_bucket(&self, bucket_id: &str, user: &str) -> Result<Bucket, Error> {
+        debug!(target: "msp_service::get_bucket", bucket_id = %bucket_id, user = %user, "Getting bucket");
+
         self.get_db_bucket(bucket_id, user).await.map(|bucket| {
             Bucket::from_db(
                 &bucket,
@@ -274,6 +252,8 @@ impl MspService {
         user: &str,
         path: &str,
     ) -> Result<FileTree, Error> {
+        debug!(target: "msp_service::get_file_tree", bucket_id = %bucket_id, user = %user, "Getting file tree");
+
         // first, get the bucket from the db and determine if user can view the bucket
         let bucket = self.get_db_bucket(bucket_id, user).await?;
 
@@ -295,6 +275,8 @@ impl MspService {
         user: &str,
         file_key: &str,
     ) -> Result<FileInfo, Error> {
+        debug!(target: "msp_service::get_file_info", bucket_id = %bucket_id, user = %user, file_key = %file_key, "Getting file info");
+
         let file_key_hex = file_key.trim_start_matches("0x");
 
         let file_key = hex::decode(file_key_hex)
@@ -318,11 +300,16 @@ impl MspService {
 
     /// Check via MSP RPC if this node is expecting to receive the given file key
     pub async fn is_msp_expecting_file_key(&self, file_key: &str) -> Result<bool, Error> {
-        let expected: bool = self
-            .rpc
-            .is_file_key_expected(file_key)
-            .await
-            .map_err(|e| Error::BadRequest(e.to_string()))?;
+        debug!(target: "msp_service::is_msp_expecting_file_key", file_key = %file_key, "Checking if MSP is expecting file key");
+
+        let expected: bool = self.rpc.is_file_key_expected(file_key).await.map_err(|e| {
+            Error::BadRequest(format!("Failed to check if file key is expected: {}", e))
+        })?;
+
+        if !expected {
+            warn!(target: "msp_service::is_msp_expecting_file_key", file_key = %file_key, "MSP not expecting file_key");
+        }
+
         Ok(expected)
     }
 
@@ -345,6 +332,8 @@ impl MspService {
         &self,
         user_address: &str,
     ) -> Result<PaymentStreamsResponse, Error> {
+        debug!(target: "msp_service::get_payment_streams", user = %user_address, "Getting payment streams");
+
         // Get all payment streams for the user from the database
         let payment_stream_data = self
             .postgres
@@ -357,8 +346,6 @@ impl MspService {
             .get_current_price_per_giga_unit_per_tick()
             .await
             .map_err(|e| Error::BadRequest(format!("Failed to get price per unit: {}", e)))?;
-        let unit_to_giga_unit =
-            BigDecimal::from_str("1e-9").expect("Inverse of GIGA to be parsed correctly");
 
         // Process each payment stream
         let mut streams = Vec::new();
@@ -374,7 +361,14 @@ impl MspService {
 
                     // Convert u128 price to BigDecimal and multiply
                     let price_bd = BigDecimal::from(current_price_per_giga_unit_per_tick);
-                    let cost = amount_provided * &unit_to_giga_unit * price_bd;
+
+                    // Matches the computation done in the runtime
+                    //
+                    // (price * amount) / gigaunit
+                    let cost = (price_bd * amount_provided) / shp_constants::GIGAUNIT;
+
+                    // Truncate the decimal digits of the cost per tick
+                    let cost = cost.with_scale_round(0, RoundingMode::Down);
 
                     ("bsp".to_string(), cost.to_string())
                 }
@@ -398,6 +392,8 @@ impl MspService {
     /// We provide an URL as saveFileToDisk RPC requires it to stream the file.
     /// We also implemented the internal_upload_by_key handler to handle this temporary file upload.
     pub async fn get_file_from_key(&self, file_key: &str) -> Result<FileDownloadResult, Error> {
+        debug!(target: "msp_service::get_file_from_key", file_key = %file_key, "Downloading file by key");
+
         // TODO: authenticate user
 
         // Create temp url for download
@@ -409,11 +405,21 @@ impl MspService {
             .rpc
             .save_file_to_disk(file_key, upload_url.as_str())
             .await
-            .map_err(|e| Error::BadRequest(e.to_string()))?;
+            .map_err(|e| {
+                Error::BadRequest(format!("Failed to save file to disk via RPC: {}", e))
+            })?;
 
         match rpc_response {
-            SaveFileToDisk::FileNotFound => Err(Error::NotFound("File not found".to_string())),
+            SaveFileToDisk::FileNotFound => {
+                warn!(target: "msp_service::get_file_from_key", file_key = %file_key, "File not found for download");
+                Err(Error::NotFound("File not found".to_string()))
+            }
             SaveFileToDisk::IncompleteFile(_status) => {
+                warn!(
+                    target: "msp_service::get_file_from_key",
+                    file_key = %file_key,
+                    "Incomplete file requested for download"
+                );
                 Err(Error::BadRequest("File is incomplete".to_string()))
             }
             SaveFileToDisk::Success(file_metadata) => {
@@ -421,6 +427,11 @@ impl MspService {
                 let location = String::from_utf8_lossy(file_metadata.location()).to_string();
                 let fingerprint: [u8; 32] = file_metadata.fingerprint().as_hash();
                 let file_size = file_metadata.file_size();
+
+                debug!(
+                    "File download prepared - file_key: {}, size: {} bytes",
+                    file_key, file_size
+                );
 
                 Ok(FileDownloadResult {
                     file_size,
@@ -440,19 +451,27 @@ impl MspService {
         mut file_data_stream: Field,
         file_metadata: FileMetadata,
     ) -> Result<FileUploadResponse, Error> {
+        debug!(
+            target: "msp_service::process_and_upload_file",
+            bucket_id = %bucket_id,
+            file_key = %file_key,
+            file_size = file_metadata.file_size(),
+            "Starting file upload"
+        );
+
         // Validate bucket id and file key against metadata
         let expected_bucket_id = hex::encode(file_metadata.bucket_id());
         if bucket_id.trim_start_matches("0x") != expected_bucket_id {
             return Err(Error::BadRequest(
-                "Bucket ID in URL does not match file metadata".to_string(),
+                format!("Bucket ID in URL does not match file metadata: {expected_bucket_id} != {bucket_id}"),
             ));
         }
 
         let expected_file_key = hex::encode(file_metadata.file_key::<Blake2Hasher>());
         if file_key.trim_start_matches("0x") != expected_file_key {
-            return Err(Error::BadRequest(
-                "File key in URL does not match file metadata".to_string(),
-            ));
+            return Err(Error::BadRequest(format!(
+                "File key in URL does not match file metadata: {expected_file_key} != {file_key}"
+            )));
         }
 
         // Initialize the trie that will hold the chunked file data.
@@ -465,11 +484,9 @@ impl MspService {
         let mut chunk_index = 0;
 
         // Start streaming the file data into the trie, chunking it into FILE_CHUNK_SIZE chunks in the process.
-        while let Some(bytes_read) = file_data_stream
-            .chunk()
-            .await
-            .map_err(|e| Error::BadRequest(e.to_string()))?
-        {
+        while let Some(bytes_read) = file_data_stream.chunk().await.map_err(|e| {
+            Error::BadRequest(format!("Failed to read multipart stream chunk: {}", e))
+        })? {
             // Load the bytes read from the file into the overflow buffer.
             overflow_buffer.extend_from_slice(&bytes_read);
 
@@ -479,7 +496,12 @@ impl MspService {
 
                 // Insert the chunk into the trie.
                 trie.write_chunk(&ChunkId::new(chunk_index as u64), &chunk)
-                    .map_err(|e| Error::BadRequest(e.to_string()))?;
+                    .map_err(|e| {
+                        Error::BadRequest(format!(
+                            "Failed to write chunk {} to trie: {}",
+                            chunk_index, e
+                        ))
+                    })?;
 
                 // Increment the chunk index.
                 chunk_index += 1;
@@ -493,7 +515,12 @@ impl MspService {
         if !overflow_buffer.is_empty() {
             // Insert the chunk into the trie.
             trie.write_chunk(&ChunkId::new(chunk_index as u64), &overflow_buffer)
-                .map_err(|e| Error::BadRequest(e.to_string()))?;
+                .map_err(|e| {
+                    Error::BadRequest(format!(
+                        "Failed to write final chunk {} to trie: {}",
+                        chunk_index, e
+                    ))
+                })?;
 
             // Increment the chunk index to get the total amount of chunks.
             chunk_index += 1;
@@ -518,6 +545,8 @@ impl MspService {
         )));
         }
 
+        debug!(target: "msp_service::process_and_upload_file", total_chunks = total_chunks, "File chunking completed");
+
         // At this point, the trie contains the entire file data and we can start generating the proofs for the chunk batches
         // and sending them to the MSP.
 
@@ -526,6 +555,8 @@ impl MspService {
 
         // Initialize the index of the initial chunk to process in this batch.
         let mut batch_start_chunk_index = 0;
+        let total_batches = (total_chunks + CHUNKS_PER_BATCH - 1) / CHUNKS_PER_BATCH;
+        let mut batch_number = 1;
 
         // Start processing batches, until all chunks have been processed.
         while batch_start_chunk_index < total_chunks {
@@ -536,10 +567,22 @@ impl MspService {
                 .collect::<HashSet<_>>();
             let chunks_in_batch = chunks.len() as u64;
 
+            debug!(
+                target: "msp_service::process_and_upload_file",
+                batch_number = batch_number,
+                total_batches = total_batches,
+                chunk_start = batch_start_chunk_index,
+                chunk_end = batch_start_chunk_index + chunks_in_batch - 1,
+                "Processing batch"
+            );
+
             // Generate the proof for the batch.
-            let file_proof = trie
-                .generate_proof(&chunks)
-                .map_err(|e| Error::BadRequest(e.to_string()))?;
+            let file_proof = trie.generate_proof(&chunks).map_err(|e| {
+                Error::BadRequest(format!(
+                    "Failed to generate proof for batch {}: {}",
+                    batch_number, e
+                ))
+            })?;
 
             // Convert the generated proof to a FileKeyProof and send it to the MSP.
             let file_key_proof = file_proof
@@ -549,10 +592,23 @@ impl MspService {
             // Send the proof with the chunks to the MSP.
             self.upload_to_msp(&chunks, &file_key_proof)
                 .await
-                .map_err(|e| Error::BadRequest(e.to_string()))?;
+                .map_err(|e| {
+                    Error::BadRequest(format!(
+                        "Failed to upload batch {} to MSP: {}",
+                        batch_number, e
+                    ))
+                })?;
+
+            debug!(
+                target: "msp_service::process_and_upload_file",
+                batch_number = batch_number,
+                total_batches = total_batches,
+                "Batch uploaded successfully"
+            );
 
             // Update the initial chunk index for the next batch.
             batch_start_chunk_index += chunks_in_batch;
+            batch_number += 1;
         }
 
         // If the complete file was uploaded to the MSP successfully, we can return the response.
@@ -560,6 +616,14 @@ impl MspService {
         let location = str::from_utf8(&bytes_location)
             .unwrap_or(file_key)
             .to_string();
+
+        debug!(
+            bucket_id = %bucket_id,
+            file_key = %file_key,
+            chunks = total_chunks,
+            "File upload completed"
+        );
+
         Ok(FileUploadResponse {
             status: "upload_successful".to_string(),
             file_key: file_key.to_string(),
@@ -583,6 +647,12 @@ impl MspService {
         chunk_ids: &HashSet<ChunkId>,
         file_key_proof: &FileKeyProof,
     ) -> Result<(), Error> {
+        debug!(
+            target: "msp_service::upload_to_msp",
+            chunk_count = chunk_ids.len(),
+            "Uploading chunks to MSP"
+        );
+
         // Ensure we are not incorrectly trying to upload an empty file.
         if chunk_ids.is_empty() {
             return Err(Error::BadRequest(
@@ -590,17 +660,14 @@ impl MspService {
             ));
         }
 
-        debug!("get_info");
-
         // Get the MSP's info including its multiaddresses.
         let msp_info = self.get_info().await?;
-
-        debug!("extract_peer_ids");
 
         // Extract the peer IDs from the multiaddresses.
         let peer_ids = self.extract_peer_ids_from_multiaddresses(&msp_info.multiaddresses)?;
 
         // Try to send the chunks batch to each peer until one succeeds.
+        debug!(target: "msp_service::upload_to_msp", "Trying to send the chunks batch to each peer until one succeeds");
         let mut last_err = None;
         for peer_id in peer_ids {
             match self
@@ -608,17 +675,18 @@ impl MspService {
                 .await
             {
                 Ok(()) => {
-                    info!(
-                        "Successfully uploaded {} chunks to MSP {} for file {} in bucket {}",
-                        chunk_ids.len(),
-                        msp_info.msp_id,
-                        hex::encode(file_key_proof.file_metadata.file_key::<Blake2Hasher>()),
-                        hex::encode(file_key_proof.file_metadata.bucket_id())
+                    debug!(
+                        target: "msp_service::upload_to_msp",
+                        chunk_count = chunk_ids.len(),
+                        msp_id = %msp_info.msp_id,
+                        file_key = %format!("0x{}", hex::encode(file_key_proof.file_metadata.file_key::<Blake2Hasher>())),
+                        bucket_id = %format!("0x{}", hex::encode(file_key_proof.file_metadata.bucket_id())),
+                        "Successfully uploaded chunks to MSP"
                     );
                     return Ok(());
                 }
                 Err(e) => {
-                    warn!("Failed to send chunks to peer {:?}: {:?}", peer_id, e);
+                    warn!(target: "msp_service::upload_to_msp", peer_id = ?peer_id, error = ?e, "Failed to send chunks to peer");
                     last_err = Some(e);
                     continue;
                 }
@@ -633,6 +701,7 @@ impl MspService {
         &self,
         multiaddresses: &[String],
     ) -> Result<Vec<PeerId>, Error> {
+        debug!(target: "msp_service::extract_peer_ids_from_multiaddresses", "Extracting peer IDs from MSP's multiaddresses");
         let mut peer_ids = HashSet::new();
 
         for multiaddr_str in multiaddresses {
@@ -645,20 +714,24 @@ impl MspService {
                 match peer_id_str.parse::<PeerId>() {
                     Ok(peer_id) => {
                         debug!(
-                            "Extracted peer ID {:?} from multiaddress {}",
-                            peer_id, multiaddr_str
+                            target: "msp_service::extract_peer_ids_from_multiaddresses",
+                            peer_id = ?peer_id,
+                            multiaddress = %multiaddr_str,
+                            "Extracted peer ID from multiaddress"
                         );
                         peer_ids.insert(peer_id);
                     }
                     Err(e) => {
                         warn!(
-                            "Failed to parse peer ID from multiaddress {}: {:?}",
-                            multiaddr_str, e
+                            target: "msp_service::extract_peer_ids_from_multiaddresses",
+                            multiaddress = %multiaddr_str,
+                            error = ?e,
+                            "Failed to parse peer ID from multiaddress"
                         );
                     }
                 }
             } else {
-                warn!("No /p2p/ section found in multiaddress: {}", multiaddr_str);
+                warn!(target: "msp_service::extract_peer_ids_from_multiaddresses", multiaddress = %multiaddr_str, "No /p2p/ section found in multiaddress");
             }
         }
 
@@ -679,8 +752,9 @@ impl MspService {
         file_key_proof: FileKeyProof,
     ) -> Result<(), Error> {
         debug!(
-            "Attempting to send upload request to MSP peer {:?} with file key proof",
-            peer_id
+            target: "msp_service::send_upload_request_to_msp_peer",
+            peer_id = ?peer_id,
+            "Attempting to send upload request to MSP peer"
         );
 
         // Get fhe file metadata from the received FileKeyProof.
@@ -699,7 +773,7 @@ impl MspService {
         let delay_between_retries_secs = 1;
 
         while retry_attempts < max_retries {
-            debug!("receive file chunks");
+            debug!(target: "msp_service::send_upload_request_to_msp_peer", peer_id = ?peer_id, retry_attempt = retry_attempts, "Sending file chunks to MSP peer via RPC");
             let result: Result<Vec<u8>, _> = self
                 .rpc
                 .receive_file_chunks(&file_key_hexstr, encoded_proof.clone())
@@ -707,17 +781,18 @@ impl MspService {
 
             match result {
                 Ok(_raw) => {
-                    info!("Successfully sent upload request to MSP peer {:?}", peer_id);
+                    debug!(peer_id = ?peer_id, "Successfully sent upload request to MSP peer");
                     return Ok(());
                 }
                 Err(e) => {
                     retry_attempts += 1;
                     if retry_attempts < max_retries {
                         warn!(
-                            "Upload request to MSP peer {:?} failed via RPC, retrying... (attempt {}): {:?}",
-                            peer_id,
-                            retry_attempts,
-                            e
+                            target: "msp_service::send_upload_request_to_msp_peer",
+                            peer_id = ?peer_id,
+                            retry_attempt = retry_attempts,
+                            error = ?e,
+                            "Upload request to MSP peer {peer_id} failed via RPC, retrying... (attempt {retry_attempts})",
                         );
                         tokio::time::sleep(std::time::Duration::from_secs(
                             delay_between_retries_secs,
@@ -778,7 +853,7 @@ impl MspService {
 
 #[cfg(all(test, feature = "mocks"))]
 mod tests {
-    use std::sync::Arc;
+    use std::{str::FromStr, sync::Arc};
 
     use bigdecimal::BigDecimal;
     use serde_json::Value;
@@ -1176,6 +1251,7 @@ mod tests {
             // mock environment sets price per giga unit to this value
             * BigDecimal::from(MOCK_PRICE_PER_GIGA_UNIT)
             * BigDecimal::from_str("1e-9").unwrap();
+        let expected_cost_per_tick = expected_cost_per_tick.with_scale_round(0, RoundingMode::Down);
 
         assert_eq!(
             BigDecimal::from_str(&dynamic.cost_per_tick)

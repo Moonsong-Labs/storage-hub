@@ -41,7 +41,7 @@
   },
   "devDependencies": {
     "@storagehub-sdk/core": "workspace:*",
-    "viem": "2.38.3"
+    "viem": ">=2.38.3"
   },
   "engines": {
     "node": ">=22"

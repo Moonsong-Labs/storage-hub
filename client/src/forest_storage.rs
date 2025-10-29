@@ -1,7 +1,14 @@
-use std::{collections::HashMap, fmt::Debug, hash::Hash, marker::PhantomData, sync::Arc};
+use std::{
+    collections::HashMap,
+    fmt::{Debug, Display},
+    hash::Hash,
+    marker::PhantomData,
+    path::PathBuf,
+    sync::Arc,
+};
 
 use async_trait::async_trait;
-use log::error;
+use log::{debug, error, info, warn};
 use shc_common::{traits::StorageEnableRuntime, types::StorageProofsMerkleTrieLayout};
 use shc_forest_manager::{
     in_memory::InMemoryForestStorage,
@@ -9,6 +16,8 @@ use shc_forest_manager::{
     traits::{ForestStorage, ForestStorageHandler},
 };
 use tokio::sync::RwLock;
+
+use crate::types::FOREST_STORAGE_PATH;
 
 const LOG_TARGET: &str = "forest-storage-handler";
 
@@ -61,7 +70,14 @@ where
 {
     #[allow(dead_code)]
     pub fn new(storage_path: String) -> Self {
-        let fs = rocksdb::create_db::<StorageProofsMerkleTrieLayout>(storage_path.clone())
+        let mut path = PathBuf::new();
+        path.push(storage_path.clone());
+        path.push(FOREST_STORAGE_PATH);
+
+        let path_str = path.to_string_lossy().to_string();
+        debug!(target: LOG_TARGET, "Creating RocksDB at path: {}", path_str);
+
+        let fs = rocksdb::create_db::<StorageProofsMerkleTrieLayout>(path_str)
             .expect("Failed to create RocksDB");
 
         let fs = RocksDBForestStorage::new(fs).expect("Failed to create Forest Storage");
@@ -132,12 +148,19 @@ where
     }
 
     async fn create(&mut self, _key: &Self::Key) -> Arc<RwLock<Self::FS>> {
-        let fs = rocksdb::create_db::<StorageProofsMerkleTrieLayout>(
+        let mut path = PathBuf::new();
+        path.push(
             self.storage_path
                 .clone()
                 .expect("Storage path should be set for RocksDB implementation"),
-        )
-        .expect("Failed to create RocksDB");
+        );
+        path.push(FOREST_STORAGE_PATH);
+
+        let path_str = path.to_string_lossy().to_string();
+        debug!(target: LOG_TARGET, "Creating RocksDB at path: {}", path_str);
+
+        let fs = rocksdb::create_db::<StorageProofsMerkleTrieLayout>(path_str)
+            .expect("Failed to create RocksDB");
 
         let fs = RocksDBForestStorage::new(fs).expect("Failed to create Forest Storage");
 
@@ -190,7 +213,7 @@ where
 impl<K, Runtime>
     ForestStorageCaching<K, InMemoryForestStorage<StorageProofsMerkleTrieLayout>, Runtime>
 where
-    K: Eq + Hash + Send + Sync,
+    K: Eq + Hash + From<Vec<u8>> + Clone + Debug + Display + Send + Sync,
     Runtime: StorageEnableRuntime,
 {
     pub fn new() -> Self {
@@ -209,13 +232,88 @@ impl<K, Runtime>
         Runtime,
     >
 where
-    K: Eq + Hash + Send + Sync,
+    K: Eq + Hash + From<Vec<u8>> + Clone + Debug + Display + Send + Sync,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_path: String) -> Self {
+        // Build initial map by restoring any pre-existing bucket forests from disk
+        let mut instances: HashMap<
+            K,
+            Arc<
+                RwLock<RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>>,
+            >,
+        > = HashMap::new();
+
+        // Compute the base folder where per-bucket RocksDB instances live
+        let mut base = PathBuf::new();
+        base.push(&storage_path);
+        base.push(FOREST_STORAGE_PATH);
+
+        // Best-effort scan of existing bucket directories
+        match std::fs::read_dir(&base) {
+            Ok(entries) => {
+                let mut restored_count: usize = 0;
+                for entry_result in entries {
+                    let Ok(entry) = entry_result else { continue };
+                    let path = entry.path();
+                    if !path.is_dir() {
+                        continue;
+                    }
+                    let name_os = match path.file_name() {
+                        Some(n) => n,
+                        None => continue,
+                    };
+                    let name = name_os.to_string_lossy();
+                    // Expect directory names to be hex string keys, typically formatted via Display as "0x<hex>"
+                    let hex_str = name.strip_prefix("0x").unwrap_or(&name);
+                    // Decode to bytes; skip if malformed
+                    let key_bytes = match hex::decode(hex_str) {
+                        Ok(b) => b,
+                        Err(e) => {
+                            warn!(target: LOG_TARGET, "Skipping invalid forest dir name '{}': {}", name, e);
+                            continue;
+                        }
+                    };
+
+                    // Build the exact DB path expected by rocksdb::create_db (base/<display(key)>)
+                    // We reconstruct the key from bytes using K: From<Vec<u8>>
+                    let key: K = K::from(key_bytes);
+
+                    let mut db_path = PathBuf::new();
+                    db_path.push(&storage_path);
+                    db_path.push(FOREST_STORAGE_PATH);
+                    db_path.push(key.to_string());
+
+                    let db_path_str = db_path.to_string_lossy().to_string();
+                    match rocksdb::create_db::<StorageProofsMerkleTrieLayout>(db_path_str) {
+                        Ok(storage_db) => match RocksDBForestStorage::new(storage_db) {
+                            Ok(fs) => {
+                                instances.insert(key, Arc::new(RwLock::new(fs)));
+                                restored_count += 1;
+                            }
+                            Err(e) => {
+                                warn!(target: LOG_TARGET, "Failed to initialise forest at '{}': {:?}", name, e);
+                            }
+                        },
+                        Err(_e) => {
+                            warn!(target: LOG_TARGET, "Failed to open RocksDB for forest dir '{}'; skipping", name);
+                        }
+                    }
+                }
+                if restored_count > 0 {
+                    info!(target: LOG_TARGET, "🌳 Restored {} forest(s) from disk", restored_count);
+                } else {
+                    debug!(target: LOG_TARGET, "No existing forests found to restore at {}", base.to_string_lossy());
+                }
+            }
+            Err(e) => {
+                debug!(target: LOG_TARGET, "Forest base path not found or unreadable ({}): {}", base.to_string_lossy(), e);
+            }
+        }
+
         Self {
             storage_path: Some(storage_path),
-            fs_instances: Arc::new(RwLock::new(HashMap::new())),
+            fs_instances: Arc::new(RwLock::new(instances)),
             _runtime: PhantomData,
         }
     }
@@ -290,7 +388,7 @@ impl<K, Runtime> ForestStorageHandler<Runtime>
         Runtime,
     >
 where
-    K: Eq + Hash + From<Vec<u8>> + Clone + Debug + Send + Sync + 'static,
+    K: Eq + Hash + From<Vec<u8>> + Clone + Debug + Display + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
     type Key = K;
@@ -309,17 +407,21 @@ where
             return fs.clone();
         }
 
-        let new_db_storage_path = format!(
-            "{}_{:?}",
-            self.storage_path
-                .clone()
-                .expect("Storage path should be set for RocksDB implementation"),
-            key.clone()
-        );
+        let storage_path = self
+            .storage_path
+            .clone()
+            .expect("Storage path should be set for RocksDB implementation");
 
-        let underlying_db =
-            rocksdb::create_db::<StorageProofsMerkleTrieLayout>(new_db_storage_path)
-                .expect("Failed to create RocksDB");
+        let mut path = PathBuf::new();
+        path.push(storage_path);
+        path.push(FOREST_STORAGE_PATH);
+        path.push(key.to_string());
+
+        let path_str = path.to_string_lossy().to_string();
+        debug!(target: LOG_TARGET, "Creating RocksDB at path: {}", path_str);
+
+        let underlying_db = rocksdb::create_db::<StorageProofsMerkleTrieLayout>(path_str)
+            .expect("Failed to create RocksDB");
 
         let forest_storage =
             RocksDBForestStorage::new(underlying_db).expect("Failed to create Forest Storage");

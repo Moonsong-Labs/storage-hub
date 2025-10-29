@@ -1,9 +1,8 @@
-use log::info;
-use std::{collections::HashSet, io, path::PathBuf, sync::Arc};
+use std::{collections::HashSet, io, sync::Arc};
 
 use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
-use log::{debug, error};
+use log::{debug, error, info};
 use shc_common::types::{
     Chunk, ChunkId, ChunkWithId, FileKeyProof, FileMetadata, FileProof, HashT, HasherOutT, H_LENGTH,
 };
@@ -12,7 +11,7 @@ use sp_trie::{prefixed_key, recorder::Recorder, PrefixedMemoryDB, TrieLayout, Tr
 use trie_db::{DBValue, Trie, TrieDBBuilder, TrieDBMutBuilder};
 
 use crate::{
-    error::{other_io_error, ErrorT},
+    error::ErrorT,
     traits::{
         ExcludeType, FileDataTrie, FileStorage, FileStorageError, FileStorageWriteError,
         FileStorageWriteOutcome,
@@ -50,6 +49,11 @@ pub enum Column {
     ExcludeUser,
     ExcludeBucket,
     ExcludeFingerprint,
+    /// Stores keys of 32 bytes representing the `fingerprint` with values being a `u64` refcount.
+    ///
+    /// Used to ensure the underlying trie (Chunks/Roots) is deleted only when the last reference
+    /// to this fingerprint is removed.
+    FingerprintRefCount,
 }
 
 impl Into<u32> for Column {
@@ -73,18 +77,10 @@ fn get_exclude_type_db_column(exclude_type: ExcludeType) -> u32 {
 
 /// Open the database on disk, creating it if it doesn't exist.
 fn open_or_creating_rocksdb(db_path: String) -> io::Result<kvdb_rocksdb::Database> {
-    let mut path = PathBuf::new();
-    path.push(db_path.as_str());
-    path.push("storagehub/file_storage/");
-
     let db_config = kvdb_rocksdb::DatabaseConfig::with_columns(NUMBER_OF_COLUMNS);
 
-    let path_str = path
-        .to_str()
-        .ok_or_else(|| other_io_error(format!("Bad database path: {:?}", path)))?;
-
-    std::fs::create_dir_all(&path_str)?;
-    let db = kvdb_rocksdb::Database::open(&db_config, &path_str)?;
+    std::fs::create_dir_all(&db_path)?;
+    let db = kvdb_rocksdb::Database::open(&db_config, &db_path)?;
 
     Ok(db)
 }
@@ -497,6 +493,78 @@ where
     DB: KeyValueDB,
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
+    /// Helper to increment the fingerprint refcount within the provided transaction.
+    /// Returns the new refcount value.
+    fn increment_fingerprint_refcount(
+        &self,
+        fingerprint: &[u8],
+        transaction: &mut DBTransaction,
+    ) -> Result<u64, FileStorageError> {
+        let current = self
+            .storage
+            .read(Column::FingerprintRefCount.into(), fingerprint)
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "{:?}", e);
+                FileStorageError::FailedToReadStorage
+            })?
+            .map(|bytes| u64::from_le_bytes(bytes.try_into().unwrap()))
+            .unwrap_or(0);
+
+        let new_count = current
+            .checked_add(1)
+            .ok_or(FileStorageError::FailedToWriteToStorage)?;
+
+        transaction.put(
+            Column::FingerprintRefCount.into(),
+            fingerprint,
+            &new_count.to_le_bytes(),
+        );
+
+        Ok(new_count)
+    }
+
+    /// Helper to decrement the fingerprint refcount within the provided transaction.
+    /// Returns the new refcount value (saturating at 0).
+    fn decrement_fingerprint_refcount(
+        &self,
+        fingerprint: &[u8],
+        transaction: &mut DBTransaction,
+    ) -> Result<u64, FileStorageError> {
+        let current = self
+            .storage
+            .read(Column::FingerprintRefCount.into(), fingerprint)
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "{:?}", e);
+                FileStorageError::FailedToReadStorage
+            })?
+            .map(|bytes| u64::from_le_bytes(bytes.try_into().unwrap()))
+            .unwrap_or(0);
+
+        let new_count = current.saturating_sub(1);
+
+        transaction.put(
+            Column::FingerprintRefCount.into(),
+            fingerprint,
+            &new_count.to_le_bytes(),
+        );
+
+        Ok(new_count)
+    }
+    /// Helper to build the bucket-prefixed file key used for efficient prefix scans.
+    ///
+    /// This is used, for instance, to delete all files in a bucket efficiently.
+    fn build_bucket_prefixed_file_key(
+        metadata: &FileMetadata,
+        file_key: &HasherOutT<T>,
+    ) -> Vec<u8> {
+        metadata
+            .bucket_id()
+            .iter()
+            .copied()
+            .chain(file_key.as_ref().iter().copied())
+            .collect::<Vec<_>>()
+    }
+
     /// Creates a new file storage instance with the given storage backend.
     pub fn new(storage: StorageDb<T, DB>) -> Self {
         Self { storage }
@@ -535,19 +603,31 @@ where
                 error!(target: LOG_TARGET, "{:?}", e);
                 FileStorageError::FailedToParseFingerprint
             })?;
+
+        debug!(target: LOG_TARGET, "Reading partial root for fingerprint {:?}", h_fingerprint);
+
+        // We call this root "partial root" because a file trie can exist while not all
+        // chunks have been written to it. When all chunks are written, this root is
+        // in fact the final root of the file trie.
         let raw_partial_root = self
             .storage
             .read(Column::Roots.into(), h_fingerprint.as_ref())
             .map_err(|e| {
-                error!(target: LOG_TARGET, "{:?}", e);
+                error!(target: LOG_TARGET, "Failed to read partial root for fingerprint {:?}: {:?}", h_fingerprint, e);
                 FileStorageError::FailedToReadStorage
-            })?
-            .expect("Failed to find partial root");
+            })?.ok_or_else(|| {
+                error!(target: LOG_TARGET, "Partial root returned None for fingerprint {:?}", h_fingerprint);
+                FileStorageError::PartialRootNotFound
+            })?;
+
         let mut partial_root =
             convert_raw_bytes_to_hasher_out::<T>(raw_partial_root).map_err(|e| {
                 error!(target: LOG_TARGET, "{:?}", e);
                 FileStorageError::FailedToParsePartialRoot
             })?;
+
+        debug!(target: LOG_TARGET, "Constructing file trie from partial root {:?}", partial_root);
+
         let file_trie =
             RocksDbFileDataTrie::<T, DB>::from_existing(self.storage.clone(), &mut partial_root);
         Ok(file_trie)
@@ -615,13 +695,21 @@ where
 
         let mut file_trie = self.get_file_trie(&metadata).map_err(|e| {
             error!(target: LOG_TARGET, "{:?}", e);
-            FileStorageWriteError::FailedToContructFileTrie
+            FileStorageWriteError::FailedToConstructFileTrie
         })?;
 
-        file_trie.write_chunk(chunk_id, data).map_err(|e| {
-            error!(target: LOG_TARGET, "{:?}", e);
-            FileStorageWriteError::FailedToInsertFileChunk
-        })?;
+        if let Err(e) = file_trie.write_chunk(chunk_id, data) {
+            match e {
+                FileStorageWriteError::FileChunkAlreadyExists => {
+                    // Treat as no-op: chunk already present (e.g., shared trie across buckets)
+                    debug!(target: LOG_TARGET, "Chunk {:?} already exists in file storage for file key {:?}", chunk_id, file_key);
+                }
+                other => {
+                    error!(target: LOG_TARGET, "{:?}", other);
+                    return Err(FileStorageWriteError::FailedToInsertFileChunk);
+                }
+            }
+        }
 
         // Update partial root.
         let new_partial_root = file_trie.get_root();
@@ -632,7 +720,7 @@ where
             new_partial_root.as_ref(),
         );
 
-        // Get current chunk count or initialize to 0
+        // Get current chunk count or initialise to 0
         let current_count = self.stored_chunks_count(file_key).map_err(|e| {
             error!(target: LOG_TARGET, "{:?}", e);
             FileStorageWriteError::FailedToGetStoredChunksCount
@@ -710,18 +798,40 @@ where
             file_key.as_ref(),
             &serialized_metadata,
         );
-        // Stores an empty root to allow for later initialization of the trie.
-        transaction.put(
-            Column::Roots.into(),
-            metadata.fingerprint().as_ref(),
-            empty_root.as_ref(),
-        );
+
+        // Ensure a partial root exists for this fingerprint, but do not overwrite if it already exists
+        let existing_partial_root = self
+            .storage
+            .read(Column::Roots.into(), metadata.fingerprint().as_ref())
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "{:?}", e);
+                FileStorageError::FailedToReadStorage
+            })?;
+        if existing_partial_root.is_none() {
+            // Stores an empty root to allow for later initialization of the trie.
+            transaction.put(
+                Column::Roots.into(),
+                metadata.fingerprint().as_ref(),
+                empty_root.as_ref(),
+            );
+        }
         // Initialize chunk count to 0
         transaction.put(
             Column::ChunkCount.into(),
             file_key.as_ref(),
             &0u64.to_le_bytes(),
         );
+
+        // Also store the bucket-prefixed key to support efficient deletions by bucket prefix.
+        let bucket_prefixed_file_key = Self::build_bucket_prefixed_file_key(&metadata, &file_key);
+        transaction.put(
+            Column::BucketPrefix.into(),
+            bucket_prefixed_file_key.as_ref(),
+            &[],
+        );
+
+        // Increment fingerprint refcount
+        self.increment_fingerprint_refcount(metadata.fingerprint().as_ref(), &mut transaction)?;
 
         self.storage.write(transaction).map_err(|e| {
             error!(target: LOG_TARGET,"{:?}", e);
@@ -780,12 +890,7 @@ where
             &chunk_count.to_le_bytes(),
         );
 
-        let bucket_prefixed_file_key = metadata
-            .bucket_id()
-            .iter()
-            .copied()
-            .chain(file_key.as_ref().iter().copied())
-            .collect::<Vec<_>>();
+        let bucket_prefixed_file_key = Self::build_bucket_prefixed_file_key(&metadata, &file_key);
 
         // Store the key prefixed by bucket id
         transaction.put(
@@ -793,6 +898,9 @@ where
             bucket_prefixed_file_key.as_ref(),
             &[],
         );
+
+        // Increment fingerprint refcount
+        self.increment_fingerprint_refcount(metadata.fingerprint().as_ref(), &mut transaction)?;
 
         self.storage.write(transaction).map_err(|e| {
             error!(target: LOG_TARGET,"{:?}", e);
@@ -860,9 +968,11 @@ where
 
     /// Deletes a file and all its associated data.
     fn delete_file(&mut self, file_key: &HasherOutT<T>) -> Result<(), FileStorageError> {
-        let metadata = self
-            .get_metadata(file_key)?
-            .ok_or(FileStorageError::FileDoesNotExist)?;
+        let Some(metadata) = self.get_metadata(file_key)? else {
+            // Idempotent: if already deleted, nothing to do
+            warn!(target: LOG_TARGET, "File key {:?} already deleted", file_key);
+            return Ok(());
+        };
 
         let b_fingerprint = metadata.fingerprint().as_ref();
         let h_fingerprint =
@@ -871,32 +981,54 @@ where
                 FileStorageError::FailedToParseFingerprint
             })?;
 
-        let mut file_trie = self.get_file_trie(&metadata)?;
-
-        file_trie.delete().map_err(|e| {
-            error!(target: LOG_TARGET,"{:?}", e);
-            FileStorageError::FailedToDeleteFileChunk
-        })?;
-
-        let mut transaction = DBTransaction::new();
-
-        transaction.delete(Column::Metadata.into(), file_key.as_ref());
-        transaction.delete(Column::Roots.into(), h_fingerprint.as_ref());
-        transaction.delete(Column::ChunkCount.into(), file_key.as_ref());
-
+        // Transaction 1: remove per-file metadata and decrement refcount
+        let mut txn1 = DBTransaction::new();
+        txn1.delete(Column::Metadata.into(), file_key.as_ref());
+        txn1.delete(Column::ChunkCount.into(), file_key.as_ref());
         let bucket_prefixed_file_key = metadata
             .bucket_id()
             .iter()
             .copied()
             .chain(file_key.as_ref().iter().copied())
             .collect::<Vec<_>>();
-        transaction.delete(
+        txn1.delete(
             Column::BucketPrefix.into(),
             bucket_prefixed_file_key.as_ref(),
         );
 
-        self.storage.write(transaction).map_err(|e| {
-            error!(target: LOG_TARGET,"{:?}", e);
+        let new_refcount = self.decrement_fingerprint_refcount(b_fingerprint, &mut txn1)?;
+        self.storage.write(txn1).map_err(|e| {
+            error!(target: LOG_TARGET, "{:?}", e);
+            FileStorageError::FailedToWriteToStorage
+        })?;
+
+        if new_refcount > 0 {
+            // Other references still exist; do not touch trie or roots
+            info!(target: LOG_TARGET, "File key {:?} has other references, skipping trie deletion", file_key);
+            return Ok(());
+        }
+
+        // Last reference: try to delete trie. If partial root is missing, treat as already deleted
+        let maybe_trie = self.get_file_trie(&metadata);
+        match maybe_trie {
+            Ok(mut file_trie) => {
+                if let Err(e) = file_trie.delete() {
+                    error!(target: LOG_TARGET, "Failed to delete file trie for file key {:?} with fingerprint {:?}: {:?}", file_key, metadata.fingerprint(), e);
+                    // Keep refcount at 0 but leave roots; caller may retry
+                    return Err(FileStorageError::FailedToDeleteFileChunk);
+                }
+            }
+            Err(e) => {
+                warn!(target: LOG_TARGET, "Failed to get file trie for file key {:?} with fingerprint {:?}: {:?}\n\nSkipping trie deletion, file may already be deleted.", file_key, metadata.fingerprint(), e);
+            }
+        }
+
+        // Transaction 2: delete roots and refcount entry (idempotent)
+        let mut txn2 = DBTransaction::new();
+        txn2.delete(Column::Roots.into(), h_fingerprint.as_ref());
+        txn2.delete(Column::FingerprintRefCount.into(), b_fingerprint);
+        self.storage.write(txn2).map_err(|e| {
+            error!(target: LOG_TARGET, "{:?}", e);
             FileStorageError::FailedToWriteToStorage
         })?;
 
@@ -933,8 +1065,27 @@ where
             }
         }
 
+        info!(target: LOG_TARGET, "Deleting {} file keys with prefix {:?}", file_keys_to_delete.len(), bucket_id_prefix);
+
         for h_file_key in file_keys_to_delete {
-            self.delete_file(&h_file_key)?;
+            debug!(target: LOG_TARGET, "Deleting file key {:?}", h_file_key);
+
+            let result = self.delete_file(&h_file_key);
+            if let Err(e) = result {
+                // If metadata is already gone or partial root is missing, skip as idempotent behaviour
+                match e {
+                    FileStorageError::FileDoesNotExist | FileStorageError::PartialRootNotFound => {
+                        warn!(target: LOG_TARGET, "Skipping already-deleted file key {:?}", h_file_key);
+                        continue;
+                    }
+                    _ => {
+                        error!(target: LOG_TARGET, "Failed to delete file key {:?}: {:?}", h_file_key, e);
+                        return Err(e);
+                    }
+                }
+            }
+
+            debug!(target: LOG_TARGET, "Successfully deleted file key {:?}", h_file_key);
         }
 
         Ok(())
@@ -1564,5 +1715,142 @@ mod tests {
         assert!(file_storage.get_metadata(&key_3).is_ok());
         assert!(file_storage.get_chunk(&key_2, &chunk_ids_2[0]).is_ok());
         assert!(file_storage.get_chunk(&key_3, &chunk_ids_3[0]).is_ok());
+    }
+
+    #[test]
+    fn delete_files_with_prefix_after_insert_file_and_writes_works() {
+        let storage = StorageDb {
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
+            _marker: Default::default(),
+        };
+
+        let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>, InMemory>::new(storage);
+
+        // Create a file via insert_file (which now also writes BucketPrefix) and then write chunks.
+        let mut tmp_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(
+            file_storage.storage.clone(),
+        );
+        // Write 3 chunks to derive a fingerprint for the metadata
+        for i in 0..3u64 {
+            tmp_trie
+                .write_chunk(
+                    &ChunkId::new(i),
+                    &Chunk::from([i as u8; FILE_CHUNK_SIZE as usize]),
+                )
+                .unwrap();
+        }
+        let fingerprint = Fingerprint::from(tmp_trie.get_root().as_ref());
+
+        let file_metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            [7u8; 32].to_vec(),
+            "location_after_insert_file".to_string().into_bytes(),
+            FILE_CHUNK_SIZE * 3,
+            fingerprint,
+        )
+        .unwrap();
+        let file_key = file_metadata.file_key::<BlakeTwo256>();
+
+        // Insert only metadata (path under test)
+        file_storage.insert_file(file_key, file_metadata).unwrap();
+
+        // Then write chunks using the storage API
+        for i in 0..3u64 {
+            file_storage
+                .write_chunk(
+                    &file_key,
+                    &ChunkId::new(i),
+                    &Chunk::from([i as u8; FILE_CHUNK_SIZE as usize]),
+                )
+                .unwrap();
+        }
+
+        // Sanity: metadata and chunk are accessible
+        assert!(file_storage.get_metadata(&file_key).is_ok());
+        assert!(file_storage
+            .get_chunk(&file_key, &ChunkId::new(0u64))
+            .is_ok());
+
+        // Now delete by bucket prefix and ensure it is removed
+        file_storage.delete_files_with_prefix(&[7u8; 32]).unwrap();
+
+        assert!(file_storage
+            .get_metadata(&file_key)
+            .is_ok_and(|m| m.is_none()));
+        assert!(file_storage
+            .get_chunk(&file_key, &ChunkId::new(0u64))
+            .is_err());
+    }
+
+    #[test]
+    fn multi_bucket_same_fingerprint_refcount_and_idempotent_delete() {
+        let storage = StorageDb {
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
+            _marker: Default::default(),
+        };
+
+        let mut tmp_trie =
+            RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(storage.clone());
+        // Build a common fingerprint
+        for i in 0..2u64 {
+            tmp_trie
+                .write_chunk(
+                    &ChunkId::new(i),
+                    &Chunk::from([i as u8; FILE_CHUNK_SIZE as usize]),
+                )
+                .unwrap();
+        }
+        let fingerprint = Fingerprint::from(tmp_trie.get_root().as_ref());
+
+        // Create two metadata objects pointing to same fingerprint but different buckets
+        let meta_a = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            [10u8; 32].to_vec(),
+            "loc_a".as_bytes().to_vec(),
+            FILE_CHUNK_SIZE * 2,
+            fingerprint.clone(),
+        )
+        .unwrap();
+        let key_a = meta_a.file_key::<BlakeTwo256>();
+
+        let meta_b = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            [11u8; 32].to_vec(),
+            "loc_b".as_bytes().to_vec(),
+            FILE_CHUNK_SIZE * 2,
+            fingerprint,
+        )
+        .unwrap();
+        let key_b = meta_b.file_key::<BlakeTwo256>();
+
+        let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>, InMemory>::new(storage);
+
+        // Insert both files via insert_file and then write chunks
+        file_storage.insert_file(key_a, meta_a).unwrap();
+        file_storage.insert_file(key_b, meta_b).unwrap();
+
+        for i in 0..2u64 {
+            let ch = Chunk::from([i as u8; FILE_CHUNK_SIZE as usize]);
+            file_storage
+                .write_chunk(&key_a, &ChunkId::new(i), &ch)
+                .unwrap();
+            file_storage
+                .write_chunk(&key_b, &ChunkId::new(i), &ch)
+                .unwrap();
+        }
+
+        // Delete bucket A only
+        file_storage.delete_files_with_prefix(&[10u8; 32]).unwrap();
+
+        // File under bucket B should still be accessible
+        assert!(file_storage.get_metadata(&key_b).is_ok());
+        assert!(file_storage.get_chunk(&key_b, &ChunkId::new(0)).is_ok());
+
+        // Deleting bucket B should clean up everything
+        file_storage.delete_files_with_prefix(&[11u8; 32]).unwrap();
+        assert!(file_storage.get_metadata(&key_b).is_ok_and(|m| m.is_none()));
+
+        // Idempotent: deleting bucket B again does nothing and should not error
+        assert!(file_storage.delete_files_with_prefix(&[11u8; 32]).is_ok());
     }
 }

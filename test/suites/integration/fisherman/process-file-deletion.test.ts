@@ -7,7 +7,6 @@ import {
   bspKey,
   waitFor,
   assertEventPresent,
-  assertEventMany,
   mspKey,
   ShConsts
 } from "../../../util";
@@ -33,7 +32,7 @@ import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
  * - Tests multiple provider scenarios (both BSP and MSP for same file)
  * - Includes extensive log verification for fisherman processing
  * - Uses container pausing/resuming to simulate network conditions
- * - Tests fisherman's preparation of delete_file extrinsics
+ * - Tests fisherman's preparation of delete_files extrinsics
  *
  * Test Scenarios:
  * 1. FileDeletionRequested: Normal user-initiated deletion with multiple providers
@@ -84,12 +83,11 @@ await describeMspNet(
       assert(createFishermanApi, "Fisherman API not available for fisherman test");
       fishermanApi = await createFishermanApi();
 
-      await userApi.rpc.engine.createBlock(true, true);
-
+      await userApi.block.seal({ finaliseBlock: true });
       await waitForIndexing(userApi);
     });
 
-    it("processes FileDeletionRequested event and prepares delete_file extrinsic", async () => {
+    it("processes FileDeletionRequested event and prepares delete_files extrinsic", async () => {
       const bucketName = "test-fisherman-deletion";
       const source = "res/smile.jpg";
       const destination = "test/fisherman-delete.txt";
@@ -176,9 +174,9 @@ await describeMspNet(
 
       await waitForIndexing(userApi, false);
 
-      // Verify delete_file extrinsics are submitted
+      // Verify delete_files extrinsics are submitted
       await userApi.assert.extrinsicPresent({
-        method: "deleteFile",
+        method: "deleteFiles",
         module: "fileSystem",
         checkTxPool: true,
         assertLength: 2,
@@ -192,18 +190,18 @@ await describeMspNet(
       assertEventPresent(
         userApi,
         "fileSystem",
-        "BucketFileDeletionCompleted",
+        "BucketFileDeletionsCompleted",
         deletionResult.events
       );
-      assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", deletionResult.events);
+      assertEventPresent(userApi, "fileSystem", "BspFileDeletionsCompleted", deletionResult.events);
 
       // Extract deletion events to verify root changes
       const mspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BucketFileDeletionCompleted,
+        userApi.events.fileSystem.BucketFileDeletionsCompleted,
         deletionResult.events
       );
       const bspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BspFileDeletionCompleted,
+        userApi.events.fileSystem.BspFileDeletionsCompleted,
         deletionResult.events
       );
 
@@ -330,9 +328,9 @@ await describeMspNet(
         await waitForIndexing(userApi, false);
         await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
 
-        // Verify delete_file_for_incomplete_storage_request extrinsic is submitted
+        // Verify delete_files_for_incomplete_storage_request extrinsic is submitted
         await userApi.assert.extrinsicPresent({
-          method: "deleteFileForIncompleteStorageRequest",
+          method: "deleteFilesForIncompleteStorageRequest",
           module: "fileSystem",
           checkTxPool: true,
           assertLength: 1,
@@ -342,11 +340,11 @@ await describeMspNet(
         // Seal block to process the extrinsic
         const deletionResult = await userApi.block.seal();
 
-        // Verify FileDeletedFromIncompleteStorageRequest event
+        // Verify BspFileDeletionsCompleted event
         assertEventPresent(
           userApi,
           "fileSystem",
-          "FileDeletedFromIncompleteStorageRequest",
+          "BspFileDeletionsCompleted",
           deletionResult.events
         );
       } finally {
@@ -407,7 +405,7 @@ await describeMspNet(
 
       // Verify 2 extrsinsics submitted for each MSP and BSP
       await userApi.assert.extrinsicPresent({
-        method: "deleteFileForIncompleteStorageRequest",
+        method: "deleteFilesForIncompleteStorageRequest",
         module: "fileSystem",
         checkTxPool: true,
         assertLength: 2,
@@ -417,21 +415,22 @@ await describeMspNet(
       // Seal block to process the extrinsic
       const deletionResult = await userApi.block.seal();
 
-      // Verify FileDeletedFromIncompleteStorageRequest event
-      assertEventMany(
+      // Verify both deletion completion events
+      assertEventPresent(
         userApi,
         "fileSystem",
-        "FileDeletedFromIncompleteStorageRequest",
+        "BucketFileDeletionsCompleted",
         deletionResult.events
       );
+      assertEventPresent(userApi, "fileSystem", "BspFileDeletionsCompleted", deletionResult.events);
 
       // Extract deletion events to verify root changes
       const mspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BucketFileDeletionCompleted,
+        userApi.events.fileSystem.BucketFileDeletionsCompleted,
         deletionResult.events
       );
       const bspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BspFileDeletionCompleted,
+        userApi.events.fileSystem.BspFileDeletionsCompleted,
         deletionResult.events
       );
 
@@ -559,9 +558,9 @@ await describeMspNet(
 
       await waitForIndexing(userApi, false);
 
-      // Verify TWO delete_file extrinsics are submitted (one for BSP and one for MSP)
+      // Verify TWO delete_files extrinsics are submitted (one for BSP and one for MSP)
       await userApi.assert.extrinsicPresent({
-        method: "deleteFile",
+        method: "deleteFiles",
         module: "fileSystem",
         checkTxPool: true,
         assertLength: 2,
@@ -575,18 +574,18 @@ await describeMspNet(
       assertEventPresent(
         userApi,
         "fileSystem",
-        "BucketFileDeletionCompleted",
+        "BucketFileDeletionsCompleted",
         deletionResult.events
       );
-      assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", deletionResult.events);
+      assertEventPresent(userApi, "fileSystem", "BspFileDeletionsCompleted", deletionResult.events);
 
       // Extract deletion events to verify root changes
       const mspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BucketFileDeletionCompleted,
+        userApi.events.fileSystem.BucketFileDeletionsCompleted,
         deletionResult.events
       );
       const bspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BspFileDeletionCompleted,
+        userApi.events.fileSystem.BspFileDeletionsCompleted,
         deletionResult.events
       );
 
@@ -724,7 +723,7 @@ await describeMspNet(
 
       // Verify 2 delete extrinsics are submitted (bucket and BSP)
       await userApi.assert.extrinsicPresent({
-        method: "deleteFileForIncompleteStorageRequest",
+        method: "deleteFilesForIncompleteStorageRequest",
         module: "fileSystem",
         checkTxPool: true,
         assertLength: 2,
@@ -734,21 +733,22 @@ await describeMspNet(
       // Seal block to process the extrinsics
       const deletionResult = await userApi.block.seal();
 
-      // Verify FileDeletedFromIncompleteStorageRequest events
-      assertEventMany(
+      // Verify both deletion completion events
+      assertEventPresent(
         userApi,
         "fileSystem",
-        "FileDeletedFromIncompleteStorageRequest",
+        "BucketFileDeletionsCompleted",
         deletionResult.events
       );
+      assertEventPresent(userApi, "fileSystem", "BspFileDeletionsCompleted", deletionResult.events);
 
       // Extract deletion events to verify root changes
       const mspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BucketFileDeletionCompleted,
+        userApi.events.fileSystem.BucketFileDeletionsCompleted,
         deletionResult.events
       );
       const bspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BspFileDeletionCompleted,
+        userApi.events.fileSystem.BspFileDeletionsCompleted,
         deletionResult.events
       );
 
