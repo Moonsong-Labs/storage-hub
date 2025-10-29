@@ -409,7 +409,7 @@ impl MspService {
 
         match file_status {
             GetFileFromFileStorageResult::FileNotFound => {
-                Err(Error::BadRequest("File not found".to_string()))
+                Err(Error::NotFound("File not found".to_string()))
             }
             GetFileFromFileStorageResult::FileFoundWithInconsistency(_inconsistent_metadata) => {
                 Err(Error::BadRequest(
