@@ -368,7 +368,7 @@ mod tests {
     use super::*;
     use crate::{
         data::indexer_db::{
-            repository::{error::RepositoryError, postgres::Repository, IndexerOpsMut},
+            repository::{postgres::Repository, IndexerOpsMut},
             test_helpers::{
                 setup_test_db,
                 snapshot_move_bucket::{
@@ -480,19 +480,10 @@ mod tests {
         );
 
         // Check for specific "not found" database error
-        let err = result.unwrap_err();
-        match err {
-            RepositoryError::Database(db_err) => {
-                // Check that the error message indicates the item was not found
-                let error_string = db_err.to_string();
-                assert!(
-                    error_string.contains("not found") || error_string.contains("No rows returned"),
-                    "Expected 'not found' error, got: {}",
-                    error_string
-                );
-            }
-            _ => panic!("Expected Database error for not found, got: {:?}", err),
-        }
+        assert!(
+            result.unwrap_err().is_not_found(),
+            "Expected not found error"
+        );
     }
 
     #[tokio::test]
@@ -1023,20 +1014,10 @@ mod tests {
             "Should return an error for non-existent file"
         );
 
-        // Check for specific "not found" database error
-        let err = result.unwrap_err();
-        match err {
-            RepositoryError::Database(db_err) => {
-                // Check that the error message indicates the item was not found
-                let error_string = db_err.to_string();
-                assert!(
-                    error_string.contains("not found") || error_string.contains("No rows returned"),
-                    "Expected 'not found' error, got: {}",
-                    error_string
-                );
-            }
-            _ => panic!("Expected Database error for not found, got: {:?}", err),
-        }
+        assert!(
+            result.unwrap_err().is_not_found(),
+            "Expected not found error"
+        );
     }
 
     #[tokio::test]
