@@ -119,19 +119,10 @@ impl RpcConnection for WsConnection {
             // Try a simple ping-like operation to check connection health
             // We'll use system_health as it's a common RPC method
             // Use rpc_params! macro for empty params
-            let health_check = client
+            client
                 .request::<serde_json::Value, _>("system_health", jsonrpsee::rpc_params![])
                 .await
-                .is_ok();
-
-            // If health check failed we probably aren't connected correctly
-            // Drop the client to avoid remaking this check unnecessarily
-            if !health_check {
-                std::mem::drop(client_guard);
-                self.client.write().await.take();
-            }
-
-            health_check
+                .is_ok()
         } else {
             false
         }
