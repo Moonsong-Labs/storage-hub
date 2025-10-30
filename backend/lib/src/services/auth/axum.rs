@@ -35,6 +35,16 @@ enum AuthenticationResult {
 }
 
 impl User {
+    /// Will return a string usable to identify the user for the session
+    ///
+    /// WARNING: Do not use for identify verification
+    pub fn id(&self) -> &String {
+        match self {
+            User::Authenticated { address } => &address,
+            User::Unauthenticated { id } => &id,
+        }
+    }
+
     /// Will return the authenticated user address or error if the user is unauthenticated
     pub fn address(&self) -> Result<&String, Error> {
         match self {
