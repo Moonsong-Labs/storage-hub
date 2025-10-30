@@ -525,7 +525,12 @@ where
         Runtime::Extension,
     > {
         let function = function.into();
+        let current_block_hash = client.info().best_hash;
         let current_block = client.info().best_number.saturated_into();
+        let genesis_block = client
+            .hash(0)
+            .expect("Failed to get genesis block hash, always present; qed")
+            .expect("Genesis block hash should never not be on-chain; qed");
         let period = BlockHashCount::get()
             .checked_next_power_of_two()
             .map(|c| c / 2)
@@ -534,13 +539,13 @@ where
         let minimal_extra =
             MinimalExtension::new(generic::Era::mortal(period, current_block), nonce, tip);
         let extra: Runtime::Extension = Runtime::Extension::from_minimal_extension(minimal_extra);
+        let implicit =
+            <Runtime::Extension as ExtensionOperations<Runtime::Call, Runtime>>::implicit(
+                genesis_block,
+                current_block_hash,
+            );
 
-        let raw_payload = SignedPayload::new(function.clone(), extra.clone())
-            .map_err(|e| {
-                error!(target: LOG_TARGET, "Failed to create signed payload: {:?}", e);
-                e
-            })
-            .expect("Creating a signed payload should always work. Implicit data should always be available.");
+        let raw_payload = SignedPayload::from_raw(function.clone(), extra.clone(), implicit);
 
         let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
 
@@ -614,12 +619,9 @@ where
         // Each event record is composed of the `phase`, `event` and `topics` fields.
         // We are interested in those events whose `phase` is equal to `ApplyExtrinsic` with the index of the extrinsic.
         // For more information see: https://polkadot.js.org/docs/api/cookbook/blocks/#how-do-i-map-extrinsics-to-their-events
-        let extrinsic_index_u32: u32 = extrinsic_index
-            .try_into()
-            .expect("Extrinsic index should always be a valid u32; qed");
         let events = events_in_block
             .into_iter()
-            .filter(|ev| ev.phase == frame_system::Phase::ApplyExtrinsic(extrinsic_index_u32))
+            .filter(|ev| ev.phase == frame_system::Phase::ApplyExtrinsic(extrinsic_index as u32))
             .collect();
 
         // Construct the extrinsic.
