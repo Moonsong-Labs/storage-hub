@@ -38,6 +38,8 @@ git diff --stat 05d269a26d11c1ed8a6d917b3e08ff3b5d3d4b22..HEAD
   - Check `/client/indexer-db/migrations` for new migrations AND cross-check code changes in `client/indexer-db` in case any migration was missed.
 - Runtime
   - Document runtime `spec_version`, any storage migrations, and constant changes.
+- Pallets
+  - Check changes in `/pallets` directory. Pay special attention to changes in runtime constants and storage migrations.
 
 4. Fill release notes
 
@@ -45,22 +47,22 @@ git diff --stat 05d269a26d11c1ed8a6d917b3e08ff3b5d3d4b22..HEAD
 
 5. Publish the release via GitHub UI
 
-- Go to: GitHub → Releases → Draft a new release.
-- Target: `release/v0.1`.
-- Tag: `v0.1.0` (create new tag on publish).
-- Title: `StorageHub v0.1.0`.
-- Body: Paste `RELEASE_NOTES_v0.1.0.md` contents.
+- Go to: GitHub → `storage-hub` repository → Create new release.
+- Target: `release/vX.Y`.
+- Tag: `vX.Y.Z` (create new tag on publish).
+- Title: `StorageHub vX.Y.Z`.
+- Body: Paste `RELEASE_NOTES_vX.Y.Z.md` contents.
 - Publish release.
 
 Notes:
 
 - Publishing a release triggers the CI workflow `.github/workflows/release-publish.yml` to:
-  - Build and push the SH Backend Docker image to GHCR with the tag (e.g., `v0.1.0`).
+  - Build and push the SH Backend Docker image to DockerHub with the tag (e.g., `vX.Y.Z`).
   - Build and publish npm packages for `sdk/`, `api-augment/`, and `types-bundle/`.
 
 6. After the release
 
-- If needed, cherry-pick hotfixes to `release/v0.1` and repeat (tag `v0.1.1`, etc.).
+- If needed, cherry-pick hotfixes to `release/vX.Y` and repeat (tag `vX.Y.Z`, etc.).
 
 ### Compatibility Matrix (to include in notes)
 

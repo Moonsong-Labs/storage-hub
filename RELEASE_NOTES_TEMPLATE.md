@@ -73,10 +73,6 @@ Base: <commit or tag>
 
 - Polkadot SDK: ...
 - Rust: ...
-- Node/TS package versions:
-  - sdk: X.Y.Z
-  - types-bundle: X.Y.Z
-  - api-augment: X.Y.Z
 
 ## Compatibility
 
