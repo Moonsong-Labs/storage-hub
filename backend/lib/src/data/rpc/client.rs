@@ -6,7 +6,9 @@ use jsonrpsee::core::traits::ToRpcParams;
 use serde::de::DeserializeOwned;
 use tracing::debug;
 
-use shc_rpc::{GetValuePropositionsResult, RpcProviderId, SaveFileToDisk};
+use shc_rpc::{
+    GetFileFromFileStorageResult, GetValuePropositionsResult, RpcProviderId, SaveFileToDisk,
+};
 
 use crate::data::rpc::{connection::error::RpcResult, methods, AnyRpcConnection, RpcConnection};
 
@@ -61,6 +63,25 @@ impl StorageHubRpcClient {
 
         self.connection
             .call(methods::FILE_KEY_EXPECTED, jsonrpsee::rpc_params![file_key])
+            .await
+    }
+
+    /// Checks the status of a file in MSP storage by its file key.
+    ///
+    /// # Returns
+    /// - `FileNotFound`: File does not exist in storage
+    /// - `FileFound`: File exists and is complete
+    /// - `IncompleteFile`: File exists but is missing chunks
+    /// - `FileFoundWithInconsistency`: File exists but has data integrity issues
+    pub async fn is_file_in_file_storage(
+        &self,
+        file_key: &str,
+    ) -> RpcResult<GetFileFromFileStorageResult> {
+        self.connection
+            .call(
+                methods::IS_FILE_IN_FILE_STORAGE,
+                jsonrpsee::rpc_params![file_key],
+            )
             .await
     }
 
@@ -294,5 +315,20 @@ mod tests {
             .expect("should be able to retrieve multiaddresses");
 
         assert!(response.len() > 0, "should have at least 1 multiaddress");
+    }
+
+    #[tokio::test]
+    async fn is_file_in_file_storage() {
+        let client = mock_rpc();
+
+        let response = client
+            .is_file_in_file_storage(&hex::encode(random_bytes_32()))
+            .await
+            .expect("should be able to upload file");
+
+        assert!(
+            matches!(response, GetFileFromFileStorageResult::FileFound(_)),
+            "should be successfull"
+        );
     }
 }
