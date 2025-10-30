@@ -784,7 +784,7 @@ export class BspNetTestApi implements AsyncDisposable {
        * where fisherman might be on the wrong cycle when deletions are created.
        *
        * If `expectExt` is provided, this function will verify that the expected
-       * number of extrinsics are present in the transaction pool before returning,
+       * number of extrinsics (BSP + bucket) are present in the transaction pool before returning,
        * preventing a race condition where blocks are sealed before verification.
        *
        * If `sealBlock` is true, a block will be sealed after verifying extrinsics.
@@ -792,14 +792,56 @@ export class BspNetTestApi implements AsyncDisposable {
        *
        * @param options - Options object
        * @param options.deletionType - Either "User" or "Incomplete" to determine which deletion cycle to wait for
-       * @param options.expectExt - Optional. The number of expected extrinsics to verify in the transaction pool
+       * @param options.expectExt - Optional. Total expected extrinsics (BSP + bucket) to verify in the transaction pool
        * @param options.sealBlock - Optional. Whether to seal a block after verifying extrinsics. Defaults to false.
        */
       waitForBatchDeletions: (options: {
         deletionType: "User" | "Incomplete";
         expectExt?: number;
         sealBlock?: boolean;
-      }) => BspNetFisherman.waitForFishermanBatchDeletions({ api: this._api as any, ...options })
+      }) => BspNetFisherman.waitForFishermanBatchDeletions({ api: this._api as any, ...options }),
+
+      /**
+       * Verifies BSP deletion results from a batch deletion operation.
+       *
+       * This function verifies:
+       * 1. The expected number of BSP deletion events are present
+       * 2. The BSP forest root has changed (oldRoot !== newRoot)
+       * 3. The current BSP forest root matches the newRoot from the deletion event
+       *
+       * @param options - Verification options
+       * @param options.userApi - The enriched BSP API for assertions and event fetching
+       * @param options.bspApi - The BSP API instance for forest root verification
+       * @param options.events - Events array from the sealed block
+       * @param options.expectedCount - Expected number of BSP deletion events. Defaults to 1.
+       */
+      verifyBspDeletionResults: (options: {
+        userApi: any;
+        bspApi: any;
+        events: any[];
+        expectedCount?: number;
+      }) => BspNetFisherman.verifyBspDeletionResults(options),
+
+      /**
+       * Verifies bucket deletion results from a batch deletion operation.
+       *
+       * This function verifies:
+       * 1. The expected number of bucket deletion events are present
+       * 2. For each bucket, the forest root has changed (oldRoot !== newRoot)
+       * 3. For each bucket, the current forest root matches the newRoot from the deletion event
+       *
+       * @param options - Verification options
+       * @param options.userApi - The enriched BSP API for assertions and event fetching
+       * @param options.mspApi - The MSP API instance for bucket forest root verification
+       * @param options.events - Events array from the sealed block
+       * @param options.expectedCount - Expected number of bucket deletion events
+       */
+      verifyBucketDeletionResults: (options: {
+        userApi: any;
+        mspApi: any;
+        events: any[];
+        expectedCount: number;
+      }) => BspNetFisherman.verifyBucketDeletionResults(options)
     };
 
     return Object.assign(this._api, {

@@ -1,4 +1,4 @@
-import assert, { strictEqual, notEqual } from "node:assert";
+import assert from "node:assert";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
 import {
@@ -315,83 +315,27 @@ await describeMspNet(
       // Wait for fisherman to process user deletions and verify extrinsics are in tx pool
       const deletionResult = await userApi.fisherman.waitForBatchDeletions({
         deletionType: "User",
-        expectExt: 4, // 1 BSP + 3 Buckets
+        expectExt: 4,
         sealBlock: true // Seal and return events for verification
       });
 
       assert(deletionResult, "Deletion result should be defined when sealBlock is true");
 
-      // Verify BSP deletion event (should be exactly 1)
-      const bspDeletionEvents = await userApi.assert.eventMany(
-        "fileSystem",
-        "BspFileDeletionsCompleted",
-        deletionResult.events
-      );
-      assert.equal(
-        bspDeletionEvents.length,
-        1,
-        "Should have exactly 1 BSP deletion event (batches all 6 files)"
-      );
-
-      // Verify bucket deletion events (should be exactly 3)
-      const bucketDeletionEvents = await userApi.assert.eventMany(
-        "fileSystem",
-        "BucketFileDeletionsCompleted",
-        deletionResult.events
-      );
-      assert.equal(
-        bucketDeletionEvents.length,
-        3,
-        "Should have exactly 3 bucket deletion events (one per bucket with 2 files each)"
-      );
-
-      // Verify BSP root changed
-      const bspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BspFileDeletionsCompleted,
-        deletionResult.events
-      );
-
-      await waitFor({
-        lambda: async () => {
-          notEqual(
-            bspDeletionEvent.data.oldRoot.toString(),
-            bspDeletionEvent.data.newRoot.toString(),
-            "BSP forest root should have changed after file deletion"
-          );
-          const currentBspRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
-          strictEqual(
-            currentBspRoot.toString(),
-            bspDeletionEvent.data.newRoot.toString(),
-            "Current BSP forest root should match the new root from deletion event"
-          );
-          return true;
-        }
+      // Verify BSP deletions
+      await userApi.fisherman.verifyBspDeletionResults({
+        userApi,
+        bspApi,
+        events: deletionResult.events,
+        expectedCount: 1
       });
 
-      // Verify MSP roots changed for all 3 buckets
-      for (const bucketDeletionRecord of bucketDeletionEvents) {
-        const bucketDeletionEvent = bucketDeletionRecord.event;
-        if (userApi.events.fileSystem.BucketFileDeletionsCompleted.is(bucketDeletionEvent)) {
-          await waitFor({
-            lambda: async () => {
-              notEqual(
-                bucketDeletionEvent.data.oldRoot.toString(),
-                bucketDeletionEvent.data.newRoot.toString(),
-                "MSP forest root should have changed after file deletion"
-              );
-              const currentBucketRoot = await msp1Api.rpc.storagehubclient.getForestRoot(
-                bucketDeletionEvent.data.bucketId.toString()
-              );
-              strictEqual(
-                currentBucketRoot.toString(),
-                bucketDeletionEvent.data.newRoot.toString(),
-                "Current bucket forest root should match the new root from deletion event"
-              );
-              return true;
-            }
-          });
-        }
-      }
+      // Verify bucket deletions
+      await userApi.fisherman.verifyBucketDeletionResults({
+        userApi,
+        mspApi: msp1Api,
+        events: deletionResult.events,
+        expectedCount: 3
+      });
     });
 
     it("batches incomplete storage request deletions across multiple buckets with parallel BSP and bucket processing", async () => {
@@ -595,83 +539,27 @@ await describeMspNet(
       // Wait for fisherman to process incomplete storage deletions and verify extrinsics are in tx pool
       const deletionResult = await userApi.fisherman.waitForBatchDeletions({
         deletionType: "Incomplete",
-        expectExt: 4, // 1 BSP + 3 Buckets
+        expectExt: 4,
         sealBlock: true // Seal and return events for verification
       });
 
       assert(deletionResult, "Deletion result should be defined when sealBlock is true");
 
-      // Verify BSP deletion event (should be exactly 1)
-      const bspDeletionEvents = await userApi.assert.eventMany(
-        "fileSystem",
-        "BspFileDeletionsCompleted",
-        deletionResult.events
-      );
-      assert.equal(
-        bspDeletionEvents.length,
-        1,
-        "Should have exactly 1 BSP deletion event (batches all 6 files)"
-      );
-
-      // Verify bucket deletion events (should be exactly 3)
-      const bucketDeletionEvents = await userApi.assert.eventMany(
-        "fileSystem",
-        "BucketFileDeletionsCompleted",
-        deletionResult.events
-      );
-      assert.equal(
-        bucketDeletionEvents.length,
-        3,
-        "Should have exactly 3 bucket deletion events (one per bucket with 2 files each)"
-      );
-
-      // Verify BSP root changed
-      const bspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BspFileDeletionsCompleted,
-        deletionResult.events
-      );
-
-      await waitFor({
-        lambda: async () => {
-          notEqual(
-            bspDeletionEvent.data.oldRoot.toString(),
-            bspDeletionEvent.data.newRoot.toString(),
-            "BSP forest root should have changed after file deletion"
-          );
-          const currentBspRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
-          strictEqual(
-            currentBspRoot.toString(),
-            bspDeletionEvent.data.newRoot.toString(),
-            "Current BSP forest root should match the new root from deletion event"
-          );
-          return true;
-        }
+      // Verify BSP deletions
+      await userApi.fisherman.verifyBspDeletionResults({
+        userApi,
+        bspApi,
+        events: deletionResult.events,
+        expectedCount: 1
       });
 
-      // Verify MSP roots changed for all 3 buckets
-      for (const bucketDeletionRecord of bucketDeletionEvents) {
-        const bucketDeletionEvent = bucketDeletionRecord.event;
-        if (userApi.events.fileSystem.BucketFileDeletionsCompleted.is(bucketDeletionEvent)) {
-          await waitFor({
-            lambda: async () => {
-              notEqual(
-                bucketDeletionEvent.data.oldRoot.toString(),
-                bucketDeletionEvent.data.newRoot.toString(),
-                "MSP forest root should have changed after file deletion"
-              );
-              const currentBucketRoot = await msp1Api.rpc.storagehubclient.getForestRoot(
-                bucketDeletionEvent.data.bucketId.toString()
-              );
-              strictEqual(
-                currentBucketRoot.toString(),
-                bucketDeletionEvent.data.newRoot.toString(),
-                "Current bucket forest root should match the new root from deletion event"
-              );
-              return true;
-            }
-          });
-        }
-      }
+      // Verify bucket deletions
+      await userApi.fisherman.verifyBucketDeletionResults({
+        userApi,
+        mspApi: msp1Api,
+        events: deletionResult.events,
+        expectedCount: 3
+      });
 
       // Always resume MSP container
       await userApi.docker.resumeContainer({

@@ -1,4 +1,4 @@
-import assert, { notEqual, strictEqual } from "node:assert";
+import assert from "node:assert";
 import type { H256 } from "@polkadot/types/interfaces";
 import {
   describeMspNet,
@@ -260,38 +260,20 @@ await describeMspNet(
       });
 
       // Wait for fisherman to process incomplete storage deletions and verify extrinsics are in tx pool
-      await userApi.fisherman.waitForBatchDeletions({
+      const deletionResult = await userApi.fisherman.waitForBatchDeletions({
         deletionType: "Incomplete",
         expectExt: 1, // 1 BSP only (MSP paused)
-        sealBlock: false // Seal manually to capture events
+        sealBlock: true // Seal and return events for verification
       });
 
-      // Seal block to process the extrinsic
-      const deletionResult = await userApi.block.seal();
+      assert(deletionResult, "Deletion result should be defined when sealBlock is true");
 
-      const {
-        data: { oldRoot, newRoot }
-      } = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BspFileDeletionsCompleted,
-        deletionResult.events
-      );
-
-      // Verify BSP root changed
-      await waitFor({
-        lambda: async () => {
-          notEqual(
-            oldRoot.toString(),
-            newRoot.toString(),
-            "BSP forest root should have changed after file deletion"
-          );
-          const currentBspRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
-          strictEqual(
-            currentBspRoot.toString(),
-            newRoot.toString(),
-            "Current BSP forest root should match the new root from deletion event"
-          );
-          return true;
-        }
+      // Verify BSP deletions
+      await userApi.fisherman.verifyBspDeletionResults({
+        userApi,
+        bspApi,
+        events: deletionResult.events,
+        expectedCount: 1
       });
 
       await userApi.docker.resumeContainer({
