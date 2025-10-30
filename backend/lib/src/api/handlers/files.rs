@@ -119,7 +119,7 @@ pub async fn download_by_key(
     let file_metadata = services.msp.check_file_status(&file_key).await?;
 
     // Verify user has access to the requested file
-    let file_info = services.msp.get_file_info(&address, &file_key)?;
+    let file_info = services.msp.get_file_info(&address, &file_key).await?;
 
     // Generate a unique session ID for the download session
     let session_id = Uuid::now_v7().to_string();

@@ -67,8 +67,6 @@ mod tests {
     use crate::services::health::HealthService;
     use axum::http::StatusCode;
     use axum_test::TestServer;
-    use shc_indexer_db::OnchainMspId;
-    use shp_types::Hash;
 
     #[tokio::test]
     async fn test_health_route() {

@@ -414,7 +414,7 @@ impl MspService {
         session_id: &str,
         file: FileInfo,
     ) -> Result<FileDownloadResult, Error> {
-        let file_key = file.file_key;
+        let file_key = &file.file_key;
         debug!(target: "msp_service::get_file_from_key", file_key = %file_key, "Downloading file by key");
 
         // TODO(AUTH): Add MSP Node authentication credentials
@@ -422,13 +422,13 @@ impl MspService {
         // the client connecting to it is the MSP Node
         let upload_url = format!(
             "{}/internal/uploads/{}/{}",
-            self.msp_callback_url, session_id, file_key
+            self.msp_config.callback_url, session_id, file_key
         );
 
         // Make the RPC call to download file and get metadata
         let rpc_response: SaveFileToDisk = self
             .rpc
-            .save_file_to_disk(&file.file_key, upload_url.as_str())
+            .save_file_to_disk(&file_key, upload_url.as_str())
             .await
             .map_err(|e| {
                 Error::BadRequest(format!("Failed to save file to disk via RPC: {}", e))
