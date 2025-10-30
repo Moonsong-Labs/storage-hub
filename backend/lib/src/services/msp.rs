@@ -13,7 +13,9 @@ use shc_common::types::{
     BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE, FILE_CHUNK_SIZE,
 };
 use shc_file_manager::{in_memory::InMemoryFileDataTrie, traits::FileDataTrie};
-use shc_rpc::{GetValuePropositionsResult, RpcProviderId, SaveFileToDisk};
+use shc_rpc::{
+    GetFileFromFileStorageResult, GetValuePropositionsResult, RpcProviderId, SaveFileToDisk,
+};
 use sp_core::{Blake2Hasher, H256};
 use tracing::{debug, warn};
 
@@ -42,8 +44,6 @@ pub struct FileDownloadResult {
     pub file_size: u64,
     pub location: String,
     pub fingerprint: [u8; 32],
-    /// Local filesystem path where the file is stored
-    pub temp_path: String,
 }
 
 /// Service for handling MSP-related operations
@@ -365,6 +365,44 @@ impl MspService {
         Ok(PaymentStreamsResponse { streams })
     }
 
+    /// Calls is_file_in_file_storage RPC method from the MSP substrate node
+    /// to get file metadata if present.
+    ///
+    /// Returns successfully only if the file is present and fully stored in
+    /// the MSP node (i.e. all chunks of the file are present).
+    /// Returns error in any other case, with descriptive message.
+    ///
+    /// ```ignore
+    /// pub enum GetFileFromFileStorageResult {
+    ///     FileNotFound, // returns Error
+    ///     IncompleteFile(IncompleteFileStatus), // returns Error
+    ///     FileFound(FileMetadata), // returns Ok
+    ///     FileFoundWithInconsistency(FileMetadata), // returns Error
+    /// }
+    /// ```
+    pub async fn check_file_status(&self, file_key: &str) -> Result<FileMetadata, Error> {
+        let file_status: GetFileFromFileStorageResult = self
+            .rpc
+            .is_file_in_file_storage(file_key)
+            .await
+            .map_err(|e| Error::BadRequest(e.to_string()))?;
+
+        match file_status {
+            GetFileFromFileStorageResult::FileNotFound => {
+                Err(Error::NotFound("File not found".to_string()))
+            }
+            GetFileFromFileStorageResult::FileFoundWithInconsistency(_inconsistent_metadata) => {
+                Err(Error::BadRequest(
+                    "File found with inconsistency".to_string(),
+                ))
+            }
+            GetFileFromFileStorageResult::IncompleteFile(_status) => {
+                Err(Error::BadRequest("File is incomplete".to_string()))
+            }
+            GetFileFromFileStorageResult::FileFound(metadata) => Ok(metadata),
+        }
+    }
+
     /// Download a file by `file_key` via the MSP RPC into `/tmp/uploads/<file_key>` and
     /// return its size, UTF-8 location, fingerprint, and temp path.
     /// Returns BadRequest on RPC/parse errors.
@@ -376,6 +414,7 @@ impl MspService {
     pub async fn get_file_from_key(
         &self,
         user: &Address,
+        session_id: &str,
         file_key: &str,
     ) -> Result<FileDownloadResult, Error> {
         debug!(target: "msp_service::get_file_from_key", file_key = %file_key, "Downloading file by key");
@@ -383,15 +422,12 @@ impl MspService {
         // Retrieve file info, this will also authenticate the user
         let file = self.get_file_info(user, file_key).await?;
 
-        // Create temp url for download
-        let temp_path = format!("/tmp/uploads/{}", file.file_key);
-
         // TODO(AUTH): Add MSP Node authentication credentials
         // Currently this internal endpoint doesn't authenticate that
         // the client connecting to it is the MSP Node
         let upload_url = format!(
-            "{}/internal/uploads/{}",
-            self.msp_config.callback_url, file.file_key
+            "{}/internal/uploads/{}/{}",
+            self.msp_callback_url, session_id, file_key
         );
 
         // Make the RPC call to download file and get metadata
@@ -446,7 +482,6 @@ impl MspService {
                     file_size: file.size,
                     location: file.location,
                     fingerprint: file.fingerprint,
-                    temp_path,
                 })
                 // }
             }

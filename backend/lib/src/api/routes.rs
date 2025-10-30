@@ -21,7 +21,7 @@ pub fn routes(services: Services) -> Router {
 
     let internal_file_upload = Router::new()
         .route(
-            "/internal/uploads/{file_key}",
+            "/internal/uploads/{session_id}/{file_key}",
             put(handlers::files::internal_upload_by_key),
         )
         .route_layer(DefaultBodyLimit::disable());
@@ -64,19 +64,7 @@ pub fn routes(services: Services) -> Router {
 
 #[cfg(all(test, feature = "mocks"))]
 mod tests {
-    use crate::{
-        api::create_app,
-        constants::{
-            mocks::{DOWNLOAD_FILE_CONTENT, MOCK_ADDRESS},
-            rpc::DUMMY_MSP_ID,
-            test::{bucket::DEFAULT_BUCKET_NAME, file::DEFAULT_FINGERPRINT},
-        },
-        services::{health::HealthService, Services},
-        test_utils::random_bytes_32,
-    };
-
-    use std::path::Path;
-
+    use crate::services::health::HealthService;
     use axum::http::StatusCode;
     use axum_test::TestServer;
     use shc_indexer_db::OnchainMspId;
@@ -92,69 +80,5 @@ mod tests {
 
         let json: serde_json::Value = response.json();
         assert_eq!(json["status"], HealthService::HEALTHY);
-    }
-
-    #[tokio::test]
-    async fn test_download_by_key_streams_and_cleans_temp() {
-        // setup file and bucket to satisfy backend checks
-        let services = Services::mocks().await;
-        let file_key = {
-            let client = &services.postgres;
-
-            // Create MSP with the ID that matches the default config
-            let msp = client
-                .create_msp(
-                    &MOCK_ADDRESS.to_string(),
-                    OnchainMspId::new(Hash::from_slice(&DUMMY_MSP_ID)),
-                )
-                .await
-                .expect("should create MSP");
-
-            // Create a test bucket for the mock user
-            let bucket_onchain_id = random_bytes_32();
-            let bucket = client
-                .create_bucket(
-                    &MOCK_ADDRESS.to_string(),
-                    Some(msp.id),
-                    DEFAULT_BUCKET_NAME.as_bytes(),
-                    &bucket_onchain_id,
-                    false,
-                )
-                .await
-                .expect("should create bucket");
-
-            // Create a test file for the mock user in the test bucket
-            let file_key = random_bytes_32();
-            let file = client
-                .create_file(
-                    MOCK_ADDRESS.to_string().as_bytes(),
-                    file_key.as_slice(),
-                    bucket.id,
-                    &bucket_onchain_id,
-                    hex::encode(file_key).as_bytes(), // RPC mock response has location as file key
-                    DEFAULT_FINGERPRINT,
-                    DOWNLOAD_FILE_CONTENT.as_bytes().len() as i64,
-                )
-                .await
-                .expect("should create file");
-
-            hex::encode(file.file_key)
-        };
-
-        let app = create_app(services);
-        let server = TestServer::new(app).unwrap();
-
-        let temp_path = format!("/tmp/uploads/{}", file_key);
-
-        let response = server.get(&format!("/download/{}", file_key)).await;
-
-        assert_eq!(response.status_code(), StatusCode::OK);
-
-        // Assert: body bytes match the mocked content written by RPC mock
-        let body = response.as_bytes();
-        assert_eq!(body.as_ref(), DOWNLOAD_FILE_CONTENT.as_bytes());
-
-        // Assert: temp file was removed
-        assert!(!Path::new(&temp_path).exists());
     }
 }
