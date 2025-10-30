@@ -79,7 +79,7 @@ await describeMspNet(
       // Set up the FileManager instance for the file to manipulate
       const testFilePath = fileURLToPath(
         new URL("../../../../docker/resource/adolphus.jpg", import.meta.url)
-      ).pathname;
+      );
       const testFileSize = statSync(testFilePath).size;
       fileManager = new FileManager({
         size: testFileSize,
