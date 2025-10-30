@@ -1,0 +1,17 @@
+{
+  "name": "@storage-hub/scripts",
+  "private": true,
+  "type": "module",
+  "license": "ISC",
+  "scripts": {
+    "migrate:rocksdb": "tsx ./migrate_rocksdb.ts",
+    "migrate:rocksdb:dry": "tsx ./migrate_rocksdb.ts --dry-run",
+    "migrate:forests": "tsx ./migrate_forests.ts",
+    "migrate:forests:dry": "tsx ./migrate_forests.ts --dry-run"
+  },
+  "devDependencies": {
+    "@napi-rs/rocksdb": "^0.11.0",
+    "tsx": "^4.19.0",
+    "typescript": "5.9.2"
+  }
+}
