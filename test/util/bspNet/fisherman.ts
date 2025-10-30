@@ -1,3 +1,6 @@
+import { strictEqual, notEqual } from "node:assert";
+import { waitFor } from "./waits";
+
 /**
  * Options for verifyBspDeletionResults
  */
@@ -67,9 +70,6 @@ export const verifyBspDeletionResults = async (
 ): Promise<void> => {
   const { userApi, bspApi, events, expectedCount = 1 } = options;
 
-  // Import assert dynamically to avoid top-level import issues
-  const { strictEqual, notEqual } = await import("node:assert");
-
   // Verify BSP deletion event count
   const bspDeletionEvents = await userApi.assert.eventMany(
     "fileSystem",
@@ -88,29 +88,21 @@ export const verifyBspDeletionResults = async (
     events
   );
 
-  // Use a simple polling mechanism for verification
-  const waitFor = async (lambda: () => Promise<boolean>, timeoutMs = 10000) => {
-    const startTime = Date.now();
-    while (Date.now() - startTime < timeoutMs) {
-      if (await lambda()) return;
-      await new Promise((resolve) => setTimeout(resolve, 100));
+  await waitFor({
+    lambda: async () => {
+      notEqual(
+        bspDeletionEvent.data.oldRoot.toString(),
+        bspDeletionEvent.data.newRoot.toString(),
+        "BSP forest root should have changed after file deletion"
+      );
+      const currentBspRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
+      strictEqual(
+        currentBspRoot.toString(),
+        bspDeletionEvent.data.newRoot.toString(),
+        "Current BSP forest root should match the new root from deletion event"
+      );
+      return true;
     }
-    throw new Error("Timeout waiting for condition");
-  };
-
-  await waitFor(async () => {
-    notEqual(
-      bspDeletionEvent.data.oldRoot.toString(),
-      bspDeletionEvent.data.newRoot.toString(),
-      "BSP forest root should have changed after file deletion"
-    );
-    const currentBspRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
-    strictEqual(
-      currentBspRoot.toString(),
-      bspDeletionEvent.data.newRoot.toString(),
-      "Current BSP forest root should match the new root from deletion event"
-    );
-    return true;
   });
 };
 
@@ -131,9 +123,6 @@ export const verifyBucketDeletionResults = async (
 ): Promise<void> => {
   const { userApi, mspApi, events, expectedCount } = options;
 
-  // Import assert dynamically to avoid top-level import issues
-  const { strictEqual, notEqual } = await import("node:assert");
-
   // Verify bucket deletion event count
   const bucketDeletionEvents = await userApi.assert.eventMany(
     "fileSystem",
@@ -146,35 +135,27 @@ export const verifyBucketDeletionResults = async (
     `Should have exactly ${expectedCount} bucket deletion event(s)`
   );
 
-  // Use a simple polling mechanism for verification
-  const waitFor = async (lambda: () => Promise<boolean>, timeoutMs = 10000) => {
-    const startTime = Date.now();
-    while (Date.now() - startTime < timeoutMs) {
-      if (await lambda()) return;
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    throw new Error("Timeout waiting for condition");
-  };
-
   // Verify MSP roots changed for all buckets
   for (const bucketDeletionRecord of bucketDeletionEvents) {
     const bucketDeletionEvent = bucketDeletionRecord.event;
     if (userApi.events.fileSystem.BucketFileDeletionsCompleted.is(bucketDeletionEvent)) {
-      await waitFor(async () => {
-        notEqual(
-          bucketDeletionEvent.data.oldRoot.toString(),
-          bucketDeletionEvent.data.newRoot.toString(),
-          "MSP forest root should have changed after file deletion"
-        );
-        const currentBucketRoot = await mspApi.rpc.storagehubclient.getForestRoot(
-          bucketDeletionEvent.data.bucketId.toString()
-        );
-        strictEqual(
-          currentBucketRoot.toString(),
-          bucketDeletionEvent.data.newRoot.toString(),
-          "Current bucket forest root should match the new root from deletion event"
-        );
-        return true;
+      await waitFor({
+        lambda: async () => {
+          notEqual(
+            bucketDeletionEvent.data.oldRoot.toString(),
+            bucketDeletionEvent.data.newRoot.toString(),
+            "MSP forest root should have changed after file deletion"
+          );
+          const currentBucketRoot = await mspApi.rpc.storagehubclient.getForestRoot(
+            bucketDeletionEvent.data.bucketId.toString()
+          );
+          strictEqual(
+            currentBucketRoot.toString(),
+            bucketDeletionEvent.data.newRoot.toString(),
+            "Current bucket forest root should match the new root from deletion event"
+          );
+          return true;
+        }
       });
     }
   }

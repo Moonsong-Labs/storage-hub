@@ -162,6 +162,8 @@ where
         let file_complete = match self.handle_remote_upload_request_event(event.clone()).await {
             Ok(complete) => complete,
             Err(e) => {
+                error!(target: LOG_TARGET, "Failed to handle remote upload request: {:?}", e);
+
                 // Send error response through FileTransferService
                 if let Err(e) = self
                     .storage_hub_handler
@@ -739,9 +741,12 @@ where
         event: RemoteUploadRequest<Runtime>,
     ) -> anyhow::Result<bool> {
         let file_key = event.file_key.into();
+
+        trace!(target: LOG_TARGET, "Waiting to acquire write lock on file storage for file key {:?}", file_key);
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
 
         // Get the file metadata to verify the fingerprint
+        trace!(target: LOG_TARGET, "Acquired write lock on file storage for file key {:?}", file_key);
         let file_metadata = write_file_storage
             .get_metadata(&file_key)
             .map_err(|e| anyhow!("Failed to get file metadata: {:?}", e))?
@@ -874,7 +879,8 @@ where
                     | FileStorageWriteError::FailedToUpdatePartialRoot
                     | FileStorageWriteError::FailedToParsePartialRoot
                     | FileStorageWriteError::FailedToGetStoredChunksCount
-                    | FileStorageWriteError::ChunkCountOverflow => {
+                    | FileStorageWriteError::ChunkCountOverflow
+                    | FileStorageWriteError::FailedToCheckFileCompletion(_) => {
                         return Err(anyhow::anyhow!(format!(
                             "Internal trie read/write error {:?}:{:?}",
                             event.file_key, chunk.key
