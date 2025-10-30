@@ -809,9 +809,6 @@ where
         }
     }
 
-    // Note: this method could use either the file storage or the forest storage, but it's using the forest storage.
-    // WARNING: Right now, forests don't have the file metadata saved to them, so don't expect to get the file
-    // metadata from this method until that's fixed.
     async fn get_file_metadata(
         &self,
         forest_key: Option<shp_types::Hash>,
