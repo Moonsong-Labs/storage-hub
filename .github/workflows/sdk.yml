@@ -20,7 +20,7 @@ on:
 
 env:
   FORCE_COLOR: 1
-  HEADLESS: 'false'
+  HEADLESS: "false"
 
 jobs:
   setup:
@@ -41,7 +41,7 @@ jobs:
           INPUT_VERSION="${{ github.event.inputs.version }}"
           if [ "$EVENT_NAME" = "release" ]; then
             TAG="${{ github.event.release.tag_name }}"
-            VERSION="${TAG#sdk-v}"
+            VERSION="${VERSION#v}"
           else
             VERSION="$INPUT_VERSION"
           fi
@@ -69,9 +69,9 @@ jobs:
       run:
         working-directory: sdk
     env:
-      SCCACHE_GHA_ENABLED: 'true'
-      RUSTC_WRAPPER: 'sccache'
-      CARGO_INCREMENTAL: '0'
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+      CARGO_INCREMENTAL: "0"
       CARGO_TERM_COLOR: always
     steps:
       - name: Checkout repository
@@ -132,7 +132,6 @@ jobs:
             sdk/core/wasm/pkg
             sdk/msp-client/dist
 
-
   e2e-wallet-metamask:
     needs: [sdk-build-and-test]
     name: E2E Wallet Tests (MetaMask)
@@ -183,11 +182,11 @@ jobs:
     name: E2E Backend Tests (MSP Client)
     runs-on: blacksmith-16vcpu-ubuntu-2404
     env:
-      HEADLESS: 'false'
+      HEADLESS: "false"
       RUST_LOG: info
-      SCCACHE_GHA_ENABLED: 'true'
-      RUSTC_WRAPPER: 'sccache'
-      CARGO_INCREMENTAL: '0'
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+      CARGO_INCREMENTAL: "0"
       CARGO_TERM_COLOR: always
     steps:
       - name: Checkout
@@ -283,7 +282,7 @@ jobs:
       - name: Smoke build
         working-directory: /tmp/hello_world_nextjs
         env:
-          NEXT_TELEMETRY_DISABLED: '1'
+          NEXT_TELEMETRY_DISABLED: "1"
         run: pnpm build
 
   publish:
@@ -339,6 +338,3 @@ jobs:
         run: |
           pnpm pack
           pnpm publish --access public --no-git-checks
-
-
-
