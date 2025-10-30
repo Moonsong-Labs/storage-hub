@@ -25,8 +25,8 @@ use crate::{
     },
     data::storage::BoxedStorage,
     error::Error,
-    models::auth::{JwtClaims, NonceResponse, TokenResponse, User, VerifyResponse},
     services::Services,
+    models::auth::{JwtClaims, NonceResponse, TokenResponse, UserProfile, VerifyResponse},
 };
 
 /// Authentication service for the backend
@@ -237,7 +237,7 @@ impl AuthService {
         // to allow users to logout (invalidate their session)
         Ok(VerifyResponse {
             token,
-            user: User {
+            user: UserProfile {
                 address,
                 ens: MOCK_ENS.to_string(),
             },
@@ -256,10 +256,10 @@ impl AuthService {
     }
 
     /// Retrieve the user profile from the corresponding `JwtClaims`
-    pub async fn profile(&self, user_address: &str) -> Result<User, Error> {
+    pub async fn profile(&self, user_address: &str) -> Result<UserProfile, Error> {
         debug!(target: "auth_service::profile", address = %user_address, "Profile requested");
 
-        Ok(User {
+        Ok(UserProfile {
             address: user_address.to_string(),
             // TODO: retrieve ENS (lookup or cache?)
             ens: MOCK_ENS.to_string(),

@@ -73,7 +73,7 @@ mod tests {
             mocks::MOCK_ADDRESS,
         },
         models::auth::{
-            JwtClaims, NonceRequest, NonceResponse, TokenResponse, User, VerifyRequest,
+            JwtClaims, NonceRequest, NonceResponse, TokenResponse, UserProfile, VerifyRequest,
             VerifyResponse,
         },
         services::Services,
