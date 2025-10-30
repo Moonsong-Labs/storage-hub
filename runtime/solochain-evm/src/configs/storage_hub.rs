@@ -34,6 +34,20 @@ impl ExtensionOperations<crate::RuntimeCall, crate::Runtime> for crate::TxExtens
             frame_metadata_hash_extension::CheckMetadataHash::new(false),
         )
     }
+
+    fn implicit(genesis_block_hash: Self::Hash, current_block_hash: Self::Hash) -> Self::Implicit {
+        (
+            (),
+            crate::VERSION.spec_version,
+            crate::VERSION.transaction_version,
+            genesis_block_hash,
+            current_block_hash,
+            (),
+            (),
+            (),
+            None,
+        )
+    }
 }
 
 // Map the runtime event into the client-facing storage events enum.
