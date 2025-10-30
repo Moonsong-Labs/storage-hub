@@ -38,7 +38,7 @@ jobs:
           fi
           MINOR_TAG=v${TAG#v}
           MINOR_TAG=${MINOR_TAG%.*}
-          TAGS="${DOCKER_IMAGE}:${TAG}\n${DOCKER_IMAGE}:${MINOR_TAG}"
+          TAGS="${DOCKER_IMAGE}:${TAG},${DOCKER_IMAGE}:${MINOR_TAG}"
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
           echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
