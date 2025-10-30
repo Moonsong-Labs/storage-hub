@@ -23,6 +23,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Docker image tag to publish (e.g., v0.1.0)"
+        required: false
+        type: string
   release:
     types: [published]
 
@@ -82,6 +87,8 @@ jobs:
         run: |
           if [[ "${{ github.event_name }}" == 'release' ]]; then
             echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == 'workflow_dispatch' && -n "${{ inputs.image_tag }}" ]]; then
+            echo "tag=${{ inputs.image_tag }}" >> $GITHUB_OUTPUT
           elif [[ "${{ github.ref }}" == 'refs/heads/main' ]]; then
             echo "tag=latest" >> $GITHUB_OUTPUT
           elif [[ "${{ env.SKIP_BUILD_LABEL_PRESENT }}" == "true" && "${{ env.SKIP_BACKEND_BUILD_LABEL_PRESENT }}" == "true" ]]; then
@@ -95,6 +102,9 @@ jobs:
         id: flags
         run: |
           if [[ "${{ github.event_name }}" == 'release' ]]; then
+            echo "force_node=false" >> $GITHUB_OUTPUT
+            echo "force_backend=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == 'workflow_dispatch' && -n "${{ inputs.image_tag }}" ]]; then
             echo "force_node=false" >> $GITHUB_OUTPUT
             echo "force_backend=true" >> $GITHUB_OUTPUT
           else
