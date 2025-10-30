@@ -38,7 +38,7 @@ impl IntoResponse for DetailedHealthStatus {
             StatusCode::SERVICE_UNAVAILABLE
         };
 
-        (status, Json(self))
+        (status, Json(self)).into_response()
     }
 }
 
