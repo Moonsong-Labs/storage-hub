@@ -24,8 +24,8 @@ use crate::{
     events::{
         DistributeFileToBsp, FinalisedBucketMovedAway, FinalisedBucketMutationsApplied,
         FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
-        ForestWriteLockTaskData, MoveBucketRequestedForMsp, NewStorageRequest,
-        ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData,
+        FinalisedStorageRequestExpired, ForestWriteLockTaskData, MoveBucketRequestedForMsp,
+        NewStorageRequest, ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData,
         ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
         StartMovedBucketDownload, VerifyMspBucketForests,
     },
@@ -233,6 +233,33 @@ where
                             new_msp_id,
                         });
                     }
+                }
+            }
+            StorageEnableEvents::FileSystem(
+                pallet_file_system::Event::StorageRequestRejected {
+                    file_key,
+                    msp_id,
+                    bucket_id,
+                    reason,
+                },
+            ) => {
+                // Other reason than RequestExpired means that the MSP proactively rejected the request.
+                // We also check for InternalError just to be sure we dont have an inconsistent state due the error.
+                if !matches!(
+                    reason,
+                    pallet_file_system::types::RejectedStorageRequestReason::RequestExpired
+                        | pallet_file_system::types::RejectedStorageRequestReason::InternalError
+                ) {
+                    return;
+                }
+
+                // Process either InternalError or RequestExpire if this provider is managing the bucket.
+                if managed_msp_id == &msp_id {
+                    self.emit(FinalisedStorageRequestExpired {
+                        file_key: file_key.into(),
+                        provider_id: msp_id.into(),
+                        bucket_id,
+                    })
                 }
             }
             StorageEnableEvents::ProofsDealer(pallet_proofs_dealer::Event::MutationsApplied {

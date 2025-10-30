@@ -384,7 +384,9 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 }
                 // If the file has associations, the `IncompleteStorageRequest` event will handle it
             }
-            pallet_file_system::Event::StorageRequestRejected { file_key, reason } => {
+            pallet_file_system::Event::StorageRequestRejected {
+                file_key, reason, ..
+            } => {
                 // Check if the file has any BSP associations (it will not have MSP ones since the MSP did not accept it)
                 let has_bsp = File::has_bsp_associations(conn, file_key.as_ref()).await?;
                 if has_bsp {
