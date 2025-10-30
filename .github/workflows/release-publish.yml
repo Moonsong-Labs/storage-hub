@@ -3,6 +3,17 @@ name: Publish on Release
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to use (e.g., v0.1.0)"
+        required: false
+        type: string
+      publish:
+        description: "Push/publish images and npm packages"
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   docker-backend:
@@ -13,14 +24,32 @@ jobs:
 
       - name: Prepare Docker tags
         id: prep
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TAG_INPUT: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+          PUBLISH: ${{ inputs.publish }}
         run: |
           DOCKER_IMAGE=moonsonglabs/storage-hub-msp-backend
-          TAG=${GITHUB_REF_NAME}
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "$TAG_INPUT" ]; then
+            TAG="$TAG_INPUT"
+          else
+            TAG="$REF_NAME"
+          fi
           MINOR_TAG=v${TAG#v}
           MINOR_TAG=${MINOR_TAG%.*}
           TAGS="${DOCKER_IMAGE}:${TAG}\n${DOCKER_IMAGE}:${MINOR_TAG}"
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
           echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ "$PUBLISH" = "true" ]; then
+              echo "push=true" >> $GITHUB_OUTPUT
+            else
+              echo "push=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "push=true" >> $GITHUB_OUTPUT
+          fi
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -39,7 +68,7 @@ jobs:
         with:
           context: .
           file: ./docker/storage-hub-msp-backend.Dockerfile
-          push: true
+          push: ${{ steps.prep.outputs.push }}
           platforms: linux/amd64
           tags: ${{ steps.prep.outputs.tags }}
           labels: |
@@ -80,9 +109,18 @@ jobs:
 
       - name: Extract version from tag
         id: vars
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TAG_INPUT: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          TAG=${GITHUB_REF_NAME}
-          VERSION=${TAG#v}
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "$TAG_INPUT" ]; then
+            TAG="$TAG_INPUT"
+          else
+            TAG="$REF_NAME"
+          fi
+          VERSION=${TAG#sdk-v}
+          VERSION=${VERSION#v}
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
       - name: Build core
@@ -107,13 +145,21 @@ jobs:
         working-directory: sdk/core
         run: |
           pnpm pack
-          pnpm publish --access public --no-git-checks
+          if [ "${{ github.event_name }}" = "release" ] || { [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.publish }}" = "true" ]; }; then
+            pnpm publish --access public --no-git-checks
+          else
+            echo "Skipping publish (manual run without publish=true)"
+          fi
 
       - name: Pack and publish msp-client
         working-directory: sdk/msp-client
         run: |
           pnpm pack
-          pnpm publish --access public --no-git-checks
+          if [ "${{ github.event_name }}" = "release" ] || { [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.publish }}" = "true" ]; }; then
+            pnpm publish --access public --no-git-checks
+          else
+            echo "Skipping publish (manual run without publish=true)"
+          fi
 
       - name: Prepare and publish types-bundle
         working-directory: types-bundle
@@ -121,7 +167,11 @@ jobs:
           jq --arg v "${{ steps.vars.outputs.version }}" '.version=$v' package.json > package.json.tmp && mv package.json.tmp package.json
           pnpm install --frozen-lockfile || true
           pnpm run build || true
-          pnpm publish --access public --no-git-checks
+          if [ "${{ github.event_name }}" = "release" ] || { [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.publish }}" = "true" ]; }; then
+            pnpm publish --access public --no-git-checks
+          else
+            echo "Skipping publish (manual run without publish=true)"
+          fi
 
       - name: Prepare and publish api-augment
         working-directory: api-augment
@@ -129,4 +179,8 @@ jobs:
           jq --arg v "${{ steps.vars.outputs.version }}" '.version=$v' package.json > package.json.tmp && mv package.json.tmp package.json
           pnpm install --frozen-lockfile || true
           pnpm run build || true
-          pnpm publish --access public --no-git-checks
+          if [ "${{ github.event_name }}" = "release" ] || { [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.publish }}" = "true" ]; }; then
+            pnpm publish --access public --no-git-checks
+          else
+            echo "Skipping publish (manual run without publish=true)"
+          fi
