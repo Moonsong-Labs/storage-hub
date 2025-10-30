@@ -108,7 +108,7 @@ pub async fn download_by_key(
     Path(file_key): Path<String>,
 ) -> Result<impl IntoResponse, Error> {
     debug!(file_key = %file_key, user = %address, "GET download file");
-    // TODO(AUTH): verify that user has permissions to access this file
+
     // Validate file_key is a hex string
     let key = file_key.trim_start_matches("0x");
     if hex::decode(key).is_err() {
@@ -117,6 +117,9 @@ pub async fn download_by_key(
 
     // Check if file exists in MSP storage
     let file_metadata = services.msp.check_file_status(&file_key).await?;
+
+    // Verify user has access to the requested file
+    let file_info = services.msp.get_file_info(&address, &file_key)?;
 
     // Generate a unique session ID for the download session
     let session_id = Uuid::now_v7().to_string();
@@ -133,13 +136,9 @@ pub async fn download_by_key(
         .add_session(&session_id, tx)
         .map_err(|e| Error::BadRequest(e.to_string()))?;
 
-    let file_key_clone = file_key.clone();
     tokio::spawn(async move {
         // We trigger the download process via RPC call
-        let _ = services
-            .msp
-            .get_file_from_key(&session_id, &file_key_clone)
-            .await;
+        _ = services.msp.get_file(&session_id, file_info).await;
     });
 
     // Extract filename from location or use file_key as fallback

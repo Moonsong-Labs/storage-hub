@@ -403,24 +403,19 @@ impl MspService {
         }
     }
 
-    /// Download a file by `file_key` via the MSP RPC into `/tmp/uploads/<file_key>` and
-    /// return its size, UTF-8 location, fingerprint, and temp path.
+    /// Download the given `file` via the MSP RPC to the specified `session_id`, and
+    /// return its size, UTF-8 location and fingerprint.
     /// Returns BadRequest on RPC/parse errors.
     ///
-    /// Will verify that `user` has permission to access the specified `file_key`
-    ///
     /// We provide an URL as saveFileToDisk RPC requires it to stream the file.
-    /// We also implemented the internal_upload_by_key handler to handle this temporary file upload.
-    pub async fn get_file_from_key(
+    /// We also implemented the internal_upload_by_key handler to handle the upload to the client.
+    pub async fn get_file(
         &self,
-        user: &Address,
         session_id: &str,
-        file_key: &str,
+        file: FileInfo,
     ) -> Result<FileDownloadResult, Error> {
+        let file_key = file.file_key;
         debug!(target: "msp_service::get_file_from_key", file_key = %file_key, "Downloading file by key");
-
-        // Retrieve file info, this will also authenticate the user
-        let file = self.get_file_info(user, file_key).await?;
 
         // TODO(AUTH): Add MSP Node authentication credentials
         // Currently this internal endpoint doesn't authenticate that
