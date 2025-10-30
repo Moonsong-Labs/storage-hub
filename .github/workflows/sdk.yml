@@ -41,6 +41,7 @@ jobs:
           INPUT_VERSION="${{ github.event.inputs.version }}"
           if [ "$EVENT_NAME" = "release" ]; then
             TAG="${{ github.event.release.tag_name }}"
+            VERSION="${TAG#sdk-v}"
             VERSION="${VERSION#v}"
           else
             VERSION="$INPUT_VERSION"
