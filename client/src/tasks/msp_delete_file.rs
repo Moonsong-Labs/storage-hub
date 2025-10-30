@@ -1,7 +1,9 @@
 use anyhow::anyhow;
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::events::FinalisedBucketMutationsApplied;
+use shc_blockchain_service::events::{
+    FinalisedBucketMutationsApplied, FinalisedStorageRequestExpired,
+};
 use shc_common::{
     traits::StorageEnableRuntime,
     types::{FileKey, TrieMutation, TrieRemoveMutation},
@@ -135,6 +137,81 @@ where
                 // If file key is not in Forest, we can now safely remove it from the File Storage.
                 self.remove_file_from_file_storage(&file_key.into()).await?;
             }
+        }
+
+        Ok(())
+    }
+}
+
+/// Handles the [`FinalisedStorageRequestExpired`] event.
+impl<NT, Runtime> EventHandler<FinalisedStorageRequestExpired<Runtime>>
+    for MspDeleteFileTask<NT, Runtime>
+where
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
+{
+    async fn handle_event(
+        &mut self,
+        event: FinalisedStorageRequestExpired<Runtime>,
+    ) -> anyhow::Result<()> {
+        info!(
+            target: LOG_TARGET,
+            "Processing finalised storage request expired for file key {:?} in bucket {:?}",
+            event.file_key,
+            event.bucket_id
+        );
+
+        // Ensure the file key is not present in the bucket's Forest.
+        let bucket_forest_key = event.bucket_id.as_ref().to_vec();
+        let read_fs = self
+            .storage_hub_handler
+            .forest_storage_handler
+            .get(&bucket_forest_key.into())
+            .await
+            .ok_or_else(|| {
+                anyhow!(
+                    "CRITICAL❗️❗️ Failed to get forest storage for bucket [{:?}].",
+                    event.bucket_id
+                )
+            })?;
+
+        if read_fs
+            .read()
+            .await
+            .contains_file_key(&event.file_key.into())?
+        {
+            warn!(
+                target: LOG_TARGET,
+                "StorageRequestExpired and finalised for file key {:?} in bucket {:?}, but file key is still in Forest.",
+                event.file_key,
+                event.bucket_id
+            );
+            return Err(anyhow!("File key is still in Forest"));
+        }
+
+        // Check that the file is present in the File Storage.
+        let is_in_file_storage = {
+            let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+            read_file_storage
+                .get_metadata(&event.file_key.into())
+                .map_err(|e| {
+                    error!(target: LOG_TARGET, "Failed to get file metadata from File Storage: {:?}", e);
+                    anyhow!("Failed to get file metadata from File Storage: {:?}", e)
+                })?
+                .is_some()
+        };
+
+        if is_in_file_storage {
+            // If file is present in File Storage and not in Forest, remove it from File Storage.
+            self.remove_file_from_file_storage(&event.file_key.into())
+                .await?;
+        } else {
+            debug!(
+                target: LOG_TARGET,
+                "File key {:?} not present in File Storage; skipping removal.",
+                event.file_key
+            );
         }
 
         Ok(())
