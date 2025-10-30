@@ -18,10 +18,10 @@
     "typecheck:solochain-evm": "tsc -p tsconfig.solochain-evm.json --noEmit",
     "typecheck:all": "pnpm typecheck:parachain && pnpm typecheck:solochain-evm",
     "typecheck": "pnpm typecheck:all",
-    "crossbuild:mac": "DOCKER_DEFAULT_PLATFORM=linux/amd64 pnpm tsx scripts/crossBuildMac.ts",
-    "crossbuild:mac:backend": "DOCKER_DEFAULT_PLATFORM=linux/amd64 pnpm tsx scripts/crossBuildBackendMac.ts",
-    "docker:build": "DOCKER_DEFAULT_PLATFORM=linux/amd64 pnpm tsx scripts/buildLocalDocker.ts",
-    "docker:build:backend": "DOCKER_DEFAULT_PLATFORM=linux/amd64 pnpm tsx scripts/buildBackendDocker.ts",
+    "crossbuild:mac": "cross-env DOCKER_DEFAULT_PLATFORM=linux/amd64 pnpm tsx scripts/crossBuildMac.ts",
+    "crossbuild:mac:backend": "cross-env DOCKER_DEFAULT_PLATFORM=linux/amd64 pnpm tsx scripts/crossBuildBackendMac.ts",
+    "docker:build": "cross-env DOCKER_DEFAULT_PLATFORM=linux/amd64 pnpm tsx scripts/buildLocalDocker.ts",
+    "docker:build:backend": "cross-env DOCKER_DEFAULT_PLATFORM=linux/amd64 pnpm tsx scripts/buildBackendDocker.ts",
     "sdk:build": "pnpm --filter @storagehub-sdk/core build && pnpm --filter @storagehub-sdk/msp-client build",
     "docker:start": "docker compose -f ../docker/local-parachain-compose.yml  -p sh_dev_node up -d",
     "docker:start:latest": "docker compose -f ../docker/latest-node-compose.yml  -p sh_dev_node up -d",
@@ -29,9 +29,9 @@
     "docker:stop:all": "docker rm -vf $(docker ps -a --filter 'ancestor=storage-hub:local' -q) $(docker ps -a --filter 'name=sh-postgres' -q) $(docker ps -a --filter 'name=toxiproxy' -q) $(docker ps -a --filter 'name=sh-backend' -q)",
     "docker:stop:latest": "docker compose -f ../docker/latest-node-compose.yml  -p sh_dev_node down",
     "docker:start:bspnet": "pnpm tsx scripts/bspNetBootstrap.ts",
-    "docker:start:fullnet": "INDEXER=1 pnpm tsx scripts/fullNetBootstrap.ts",
-    "docker:start:fullnet:initialised": "INDEXER=1 pnpm tsx scripts/fullNetBootstrapInitialised.ts",
-    "docker:start:solochain-evm:initialised": "INDEXER=1 BACKEND=1 pnpm tsx scripts/solochainEvmBootstrapInitialised.ts",
+    "docker:start:fullnet": "cross-env INDEXER=1 pnpm tsx scripts/fullNetBootstrap.ts",
+    "docker:start:fullnet:initialised": "cross-env INDEXER=1 pnpm tsx scripts/fullNetBootstrapInitialised.ts",
+    "docker:start:solochain-evm:initialised": "cross-env INDEXER=1 BACKEND=1 pnpm tsx scripts/solochainEvmBootstrapInitialised.ts",
     "docker:start:generateProofsDealerBenchmarkProofs": "pnpm tsx scripts/generateProofsDealerBenchmarkProofs.ts",
     "docker:start:generateFileSystemBenchmarkProofs": "pnpm tsx scripts/generateFileSystemBenchmarkProofs.ts",
     "docker:stop:fullnet": "docker compose -f ../docker/fullnet-base-template.yml down --remove-orphans && docker volume prune -f",
@@ -105,6 +105,7 @@
     "@types/inquirer": "9.0.9",
     "@types/json-bigint": "1.0.4",
     "@types/node": "^24.3.0",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "cross-env": "7.0.3"
   }
 }
