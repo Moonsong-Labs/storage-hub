@@ -47,6 +47,11 @@ export const shUser = keyring.addFromUri("//Sh-User", {
   name: "Sh-User"
 });
 
+export const fishermanSeed = "//Sh-Fisherman";
+export const fishermanKey = keyring.addFromUri(fishermanSeed, {
+  name: "Sh-Fisherman"
+});
+
 export const sudo = alice;
 
 export const createSr25519Account = async (privateKey?: string) => {

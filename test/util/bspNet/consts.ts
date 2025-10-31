@@ -41,6 +41,12 @@ export const NODE_INFOS = {
     p2pPort: 30666,
     nodeKey: "0x23b3b1c917dda506f152816aad4685eefa54fe57792165b31141ac893610b315"
   },
+  indexer: {
+    containerName: "storage-hub-sh-indexer-1",
+    port: 9800,
+    p2pPort: 30777,
+    nodeKey: "0x33b3b1c917dda506f152816aad4685eefa54fe57792165b31141ac893610b316"
+  },
   toxiproxy: {
     containerName: "toxiproxy",
     port: 8474

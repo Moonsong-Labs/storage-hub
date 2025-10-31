@@ -44,7 +44,7 @@ await describeMspNet(
 
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",
-        containerName: "storage-hub-sh-user-1",
+        containerName: userApi.shConsts.NODE_INFOS.user.containerName,
         timeout: 10000
       });
 
@@ -94,7 +94,7 @@ await describeMspNet(
       const blockBeforePause = await getLastIndexedBlock(sql);
 
       // Phase 2: Create catchup scenario - pause indexer while blockchain advances
-      await userApi.docker.pauseContainer("storage-hub-sh-indexer-1");
+      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.indexer.containerName);
 
       // Produce blocks exceeding sync threshold (7 blocks > 5 threshold)
       const catchupBuckets: string[] = [];
@@ -122,11 +122,13 @@ await describeMspNet(
       await postgresContainer.pause();
 
       // Resume indexer first to start the resync process
-      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-indexer-1" });
+      await userApi.docker.resumeContainer({
+        containerName: userApi.shConsts.NODE_INFOS.indexer.containerName
+      });
 
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",
-        containerName: "storage-hub-sh-indexer-1",
+        containerName: userApi.shConsts.NODE_INFOS.indexer.containerName,
         timeout: 10000
       });
 
@@ -153,7 +155,7 @@ await describeMspNet(
 
       // Wait for database to be ready to accept connections again
       await userApi.docker.waitForLog({
-        containerName: "storage-hub-sh-postgres-1",
+        containerName: "storage-hub-sh-postgres-1", // Note: postgres is not in NODE_INFOS, keep hardcoded
         searchString: "database system is ready to accept connections",
         timeout: 10000
       });

@@ -35,7 +35,9 @@ import * as BspNetBlock from "./block";
 import * as ShConsts from "./consts";
 import * as DockerBspNet from "./docker";
 import * as Files from "./fileHelpers";
+import * as BspNetFisherman from "./fisherman";
 import { addBsp } from "./helpers";
+import * as BspNetIndexer from "./indexer";
 import * as NodeBspNet from "./node";
 import type { BspNetApi, BspStoredOptions, SealBlockOptions } from "./types";
 import * as Waits from "./waits";
@@ -87,6 +89,7 @@ export class BspNetTestApi implements AsyncDisposable {
    * Creates a new instance of BspNetTestApi.
    *
    * @param endpoint - The WebSocket endpoint to connect to.
+   * @param runtimeType - The type of runtime ("parachain" or "solochain").
    * @returns A promise that resolves to an enriched BspNetApi.
    */
   public static async create(
@@ -693,6 +696,154 @@ export class BspNetTestApi implements AsyncDisposable {
         )
     };
 
+    /**
+     * Indexer operations namespace
+     * Contains methods for interacting with the indexer and verifying indexed data.
+     */
+    const remappedIndexerNs = {
+      /**
+       * Waits for the indexer to process blocks from a producer node.
+       *
+       * This method should be called on the indexer API instance (e.g., `indexerApi.indexer.waitForIndexing(...)`).
+       * For embedded indexers, you can now omit the producer API parameter (e.g., `userApi.indexer.waitForIndexing()`).
+       *
+       * @param options - Options object or producer API (for backward compatibility)
+       * @param options.producerApi - Optional. The producer API to get block number and finalization status from.
+       * @param options.sealBlock - Whether to seal a new block on the producer (default: `true`)
+       * @param options.finalizeOnIndexer - Whether to finalize blocks on this indexer node (default: `true`)
+       * @returns A Promise that resolves when the indexer has processed the block
+       *
+       * @example
+       * // Standalone indexer
+       * await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sealBlock: false });
+       *
+       * @example
+       * // Embedded indexer (simplified)
+       * await userApi.indexer.waitForIndexing({});
+       */
+      waitForIndexing: (
+        options: { producerApi?: BspNetApi; sealBlock?: boolean; finalizeOnIndexer?: boolean } = {}
+      ) =>
+        BspNetIndexer.waitForIndexing({
+          indexerApi: this._api as any,
+          ...options
+        }),
+
+      /**
+       * Verifies that a file has been indexed in the database.
+       * @param options - Options object
+       * @param options.sql - The SQL client instance.
+       * @param options.bucketName - The name of the bucket containing the file.
+       * @param options.fileKey - The file key to verify.
+       * @returns The indexed file record from the database.
+       */
+      verifyFileIndexed: (options: { sql: any; bucketName: string; fileKey: string }) =>
+        BspNetIndexer.verifyFileIndexed(options),
+
+      /**
+       * Verifies that a provider association exists in the database.
+       * @param options - Options object
+       * @param options.sql - The SQL client instance.
+       * @param options.fileKey - The file key to check association for.
+       * @param options.providerId - The provider ID to verify association with.
+       * @param options.providerType - The type of provider ("msp" or "bsp").
+       * @returns The provider association record from the database.
+       */
+      verifyProviderAssociation: (options: {
+        sql: any;
+        fileKey: string;
+        providerId: string;
+        providerType: "msp" | "bsp";
+      }) => BspNetIndexer.verifyProviderAssociation(options),
+
+      /**
+       * Verifies that deletion signatures are stored in the database for all specified file keys.
+       *
+       * This function waits for the first file to have a deletion signature stored, then verifies
+       * that all files have non-empty SCALE-encoded deletion signatures in the database.
+       *
+       * @param options - Options object
+       * @param options.sql - The SQL client instance.
+       * @param options.fileKeys - Array of file keys to verify have deletion signatures.
+       * @throws Error if any file doesn't have a deletion signature stored or if the signature is empty.
+       */
+      verifyDeletionSignaturesStored: (options: { sql: any; fileKeys: string[] }) =>
+        BspNetIndexer.verifyDeletionSignaturesStored(options)
+    };
+
+    /**
+     * Fisherman operations namespace
+     * Contains methods for interacting with and testing fisherman node functionality.
+     */
+    const remappedFishermanNs = {
+      /**
+       * Waits for fisherman to process batch deletions by sealing blocks until
+       * the fisherman submits extrinsics for the specified deletion type.
+       *
+       * This handles the alternating User/Incomplete deletion cycle timing issue
+       * where fisherman might be on the wrong cycle when deletions are created.
+       *
+       * If `expectExt` is provided, this function will verify that the expected
+       * number of extrinsics (BSP + bucket) are present in the transaction pool before returning,
+       * preventing a race condition where blocks are sealed before verification.
+       *
+       * If `sealBlock` is true, a block will be sealed after verifying extrinsics.
+       * Defaults to false to allow manual block sealing in tests.
+       *
+       * @param options - Options object
+       * @param options.deletionType - Either "User" or "Incomplete" to determine which deletion cycle to wait for
+       * @param options.expectExt - Optional. Total expected extrinsics (BSP + bucket) to verify in the transaction pool
+       * @param options.sealBlock - Optional. Whether to seal a block after verifying extrinsics. Defaults to false.
+       */
+      waitForBatchDeletions: (options: {
+        deletionType: "User" | "Incomplete";
+        expectExt?: number;
+        sealBlock?: boolean;
+      }) => BspNetFisherman.waitForFishermanBatchDeletions({ api: this._api as any, ...options }),
+
+      /**
+       * Verifies BSP deletion results from a batch deletion operation.
+       *
+       * This function verifies:
+       * 1. The expected number of BSP deletion events are present
+       * 2. The BSP forest root has changed (oldRoot !== newRoot)
+       * 3. The current BSP forest root matches the newRoot from the deletion event
+       *
+       * @param options - Verification options
+       * @param options.userApi - The enriched BSP API for assertions and event fetching
+       * @param options.bspApi - The BSP API instance for forest root verification
+       * @param options.events - Events array from the sealed block
+       * @param options.expectedCount - Expected number of BSP deletion events. Defaults to 1.
+       */
+      verifyBspDeletionResults: (options: {
+        userApi: any;
+        bspApi: any;
+        events: any[];
+        expectedCount?: number;
+      }) => BspNetFisherman.verifyBspDeletionResults(options),
+
+      /**
+       * Verifies bucket deletion results from a batch deletion operation.
+       *
+       * This function verifies:
+       * 1. The expected number of bucket deletion events are present
+       * 2. For each bucket, the forest root has changed (oldRoot !== newRoot)
+       * 3. For each bucket, the current forest root matches the newRoot from the deletion event
+       *
+       * @param options - Verification options
+       * @param options.userApi - The enriched BSP API for assertions and event fetching
+       * @param options.mspApi - The MSP API instance for bucket forest root verification
+       * @param options.events - Events array from the sealed block
+       * @param options.expectedCount - Expected number of bucket deletion events
+       */
+      verifyBucketDeletionResults: (options: {
+        userApi: any;
+        mspApi: any;
+        events: any[];
+        expectedCount: number;
+      }) => BspNetFisherman.verifyBucketDeletionResults(options)
+    };
+
     return Object.assign(this._api, {
       /**
        * Soon Deprecated. Use api.file.newStorageRequest() instead.
@@ -744,6 +895,16 @@ export class BspNetTestApi implements AsyncDisposable {
        * Offers methods for interacting with Docker containers in the BSP network test environment.
        */
       docker: remappedDockerNs,
+      /**
+       * Indexer operations namespace
+       * Contains methods for interacting with the indexer and verifying indexed data.
+       */
+      indexer: remappedIndexerNs,
+      /**
+       * Fisherman operations namespace
+       * Contains methods for interacting with and testing fisherman node functionality.
+       */
+      fisherman: remappedFishermanNs,
       /**
        * Accounts namespace
        * Provides runtime-dependent test accounts for convenience.

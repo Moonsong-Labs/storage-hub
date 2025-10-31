@@ -122,7 +122,7 @@ services:
       - '9999:9944'
       - '30666:30666'
     volumes:
-      - ./dev-keystores/user:/keystore:rw
+      - ./dev-keystores/fisherman:/keystore:rw
     command:
       [
         '--dev',
@@ -139,6 +139,7 @@ services:
         '--base-path=/data',
         '--fisherman',
         '--fisherman-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub',
+        '--fisherman-batch-interval-seconds=5',
       ]
 
   sh-indexer:

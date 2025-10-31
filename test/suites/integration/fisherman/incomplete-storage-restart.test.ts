@@ -1,4 +1,4 @@
-import assert, { notEqual, strictEqual } from "node:assert";
+import assert from "node:assert";
 import type { H256 } from "@polkadot/types/interfaces";
 import {
   describeMspNet,
@@ -114,7 +114,7 @@ await describeMspNet(
       // Wait for user node to be ready
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",
-        containerName: "storage-hub-sh-user-1",
+        containerName: userApi.shConsts.NODE_INFOS.user.containerName,
         timeout: 10000
       });
 
@@ -172,10 +172,10 @@ await describeMspNet(
 
       const { bucketId } = await ensureBucket(bucketName);
 
-      await userApi.docker.pauseContainer("storage-hub-sh-fisherman-1");
+      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.fisherman.containerName);
 
       // Pause MSP container so that we trigger the incomplete storage request
-      await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
+      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.msp1.containerName);
       // Create more incomplete requests while fisherman is down
       const destinations = buildDestinations("test/restart-basic-new", 1, 5);
       const initialRequests: string[] = [];
@@ -233,11 +233,13 @@ await describeMspNet(
         await userApi.block.seal({ finaliseBlock: true });
       }
 
-      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-fisherman-1" });
+      await userApi.docker.resumeContainer({
+        containerName: userApi.shConsts.NODE_INFOS.fisherman.containerName
+      });
 
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",
-        containerName: "storage-hub-sh-fisherman-1",
+        containerName: userApi.shConsts.NODE_INFOS.fisherman.containerName,
         tail: 10
       });
 
@@ -246,54 +248,37 @@ await describeMspNet(
       // Wait for fisherman to detect it's out of sync and start syncing
       await userApi.docker.waitForLog({
         searchString: "🎣 Handling coming out of sync mode",
-        containerName: "storage-hub-sh-fisherman-1",
+        containerName: userApi.shConsts.NODE_INFOS.fisherman.containerName,
         timeout: 30000
       });
 
       // Wait for sync to complete
       await userApi.docker.waitForLog({
         searchString: "🎣 Completed initial incomplete storage requests sync",
-        containerName: "storage-hub-sh-fisherman-1",
+        containerName: userApi.shConsts.NODE_INFOS.fisherman.containerName,
         timeout: 30000
       });
 
-      // Verify delete extrinsic is submitted for the BSP
-      await userApi.assert.extrinsicPresent({
-        method: "deleteFilesForIncompleteStorageRequest",
-        module: "fileSystem",
-        checkTxPool: true,
-        assertLength: 1
+      // Wait for fisherman to process incomplete storage deletions and verify extrinsics are in tx pool
+      const deletionResult = await userApi.fisherman.waitForBatchDeletions({
+        deletionType: "Incomplete",
+        expectExt: 1, // 1 BSP only (MSP paused)
+        sealBlock: true // Seal and return events for verification
       });
 
-      // Seal block to process the extrinsic
-      const deletionResult = await userApi.block.seal();
+      assert(deletionResult, "Deletion result should be defined when sealBlock is true");
 
-      const {
-        data: { oldRoot, newRoot }
-      } = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BspFileDeletionsCompleted,
-        deletionResult.events
-      );
-
-      // Verify BSP root changed
-      await waitFor({
-        lambda: async () => {
-          notEqual(
-            oldRoot.toString(),
-            newRoot.toString(),
-            "BSP forest root should have changed after file deletion"
-          );
-          const currentBspRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
-          strictEqual(
-            currentBspRoot.toString(),
-            newRoot.toString(),
-            "Current BSP forest root should match the new root from deletion event"
-          );
-          return true;
-        }
+      // Verify BSP deletions
+      await userApi.fisherman.verifyBspDeletionResults({
+        userApi,
+        bspApi,
+        events: deletionResult.events,
+        expectedCount: 1
       });
 
-      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-msp-1" });
+      await userApi.docker.resumeContainer({
+        containerName: userApi.shConsts.NODE_INFOS.msp1.containerName
+      });
     });
   }
 );

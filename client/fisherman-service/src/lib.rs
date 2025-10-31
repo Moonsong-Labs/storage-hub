@@ -22,10 +22,7 @@ use shc_common::types::ParachainClient;
 
 pub use self::commands::{FishermanServiceCommand, FishermanServiceError};
 pub use self::handler::{FileKeyChange, FileKeyOperation, FishermanService};
-pub use events::{
-    FileDeletionTarget, FishermanServiceEventBusProvider, ProcessFileDeletionRequest,
-    ProcessIncompleteStorageRequest,
-};
+pub use events::{BatchFileDeletions, FileDeletionTarget, FishermanServiceEventBusProvider};
 
 /// Spawn the fisherman service as an actor
 ///
@@ -37,6 +34,7 @@ pub async fn spawn_fisherman_service<Runtime: StorageEnableRuntime>(
     incomplete_sync_max: u32,
     incomplete_sync_page_size: u32,
     sync_mode_min_blocks_behind: u32,
+    batch_interval_seconds: u64,
 ) -> ActorHandle<FishermanService<Runtime>> {
     // Create a named task spawner for the fisherman service
     let task_spawner = task_spawner
@@ -49,6 +47,7 @@ pub async fn spawn_fisherman_service<Runtime: StorageEnableRuntime>(
         incomplete_sync_max,
         incomplete_sync_page_size,
         sync_mode_min_blocks_behind,
+        batch_interval_seconds,
     );
 
     // Spawn the actor and return the handle

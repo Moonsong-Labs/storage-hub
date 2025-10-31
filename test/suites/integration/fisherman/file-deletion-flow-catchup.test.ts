@@ -1,4 +1,4 @@
-import assert, { strictEqual, notEqual } from "node:assert";
+import assert from "node:assert";
 import {
   describeMspNet,
   type EnrichedBspApi,
@@ -7,7 +7,6 @@ import {
   bspKey,
   sleep,
   waitFor,
-  assertEventPresent,
   ShConsts
 } from "../../../util";
 import {
@@ -15,7 +14,6 @@ import {
   waitForMspFileAssociation,
   waitForBspFileAssociation
 } from "../../../util/indexerHelpers";
-import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
 
 /**
  * FISHERMAN FILE DELETION FLOW WITH CATCHUP
@@ -70,13 +68,13 @@ await describeMspNet(
 
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",
-        containerName: "storage-hub-sh-user-1",
+        containerName: userApi.shConsts.NODE_INFOS.user.containerName,
         timeout: 10000
       });
 
       await userApi.block.seal({ finaliseBlock: true });
 
-      await waitForIndexing(userApi);
+      await userApi.indexer.waitForIndexing({});
     });
 
     it("creates finalized block with storage request and BSP & MSP confirming", async () => {
@@ -123,7 +121,7 @@ await describeMspNet(
         bspAccount: bspAddress
       });
 
-      await waitForIndexing(userApi);
+      await userApi.indexer.waitForIndexing({});
       await waitForFileIndexed(sql, fileKey);
       await waitForMspFileAssociation(sql, fileKey);
       await waitForBspFileAssociation(sql, fileKey);
@@ -269,66 +267,29 @@ await describeMspNet(
       const eventFileKey = deletionEventData.signedDeleteIntention.fileKey;
       assert.equal(eventFileKey.toString(), fileToDelete.fileKey.toString());
 
-      // Verify delete_files extrinsics are submitted (should be 2: one for BSP and one for MSP)
-      await userApi.assert.extrinsicPresent({
-        method: "deleteFiles",
-        module: "fileSystem",
-        checkTxPool: true,
-        assertLength: 2
+      // Wait for fisherman to process user deletions and verify extrinsics are in tx pool
+      const deletionResult = await userApi.fisherman.waitForBatchDeletions({
+        deletionType: "User",
+        expectExt: 2,
+        sealBlock: true // Seal and return events for verification
       });
 
-      // Now finalize the blocks to process the extrinsics
-      const { events } = await userApi.block.seal();
+      assert(deletionResult, "Deletion result should be defined when sealBlock is true");
 
-      assertEventPresent(userApi, "fileSystem", "BucketFileDeletionsCompleted", events);
-      assertEventPresent(userApi, "fileSystem", "BspFileDeletionsCompleted", events);
-
-      // Extract deletion events to verify root changes
-      const mspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BucketFileDeletionsCompleted,
-        events
-      );
-      const bspDeletionEvent = userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BspFileDeletionsCompleted,
-        events
-      );
-
-      // Verify MSP root changed
-      await waitFor({
-        lambda: async () => {
-          notEqual(
-            mspDeletionEvent.data.oldRoot.toString(),
-            mspDeletionEvent.data.newRoot.toString(),
-            "MSP forest root should have changed after file deletion"
-          );
-          const currentBucketRoot = await msp1Api.rpc.storagehubclient.getForestRoot(
-            mspDeletionEvent.data.bucketId.toString()
-          );
-          strictEqual(
-            currentBucketRoot.toString(),
-            mspDeletionEvent.data.newRoot.toString(),
-            "Current bucket forest root should match the new root from deletion event"
-          );
-          return true;
-        }
+      // Verify BSP deletions
+      await userApi.fisherman.verifyBspDeletionResults({
+        userApi,
+        bspApi,
+        events: deletionResult.events,
+        expectedCount: 1
       });
 
-      // Verify BSP root changed
-      await waitFor({
-        lambda: async () => {
-          notEqual(
-            bspDeletionEvent.data.oldRoot.toString(),
-            bspDeletionEvent.data.newRoot.toString(),
-            "BSP forest root should have changed after file deletion"
-          );
-          const currentBspRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
-          strictEqual(
-            currentBspRoot.toString(),
-            bspDeletionEvent.data.newRoot.toString(),
-            "Current BSP forest root should match the new root from deletion event"
-          );
-          return true;
-        }
+      // Verify bucket deletions
+      await userApi.fisherman.verifyBucketDeletionResults({
+        userApi,
+        mspApi: msp1Api,
+        events: deletionResult.events,
+        expectedCount: 1
       });
     });
   }

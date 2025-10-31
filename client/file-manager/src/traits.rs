@@ -40,6 +40,8 @@ pub enum FileStorageWriteError {
     FailedToGetStoredChunksCount,
     /// Reached chunk count limit (overflow)
     ChunkCountOverflow,
+    /// Failed to check file completion status.
+    FailedToCheckFileCompletion(FileStorageError),
 }
 
 impl std::fmt::Display for FileStorageWriteError {

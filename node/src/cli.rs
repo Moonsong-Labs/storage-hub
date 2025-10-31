@@ -575,6 +575,10 @@ pub struct FishermanConfigurations {
     /// The minimum number of blocks between the last processed block and the current best block to consider the fisherman out of sync.
     #[arg(long, default_value = "5")]
     pub fisherman_sync_mode_min_blocks_behind: u32,
+
+    /// Duration between batch deletion processing cycles (in seconds).
+    #[arg(long, default_value = "60", value_parser = clap::value_parser!(u64).range(1..))]
+    pub fisherman_batch_interval_seconds: u64,
 }
 
 impl FishermanConfigurations {
@@ -588,6 +592,7 @@ impl FishermanConfigurations {
                 incomplete_sync_max: self.fisherman_incomplete_sync_max,
                 incomplete_sync_page_size: self.fisherman_incomplete_sync_page_size,
                 sync_mode_min_blocks_behind: self.fisherman_sync_mode_min_blocks_behind,
+                batch_interval_seconds: self.fisherman_batch_interval_seconds,
                 maintenance_mode,
             })
         } else {

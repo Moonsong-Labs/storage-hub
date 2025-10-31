@@ -37,7 +37,7 @@ await describeMspNet(
 
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",
-        containerName: "storage-hub-sh-user-1",
+        containerName: userApi.shConsts.NODE_INFOS.user.containerName,
         timeout: 10000
       });
 
@@ -54,7 +54,7 @@ await describeMspNet(
       await getLastIndexedBlock(sql);
 
       // Simulate indexer falling behind by pausing its container while blockchain continues
-      await userApi.docker.pauseContainer("storage-hub-sh-indexer-1");
+      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.indexer.containerName);
 
       // Produce enough blocks (7) to exceed sync_mode_min_blocks_behind threshold (5)
       // This ensures the indexer will enter sync mode rather than processing blocks individually
@@ -73,7 +73,9 @@ await describeMspNet(
       await getLastIndexedBlock(sql);
 
       // Resume indexer to trigger catchup - it must now process backlog via finality notifications
-      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-indexer-1" });
+      await userApi.docker.resumeContainer({
+        containerName: userApi.shConsts.NODE_INFOS.indexer.containerName
+      });
 
       // Non-producer nodes must explicitly finalize imported blocks to trigger indexing
       // Producer node (user) has finalized blocks, but indexer node must finalize locally

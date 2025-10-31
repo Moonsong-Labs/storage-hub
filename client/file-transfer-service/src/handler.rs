@@ -232,6 +232,9 @@ impl<Runtime: StorageEnableRuntime> Actor for FileTransferService<Runtime> {
                     file_complete,
                     callback,
                 } => {
+                    trace!(target: LOG_TARGET, "Received upload response for request id {:?}", request_id);
+                    trace!(target: LOG_TARGET, "File complete: {:?}", file_complete);
+
                     let response =
                         schema::v1::provider::response::Response::RemoteUploadDataResponse(
                             schema::v1::provider::RemoteUploadDataResponse {
@@ -262,7 +265,10 @@ impl<Runtime: StorageEnableRuntime> Actor for FileTransferService<Runtime> {
 
                             // Checks if response was sent back
                             match pending_response_result {
-                                Ok(()) => callback.send(Ok(())),
+                                Ok(()) => {
+                                    trace!(target: LOG_TARGET, "Upload response sent back successfully");
+                                    callback.send(Ok(()))
+                                }
                                 Err(e) => {
                                     error!(
                                         target: LOG_TARGET,

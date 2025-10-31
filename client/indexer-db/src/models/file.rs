@@ -10,7 +10,7 @@ use shc_common::types::{FileMetadata, Fingerprint};
 
 use crate::{
     models::MultiAddress,
-    schema::{bucket, file, file_peer_id},
+    schema::{bucket, file, file_peer_id, msp_file},
     DbConnection,
 };
 
@@ -504,9 +504,14 @@ impl File {
 
     /// Get files pending deletion grouped by bucket.
     ///
-    /// Queries files with `deletion_status = InProgress` and groups them by their
+    /// Queries files with `deletion_status = InProgress` that have actual MSP associations
+    /// (i.e., files that the MSP accepted and confirmed storing) and groups them by their
     /// `onchain_bucket_id`. The deletion type determines whether to include files
     /// with or without user signatures.
+    ///
+    /// **Important**: This function only returns files where the MSP actually accepted the
+    /// storage request and created an `msp_file` association. Files that have a bucket_id
+    /// but were never accepted by the MSP will NOT be included in the results.
     ///
     /// # Arguments
     /// * `deletion_type` - Filter for user deletions (with signature) or incomplete deletions (without signature)
@@ -516,6 +521,7 @@ impl File {
     ///
     /// # Returns
     /// HashMap mapping bucket IDs (as `Vec<u8>`) to vectors of files pending deletion in that bucket.
+    /// Only includes files with actual MSP storage associations.
     ///
     /// # Note
     /// The limit/offset applies to the total number of files retrieved, not the number of buckets.
@@ -532,6 +538,7 @@ impl File {
 
         let mut query = file::table
             .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
+            .inner_join(msp_file::table.on(file::id.eq(msp_file::file_id)))
             .filter(file::deletion_status.eq(FileDeletionStatus::InProgress as i32))
             .into_boxed();
 
