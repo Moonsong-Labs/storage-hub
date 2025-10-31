@@ -94,8 +94,11 @@ pub fn spawn_transaction_watcher<Runtime>(
                                     nonce,
                                     peer_ids.len()
                                 );
-                                let _ =
-                                    status_tx.send((nonce, tx_hash, TransactionStatus::Broadcast(peer_ids)));
+                                let _ = status_tx.send((
+                                    nonce,
+                                    tx_hash,
+                                    TransactionStatus::Broadcast(peer_ids),
+                                ));
                             } else if let Some(block_hash_json) = result.get("inBlock") {
                                 let block_hash =
                                     parse_block_hash_from_json::<Runtime>(block_hash_json);
@@ -107,8 +110,11 @@ pub fn spawn_transaction_watcher<Runtime>(
                                 );
                                 // Note: TxIndex is not present in the RPC JSON response, and since the pool doesn't need it
                                 // for state tracking, we use 0 as a placeholder
-                                let _ = status_tx
-                                    .send((nonce, tx_hash, TransactionStatus::InBlock((block_hash, 0))));
+                                let _ = status_tx.send((
+                                    nonce,
+                                    tx_hash,
+                                    TransactionStatus::InBlock((block_hash, 0)),
+                                ));
                             } else if let Some(block_hash_json) = result.get("retracted") {
                                 let block_hash =
                                     parse_block_hash_from_json::<Runtime>(block_hash_json);
@@ -119,8 +125,11 @@ pub fn spawn_transaction_watcher<Runtime>(
                                     nonce,
                                     block_hash
                                 );
-                                let _ = status_tx
-                                    .send((nonce, tx_hash, TransactionStatus::Retracted(block_hash)));
+                                let _ = status_tx.send((
+                                    nonce,
+                                    tx_hash,
+                                    TransactionStatus::Retracted(block_hash),
+                                ));
                             } else if let Some(block_hash_json) = result.get("finalized") {
                                 let block_hash =
                                     parse_block_hash_from_json::<Runtime>(block_hash_json);
@@ -132,8 +141,11 @@ pub fn spawn_transaction_watcher<Runtime>(
                                 );
                                 // Note: TxIndex is not present in the RPC JSON response, and since the pool doesn't need it
                                 // for state tracking, we use 0 as a placeholder
-                                let _ = status_tx
-                                    .send((nonce, tx_hash, TransactionStatus::Finalized((block_hash, 0))));
+                                let _ = status_tx.send((
+                                    nonce,
+                                    tx_hash,
+                                    TransactionStatus::Finalized((block_hash, 0)),
+                                ));
                                 // Finalized is a terminal state, stop watching
                                 break;
                             } else if let Some(block_hash_json) = result.get("finalityTimeout") {
@@ -145,8 +157,11 @@ pub fn spawn_transaction_watcher<Runtime>(
                                     nonce,
                                     block_hash
                                 );
-                                let _ = status_tx
-                                    .send((nonce, tx_hash, TransactionStatus::FinalityTimeout(block_hash)));
+                                let _ = status_tx.send((
+                                    nonce,
+                                    tx_hash,
+                                    TransactionStatus::FinalityTimeout(block_hash),
+                                ));
                                 // FinalityTimeout is a terminal state, stop watching
                                 break;
                             } else if result.as_str() == Some("invalid") {
@@ -156,7 +171,8 @@ pub fn spawn_transaction_watcher<Runtime>(
                                     nonce,
                                     tx_hash
                                 );
-                                let _ = status_tx.send((nonce, tx_hash, TransactionStatus::Invalid));
+                                let _ =
+                                    status_tx.send((nonce, tx_hash, TransactionStatus::Invalid));
                                 // Invalid is a terminal state, stop watching
                                 break;
                             } else if let Some(usurped_by_json) = result.get("usurped") {
@@ -169,8 +185,11 @@ pub fn spawn_transaction_watcher<Runtime>(
                                     tx_hash,
                                     usurped_by_hash
                                 );
-                                let _ = status_tx
-                                    .send((nonce, tx_hash, TransactionStatus::Usurped(usurped_by_hash)));
+                                let _ = status_tx.send((
+                                    nonce,
+                                    tx_hash,
+                                    TransactionStatus::Usurped(usurped_by_hash),
+                                ));
                                 // Usurped is a terminal state, stop watching
                                 break;
                             } else if result.as_str() == Some("dropped") {
@@ -180,7 +199,8 @@ pub fn spawn_transaction_watcher<Runtime>(
                                     nonce,
                                     tx_hash
                                 );
-                                let _ = status_tx.send((nonce, tx_hash, TransactionStatus::Dropped));
+                                let _ =
+                                    status_tx.send((nonce, tx_hash, TransactionStatus::Dropped));
                                 // Dropped is a terminal state, stop watching
                                 break;
                             } else {
