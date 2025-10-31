@@ -112,11 +112,15 @@ where
     /// Watchers send TransactionStatus events for all lifecycle changes (Future, Ready, InBlock,
     /// Retracted, Finalized, Invalid, Dropped, Usurped). Terminal failure states (Invalid, Dropped)
     /// trigger immediate removal from the pool, enabling gap detection without waiting for timeout.
-    pub(crate) tx_status_sender:
-        tokio::sync::mpsc::UnboundedSender<(u32, TransactionStatus<Runtime::Hash, Runtime::Hash>)>,
+    pub(crate) tx_status_sender: tokio::sync::mpsc::UnboundedSender<(
+        u32,
+        Runtime::Hash,
+        TransactionStatus<Runtime::Hash, Runtime::Hash>,
+    )>,
     /// Channel receiver for processing transaction status updates.
     pub(crate) tx_status_receiver: tokio::sync::mpsc::UnboundedReceiver<(
         u32,
+        Runtime::Hash,
         TransactionStatus<Runtime::Hash, Runtime::Hash>,
     )>,
     /// Phantom data for the Runtime type.

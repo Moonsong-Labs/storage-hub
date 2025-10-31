@@ -144,6 +144,13 @@ where
 
         self.pending.insert(nonce, pending_tx);
 
+        // Create a new watch channel for status subscriptions
+        // Even if we're replacing a transaction with the same nonce, the new transaction
+        // needs its own fresh channel. The old transaction's watcher will receive an Usurped
+        // event and clean up its own channel separately
+        let (tx, _rx) = tokio::sync::watch::channel(TransactionStatus::Future);
+        self.status_subscribers.insert(nonce, tx);
+
         // Clear gap tracking for this nonce (if it was previously detected as a gap)
         self.detected_gaps.remove(&nonce);
 

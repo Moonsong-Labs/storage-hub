@@ -531,9 +531,14 @@ where
         );
 
         // Create a status subscription for this transaction
-        let status_subscription = self.transaction_pool.subscribe_to_status(nonce).expect(
-            "Transaction was just added to the pool, so it must have a status subscription",
-        );
+        let status_subscription = self
+            .transaction_pool
+            .subscribe_to_status(nonce)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Transaction was just added to the pool, so it must have a status subscription"
+                )
+            })?;
 
         Ok(SubmittedExtrinsicInfo {
             hash: id_hash,
@@ -756,7 +761,7 @@ where
     ///
     /// TODO: Implement automatic retry logic for retriable transactions
     pub(crate) fn process_transaction_status_updates(&mut self) {
-        while let Ok((nonce, status)) = self.tx_status_receiver.try_recv() {
+        while let Ok((nonce, tx_hash, status)) = self.tx_status_receiver.try_recv() {
             // Notify subscribers about the status change
             self.transaction_pool
                 .notify_status_change(nonce, status.clone());
@@ -772,58 +777,115 @@ where
             );
 
             if should_remove {
+                // Check if this transaction is still the current one in the pool
+                // (it might have been replaced by a newer transaction with the same nonce)
+                let is_current_transaction = self
+                    .transaction_pool
+                    .pending
+                    .get(&nonce)
+                    .map(|tx| tx.hash == tx_hash)
+                    .unwrap_or(false);
+
                 match &status {
                     TransactionStatus::Dropped => {
-                        warn!(
-                            target: LOG_TARGET,
-                            "⚠️ Transaction with nonce {} was dropped from pool. Removing from tracking but keeping gap detection.",
-                            nonce
-                        );
-                        self.transaction_pool.remove_pending_but_keep_gap(nonce);
+                        if is_current_transaction {
+                            warn!(
+                                target: LOG_TARGET,
+                                "⚠️ Transaction with nonce {} (hash: {:?}) was dropped from pool. Removing from tracking but keeping gap detection.",
+                                nonce, tx_hash
+                            );
+                            self.transaction_pool.remove_pending_but_keep_gap(nonce);
+                        } else {
+                            debug!(
+                                target: LOG_TARGET,
+                                "Ignoring Dropped event for old transaction with nonce {} (hash: {:?}), current transaction is different",
+                                nonce, tx_hash
+                            );
+                        }
                     }
                     TransactionStatus::Invalid => {
-                        warn!(
-                            target: LOG_TARGET,
-                            "⚠️ Transaction with nonce {} is invalid. Removing from tracking but keeping gap detection.",
-                            nonce
-                        );
-                        self.transaction_pool.remove_pending_but_keep_gap(nonce);
+                        if is_current_transaction {
+                            warn!(
+                                target: LOG_TARGET,
+                                "⚠️ Transaction with nonce {} (hash: {:?}) is invalid. Removing from tracking but keeping gap detection.",
+                                nonce, tx_hash
+                            );
+                            self.transaction_pool.remove_pending_but_keep_gap(nonce);
+                        } else {
+                            debug!(
+                                target: LOG_TARGET,
+                                "Ignoring Invalid event for old transaction with nonce {} (hash: {:?}), current transaction is different",
+                                nonce, tx_hash
+                            );
+                        }
                     }
                     TransactionStatus::Usurped(_) => {
-                        debug!(
-                            target: LOG_TARGET,
-                            "✓ Transaction with nonce {} was usurped. New transaction is tracked separately.",
-                            nonce
-                        );
-                        self.transaction_pool.remove(nonce);
+                        if is_current_transaction {
+                            debug!(
+                                target: LOG_TARGET,
+                                "✓ Transaction with nonce {} (hash: {:?}) was usurped. Removing from tracking.",
+                                nonce, tx_hash
+                            );
+                            self.transaction_pool.remove(nonce);
+                        } else {
+                            debug!(
+                                target: LOG_TARGET,
+                                "Ignoring Usurped event for old transaction with nonce {} (hash: {:?}), it was already replaced",
+                                nonce, tx_hash
+                            );
+                        }
                     }
                     TransactionStatus::Finalized(_) => {
-                        debug!(
-                            target: LOG_TARGET,
-                            "✓ Transaction with nonce {} was finalized. Removing from tracking.",
-                            nonce
-                        );
+                        if is_current_transaction {
+                            debug!(
+                                target: LOG_TARGET,
+                                "✓ Transaction with nonce {} (hash: {:?}) was finalized. Removing from tracking.",
+                                nonce, tx_hash
+                            );
+                        } else {
+                            warn!(
+                                target: LOG_TARGET,
+                                "⚠️ Old transaction with nonce {} (hash: {:?}) was finalized, but we have a different transaction ({:?}) in pool. \
+                                Removing newer transaction as nonce is now consumed.",
+                                nonce, tx_hash, self.transaction_pool.pending.get(&nonce).map(|tx| tx.hash)
+                            );
+                        }
                         self.transaction_pool.remove(nonce);
                     }
                     TransactionStatus::FinalityTimeout(_) => {
-                        debug!(
-                            target: LOG_TARGET,
-                            "⏱️ Transaction with nonce {} had finality timeout. Removing from tracking.",
-                            nonce
-                        );
-                        self.transaction_pool.remove(nonce);
+                        if is_current_transaction {
+                            debug!(
+                                target: LOG_TARGET,
+                                "⏱️ Transaction with nonce {} (hash: {:?}) had finality timeout. Removing from tracking.",
+                                nonce, tx_hash
+                            );
+                            self.transaction_pool.remove(nonce);
+                        } else {
+                            debug!(
+                                target: LOG_TARGET,
+                                "Ignoring FinalityTimeout event for old transaction with nonce {} (hash: {:?}), current transaction is different",
+                                nonce, tx_hash
+                            );
+                        }
                     }
                     _ => {}
                 }
             } else if let Some(tx) = self.transaction_pool.pending.get_mut(&nonce) {
-                // Update the latest status for non-terminal states
-                debug!(
-                    target: LOG_TARGET,
-                    "📊 Transaction with nonce {} status updated: {:?}",
-                    nonce,
-                    status
-                );
-                tx.latest_status = status;
+                // Only update status if this is the current transaction
+                if tx.hash == tx_hash {
+                    debug!(
+                        target: LOG_TARGET,
+                        "📊 Transaction with nonce {} (hash: {:?}) status updated: {:?}",
+                        nonce, tx_hash, status
+                    );
+                    tx.latest_status = status;
+                } else {
+                    debug!(
+                        target: LOG_TARGET,
+                        "Ignoring status update for old transaction with nonce {} (hash: {:?}), current hash is {:?}",
+                        nonce, tx_hash, tx.hash
+                    );
+                }
             }
         }
     }
