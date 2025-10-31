@@ -1,5 +1,7 @@
 import { strictEqual } from "node:assert";
 import { describeBspNet, type EnrichedBspApi, ShConsts } from "../../../util";
+import { TypeRegistry } from "@polkadot/types";
+import type { H256 } from "@polkadot/types/interfaces";
 
 /**
  * Integration tests for transaction pool and watcher functionality.
@@ -238,6 +240,166 @@ await describeBspNet(
         "Transaction hash should be different after usurpation"
       );
       strictEqual(currentTip > 0, true, "New transaction should have a tip greater than 0");
+    });
+
+    it("Transaction pool detects Invalid transactions and fills up nonce gap with next transaction", async () => {
+      // Seal a finalized block for a stable base
+      await userApi.block.seal();
+
+      // Get next challenge tick and position 2 blocks before it
+      // There's an edge case in which the next challenge tick is in the current or the next block, in which
+      // case we would be skipping to a past block and that's not what we want. We check for this
+      // and skip an extra period if needed.
+      const currentBlock = (await userApi.query.system.number()).toNumber();
+      let nextChallengeTick = await getNextChallengeHeight(userApi);
+      const challengePeriod = (
+        await userApi.call.proofsDealerApi.getChallengePeriod(ShConsts.DUMMY_BSP_ID)
+      ).asOk.toNumber();
+      if (nextChallengeTick < currentBlock + 1) {
+        nextChallengeTick += challengePeriod;
+      }
+      await userApi.block.skipTo(nextChallengeTick - 2, { finalised: true });
+
+      // Create a bucket and send a storage request to trigger BSP volunteer. This will seal 2 blocks to reach the challenge tick
+      const source1 = "res/whatsup.jpg";
+      const destination1 = "test/gap-test-1.jpg";
+      const bucketName1 = "gap-test-bucket-1";
+
+      const fileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(
+        source1,
+        destination1,
+        bucketName1
+      );
+      const bucketIdString = fileMetadata.bucketId;
+
+      // Now we should be at the challenge tick with both volunteer (nonce n) and proof (nonce n+1) in pool
+      // We check both the user and BSP API to ensure the transactions are present in both pools, since we have
+      // to drop the tx from the user (so it's not included in the block) and from the BSP (so it detects the
+      // dropped tx and the nonce gap is filled).
+
+      // The BSP volunteer should be in the pools
+      await userApi.wait.bspVolunteerInTxPool(1);
+      await bspApi.wait.bspVolunteerInTxPool(1);
+
+      // And the submit proof as well
+      await userApi.assert.extrinsicPresent({
+        module: "proofsDealer",
+        method: "submitProof",
+        checkTxPool: true
+      });
+      await bspApi.assert.extrinsicPresent({
+        module: "proofsDealer",
+        method: "submitProof",
+        checkTxPool: true
+      });
+
+      // Get the volunteer transaction nonce
+      const volunteerExtrinsics = await userApi.assert.extrinsicPresent({
+        module: "fileSystem",
+        method: "bspVolunteer",
+        checkTxPool: true,
+        assertLength: 1
+      });
+
+      const txPool1 = await userApi.rpc.author.pendingExtrinsics();
+      const volunteerNonce = txPool1[volunteerExtrinsics[0].extIndex].nonce.toNumber();
+
+      // And the submit proof transaction nonce
+      const submitProofExtrinsics = await userApi.assert.extrinsicPresent({
+        module: "proofsDealer",
+        method: "submitProof",
+        checkTxPool: true,
+        assertLength: 1
+      });
+      const submitProofNonce = txPool1[submitProofExtrinsics[0].extIndex].nonce.toNumber();
+
+      // They should differ by 1
+      strictEqual(
+        submitProofNonce - volunteerNonce,
+        1,
+        "Submit proof nonce should be 1 higher than volunteer nonce"
+      );
+
+      // Drop the volunteer transaction (creates the gap at nonce n)
+      await bspApi.node.dropTxn({ module: "fileSystem", method: "bspVolunteer" });
+      await userApi.node.dropTxn({ module: "fileSystem", method: "bspVolunteer" });
+
+      // Verify the volunteer was dropped
+      await userApi.assert.extrinsicPresent({
+        module: "fileSystem",
+        method: "bspVolunteer",
+        checkTxPool: true,
+        assertLength: 0
+      });
+      await bspApi.assert.extrinsicPresent({
+        module: "fileSystem",
+        method: "bspVolunteer",
+        checkTxPool: true,
+        assertLength: 0
+      });
+
+      // Verify the Invalid log was emitted
+      await bspApi.docker.waitForLog({
+        containerName: "storage-hub-sh-bsp-1",
+        searchString: `Transaction with nonce ${volunteerNonce} is invalid`,
+        timeout: 10000
+      });
+
+      // The submit proof should have also been dropped because it's no longer valid
+      await userApi.assert.extrinsicPresent({
+        module: "proofsDealer",
+        method: "submitProof",
+        checkTxPool: true,
+        assertLength: 0
+      });
+      await bspApi.assert.extrinsicPresent({
+        module: "proofsDealer",
+        method: "submitProof",
+        checkTxPool: true,
+        assertLength: 0
+      });
+
+      // Verify the Invalid log was emitted for the submit proof transaction
+      await bspApi.docker.waitForLog({
+        containerName: "storage-hub-sh-bsp-1",
+        searchString: `Transaction with nonce ${submitProofNonce} is invalid`,
+        timeout: 10000
+      });
+
+      // Create a second storage request which should trigger the gap filling and use the same nonce as the first one
+      const source2 = "res/adolphus.jpg";
+      const destination2 = "test/gap-test-2.jpg";
+
+      const registry = new TypeRegistry();
+      const bucketId: H256 = registry.createType("H256", bucketIdString);
+      await userApi.file.newStorageRequest(source2, destination2, bucketId);
+      await userApi.wait.bspVolunteerInTxPool(1);
+
+      // Check for the gap filling log
+      await bspApi.docker.waitForLog({
+        containerName: "storage-hub-sh-bsp-1",
+        searchString: "🔧 Using transaction to fill nonce gap at",
+        timeout: 10000
+      });
+
+      // Verify the new volunteer uses the same nonce as the dropped one
+      const newVolunteerExtrinsics = await userApi.assert.extrinsicPresent({
+        module: "fileSystem",
+        method: "bspVolunteer",
+        checkTxPool: true
+      });
+
+      const txPool2 = await userApi.rpc.author.pendingExtrinsics();
+      const newVolunteerNonce = txPool2[newVolunteerExtrinsics[0].extIndex].nonce.toNumber();
+
+      strictEqual(newVolunteerNonce, volunteerNonce, "New volunteer should fill gap with nonce n");
+
+      // Seal the block and verify the volunteer event was emitted.
+      // The proof transaction was discarded as Invalid by the watcher so it's no longer tracked
+      const { events } = await userApi.block.seal();
+
+      // Verify the volunteer event was emitted
+      await userApi.assert.eventPresent("fileSystem", "AcceptedBspVolunteer", events);
     });
   }
 );

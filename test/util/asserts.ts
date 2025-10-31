@@ -97,7 +97,7 @@ export const assertExtrinsicPresent = async (
         ({ method, module }) => method === options?.method && module === options?.module
       );
 
-      if (matches.length > 0) {
+      if (matches.length >= 0) {
         if (options?.assertLength !== undefined) {
           if (options?.exactLength === false) {
             assert(
