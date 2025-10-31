@@ -2180,6 +2180,8 @@ mod benchmarks {
         let expected_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::StorageRequestRejected {
                 file_key,
+                msp_id,
+                bucket_id,
                 reason: RejectedStorageRequestReason::RequestExpired,
             });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
