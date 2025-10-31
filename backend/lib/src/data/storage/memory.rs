@@ -38,8 +38,17 @@ pub enum InMemoryStorageError {
 struct NonceEntry {
     /// The user address associated with the nonce key
     address: String,
-    /// Timestamp when the nonce will expire from storage
-    expires_at: Instant,
+    /// Timestamp when the nonce was issued
+    issued_at: Instant,
+    /// Duration from `issued_at` when the nonce will expire from storage
+    expiry: Duration,
+}
+
+impl NonceEntry {
+    /// Checks if the entry has expired by the given `at` timestamp
+    fn expired_at(&self, at: Instant) -> bool {
+        at.saturating_duration_since(self.issued_at) >= self.expiry
+    }
 }
 
 /// In-memory storage implementation
@@ -97,7 +106,7 @@ impl InMemoryStorage {
                 let now = Instant::now();
 
                 let mut nonces_guard = nonces.write();
-                nonces_guard.retain(|_, entry| entry.expires_at > now);
+                nonces_guard.retain(|_, entry| !entry.expired_at(now));
             }
         });
 
@@ -138,12 +147,13 @@ impl Storage for InMemoryStorage {
         address: String,
         expiration_seconds: u64,
     ) -> Result<(), Self::Error> {
-        let now = Instant::now();
-        let expires_at = now + Duration::from_secs(expiration_seconds);
+        let issued_at = Instant::now();
+        let expiry = Duration::from_secs(expiration_seconds);
 
         let entry = NonceEntry {
             address,
-            expires_at,
+            issued_at,
+            expiry,
         };
 
         self.nonces.write().insert(message, entry);
@@ -156,7 +166,7 @@ impl Storage for InMemoryStorage {
         if let Some(entry) = nonces.remove(message) {
             let now = Instant::now();
 
-            if now < entry.expires_at {
+            if !entry.expired_at(now) {
                 return Ok(Some(entry.address));
             }
         }
