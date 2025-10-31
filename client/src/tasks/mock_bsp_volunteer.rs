@@ -76,12 +76,16 @@ where
             .blockchain
             .send_extrinsic(
                 call.clone(),
-                SendExtrinsicOptions::new(Duration::from_secs(
-                    self.storage_hub_handler
-                        .provider_config
-                        .blockchain_service
-                        .extrinsic_retry_timeout,
-                )),
+                SendExtrinsicOptions::new(
+                    Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .blockchain_service
+                            .extrinsic_retry_timeout,
+                    ),
+                    Some("fileSystem".to_string()),
+                    Some("bspVolunteer".to_string()),
+                ),
             )
             .await?
             .watch_for_success()

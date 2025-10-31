@@ -77,12 +77,16 @@ where
             .blockchain
             .send_extrinsic(
                 call,
-                SendExtrinsicOptions::new(Duration::from_secs(
-                    self.storage_hub_handler
-                        .provider_config
-                        .blockchain_service
-                        .extrinsic_retry_timeout,
-                )),
+                SendExtrinsicOptions::new(
+                    Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .blockchain_service
+                            .extrinsic_retry_timeout,
+                    ),
+                    Some("system".to_string()),
+                    Some("remarkWithEvent".to_string()),
+                ),
             )
             .await?
             .watch_for_success()
