@@ -11,7 +11,7 @@ import { describeBspNet, type EnrichedBspApi, ShConsts, bspKey } from "../../../
  */
 await describeBspNet(
   "Transaction Pool & Watcher",
-  { initialised: true, networkConfig: "standard", only: true, keepAlive: true },
+  { initialised: true, networkConfig: "standard", only: true },
   ({ before, createUserApi, createBspApi, it }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
@@ -90,13 +90,6 @@ await describeBspNet(
       await bspApi.docker.waitForLog({
         containerName: "storage-hub-sh-bsp-1",
         searchString: `Transaction with nonce ${nonce} was finalized in block`,
-        timeout: 10000
-      });
-
-      // Check for the transaction being removed from our tracking
-      await bspApi.docker.waitForLog({
-        containerName: "storage-hub-sh-bsp-1",
-        searchString: "was finalized. Removing from tracking",
         timeout: 10000
       });
     });

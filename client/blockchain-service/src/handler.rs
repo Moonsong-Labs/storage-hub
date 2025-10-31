@@ -1525,6 +1525,11 @@ where
 
         info!(target: LOG_TARGET, "📨 Finality notification #{}: {}", block_number, block_hash);
 
+        // Process any pending transaction status updates from watchers
+        // This is important because watchers send Finalized status that could
+        // arrive in between block imports
+        self.process_transaction_status_updates();
+
         // Get events from storage.
         match get_events_at_block::<Runtime>(&self.client, &block_hash) {
             Ok(block_events) => {
