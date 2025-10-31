@@ -13,6 +13,7 @@ use pallet_storage_providers_runtime_api::{
 use polkadot_runtime_common::BlockHashCount;
 use sc_client_api::{BlockBackend, BlockImportNotification, HeaderBackend};
 use sc_network::Multiaddr;
+use sc_transaction_pool_api::TransactionStatus;
 use shc_actors_framework::actor::Actor;
 use shc_common::{
     blockchain_utils::{
@@ -367,9 +368,15 @@ where
     ///
     /// If the nonce is higher, the `nonce_counter` is updated in the [`BlockchainService`].
     pub(crate) fn sync_nonce(&mut self, block_hash: &Runtime::Hash) {
-        let latest_nonce = self.account_nonce(block_hash);
-        if latest_nonce > self.nonce_counter {
-            self.nonce_counter = latest_nonce
+        let on_chain_nonce = self.account_nonce(block_hash);
+        if on_chain_nonce > self.nonce_counter {
+            debug!(
+                target: LOG_TARGET,
+                "Syncing nonce from {} (local) to {} (on-chain)",
+                self.nonce_counter,
+                on_chain_nonce
+            );
+            self.nonce_counter = on_chain_nonce;
         }
     }
 
@@ -457,56 +464,71 @@ where
         debug!(target: LOG_TARGET, "Sending extrinsic to the runtime");
 
         let block_hash = self.client.info().best_hash;
+        let block_number = self.client.info().best_number.saturated_into();
 
-        // Use the highest valid nonce.
-        let nonce = max(
-            options.nonce().unwrap_or(self.nonce_counter),
-            self.account_nonce(&block_hash),
-        );
+        // Check if there's a nonce gap we can fill with this transaction
+        let on_chain_nonce = self.account_nonce(&block_hash);
+        let gaps =
+            self.transaction_pool
+                .detect_gaps(on_chain_nonce, self.nonce_counter, block_number);
+
+        // Use the highest valid nonce, OR the first gap nonce if one exists
+        let nonce = if !gaps.is_empty() && options.nonce().is_none() {
+            let gap_nonce = gaps[0].nonce;
+            info!(
+                target: LOG_TARGET,
+                "🔧 Using transaction to fill nonce gap at {} (would have been {})",
+                gap_nonce,
+                self.nonce_counter
+            );
+            gap_nonce
+        } else {
+            max(
+                options.nonce().unwrap_or(self.nonce_counter),
+                on_chain_nonce,
+            )
+        };
 
         // Construct the extrinsic.
-        let extrinsic = self.construct_extrinsic(self.client.clone(), call, nonce, options.tip());
+        let call: Runtime::Call = call.into();
+        let extrinsic =
+            self.construct_extrinsic(self.client.clone(), call.clone(), nonce, options.tip());
 
         // Generate a unique ID for this query.
         let id_hash = Blake2Hasher::hash(&extrinsic.encode());
-        // TODO: Consider storing the ID in a hashmap if later retrieval is needed.
 
-        let (result, rx) = self
-            .rpc_handlers
-            .rpc_query(&format!(
-                r#"{{
-                    "jsonrpc": "2.0",
-                    "method": "author_submitAndWatchExtrinsic",
-                    "params": ["0x{}"],
-                    "id": {:?}
-                }}"#,
-                array_bytes::bytes2hex("", &extrinsic.encode()),
-                array_bytes::bytes2hex("", &id_hash.as_bytes())
-            ))
-            .await
-            .expect("Sending query failed even when it is correctly formatted as JSON-RPC; qed");
+        // Submit the transaction and set up the watcher infrastructure for it.
+        // We submit before tracking because Substrate's transaction pool validates everything
+        // (including nonce conflicts, tip comparisons, etc.). If the RPC accepts it, it's safe to track
+        let (tx_hash, result, return_rx, watch_rx) = self
+            .submit_and_watch_extrinsic(extrinsic.encode(), nonce, id_hash)
+            .await?;
 
-        let json: serde_json::Value =
-            serde_json::from_str(&result).expect("the result can only be a JSONRPC string; qed");
-        let error = json
-            .as_object()
-            .expect("JSON result is always an object; qed")
-            .get("error");
-
-        if let Some(error) = error {
-            // TODO: Consider how to handle a low nonce error, and retry.
-            return Err(anyhow::anyhow!("Error in RPC call: {}", error.to_string()));
+        // Add the transaction to the transaction pool to track it
+        if let Err(e) = self
+            .transaction_pool
+            .track_transaction(nonce, id_hash, call, block_number)
+        {
+            warn!(
+                target: LOG_TARGET,
+                "Failed to track transaction in pool: {:?}. Transaction will still be watched but not tracked for gap detection.",
+                e
+            );
         }
 
         // TODO: Handle nonce overflow.
-        // Only update nonce after we are sure no errors
-        // occurred submitting the extrinsic.
-        self.nonce_counter = nonce + 1;
+        // Only update nonce after we are sure no errors occurred submitting the extrinsic to the node.
+        // Use max() to prevent regression when filling gaps. For example, if we're filling a gap at
+        // nonce 25 but our local nonce counter is already at 28, we want to keep it at 28, not drop it to 26
+        self.nonce_counter = max(self.nonce_counter, nonce + 1);
+
+        // Spawn the transaction watcher
+        self.spawn_transaction_watcher(nonce, tx_hash, watch_rx, self.tx_status_sender.clone());
 
         Ok(RpcExtrinsicOutput {
             hash: id_hash,
             result,
-            receiver: rx,
+            receiver: return_rx,
             nonce,
         })
     }
@@ -744,6 +766,529 @@ where
         };
 
         (current_tick_minus_last_submission % provider_challenge_period) == Zero::zero()
+    }
+
+    /// Process pending transaction status updates from watchers.
+    ///
+    /// Immediate removal from our transaction pool (all terminal states):
+    /// - Invalid (retriable - gap preserved)
+    /// - Dropped (retriable - gap preserved)
+    /// - Usurped (replaced - gap cleared)
+    /// - Finalized (success - gap cleared)
+    /// - FinalityTimeout (timeout - gap cleared)
+    ///
+    /// Kept in our transaction pool (non-terminal states):
+    /// - Future
+    /// - Ready
+    /// - Broadcast
+    /// - InBlock
+    /// - Retracted
+    ///
+    /// TODO: Implement automatic retry logic for retriable transactions
+    pub(crate) fn process_transaction_status_updates(&mut self) {
+        while let Ok((nonce, status)) = self.tx_status_receiver.try_recv() {
+            // Check if this is a terminal state that requires immediate removal
+            let should_remove = matches!(
+                status,
+                TransactionStatus::Invalid
+                    | TransactionStatus::Dropped
+                    | TransactionStatus::Usurped(_)
+                    | TransactionStatus::Finalized(_)
+                    | TransactionStatus::FinalityTimeout(_)
+            );
+
+            if should_remove {
+                match &status {
+                    TransactionStatus::Dropped => {
+                        warn!(
+                            target: LOG_TARGET,
+                            "⚠️ Transaction with nonce {} was dropped from pool. Removing from tracking but keeping gap detection.",
+                            nonce
+                        );
+                        self.transaction_pool.remove_pending_but_keep_gap(nonce);
+                    }
+                    TransactionStatus::Invalid => {
+                        warn!(
+                            target: LOG_TARGET,
+                            "⚠️ Transaction with nonce {} is invalid. Removing from tracking but keeping gap detection.",
+                            nonce
+                        );
+                        self.transaction_pool.remove_pending_but_keep_gap(nonce);
+                    }
+                    TransactionStatus::Usurped(_) => {
+                        debug!(
+                            target: LOG_TARGET,
+                            "✓ Transaction with nonce {} was usurped. New transaction is tracked separately.",
+                            nonce
+                        );
+                        self.transaction_pool.remove(nonce);
+                    }
+                    TransactionStatus::Finalized(_) => {
+                        debug!(
+                            target: LOG_TARGET,
+                            "✓ Transaction with nonce {} was finalized. Removing from tracking.",
+                            nonce
+                        );
+                        self.transaction_pool.remove(nonce);
+                    }
+                    TransactionStatus::FinalityTimeout(_) => {
+                        debug!(
+                            target: LOG_TARGET,
+                            "⏱️ Transaction with nonce {} had finality timeout. Removing from tracking.",
+                            nonce
+                        );
+                        self.transaction_pool.remove(nonce);
+                    }
+                    _ => {}
+                }
+            } else if let Some(tx) = self.transaction_pool.pending.get_mut(&nonce) {
+                // Update the latest status for non-terminal states
+                debug!(
+                    target: LOG_TARGET,
+                    "📊 Transaction with nonce {} status updated: {:?}",
+                    nonce,
+                    status
+                );
+                tx.latest_status = status;
+            }
+        }
+    }
+
+    /// Handle old nonce gaps that haven't been filled in the transaction pool.
+    ///
+    /// Nonce gaps can occur when a transaction is dropped from the mempool after RPC acceptance
+    /// so it fails to be included, but higher nonces were submitted optimistically.
+    ///
+    /// Normally, nonce gaps are filled automatically when a new transaction is submitted, but in case
+    /// a new transaction is not submitted after a certain number of blocks, we will send a `remark`
+    /// transaction to fill the gap and avoid the client getting stuck.
+    pub(crate) async fn handle_old_nonce_gaps(&mut self, block_number: BlockNumber<Runtime>) {
+        // Detect gaps in the nonce sequence
+        let on_chain_nonce = self.account_nonce(&self.client.info().best_hash);
+        let gaps =
+            self.transaction_pool
+                .detect_gaps(on_chain_nonce, self.nonce_counter, block_number);
+
+        if gaps.is_empty() {
+            return;
+        }
+
+        // Send gap-filling transactions for old gaps
+        let gap_fill_threshold = self.transaction_pool.config.gap_fill_threshold_blocks;
+
+        for gap in gaps {
+            if gap.age_in_blocks >= gap_fill_threshold {
+                warn!(
+                    target: LOG_TARGET,
+                    "Gap at nonce {} is {} blocks old, sending gap-filling transaction",
+                    gap.nonce,
+                    gap.age_in_blocks
+                );
+
+                if let Err(e) = self.send_gap_filling_transaction(gap.nonce).await {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to send gap-filling transaction for nonce {}: {:?}",
+                        gap.nonce,
+                        e
+                    );
+                }
+            } else {
+                debug!(
+                    target: LOG_TARGET,
+                    "Gap at nonce {} is only {} blocks old, waiting before filling",
+                    gap.nonce,
+                    gap.age_in_blocks
+                );
+            }
+        }
+    }
+
+    /// Send a gap-filling transaction using system.remark("").
+    ///
+    /// This is used as a fallback when a nonce gap persists after a timeout
+    /// and no other transaction have been submitted to fill the gap.
+    async fn send_gap_filling_transaction(&mut self, nonce: u32) -> Result<()> {
+        info!(
+                target: LOG_TARGET,
+                "Sending gap-filling transaction (system.remark) for nonce {}",
+                nonce
+        );
+
+        // Create a system.remark("") call
+        let remark_call = frame_system::Call::<Runtime>::remark { remark: vec![] };
+        let call: Runtime::Call = remark_call.into();
+
+        // Construct the extrinsic
+        let extrinsic = self.construct_extrinsic(self.client.clone(), call.clone(), nonce, 0);
+
+        // Calculate the transaction hash
+        let id_hash = sp_core::Blake2Hasher::hash(&extrinsic.encode());
+
+        // Submit the transaction and set up the watcher infrastructure for it.
+        // We submit before tracking because Substrate's transaction pool validates everything
+        // (including nonce conflicts, tip comparisons, etc.). If the RPC accepts it, it's safe to track
+        let (tx_hash, _result, _return_rx, watch_rx) = self
+            .submit_and_watch_extrinsic(extrinsic.encode(), nonce, id_hash)
+            .await?;
+
+        // Add the transaction to the transaction pool to track it
+        let block_number = self.client.info().best_number.saturated_into();
+        if let Err(e) =
+            self.transaction_pool
+                .track_transaction(nonce, id_hash, call.clone(), block_number)
+        {
+            warn!(
+                target: LOG_TARGET,
+                "Failed to track gap-filling transaction: {:?}. It will still be watched.",
+                e
+            );
+        }
+
+        // Spawn the watcher for the gap-filling transaction.
+        self.spawn_transaction_watcher(nonce, tx_hash, watch_rx, self.tx_status_sender.clone());
+
+        info!(
+                target: LOG_TARGET,
+                "Successfully sent gap-filling transaction for nonce {}",
+                nonce
+        );
+
+        Ok(())
+    }
+
+    /// Watch and log a transaction's lifecycle.
+    ///
+    /// This spawns a background task that monitors the transaction status via RPC subscription
+    /// (`author_submitAndWatchExtrinsic`), logs all state changes, and sends TransactionStatus
+    /// updates to the transaction pool via the status channel.
+    ///
+    /// Watchers send status updates via the channel when transactions move through their lifecycle:
+    /// - Future: Transaction nonce is ahead so it is waiting in the future queue
+    /// - Ready: Transaction is ready for inclusion in a block
+    /// - Broadcast: Transaction has been propagated to peers
+    /// - InBlock: Transaction has been included in a block (NOT final - can be retracted in a reorg)
+    /// - Retracted: Block containing the tx was reverted (tx stays in pool, may be included later)
+    /// - Finalized: Transaction was finalized by consensus gadget (GRANDPA) - terminal success state
+    /// - Invalid: Transaction is no longer valid - terminal failure state (retriable)
+    /// - Dropped: Transaction was removed due to pool limits - terminal failure state (retriable)
+    /// - Usurped: Transaction was replaced by another transaction with the same nonce - terminal state
+    /// - FinalityTimeout: Finality unwatched after 512 blocks - terminal state
+    pub(crate) fn spawn_transaction_watcher(
+        &self,
+        nonce: u32,
+        tx_hash: Runtime::Hash,
+        mut receiver: tokio::sync::broadcast::Receiver<String>,
+        status_tx: tokio::sync::mpsc::UnboundedSender<(
+            u32,
+            TransactionStatus<Runtime::Hash, Runtime::Hash>,
+        )>,
+    ) {
+        tokio::spawn(async move {
+            info!(
+                target: LOG_TARGET,
+                "📡 Watching transaction with nonce {} (hash: {:?})",
+                nonce,
+                tx_hash
+            );
+
+            while let Ok(status_update) = receiver.recv().await {
+                match serde_json::from_str::<serde_json::Value>(&status_update) {
+                    Ok(json) => {
+                        if let Some(params) = json.get("params") {
+                            if let Some(result) = params.get("result") {
+                                // Handle all TransactionStatus variants according to the API
+                                // Some variants are strings: "ready", "future"
+                                // Others are objects: {"inBlock": "0x..."}, {"broadcast": [...]}
+                                if result.as_str() == Some("future") {
+                                    warn!(
+                                        target: LOG_TARGET,
+                                        "⏭ Transaction with nonce {} is future",
+                                        nonce
+                                    );
+                                    let _ = status_tx.send((nonce, TransactionStatus::Future));
+                                } else if result.as_str() == Some("ready") {
+                                    debug!(
+                                        target: LOG_TARGET,
+                                        "✓ Transaction with nonce {} is ready (in transaction pool)",
+                                        nonce
+                                    );
+                                    let _ = status_tx.send((nonce, TransactionStatus::Ready));
+                                } else if let Some(broadcast) = result.get("broadcast") {
+                                    // Parse peer IDs from the broadcast array
+                                    let peer_ids: Vec<String> = broadcast
+                                        .as_array()
+                                        .map(|arr| {
+                                            arr.iter()
+                                                .filter_map(|v| v.as_str().map(String::from))
+                                                .collect()
+                                        })
+                                        .unwrap_or_default();
+
+                                    debug!(
+                                        target: LOG_TARGET,
+                                        "📡 Transaction with nonce {} was broadcast to {} peers",
+                                        nonce,
+                                        peer_ids.len()
+                                    );
+                                    let _ = status_tx
+                                        .send((nonce, TransactionStatus::Broadcast(peer_ids)));
+                                } else if let Some(block_hash_json) = result.get("inBlock") {
+                                    let block_hash =
+                                        Self::parse_block_hash_from_json(block_hash_json);
+                                    info!(
+                                        target: LOG_TARGET,
+                                        "✓ Transaction with nonce {} was included in block: {:?}",
+                                        nonce,
+                                        block_hash
+                                    );
+                                    // Note: TxIndex is not present in the RPC JSON response, and since the pool doesn't need it
+                                    // for state tracking, we use 0 as a placeholder
+                                    let _ = status_tx
+                                        .send((nonce, TransactionStatus::InBlock((block_hash, 0))));
+                                } else if let Some(block_hash_json) = result.get("retracted") {
+                                    let block_hash =
+                                        Self::parse_block_hash_from_json(block_hash_json);
+                                    warn!(
+                                        target: LOG_TARGET,
+                                        "🔄 Transaction with nonce {} was retracted from block: {:?}. Block was reverted in reorg. \
+                                        Transaction stays in pool and may be included in another block.",
+                                        nonce,
+                                        block_hash
+                                    );
+                                    let _ = status_tx
+                                        .send((nonce, TransactionStatus::Retracted(block_hash)));
+                                } else if let Some(block_hash_json) = result.get("finalized") {
+                                    let block_hash =
+                                        Self::parse_block_hash_from_json(block_hash_json);
+                                    info!(
+                                        target: LOG_TARGET,
+                                        "✓ Transaction with nonce {} was finalized in block: {:?}",
+                                        nonce,
+                                        block_hash
+                                    );
+                                    // Note: TxIndex is not present in the RPC JSON response, and since the pool doesn't need it
+                                    // for state tracking, we use 0 as a placeholder
+                                    let _ = status_tx.send((
+                                        nonce,
+                                        TransactionStatus::Finalized((block_hash, 0)),
+                                    ));
+                                    // Finalized is a terminal state, stop watching
+                                    break;
+                                } else if let Some(block_hash_json) = result.get("finalityTimeout")
+                                {
+                                    let block_hash =
+                                        Self::parse_block_hash_from_json(block_hash_json);
+                                    warn!(
+                                        target: LOG_TARGET,
+                                        "⏱️ Transaction with nonce {} had finality timeout after 512 blocks in block: {:?}",
+                                        nonce,
+                                        block_hash
+                                    );
+                                    let _ = status_tx.send((
+                                        nonce,
+                                        TransactionStatus::FinalityTimeout(block_hash),
+                                    ));
+                                    // FinalityTimeout is a terminal state, stop watching
+                                    break;
+                                } else if result.as_str() == Some("invalid") {
+                                    error!(
+                                        target: LOG_TARGET,
+                                        "✗ Transaction with nonce {} is invalid (hash: {:?})",
+                                        nonce,
+                                        tx_hash
+                                    );
+                                    let _ = status_tx.send((nonce, TransactionStatus::Invalid));
+                                    // Invalid is a terminal state, stop watching
+                                    break;
+                                } else if let Some(usurped_by_json) = result.get("usurped") {
+                                    let usurped_by_hash =
+                                        Self::parse_tx_hash_from_json(usurped_by_json);
+                                    warn!(
+                                        target: LOG_TARGET,
+                                        "⚠ Transaction with nonce {} (hash: {:?}) was usurped by transaction {:?}",
+                                        nonce,
+                                        tx_hash,
+                                        usurped_by_hash
+                                    );
+                                    let _ = status_tx
+                                        .send((nonce, TransactionStatus::Usurped(usurped_by_hash)));
+                                    // Usurped is a terminal state, stop watching
+                                    break;
+                                } else if result.as_str() == Some("dropped") {
+                                    warn!(
+                                        target: LOG_TARGET,
+                                        "⚠ Transaction with nonce {} was dropped (hash: {:?})",
+                                        nonce,
+                                        tx_hash
+                                    );
+                                    let _ = status_tx.send((nonce, TransactionStatus::Dropped));
+                                    // Dropped is a terminal state, stop watching
+                                    break;
+                                } else {
+                                    debug!(
+                                        target: LOG_TARGET,
+                                        "Transaction with nonce {} status update: {:?}",
+                                        nonce,
+                                        result
+                                    );
+                                }
+                            }
+                        } else if let Some(error) = json.get("error") {
+                            error!(
+                                target: LOG_TARGET,
+                                "✗ Transaction with nonce {} error: {:?}",
+                                nonce,
+                                error
+                            );
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        warn!(
+                            target: LOG_TARGET,
+                            "Failed to parse transaction status for nonce {}: {:?}",
+                            nonce,
+                            e
+                        );
+                    }
+                }
+            }
+
+            debug!(
+                target: LOG_TARGET,
+                "📡 Stopped watching transaction with nonce {}",
+                nonce
+            );
+        });
+    }
+
+    /// Parse a block hash from a JSON value containing a hex-encoded hash string.
+    ///
+    /// Returns `Default::default()` if parsing fails (hex decoding error or wrong length).
+    fn parse_block_hash_from_json(json_value: &serde_json::Value) -> Runtime::Hash {
+        json_value
+            .as_str()
+            .and_then(|hex_str| {
+                // Remove 0x prefix if present
+                let hex_str = hex_str.strip_prefix("0x").unwrap_or(hex_str);
+                // Decode hex to bytes
+                array_bytes::hex2bytes(hex_str).ok()
+            })
+            .and_then(|bytes| {
+                // Try to decode as Runtime::Hash
+                Decode::decode(&mut &bytes[..]).ok()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Parse a transaction hash from a JSON value containing a hex-encoded hash string.
+    ///
+    /// Returns `Default::default()` if parsing fails.
+    fn parse_tx_hash_from_json(json_value: &serde_json::Value) -> Runtime::Hash {
+        // Same implementation as block hash since they're both Runtime::Hash
+        Self::parse_block_hash_from_json(json_value)
+    }
+
+    /// Submit an extrinsic via RPC and set up a broadcast channel with a watcher.
+    ///
+    /// This is the common logic for submitting transactions and monitoring their status.
+    /// It handles RPC errors, JSON parsing, and sets up the watcher infrastructure.
+    ///
+    /// Returns a tuple of (transaction_hash, result_string, receiver_for_caller, receiver_for_watcher)
+    async fn submit_and_watch_extrinsic(
+        &self,
+        extrinsic_encoded: Vec<u8>,
+        nonce: u32,
+        id_hash: Runtime::Hash,
+    ) -> Result<(
+        Runtime::Hash,
+        String,
+        tokio::sync::mpsc::Receiver<String>,
+        tokio::sync::broadcast::Receiver<String>,
+    )> {
+        // Submit the transaction via RPC
+        let (result, rx) = match self
+            .rpc_handlers
+            .rpc_query(&format!(
+                r#"{{
+                    "jsonrpc": "2.0",
+                    "method": "author_submitAndWatchExtrinsic",
+                    "params": ["0x{}"],
+                    "id": {:?}
+                }}"#,
+                array_bytes::bytes2hex("", &extrinsic_encoded),
+                array_bytes::bytes2hex("", &id_hash.as_bytes())
+            ))
+            .await
+        {
+            Ok((result, rx)) => (result, rx),
+            Err(e) => {
+                error!(
+                    target: LOG_TARGET,
+                    "RPC query failed for transaction with nonce {}: {}",
+                    nonce,
+                    e
+                );
+                return Err(anyhow::anyhow!("RPC query failed: {}", e));
+            }
+        };
+
+        // Parse JSON response
+        let json: serde_json::Value = match serde_json::from_str(&result) {
+            Ok(json) => json,
+            Err(e) => {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to parse RPC response for nonce {}: {}",
+                    nonce,
+                    e
+                );
+                return Err(anyhow::anyhow!("Failed to parse RPC response: {}", e));
+            }
+        };
+
+        // Check for errors in response
+        let error = match json.as_object() {
+            Some(obj) => obj.get("error"),
+            None => {
+                error!(
+                    target: LOG_TARGET,
+                    "RPC response is not a JSON object for nonce {}",
+                    nonce
+                );
+                return Err(anyhow::anyhow!("RPC response is not a JSON object"));
+            }
+        };
+
+        if let Some(error) = error {
+            return Err(anyhow::anyhow!("Error in RPC call: {}", error.to_string()));
+        }
+
+        // Set up a broadcast channel to allow multiple watchers of the same transaction
+        let (watch_tx, watch_rx1) = tokio::sync::broadcast::channel(100);
+        let watch_rx2 = watch_tx.subscribe();
+
+        // Spawn a forwarder from mpsc to broadcast
+        tokio::spawn(async move {
+            let mut rx = rx;
+            while let Some(msg) = rx.recv().await {
+                let _ = watch_tx.send(msg); // Ignore errors if receivers are dropped
+            }
+        });
+
+        // Convert the broadcast receiver to mpsc for compatibility with the caller
+        let (return_tx, return_rx) = tokio::sync::mpsc::channel(100);
+        tokio::spawn(async move {
+            let mut rx = watch_rx1;
+            while let Ok(msg) = rx.recv().await {
+                if return_tx.send(msg).await.is_err() {
+                    break; // Caller dropped the receiver
+                }
+            }
+        });
+
+        Ok((id_hash, result, return_rx, watch_rx2))
     }
 
     /// Applies Forest root changes found in a [`TreeRoute`].

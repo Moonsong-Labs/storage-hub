@@ -8,6 +8,7 @@ use sc_client_api::{
 use sc_network_types::PeerId;
 use sc_service::RpcHandlers;
 use sc_tracing::tracing::{debug, error, info, trace, warn};
+use sc_transaction_pool_api::TransactionStatus;
 use shc_common::traits::StorageEnableRuntime;
 use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_blockchain::TreeRoute;
@@ -42,6 +43,7 @@ use crate::{
     events::BlockchainServiceEventBusProvider,
     state::{BlockchainServiceStateStore, LastProcessedBlockNumberCf},
     transaction::SubmittedTransaction,
+    transaction_pool::{TransactionPool, TransactionPoolConfig},
     types::{FileDistributionInfo, ManagedProvider, MinimalBlockInfo, NewBlockNotificationKind},
 };
 
@@ -103,6 +105,21 @@ where
     pub(crate) capacity_manager: Option<CapacityRequestQueue<Runtime>>,
     /// Whether the node is running in maintenance mode.
     pub(crate) maintenance_mode: bool,
+    /// Transaction pool for tracking pending transactions and managing nonces.
+    pub(crate) transaction_pool:
+        TransactionPool<Runtime::Hash, Runtime::Call, BlockNumber<Runtime>>,
+    /// Channel for transaction watchers to send status updates.
+    ///
+    /// Watchers send TransactionStatus events for all lifecycle changes (Future, Ready, InBlock,
+    /// Retracted, Finalized, Invalid, Dropped, Usurped). Terminal failure states (Invalid, Dropped)
+    /// trigger immediate removal from the pool, enabling gap detection without waiting for timeout.
+    pub(crate) tx_status_sender:
+        tokio::sync::mpsc::UnboundedSender<(u32, TransactionStatus<Runtime::Hash, Runtime::Hash>)>,
+    /// Channel receiver for processing transaction status updates.
+    pub(crate) tx_status_receiver: tokio::sync::mpsc::UnboundedReceiver<(
+        u32,
+        TransactionStatus<Runtime::Hash, Runtime::Hash>,
+    )>,
     /// Phantom data for the Runtime type.
     _runtime: PhantomData<Runtime>,
 }
@@ -1279,6 +1296,9 @@ where
         capacity_request_queue: Option<CapacityRequestQueue<Runtime>>,
         maintenance_mode: bool,
     ) -> Self {
+        // Create channel for transaction status updates
+        let (tx_status_sender, tx_status_receiver) = tokio::sync::mpsc::unbounded_channel();
+
         Self {
             config,
             event_bus_provider: BlockchainServiceEventBusProvider::new(),
@@ -1295,6 +1315,9 @@ where
             notify_period,
             capacity_manager: capacity_request_queue,
             maintenance_mode,
+            transaction_pool: TransactionPool::new(TransactionPoolConfig::default()),
+            tx_status_sender,
+            tx_status_receiver,
             _runtime: PhantomData,
         }
     }
@@ -1399,6 +1422,18 @@ where
         tree_route: TreeRoute<OpaqueBlock>,
     ) {
         trace!(target: LOG_TARGET, "📠 Processing block import #{}: {}", block_number, block_hash);
+
+        // Process any pending transaction status updates from watchers
+        // This handles immediate removal from the transaction pool of all transactions in a terminal state
+        self.process_transaction_status_updates();
+
+        // Clean up the stale nonce gaps in the transaction pool
+        let on_chain_nonce = self.account_nonce(&self.client.info().best_hash);
+        self.transaction_pool
+            .cleanup_stale_nonce_gaps(on_chain_nonce);
+
+        // Handle old nonce gaps that haven't been filled in the transaction pool
+        self.handle_old_nonce_gaps(*block_number).await;
 
         // Provider-specific code to run at the start of every block import.
         match self.maybe_managed_provider {
