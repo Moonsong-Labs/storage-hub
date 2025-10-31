@@ -43,6 +43,6 @@ pub trait RpcConnection: Send + Sync {
     /// Check if the connection is currently active
     async fn is_connected(&self) -> bool;
 
-    /// Close the connection gracefully
-    async fn close(&self) -> RpcResult<()>;
+    /// Create a new instance of the connection, closing the current one gracefully
+    async fn reconnect(&self) -> RpcResult<()>;
 }
