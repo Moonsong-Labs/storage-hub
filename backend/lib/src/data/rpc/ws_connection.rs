@@ -128,9 +128,10 @@ impl RpcConnection for WsConnection {
         }
     }
 
-    async fn close(&self) -> RpcResult<()> {
-        self.client.write().await.take();
+    async fn reconnect(&self) -> RpcResult<()> {
+        let new_client = Self::build_client(&self.config).await?;
 
+        self.client.write().await.replace(Arc::new(new_client));
         Ok(())
     }
 }
