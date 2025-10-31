@@ -22,11 +22,11 @@ pub struct VerifyRequest {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VerifyResponse {
     pub token: String,
-    pub user: User,
+    pub user: UserProfile,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct User {
+pub struct UserProfile {
     // TODO: consider typing this field more strongly
     pub address: String,
     pub ens: String,
