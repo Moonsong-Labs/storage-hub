@@ -306,7 +306,7 @@ where
 ///
 /// # Returns
 ///
-/// Returns `Ok(Some(Hash))` with the block hash if the transaction reaches the desired status.
+/// Returns `Ok(Hash)` with the block hash if the transaction reaches the desired status.
 /// Returns `Err` if:
 /// - The transaction reaches a failure terminal state (Invalid, Dropped, Usurped, FinalityTimeout)
 /// - The timeout is reached
@@ -315,7 +315,7 @@ pub async fn wait_for_transaction_status<Hash>(
     mut status_receiver: tokio::sync::watch::Receiver<TransactionStatus<Hash, Hash>>,
     target_status: StatusToWait,
     timeout: Duration,
-) -> Result<Option<Hash>, WatchTransactionError>
+) -> Result<Hash, WatchTransactionError>
 where
     Hash: std::fmt::Debug + Clone,
 {
@@ -352,7 +352,7 @@ where
                             "Transaction with nonce {} reached InBlock state",
                             nonce
                         );
-                        return Ok(Some(block_hash.clone()));
+                        return Ok(block_hash.clone());
                     }
                     TransactionStatus::Finalized((block_hash, _))
                         if matches!(
@@ -365,7 +365,7 @@ where
                             "Transaction with nonce {} reached Finalized state",
                             nonce
                         );
-                        return Ok(Some(block_hash.clone()));
+                        return Ok(block_hash.clone());
                     }
 
                     // Failure terminal states

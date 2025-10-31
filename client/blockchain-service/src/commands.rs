@@ -269,15 +269,12 @@ where
             .await;
 
             match result {
-                Ok(_block_hash) => {
+                Ok(block_hash) => {
                     debug!(target: LOG_TARGET, "Transaction with hash {:?} succeeded", submitted_ext_info.hash);
 
                     if with_events {
-                        // Get the extrinsic from the block to retrieve events
-                        // We need to find which block it was included in
-                        // For now, return None - this will need block hash tracking
-                        // TODO: Track block hash when transaction reaches InBlock status
-                        return Ok(None);
+                        let extrinsic = self.get_extrinsic_from_block(block_hash, submitted_ext_info.hash).await?;
+                        return Ok(Some(extrinsic.events));
                     } else {
                         return Ok(None);
                     }
