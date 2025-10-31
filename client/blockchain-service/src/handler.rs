@@ -42,7 +42,6 @@ use crate::{
     commands::BlockchainServiceCommand,
     events::BlockchainServiceEventBusProvider,
     state::{BlockchainServiceStateStore, LastProcessedBlockNumberCf},
-    transaction::SubmittedTransaction,
     transaction_pool::{TransactionPool, TransactionPoolConfig},
     types::{FileDistributionInfo, ManagedProvider, MinimalBlockInfo, NewBlockNotificationKind},
 };
@@ -275,17 +274,12 @@ where
                 } => match self.send_extrinsic(call, &options).await {
                     Ok(output) => {
                         debug!(target: LOG_TARGET, "Extrinsic sent successfully: {:?}", output);
-                        match callback.send(Ok(SubmittedTransaction::new(
-                            output.receiver,
-                            output.hash,
-                            output.nonce,
-                            options.timeout(),
-                        ))) {
+                        match callback.send(Ok(output)) {
                             Ok(_) => {
-                                trace!(target: LOG_TARGET, "Receiver sent successfully");
+                                trace!(target: LOG_TARGET, "Submitted extrinsic info sent successfully");
                             }
                             Err(e) => {
-                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                                error!(target: LOG_TARGET, "Failed to send submitted extrinsic info: {:?}", e);
                             }
                         }
                     }
@@ -335,33 +329,6 @@ where
                         }
                     }
                 }
-                BlockchainServiceCommand::UnwatchExtrinsic {
-                    subscription_id,
-                    callback,
-                } => match self.unwatch_extrinsic(subscription_id).await {
-                    Ok(output) => {
-                        debug!(target: LOG_TARGET, "Extrinsic unwatched successfully: {:?}", output);
-                        match callback.send(Ok(())) {
-                            Ok(_) => {
-                                trace!(target: LOG_TARGET, "Receiver sent successfully");
-                            }
-                            Err(e) => {
-                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        warn!(target: LOG_TARGET, "Failed to unwatch extrinsic: {:?}", e);
-                        match callback.send(Err(e)) {
-                            Ok(_) => {
-                                trace!(target: LOG_TARGET, "Receiver sent successfully");
-                            }
-                            Err(e) => {
-                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
-                            }
-                        }
-                    }
-                },
                 BlockchainServiceCommand::GetBestBlockInfo { callback } => {
                     let best_block_info = self.best_block;
                     match callback.send(Ok(best_block_info)) {

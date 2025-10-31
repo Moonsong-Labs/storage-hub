@@ -1,12 +1,16 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, time::Duration};
 
 use anyhow::Result;
 use codec::Encode;
-use log::{debug, warn};
+use log::{debug, error, warn};
 use sc_transaction_pool_api::TransactionStatus;
 use sp_runtime::traits::{One, Saturating};
+use tokio::time::Instant;
 
-use crate::handler::LOG_TARGET;
+use crate::{
+    handler::LOG_TARGET,
+    types::{StatusToWait, WatchTransactionError},
+};
 
 /// Configuration for the transaction pool.
 #[derive(Clone, Debug)]
@@ -67,6 +71,9 @@ pub struct TransactionPool<Hash, Call, BlockNumber> {
     pub(crate) pending: BTreeMap<u32, PendingTransaction<Hash, Call, BlockNumber>>,
     /// Map of nonce to block number when gap was first detected.
     detected_gaps: BTreeMap<u32, BlockNumber>,
+    /// Map of nonce to status broadcast senders for subscription.
+    /// Subscribers receive updates when the transaction status changes in the pool.
+    status_subscribers: BTreeMap<u32, tokio::sync::watch::Sender<TransactionStatus<Hash, Hash>>>,
 }
 
 impl<Hash, Call, BlockNumber> TransactionPool<Hash, Call, BlockNumber>
@@ -88,6 +95,7 @@ where
             config,
             pending: BTreeMap::new(),
             detected_gaps: BTreeMap::new(),
+            status_subscribers: BTreeMap::new(),
         }
     }
 
@@ -206,12 +214,14 @@ where
     ///
     /// This removes both the pending transaction and any gap tracking history.
     /// Use this when a transaction is permanently replaced (e.g., Usurped).
+    /// It also cleans up the status subscribers for the transaction.
     pub fn remove(&mut self, nonce: u32) {
         self.pending.remove(&nonce);
         self.detected_gaps.remove(&nonce);
+        self.status_subscribers.remove(&nonce);
     }
 
-    /// Remove a transaction from pending but preserve gap tracking.
+    /// Remove a transaction from the pool but preserve gap tracking.
     ///
     /// This allows the gap detection system to remember when the gap was first detected,
     /// to execute the gap-filling logic later if needed.
@@ -219,6 +229,7 @@ where
     /// potentially fill the gap later.
     pub fn remove_pending_but_keep_gap(&mut self, nonce: u32) {
         self.pending.remove(&nonce);
+        self.status_subscribers.remove(&nonce);
     }
 
     /// Clean up the stale nonce gaps in the transaction pool.
@@ -242,6 +253,190 @@ where
                 on_chain_nonce
             );
             self.detected_gaps.remove(&nonce);
+        }
+    }
+
+    /// Subscribe to status updates for a specific transaction.
+    ///
+    /// Returns a receiver that will get notified whenever the transaction status changes,
+    /// or None if the transaction is not tracked in the pool.
+    ///
+    /// Multiple subscribers can wait for the same transaction without interfering with each other.
+    pub fn subscribe_to_status(
+        &mut self,
+        nonce: u32,
+    ) -> Option<tokio::sync::watch::Receiver<TransactionStatus<Hash, Hash>>> {
+        // Get the watch sender for the transaction with the given nonce
+        let Some(sender) = self.status_subscribers.get(&nonce) else {
+            return None;
+        };
+        Some(sender.subscribe())
+    }
+
+    /// Notify all subscribers about a status change for a specific transaction.
+    ///
+    /// This should be called whenever a transaction's status is updated.
+    /// It broadcasts the new status to all active subscribers.
+    pub fn notify_status_change(&mut self, nonce: u32, status: TransactionStatus<Hash, Hash>) {
+        if let Some(sender) = self.status_subscribers.get(&nonce) {
+            // Send the status update. Ignore errors if all receivers were dropped.
+            let _ = sender.send(status);
+        }
+    }
+}
+
+/// Wait for a transaction to reach a specific status using a status subscription receiver.
+///
+/// This is a helper function that waits for transaction status updates via a watch channel
+/// and returns when the desired status is reached or a terminal failure occurs.
+///
+/// # Arguments
+///
+/// * `nonce` - The nonce of the transaction to wait for
+/// * `status_receiver` - Watch receiver that provides transaction status updates
+/// * `target_status` - The target status to wait for (InBlock or Finalized)
+/// * `timeout` - Maximum time to wait before returning a timeout error
+///
+/// # Returns
+///
+/// Returns `Ok(Some(Hash))` with the block hash if the transaction reaches the desired status.
+/// Returns `Err` if:
+/// - The transaction reaches a failure terminal state (Invalid, Dropped, Usurped, FinalityTimeout)
+/// - The timeout is reached
+pub async fn wait_for_transaction_status<Hash>(
+    nonce: u32,
+    mut status_receiver: tokio::sync::watch::Receiver<TransactionStatus<Hash, Hash>>,
+    target_status: StatusToWait,
+    timeout: Duration,
+) -> Result<Option<Hash>, WatchTransactionError>
+where
+    Hash: std::fmt::Debug + Clone,
+{
+    let start_time = Instant::now();
+
+    loop {
+        // Check if timeout has been reached
+        let elapsed = start_time.elapsed();
+        if elapsed > timeout {
+            error!(
+                target: LOG_TARGET,
+                "Timeout waiting for transaction to reach {:?}",
+                target_status
+            );
+            return Err(WatchTransactionError::Timeout);
+        }
+
+        // Wait for a status change or timeout
+        let wait_result =
+            tokio::time::timeout(timeout.saturating_sub(elapsed), status_receiver.changed()).await;
+
+        match wait_result {
+            Ok(Ok(())) => {
+                // Status changed, check the new status
+                let current_status = status_receiver.borrow().clone();
+
+                match &current_status {
+                    // Success terminal states
+                    TransactionStatus::InBlock((block_hash, _))
+                        if matches!(target_status, StatusToWait::InBlock) =>
+                    {
+                        debug!(
+                            target: LOG_TARGET,
+                            "Transaction with nonce {} reached InBlock state",
+                            nonce
+                        );
+                        return Ok(Some(block_hash.clone()));
+                    }
+                    TransactionStatus::Finalized((block_hash, _))
+                        if matches!(
+                            target_status,
+                            StatusToWait::InBlock | StatusToWait::Finalized
+                        ) =>
+                    {
+                        debug!(
+                            target: LOG_TARGET,
+                            "Transaction with nonce {} reached Finalized state",
+                            nonce
+                        );
+                        return Ok(Some(block_hash.clone()));
+                    }
+
+                    // Failure terminal states
+                    TransactionStatus::Invalid => {
+                        error!(
+                            target: LOG_TARGET,
+                            "Transaction with nonce {} is invalid",
+                            nonce
+                        );
+                        return Err(WatchTransactionError::TransactionFailed {
+                            dispatch_info: "Invalid".to_string(),
+                            dispatch_error: "Transaction is invalid".to_string(),
+                        });
+                    }
+                    TransactionStatus::Dropped => {
+                        error!(
+                            target: LOG_TARGET,
+                            "Transaction with nonce {} was dropped",
+                            nonce
+                        );
+                        return Err(WatchTransactionError::TransactionFailed {
+                            dispatch_info: "Dropped".to_string(),
+                            dispatch_error: "Transaction was dropped from pool".to_string(),
+                        });
+                    }
+                    TransactionStatus::Usurped(_) => {
+                        error!(
+                            target: LOG_TARGET,
+                            "Transaction with nonce {} was usurped",
+                            nonce
+                        );
+                        return Err(WatchTransactionError::TransactionFailed {
+                            dispatch_info: "Usurped".to_string(),
+                            dispatch_error: "Transaction was usurped by another transaction"
+                                .to_string(),
+                        });
+                    }
+                    TransactionStatus::FinalityTimeout(_) => {
+                        error!(
+                            target: LOG_TARGET,
+                            "Transaction with nonce {} had finality timeout",
+                            nonce
+                        );
+                        return Err(WatchTransactionError::TransactionFailed {
+                            dispatch_info: "FinalityTimeout".to_string(),
+                            dispatch_error: "Transaction had finality timeout".to_string(),
+                        });
+                    }
+
+                    // Non-terminal states, keep waiting
+                    _ => {
+                        debug!(
+                            target: LOG_TARGET,
+                            "Transaction with nonce {} is in state {:?}, waiting for {:?}",
+                            nonce,
+                            current_status,
+                            target_status
+                        );
+                    }
+                }
+            }
+            Ok(Err(_)) => {
+                // Channel closed, sender was dropped
+                warn!(
+                    target: LOG_TARGET,
+                    "Status receiver channel closed, transaction may have been removed from pool"
+                );
+                return Err(WatchTransactionError::TransactionNotFound);
+            }
+            Err(_) => {
+                // Timeout elapsed
+                error!(
+                    target: LOG_TARGET,
+                    "Timeout waiting for transaction to reach {:?}",
+                    target_status
+                );
+                return Err(WatchTransactionError::Timeout);
+            }
         }
     }
 }

@@ -10,6 +10,7 @@ use std::{
 use codec::{Decode, Encode};
 use frame_system::DispatchEventInfo;
 use sc_client_api::BlockImportNotification;
+use sc_transaction_pool_api::TransactionStatus;
 use shc_common::{
     traits::StorageEnableRuntime,
     types::{
@@ -25,7 +26,7 @@ use sp_runtime::{
     DispatchError, SaturatedConversion,
 };
 
-use crate::handler::LOG_TARGET;
+use crate::{handler::LOG_TARGET, transaction_pool::wait_for_transaction_status};
 
 /// A struct that holds the information to submit a storage proof.
 ///
@@ -190,6 +191,62 @@ pub struct Extrinsic<Runtime: StorageEnableRuntime> {
     pub block_hash: Runtime::Hash,
     /// Events vector.
     pub events: StorageHubEventsVec<Runtime>,
+}
+
+/// Information about a submitted extrinsic.
+///
+/// This struct is returned by `send_extrinsic()` and contains basic information
+/// about the submitted transaction. The transaction is automatically watched
+/// in the background by a spawned watcher task.
+#[derive(Debug, Clone)]
+pub struct SubmittedExtrinsicInfo<Runtime: StorageEnableRuntime> {
+    /// Hash of the submitted extrinsic.
+    pub hash: Runtime::Hash,
+    /// The nonce of the extrinsic.
+    pub nonce: u32,
+    /// Status subscription receiver for tracking transaction lifecycle.
+    /// Subscribe to this to get notified of status changes (Ready, InBlock, Finalized, etc.)
+    pub status_subscription:
+        tokio::sync::watch::Receiver<TransactionStatus<Runtime::Hash, Runtime::Hash>>,
+}
+
+impl<Runtime: StorageEnableRuntime> SubmittedExtrinsicInfo<Runtime> {
+    /// Wait for the transaction to be included in a block
+    ///
+    /// This is a convenience method that waits for the transaction to reach InBlock status.
+    /// Returns an error if the transaction fails or times out.
+    /// TODO: Add a timeout parameter.
+    pub async fn watch_for_success(self) -> anyhow::Result<()> {
+        // Wait for InBlock status with a reasonable timeout
+        wait_for_transaction_status(
+            self.nonce,
+            self.status_subscription,
+            StatusToWait::InBlock,
+            std::time::Duration::from_secs(60),
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!("Transaction failed: {:?}", e))?;
+
+        Ok(())
+    }
+
+    /// Wait for the transaction to be finalized.
+    ///
+    /// This is a convenience method that waits for the transaction to reach Finalized status.
+    /// Returns an error if the transaction fails or times out.
+    /// TODO: Add a timeout parameter.
+    pub async fn watch_for_finalization(self) -> anyhow::Result<()> {
+        wait_for_transaction_status(
+            self.nonce,
+            self.status_subscription,
+            StatusToWait::Finalized,
+            std::time::Duration::from_secs(60),
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!("Transaction failed: {:?}", e))?;
+
+        Ok(())
+    }
 }
 
 /// ExtrinsicResult enum.
@@ -407,10 +464,23 @@ impl Default for RetryStrategy {
     }
 }
 
+/// Status to wait for when monitoring a transaction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StatusToWait {
+    /// Wait for the transaction to be included in a block.
+    InBlock,
+    /// Wait for the transaction to be finalized.
+    Finalized,
+}
+
 #[derive(thiserror::Error, Debug, Clone)]
 pub enum WatchTransactionError {
     #[error("Timeout waiting for transaction to be included in a block")]
     Timeout,
+    #[error("Transaction not found in the pool")]
+    TransactionNotFound,
+    #[error("Transaction hash does not match the hash in the pool")]
+    TransactionHashMismatch,
     #[error("Transaction watcher channel closed")]
     WatcherChannelClosed,
     #[error("Transaction failed. DispatchError: {dispatch_error}, DispatchInfo: {dispatch_info}")]

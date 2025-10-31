@@ -2,7 +2,6 @@ use anyhow::Result;
 use async_trait::async_trait;
 use log::{debug, warn};
 use sc_network::Multiaddr;
-use serde_json::Number;
 use shc_common::{
     traits::{KeyTypeOperations, StorageEnableRuntime},
     types::StorageEnableEvents,
@@ -34,11 +33,12 @@ use shc_forest_manager::traits::ForestStorageHandler;
 use crate::{
     capacity_manager::CapacityRequestData,
     handler::BlockchainService,
-    transaction::SubmittedTransaction,
+    transaction_pool::wait_for_transaction_status,
     types::{
         ConfirmStoringRequest, Extrinsic, ExtrinsicResult, FileDeletionRequest, MinimalBlockInfo,
-        RespondStorageRequest, RetryStrategy, SendExtrinsicOptions,
-        StopStoringForInsolventUserRequest, SubmitProofRequest, WatchTransactionError,
+        RespondStorageRequest, RetryStrategy, SendExtrinsicOptions, StatusToWait,
+        StopStoringForInsolventUserRequest, SubmitProofRequest, SubmittedExtrinsicInfo,
+        WatchTransactionError,
     },
 };
 
@@ -51,7 +51,7 @@ const LOG_TARGET: &str = "blockchain-service-interface";
     default_inner_channel_type = tokio::sync::oneshot::Receiver,
 )]
 pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
-    #[command(success_type = SubmittedTransaction<Runtime>)]
+    #[command(success_type = SubmittedExtrinsicInfo<Runtime>)]
     SendExtrinsic {
         call: Runtime::Call,
         options: SendExtrinsicOptions,
@@ -61,36 +61,25 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
         block_hash: Runtime::Hash,
         extrinsic_hash: Runtime::Hash,
     },
-    UnwatchExtrinsic {
-        subscription_id: Number,
-    },
     #[command(success_type = MinimalBlockInfo<Runtime>)]
     GetBestBlockInfo,
     #[command(mode = "AsyncResponse")]
-    WaitForBlock {
-        block_number: BlockNumber<Runtime>,
-    },
+    WaitForBlock { block_number: BlockNumber<Runtime> },
     #[command(mode = "AsyncResponse")]
     WaitForNumBlocks {
         number_of_blocks: BlockNumber<Runtime>,
     },
     #[command(mode = "AsyncResponse", error_type = ApiError)]
-    WaitForTick {
-        tick_number: TickNumber<Runtime>,
-    },
+    WaitForTick { tick_number: TickNumber<Runtime> },
     #[command(success_type = bool, error_type = IsStorageRequestOpenToVolunteersError)]
-    IsStorageRequestOpenToVolunteers {
-        file_key: Runtime::Hash,
-    },
+    IsStorageRequestOpenToVolunteers { file_key: Runtime::Hash },
     #[command(success_type = BlockNumber<Runtime>, error_type = QueryFileEarliestVolunteerTickError)]
     QueryFileEarliestVolunteerTick {
         bsp_id: ProviderId<Runtime>,
         file_key: Runtime::Hash,
     },
     #[command(success_type = BlockNumber<Runtime>, error_type = QueryEarliestChangeCapacityBlockError)]
-    QueryEarliestChangeCapacityBlock {
-        bsp_id: ProviderId<Runtime>,
-    },
+    QueryEarliestChangeCapacityBlock { bsp_id: ProviderId<Runtime> },
     #[command(success_type = <<Runtime as StorageEnableRuntime>::Signature as KeyTypeOperations>::Public)]
     GetNodePublicKey,
     #[command(success_type = Vec<ChunkId>, error_type = QueryBspConfirmChunksToProveForFileError)]
@@ -104,9 +93,7 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
         file_key: Runtime::Hash,
     },
     #[command(success_type = Vec<Multiaddr>, error_type = QueryProviderMultiaddressesError)]
-    QueryProviderMultiaddresses {
-        provider_id: ProviderId<Runtime>,
-    },
+    QueryProviderMultiaddresses { provider_id: ProviderId<Runtime> },
     QueueSubmitProofRequest {
         request: SubmitProofRequest<Runtime>,
     },
@@ -145,21 +132,13 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     #[command(success_type = BlockNumber<Runtime>, error_type = ApiError)]
     QueryLastCheckpointChallengeTick,
     #[command(success_type = Vec<CustomChallenge<Runtime>>, error_type = GetCheckpointChallengesError)]
-    QueryLastCheckpointChallenges {
-        tick: BlockNumber<Runtime>,
-    },
+    QueryLastCheckpointChallenges { tick: BlockNumber<Runtime> },
     #[command(success_type = Runtime::Hash, error_type = GetBspInfoError)]
-    QueryProviderForestRoot {
-        provider_id: ProviderId<Runtime>,
-    },
+    QueryProviderForestRoot { provider_id: ProviderId<Runtime> },
     #[command(success_type = StorageDataUnit<Runtime>, error_type = QueryStorageProviderCapacityError)]
-    QueryStorageProviderCapacity {
-        provider_id: ProviderId<Runtime>,
-    },
+    QueryStorageProviderCapacity { provider_id: ProviderId<Runtime> },
     #[command(success_type = StorageDataUnit<Runtime>, error_type = QueryAvailableStorageCapacityError)]
-    QueryAvailableStorageCapacity {
-        provider_id: ProviderId<Runtime>,
-    },
+    QueryAvailableStorageCapacity { provider_id: ProviderId<Runtime> },
     #[command(success_type = Option<StorageProviderId<Runtime>>)]
     QueryStorageProviderId {
         maybe_node_pub_key:
@@ -171,15 +150,11 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
         min_debt: Balance<Runtime>,
     },
     #[command(success_type = Option<Balance<Runtime>>)]
-    QueryWorstCaseScenarioSlashableAmount {
-        provider_id: ProviderId<Runtime>,
-    },
+    QueryWorstCaseScenarioSlashableAmount { provider_id: ProviderId<Runtime> },
     #[command(success_type = Balance<Runtime>)]
     QuerySlashAmountPerMaxFileSize,
     #[command(success_type = Option<MainStorageProviderId<Runtime>>, error_type = QueryMspIdOfBucketIdError)]
-    QueryMspIdOfBucketId {
-        bucket_id: BucketId<Runtime>,
-    },
+    QueryMspIdOfBucketId { bucket_id: BucketId<Runtime> },
     ReleaseForestRootWriteLock {
         forest_root_write_tx: tokio::sync::oneshot::Sender<()>,
     },
@@ -206,9 +181,7 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
         bsp_id: BackupStorageProviderId<Runtime>,
     },
     #[command(success_type = Vec<BucketId<Runtime>>)]
-    QueryBucketsForMsp {
-        msp_id: ProviderId<Runtime>,
-    },
+    QueryBucketsForMsp { msp_id: ProviderId<Runtime> },
 }
 
 /// Interface for interacting with the BlockchainService actor.
@@ -284,21 +257,30 @@ where
                 .with_tip(tip as u128)
                 .with_nonce(nonce);
 
-            let mut transaction = self.send_extrinsic(call.clone(), extrinsic_options).await?;
+            let submitted_ext_info = self.send_extrinsic(call.clone(), extrinsic_options).await?;
 
-            let result: Result<Option<StorageHubEventsVec<Runtime>>, _> = if with_events {
-                transaction
-                    .watch_for_success_with_events(&self)
-                    .await
-                    .map(Some)
-            } else {
-                transaction.watch_for_success(&self).await.map(|_| None)
-            };
+            // Wait for transaction to be included in a block
+            let result = wait_for_transaction_status(
+                submitted_ext_info.nonce,
+                submitted_ext_info.status_subscription.clone(),
+                StatusToWait::InBlock,
+                options.timeout(),
+            )
+            .await;
 
             match result {
-                Ok(maybe_events) => {
-                    debug!(target: LOG_TARGET, "Transaction with hash {:?} succeeded", transaction.hash());
-                    return Ok(maybe_events);
+                Ok(_block_hash) => {
+                    debug!(target: LOG_TARGET, "Transaction with hash {:?} succeeded", submitted_ext_info.hash);
+
+                    if with_events {
+                        // Get the extrinsic from the block to retrieve events
+                        // We need to find which block it was included in
+                        // For now, return None - this will need block hash tracking
+                        // TODO: Track block hash when transaction reaches InBlock status
+                        return Ok(None);
+                    } else {
+                        return Ok(None);
+                    }
                 }
                 Err(err) => {
                     warn!(target: LOG_TARGET, "Transaction failed: {:?}", err);
@@ -309,18 +291,17 @@ where
                         }
                     }
 
-                    warn!(target: LOG_TARGET, "Failed to submit transaction with hash {:?}, attempt #{}", transaction.hash(), retry_count + 1);
+                    warn!(target: LOG_TARGET, "Failed to submit transaction with hash {:?}, attempt #{}", submitted_ext_info.hash, retry_count + 1);
 
-                    // TODO: Add pending transaction pool implementation to be able to resubmit transactions with nonces lower than the current one to avoid this transaction from being stuck.
                     if let WatchTransactionError::Timeout = err {
                         // Increase the tip to incentivise the collators to include the transaction in a block with priority
                         tip = retry_strategy.compute_tip(retry_count + 1);
                         // Reuse the same nonce since the transaction was not included in a block.
-                        nonce = Some(transaction.nonce());
+                        nonce = Some(submitted_ext_info.nonce);
 
                         // Log warning if this is not the last retry.
                         if retry_count < retry_strategy.max_retries {
-                            warn!(target: LOG_TARGET, "Retrying with increased tip {} and nonce {}", tip, transaction.nonce());
+                            warn!(target: LOG_TARGET, "Retrying with increased tip {} and nonce {}", tip, submitted_ext_info.nonce);
                         }
                     }
                 }

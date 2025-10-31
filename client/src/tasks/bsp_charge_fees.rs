@@ -139,7 +139,7 @@ where
 
             match charging_result {
                 Ok(submitted_transaction) => {
-                    info!(target: LOG_TARGET, "Submitted extrinsic to charge users with debt: {}", submitted_transaction.hash());
+                    info!(target: LOG_TARGET, "Submitted extrinsic to charge users with debt: {}", submitted_transaction.hash);
                 }
                 Err(e) => {
                     error!(target: LOG_TARGET, "Failed to send extrinsic to charge users with debt: {}", e);
@@ -367,7 +367,7 @@ where
 
                 match charging_result {
                     Ok(submitted_transaction) => {
-                        info!(target: LOG_TARGET, "Submitted extrinsic to charge users with debt: {}", submitted_transaction.hash());
+                        info!(target: LOG_TARGET, "Submitted extrinsic to charge users with debt: {}", submitted_transaction.hash);
                     }
                     Err(e) => {
                         error!(target: LOG_TARGET, "Failed to send extrinsic to charge users with debt: {}", e);
