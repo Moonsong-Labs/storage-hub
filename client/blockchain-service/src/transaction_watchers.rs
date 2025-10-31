@@ -215,8 +215,9 @@ pub fn spawn_transaction_watcher<Runtime>(
 
         debug!(
             target: LOG_TARGET,
-            "📡 Stopped watching transaction with nonce {}",
-            nonce
+            "📡 Stopped watching transaction with nonce {} (hash: {:?})",
+            nonce,
+            tx_hash
         );
     });
 }
