@@ -69,14 +69,20 @@ pub fn spawn_transaction_watcher<Runtime>(
                                     "⏭ Transaction with nonce {} is future",
                                     nonce
                                 );
-                                let _ = status_tx.send((nonce, tx_hash, TransactionStatus::Future));
+                                let _ = status_tx.send((nonce, tx_hash, TransactionStatus::Future)).map_err(|e| {
+                                    error!(target: LOG_TARGET, "Failed to send transaction status update. Transaction hash: {:?}, nonce: {}, status: Future. \n  Error: {:?}", tx_hash, nonce, e);
+                                    e
+                                });
                             } else if result.as_str() == Some("ready") {
                                 debug!(
                                     target: LOG_TARGET,
                                     "✓ Transaction with nonce {} is ready (in transaction pool)",
                                     nonce
                                 );
-                                let _ = status_tx.send((nonce, tx_hash, TransactionStatus::Ready));
+                                let _ = status_tx.send((nonce, tx_hash, TransactionStatus::Ready)).map_err(|e| {
+                                    error!(target: LOG_TARGET, "Failed to send transaction status update. Transaction hash: {:?}, nonce: {}, status: Ready. \n  Error: {:?}", tx_hash, nonce, e);
+                                    e
+                                });
                             } else if let Some(broadcast) = result.get("broadcast") {
                                 // Parse peer IDs from the broadcast array
                                 let peer_ids: Vec<String> = broadcast
@@ -98,7 +104,10 @@ pub fn spawn_transaction_watcher<Runtime>(
                                     nonce,
                                     tx_hash,
                                     TransactionStatus::Broadcast(peer_ids),
-                                ));
+                                )).map_err(|e| {
+                                    error!(target: LOG_TARGET, "Failed to send transaction status update. Transaction hash: {:?}, nonce: {}, status: Broadcast. \n  Error: {:?}", tx_hash, nonce, e);
+                                    e
+                                });
                             } else if let Some(block_hash_json) = result.get("inBlock") {
                                 let block_hash =
                                     parse_block_hash_from_json::<Runtime>(block_hash_json);
@@ -114,7 +123,10 @@ pub fn spawn_transaction_watcher<Runtime>(
                                     nonce,
                                     tx_hash,
                                     TransactionStatus::InBlock((block_hash, 0)),
-                                ));
+                                )).map_err(|e| {
+                                    error!(target: LOG_TARGET, "Failed to send transaction status update. Transaction hash: {:?}, nonce: {}, status: InBlock. \n  Error: {:?}", tx_hash, nonce, e);
+                                    e
+                                });
                             } else if let Some(block_hash_json) = result.get("retracted") {
                                 let block_hash =
                                     parse_block_hash_from_json::<Runtime>(block_hash_json);
@@ -129,7 +141,10 @@ pub fn spawn_transaction_watcher<Runtime>(
                                     nonce,
                                     tx_hash,
                                     TransactionStatus::Retracted(block_hash),
-                                ));
+                                )).map_err(|e| {
+                                    error!(target: LOG_TARGET, "Failed to send transaction status update. Transaction hash: {:?}, nonce: {}, status: Retracted. \n  Error: {:?}", tx_hash, nonce, e);
+                                    e
+                                });
                             } else if let Some(block_hash_json) = result.get("finalized") {
                                 let block_hash =
                                     parse_block_hash_from_json::<Runtime>(block_hash_json);
@@ -145,7 +160,10 @@ pub fn spawn_transaction_watcher<Runtime>(
                                     nonce,
                                     tx_hash,
                                     TransactionStatus::Finalized((block_hash, 0)),
-                                ));
+                                )).map_err(|e| {
+                                    error!(target: LOG_TARGET, "Failed to send transaction status update. Transaction hash: {:?}, nonce: {}, status: Finalized. \n  Error: {:?}", tx_hash, nonce, e);
+                                    e
+                                });
                                 // Finalized is a terminal state, stop watching
                                 break;
                             } else if let Some(block_hash_json) = result.get("finalityTimeout") {
@@ -161,7 +179,10 @@ pub fn spawn_transaction_watcher<Runtime>(
                                     nonce,
                                     tx_hash,
                                     TransactionStatus::FinalityTimeout(block_hash),
-                                ));
+                                )).map_err(|e| {
+                                    error!(target: LOG_TARGET, "Failed to send transaction status update. Transaction hash: {:?}, nonce: {}, status: FinalityTimeout. \n  Error: {:?}", tx_hash, nonce, e);
+                                    e
+                                });
                                 // FinalityTimeout is a terminal state, stop watching
                                 break;
                             } else if result.as_str() == Some("invalid") {
@@ -172,7 +193,10 @@ pub fn spawn_transaction_watcher<Runtime>(
                                     tx_hash
                                 );
                                 let _ =
-                                    status_tx.send((nonce, tx_hash, TransactionStatus::Invalid));
+                                    status_tx.send((nonce, tx_hash, TransactionStatus::Invalid)).map_err(|e| {
+                                        error!(target: LOG_TARGET, "Failed to send transaction status update. Transaction hash: {:?}, nonce: {}, status: Invalid. \n  Error: {:?}", tx_hash, nonce, e);
+                                        e
+                                    });
                                 // Invalid is a terminal state, stop watching
                                 break;
                             } else if let Some(usurped_by_json) = result.get("usurped") {
@@ -189,7 +213,10 @@ pub fn spawn_transaction_watcher<Runtime>(
                                     nonce,
                                     tx_hash,
                                     TransactionStatus::Usurped(usurped_by_hash),
-                                ));
+                                )).map_err(|e| {
+                                    error!(target: LOG_TARGET, "Failed to send transaction status update. Transaction hash: {:?}, nonce: {}, status: Usurped. \n  Error: {:?}", tx_hash, nonce, e);
+                                    e
+                                });
                                 // Usurped is a terminal state, stop watching
                                 break;
                             } else if result.as_str() == Some("dropped") {
@@ -200,14 +227,18 @@ pub fn spawn_transaction_watcher<Runtime>(
                                     tx_hash
                                 );
                                 let _ =
-                                    status_tx.send((nonce, tx_hash, TransactionStatus::Dropped));
+                                    status_tx.send((nonce, tx_hash, TransactionStatus::Dropped)).map_err(|e| {
+                                        error!(target: LOG_TARGET, "Failed to send transaction status update. Transaction hash: {:?}, nonce: {}, status: Dropped. \n  Error: {:?}", tx_hash, nonce, e);
+                                        e
+                                    });
                                 // Dropped is a terminal state, stop watching
                                 break;
                             } else {
-                                debug!(
+                                warn!(
                                     target: LOG_TARGET,
-                                    "Transaction with nonce {} status update: {:?}",
+                                    "Unknown transaction status update for nonce {} and transaction hash {:?}. Result: {:?}",
                                     nonce,
+                                    tx_hash,
                                     result
                                 );
                             }
@@ -215,8 +246,9 @@ pub fn spawn_transaction_watcher<Runtime>(
                     } else if let Some(error) = json.get("error") {
                         error!(
                             target: LOG_TARGET,
-                            "✗ Transaction with nonce {} error: {:?}",
+                            "✗ Error receiving transaction status update for nonce {} and transaction hash {:?}. Error: {:?}",
                             nonce,
+                            tx_hash,
                             error
                         );
                         break;
@@ -225,8 +257,9 @@ pub fn spawn_transaction_watcher<Runtime>(
                 Err(e) => {
                     warn!(
                         target: LOG_TARGET,
-                        "Failed to parse transaction status for nonce {}: {:?}",
+                        "Failed to parse transaction status update for nonce {} and transaction hash {:?}. Error: {:?}",
                         nonce,
+                        tx_hash,
                         e
                     );
                 }
