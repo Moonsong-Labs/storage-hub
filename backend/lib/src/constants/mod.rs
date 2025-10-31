@@ -34,6 +34,12 @@ pub mod rpc {
 
     /// Timeout multiplier for simulating network delays in mocks
     pub const TIMEOUT_MULTIPLIER: u64 = 10;
+
+    /// Default number of retry attempts for file upload operations
+    pub const DEFAULT_UPLOAD_RETRY_ATTEMPTS: u32 = 3;
+
+    /// Default delay between file upload retries in seconds
+    pub const DEFAULT_UPLOAD_RETRY_DELAY_SECS: u64 = 1;
 }
 
 /// Database configuration
@@ -49,6 +55,12 @@ pub mod database {
 
     /// Default limit for requests with pagination
     pub const DEFAULT_PAGE_LIMIT: i64 = 100;
+
+    /// Maximum limit for requests with pagination
+    pub const MAX_PAGE_LIMIT: usize = 500;
+
+    /// MSP cache time-to-live in seconds
+    pub const MSP_CACHE_TTL_SECS: u64 = 300; // 5 minutes
 }
 
 /// API configuration constants
@@ -62,8 +74,6 @@ pub mod api {
 
 /// Auth configuration constants
 pub mod auth {
-    use chrono::Duration;
-
     /// The endpoint for the nonce authentication
     ///
     /// This is here as a constant because it is used both in the
@@ -72,16 +82,14 @@ pub mod auth {
     pub const AUTH_NONCE_ENDPOINT: &str = "/auth/nonce";
 
     /// The 'domain' to use for the SIWE message
-    // TODO: make configurable
-    pub const AUTH_SIWE_DOMAIN: &str = "localhost";
+    pub const DEFAULT_SIWE_DOMAIN: &str = "localhost";
 
-    /// Authentication nonce expiration, in seconds
-    // TODO: make configurable
-    pub const AUTH_NONCE_EXPIRATION_SECONDS: u64 = 300; // 5 minutes
+    /// Default nonce expiration, in seconds
+    pub const DEFAULT_AUTH_NONCE_EXPIRATION_SECONDS: usize = 300; // 5 minutes
 
-    /// Authentication JWT token expiration
-    // TODO: make configurable
-    pub const JWT_EXPIRY_OFFSET: Duration = Duration::minutes(60 * 5); // 5 hours
+    /// Default authentication JWT token expiration (in minutes)
+    // TODO: temporarily set to 5 hours to extend sessions
+    pub const DEFAULT_JWT_EXPIRY_OFFSET_MINUTES: usize = 60 * 5;
 
     // TODO(MOCK): retrieve ens from token?
     pub const MOCK_ENS: &str = "user.eth";
@@ -119,15 +127,10 @@ pub mod retry {
 }
 
 pub mod mocks {
+    use alloy_core::primitives::{address, Address};
+
     /// The user address to mock
-    pub const MOCK_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
-
-    // TODO: These are placeholder that are not indexed currently but we could compute.
-    // For example, we could retrieve all files in the DB by bucket and compute it that way
-    // using `File::get_by_onchain_bucket_id`
-
-    pub const PLACEHOLDER_BUCKET_SIZE_BYTES: u64 = 0;
-    pub const PLACEHOLDER_BUCKET_FILE_COUNT: u64 = 0;
+    pub const MOCK_ADDRESS: Address = address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
 
     /// Shared mock file content used by tests and RPC mocks
     pub const DOWNLOAD_FILE_CONTENT: &str = "GoodFla mock file content for download";

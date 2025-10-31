@@ -163,8 +163,6 @@ mod tests {
         test_utils::random_bytes_32,
     };
 
-    // TODO(SCAFFOLDING): this will contain proper tests when we have defined
-    // what RPC methods to make use of
     #[tokio::test]
     async fn use_mock_connection() {
         let mock_conn = MockConnection::new();

@@ -216,7 +216,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 name,
                 collection_id,
                 private,
-                value_prop_id: _,
+                value_prop_id,
                 root,
             } => {
                 let msp =
@@ -231,6 +231,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     collection_id.map(|id| id.to_string()),
                     *private,
                     root.as_ref().to_vec(),
+                    format!("{:#?}", value_prop_id), // using .to_string() leads to truncation
                 )
                 .await?;
             }
@@ -334,6 +335,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 }
 
                 let size: u64 = (*size).saturated_into();
+                let size: i64 = size.saturated_into();
                 let who = who.as_ref().to_vec();
                 File::create(
                     conn,
@@ -343,7 +345,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     bucket_id.as_ref().to_vec(),
                     location.to_vec(),
                     fingerprint.as_ref().to_vec(),
-                    size.saturated_into(),
+                    size,
                     FileStorageRequestStep::Requested,
                     sql_peer_ids,
                 )

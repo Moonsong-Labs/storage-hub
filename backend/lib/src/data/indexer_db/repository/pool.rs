@@ -7,6 +7,8 @@
 //! - Automatic test transactions in test mode (single connection)
 //! - Normal pooling in production mode (32 connections)
 
+//TODO: organize module a bit more cleanly, separating test (no SSL) from production logic
+
 #[cfg(test)]
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;

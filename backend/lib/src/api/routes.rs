@@ -53,10 +53,6 @@ pub fn routes(services: Services) -> Router {
         .merge(file_upload)
         .merge(internal_file_upload)
         .route(
-            "/buckets/{bucket_id}/distribute/{file_key}",
-            post(handlers::files::distribute_file),
-        )
-        .route(
             "/download/{file_key}",
             get(handlers::files::download_by_key),
         )

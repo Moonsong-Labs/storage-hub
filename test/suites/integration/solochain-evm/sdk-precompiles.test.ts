@@ -398,13 +398,17 @@ await describeMspNet(
       // Check that the upload was successful
       strictEqual(uploadResponse.status, "upload_successful", "Upload should return success");
       strictEqual(
-        uploadResponse.fileKey,
+        `0x${uploadResponse.fileKey}`,
         fileKey.toHex(),
         "Upload should return expected file key"
       );
-      strictEqual(uploadResponse.bucketId, bucketId, "Upload should return expected bucket ID");
       strictEqual(
-        uploadResponse.fingerprint,
+        `0x${uploadResponse.bucketId}`,
+        bucketId,
+        "Upload should return expected bucket ID"
+      );
+      strictEqual(
+        `0x${uploadResponse.fingerprint}`,
         (await fileManager.getFingerprint()).toString(),
         "Upload should return expected fingerprint"
       );
@@ -447,9 +451,9 @@ await describeMspNet(
       await msp1Api.wait.fileStorageComplete(hexFileKey);
 
       // Ensure file tree and file info are available via backend for this bucket
-      const fileTree = await mspClient.buckets.getFiles(bucketId);
+      const fileTree = (await mspClient.buckets.getFiles(bucketId)).tree;
       assert(
-        Array.isArray(fileTree.files) && fileTree.files.length > 0,
+        Array.isArray(fileTree.children) && fileTree.children.length > 0,
         "file tree should not be empty"
       );
       const fileInfo = await mspClient.files.getFileInfo(bucketId, fileKey.toHex());

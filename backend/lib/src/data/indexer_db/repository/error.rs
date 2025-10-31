@@ -8,6 +8,7 @@
 //! - Connection pool errors
 //! - Not found errors for missing entities
 
+use diesel::result::Error as DBError;
 use thiserror::Error;
 
 /// Main error type for repository operations.
@@ -18,7 +19,7 @@ use thiserror::Error;
 pub enum RepositoryError {
     /// Database operation error from diesel
     #[error("Database error: {0}")]
-    Database(#[from] diesel::result::Error),
+    Database(DBError),
 
     /// Connection pool error
     #[error("Pool error: {0}")]
@@ -42,6 +43,25 @@ pub enum RepositoryError {
     /// Transaction error
     #[error("Transaction error: {0}")]
     Transaction(String),
+}
+
+impl From<DBError> for RepositoryError {
+    fn from(value: DBError) -> Self {
+        match value {
+            DBError::NotFound => Self::not_found("Record"),
+            err @ DBError::DatabaseError(..) => Self::Database(err),
+            err @ DBError::QueryBuilderError(_)
+            | err @ DBError::DeserializationError(_)
+            | err @ DBError::SerializationError(_)
+            | err @ DBError::InvalidCString(_) => Self::invalid_input(err.to_string()),
+            err @ DBError::RollbackErrorOnCommit { .. }
+            | err @ DBError::RollbackTransaction
+            | err @ DBError::AlreadyInTransaction
+            | err @ DBError::NotInTransaction => Self::transaction(err.to_string()),
+            err @ DBError::BrokenTransactionManager => Self::Pool(err.to_string()),
+            err => Self::Database(err),
+        }
+    }
 }
 
 impl RepositoryError {
@@ -88,10 +108,10 @@ impl RepositoryError {
     pub fn is_constraint_violation(&self) -> bool {
         matches!(
             self,
-            Self::Database(diesel::result::Error::DatabaseError(
+            Self::Database(DBError::DatabaseError(
                 diesel::result::DatabaseErrorKind::UniqueViolation,
                 _,
-            )) | Self::Database(diesel::result::Error::DatabaseError(
+            )) | Self::Database(DBError::DatabaseError(
                 diesel::result::DatabaseErrorKind::ForeignKeyViolation,
                 _,
             ))

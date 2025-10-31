@@ -10,6 +10,8 @@ pub mod auth;
 pub mod buckets;
 pub mod files;
 
+mod pagination;
+
 // ==================== MSP Info Handlers ====================
 
 pub async fn info(State(services): State<Services>) -> Result<impl IntoResponse, Error> {
