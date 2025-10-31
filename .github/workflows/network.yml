@@ -23,6 +23,13 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Docker image tag to publish (e.g., v0.1.0)"
+        required: false
+        type: string
+  release:
+    types: [published]
 
 jobs:
   setup:
@@ -46,6 +53,10 @@ jobs:
       - name: Check if the node needs rebuild
         id: node_check
         run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
           BASE_SHA="${{ github.event.pull_request.base.sha || github.event.before }}"
           HEAD_SHA="${{ github.sha }}"
 
@@ -58,6 +69,10 @@ jobs:
       - name: Check if the MSP backend needs rebuild
         id: backend_check
         run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
           BASE_SHA="${{ github.event.pull_request.base.sha || github.event.before }}"
           HEAD_SHA="${{ github.sha }}"
 
@@ -70,7 +85,11 @@ jobs:
       - name: Set tag names for publishing
         id: set-tag
         run: |
-          if [[ "${{ github.ref }}" == 'refs/heads/main' ]]; then
+          if [[ "${{ github.event_name }}" == 'release' ]]; then
+            echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == 'workflow_dispatch' && -n "${{ inputs.image_tag }}" ]]; then
+            echo "tag=${{ inputs.image_tag }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == 'refs/heads/main' ]]; then
             echo "tag=latest" >> $GITHUB_OUTPUT
           elif [[ "${{ env.SKIP_BUILD_LABEL_PRESENT }}" == "true" && "${{ env.SKIP_BACKEND_BUILD_LABEL_PRESENT }}" == "true" ]]; then
             echo "tag=latest" >> $GITHUB_OUTPUT
@@ -82,17 +101,25 @@ jobs:
       - name: Set flags
         id: flags
         run: |
-          echo "force_node=${{ env.FORCE_NODE_PUBLISH_LABEL_PRESENT }}" >> $GITHUB_OUTPUT
-          echo "force_backend=${{ env.FORCE_BACKEND_PUBLISH_LABEL_PRESENT }}" >> $GITHUB_OUTPUT
+          if [[ "${{ github.event_name }}" == 'release' ]]; then
+            echo "force_node=false" >> $GITHUB_OUTPUT
+            echo "force_backend=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == 'workflow_dispatch' && -n "${{ inputs.image_tag }}" ]]; then
+            echo "force_node=false" >> $GITHUB_OUTPUT
+            echo "force_backend=true" >> $GITHUB_OUTPUT
+          else
+            echo "force_node=${{ env.FORCE_NODE_PUBLISH_LABEL_PRESENT }}" >> $GITHUB_OUTPUT
+            echo "force_backend=${{ env.FORCE_BACKEND_PUBLISH_LABEL_PRESENT }}" >> $GITHUB_OUTPUT
+          fi
 
   build_node:
     needs: [setup]
-    name: 'Build node binary if changed'
+    name: "Build node binary if changed"
     runs-on: blacksmith-16vcpu-ubuntu-2404
     env:
-      SCCACHE_GHA_ENABLED: 'true'
-      RUSTC_WRAPPER: 'sccache'
-      CARGO_INCREMENTAL: '0'
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+      CARGO_INCREMENTAL: "0"
       CARGO_TERM_COLOR: always
     steps:
       - uses: actions/checkout@v4
@@ -147,12 +174,12 @@ jobs:
 
   build_backend:
     needs: [setup]
-    name: 'Build backend binary if changed'
+    name: "Build backend binary if changed"
     runs-on: blacksmith-16vcpu-ubuntu-2404
     env:
-      SCCACHE_GHA_ENABLED: 'true'
-      RUSTC_WRAPPER: 'sccache'
-      CARGO_INCREMENTAL: '0'
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+      CARGO_INCREMENTAL: "0"
       CARGO_TERM_COLOR: always
     steps:
       - uses: actions/checkout@v4
@@ -201,11 +228,11 @@ jobs:
           name: backend
           path: build/sh-msp-backend
           if-no-files-found: error
-  
+
   push_node_image:
     needs: [build_node, setup]
     if: needs.setup.outputs.node_changed == 'true' || needs.setup.outputs.force_node == 'true'
-    name: 'Push node Docker image to Docker Hub'
+    name: "Push node Docker image to Docker Hub"
     runs-on: blacksmith-16vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
@@ -245,11 +272,11 @@ jobs:
             org.opencontainers.image.source=${{ github.event.repository.clone_url }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=${{ github.event.repository.license.spdx_id }}
-  
+
   push_backend_image:
     needs: [build_backend, setup]
     if: needs.setup.outputs.backend_changed == 'true' || needs.setup.outputs.force_backend == 'true'
-    name: 'Push backend Docker image to Docker Hub'
+    name: "Push backend Docker image to Docker Hub"
     runs-on: blacksmith-16vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
@@ -290,7 +317,6 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=${{ github.event.repository.license.spdx_id }}
 
-
   # zombie_test_k8:
   #   needs: [build_node, setup]
   #   name: "Test Simple Network"
@@ -319,7 +345,7 @@ jobs:
 
   network_test:
     needs: [build_node, setup]
-    name: 'Network Test: Zombienet (Parachain + Relay)'
+    name: "Network Test: Zombienet (Parachain + Relay)"
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     steps:
@@ -359,7 +385,7 @@ jobs:
 
   zombie_test:
     needs: [build_node, setup]
-    name: 'Network Test: Zombienet CLI'
+    name: "Network Test: Zombienet CLI"
     timeout-minutes: 30
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
@@ -394,7 +420,7 @@ jobs:
   dev_node_test:
     needs: [build_node, setup]
     timeout-minutes: 30
-    name: 'Node Tests: Solo Dev Node'
+    name: "Node Tests: Solo Dev Node"
     runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
@@ -442,7 +468,7 @@ jobs:
 
   full_net:
     needs: [build_node, setup]
-    name: 'Integration Tests: FullNet'
+    name: "Integration Tests: FullNet"
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     strategy:
@@ -533,7 +559,7 @@ jobs:
 
   bsp_net:
     needs: [build_node, setup]
-    name: 'Integration Tests: BSPNet'
+    name: "Integration Tests: BSPNet"
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     strategy:
@@ -621,7 +647,7 @@ jobs:
 
   backend_test:
     needs: [build_node, build_backend, setup]
-    name: 'Integration Tests: Backend'
+    name: "Integration Tests: Backend"
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     strategy:
@@ -679,7 +705,7 @@ jobs:
         run: |
           docker pull moonsonglabs/storage-hub:latest
           docker tag moonsonglabs/storage-hub:latest storage-hub:local
-      
+
       - uses: taiki-e/install-action@v2
         with:
           tool: diesel_cli
@@ -740,7 +766,7 @@ jobs:
 
   user_net:
     needs: [build_node, setup]
-    name: 'Integration Tests: User'
+    name: "Integration Tests: User"
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     strategy:
@@ -831,7 +857,7 @@ jobs:
 
   fisherman_test:
     needs: [build_node, setup]
-    name: 'Integration Tests: Fisherman'
+    name: "Integration Tests: Fisherman"
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     steps:
@@ -917,7 +943,7 @@ jobs:
 
   solochain_evm:
     needs: [build_node, build_backend, setup]
-    name: 'Integration Tests: Solochain EVM'
+    name: "Integration Tests: Solochain EVM"
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     steps:
@@ -1045,7 +1071,7 @@ jobs:
 
   typegen_check:
     needs: [build_node, setup]
-    name: 'Check Rust/TS bindings are up to date'
+    name: "Check Rust/TS bindings are up to date"
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
