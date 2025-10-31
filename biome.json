@@ -17,6 +17,7 @@
       "!**/build",
       "!**/wasm/pkg",
       "!**/examples/nextjs/.next",
+      "!**/examples/demo-app/.next",
       "!**/_wasm_embed.ts"
     ]
   },
