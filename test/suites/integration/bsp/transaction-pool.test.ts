@@ -13,7 +13,7 @@ import type { H256 } from "@polkadot/types/interfaces";
  */
 await describeBspNet(
   "Transaction Pool & Watcher",
-  { initialised: true, networkConfig: "standard", only: true },
+  { initialised: true, networkConfig: "standard", only: true, logLevel: "debug" },
   ({ before, createUserApi, createBspApi, it }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
@@ -255,7 +255,7 @@ await describeBspNet(
       const challengePeriod = (
         await userApi.call.proofsDealerApi.getChallengePeriod(ShConsts.DUMMY_BSP_ID)
       ).asOk.toNumber();
-      if (nextChallengeTick < currentBlock + 1) {
+      if (nextChallengeTick < currentBlock + 2) {
         nextChallengeTick += challengePeriod;
       }
       await userApi.block.skipTo(nextChallengeTick - 2, { finalised: true });

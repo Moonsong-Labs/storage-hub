@@ -204,6 +204,12 @@ export type BspNetConfig = {
    * Must be at least 1.
    */
   fishermanIncompleteSyncPageSize?: number;
+
+  /**
+   * Optional parameter to set the Rust log level for all nodes.
+   * Defaults to 'info' if not specified.
+   */
+  logLevel?: "trace" | "debug" | "info" | "warn" | "error";
 };
 
 /**
@@ -424,6 +430,11 @@ export type TestOptions = {
    * Must be at least 1.
    */
   fishermanIncompleteSyncPageSize?: number;
+  /**
+   * Optional parameter to set the Rust log level for all nodes.
+   * Defaults to 'info' if not specified.
+   */
+  logLevel?: "trace" | "debug" | "info" | "warn" | "error";
 };
 
 /**
