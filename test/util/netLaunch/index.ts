@@ -526,7 +526,10 @@ export class NetworkLauncher {
         .signAsync(sudo, { nonce: 3 }),
       api.tx.sudo
         .sudo(api.tx.balances.forceSetBalance(api.accounts.mspDownKey.address, amount))
-        .signAsync(sudo, { nonce: 4 })
+        .signAsync(sudo, { nonce: 4 }),
+      api.tx.sudo
+        .sudo(api.tx.balances.forceSetBalance(api.accounts.fishermanKey.address, amount))
+        .signAsync(sudo, { nonce: 5 })
     ];
 
     const sudoTxns = await Promise.all(signedCalls);
