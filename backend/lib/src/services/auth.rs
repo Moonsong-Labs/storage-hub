@@ -23,7 +23,7 @@ use crate::{
         },
         mocks::MOCK_ADDRESS,
     },
-    data::storage::BoxedStorage,
+    data::storage::{BoxedStorage, WithExpiry},
     error::Error,
     models::auth::{JwtClaims, NonceResponse, TokenResponse, User, VerifyResponse},
     services::Services,
@@ -202,8 +202,12 @@ impl AuthService {
             .storage
             .get_nonce(message)
             .await
-            .map_err(|_| Error::Internal)?
-            .ok_or_else(|| Error::Unauthorized("Invalid or expired nonce".to_string()))?;
+            .map_err(|_| Error::Internal)
+            .and_then(|entry| match entry {
+                WithExpiry::Valid(address) => Ok(address),
+                WithExpiry::Expired => Err(Error::Unauthorized("Expired nonce".to_string())),
+                WithExpiry::NotFound => Err(Error::Unauthorized("Invalid nonce".to_string())),
+            })?;
 
         if self.validate_signature {
             let recovered_address = Self::recover_eth_address_from_sig(message, signature)?;
@@ -477,7 +481,7 @@ mod tests {
 
         // Check that message was stored in storage
         let stored_address = storage.get_nonce(&result.message).await.unwrap();
-        assert_eq!(stored_address, Some(MOCK_ADDRESS.to_string()));
+        assert_eq!(stored_address, WithExpiry::Valid(MOCK_ADDRESS.to_string()));
     }
 
     #[test]
