@@ -12742,6 +12742,8 @@ mod delete_files_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::StorageRequestRejected {
                         file_key,
+                        msp_id,
+                        bucket_id,
                         reason: RejectedStorageRequestReason::RequestExpired,
                     }
                     .into(),
@@ -13022,6 +13024,8 @@ mod delete_files_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::StorageRequestRejected {
                         file_key: file_key2,
+                        msp_id,
+                        bucket_id,
                         reason: RejectedStorageRequestReason::RequestExpired,
                     }
                     .into(),
@@ -13229,6 +13233,8 @@ mod delete_files_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::StorageRequestRejected {
                         file_key,
+                        msp_id,
+                        bucket_id,
                         reason: RejectedStorageRequestReason::RequestExpired,
                     }
                     .into(),
@@ -13915,6 +13921,8 @@ mod delete_files_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::StorageRequestRejected {
                         file_key,
+                        msp_id,
+                        bucket_id,
                         reason: RejectedStorageRequestReason::ReachedMaximumCapacity,
                     }
                     .into(),
@@ -13998,6 +14006,8 @@ mod delete_files_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::StorageRequestRejected {
                         file_key,
+                        msp_id,
+                        bucket_id,
                         reason: RejectedStorageRequestReason::RequestExpired,
                     }.into()
                 );
@@ -14146,6 +14156,8 @@ mod delete_files_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::StorageRequestRejected {
                         file_key,
+                        msp_id,
+                        bucket_id,
                         reason: RejectedStorageRequestReason::ReachedMaximumCapacity,
                     }
                     .into(),

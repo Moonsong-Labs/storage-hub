@@ -557,8 +557,10 @@ declare module '@polkadot/api-base/types/events' {
              * Note: the storage request will be marked as "incomplete", and it is expected that fisherman
              * nodes will pick it up and delete the file from the confirmed BSPs as well as the Bucket.
              **/
-            StorageRequestRejected: AugmentedEvent<ApiType, [fileKey: H256, reason: PalletFileSystemRejectedStorageRequestReason], {
+            StorageRequestRejected: AugmentedEvent<ApiType, [fileKey: H256, mspId: H256, bucketId: H256, reason: PalletFileSystemRejectedStorageRequestReason], {
                 fileKey: H256;
+                mspId: H256;
+                bucketId: H256;
                 reason: PalletFileSystemRejectedStorageRequestReason;
             }>;
             /**
