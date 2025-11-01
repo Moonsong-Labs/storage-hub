@@ -139,7 +139,7 @@ where
 
             match charging_result {
                 Ok(submitted_transaction) => {
-                    info!(target: LOG_TARGET, "Submitted extrinsic to charge users with debt: {}", submitted_transaction.hash());
+                    info!(target: LOG_TARGET, "Submitted extrinsic to charge users with debt: {}", submitted_transaction.hash);
                 }
                 Err(e) => {
                     error!(target: LOG_TARGET, "Failed to send extrinsic to charge users with debt: {}", e);
@@ -340,12 +340,16 @@ where
                 .blockchain
                 .send_extrinsic(
                     stop_storing_for_insolvent_user_call,
-                    SendExtrinsicOptions::new(Duration::from_secs(
-                        self.storage_hub_handler
-                            .provider_config
-                            .blockchain_service
-                            .extrinsic_retry_timeout,
-                    )),
+                    SendExtrinsicOptions::new(
+                        Duration::from_secs(
+                            self.storage_hub_handler
+                                .provider_config
+                                .blockchain_service
+                                .extrinsic_retry_timeout,
+                        ),
+                        Some("fileSystem".to_string()),
+                        Some("stopStoringForInsolventUser".to_string()),
+                    ),
                 )
                 .await?;
 
@@ -367,7 +371,7 @@ where
 
                 match charging_result {
                     Ok(submitted_transaction) => {
-                        info!(target: LOG_TARGET, "Submitted extrinsic to charge users with debt: {}", submitted_transaction.hash());
+                        info!(target: LOG_TARGET, "Submitted extrinsic to charge users with debt: {}", submitted_transaction.hash);
                     }
                     Err(e) => {
                         error!(target: LOG_TARGET, "Failed to send extrinsic to charge users with debt: {}", e);

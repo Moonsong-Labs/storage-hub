@@ -343,15 +343,19 @@ where
             .blockchain
             .send_extrinsic(
                 call,
-                SendExtrinsicOptions::new(Duration::from_secs(
-                    self.storage_hub_handler
-                        .provider_config
-                        .blockchain_service
-                        .extrinsic_retry_timeout,
-                )),
+                SendExtrinsicOptions::new(
+                    Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .blockchain_service
+                            .extrinsic_retry_timeout,
+                    ),
+                    Some("fileSystem".to_string()),
+                    Some("mspRespondStorageRequestsMultipleBuckets".to_string()),
+                ),
             )
             .await?
-            .watch_for_success(&self.storage_hub_handler.blockchain)
+            .watch_for_success()
             .await?;
 
         // Remove the files that were rejected from the File Storage.
@@ -562,15 +566,19 @@ where
                         .blockchain
                         .send_extrinsic(
                             call,
-                            SendExtrinsicOptions::new(Duration::from_secs(
-                                self.storage_hub_handler
-                                    .provider_config
-                                    .blockchain_service
-                                    .extrinsic_retry_timeout,
-                            )),
+                            SendExtrinsicOptions::new(
+                                Duration::from_secs(
+                                    self.storage_hub_handler
+                                        .provider_config
+                                        .blockchain_service
+                                        .extrinsic_retry_timeout,
+                                ),
+                                Some("fileSystem".to_string()),
+                                Some("mspRespondStorageRequestsMultipleBuckets".to_string()),
+                            ),
                         )
                         .await?
-                        .watch_for_success(&self.storage_hub_handler.blockchain)
+                        .watch_for_success()
                         .await?;
 
                     return Err(anyhow::anyhow!(err_msg));
@@ -917,15 +925,19 @@ where
             .blockchain
             .send_extrinsic(
                 call,
-                SendExtrinsicOptions::new(Duration::from_secs(
-                    self.storage_hub_handler
-                        .provider_config
-                        .blockchain_service
-                        .extrinsic_retry_timeout,
-                )),
+                SendExtrinsicOptions::new(
+                    Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .blockchain_service
+                            .extrinsic_retry_timeout,
+                    ),
+                    Some("fileSystem".to_string()),
+                    Some("mspRespondStorageRequestsMultipleBuckets".to_string()),
+                ),
             )
             .await?
-            .watch_for_success(&self.storage_hub_handler.blockchain)
+            .watch_for_success()
             .await?;
 
         // Unregister the file

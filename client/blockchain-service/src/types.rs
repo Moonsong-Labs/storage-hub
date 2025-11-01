@@ -10,6 +10,7 @@ use std::{
 use codec::{Decode, Encode};
 use frame_system::DispatchEventInfo;
 use sc_client_api::BlockImportNotification;
+use sc_transaction_pool_api::TransactionStatus;
 use shc_common::{
     traits::StorageEnableRuntime,
     types::{
@@ -25,7 +26,7 @@ use sp_runtime::{
     DispatchError, SaturatedConversion,
 };
 
-use crate::handler::LOG_TARGET;
+use crate::{handler::LOG_TARGET, transaction_manager::wait_for_transaction_status};
 
 /// A struct that holds the information to submit a storage proof.
 ///
@@ -192,6 +193,62 @@ pub struct Extrinsic<Runtime: StorageEnableRuntime> {
     pub events: StorageHubEventsVec<Runtime>,
 }
 
+/// Information about a submitted extrinsic.
+///
+/// This struct is returned by `send_extrinsic()` and contains basic information
+/// about the submitted transaction. The transaction is automatically watched
+/// in the background by a spawned watcher task.
+#[derive(Debug, Clone)]
+pub struct SubmittedExtrinsicInfo<Runtime: StorageEnableRuntime> {
+    /// Hash of the submitted extrinsic.
+    pub hash: Runtime::Hash,
+    /// The nonce of the extrinsic.
+    pub nonce: u32,
+    /// Status subscription receiver for tracking transaction lifecycle.
+    /// Subscribe to this to get notified of status changes (Ready, InBlock, Finalized, etc.)
+    pub status_subscription:
+        tokio::sync::watch::Receiver<TransactionStatus<Runtime::Hash, Runtime::Hash>>,
+}
+
+impl<Runtime: StorageEnableRuntime> SubmittedExtrinsicInfo<Runtime> {
+    /// Wait for the transaction to be included in a block
+    ///
+    /// This is a convenience method that waits for the transaction to reach InBlock status.
+    /// Returns an error if the transaction fails or times out.
+    /// TODO: Add a timeout parameter.
+    pub async fn watch_for_success(self) -> anyhow::Result<()> {
+        // Wait for InBlock status with a reasonable timeout
+        wait_for_transaction_status(
+            self.nonce,
+            self.status_subscription,
+            StatusToWait::InBlock,
+            std::time::Duration::from_secs(60),
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!("Transaction failed: {:?}", e))?;
+
+        Ok(())
+    }
+
+    /// Wait for the transaction to be finalized.
+    ///
+    /// This is a convenience method that waits for the transaction to reach Finalized status.
+    /// Returns an error if the transaction fails or times out.
+    /// TODO: Add a timeout parameter.
+    pub async fn watch_for_finalization(self) -> anyhow::Result<()> {
+        wait_for_transaction_status(
+            self.nonce,
+            self.status_subscription,
+            StatusToWait::Finalized,
+            std::time::Duration::from_secs(60),
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!("Transaction failed: {:?}", e))?;
+
+        Ok(())
+    }
+}
+
 /// ExtrinsicResult enum.
 ///
 /// This enum represents the result of an extrinsic execution. It can be either a success or a failure.
@@ -225,15 +282,28 @@ pub struct SendExtrinsicOptions {
     nonce: Option<u32>,
     /// Maximum time to wait for a response before assuming the extrinsic submission has failed.
     timeout: Duration,
+    /// The module (pallet) that the extrinsic belongs to. For instance, when sending a system_remark
+    /// extrinsic, the module would be "system".
+    module: Option<String>,
+    /// The method that the extrinsic is calling. For instance, when sending a system_remark
+    /// extrinsic, the method would be "remark".
+    method: Option<String>,
 }
 
 impl SendExtrinsicOptions {
-    pub fn new(timeout: Duration) -> Self {
+    pub fn new(timeout: Duration, module: Option<String>, method: Option<String>) -> Self {
         Self {
             tip: 0u128,
             nonce: None,
             timeout,
+            module,
+            method,
         }
+    }
+
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
+        self
     }
 
     pub fn with_tip(mut self, tip: u128) -> Self {
@@ -243,6 +313,16 @@ impl SendExtrinsicOptions {
 
     pub fn with_nonce(mut self, nonce: Option<u32>) -> Self {
         self.nonce = nonce;
+        self
+    }
+
+    pub fn with_module(mut self, module: Option<String>) -> Self {
+        self.module = module;
+        self
+    }
+
+    pub fn with_method(mut self, method: Option<String>) -> Self {
+        self.method = method;
         self
     }
 
@@ -257,6 +337,14 @@ impl SendExtrinsicOptions {
     pub fn timeout(&self) -> Duration {
         self.timeout
     }
+
+    pub fn module(&self) -> Option<String> {
+        self.module.clone()
+    }
+
+    pub fn method(&self) -> Option<String> {
+        self.method.clone()
+    }
 }
 
 impl Default for SendExtrinsicOptions {
@@ -265,6 +353,8 @@ impl Default for SendExtrinsicOptions {
             tip: 0u128,
             nonce: None,
             timeout: Duration::from_secs(60),
+            module: None,
+            method: None,
         }
     }
 }
@@ -407,10 +497,23 @@ impl Default for RetryStrategy {
     }
 }
 
+/// Status to wait for when monitoring a transaction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StatusToWait {
+    /// Wait for the transaction to be included in a block.
+    InBlock,
+    /// Wait for the transaction to be finalized.
+    Finalized,
+}
+
 #[derive(thiserror::Error, Debug, Clone)]
 pub enum WatchTransactionError {
     #[error("Timeout waiting for transaction to be included in a block")]
     Timeout,
+    #[error("Transaction not found in the manager")]
+    TransactionNotFound,
+    #[error("Transaction hash does not match the hash in the manager")]
+    TransactionHashMismatch,
     #[error("Transaction watcher channel closed")]
     WatcherChannelClosed,
     #[error("Transaction failed. DispatchError: {dispatch_error}, DispatchInfo: {dispatch_info}")]

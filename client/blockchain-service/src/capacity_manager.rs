@@ -16,7 +16,7 @@ use shc_common::types::{BlockNumber, ProviderId, StorageDataUnit};
 use shc_forest_manager::traits::ForestStorageHandler;
 
 use crate::{
-    transaction::SubmittedTransaction, types::ManagedProvider, types::SendExtrinsicOptions,
+    types::{ManagedProvider, SendExtrinsicOptions, SubmittedExtrinsicInfo},
     BlockchainService,
 };
 
@@ -38,7 +38,7 @@ pub struct CapacityRequestQueue<Runtime: StorageEnableRuntime> {
     /// This is reset when the `pending_requests` is moved to `requests_waiting_for_inclusion` when they have been batched in a single transaction.
     total_required: StorageDataUnit<Runtime>,
     /// The last submitted transaction which `requests_waiting_for_inclusion` is waiting for.
-    last_submitted_transaction: Option<SubmittedTransaction<Runtime>>,
+    last_submitted_transaction: Option<SubmittedExtrinsicInfo<Runtime>>,
 }
 
 impl<Runtime: StorageEnableRuntime> CapacityRequestQueue<Runtime> {
@@ -53,7 +53,7 @@ impl<Runtime: StorageEnableRuntime> CapacityRequestQueue<Runtime> {
     }
 
     /// Get the last submitted transaction.
-    pub fn last_submitted_transaction(&self) -> Option<&SubmittedTransaction<Runtime>> {
+    pub fn last_submitted_transaction(&self) -> Option<&SubmittedExtrinsicInfo<Runtime>> {
         self.last_submitted_transaction.as_ref()
     }
 
@@ -131,10 +131,10 @@ impl<Runtime: StorageEnableRuntime> CapacityRequestQueue<Runtime> {
         !self.requests_waiting_for_inclusion.is_empty()
     }
 
-    /// Add all pending requests to the list of requests waiting for inclusion of the [`SubmittedTransaction`].
+    /// Add all pending requests to the list of requests waiting for inclusion of the [`SubmittedExtrinsicInfo`].
     pub fn add_pending_requests_to_waiting_for_inclusion(
         &mut self,
-        submitted_transaction: SubmittedTransaction<Runtime>,
+        submitted_transaction: SubmittedExtrinsicInfo<Runtime>,
     ) {
         self.requests_waiting_for_inclusion
             .extend(self.pending_requests.drain(..));
@@ -335,20 +335,20 @@ where
 
         // Send extrinsic to increase capacity
         match self
-            .send_extrinsic(call, &SendExtrinsicOptions::new(extrinsic_retry_timeout))
+            .send_extrinsic(
+                call,
+                &SendExtrinsicOptions::new(
+                    extrinsic_retry_timeout,
+                    Some("storageProviders".to_string()),
+                    Some("changeCapacity".to_string()),
+                ),
+            )
             .await
         {
             Ok(output) => {
                 // Add all pending requests to the list of requests waiting for inclusion.
                 if let Some(capacity_manager) = self.capacity_manager.as_mut() {
-                    capacity_manager.add_pending_requests_to_waiting_for_inclusion(
-                        SubmittedTransaction::new(
-                            output.receiver,
-                            output.hash,
-                            output.nonce,
-                            extrinsic_retry_timeout,
-                        ),
-                    );
+                    capacity_manager.add_pending_requests_to_waiting_for_inclusion(output);
                 } else {
                     error!(target: LOG_TARGET, "Capacity manager not initialized");
                 }

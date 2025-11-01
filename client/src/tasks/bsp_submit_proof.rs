@@ -314,12 +314,16 @@ where
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
-                SendExtrinsicOptions::new(Duration::from_secs(
-                    self.storage_hub_handler
-                        .provider_config
-                        .blockchain_service
-                        .extrinsic_retry_timeout,
-                )),
+                SendExtrinsicOptions::new(
+                    Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .blockchain_service
+                            .extrinsic_retry_timeout,
+                    ),
+                    Some("proofsDealer".to_string()),
+                    Some("submitProof".to_string()),
+                ),
                 RetryStrategy::default()
                     .with_max_retries(self.config.max_submission_attempts)
                     .with_max_tip(max_tip.saturated_into())
