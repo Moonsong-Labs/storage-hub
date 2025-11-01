@@ -1,10 +1,10 @@
-import { strictEqual } from "node:assert";
+import assert, { strictEqual } from "node:assert";
 import { TypeRegistry } from "@polkadot/types";
 import type { H256 } from "@polkadot/types/interfaces";
 import { describeBspNet, type EnrichedBspApi, ShConsts } from "../../../util";
 
 /**
- * Integration tests for transaction pool and watcher functionality.
+ * Integration tests for transaction manager and watcher functionality.
  *
  * These tests verify:
  * 1. Transaction watcher logs for all lifecycle states
@@ -12,12 +12,13 @@ import { describeBspNet, type EnrichedBspApi, ShConsts } from "../../../util";
  * 3. Transaction replacement (Usurped) via higher-tip transaction
  */
 await describeBspNet(
-  "Transaction Pool & Watcher",
+  "Transaction Manager & Watcher",
   {
     initialised: true,
     networkConfig: "standard",
     extrinsicRetryTimeout: 10,
-    logLevel: "debug"
+    logLevel: "debug",
+    only: true
   },
   ({ before, createUserApi, createBspApi, it }) => {
     let userApi: EnrichedBspApi;
@@ -68,7 +69,7 @@ await describeBspNet(
       // Verify that the `Ready` log was logged
       await bspApi.docker.waitForLog({
         containerName: "storage-hub-sh-bsp-1",
-        searchString: `Transaction with nonce ${nonce} is ready (in transaction pool)`,
+        searchString: `Transaction with nonce ${nonce} is ready (in Substrate's transaction pool)`,
         timeout: 10000
       });
 
@@ -205,6 +206,7 @@ await describeBspNet(
       // Get the nonce of this transaction
       const txPool1 = await userApi.rpc.author.pendingExtrinsics();
       const nonce = txPool1[firstExtrinsics[0].extIndex].nonce.toNumber();
+      const firstTxTip = txPool1[firstExtrinsics[0].extIndex].tip.toBigInt();
       const firstTxHash = txPool1[firstExtrinsics[0].extIndex].hash.toString();
 
       // Wait for retry attempts which will increase the tip
@@ -233,21 +235,23 @@ await describeBspNet(
 
       // Get the current transaction in the pool
       const txPool2 = await userApi.rpc.author.pendingExtrinsics();
-      const currentTxHash = txPool2[finalExtrinsics[0].extIndex].hash.toString();
       const currentNonce = txPool2[finalExtrinsics[0].extIndex].nonce.toNumber();
       const currentTip = txPool2[finalExtrinsics[0].extIndex].tip.toBigInt();
+      const currentTxHash = txPool2[finalExtrinsics[0].extIndex].hash.toString();
 
       // Verify the nonce is the same but the transaction hash is different
       strictEqual(currentNonce, nonce, "Nonce should be the same");
-      strictEqual(
+      assert(
+        currentTip > firstTxTip,
+        "New transaction should have a tip greater than the first transaction"
+      );
+      assert(
         currentTxHash !== firstTxHash,
-        true,
         "Transaction hash should be different after usurpation"
       );
-      strictEqual(currentTip > 0, true, "New transaction should have a tip greater than 0");
     });
 
-    it("Transaction pool detects Invalid transactions and fills up nonce gap with next transaction", async () => {
+    it("Transaction manager detects Invalid transactions and fills up nonce gap with next transaction", async () => {
       // Seal a finalized block for a stable base
       await userApi.block.seal();
 
