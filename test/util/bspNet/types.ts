@@ -398,7 +398,7 @@ export type TestOptions = {
   bspStartingWeight?: bigint;
   /** Custom toxics to apply to the network */
   toxics?: ToxicInfo[];
-  /** Set a custom timeout interval for submit extrinsic retries */
+  /** Set a custom timeout interval for submit extrinsic retries, in seconds */
   extrinsicRetryTimeout?: number;
   /** If true, runs launched userNode has attached indexer service enabled. */
   indexer?: boolean;

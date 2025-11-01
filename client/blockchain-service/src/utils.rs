@@ -462,6 +462,7 @@ where
         options: &SendExtrinsicOptions,
     ) -> Result<SubmittedExtrinsicInfo<Runtime>> {
         debug!(target: LOG_TARGET, "Sending extrinsic to the runtime");
+        debug!(target: LOG_TARGET, "Extrinsic options: {:?}", options);
 
         let block_hash = self.client.info().best_hash;
         let block_number = self.client.info().best_number.saturated_into();
@@ -503,6 +504,9 @@ where
         let (tx_hash, watch_rx) = self
             .submit_and_watch_extrinsic(extrinsic.encode(), nonce, id_hash)
             .await?;
+        let module = options.module().unwrap_or("unknown".to_string());
+        let method = options.method().unwrap_or("unknown".to_string());
+        info!(target: LOG_TARGET, "Transaction {}_{} submitted successfully with hash: {:?}", module, method, tx_hash);
 
         // Add the transaction to the transaction manager to track it
         if let Err(e) = self.transaction_manager.track_transaction(
@@ -986,6 +990,7 @@ where
         }
 
         // Spawn the watcher for the gap-filling transaction
+        // We don't care to keep track of this transaction, as there are no other tasks that depend on it.
         spawn_transaction_watcher::<Runtime>(
             nonce,
             tx_hash,

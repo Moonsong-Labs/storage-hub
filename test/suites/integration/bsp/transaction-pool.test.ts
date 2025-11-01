@@ -1,7 +1,7 @@
 import { strictEqual } from "node:assert";
-import { describeBspNet, type EnrichedBspApi, ShConsts } from "../../../util";
 import { TypeRegistry } from "@polkadot/types";
 import type { H256 } from "@polkadot/types/interfaces";
+import { describeBspNet, type EnrichedBspApi, ShConsts } from "../../../util";
 
 /**
  * Integration tests for transaction pool and watcher functionality.
@@ -13,7 +13,12 @@ import type { H256 } from "@polkadot/types/interfaces";
  */
 await describeBspNet(
   "Transaction Pool & Watcher",
-  { initialised: true, networkConfig: "standard", only: true, logLevel: "debug" },
+  {
+    initialised: true,
+    networkConfig: "standard",
+    extrinsicRetryTimeout: 10,
+    logLevel: "debug"
+  },
   ({ before, createUserApi, createBspApi, it }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
@@ -206,7 +211,7 @@ await describeBspNet(
       await bspApi.docker.waitForLog({
         containerName: "storage-hub-sh-bsp-1",
         searchString: "Retrying with increased tip",
-        timeout: 60000
+        timeout: 30000
       });
 
       // After retries, a new transaction with higher tip should be submitted

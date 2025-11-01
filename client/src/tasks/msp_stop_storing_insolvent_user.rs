@@ -286,12 +286,16 @@ where
             .blockchain
             .send_extrinsic(
                 stop_storing_bucket_for_insolvent_user_call,
-                SendExtrinsicOptions::new(Duration::from_secs(
-                    self.storage_hub_handler
-                        .provider_config
-                        .blockchain_service
-                        .extrinsic_retry_timeout,
-                )),
+                SendExtrinsicOptions::new(
+                    Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .blockchain_service
+                            .extrinsic_retry_timeout,
+                    ),
+                    Some("fileSystem".to_string()),
+                    Some("mspStopStoringBucketForInsolventUser".to_string()),
+                ),
             )
             .await?
             .watch_for_success()

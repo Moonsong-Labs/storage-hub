@@ -282,15 +282,28 @@ pub struct SendExtrinsicOptions {
     nonce: Option<u32>,
     /// Maximum time to wait for a response before assuming the extrinsic submission has failed.
     timeout: Duration,
+    /// The module (pallet) that the extrinsic belongs to. For instance, when sending a system_remark
+    /// extrinsic, the module would be "system".
+    module: Option<String>,
+    /// The method that the extrinsic is calling. For instance, when sending a system_remark
+    /// extrinsic, the method would be "remark".
+    method: Option<String>,
 }
 
 impl SendExtrinsicOptions {
-    pub fn new(timeout: Duration) -> Self {
+    pub fn new(timeout: Duration, module: Option<String>, method: Option<String>) -> Self {
         Self {
             tip: 0u128,
             nonce: None,
             timeout,
+            module,
+            method,
         }
+    }
+
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
+        self
     }
 
     pub fn with_tip(mut self, tip: u128) -> Self {
@@ -300,6 +313,16 @@ impl SendExtrinsicOptions {
 
     pub fn with_nonce(mut self, nonce: Option<u32>) -> Self {
         self.nonce = nonce;
+        self
+    }
+
+    pub fn with_module(mut self, module: Option<String>) -> Self {
+        self.module = module;
+        self
+    }
+
+    pub fn with_method(mut self, method: Option<String>) -> Self {
+        self.method = method;
         self
     }
 
@@ -314,6 +337,14 @@ impl SendExtrinsicOptions {
     pub fn timeout(&self) -> Duration {
         self.timeout
     }
+
+    pub fn module(&self) -> Option<String> {
+        self.module.clone()
+    }
+
+    pub fn method(&self) -> Option<String> {
+        self.method.clone()
+    }
 }
 
 impl Default for SendExtrinsicOptions {
@@ -322,6 +353,8 @@ impl Default for SendExtrinsicOptions {
             tip: 0u128,
             nonce: None,
             timeout: Duration::from_secs(60),
+            module: None,
+            method: None,
         }
     }
 }

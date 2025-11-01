@@ -335,7 +335,14 @@ where
 
         // Send extrinsic to increase capacity
         match self
-            .send_extrinsic(call, &SendExtrinsicOptions::new(extrinsic_retry_timeout))
+            .send_extrinsic(
+                call,
+                &SendExtrinsicOptions::new(
+                    extrinsic_retry_timeout,
+                    Some("storageProviders".to_string()),
+                    Some("changeCapacity".to_string()),
+                ),
+            )
             .await
         {
             Ok(output) => {
