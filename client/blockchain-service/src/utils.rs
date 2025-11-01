@@ -469,7 +469,7 @@ where
         // Check if there's a nonce gap we can fill with this transaction
         let on_chain_nonce = self.account_nonce(&block_hash);
         let gaps =
-            self.transaction_pool
+            self.transaction_manager
                 .detect_gaps(on_chain_nonce, self.nonce_counter, block_number);
 
         // Use the highest valid nonce, OR the first gap nonce if one exists
@@ -504,14 +504,14 @@ where
             .submit_and_watch_extrinsic(extrinsic.encode(), nonce, id_hash)
             .await?;
 
-        // Add the transaction to the transaction pool to track it
-        if let Err(e) = self
-            .transaction_pool
-            .track_transaction(nonce, id_hash, call, block_number)
+        // Add the transaction to the transaction manager to track it
+        if let Err(e) =
+            self.transaction_manager
+                .track_transaction(nonce, id_hash, call, block_number)
         {
             warn!(
                 target: LOG_TARGET,
-                "Failed to track transaction in pool: {:?}. Transaction will still be watched but not tracked for gap detection.",
+                "Failed to track transaction in manager: {:?}. Transaction will still be watched but not tracked for gap detection.",
                 e
             );
         }
@@ -532,11 +532,11 @@ where
 
         // Create a status subscription for this transaction
         let status_subscription = self
-            .transaction_pool
+            .transaction_manager
             .subscribe_to_status(nonce)
             .ok_or_else(|| {
                 anyhow::anyhow!(
-                    "Transaction was just added to the pool, so it must have a status subscription"
+                    "Transaction was just added to the manager, so it must have a status subscription"
                 )
             })?;
 
@@ -745,25 +745,23 @@ where
 
     /// Process pending transaction status updates from watchers.
     ///
-    /// Immediate removal from our transaction pool (all terminal states):
+    /// Immediate removal from our transaction manager (all terminal states):
     /// - Invalid (retriable - gap preserved)
     /// - Dropped (retriable - gap preserved)
     /// - Usurped (replaced - gap cleared)
     /// - Finalized (success - gap cleared)
     /// - FinalityTimeout (timeout - gap cleared)
     ///
-    /// Kept in our transaction pool (non-terminal states):
+    /// Kept in our transaction manager (non-terminal states):
     /// - Future
     /// - Ready
     /// - Broadcast
     /// - InBlock
     /// - Retracted
-    ///
-    /// TODO: Implement automatic retry logic for retriable transactions
     pub(crate) fn process_transaction_status_updates(&mut self) {
         while let Ok((nonce, tx_hash, status)) = self.tx_status_receiver.try_recv() {
             // Notify subscribers about the status change
-            self.transaction_pool
+            self.transaction_manager
                 .notify_status_change(nonce, status.clone());
 
             // Check if this is a terminal state that requires immediate removal
@@ -777,10 +775,10 @@ where
             );
 
             if should_remove {
-                // Check if this transaction is still the current one in the pool
+                // Check if this transaction is still the current one in the manager
                 // (it might have been replaced by a newer transaction with the same nonce)
                 let is_current_transaction = self
-                    .transaction_pool
+                    .transaction_manager
                     .pending
                     .get(&nonce)
                     .map(|tx| tx.hash == tx_hash)
@@ -791,10 +789,10 @@ where
                         if is_current_transaction {
                             warn!(
                                 target: LOG_TARGET,
-                                "⚠️ Transaction with nonce {} (hash: {:?}) was dropped from pool. Removing from tracking but keeping gap detection.",
+                                "⚠️ Transaction with nonce {} (hash: {:?}) was dropped from Substrate's transaction pool. Removing from tracking but keeping gap detection.",
                                 nonce, tx_hash
                             );
-                            self.transaction_pool.remove_pending_but_keep_gap(nonce);
+                            self.transaction_manager.remove_pending_but_keep_gap(nonce);
                         } else {
                             debug!(
                                 target: LOG_TARGET,
@@ -810,7 +808,7 @@ where
                                 "⚠️ Transaction with nonce {} (hash: {:?}) is invalid. Removing from tracking but keeping gap detection.",
                                 nonce, tx_hash
                             );
-                            self.transaction_pool.remove_pending_but_keep_gap(nonce);
+                            self.transaction_manager.remove_pending_but_keep_gap(nonce);
                         } else {
                             debug!(
                                 target: LOG_TARGET,
@@ -826,7 +824,7 @@ where
                                 "✓ Transaction with nonce {} (hash: {:?}) was usurped. Removing from tracking.",
                                 nonce, tx_hash
                             );
-                            self.transaction_pool.remove(nonce);
+                            self.transaction_manager.remove(nonce);
                         } else {
                             debug!(
                                 target: LOG_TARGET,
@@ -845,12 +843,12 @@ where
                         } else {
                             warn!(
                                 target: LOG_TARGET,
-                                "⚠️ Old transaction with nonce {} (hash: {:?}) was finalized, but we have a different transaction ({:?}) in pool. \
+                                "⚠️ Old transaction with nonce {} (hash: {:?}) was finalized, but we have a different transaction ({:?}) in manager. \
                                 Removing newer transaction as nonce is now consumed.",
-                                nonce, tx_hash, self.transaction_pool.pending.get(&nonce).map(|tx| tx.hash)
+                                nonce, tx_hash, self.transaction_manager.pending.get(&nonce).map(|tx| tx.hash)
                             );
                         }
-                        self.transaction_pool.remove(nonce);
+                        self.transaction_manager.remove(nonce);
                     }
                     TransactionStatus::FinalityTimeout(_) => {
                         if is_current_transaction {
@@ -859,7 +857,7 @@ where
                                 "⏱️ Transaction with nonce {} (hash: {:?}) had finality timeout. Removing from tracking.",
                                 nonce, tx_hash
                             );
-                            self.transaction_pool.remove(nonce);
+                            self.transaction_manager.remove(nonce);
                         } else {
                             debug!(
                                 target: LOG_TARGET,
@@ -870,7 +868,7 @@ where
                     }
                     _ => {}
                 }
-            } else if let Some(tx) = self.transaction_pool.pending.get_mut(&nonce) {
+            } else if let Some(tx) = self.transaction_manager.pending.get_mut(&nonce) {
                 // Only update status if this is the current transaction
                 if tx.hash == tx_hash {
                     debug!(
@@ -890,7 +888,7 @@ where
         }
     }
 
-    /// Handle old nonce gaps that haven't been filled in the transaction pool.
+    /// Handle old nonce gaps that haven't been filled in the transaction manager.
     ///
     /// Nonce gaps can occur when a transaction is dropped from the mempool after RPC acceptance
     /// so it fails to be included, but higher nonces were submitted optimistically.
@@ -902,7 +900,7 @@ where
         // Detect gaps in the nonce sequence
         let on_chain_nonce = self.account_nonce(&self.client.info().best_hash);
         let gaps =
-            self.transaction_pool
+            self.transaction_manager
                 .detect_gaps(on_chain_nonce, self.nonce_counter, block_number);
 
         if gaps.is_empty() {
@@ -910,7 +908,7 @@ where
         }
 
         // Send gap-filling transactions for old gaps
-        let gap_fill_threshold = self.transaction_pool.config.gap_fill_threshold_blocks;
+        let gap_fill_threshold = self.transaction_manager.config.gap_fill_threshold_blocks;
 
         for gap in gaps {
             if gap.age_in_blocks >= gap_fill_threshold {
@@ -968,10 +966,10 @@ where
             .submit_and_watch_extrinsic(extrinsic.encode(), nonce, id_hash)
             .await?;
 
-        // Add the transaction to the transaction pool to track it
+        // Add the transaction to the transaction manager to track it
         let block_number = self.client.info().best_number.saturated_into();
         if let Err(e) =
-            self.transaction_pool
+            self.transaction_manager
                 .track_transaction(nonce, id_hash, call.clone(), block_number)
         {
             warn!(

@@ -5,7 +5,7 @@ pub mod handler;
 pub mod handler_bsp;
 pub mod handler_msp;
 pub mod state;
-pub mod transaction_pool;
+pub mod transaction_manager;
 pub mod transaction_watchers;
 pub mod types;
 pub mod utils;

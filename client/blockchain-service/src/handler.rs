@@ -42,7 +42,7 @@ use crate::{
     commands::BlockchainServiceCommand,
     events::BlockchainServiceEventBusProvider,
     state::{BlockchainServiceStateStore, LastProcessedBlockNumberCf},
-    transaction_pool::{TransactionPool, TransactionPoolConfig},
+    transaction_manager::{TransactionManager, TransactionManagerConfig},
     types::{FileDistributionInfo, ManagedProvider, MinimalBlockInfo, NewBlockNotificationKind},
 };
 
@@ -104,14 +104,14 @@ where
     pub(crate) capacity_manager: Option<CapacityRequestQueue<Runtime>>,
     /// Whether the node is running in maintenance mode.
     pub(crate) maintenance_mode: bool,
-    /// Transaction pool for tracking pending transactions and managing nonces.
-    pub(crate) transaction_pool:
-        TransactionPool<Runtime::Hash, Runtime::Call, BlockNumber<Runtime>>,
+    /// Transaction manager for tracking pending transactions and managing nonces.
+    pub(crate) transaction_manager:
+        TransactionManager<Runtime::Hash, Runtime::Call, BlockNumber<Runtime>>,
     /// Channel for transaction watchers to send status updates.
     ///
     /// Watchers send TransactionStatus events for all lifecycle changes (Future, Ready, InBlock,
     /// Retracted, Finalized, Invalid, Dropped, Usurped). Terminal failure states (Invalid, Dropped)
-    /// trigger immediate removal from the pool, enabling gap detection without waiting for timeout.
+    /// trigger immediate removal from the manager, enabling gap detection without waiting for timeout.
     pub(crate) tx_status_sender: tokio::sync::mpsc::UnboundedSender<(
         u32,
         Runtime::Hash,
@@ -1286,7 +1286,7 @@ where
             notify_period,
             capacity_manager: capacity_request_queue,
             maintenance_mode,
-            transaction_pool: TransactionPool::new(TransactionPoolConfig::default()),
+            transaction_manager: TransactionManager::new(TransactionManagerConfig::default()),
             tx_status_sender,
             tx_status_receiver,
             _runtime: PhantomData,
@@ -1395,15 +1395,15 @@ where
         trace!(target: LOG_TARGET, "📠 Processing block import #{}: {}", block_number, block_hash);
 
         // Process any pending transaction status updates from watchers
-        // This handles immediate removal from the transaction pool of all transactions in a terminal state
+        // This handles immediate removal from the transaction manager of all transactions in a terminal state
         self.process_transaction_status_updates();
 
-        // Clean up the stale nonce gaps in the transaction pool
+        // Clean up the stale nonce gaps in the transaction manager
         let on_chain_nonce = self.account_nonce(&self.client.info().best_hash);
-        self.transaction_pool
+        self.transaction_manager
             .cleanup_stale_nonce_gaps(on_chain_nonce);
 
-        // Handle old nonce gaps that haven't been filled in the transaction pool
+        // Handle old nonce gaps that haven't been filled in the transaction manager
         self.handle_old_nonce_gaps(*block_number).await;
 
         // Provider-specific code to run at the start of every block import.

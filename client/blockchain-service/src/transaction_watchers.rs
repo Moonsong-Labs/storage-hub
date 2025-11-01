@@ -7,7 +7,7 @@
 //!
 //! Watchers are spawned automatically by `send_extrinsic()` in the BlockchainService.
 //! They monitor transactions via RPC subscriptions and send status updates to the
-//! transaction pool through an unbounded channel.
+//! transaction manager through an unbounded channel.
 //!
 //! ## Transaction Lifecycle
 //!
@@ -34,7 +34,7 @@ const LOG_TARGET: &str = "blockchain-transaction-watcher";
 ///
 /// This spawns a background task that monitors the transaction status via RPC subscription
 /// (`author_submitAndWatchExtrinsic`), logs all state changes, and sends TransactionStatus
-/// updates to the transaction pool via the status channel.
+/// updates to the transaction manager via the status channel.
 ///
 /// The watcher will run until the transaction reaches a terminal state or the receiver channel closes.
 pub fn spawn_transaction_watcher<Runtime>(
@@ -76,7 +76,7 @@ pub fn spawn_transaction_watcher<Runtime>(
                             } else if result.as_str() == Some("ready") {
                                 debug!(
                                     target: LOG_TARGET,
-                                    "✓ Transaction with nonce {} is ready (in transaction pool)",
+                                    "✓ Transaction with nonce {} is ready (in Substrate's transaction pool)",
                                     nonce
                                 );
                                 let _ = status_tx.send((nonce, tx_hash, TransactionStatus::Ready)).map_err(|e| {
@@ -117,7 +117,7 @@ pub fn spawn_transaction_watcher<Runtime>(
                                     nonce,
                                     block_hash
                                 );
-                                // Note: TxIndex is not present in the RPC JSON response, and since the pool doesn't need it
+                                // Note: TxIndex is not present in the RPC JSON response, and since the manager doesn't need it
                                 // for state tracking, we use 0 as a placeholder
                                 let _ = status_tx.send((
                                     nonce,
@@ -154,7 +154,7 @@ pub fn spawn_transaction_watcher<Runtime>(
                                     nonce,
                                     block_hash
                                 );
-                                // Note: TxIndex is not present in the RPC JSON response, and since the pool doesn't need it
+                                // Note: TxIndex is not present in the RPC JSON response, and since the manager doesn't need it
                                 // for state tracking, we use 0 as a placeholder
                                 let _ = status_tx.send((
                                     nonce,

@@ -26,7 +26,7 @@ use sp_runtime::{
     DispatchError, SaturatedConversion,
 };
 
-use crate::{handler::LOG_TARGET, transaction_pool::wait_for_transaction_status};
+use crate::{handler::LOG_TARGET, transaction_manager::wait_for_transaction_status};
 
 /// A struct that holds the information to submit a storage proof.
 ///
@@ -477,9 +477,9 @@ pub enum StatusToWait {
 pub enum WatchTransactionError {
     #[error("Timeout waiting for transaction to be included in a block")]
     Timeout,
-    #[error("Transaction not found in the pool")]
+    #[error("Transaction not found in the manager")]
     TransactionNotFound,
-    #[error("Transaction hash does not match the hash in the pool")]
+    #[error("Transaction hash does not match the hash in the manager")]
     TransactionHashMismatch,
     #[error("Transaction watcher channel closed")]
     WatcherChannelClosed,

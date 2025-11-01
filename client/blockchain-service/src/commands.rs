@@ -33,7 +33,7 @@ use shc_forest_manager::traits::ForestStorageHandler;
 use crate::{
     capacity_manager::CapacityRequestData,
     handler::BlockchainService,
-    transaction_pool::wait_for_transaction_status,
+    transaction_manager::wait_for_transaction_status,
     types::{
         ConfirmStoringRequest, Extrinsic, ExtrinsicResult, FileDeletionRequest, MinimalBlockInfo,
         RespondStorageRequest, RetryStrategy, SendExtrinsicOptions, StatusToWait,

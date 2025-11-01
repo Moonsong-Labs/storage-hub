@@ -12,9 +12,9 @@ use crate::{
     types::{StatusToWait, WatchTransactionError},
 };
 
-/// Configuration for the transaction pool.
+/// Configuration for the transaction manager.
 #[derive(Clone, Debug)]
-pub struct TransactionPoolConfig {
+pub struct TransactionManagerConfig {
     /// Maximum number of pending transactions to track.
     pub max_pending_transactions: u32,
     /// Number of blocks to wait before filling a nonce gap with a remark transaction.
@@ -22,7 +22,7 @@ pub struct TransactionPoolConfig {
     pub gap_fill_threshold_blocks: u32,
 }
 
-impl Default for TransactionPoolConfig {
+impl Default for TransactionManagerConfig {
     fn default() -> Self {
         Self {
             max_pending_transactions: 100,
@@ -31,12 +31,12 @@ impl Default for TransactionPoolConfig {
     }
 }
 
-/// A pending transaction tracked by the pool.
+/// A pending transaction tracked by the manager.
 #[derive(Clone, Debug)]
 pub struct PendingTransaction<Hash, Call, BlockNumber> {
     /// Hash of the transaction.
     pub hash: Hash,
-    /// The extrinsic call (TODO: for re-submission if needed).
+    /// The extrinsic call.
     pub call: Call,
     /// Block number when transaction was submitted.
     pub submitted_at: BlockNumber,
@@ -44,7 +44,7 @@ pub struct PendingTransaction<Hash, Call, BlockNumber> {
     pub latest_status: TransactionStatus<Hash, Hash>,
 }
 
-/// Information about nonce gaps detected in the transaction pool.
+/// Information about nonce gaps detected in the transaction manager.
 #[derive(Clone, Debug)]
 pub struct NonceGap {
     /// The missing nonce.
@@ -53,30 +53,30 @@ pub struct NonceGap {
     pub age_in_blocks: u32,
 }
 
-/// Transaction pool for tracking pending transactions and managing nonces.
+/// Transaction manager for tracking pending transactions and managing nonces.
 ///
 /// Transaction state is managed via watcher events from Substrate's transaction pool.
-/// This pool tracks nonces and detects gaps, but relies on watchers as the source
+/// This manager tracks nonces and detects gaps, but relies on watchers as the source
 /// of truth for transaction lifecycle events (Ready, InBlock, Retracted, Finalized, etc.).
 ///
-/// TODO: Make transaction pool state persistent across node restarts.
+/// TODO: Make transaction manager state persistent across node restarts.
 /// Currently, if the node restarts, we lose all tracking of pending transactions,
 /// which nonces were used, and gap detection history.
 /// The current mitigation is initializing the nonce counter from on-chain state,
 /// which helps but doesn't fully solve the problem.
-pub struct TransactionPool<Hash, Call, BlockNumber> {
-    /// Configuration for the pool.
-    pub config: TransactionPoolConfig,
+pub struct TransactionManager<Hash, Call, BlockNumber> {
+    /// Configuration for the manager.
+    pub config: TransactionManagerConfig,
     /// Map of nonce to pending transaction.
     pub(crate) pending: BTreeMap<u32, PendingTransaction<Hash, Call, BlockNumber>>,
     /// Map of nonce to block number when gap was first detected.
     detected_gaps: BTreeMap<u32, BlockNumber>,
     /// Map of nonce to status broadcast senders for subscription.
-    /// Subscribers receive updates when the transaction status changes in the pool.
+    /// Subscribers receive updates when the transaction status changes in the manager.
     status_subscribers: BTreeMap<u32, tokio::sync::watch::Sender<TransactionStatus<Hash, Hash>>>,
 }
 
-impl<Hash, Call, BlockNumber> TransactionPool<Hash, Call, BlockNumber>
+impl<Hash, Call, BlockNumber> TransactionManager<Hash, Call, BlockNumber>
 where
     Hash: std::fmt::Debug + Clone + Eq + std::hash::Hash + Encode,
     Call: Clone + std::fmt::Debug,
@@ -89,8 +89,8 @@ where
         + One
         + std::ops::Sub<Output = BlockNumber>,
 {
-    /// Create a new transaction pool with the given configuration.
-    pub fn new(config: TransactionPoolConfig) -> Self {
+    /// Create a new transaction manager with the given configuration.
+    pub fn new(config: TransactionManagerConfig) -> Self {
         Self {
             config,
             pending: BTreeMap::new(),
@@ -110,7 +110,7 @@ where
         if self.pending.len() >= self.config.max_pending_transactions as usize {
             warn!(
                 target: LOG_TARGET,
-                "Transaction pool is at capacity ({}), dropping oldest pending transaction",
+                "Transaction manager is at capacity ({}), dropping oldest pending transaction",
                 self.config.max_pending_transactions
             );
             // Remove the oldest pending transaction
@@ -162,8 +162,8 @@ where
     /// Returns a list of missing nonces between the on-chain nonce and the highest tracked nonce.
     ///
     /// The `local_nonce_counter` parameter is the highest nonce that has been locally assigned
-    /// (not necessarily submitted or in the pool). This allows detection of gaps even when the
-    /// pool is empty (e.g., after a dropped transaction is cleaned up).
+    /// (not necessarily in a block or even in the manager). This allows detection of gaps even when the
+    /// manager is empty (e.g., after a dropped transaction is cleaned up).
     pub fn detect_gaps(
         &mut self,
         on_chain_nonce: u32,
@@ -174,7 +174,7 @@ where
 
         // Determine the highest nonce we need to check
         // This is the maximum of:
-        // 1. The highest nonce in the pool (if any)
+        // 1. The highest nonce in the manager (if any)
         // 2. The local nonce counter
         let max_nonce = self
             .pending
@@ -184,8 +184,8 @@ where
             .unwrap_or(on_chain_nonce)
             .max(local_nonce_counter);
 
-        // If max_nonce equals on-chain nonce, there are no gaps to check
-        if max_nonce == on_chain_nonce {
+        // If max_nonce is less than or equal to on-chain nonce, there are no gaps to check
+        if max_nonce <= on_chain_nonce {
             return gaps;
         }
 
@@ -217,7 +217,7 @@ where
         gaps
     }
 
-    /// Remove a transaction from the pool completely.
+    /// Remove a transaction from the manager completely.
     ///
     /// This removes both the pending transaction and any gap tracking history.
     /// Use this when a transaction is permanently replaced (e.g., Usurped).
@@ -228,7 +228,7 @@ where
         self.status_subscribers.remove(&nonce);
     }
 
-    /// Remove a transaction from the pool but preserve gap tracking.
+    /// Remove a transaction from the manager but preserve gap tracking.
     ///
     /// This allows the gap detection system to remember when the gap was first detected,
     /// to execute the gap-filling logic later if needed.
@@ -239,7 +239,7 @@ where
         self.status_subscribers.remove(&nonce);
     }
 
-    /// Clean up the stale nonce gaps in the transaction pool.
+    /// Clean up the stale nonce gaps in the transaction manager.
     ///
     /// Removes stale nonce gaps that have already been filled (either by us or externally).
     /// If a nonce gap is less than the on-chain nonce, it means the gap was filled,
@@ -266,7 +266,7 @@ where
     /// Subscribe to status updates for a specific transaction.
     ///
     /// Returns a receiver that will get notified whenever the transaction status changes,
-    /// or None if the transaction is not tracked in the pool.
+    /// or None if the transaction is not tracked in the manager.
     ///
     /// Multiple subscribers can wait for the same transaction without interfering with each other.
     pub fn subscribe_to_status(
@@ -431,7 +431,7 @@ where
                 // Channel closed, sender was dropped
                 warn!(
                     target: LOG_TARGET,
-                    "Status receiver channel closed, transaction may have been removed from pool"
+                    "Status receiver channel closed, transaction may have been removed from manager"
                 );
                 return Err(WatchTransactionError::TransactionNotFound);
             }
