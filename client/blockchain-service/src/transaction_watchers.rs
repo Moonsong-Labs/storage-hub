@@ -11,7 +11,7 @@
 //!
 //! ## Transaction Lifecycle
 //!
-//! Watchers track transactions through these states:
+//! Watchers track transactions through these states (details)[https://github.com/paritytech/polkadot-sdk/blob/9136565addc23a552f6960a7581f13c8dfc651f1/substrate/client/transaction-pool/api/src/lib.rs#L132-L158]:
 //! - **Future**: Transaction nonce is ahead, waiting in the future queue
 //! - **Ready**: Transaction is ready for inclusion in a block
 //! - **Broadcast**: Transaction has been propagated to peers
