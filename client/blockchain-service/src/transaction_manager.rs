@@ -38,6 +38,8 @@ pub struct PendingTransaction<Hash, Call, BlockNumber> {
     pub hash: Hash,
     /// The extrinsic call.
     pub call: Call,
+    /// The tip used when submitting this transaction.
+    pub tip: u128,
     /// Block number when transaction was submitted.
     pub submitted_at: BlockNumber,
     /// Latest status from the transaction watcher.
@@ -105,6 +107,7 @@ where
         nonce: u32,
         hash: Hash,
         call: Call,
+        tip: u128,
         submitted_at: BlockNumber,
     ) -> Result<()> {
         if self.pending.len() >= self.config.max_pending_transactions as usize {
@@ -138,6 +141,7 @@ where
         let pending_tx = PendingTransaction {
             hash,
             call,
+            tip,
             submitted_at,
             latest_status: TransactionStatus::Future,
         };

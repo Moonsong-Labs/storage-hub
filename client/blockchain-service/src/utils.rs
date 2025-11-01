@@ -505,10 +505,13 @@ where
             .await?;
 
         // Add the transaction to the transaction manager to track it
-        if let Err(e) =
-            self.transaction_manager
-                .track_transaction(nonce, id_hash, call, block_number)
-        {
+        if let Err(e) = self.transaction_manager.track_transaction(
+            nonce,
+            id_hash,
+            call,
+            options.tip(),
+            block_number,
+        ) {
             warn!(
                 target: LOG_TARGET,
                 "Failed to track transaction in manager: {:?}. Transaction will still be watched but not tracked for gap detection.",
@@ -968,10 +971,13 @@ where
 
         // Add the transaction to the transaction manager to track it
         let block_number = self.client.info().best_number.saturated_into();
-        if let Err(e) =
-            self.transaction_manager
-                .track_transaction(nonce, id_hash, call.clone(), block_number)
-        {
+        if let Err(e) = self.transaction_manager.track_transaction(
+            nonce,
+            id_hash,
+            call.clone(),
+            0,
+            block_number,
+        ) {
             warn!(
                 target: LOG_TARGET,
                 "Failed to track gap-filling transaction: {:?}. It will still be watched.",
