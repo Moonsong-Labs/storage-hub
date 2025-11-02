@@ -199,6 +199,7 @@ await describeBspNet(
 
 await describeBspNet(
   "Single BSP multi-volunteers",
+  { initialised: false },
   ({ before, createBspApi, createUserApi, it }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
@@ -208,9 +209,23 @@ await describeBspNet(
       bspApi = await createBspApi();
     });
 
-    it("bsp volunteers multiple files properly", async () => {
+    it("Network launches and can be queried", async () => {
+      const userNodePeerId = await userApi.rpc.system.localPeerId();
+      strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
+
+      const bspNodePeerId = await bspApi.rpc.system.localPeerId();
+      strictEqual(bspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.bsp.expectedPeerId);
+    });
+
+    it("BSP volunteers and confirms storing multiple files with batching", async () => {
+      // Get the initial forest root of the BSP and ensure it matches the root of an empty forest
       const initialBspForestRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
-      // 1 block to maxthreshold (i.e. instant acceptance)
+      strictEqual(
+        initialBspForestRoot.toString(),
+        "0x03170a2e7597b7b7e3d84c05391d139a62b157e78786d8c082f29dcf4c111314"
+      );
+
+      // Set tick range to 1 block for instant BSP acceptance (bypasses threshold checks)
       const tickToMaximumThresholdRuntimeParameter = {
         RuntimeConfig: {
           TickRangeToMaximumThreshold: [null, 1]
@@ -228,12 +243,14 @@ await describeBspNet(
       const destination = ["test/whatsup.jpg", "test/adolphus.jpg", "test/cloud.jpg"];
       const bucketName = "something-3";
 
+      // Create a new bucket for the storage requests
       const newBucketEventEvent = await userApi.createBucket(bucketName);
       const newBucketEventDataBlob =
         userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
       assert(newBucketEventDataBlob, "Event doesn't match Type");
 
+      // Prepare multiple storage request transactions for all files
       const txs = [];
       const ownerHex2 = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(
         2
@@ -263,9 +280,10 @@ await describeBspNet(
         );
       }
 
+      // Seal a block with all storage request transactions
       await userApi.block.seal({ calls: txs, signer: shUser });
 
-      // Get the new storage request events, making sure we have 3
+      // Verify that all three storage requests were created
       const storageRequestEvents = await userApi.assert.eventMany(
         "fileSystem",
         "NewStorageRequest"
@@ -282,55 +300,101 @@ await describeBspNet(
         return dataBlob.fileKey;
       });
 
-      // Wait for the BSP to volunteer
-      await userApi.wait.bspVolunteer(source.length);
+      // Wait for the BSP volunteer transactions to be in the transaction pool
+      await userApi.wait.bspVolunteerInTxPool(source.length);
 
-      // Wait for the BSP to receive and store all files
+      // Seal the block with the BSP volunteer transactions
+      await userApi.block.seal();
+
+      // Wait for the BSP to receive and store all files in its file storage
       for (let i = 0; i < source.length; i++) {
         const fileKey = fileKeys[i];
-        await bspApi.wait.fileStorageComplete(fileKey);
+        await waitFor({
+          lambda: async () =>
+            (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
+        });
       }
 
+      // Wait for the BSP to confirm storing the files via the `bspConfirmStoring` extrinsic
       // The first file to be completed will immediately acquire the forest write lock
       // and send the `bspConfirmStoring` extrinsic. The other two files will be queued.
-      // Here we wait for the first `bspConfirmStoring` extrinsic to be submitted to the tx pool,
-      // we seal the block and check for the `BspConfirmedStoring` event.
-      await userApi.wait.bspStored({ expectedExts: 1 });
+      await userApi.wait.bspStored({
+        expectedExts: 1,
+        timeoutMs: 12000,
+        sealBlock: false
+      });
 
+      // Ensure the BSP confirm storing transaction is in the pool
+      await userApi.assert.extrinsicPresent({
+        method: "bspConfirmStoring",
+        module: "fileSystem",
+        checkTxPool: true,
+        assertLength: 1
+      });
+
+      // Seal the block with the `bspConfirmStoring` extrinsic
+      await userApi.block.seal();
+
+      // Assert that the first `BspConfirmedStoring` event was emitted for the correct BSP and file
       const {
-        data: { confirmedFileKeys: bspConfirmRes_fileKeys, newRoot: bspConfirmRes_newRoot }
+        data: {
+          bspId: bspConfirmRes_bspId,
+          confirmedFileKeys: bspConfirmRes_fileKeys,
+          newRoot: bspConfirmRes_newRoot
+        }
       } = userApi.assert.fetchEvent(
         userApi.events.fileSystem.BspConfirmedStoring,
         await userApi.query.system.events()
       );
 
-      // Here we expect only 1 file to be confirmed since we always prefer smallest possible latency.
+      strictEqual(bspConfirmRes_bspId.toHuman(), userApi.shConsts.DUMMY_BSP_ID);
       strictEqual(bspConfirmRes_fileKeys.length, 1);
 
-      // Wait for the BSP to process the BspConfirmedStoring event.
+      // Wait for the BSP to process the BspConfirmedStoring event and update its forest root
       await waitFor({
         lambda: async () =>
           (await bspApi.rpc.storagehubclient.getForestRoot(null)).toHex() !==
           initialBspForestRoot.unwrap().toHex()
       });
       const bspForestRootAfterConfirm = await bspApi.rpc.storagehubclient.getForestRoot(null);
-
       strictEqual(bspForestRootAfterConfirm.toString(), bspConfirmRes_newRoot.toString());
+      notEqual(bspForestRootAfterConfirm.toString(), initialBspForestRoot.toString());
 
       // After the previous block is processed by the BSP, the forest write lock is released and
-      // the other pending `bspConfirmStoring` extrinsics are processed and batched into one extrinsic.
-      await userApi.wait.bspStored({ expectedExts: 1 });
+      // the other pending `bspConfirmStoring` extrinsics are processed and batched into one extrinsic
+      await userApi.wait.bspStored({
+        expectedExts: 1,
+        timeoutMs: 12000,
+        sealBlock: false
+      });
 
+      // Ensure the batched BSP confirm storing transaction is in the pool
+      await userApi.assert.extrinsicPresent({
+        method: "bspConfirmStoring",
+        module: "fileSystem",
+        checkTxPool: true,
+        assertLength: 1
+      });
+
+      // Seal the block with the batched `bspConfirmStoring` extrinsic
+      await userApi.block.seal();
+
+      // Assert that the second `BspConfirmedStoring` event contains the batched files
       const {
-        data: { confirmedFileKeys: bspConfirm2Res_fileKeys, newRoot: bspConfirm2Res_newRoot }
+        data: {
+          bspId: bspConfirm2Res_bspId,
+          confirmedFileKeys: bspConfirm2Res_fileKeys,
+          newRoot: bspConfirm2Res_newRoot
+        }
       } = userApi.assert.fetchEvent(
         userApi.events.fileSystem.BspConfirmedStoring,
         await userApi.query.system.events()
       );
 
-      // Here we expect 2 batched files to be confirmed.
+      strictEqual(bspConfirm2Res_bspId.toHuman(), userApi.shConsts.DUMMY_BSP_ID);
       strictEqual(bspConfirm2Res_fileKeys.length, 2);
 
+      // Wait for the BSP to process the second batch and update its forest root
       await waitFor({
         lambda: async () =>
           (await bspApi.rpc.storagehubclient.getForestRoot(null)).toHex() !==
@@ -339,6 +403,7 @@ await describeBspNet(
 
       const bspForestRootAfterConfirm2 = await bspApi.rpc.storagehubclient.getForestRoot(null);
       strictEqual(bspForestRootAfterConfirm2.toString(), bspConfirm2Res_newRoot.toString());
+      notEqual(bspForestRootAfterConfirm2.toString(), bspForestRootAfterConfirm.toString());
     });
   }
 );
