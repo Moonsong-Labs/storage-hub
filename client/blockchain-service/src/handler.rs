@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use futures::prelude::*;
-use std::{collections::BTreeMap, marker::PhantomData, path::PathBuf, sync::Arc};
+use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 
 use sc_client_api::{
     BlockImportNotification, BlockchainEvents, FinalityNotification, HeaderBackend,
@@ -8,6 +8,7 @@ use sc_client_api::{
 use sc_network_types::PeerId;
 use sc_service::RpcHandlers;
 use sc_tracing::tracing::{debug, error, info, trace, warn};
+use sc_transaction_pool_api::TransactionStatus;
 use shc_common::traits::StorageEnableRuntime;
 use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_blockchain::TreeRoute;
@@ -41,7 +42,7 @@ use crate::{
     commands::BlockchainServiceCommand,
     events::BlockchainServiceEventBusProvider,
     state::{BlockchainServiceStateStore, LastProcessedBlockNumberCf},
-    transaction::SubmittedTransaction,
+    transaction_manager::{TransactionManager, TransactionManagerConfig},
     types::{FileDistributionInfo, ManagedProvider, MinimalBlockInfo, NewBlockNotificationKind},
 };
 
@@ -103,8 +104,19 @@ where
     pub(crate) capacity_manager: Option<CapacityRequestQueue<Runtime>>,
     /// Whether the node is running in maintenance mode.
     pub(crate) maintenance_mode: bool,
-    /// Phantom data for the Runtime type.
-    _runtime: PhantomData<Runtime>,
+    /// Transaction manager for tracking pending transactions and managing nonces.
+    pub(crate) transaction_manager:
+        TransactionManager<Runtime::Hash, Runtime::Call, BlockNumber<Runtime>>,
+    /// Channel for transaction watchers to send status updates.
+    ///
+    /// Watchers send TransactionStatus events for all lifecycle changes (Future, Ready, InBlock,
+    /// Retracted, Finalized, Invalid, Dropped, Usurped). Terminal failure states (Invalid, Dropped)
+    /// trigger immediate removal from the manager, enabling gap detection without waiting for timeout.
+    pub(crate) tx_status_sender: tokio::sync::mpsc::UnboundedSender<(
+        u32,
+        Runtime::Hash,
+        TransactionStatus<Runtime::Hash, Runtime::Hash>,
+    )>,
 }
 
 #[derive(Debug, Clone)]
@@ -164,6 +176,11 @@ where
 {
     receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand<Runtime>>,
     actor: BlockchainService<FSH, Runtime>,
+    tx_status_receiver: tokio::sync::mpsc::UnboundedReceiver<(
+        u32,
+        Runtime::Hash,
+        TransactionStatus<Runtime::Hash, Runtime::Hash>,
+    )>,
 }
 
 /// Merged event loop message for the BlockchainService actor.
@@ -174,6 +191,13 @@ where
     Command(BlockchainServiceCommand<Runtime>),
     BlockImportNotification(BlockImportNotification<OpaqueBlock>),
     FinalityNotification(FinalityNotification<OpaqueBlock>),
+    TxStatusUpdate(
+        (
+            u32,
+            Runtime::Hash,
+            TransactionStatus<Runtime::Hash, Runtime::Hash>,
+        ),
+    ),
 }
 
 /// Implement the ActorEventLoop trait for the BlockchainServiceEventLoop.
@@ -187,7 +211,16 @@ where
         actor: BlockchainService<FSH, Runtime>,
         receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand<Runtime>>,
     ) -> Self {
-        Self { actor, receiver }
+        // Create transaction status channel and wire sender into actor
+        let (tx_status_sender, tx_status_receiver) = tokio::sync::mpsc::unbounded_channel();
+        let mut actor = actor;
+        actor.tx_status_sender = tx_status_sender;
+
+        Self {
+            actor,
+            receiver,
+            tx_status_receiver,
+        }
     }
 
     async fn run(mut self) {
@@ -204,6 +237,13 @@ where
         let finality_notification_stream = self.actor.client.finality_notification_stream();
 
         // Merging notification streams with command stream.
+        let tx_status_stream = futures::stream::unfold(self.tx_status_receiver, |mut rx| async {
+            match rx.recv().await {
+                Some(item) => Some((item, rx)),
+                None => None,
+            }
+        });
+
         let mut merged_stream = stream::select_all(vec![
             self.receiver
                 .map(MergedEventLoopMessage::<Runtime>::Command)
@@ -213,6 +253,9 @@ where
                 .boxed(),
             finality_notification_stream
                 .map(|n| MergedEventLoopMessage::<Runtime>::FinalityNotification(n))
+                .boxed(),
+            tx_status_stream
+                .map(MergedEventLoopMessage::<Runtime>::TxStatusUpdate)
                 .boxed(),
         ]);
 
@@ -229,6 +272,10 @@ where
                 }
                 MergedEventLoopMessage::FinalityNotification(notification) => {
                     self.actor.handle_finality_notification(notification).await;
+                }
+                MergedEventLoopMessage::TxStatusUpdate((nonce, tx_hash, status)) => {
+                    self.actor
+                        .handle_transaction_status_update(nonce, tx_hash, status);
                 }
             };
         }
@@ -258,17 +305,12 @@ where
                 } => match self.send_extrinsic(call, &options).await {
                     Ok(output) => {
                         debug!(target: LOG_TARGET, "Extrinsic sent successfully: {:?}", output);
-                        match callback.send(Ok(SubmittedTransaction::new(
-                            output.receiver,
-                            output.hash,
-                            output.nonce,
-                            options.timeout(),
-                        ))) {
+                        match callback.send(Ok(output)) {
                             Ok(_) => {
-                                trace!(target: LOG_TARGET, "Receiver sent successfully");
+                                trace!(target: LOG_TARGET, "Submitted extrinsic info sent successfully");
                             }
                             Err(e) => {
-                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                                error!(target: LOG_TARGET, "Failed to send submitted extrinsic info: {:?}", e);
                             }
                         }
                     }
@@ -318,33 +360,6 @@ where
                         }
                     }
                 }
-                BlockchainServiceCommand::UnwatchExtrinsic {
-                    subscription_id,
-                    callback,
-                } => match self.unwatch_extrinsic(subscription_id).await {
-                    Ok(output) => {
-                        debug!(target: LOG_TARGET, "Extrinsic unwatched successfully: {:?}", output);
-                        match callback.send(Ok(())) {
-                            Ok(_) => {
-                                trace!(target: LOG_TARGET, "Receiver sent successfully");
-                            }
-                            Err(e) => {
-                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        warn!(target: LOG_TARGET, "Failed to unwatch extrinsic: {:?}", e);
-                        match callback.send(Err(e)) {
-                            Ok(_) => {
-                                trace!(target: LOG_TARGET, "Receiver sent successfully");
-                            }
-                            Err(e) => {
-                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
-                            }
-                        }
-                    }
-                },
                 BlockchainServiceCommand::GetBestBlockInfo { callback } => {
                     let best_block_info = self.best_block;
                     match callback.send(Ok(best_block_info)) {
@@ -1295,7 +1310,12 @@ where
             notify_period,
             capacity_manager: capacity_request_queue,
             maintenance_mode,
-            _runtime: PhantomData,
+            transaction_manager: TransactionManager::new(TransactionManagerConfig::default()),
+            // Temporary sender, will be replaced by the event loop during startup
+            tx_status_sender: {
+                let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+                tx
+            },
         }
     }
 
@@ -1399,6 +1419,14 @@ where
         tree_route: TreeRoute<OpaqueBlock>,
     ) {
         trace!(target: LOG_TARGET, "📠 Processing block import #{}: {}", block_number, block_hash);
+
+        // Clean up the stale nonce gaps in the transaction manager
+        let on_chain_nonce = self.account_nonce(&self.client.info().best_hash);
+        self.transaction_manager
+            .cleanup_stale_nonce_gaps(on_chain_nonce);
+
+        // Handle old nonce gaps that haven't been filled in the transaction manager
+        self.handle_old_nonce_gaps(*block_number).await;
 
         // Provider-specific code to run at the start of every block import.
         match self.maybe_managed_provider {
