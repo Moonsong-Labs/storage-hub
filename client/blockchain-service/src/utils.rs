@@ -767,130 +767,155 @@ where
     /// - Retracted
     pub(crate) fn process_transaction_status_updates(&mut self) {
         while let Ok((nonce, tx_hash, status)) = self.tx_status_receiver.try_recv() {
-            // Notify subscribers about the status change
-            self.transaction_manager
-                .notify_status_change(nonce, status.clone());
+            self.handle_transaction_status_update(nonce, tx_hash, status);
+        }
+    }
 
-            // Check if this is a terminal state that requires immediate removal
-            let should_remove = matches!(
-                status,
-                TransactionStatus::Invalid
-                    | TransactionStatus::Dropped
-                    | TransactionStatus::Usurped(_)
-                    | TransactionStatus::Finalized(_)
-                    | TransactionStatus::FinalityTimeout(_)
-            );
+    /// Handle a single transaction status update, notifying subscribers and updating
+    /// the transaction manager state (including cleanup for terminal states).
+    ///
+    /// Immediate removal from our transaction manager (all terminal states):
+    /// - Invalid (retriable - gap preserved)
+    /// - Dropped (retriable - gap preserved)
+    /// - Usurped (replaced - gap cleared)
+    /// - Finalized (success - gap cleared)
+    /// - FinalityTimeout (timeout - gap cleared)
+    ///
+    /// Kept in our transaction manager (non-terminal states):
+    /// - Future
+    /// - Ready
+    /// - Broadcast
+    /// - InBlock
+    /// - Retracted
+    pub(crate) fn handle_transaction_status_update(
+        &mut self,
+        nonce: u32,
+        tx_hash: Runtime::Hash,
+        status: TransactionStatus<Runtime::Hash, Runtime::Hash>,
+    ) {
+        // Notify subscribers about the status change
+        self.transaction_manager
+            .notify_status_change(nonce, status.clone());
 
-            if should_remove {
-                // Check if this transaction is still the current one in the manager
-                // (it might have been replaced by a newer transaction with the same nonce)
-                let is_current_transaction = self
-                    .transaction_manager
-                    .pending
-                    .get(&nonce)
-                    .map(|tx| tx.hash == tx_hash)
-                    .unwrap_or(false);
+        // Check if this is a terminal state that requires immediate removal
+        let should_remove = matches!(
+            status,
+            TransactionStatus::Invalid
+                | TransactionStatus::Dropped
+                | TransactionStatus::Usurped(_)
+                | TransactionStatus::Finalized(_)
+                | TransactionStatus::FinalityTimeout(_)
+        );
 
-                match &status {
-                    TransactionStatus::Dropped => {
-                        if is_current_transaction {
-                            warn!(
-                                target: LOG_TARGET,
-                                "⚠️ Transaction with nonce {} (hash: {:?}) was dropped from Substrate's transaction pool. Removing from tracking but keeping gap detection.",
-                                nonce, tx_hash
-                            );
-                            self.transaction_manager.remove_pending_but_keep_gap(nonce);
-                        } else {
-                            debug!(
-                                target: LOG_TARGET,
-                                "Ignoring Dropped event for old transaction with nonce {} (hash: {:?}), current transaction is different",
-                                nonce, tx_hash
-                            );
-                        }
+        if should_remove {
+            // Check if this transaction is still the current one in the manager
+            // (it might have been replaced by a newer transaction with the same nonce)
+            let is_current_transaction = self
+                .transaction_manager
+                .pending
+                .get(&nonce)
+                .map(|tx| tx.hash == tx_hash)
+                .unwrap_or(false);
+
+            match &status {
+                TransactionStatus::Dropped => {
+                    if is_current_transaction {
+                        warn!(
+                            target: LOG_TARGET,
+                            "⚠️ Transaction with nonce {} (hash: {:?}) was dropped from Substrate's transaction pool. Removing from tracking but keeping gap detection.",
+                            nonce, tx_hash
+                        );
+                        self.transaction_manager.remove_pending_but_keep_gap(nonce);
+                    } else {
+                        debug!(
+                            target: LOG_TARGET,
+                            "Ignoring Dropped event for old transaction with nonce {} (hash: {:?}), current transaction is different",
+                            nonce, tx_hash
+                        );
                     }
-                    TransactionStatus::Invalid => {
-                        if is_current_transaction {
-                            warn!(
-                                target: LOG_TARGET,
-                                "⚠️ Transaction with nonce {} (hash: {:?}) is invalid. Removing from tracking but keeping gap detection.",
-                                nonce, tx_hash
-                            );
-                            self.transaction_manager.remove_pending_but_keep_gap(nonce);
-                        } else {
-                            debug!(
-                                target: LOG_TARGET,
-                                "Ignoring Invalid event for old transaction with nonce {} (hash: {:?}), current transaction is different",
-                                nonce, tx_hash
-                            );
-                        }
+                }
+                TransactionStatus::Invalid => {
+                    if is_current_transaction {
+                        warn!(
+                            target: LOG_TARGET,
+                            "⚠️ Transaction with nonce {} (hash: {:?}) is invalid. Removing from tracking but keeping gap detection.",
+                            nonce, tx_hash
+                        );
+                        self.transaction_manager.remove_pending_but_keep_gap(nonce);
+                    } else {
+                        debug!(
+                            target: LOG_TARGET,
+                            "Ignoring Invalid event for old transaction with nonce {} (hash: {:?}), current transaction is different",
+                            nonce, tx_hash
+                        );
                     }
-                    TransactionStatus::Usurped(_) => {
-                        if is_current_transaction {
-                            debug!(
-                                target: LOG_TARGET,
-                                "✓ Transaction with nonce {} (hash: {:?}) was usurped. Removing from tracking.",
-                                nonce, tx_hash
-                            );
-                            self.transaction_manager.remove(nonce);
-                        } else {
-                            debug!(
-                                target: LOG_TARGET,
-                                "Ignoring Usurped event for old transaction with nonce {} (hash: {:?}), it was already replaced",
-                                nonce, tx_hash
-                            );
-                        }
-                    }
-                    TransactionStatus::Finalized(_) => {
-                        if is_current_transaction {
-                            debug!(
-                                target: LOG_TARGET,
-                                "✓ Transaction with nonce {} (hash: {:?}) was finalized. Removing from tracking.",
-                                nonce, tx_hash
-                            );
-                        } else {
-                            warn!(
-                                target: LOG_TARGET,
-                                "⚠️ Old transaction with nonce {} (hash: {:?}) was finalized, but we have a different transaction ({:?}) in manager. \
-                                Removing newer transaction as nonce is now consumed.",
-                                nonce, tx_hash, self.transaction_manager.pending.get(&nonce).map(|tx| tx.hash)
-                            );
-                        }
+                }
+                TransactionStatus::Usurped(_) => {
+                    if is_current_transaction {
+                        debug!(
+                            target: LOG_TARGET,
+                            "✓ Transaction with nonce {} (hash: {:?}) was usurped. Removing from tracking.",
+                            nonce, tx_hash
+                        );
                         self.transaction_manager.remove(nonce);
+                    } else {
+                        debug!(
+                            target: LOG_TARGET,
+                            "Ignoring Usurped event for old transaction with nonce {} (hash: {:?}), it was already replaced",
+                            nonce, tx_hash
+                        );
                     }
-                    TransactionStatus::FinalityTimeout(_) => {
-                        if is_current_transaction {
-                            debug!(
-                                target: LOG_TARGET,
-                                "⏱️ Transaction with nonce {} (hash: {:?}) had finality timeout. Removing from tracking.",
-                                nonce, tx_hash
-                            );
-                            self.transaction_manager.remove(nonce);
-                        } else {
-                            debug!(
-                                target: LOG_TARGET,
-                                "Ignoring FinalityTimeout event for old transaction with nonce {} (hash: {:?}), current transaction is different",
-                                nonce, tx_hash
-                            );
-                        }
+                }
+                TransactionStatus::Finalized(_) => {
+                    if is_current_transaction {
+                        debug!(
+                            target: LOG_TARGET,
+                            "✓ Transaction with nonce {} (hash: {:?}) was finalized. Removing from tracking.",
+                            nonce, tx_hash
+                        );
+                    } else {
+                        warn!(
+                            target: LOG_TARGET,
+                            "⚠️ Old transaction with nonce {} (hash: {:?}) was finalized, but we have a different transaction ({:?}) in manager. \
+                                Removing newer transaction as nonce is now consumed.",
+                            nonce, tx_hash, self.transaction_manager.pending.get(&nonce).map(|tx| tx.hash)
+                        );
                     }
-                    _ => {}
+                    self.transaction_manager.remove(nonce);
                 }
-            } else if let Some(tx) = self.transaction_manager.pending.get_mut(&nonce) {
-                // Only update status if this is the current transaction
-                if tx.hash == tx_hash {
-                    debug!(
-                        target: LOG_TARGET,
-                        "📊 Transaction with nonce {} (hash: {:?}) status updated: {:?}",
-                        nonce, tx_hash, status
-                    );
-                    tx.latest_status = status;
-                } else {
-                    debug!(
-                        target: LOG_TARGET,
-                        "Ignoring status update for old transaction with nonce {} (hash: {:?}), current hash is {:?}",
-                        nonce, tx_hash, tx.hash
-                    );
+                TransactionStatus::FinalityTimeout(_) => {
+                    if is_current_transaction {
+                        debug!(
+                            target: LOG_TARGET,
+                            "⏱️ Transaction with nonce {} (hash: {:?}) had finality timeout. Removing from tracking.",
+                            nonce, tx_hash
+                        );
+                        self.transaction_manager.remove(nonce);
+                    } else {
+                        debug!(
+                            target: LOG_TARGET,
+                            "Ignoring FinalityTimeout event for old transaction with nonce {} (hash: {:?}), current transaction is different",
+                            nonce, tx_hash
+                        );
+                    }
                 }
+                _ => {}
+            }
+        } else if let Some(tx) = self.transaction_manager.pending.get_mut(&nonce) {
+            // Only update status if this is the current transaction
+            if tx.hash == tx_hash {
+                debug!(
+                    target: LOG_TARGET,
+                    "📊 Transaction with nonce {} (hash: {:?}) status updated: {:?}",
+                    nonce, tx_hash, status
+                );
+                tx.latest_status = status;
+            } else {
+                debug!(
+                    target: LOG_TARGET,
+                    "Ignoring status update for old transaction with nonce {} (hash: {:?}), current hash is {:?}",
+                    nonce, tx_hash, tx.hash
+                );
             }
         }
     }
