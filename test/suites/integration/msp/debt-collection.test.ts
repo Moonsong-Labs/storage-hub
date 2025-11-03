@@ -8,7 +8,6 @@ import { DUMMY_MSP_ID, MSP_CHARGING_PERIOD } from "../../../util/bspNet/consts";
 
 await describeMspNet(
   "Single MSP collecting debt",
-  { only: true, networkConfig: "standard" },
   ({ before, createMsp1Api, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
