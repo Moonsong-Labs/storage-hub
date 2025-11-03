@@ -1421,10 +1421,6 @@ where
     ) {
         trace!(target: LOG_TARGET, "📠 Processing block import #{}: {}", block_number, block_hash);
 
-        // Process any pending transaction status updates from watchers
-        // This handles immediate removal from the transaction manager of all transactions in a terminal state
-        self.process_transaction_status_updates();
-
         // Clean up the stale nonce gaps in the transaction manager
         let on_chain_nonce = self.account_nonce(&self.client.info().best_hash);
         self.transaction_manager
@@ -1551,11 +1547,6 @@ where
         }
 
         info!(target: LOG_TARGET, "📨 Finality notification #{}: {}", block_number, block_hash);
-
-        // Process any pending transaction status updates from watchers
-        // This is important because watchers send Finalized status that could
-        // arrive in between block imports
-        self.process_transaction_status_updates();
 
         // Get events from storage.
         match get_events_at_block::<Runtime>(&self.client, &block_hash) {

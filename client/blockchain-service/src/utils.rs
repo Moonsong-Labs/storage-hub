@@ -750,27 +750,6 @@ where
         (current_tick_minus_last_submission % provider_challenge_period) == Zero::zero()
     }
 
-    /// Process pending transaction status updates from watchers.
-    ///
-    /// Immediate removal from our transaction manager (all terminal states):
-    /// - Invalid (retriable - gap preserved)
-    /// - Dropped (retriable - gap preserved)
-    /// - Usurped (replaced - gap cleared)
-    /// - Finalized (success - gap cleared)
-    /// - FinalityTimeout (timeout - gap cleared)
-    ///
-    /// Kept in our transaction manager (non-terminal states):
-    /// - Future
-    /// - Ready
-    /// - Broadcast
-    /// - InBlock
-    /// - Retracted
-    pub(crate) fn process_transaction_status_updates(&mut self) {
-        while let Ok((nonce, tx_hash, status)) = self.tx_status_receiver.try_recv() {
-            self.handle_transaction_status_update(nonce, tx_hash, status);
-        }
-    }
-
     /// Handle a single transaction status update, notifying subscribers and updating
     /// the transaction manager state (including cleanup for terminal states).
     ///
