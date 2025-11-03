@@ -4,25 +4,12 @@ import {
   bspKey,
   describeMspNet,
   type EnrichedBspApi,
+  hexToBuffer,
   ShConsts,
   type SqlClient,
   shUser,
   waitFor
 } from "../../../util";
-import {
-  chargeUserUntilInsolvent,
-  hexToBuffer,
-  verifyNoBspFileAssociation,
-  verifyNoOrphanedBspAssociations,
-  verifyNoOrphanedMspAssociations,
-  waitForBlockIndexed,
-  waitForBspFileAssociation,
-  waitForBucketByIdIndexed,
-  waitForBucketIndexed,
-  waitForFileDeleted,
-  waitForFileIndexed,
-  waitForMspFileAssociation
-} from "../../../util/indexerHelpers";
 
 await describeMspNet(
   "Fisherman Indexer - Fishing Mode",
@@ -30,13 +17,24 @@ await describeMspNet(
     initialised: false,
     indexer: true,
     fisherman: true,
-    indexerMode: "fishing"
+    indexerMode: "fishing",
+    standaloneIndexer: true
   },
-  ({ before, it, createUserApi, createBspApi, createMsp1Api, createMsp2Api, createSqlClient }) => {
+  ({
+    before,
+    it,
+    createUserApi,
+    createBspApi,
+    createMsp1Api,
+    createMsp2Api,
+    createSqlClient,
+    createIndexerApi
+  }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
     let msp1Api: EnrichedBspApi;
     let msp2Api: EnrichedBspApi;
+    let indexerApi: EnrichedBspApi;
     let sql: SqlClient;
 
     before(async () => {
@@ -51,14 +49,21 @@ await describeMspNet(
       msp2Api = maybeMsp2Api;
       sql = createSqlClient();
 
+      // Connect to standalone indexer node
+      assert(
+        createIndexerApi,
+        "Indexer API not available. Ensure `standaloneIndexer` is set to `true` in the network configuration."
+      );
+      indexerApi = await createIndexerApi();
+
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",
         containerName: userApi.shConsts.NODE_INFOS.user.containerName,
         timeout: 10000
       });
 
-      await userApi.block.seal({ finaliseBlock: true });
-      await userApi.indexer.waitForIndexing({});
+      // Wait for indexer to process the finalized block (producerApi will seal a finalized block by default)
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
     });
 
     it("indexes NewStorageRequest events", async () => {
@@ -72,8 +77,8 @@ await describeMspNet(
         bucketName
       );
 
-      await userApi.indexer.waitForIndexing({});
-      await waitForFileIndexed(sql, fileKey);
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForFileIndexed({ sql, fileKey });
 
       const files = await sql`
         SELECT * FROM file
@@ -120,11 +125,11 @@ await describeMspNet(
       );
       assert(bspConfirmedEvent, "BspConfirmedStoring event should be present");
 
-      await userApi.indexer.waitForIndexing({});
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
 
-      await waitForFileIndexed(sql, fileKey);
+      await indexerApi.indexer.waitForFileIndexed({ sql, fileKey });
 
-      await waitForBspFileAssociation(sql, fileKey);
+      await indexerApi.indexer.waitForBspFileAssociation({ sql, fileKey });
     });
 
     it("indexes MspAcceptedStorageRequest events", async () => {
@@ -147,7 +152,6 @@ await describeMspNet(
       );
 
       await userApi.wait.mspResponseInTxPool();
-
       await userApi.wait.bspVolunteer();
 
       const { event: mspAcceptedEvent } = await userApi.assert.eventPresent(
@@ -167,18 +171,22 @@ await describeMspNet(
       const acceptedFileKey = mspAcceptedEventDataBlob.fileKey.toString();
       assert.equal(acceptedFileKey, fileKey.toString());
 
-      await userApi.indexer.waitForIndexing({});
-
-      await waitForFileIndexed(sql, fileKey.toString());
-
-      await waitForMspFileAssociation(sql, fileKey.toString());
-
       const bspAddress = userApi.createType("Address", bspKey.address);
       await userApi.wait.bspStored({
         expectedExts: 1,
         sealBlock: true,
         bspAccount: bspAddress,
         timeoutMs: 30000
+      });
+
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+
+      await indexerApi.indexer.waitForFileIndexed({ sql, fileKey: fileKey.toString() });
+
+      await indexerApi.indexer.waitForMspFileAssociation({ sql, fileKey: fileKey.toString() });
+      await indexerApi.indexer.waitForBspFileAssociation({
+        sql,
+        fileKey: fileKey.toString()
       });
     });
 
@@ -214,8 +222,8 @@ await describeMspNet(
           revokeStorageRequestResult.events
         );
 
-        await userApi.indexer.waitForIndexing({});
-        await waitForFileDeleted(sql, fileKey);
+        await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+        await indexerApi.indexer.waitForFileDeleted({ sql, fileKey });
       } finally {
         // Always resume containers even if the test fails
         await userApi.docker.resumeContainer({
@@ -310,9 +318,9 @@ await describeMspNet(
 
       await userApi.assert.eventPresent("fileSystem", "BspConfirmStoppedStoring");
 
-      await userApi.indexer.waitForIndexing({});
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
 
-      await verifyNoBspFileAssociation(sql, fileKey);
+      await indexerApi.indexer.verifyNoBspFileAssociation({ sql, fileKey });
     });
 
     it("indexes NewBucket and BucketDeleted events", async () => {
@@ -328,9 +336,9 @@ await describeMspNet(
 
       const bucketId = newBucketEventData.bucketId;
 
-      await userApi.indexer.waitForIndexing({});
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
 
-      await waitForBucketIndexed(sql, bucketName);
+      await indexerApi.indexer.waitForBucketIndexed({ sql, bucketName });
 
       let buckets = await sql`
         SELECT * FROM bucket WHERE name = ${bucketName}
@@ -344,7 +352,7 @@ await describeMspNet(
 
       await userApi.assert.eventPresent("fileSystem", "BucketDeleted", deleteBucketResult.events);
 
-      await userApi.indexer.waitForIndexing({});
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
 
       buckets = await sql`
         SELECT * FROM bucket WHERE name = ${bucketName}
@@ -373,9 +381,9 @@ await describeMspNet(
       await userApi.wait.mspResponseInTxPool();
       await userApi.block.seal();
 
-      await userApi.indexer.waitForIndexing({});
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
 
-      await waitForFileIndexed(sql, fileKey);
+      await indexerApi.indexer.waitForFileIndexed({ sql, fileKey });
 
       const files = await sql`
         SELECT * FROM file WHERE file_key = ${hexToBuffer(fileKey)}
@@ -395,12 +403,25 @@ await describeMspNet(
         bucketName
       );
 
+      await userApi.wait.mspResponseInTxPool();
+      await userApi.wait.bspVolunteer();
+      await waitFor({
+        lambda: async () =>
+          (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
+      });
+      const bspAddress = userApi.createType("Address", bspKey.address);
+      await userApi.wait.bspStored({
+        expectedExts: 1,
+        sealBlock: true,
+        bspAccount: bspAddress
+      });
+
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
 
       await userApi.block.skipTo(currentBlockNumber + 100);
 
-      await userApi.indexer.waitForIndexing({});
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
 
       // For expired requests, file remains in database with expired status
       const files = await sql`
@@ -450,10 +471,10 @@ await describeMspNet(
         bspAccount: bspAddress
       });
 
-      await waitForBlockIndexed(userApi);
-      await waitForMspFileAssociation(sql, fileKey);
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForMspFileAssociation({ sql, fileKey });
 
-      await waitForBspFileAssociation(sql, fileKey);
+      await indexerApi.indexer.waitForBspFileAssociation({ sql, fileKey });
 
       const fileOperationIntention = {
         fileKey: fileKey,
@@ -491,71 +512,30 @@ await describeMspNet(
       );
 
       // Wait for indexer to process the FileDeletionRequested event
-      await userApi.indexer.waitForIndexing({ producerApi: userApi, sealBlock: false });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
 
-      // Verify that the deletion signature was stored in the database (SCALE-encoded)
-      await waitFor({
-        lambda: async () => {
-          const files = await sql`
-            SELECT deletion_signature FROM file
-            WHERE file_key = ${hexToBuffer(fileKey)}
-            AND deletion_signature IS NOT NULL
-          `;
-          return files.length > 0;
-        }
-      });
+      // Verify deletion signatures are stored in database for the User deletion type
+      await indexerApi.indexer.verifyDeletionSignaturesStored({ sql, fileKeys: [fileKey] });
 
-      const filesWithSignature = await sql`
-        SELECT deletion_signature FROM file
-        WHERE file_key = ${hexToBuffer(fileKey)}
-        AND deletion_signature IS NOT NULL
-      `;
-      assert.equal(filesWithSignature.length, 1, "File should have deletion signature stored");
-      assert(
-        filesWithSignature[0].deletion_signature.length > 0,
-        "SCALE-encoded signature should not be empty"
-      );
-
-      // Wait for fisherman to process user deletions and verify extrinsics are in tx pool
-      const deletionResult = await userApi.fisherman.waitForBatchDeletions({
+      await userApi.fisherman.retryableWaitAndVerifyBatchDeletions({
+        blockProducerApi: userApi,
         deletionType: "User",
         expectExt: 2,
-        sealBlock: true // Seal and return events for verification
-      });
-
-      assert(deletionResult, "Deletion result should be defined when sealBlock is true");
-
-      await userApi.assert.eventPresent(
-        "fileSystem",
-        "BucketFileDeletionsCompleted",
-        deletionResult.events
-      );
-      await userApi.assert.eventPresent(
-        "fileSystem",
-        "BspFileDeletionsCompleted",
-        deletionResult.events
-      );
-
-      // Verify BSP deletions
-      await userApi.fisherman.verifyBspDeletionResults({
         userApi,
         bspApi,
-        events: deletionResult.events,
-        expectedCount: 1
-      });
-
-      // Verify bucket deletions
-      await userApi.fisherman.verifyBucketDeletionResults({
-        userApi,
+        expectedBspCount: 1,
         mspApi: msp1Api,
-        events: deletionResult.events,
-        expectedCount: 1
+        expectedBucketCount: 1,
+        maxRetries: 3
       });
 
-      await userApi.indexer.waitForIndexing({});
-      await waitForFileDeleted(sql, fileKey);
-      await verifyNoOrphanedMspAssociations(sql, mspId);
-      await verifyNoOrphanedBspAssociations(sql, userApi.shConsts.DUMMY_BSP_ID);
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForFileDeleted({ sql, fileKey });
+      await indexerApi.indexer.verifyNoOrphanedMspAssociations({ sql, mspId });
+      await indexerApi.indexer.verifyNoOrphanedBspAssociations({
+        sql,
+        bspId: userApi.shConsts.DUMMY_BSP_ID
+      });
     });
 
     it("indexes MoveBucketAccepted events", async () => {
@@ -588,6 +568,8 @@ await describeMspNet(
         bspAccount: bspAddress
       });
 
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+
       const truncatedMspId = `${ShConsts.DUMMY_MSP_ID.slice(0, 6)}…${ShConsts.DUMMY_MSP_ID.slice(
         -4
       )}`;
@@ -597,7 +579,7 @@ await describeMspNet(
       const mspId = mspRows[0]?.id;
 
       // Wait for bucket to be indexed
-      await waitForBucketByIdIndexed(sql, bucketId, mspId);
+      await indexerApi.indexer.waitForBucketByIdIndexed({ sql, bucketId, mspId });
 
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
         userApi.shConsts.DUMMY_MSP_ID_2
@@ -634,6 +616,19 @@ await describeMspNet(
       const { events } = await userApi.block.seal();
 
       await userApi.assert.eventPresent("fileSystem", "MoveBucketAccepted", events);
+
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+
+      const truncatedMspId2 = `${ShConsts.DUMMY_MSP_ID_2.slice(0, 6)}…${ShConsts.DUMMY_MSP_ID_2.slice(
+        -4
+      )}`;
+      const mspRows2 = await sql`
+            SELECT id FROM msp WHERE onchain_msp_id = ${truncatedMspId2}
+            `;
+      const mspId2 = mspRows2[0]?.id;
+
+      // Bucket should now be indexed with the new MSP ID owning it
+      await indexerApi.indexer.waitForBucketByIdIndexed({ sql, bucketId, mspId: mspId2 });
 
       await waitFor({
         lambda: async () => {
@@ -681,9 +676,9 @@ await describeMspNet(
         bspAccount: bspAddress
       });
 
-      await userApi.indexer.waitForIndexing({});
-      await waitForFileIndexed(sql, fileKey);
-      await waitForBspFileAssociation(sql, fileKey);
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForFileIndexed({ sql, fileKey });
+      await indexerApi.indexer.waitForBspFileAssociation({ sql, fileKey });
 
       const preStreamLastTickResult =
         await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
@@ -765,12 +760,12 @@ await describeMspNet(
       });
       assert(updatePaymentStreamResult.extSuccess, "Payment stream update should succeed");
 
-      const chargingResult = await chargeUserUntilInsolvent(
-        userApi,
-        userApi.shConsts.DUMMY_BSP_ID,
-        10,
-        shUser.address
-      );
+      const chargingResult = await userApi.block.chargeUserUntilInsolvent({
+        api: userApi,
+        providerId: userApi.shConsts.DUMMY_BSP_ID,
+        maxAttempts: 10,
+        userAddress: shUser.address
+      });
 
       if (!chargingResult.userBecameInsolvent) {
         throw new Error("User did not become insolvent after multiple charging cycles");
@@ -836,12 +831,8 @@ await describeMspNet(
         "Event should contain correct BSP ID"
       );
 
-      const eventBlock = await userApi.rpc.chain.getBlock();
-      const eventBlockNumber = eventBlock.block.header.number.toNumber();
-      await waitForBlockIndexed(userApi, eventBlockNumber);
-
-      await verifyNoBspFileAssociation(sql, fileKey);
-
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.verifyNoBspFileAssociation({ sql, fileKey });
       await bspApi.wait.bspFileDeletionCompleted(fileKey);
     });
   }

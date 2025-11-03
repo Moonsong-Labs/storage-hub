@@ -24,12 +24,23 @@ await describeMspNet(
     indexer: true,
     fisherman: true,
     indexerMode: "fishing",
+    standaloneIndexer: true,
     fishermanIncompleteSyncMax: 100,
     fishermanIncompleteSyncPageSize: 20
   },
-  ({ before, it, createUserApi, createBspApi, createMsp1Api, createFishermanApi }) => {
+  ({
+    before,
+    it,
+    createUserApi,
+    createBspApi,
+    createMsp1Api,
+    createFishermanApi,
+    createIndexerApi
+  }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
+    let fishermanApi: EnrichedBspApi;
+    let indexerApi: EnrichedBspApi;
     let valuePropId: H256 | null = null;
 
     /**
@@ -108,7 +119,6 @@ await describeMspNet(
       userApi = await createUserApi();
       bspApi = await createBspApi();
       const maybeMsp1Api = await createMsp1Api();
-
       assert(maybeMsp1Api, "MSP API not available");
 
       // Wait for user node to be ready
@@ -120,6 +130,16 @@ await describeMspNet(
 
       // Ensure fisherman node is ready
       assert(createFishermanApi, "Fisherman API not available for fisherman test");
+      const maybeFishermanApi = await createFishermanApi();
+      assert(maybeFishermanApi, "Fisherman API not available");
+      fishermanApi = maybeFishermanApi;
+
+      // Connect to standalone indexer node
+      assert(
+        createIndexerApi,
+        "Indexer API not available. Ensure `standaloneIndexer` is set to `true` in the network configuration."
+      );
+      indexerApi = await createIndexerApi();
 
       // Fund shUser account with extra balance for creating many buckets
       // Each bucket creation requires a deposit, and Test 3 creates 150 buckets
@@ -163,7 +183,8 @@ await describeMspNet(
       assert(valuePropAddedEventData, "ValuePropAdded event data doesn't match expected type");
       valuePropId = valuePropAddedEventData.valuePropId;
 
-      await userApi.block.seal({ finaliseBlock: true });
+      // Wait for indexer to process the finalized block (producerApi will seal a finalized block by default)
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
     });
 
     it("Basic restart with pending incomplete requests", async () => {
@@ -243,8 +264,14 @@ await describeMspNet(
         tail: 10
       });
 
+      await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
+
       // Waiting for the fisherman node to be in sync with the chain.
       await userApi.block.seal({ finaliseBlock: true });
+
+      // Wait for indexer to process all finalized blocks containing incomplete storage events
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+
       // Wait for fisherman to detect it's out of sync and start syncing
       await userApi.docker.waitForLog({
         searchString: "🎣 Handling coming out of sync mode",
@@ -259,21 +286,17 @@ await describeMspNet(
         timeout: 30000
       });
 
-      // Wait for fisherman to process incomplete storage deletions and verify extrinsics are in tx pool
-      const deletionResult = await userApi.fisherman.waitForBatchDeletions({
+      // Wait for fisherman to process incomplete storage deletions with retry if we encounter ForestProofVerificationFailed errors (stale proofs)
+      // When resuming the fisherman node, the deletion task can trigger and submit a deletion extrinsic before the blockchain service imports the latest block containing the unfinalized BSP
+      // confirmations. In this scenario, it is guaranteed that the deletion extrinsic will fail with a ForestProofVerificationFailed error and we must let the fisherman retry.
+      await userApi.fisherman.retryableWaitAndVerifyBatchDeletions({
+        blockProducerApi: userApi,
         deletionType: "Incomplete",
-        expectExt: 1, // 1 BSP only (MSP paused)
-        sealBlock: true // Seal and return events for verification
-      });
-
-      assert(deletionResult, "Deletion result should be defined when sealBlock is true");
-
-      // Verify BSP deletions
-      await userApi.fisherman.verifyBspDeletionResults({
+        expectExt: 1, // 1 BSP only (MSP did not accept)
         userApi,
         bspApi,
-        events: deletionResult.events,
-        expectedCount: 1
+        expectedBspCount: 1,
+        maxRetries: 3
       });
 
       await userApi.docker.resumeContainer({

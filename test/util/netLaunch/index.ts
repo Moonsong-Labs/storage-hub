@@ -212,18 +212,28 @@ export class NetworkLauncher {
         if (this.config.indexerMode) {
           composeYaml.services["sh-user"].command.push(`--indexer-mode=${this.config.indexerMode}`);
         }
+      }
 
-        // For fullnet, also configure MSPs
-        if (this.type === "fullnet") {
+      // For fullnet MSPs need access to the indexer database
+      // Need to pass `--indexer` to both MSPs for functionality which requires an indexer database pool to be connected (e.g. MSP move bucket operations)
+      if (this.type === "fullnet") {
+        composeYaml.services["sh-msp-1"].command.push("--indexer");
+        composeYaml.services["sh-msp-1"].command.push(
+          "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+        );
+        if (this.config.indexerMode) {
           composeYaml.services["sh-msp-1"].command.push(
-            "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+            `--indexer-mode=${this.config.indexerMode}`
           );
-          composeYaml.services["sh-msp-2"].command.push("--indexer");
-          composeYaml.services["sh-msp-2"].environment =
-            composeYaml.services["sh-msp-2"].environment ?? {};
-          composeYaml.services["sh-msp-2"].environment.SH_INDEXER_DB_AUTO_MIGRATE = "false";
+        }
+
+        composeYaml.services["sh-msp-2"].command.push("--indexer");
+        composeYaml.services["sh-msp-2"].command.push(
+          "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+        );
+        if (this.config.indexerMode) {
           composeYaml.services["sh-msp-2"].command.push(
-            "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+            `--indexer-mode=${this.config.indexerMode}`
           );
         }
       }

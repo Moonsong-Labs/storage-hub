@@ -1,6 +1,5 @@
 import assert from "node:assert";
 import { describeMspNet, type EnrichedBspApi, type SqlClient, waitFor } from "../../../util";
-import { getLastIndexedBlock, waitForBucketIndexed } from "../../../util/indexerHelpers";
 
 await describeMspNet(
   "Indexer Service - Block Notification Sync (Genesis Pause)",
@@ -51,7 +50,7 @@ await describeMspNet(
 
     it("indexes all events produced while behind and during sync", async () => {
       // Capture baseline state to verify indexer was truly paused during block production
-      await getLastIndexedBlock(sql);
+      await indexerApi.indexer.getLastIndexedBlock({ sql });
 
       // Simulate indexer falling behind by pausing its container while blockchain continues
       await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.indexer.containerName);
@@ -70,7 +69,7 @@ await describeMspNet(
       const finalBlockNumber = finalBlockHeader.number.toNumber();
 
       // Confirm indexer remained frozen at initial block - ensures pause was effective
-      await getLastIndexedBlock(sql);
+      await indexerApi.indexer.getLastIndexedBlock({ sql });
 
       // Resume indexer to trigger catchup - it must now process backlog via finality notifications
       await userApi.docker.resumeContainer({
@@ -88,7 +87,7 @@ await describeMspNet(
       // Block until indexer catches up - verifies finality notification pipeline works under load
       await waitFor({
         lambda: async () => {
-          const lastIndexed = await getLastIndexedBlock(sql);
+          const lastIndexed = await indexerApi.indexer.getLastIndexedBlock({ sql });
           return lastIndexed >= finalBlockNumber;
         },
         iterations: 100,
@@ -97,11 +96,11 @@ await describeMspNet(
 
       // Verify data consistency - all events from missed blocks should be present in database
       for (const bucketName of buckets) {
-        await waitForBucketIndexed(sql, bucketName);
+        await indexerApi.indexer.waitForBucketIndexed({ sql, bucketName });
       }
 
       // Validate service_state tracking is accurate after catchup
-      const lastIndexedBlock = await getLastIndexedBlock(sql);
+      const lastIndexedBlock = await indexerApi.indexer.getLastIndexedBlock({ sql });
 
       // Indexer should have processed at minimum the blocks we created, possibly more if chain advanced
       assert(

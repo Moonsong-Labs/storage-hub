@@ -13,6 +13,7 @@ import {
   ethBspKey,
   ethBspThreeKey,
   ethBspTwoKey,
+  ethFishermanKey,
   ethMspDownKey,
   ethMspKey,
   ethMspThreeKey,
@@ -25,6 +26,7 @@ import {
   bspKey,
   bspThreeKey,
   bspTwoKey,
+  fishermanKey,
   mspDownKey,
   mspKey,
   mspThreeKey,
@@ -188,7 +190,8 @@ export class BspNetTestApi implements AsyncDisposable {
       mspDownKey: runtimeType === "solochain" ? ethMspDownKey : mspDownKey,
       mspTwoKey: runtimeType === "solochain" ? ethMspTwoKey : mspTwoKey,
       mspThreeKey: runtimeType === "solochain" ? ethMspThreeKey : mspThreeKey,
-      shUser: runtimeType === "solochain" ? ethShUser : shUser
+      shUser: runtimeType === "solochain" ? ethShUser : shUser,
+      fishermanKey: runtimeType === "solochain" ? ethFishermanKey : fishermanKey
     } as const;
 
     const remappedAssertNs = {
@@ -499,7 +502,49 @@ export class BspNetTestApi implements AsyncDisposable {
           msp_id,
           replicationTarget,
           finalizeBlock
-        )
+        ),
+
+      /**
+       * Batches multiple storage requests together for efficient processing.
+       *
+       * This function handles the complete flow where both BSP and MSP respond:
+       * 1. Creates buckets if bucket names are provided (deduplicates unique bucket names)
+       * 2. Prepares all storage request transactions for the provided files
+       * 3. Pauses MSP1 container to deterministically control storage request flow
+       * 4. Seals all storage requests in a single block (finalized or unfinalized based on `finaliseBlock`)
+       * 5. Waits for all BSP volunteers to appear in tx pool
+       * 6. Processes BSP confirmations in batches (handles batched extrinsics)
+       * 7. Verifies all files are confirmed by BSP
+       * 8. Waits for BSP to store all files locally
+       * 9. Unpauses MSP1 container
+       * 10. Waits for MSP to catch up to chain tip
+       * 11. Processes MSP acceptances in batches (handles batched extrinsics)
+       * 12. Verifies all files are accepted by MSP
+       * 13. Waits for MSP to store all files locally
+       * 14. Returns all file metadata (fileKeys, bucketIds, locations, fingerprints, fileSizes)
+       *
+       * **Purpose:**
+       * This helper simplifies the common case of batch creating storage requests where both BSP and MSP
+       * respond. For tests that need more granular control (e.g., BSP-only or MSP-only scenarios), write
+       * custom logic instead of using this helper.
+       *
+       * **Parameter Requirements:**
+       * - `bspApi` is required for verifying BSP file storage
+       * - `mspApi` is required for MSP catchup and verifying MSP file storage
+       * - `owner` is always required (defaults to `shUser` or `ethShUser` based on runtime type)
+       *
+       * @param options - Batch storage request options
+       * @returns Promise resolving to batch storage request result with all file metadata
+       */
+      batchStorageRequests: (
+        options: Omit<Files.BatchStorageRequestsOptions, "owner"> & {
+          owner?: KeyringPair;
+        }
+      ) =>
+        Files.batchStorageRequests(this._api as EnrichedBspApi, {
+          ...options,
+          owner: options.owner ?? (this._runtimeType === "solochain" ? ethShUser : shUser)
+        })
     };
 
     /**
@@ -659,7 +704,50 @@ export class BspNetTestApi implements AsyncDisposable {
        * @returns A promise that resolves when the chain re-org is complete.
        */
       reOrgWithLongerChain: (startingBlockHash?: string) =>
-        BspNetBlock.reOrgWithLongerChain(this._api, startingBlockHash)
+        BspNetBlock.reOrgWithLongerChain(this._api, startingBlockHash),
+
+      /**
+       * Calculates the next challenge tick for a given provider.
+       * @param options - Options object
+       * @param options.api - The enriched BSP API instance.
+       * @param options.providerId - The provider ID to calculate the next challenge tick for.
+       * @returns The next challenge tick block number.
+       * @throws Error if the API call fails or returns an error.
+       */
+      calculateNextChallengeTick: (options: { api: any; providerId: string }) =>
+        BspNetBlock.calculateNextChallengeTick(options),
+
+      /**
+       * Triggers a complete provider charging cycle by advancing to the next challenge tick,
+       * waiting for proof submission, and processing the charge transaction.
+       * @param options - Options object
+       * @param options.api - The enriched BSP API instance.
+       * @param options.providerId - The provider ID to trigger charging for.
+       * @param options.userAddress - Optional user address for balance tracking.
+       * @returns Object containing charging event details including if user became insolvent.
+       */
+      triggerProviderChargingCycle: (options: {
+        api: any;
+        providerId: string;
+        userAddress?: string;
+      }) => BspNetBlock.triggerProviderChargingCycle(options),
+
+      /**
+       * Keeps charging a user until they become insolvent (UserWithoutFunds event is emitted).
+       * This function will repeatedly call triggerProviderChargingCycle until the user runs out of funds.
+       * @param options - Options object
+       * @param options.api - The enriched BSP API instance.
+       * @param options.providerId - The provider ID to charge the user.
+       * @param options.maxAttempts - Maximum number of charging attempts to prevent infinite loops (default: 10).
+       * @param options.userAddress - Optional user address for balance logging and debugging.
+       * @returns Object containing details about all charging cycles and final result.
+       */
+      chargeUserUntilInsolvent: (options: {
+        api: any;
+        providerId: string;
+        maxAttempts?: number;
+        userAddress?: string;
+      }) => BspNetBlock.chargeUserUntilInsolvent(options)
     };
 
     const remappedNodeNs = {
@@ -715,14 +803,14 @@ export class BspNetTestApi implements AsyncDisposable {
        *
        * @example
        * // Standalone indexer
-       * await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sealBlock: false });
+       * await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
        *
        * @example
        * // Embedded indexer (simplified)
        * await userApi.indexer.waitForIndexing({});
        */
       waitForIndexing: (
-        options: { producerApi?: BspNetApi; sealBlock?: boolean; finalizeOnIndexer?: boolean } = {}
+        options: { producerApi?: any; sealBlock?: boolean; finalizeOnIndexer?: boolean } = {}
       ) =>
         BspNetIndexer.waitForIndexing({
           indexerApi: this._api as any,
@@ -768,7 +856,160 @@ export class BspNetTestApi implements AsyncDisposable {
        * @throws Error if any file doesn't have a deletion signature stored or if the signature is empty.
        */
       verifyDeletionSignaturesStored: (options: { sql: any; fileKeys: string[] }) =>
-        BspNetIndexer.verifyDeletionSignaturesStored(options)
+        BspNetIndexer.verifyDeletionSignaturesStored(options),
+
+      /**
+       * Waits for a specific block to be indexed by checking docker logs.
+       * @param options - Options object
+       * @param options.api - The indexer API
+       * @param options.blockNumber - Optional block number to wait for. Defaults to current block.
+       * @returns A Promise that resolves when the block has been indexed.
+       */
+      waitForBlockIndexed: (options: { api: any; blockNumber?: number }) =>
+        BspNetIndexer.waitForBlockIndexed(options),
+
+      /**
+       * Waits for a file to be indexed in the database.
+       * @param options - Options object
+       * @param options.sql - The SQL client instance.
+       * @param options.fileKey - The file key to wait for.
+       * @returns A Promise that resolves when the file is indexed.
+       */
+      waitForFileIndexed: (options: { sql: any; fileKey: string }) =>
+        BspNetIndexer.waitForFileIndexed(options),
+
+      /**
+       * Waits for a bucket to be indexed in the database by name.
+       * @param options - Options object
+       * @param options.sql - The SQL client instance.
+       * @param options.bucketName - The bucket name to wait for.
+       * @returns A Promise that resolves when the bucket is indexed.
+       */
+      waitForBucketIndexed: (options: { sql: any; bucketName: string }) =>
+        BspNetIndexer.waitForBucketIndexed(options),
+
+      /**
+       * Waits for a bucket to be indexed in the database by onchain bucket ID.
+       * @param options - Options object
+       * @param options.sql - The SQL client instance.
+       * @param options.bucketId - The onchain bucket ID to wait for.
+       * @param options.mspId - Optional MSP ID filter.
+       * @returns A Promise that resolves when the bucket is indexed.
+       */
+      waitForBucketByIdIndexed: (options: { sql: any; bucketId: string; mspId?: string }) =>
+        BspNetIndexer.waitForBucketByIdIndexed(options),
+
+      /**
+       * Waits for a bucket to be marked as deleted in the database.
+       * @param options - Options object
+       * @param options.sql - The SQL client instance.
+       * @param options.bucketId - The onchain bucket ID to wait for deletion.
+       * @returns A Promise that resolves when the bucket is marked as deleted.
+       */
+      waitForBucketDeleted: (options: { sql: any; bucketId: string }) =>
+        BspNetIndexer.waitForBucketDeleted(options),
+
+      /**
+       * Waits for an MSP file association to be created in the database.
+       * @param options - Options object
+       * @param options.sql - The SQL client instance.
+       * @param options.fileKey - The file key to check association for.
+       * @param options.mspId - Optional MSP ID filter.
+       * @returns A Promise that resolves when the association exists.
+       */
+      waitForMspFileAssociation: (options: { sql: any; fileKey: string; mspId?: string }) =>
+        BspNetIndexer.waitForMspFileAssociation(options),
+
+      /**
+       * Waits for a BSP file association to be created in the database.
+       * @param options - Options object
+       * @param options.sql - The SQL client instance.
+       * @param options.fileKey - The file key to check association for.
+       * @param options.bspId - Optional BSP ID filter.
+       * @returns A Promise that resolves when the association exists.
+       */
+      waitForBspFileAssociation: (options: { sql: any; fileKey: string; bspId?: string }) =>
+        BspNetIndexer.waitForBspFileAssociation(options),
+
+      /**
+       * Waits for a file to be deleted from the database.
+       * @param options - Options object
+       * @param options.sql - The SQL client instance.
+       * @param options.fileKey - The file key to wait for deletion.
+       * @returns A Promise that resolves when the file is deleted.
+       */
+      waitForFileDeleted: (options: { sql: any; fileKey: string }) =>
+        BspNetIndexer.waitForFileDeleted(options),
+
+      /**
+       * Waits for a BSP file association to be removed from the database.
+       * @param options - Options object
+       * @param options.sql - The SQL client instance.
+       * @param options.fileKey - The file key to check association for.
+       * @param options.bspId - Optional BSP ID filter.
+       * @returns A Promise that resolves when the association is removed.
+       */
+      waitForBspFileAssociationRemoved: (options: { sql: any; fileKey: string; bspId?: string }) =>
+        BspNetIndexer.waitForBspFileAssociationRemoved(options),
+
+      /**
+       * Waits for an MSP file association to be removed from the database.
+       * @param options - Options object
+       * @param options.sql - The SQL client instance.
+       * @param options.fileKey - The file key to check association for.
+       * @param options.mspId - Optional MSP ID filter.
+       * @returns A Promise that resolves when the association is removed.
+       */
+      waitForMspFileAssociationRemoved: (options: { sql: any; fileKey: string; mspId?: string }) =>
+        BspNetIndexer.waitForMspFileAssociationRemoved(options),
+
+      /**
+       * Verifies that no BSP file associations exist for a given file.
+       * @param options - Options object
+       * @param options.sql - The SQL client instance.
+       * @param options.fileKey - The file key to check.
+       * @throws Error if associations are found.
+       */
+      verifyNoBspFileAssociation: (options: { sql: any; fileKey: string }) =>
+        BspNetIndexer.verifyNoBspFileAssociation(options),
+
+      /**
+       * Verifies that no MSP file associations exist for a given file.
+       * @param options - Options object
+       * @param options.sql - The SQL client instance.
+       * @param options.fileKey - The file key to check.
+       * @throws Error if associations are found.
+       */
+      verifyNoMspFileAssociation: (options: { sql: any; fileKey: string }) =>
+        BspNetIndexer.verifyNoMspFileAssociation(options),
+
+      /**
+       * Verifies that no orphaned BSP associations exist (associations without corresponding files).
+       * @param options - Options object
+       * @param options.sql - The SQL client instance.
+       * @param options.bspId - The BSP ID to check.
+       * @throws Error if orphaned associations are found.
+       */
+      verifyNoOrphanedBspAssociations: (options: { sql: any; bspId: string }) =>
+        BspNetIndexer.verifyNoOrphanedBspAssociations(options),
+
+      /**
+       * Verifies that no orphaned MSP associations exist (associations without corresponding files).
+       * @param options - Options object
+       * @param options.sql - The SQL client instance.
+       * @param options.mspId - The MSP ID to check.
+       * @throws Error if orphaned associations are found.
+       */
+      verifyNoOrphanedMspAssociations: (options: { sql: any; mspId: string }) =>
+        BspNetIndexer.verifyNoOrphanedMspAssociations(options),
+
+      /**
+       * Get the last indexed block number from the service_state table.
+       * @param options - Options object
+       * @param options.sql - The SQL client instance.
+       * @returns The last indexed finalized block number.
+       */
+      getLastIndexedBlock: (options: { sql: any }) => BspNetIndexer.getLastIndexedBlock(options)
     };
 
     /**
@@ -799,7 +1040,11 @@ export class BspNetTestApi implements AsyncDisposable {
         deletionType: "User" | "Incomplete";
         expectExt?: number;
         sealBlock?: boolean;
-      }) => BspNetFisherman.waitForFishermanBatchDeletions({ api: this._api as any, ...options }),
+      }) =>
+        BspNetFisherman.waitForFishermanBatchDeletions({
+          blockProducerApi: this._api as EnrichedBspApi,
+          ...options
+        }),
 
       /**
        * Verifies BSP deletion results from a batch deletion operation.
@@ -841,7 +1086,37 @@ export class BspNetTestApi implements AsyncDisposable {
         mspApi: any;
         events: any[];
         expectedCount: number;
-      }) => BspNetFisherman.verifyBucketDeletionResults(options)
+      }) => BspNetFisherman.verifyBucketDeletionResults(options),
+
+      /**
+       * Waits for fisherman batch deletions and verifies BSP deletion results with retry logic.
+       *
+       * This function will retry both `waitForBatchDeletions` and `verifyBspDeletionResults`
+       * if `ForestProofVerificationFailed` errors are detected in the events, up to a maximum
+       * number of attempts (defaults to 3).
+       *
+       * @param options - Options for the retryable batch deletions
+       * @param options.blockProducerApi - The block producer API (normally userApi)
+       * @param options.deletionType - Either "User" or "Incomplete" to determine which deletion cycle to wait for
+       * @param options.expectExt - Optional. Total expected extrinsics (BSP + bucket) to verify in the transaction pool
+       * @param options.userApi - The enriched BSP API for assertions and event fetching
+       * @param options.bspApi - The BSP API instance for forest root verification
+       * @param options.expectedBspCount - Expected number of BSP deletion events. Defaults to 1.
+       * @param options.mspApi - Optional MSP API instance for bucket forest root verification
+       * @param options.expectedBucketCount - Expected number of bucket deletion events. If provided, bucket deletions will be verified.
+       * @param options.maxRetries - Maximum number of retry attempts. Defaults to 3.
+       */
+      retryableWaitAndVerifyBatchDeletions: (options: {
+        blockProducerApi: any;
+        deletionType: "User" | "Incomplete";
+        expectExt?: number;
+        userApi: any;
+        bspApi: any;
+        expectedBspCount?: number;
+        mspApi?: any;
+        expectedBucketCount?: number;
+        maxRetries?: number;
+      }) => BspNetFisherman.retryableWaitAndVerifyBatchDeletions(options)
     };
 
     return Object.assign(this._api, {
