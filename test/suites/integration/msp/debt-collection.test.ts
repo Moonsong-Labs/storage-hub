@@ -8,6 +8,7 @@ import { DUMMY_MSP_ID, MSP_CHARGING_PERIOD } from "../../../util/bspNet/consts";
 
 await describeMspNet(
   "Single MSP collecting debt",
+  { only: true, networkConfig: "standard" },
   ({ before, createMsp1Api, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
@@ -360,7 +361,14 @@ await describeMspNet(
         // Since the MSP is going to charge each period, the last charge should be for one period.
         currentBlock = await userApi.rpc.chain.getHeader();
         currentBlockNumber = currentBlock.number.toNumber();
-        await userApi.block.skipTo(currentBlockNumber + MSP_CHARGING_PERIOD);
+        await userApi.block.skipTo(currentBlockNumber + MSP_CHARGING_PERIOD - 1);
+
+        // Check that the MSP tries to charge the user again.
+        await userApi.assert.extrinsicPresent({
+          module: "paymentStreams",
+          method: "chargeMultipleUsersPaymentStreams",
+          checkTxPool: true
+        });
 
         // Calculate the expected rate of the payment stream and compare it to the actual rate.
         const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
@@ -390,6 +398,9 @@ await describeMspNet(
 
         // The expected amount to be charged is the rate of the payment stream times the charging period.
         const expectedChargedAmount = paymentStreamRate * MSP_CHARGING_PERIOD;
+
+        // Seal the block containing the MSP's payment stream charge
+        await userApi.block.seal();
 
         // Getting the PaymentStreamCharged events. There could be multiple of these events in the last block,
         // so we get them all and then filter the one where the Provider ID matches the MSP ID.
