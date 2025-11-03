@@ -506,7 +506,7 @@ where
             .await?;
         let module = options.module().unwrap_or("unknown".to_string());
         let method = options.method().unwrap_or("unknown".to_string());
-        info!(target: LOG_TARGET, "Transaction {}_{} submitted successfully with hash: {:?}", module, method, tx_hash);
+        info!(target: LOG_TARGET, "Transaction {}_{} submitted successfully with hash {:?} and nonce {}", module, method, tx_hash, nonce);
 
         // Add the transaction to the transaction manager to track it
         if let Err(e) = self.transaction_manager.track_transaction(
