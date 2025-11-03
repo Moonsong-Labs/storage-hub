@@ -457,7 +457,7 @@ export const waitForBlockImported = async (api: ApiPromise, blockHash: string) =
 export const waitForMspResponseWithoutSealing = async (
   api: ApiPromise,
   checkQuantity?: number,
-  timeoutMs = 10000
+  timeoutMs?: number
 ) => {
   await waitForTxInPool(api, {
     module: "fileSystem",
@@ -487,8 +487,7 @@ export const waitForMspPendingFileDeletionRequestSubmitProof = async (
   await waitForTxInPool(api, {
     module: "fileSystem",
     method: "pendingFileDeletionRequestSubmitProof",
-    checkQuantity,
-    timeout: 10000
+    checkQuantity
   });
 };
 
