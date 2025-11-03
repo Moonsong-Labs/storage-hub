@@ -188,15 +188,16 @@ await describeBspNet(
       assert(usersWithDebtResult.asOk.map((x) => x.toString()).includes(userAddress));
       assert(usersWithDebtResult.asOk.map((x) => x.toString()).includes(bob.address));
 
-      // Check that the three Providers have tried to charge the user
+      // Check that at least the three Providers have tried to charge the user
       // since the user has a payment stream with each of them
-      await userApi.assert.extrinsicPresent({
+      const extrinsics = await userApi.assert.extrinsicPresent({
         method: "chargeMultipleUsersPaymentStreams",
         module: "paymentStreams",
         checkTxPool: true,
         assertLength: 3,
         exactLength: false
       });
+      const providersTryingToCharge = extrinsics.length;
 
       // Seal a block to allow BSPs to charge the payment stream
       await userApi.block.seal();
@@ -206,7 +207,15 @@ await describeBspNet(
 
       // Assert that the event for the DUMMY_BSP has both users charged
       const usersChargedEvents = await userApi.assert.eventMany("paymentStreams", "UsersCharged");
-      strictEqual(usersChargedEvents.length, 3, "There should be three users charged event");
+      assert(
+        providersTryingToCharge >= 3,
+        "There should be at least three providers trying to charge the user"
+      );
+      strictEqual(
+        usersChargedEvents.length,
+        providersTryingToCharge,
+        "All providers should have been able to charge the user"
+      );
       const dummyBspEvent = usersChargedEvents.find(
         (event) => event.event.data[1].toString() === ShConsts.DUMMY_BSP_ID.toString()
       );

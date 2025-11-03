@@ -343,12 +343,16 @@ where
             .blockchain
             .send_extrinsic(
                 call,
-                SendExtrinsicOptions::new(Duration::from_secs(
-                    self.storage_hub_handler
-                        .provider_config
-                        .blockchain_service
-                        .extrinsic_retry_timeout,
-                )),
+                SendExtrinsicOptions::new(
+                    Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .blockchain_service
+                            .extrinsic_retry_timeout,
+                    ),
+                    Some("fileSystem".to_string()),
+                    Some("mspRespondStorageRequestsMultipleBuckets".to_string()),
+                ),
             )
             .await?
             .watch_for_success(&self.storage_hub_handler.blockchain)
@@ -562,12 +566,16 @@ where
                         .blockchain
                         .send_extrinsic(
                             call,
-                            SendExtrinsicOptions::new(Duration::from_secs(
-                                self.storage_hub_handler
-                                    .provider_config
-                                    .blockchain_service
-                                    .extrinsic_retry_timeout,
-                            )),
+                            SendExtrinsicOptions::new(
+                                Duration::from_secs(
+                                    self.storage_hub_handler
+                                        .provider_config
+                                        .blockchain_service
+                                        .extrinsic_retry_timeout,
+                                ),
+                                Some("fileSystem".to_string()),
+                                Some("mspRespondStorageRequestsMultipleBuckets".to_string()),
+                            ),
                         )
                         .await?
                         .watch_for_success(&self.storage_hub_handler.blockchain)
@@ -918,12 +926,16 @@ where
             .blockchain
             .send_extrinsic(
                 call,
-                SendExtrinsicOptions::new(Duration::from_secs(
-                    self.storage_hub_handler
-                        .provider_config
-                        .blockchain_service
-                        .extrinsic_retry_timeout,
-                )),
+                SendExtrinsicOptions::new(
+                    Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .blockchain_service
+                            .extrinsic_retry_timeout,
+                    ),
+                    Some("fileSystem".to_string()),
+                    Some("mspRespondStorageRequestsMultipleBuckets".to_string()),
+                ),
             )
             .await?
             .watch_for_success(&self.storage_hub_handler.blockchain)

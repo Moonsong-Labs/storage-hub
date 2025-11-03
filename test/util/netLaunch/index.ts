@@ -166,6 +166,24 @@ export class NetworkLauncher {
       }
     }
 
+    // Configure log level for all services using -l flag
+    if (this.config.logLevel) {
+      const logFlag = `-l${this.config.logLevel}`;
+      composeYaml.services["sh-bsp"].command.push(logFlag);
+      composeYaml.services["sh-user"].command.push(logFlag);
+
+      if (this.type === "fullnet") {
+        composeYaml.services["sh-msp-1"].command.push(logFlag);
+        composeYaml.services["sh-msp-2"].command.push(logFlag);
+      }
+      if (this.config.fisherman && this.type === "fullnet") {
+        composeYaml.services["sh-fisherman"].command.push(logFlag);
+      }
+      if (this.config.indexer && this.config.standaloneIndexer && this.type === "fullnet") {
+        composeYaml.services["sh-indexer"].command.push(logFlag);
+      }
+    }
+
     if (this.config.rocksdb) {
       composeYaml.services["sh-bsp"].command.push("--storage-layer=rocks-db");
       composeYaml.services["sh-bsp"].command.push(
@@ -1037,4 +1055,10 @@ export type NetLaunchConfig = {
    * Must be at least 1.
    */
   fishermanIncompleteSyncPageSize?: number;
+
+  /**
+   * Optional parameter to set the Rust log level for all nodes.
+   * Defaults to 'info' if not specified.
+   */
+  logLevel?: string;
 };
