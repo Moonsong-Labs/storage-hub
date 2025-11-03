@@ -1,4 +1,4 @@
-use log::warn;
+use log::{debug, info, warn};
 use std::{
     cmp::{min, Ordering},
     collections::{BTreeMap, BTreeSet, HashMap},
@@ -26,7 +26,10 @@ use sp_runtime::{
     DispatchError, SaturatedConversion,
 };
 
-use crate::{handler::LOG_TARGET, transaction_manager::wait_for_transaction_status};
+use crate::{
+    commands::BlockchainServiceCommandInterfaceExt, handler::LOG_TARGET,
+    transaction_manager::wait_for_transaction_status,
+};
 
 /// A struct that holds the information to submit a storage proof.
 ///
@@ -211,23 +214,77 @@ pub struct SubmittedExtrinsicInfo<Runtime: StorageEnableRuntime> {
 }
 
 impl<Runtime: StorageEnableRuntime> SubmittedExtrinsicInfo<Runtime> {
-    /// Wait for the transaction to be included in a block
+    /// Wait for the transaction to be included in a block and verify it succeeded.
     ///
-    /// This is a convenience method that waits for the transaction to reach InBlock status.
-    /// Returns an error if the transaction fails or times out.
-    /// TODO: Add a timeout parameter.
-    pub async fn watch_for_success(self) -> anyhow::Result<()> {
+    /// This method waits for the transaction to reach InBlock status, then fetches the
+    /// extrinsic from the block and checks if it succeeded or failed by examining the
+    /// ExtrinsicSuccess/ExtrinsicFailed events.
+    ///
+    /// Returns an error if:
+    /// - The transaction fails to be included in a block (timeout, dropped, invalid, etc.)
+    /// - The transaction is included but the extrinsic failed (ExtrinsicFailed event)
+    pub async fn watch_for_success<T>(self, blockchain: &T) -> anyhow::Result<()>
+    where
+        T: BlockchainServiceCommandInterfaceExt<Runtime>,
+    {
         // Wait for InBlock status with a reasonable timeout
-        wait_for_transaction_status(
+        let block_hash = wait_for_transaction_status(
             self.nonce,
             self.status_subscription,
             StatusToWait::InBlock,
             std::time::Duration::from_secs(60),
         )
         .await
-        .map_err(|e| anyhow::anyhow!("Transaction failed: {:?}", e))?;
+        .map_err(|e| anyhow::anyhow!("Transaction failed to be included in block: {:?}", e))?;
 
-        Ok(())
+        // Fetch the extrinsic from the block to check if it succeeded
+        let extrinsic = blockchain
+            .get_extrinsic_from_block(block_hash, self.hash)
+            .await
+            .map_err(|e| {
+                anyhow::anyhow!(
+                    "Failed to get extrinsic from block after InBlock status: {:?}",
+                    e
+                )
+            })?;
+
+        // Check if the extrinsic was successful by examining the events
+        let extrinsic_result = T::extrinsic_result(extrinsic.clone()).map_err(|e| {
+            anyhow::anyhow!(
+                "Extrinsic does not contain an ExtrinsicFailed nor ExtrinsicSuccess event: {:?}",
+                e
+            )
+        })?;
+
+        match extrinsic_result {
+            ExtrinsicResult::Success { dispatch_info } => {
+                info!(
+                    target: LOG_TARGET,
+                    "Extrinsic with nonce {} succeeded with dispatch info: {:?}",
+                    self.nonce,
+                    dispatch_info
+                );
+                debug!(target: LOG_TARGET, "Extrinsic events: {:?}", extrinsic.events);
+                Ok(())
+            }
+            ExtrinsicResult::Failure {
+                dispatch_error,
+                dispatch_info,
+            } => {
+                log::error!(
+                    target: LOG_TARGET,
+                    "Extrinsic with nonce {} failed with dispatch error: {:?}, dispatch info: {:?}",
+                    self.nonce,
+                    dispatch_error,
+                    dispatch_info
+                );
+                Err(anyhow::anyhow!(
+                    "Extrinsic failed: dispatch_error={:?}, dispatch_info={:?}",
+                    dispatch_error,
+                    dispatch_info
+                ))
+            }
+        }
     }
 
     /// Wait for the transaction to be finalized.

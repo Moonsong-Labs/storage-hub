@@ -88,7 +88,7 @@ where
                 ),
             )
             .await?
-            .watch_for_success()
+            .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
 
         Ok(())

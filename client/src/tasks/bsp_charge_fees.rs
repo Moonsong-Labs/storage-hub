@@ -131,10 +131,20 @@ where
                 }
                 .into();
 
+            let options = SendExtrinsicOptions::new(
+                Duration::from_secs(
+                    self.storage_hub_handler
+                        .provider_config
+                        .blockchain_service
+                        .extrinsic_retry_timeout,
+                ),
+                Some("paymentStreams".to_string()),
+                Some("chargeMultipleUsersPaymentStreams".to_string()),
+            );
             let charging_result = self
                 .storage_hub_handler
                 .blockchain
-                .send_extrinsic(call, Default::default())
+                .send_extrinsic(call, options)
                 .await;
 
             match charging_result {
@@ -363,10 +373,20 @@ where
                     }
                     .into();
 
+                let options = SendExtrinsicOptions::new(
+                    Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .blockchain_service
+                            .extrinsic_retry_timeout,
+                    ),
+                    Some("paymentStreams".to_string()),
+                    Some("chargePaymentStreams".to_string()),
+                );
                 let charging_result = self
                     .storage_hub_handler
                     .blockchain
-                    .send_extrinsic(call, Default::default())
+                    .send_extrinsic(call, options)
                     .await;
 
                 match charging_result {

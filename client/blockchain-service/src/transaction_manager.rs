@@ -325,6 +325,29 @@ where
 {
     let start_time = Instant::now();
 
+    // Check the initial status before waiting for changes.
+    // This prevents race conditions where the transaction reached the desired state
+    // before we started waiting.
+    // Using borrow_and_update() marks the current value as seen, preventing spurious
+    // notifications if the value hasn't actually changed.
+    let initial_status = status_receiver.borrow_and_update().clone();
+
+    // Check if we're already at the desired status or a terminal failure state
+    match check_transaction_status(&initial_status, &target_status, nonce) {
+        StatusCheckResult::Success(block_hash) => return Ok(block_hash),
+        StatusCheckResult::Failure(err) => return Err(err),
+        StatusCheckResult::Continue => {
+            // Status is non-terminal, continue waiting
+            debug!(
+                target: LOG_TARGET,
+                "Transaction with nonce {} initial status: {:?}, waiting for {:?}",
+                nonce,
+                initial_status,
+                target_status
+            );
+        }
+    }
+
     loop {
         // Check if timeout has been reached
         let elapsed = start_time.elapsed();
@@ -338,93 +361,26 @@ where
             return Err(WatchTransactionError::Timeout);
         }
 
-        // Wait for a status change or timeout
+        // Wait for a status change or timeout.
+        // changed() will only return Ok(()) when a new value has been sent since the last
+        // borrow_and_update() or changed() call, preventing missed updates.
         let wait_result =
             tokio::time::timeout(timeout.saturating_sub(elapsed), status_receiver.changed()).await;
 
         match wait_result {
             Ok(Ok(())) => {
-                // Status changed, check the new status
-                let current_status = status_receiver.borrow().clone();
+                // Status changed, get the new status using borrow_and_update() to mark it as seen
+                let current_status = status_receiver.borrow_and_update().clone();
 
-                match &current_status {
-                    // Success terminal states
-                    TransactionStatus::InBlock((block_hash, _))
-                        if matches!(target_status, StatusToWait::InBlock) =>
-                    {
+                // Check the new status
+                match check_transaction_status(&current_status, &target_status, nonce) {
+                    StatusCheckResult::Success(block_hash) => return Ok(block_hash),
+                    StatusCheckResult::Failure(err) => return Err(err),
+                    StatusCheckResult::Continue => {
+                        // Status is non-terminal, continue waiting
                         debug!(
                             target: LOG_TARGET,
-                            "Transaction with nonce {} reached InBlock state",
-                            nonce
-                        );
-                        return Ok(block_hash.clone());
-                    }
-                    TransactionStatus::Finalized((block_hash, _))
-                        if matches!(
-                            target_status,
-                            StatusToWait::InBlock | StatusToWait::Finalized
-                        ) =>
-                    {
-                        debug!(
-                            target: LOG_TARGET,
-                            "Transaction with nonce {} reached Finalized state",
-                            nonce
-                        );
-                        return Ok(block_hash.clone());
-                    }
-
-                    // Failure terminal states
-                    TransactionStatus::Invalid => {
-                        error!(
-                            target: LOG_TARGET,
-                            "Transaction with nonce {} is invalid",
-                            nonce
-                        );
-                        return Err(WatchTransactionError::TransactionFailed {
-                            dispatch_info: "Invalid".to_string(),
-                            dispatch_error: "Transaction is invalid".to_string(),
-                        });
-                    }
-                    TransactionStatus::Dropped => {
-                        error!(
-                            target: LOG_TARGET,
-                            "Transaction with nonce {} was dropped",
-                            nonce
-                        );
-                        return Err(WatchTransactionError::TransactionFailed {
-                            dispatch_info: "Dropped".to_string(),
-                            dispatch_error: "Transaction was dropped from pool".to_string(),
-                        });
-                    }
-                    TransactionStatus::Usurped(_) => {
-                        error!(
-                            target: LOG_TARGET,
-                            "Transaction with nonce {} was usurped",
-                            nonce
-                        );
-                        return Err(WatchTransactionError::TransactionFailed {
-                            dispatch_info: "Usurped".to_string(),
-                            dispatch_error: "Transaction was usurped by another transaction"
-                                .to_string(),
-                        });
-                    }
-                    TransactionStatus::FinalityTimeout(_) => {
-                        error!(
-                            target: LOG_TARGET,
-                            "Transaction with nonce {} had finality timeout",
-                            nonce
-                        );
-                        return Err(WatchTransactionError::TransactionFailed {
-                            dispatch_info: "FinalityTimeout".to_string(),
-                            dispatch_error: "Transaction had finality timeout".to_string(),
-                        });
-                    }
-
-                    // Non-terminal states, keep waiting
-                    _ => {
-                        debug!(
-                            target: LOG_TARGET,
-                            "Transaction with nonce {} is in state {:?}, waiting for {:?}",
+                            "Transaction with nonce {} updated to status {:?}, continuing to wait for {:?}",
                             nonce,
                             current_status,
                             target_status
@@ -451,5 +407,101 @@ where
                 return Err(WatchTransactionError::Timeout);
             }
         }
+    }
+}
+
+/// Result of checking a transaction status against a target status.
+enum StatusCheckResult<Hash> {
+    /// The transaction has reached the desired status.
+    Success(Hash),
+    /// The transaction has reached a terminal failure state.
+    Failure(WatchTransactionError),
+    /// The transaction is in a non-terminal state, continue waiting.
+    Continue,
+}
+
+/// Check if a transaction status matches the target status or represents a terminal state.
+fn check_transaction_status<Hash>(
+    current_status: &TransactionStatus<Hash, Hash>,
+    target_status: &StatusToWait,
+    nonce: u32,
+) -> StatusCheckResult<Hash>
+where
+    Hash: std::fmt::Debug + Clone,
+{
+    match current_status {
+        // Success terminal states
+        TransactionStatus::InBlock((block_hash, _))
+            if matches!(target_status, StatusToWait::InBlock) =>
+        {
+            debug!(
+                    target: LOG_TARGET,
+                    "Transaction with nonce {} reached InBlock state",
+                    nonce
+            );
+            StatusCheckResult::Success(block_hash.clone())
+        }
+        TransactionStatus::Finalized((block_hash, _))
+            if matches!(
+                target_status,
+                StatusToWait::InBlock | StatusToWait::Finalized
+            ) =>
+        {
+            debug!(
+                    target: LOG_TARGET,
+                    "Transaction with nonce {} reached Finalized state",
+                    nonce
+            );
+            StatusCheckResult::Success(block_hash.clone())
+        }
+
+        // Failure terminal states
+        TransactionStatus::Invalid => {
+            error!(
+                    target: LOG_TARGET,
+                    "Transaction with nonce {} is invalid",
+                    nonce
+            );
+            StatusCheckResult::Failure(WatchTransactionError::TransactionFailed {
+                dispatch_info: "Invalid".to_string(),
+                dispatch_error: "Transaction is invalid".to_string(),
+            })
+        }
+        TransactionStatus::Dropped => {
+            error!(
+                    target: LOG_TARGET,
+                    "Transaction with nonce {} was dropped",
+                    nonce
+            );
+            StatusCheckResult::Failure(WatchTransactionError::TransactionFailed {
+                dispatch_info: "Dropped".to_string(),
+                dispatch_error: "Transaction was dropped from pool".to_string(),
+            })
+        }
+        TransactionStatus::Usurped(_) => {
+            error!(
+                    target: LOG_TARGET,
+                    "Transaction with nonce {} was usurped",
+                    nonce
+            );
+            StatusCheckResult::Failure(WatchTransactionError::TransactionFailed {
+                dispatch_info: "Usurped".to_string(),
+                dispatch_error: "Transaction was usurped by another transaction".to_string(),
+            })
+        }
+        TransactionStatus::FinalityTimeout(_) => {
+            error!(
+                    target: LOG_TARGET,
+                    "Transaction with nonce {} had finality timeout",
+                    nonce
+            );
+            StatusCheckResult::Failure(WatchTransactionError::TransactionFailed {
+                dispatch_info: "FinalityTimeout".to_string(),
+                dispatch_error: "Transaction had finality timeout".to_string(),
+            })
+        }
+
+        // Non-terminal states, keep waiting
+        _ => StatusCheckResult::Continue,
     }
 }
