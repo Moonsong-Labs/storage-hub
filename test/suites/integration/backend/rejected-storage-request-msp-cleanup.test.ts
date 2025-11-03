@@ -72,25 +72,6 @@ await describeMspNet(
     });
 
     it("Create storage request and upload to MSP (no sealing acceptance)", async () => {
-      // Make TTL short so rejection happens quickly
-      const tickRangeToMaximumThreshold = (
-        await userApi.query.parameters.parameters({
-          RuntimeConfig: { TickRangeToMaximumThreshold: null }
-        })
-      )
-        .unwrap()
-        .asRuntimeConfig.asTickRangeToMaximumThreshold.toNumber();
-      const storageRequestTtlRuntimeParameter = {
-        RuntimeConfig: { StorageRequestTtl: [null, tickRangeToMaximumThreshold] }
-      } as const;
-      await userApi.block.seal({
-        calls: [
-          userApi.tx.sudo.sudo(
-            userApi.tx.parameters.setParameter(storageRequestTtlRuntimeParameter)
-          )
-        ]
-      });
-
       // Create bucket
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
         userApi.shConsts.DUMMY_MSP_ID
@@ -141,6 +122,7 @@ await describeMspNet(
       originalFileBuffer = fileBuffer;
       form = new FormData();
 
+      // SCALE-encode file metadata
       const FileMetadataCodec = $.object(
         $.field("owner", $.uint8Array),
         $.field("bucket_id", $.uint8Array),
@@ -177,7 +159,7 @@ await describeMspNet(
       // MSP acceptance extrinsic in tx pool (do not seal)
       await userApi.wait.mspResponseInTxPool(1);
 
-      // Verify we can download before sealing acceptance
+      // Verify we can download
       uploadedFileKeyHex = fileKey.toHex();
       const preRejectDownload = await fetch(
         `http://localhost:8080/download/${uploadedFileKeyHex}`,
@@ -187,10 +169,15 @@ await describeMspNet(
       );
       strictEqual(preRejectDownload.status, 200, "Download should succeed before rejection");
       const preArrayBuffer = await preRejectDownload.arrayBuffer();
+      const downloadedBuffer = Buffer.from(preArrayBuffer);
       strictEqual(Buffer.from(preArrayBuffer).length, originalFileBuffer.length);
+      assert(
+        downloadedBuffer.equals(originalFileBuffer),
+        "Downloaded file contents should match the uploaded file"
+      );
     });
 
-    it("Drop MSP SR acceptance, advance to rejection, assert and expect download to fail", async () => {
+    it("Drop MSP SR acceptance extrinsic, advance to rejection, expect download to fail as MSP should have deleted the file", async () => {
       assert(fileKey, "File key should be available from previous step");
 
       // Remove MSP response extrinsic from tx pool
@@ -224,7 +211,6 @@ await describeMspNet(
         "File key should match the deleted file key"
       );
 
-      console.log(StorageRequestEventData.reason.toString());
       // Storage Request should not exist anymore
       const storageRequestAfter = await userApi.query.fileSystem.storageRequests(fileKey);
       assert(storageRequestAfter.isNone, "Storage request should not exist anymore");

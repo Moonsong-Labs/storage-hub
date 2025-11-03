@@ -24,7 +24,7 @@ use crate::{
     events::{
         DistributeFileToBsp, FinalisedBucketMovedAway, FinalisedBucketMutationsApplied,
         FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
-        FinalisedStorageRequestExpired, ForestWriteLockTaskData, MoveBucketRequestedForMsp,
+        FinalisedStorageRequestRejected, ForestWriteLockTaskData, MoveBucketRequestedForMsp,
         NewStorageRequest, ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData,
         ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
         StartMovedBucketDownload, VerifyMspBucketForests,
@@ -255,7 +255,7 @@ where
 
                 // Process either InternalError or RequestExpire if this provider is managing the bucket.
                 if managed_msp_id == &msp_id {
-                    self.emit(FinalisedStorageRequestExpired {
+                    self.emit(FinalisedStorageRequestRejected {
                         file_key: file_key.into(),
                         provider_id: msp_id.into(),
                         bucket_id,

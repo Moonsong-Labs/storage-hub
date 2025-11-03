@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::events::{
-    FinalisedBucketMutationsApplied, FinalisedStorageRequestExpired,
+    FinalisedBucketMutationsApplied, FinalisedStorageRequestRejected,
 };
 use shc_common::{
     traits::StorageEnableRuntime,
@@ -143,8 +143,8 @@ where
     }
 }
 
-/// Handles the [`FinalisedStorageRequestExpired`] event.
-impl<NT, Runtime> EventHandler<FinalisedStorageRequestExpired<Runtime>>
+/// Handles the [`FinalisedStorageRequestRejected`] event.
+impl<NT, Runtime> EventHandler<FinalisedStorageRequestRejected<Runtime>>
     for MspDeleteFileTask<NT, Runtime>
 where
     NT: ShNodeType<Runtime> + 'static,
@@ -153,7 +153,7 @@ where
 {
     async fn handle_event(
         &mut self,
-        event: FinalisedStorageRequestExpired<Runtime>,
+        event: FinalisedStorageRequestRejected<Runtime>,
     ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,

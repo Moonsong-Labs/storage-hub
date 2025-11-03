@@ -203,7 +203,7 @@ pub struct SlashableProvider<Runtime: StorageEnableRuntime> {
 // This event is emitted when a storage request expires in a finalised block.
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct FinalisedStorageRequestExpired<Runtime: StorageEnableRuntime> {
+pub struct FinalisedStorageRequestRejected<Runtime: StorageEnableRuntime> {
     pub file_key: FileKey,
     pub provider_id: ProofsDealerProviderId<Runtime>,
     pub bucket_id: BucketId<Runtime>,
