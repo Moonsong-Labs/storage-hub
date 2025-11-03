@@ -772,9 +772,18 @@ where
         tx_hash: Runtime::Hash,
         status: TransactionStatus<Runtime::Hash, Runtime::Hash>,
     ) {
-        // Notify subscribers about the status change
-        self.transaction_manager
-            .notify_status_change(nonce, status.clone());
+        // Only broadcast to subscribers if this update belongs to the current attempt for this nonce
+        let is_current_transaction_for_broadcast = self
+            .transaction_manager
+            .pending
+            .get(&nonce)
+            .map(|tx| tx.hash == tx_hash)
+            .unwrap_or(false);
+
+        if is_current_transaction_for_broadcast {
+            self.transaction_manager
+                .notify_status_change(nonce, status.clone());
+        }
 
         // Check if this is a terminal state that requires immediate removal
         let should_remove = matches!(
