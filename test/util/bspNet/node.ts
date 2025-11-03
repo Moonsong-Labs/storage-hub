@@ -18,14 +18,6 @@ export async function dropTransaction(
   sealAfter = false
 ) {
   const pendingBefore = await api.rpc.author.pendingExtrinsics();
-  console.log(
-    "Pending extrinsics:",
-    pendingBefore.map((ext) => ({
-      hash: ext.hash.toHex(),
-      method: `${ext.method.section}.${ext.method.method}`,
-      signer: ext.signer?.toString()
-    }))
-  );
 
   if (!extrinsic) {
     // Remove all extrinsics from the txPool
@@ -38,7 +30,6 @@ export async function dropTransaction(
     assert(pendingAfter.length === 0, "Not all extrinsics removed from txPool");
   } else if (typeof extrinsic === "object" && "module" in extrinsic && "method" in extrinsic) {
     // Remove extrinsics matching the specified module and method
-
     const matches = pendingBefore
       .filter(
         ({ method }) => method.section === extrinsic.module && method.method === extrinsic.method
@@ -49,30 +40,13 @@ export async function dropTransaction(
       matches.length > 0,
       `No extrinsics found in txPool matching ${extrinsic.module}:${extrinsic.method}`
     );
-    console.log("Removing extrinsics:", matches);
     const result = await api.rpc.author.removeExtrinsic(matches.map((hash) => ({ Hash: hash })));
-    console.log(
-      "Removed extrinsics:",
-      result.map((hash) => hash.toHex())
-    );
     const pendingAfter = await api.rpc.author.pendingExtrinsics();
-    console.log(
-      "Pending extrinsics after removal:",
-      pendingAfter.map((ext) => ({
-        hash: ext.hash.toHex(),
-        method: `${ext.method.section}.${ext.method.method}`,
-        signer: ext.signer?.toString()
-      }))
-    );
     assert(result.length > 0, "No removal confirmation returned by RPC");
     assert(pendingBefore.length > pendingAfter.length, "Extrinsic not removed from txPool");
   } else {
     // Remove the extrinsic with the specified hash
     const result = await api.rpc.author.removeExtrinsic([{ Hash: extrinsic }]);
-    console.log(
-      "Removed extrinsic:",
-      result.map((hash) => hash.toHex())
-    );
     const pendingAfter = await api.rpc.author.pendingExtrinsics();
     assert(result.length > 0, "No removal confirmation returned by RPC");
     assert(pendingBefore > pendingAfter, "Extrinsic not removed from txPool");
