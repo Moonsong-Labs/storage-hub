@@ -9,7 +9,7 @@ import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import { ETH_SH_USER_ADDRESS, ETH_SH_USER_PRIVATE_KEY, ethShUser } from "../../../util/evmNet/keyring";
 
 await describeMspNet(
-  "Backend cleanup after MSP rejection (drop acceptance, expect 404)",
+  "MSP storage cleanup after StorageRequest acceptance extrinsic failure",
   {
     initialised: false,
     runtimeType: "solochain",
@@ -179,7 +179,7 @@ await describeMspNet(
       strictEqual(Buffer.from(preArrayBuffer).length, originalFileBuffer.length);
     });
 
-    it("Drop MSP acceptance, advance to rejection, assert and expect download to fail", async () => {
+    it("Drop MSP SR acceptance, advance to rejection, assert and expect download to fail", async () => {
       assert(fileKey, "File key should be available from previous step");
 
       // Remove MSP response extrinsic from tx pool
@@ -187,27 +187,44 @@ await describeMspNet(
         module: "fileSystem",
         method: "mspRespondStorageRequestsMultipleBuckets"
       });
+      await userApi.block.seal();
 
       // Find expiration and advance to it
       const storageRequest = await userApi.query.fileSystem.storageRequests(fileKey);
       assert(storageRequest.isSome, "Storage request should exist");
       const expiresAt = storageRequest.unwrap().expiresAt.toNumber();
-      const result = await userApi.block.skipTo(expiresAt);
+      const expiredStorageRequestBlock = await userApi.block.skipTo(expiresAt);
 
       // Expect StorageRequestRejected event
-      await userApi.assert.eventPresent("fileSystem", "StorageRequestRejected", result.events);
+      const StorageRequestRejectedEvent = await userApi.assert.eventPresent("fileSystem", "StorageRequestRejected", expiredStorageRequestBlock.events);
+      assert(StorageRequestRejectedEvent, "StorageRequestRejected event not found");
 
-      // Download should now fail (backend should no longer serve the file)
-      await waitFor({
-        lambda: async () => {
-          const resp = await fetch(`http://localhost:8080/download/${uploadedFileKeyHex}`, {
-            headers: { Authorization: `Bearer ${userJWT}` }
-          });
-          return resp.status === 404;
-        },
-        iterations: 60,
-        delay: 250
+      const StorageRequestEventData = userApi.events.fileSystem.StorageRequestRejected.is(StorageRequestRejectedEvent.event) && StorageRequestRejectedEvent.event.data;
+      assert(
+        StorageRequestEventData,
+        "StorageRequestRejectedEvent event data not found"
+      );
+      strictEqual(
+        StorageRequestEventData.fileKey.toString(),
+        fileKey.toHex(),
+        "File key should match the deleted file key"
+      );
+
+      console.log(StorageRequestEventData.reason.toString())
+      // Storage Request should not exist anymore
+      const storageRequestAfter = await userApi.query.fileSystem.storageRequests(fileKey);
+      assert(storageRequestAfter.isNone, "Storage request should not exist anymore");
+
+      await msp1Api.rpc.engine.finalizeBlock(expiredStorageRequestBlock.blockReceipt.blockHash);
+
+      // Wait until the MSP detects the on-chain deletion and updates its local bucket forest
+      await msp1Api.wait.fileDeletionFromFileStorage(fileKey.toHex());
+
+      // Download should now fail (MSP should no longer have the file)
+      const postRejectDownload = await fetch(`http://localhost:8080/download/${uploadedFileKeyHex}`, {
+        headers: { Authorization: `Bearer ${userJWT}` }
       });
+      strictEqual(postRejectDownload.status, 404 , "Download should fail before storage request rejection");
     });
   }
 );
