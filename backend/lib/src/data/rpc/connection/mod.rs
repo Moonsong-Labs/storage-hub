@@ -71,11 +71,11 @@ impl RpcConnection for AnyRpcConnection {
         }
     }
 
-    async fn close(&self) -> RpcResult<()> {
+    async fn reconnect(&self) -> RpcResult<()> {
         match self {
-            AnyRpcConnection::Real(conn) => conn.close().await,
+            AnyRpcConnection::Real(conn) => conn.reconnect().await,
             #[cfg(feature = "mocks")]
-            AnyRpcConnection::Mock(conn) => conn.close().await,
+            AnyRpcConnection::Mock(conn) => conn.reconnect().await,
         }
     }
 }
