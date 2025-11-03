@@ -6,7 +6,11 @@ import type { H256 } from "@polkadot/types/interfaces";
 import { describeMspNet, type EnrichedBspApi, waitFor } from "../../../util";
 import { fetchJwtToken } from "../../../util/backend/jwt";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
-import { ETH_SH_USER_ADDRESS, ETH_SH_USER_PRIVATE_KEY, ethShUser } from "../../../util/evmNet/keyring";
+import {
+  ETH_SH_USER_ADDRESS,
+  ETH_SH_USER_PRIVATE_KEY,
+  ethShUser
+} from "../../../util/evmNet/keyring";
 
 await describeMspNet(
   "MSP storage cleanup after StorageRequest acceptance extrinsic failure",
@@ -80,7 +84,11 @@ await describeMspNet(
         RuntimeConfig: { StorageRequestTtl: [null, tickRangeToMaximumThreshold] }
       } as const;
       await userApi.block.seal({
-        calls: [userApi.tx.sudo.sudo(userApi.tx.parameters.setParameter(storageRequestTtlRuntimeParameter))]
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.parameters.setParameter(storageRequestTtlRuntimeParameter)
+          )
+        ]
       });
 
       // Create bucket
@@ -171,9 +179,12 @@ await describeMspNet(
 
       // Verify we can download before sealing acceptance
       uploadedFileKeyHex = fileKey.toHex();
-      const preRejectDownload = await fetch(`http://localhost:8080/download/${uploadedFileKeyHex}`, {
-        headers: { Authorization: `Bearer ${userJWT}` }
-      });
+      const preRejectDownload = await fetch(
+        `http://localhost:8080/download/${uploadedFileKeyHex}`,
+        {
+          headers: { Authorization: `Bearer ${userJWT}` }
+        }
+      );
       strictEqual(preRejectDownload.status, 200, "Download should succeed before rejection");
       const preArrayBuffer = await preRejectDownload.arrayBuffer();
       strictEqual(Buffer.from(preArrayBuffer).length, originalFileBuffer.length);
@@ -196,21 +207,24 @@ await describeMspNet(
       const expiredStorageRequestBlock = await userApi.block.skipTo(expiresAt);
 
       // Expect StorageRequestRejected event
-      const StorageRequestRejectedEvent = await userApi.assert.eventPresent("fileSystem", "StorageRequestRejected", expiredStorageRequestBlock.events);
+      const StorageRequestRejectedEvent = await userApi.assert.eventPresent(
+        "fileSystem",
+        "StorageRequestRejected",
+        expiredStorageRequestBlock.events
+      );
       assert(StorageRequestRejectedEvent, "StorageRequestRejected event not found");
 
-      const StorageRequestEventData = userApi.events.fileSystem.StorageRequestRejected.is(StorageRequestRejectedEvent.event) && StorageRequestRejectedEvent.event.data;
-      assert(
-        StorageRequestEventData,
-        "StorageRequestRejectedEvent event data not found"
-      );
+      const StorageRequestEventData =
+        userApi.events.fileSystem.StorageRequestRejected.is(StorageRequestRejectedEvent.event) &&
+        StorageRequestRejectedEvent.event.data;
+      assert(StorageRequestEventData, "StorageRequestRejectedEvent event data not found");
       strictEqual(
         StorageRequestEventData.fileKey.toString(),
         fileKey.toHex(),
         "File key should match the deleted file key"
       );
 
-      console.log(StorageRequestEventData.reason.toString())
+      console.log(StorageRequestEventData.reason.toString());
       // Storage Request should not exist anymore
       const storageRequestAfter = await userApi.query.fileSystem.storageRequests(fileKey);
       assert(storageRequestAfter.isNone, "Storage request should not exist anymore");
@@ -221,10 +235,17 @@ await describeMspNet(
       await msp1Api.wait.fileDeletionFromFileStorage(fileKey.toHex());
 
       // Download should now fail (MSP should no longer have the file)
-      const postRejectDownload = await fetch(`http://localhost:8080/download/${uploadedFileKeyHex}`, {
-        headers: { Authorization: `Bearer ${userJWT}` }
-      });
-      strictEqual(postRejectDownload.status, 404 , "Download should fail before storage request rejection");
+      const postRejectDownload = await fetch(
+        `http://localhost:8080/download/${uploadedFileKeyHex}`,
+        {
+          headers: { Authorization: `Bearer ${userJWT}` }
+        }
+      );
+      strictEqual(
+        postRejectDownload.status,
+        404,
+        "Download should fail before storage request rejection"
+      );
     });
   }
 );
