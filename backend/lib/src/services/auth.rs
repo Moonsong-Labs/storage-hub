@@ -532,7 +532,7 @@ mod tests {
         let result = auth_service.login(message, &sig_str).await;
         assert!(result.is_err(), "Should fail if challenge wasn't called");
         match result {
-            Err(Error::Unauthorized(msg)) => assert!(msg.contains("Invalid nonce")),
+            Err(Error::Unauthorized(msg)) => assert!(msg.contains("Invalid or expired nonce")),
             _ => panic!("Expected unauthorized error for missing nonce"),
         }
     }
