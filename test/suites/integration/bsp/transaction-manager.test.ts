@@ -16,7 +16,8 @@ await describeBspNet(
   {
     initialised: true,
     networkConfig: "standard",
-    extrinsicRetryTimeout: 10
+    extrinsicRetryTimeout: 10,
+    logLevel: "debug" // This test must execute with debug logs to verify the transaction watcher logs
   },
   ({ before, createUserApi, createBspApi, it }) => {
     let userApi: EnrichedBspApi;
@@ -44,13 +45,6 @@ await describeBspNet(
       await userApi.block.skipTo(nextChallengeTick, {
         watchForBspProofs: [ShConsts.DUMMY_BSP_ID],
         finalised: false
-      });
-
-      // Check for "Watching transaction" log
-      await bspApi.docker.waitForLog({
-        containerName: "storage-hub-sh-bsp-1",
-        searchString: "Watching transaction with nonce",
-        timeout: 10000
       });
 
       // Verify that the submit proof extrinsic is now present in the tx pool
@@ -300,7 +294,7 @@ await describeBspNet(
         checkTxPool: true
       });
 
-      // Get the volunteer transaction nonce
+      // Get the volunteer transaction nonce and hash
       const volunteerExtrinsics = await userApi.assert.extrinsicPresent({
         module: "fileSystem",
         method: "bspVolunteer",
@@ -310,6 +304,7 @@ await describeBspNet(
 
       const txPool1 = await userApi.rpc.author.pendingExtrinsics();
       const volunteerNonce = txPool1[volunteerExtrinsics[0].extIndex].nonce.toNumber();
+      const volunteerHash = txPool1[volunteerExtrinsics[0].extIndex].hash.toString();
 
       // And the submit proof transaction nonce
       const submitProofExtrinsics = await userApi.assert.extrinsicPresent({
@@ -328,24 +323,8 @@ await describeBspNet(
       );
 
       // Drop the volunteer transaction (creates the gap at nonce n)
-      await bspApi.node.dropTxn({ module: "fileSystem", method: "bspVolunteer" });
-      await userApi.node.dropTxn({ module: "fileSystem", method: "bspVolunteer" });
-
-      // Verify the volunteer was dropped
-      await userApi.assert.extrinsicPresent({
-        module: "fileSystem",
-        method: "bspVolunteer",
-        checkTxPool: true,
-        assertLength: 0,
-        exactLength: true
-      });
-      await bspApi.assert.extrinsicPresent({
-        module: "fileSystem",
-        method: "bspVolunteer",
-        checkTxPool: true,
-        assertLength: 0,
-        exactLength: true
-      });
+      await bspApi.node.dropTxn(volunteerHash as `0x${string}`);
+      await userApi.node.dropTxn(volunteerHash as `0x${string}`);
 
       // Verify the Invalid log was emitted
       await bspApi.docker.waitForLog({
@@ -375,6 +354,49 @@ await describeBspNet(
         containerName: "storage-hub-sh-bsp-1",
         searchString: `Transaction with nonce ${submitProofNonce} is invalid`,
         timeout: 10000
+      });
+
+      // Wait for the BSP to retry submitting the volunteer (automatic retry mechanism)
+      await userApi.wait.bspVolunteerInTxPool(1);
+      await bspApi.wait.bspVolunteerInTxPool(1);
+
+      // Get the retry volunteer transaction hash
+      const retryVolunteerExtrinsics = await userApi.assert.extrinsicPresent({
+        module: "fileSystem",
+        method: "bspVolunteer",
+        checkTxPool: true,
+        assertLength: 1
+      });
+      const txPoolRetry = await userApi.rpc.author.pendingExtrinsics();
+      const retryVolunteerHash = txPoolRetry[retryVolunteerExtrinsics[0].extIndex].hash.toString();
+      const retryVolunteerNonce =
+        txPoolRetry[retryVolunteerExtrinsics[0].extIndex].nonce.toNumber();
+
+      // Verify the retry uses the same nonce (gap filling)
+      strictEqual(
+        retryVolunteerNonce,
+        volunteerNonce,
+        "Retry volunteer should use the same nonce to fill the gap"
+      );
+
+      // Drop the retry volunteer transaction to exhaust the retry mechanism
+      await bspApi.node.dropTxn(retryVolunteerHash as `0x${string}`);
+      await userApi.node.dropTxn(retryVolunteerHash as `0x${string}`);
+
+      // Verify the retry volunteer was dropped
+      await userApi.assert.extrinsicPresent({
+        module: "fileSystem",
+        method: "bspVolunteer",
+        checkTxPool: true,
+        assertLength: 0,
+        exactLength: true
+      });
+      await bspApi.assert.extrinsicPresent({
+        module: "fileSystem",
+        method: "bspVolunteer",
+        checkTxPool: true,
+        assertLength: 0,
+        exactLength: true
       });
 
       // Create a second storage request which should trigger the gap filling and use the same nonce as the first one
