@@ -337,13 +337,15 @@ await describeBspNet(
         module: "fileSystem",
         method: "bspVolunteer",
         checkTxPool: true,
-        assertLength: 0
+        assertLength: 0,
+        exactLength: true
       });
       await bspApi.assert.extrinsicPresent({
         module: "fileSystem",
         method: "bspVolunteer",
         checkTxPool: true,
-        assertLength: 0
+        assertLength: 0,
+        exactLength: true
       });
 
       // Verify the Invalid log was emitted
@@ -358,13 +360,15 @@ await describeBspNet(
         module: "proofsDealer",
         method: "submitProof",
         checkTxPool: true,
-        assertLength: 0
+        assertLength: 0,
+        exactLength: true
       });
       await bspApi.assert.extrinsicPresent({
         module: "proofsDealer",
         method: "submitProof",
         checkTxPool: true,
-        assertLength: 0
+        assertLength: 0,
+        exactLength: true
       });
 
       // Verify the Invalid log was emitted for the submit proof transaction
