@@ -418,13 +418,13 @@ where
             .expect("Fisherman service not set for FishermanRole");
 
         // Register FishermanTask to handle BatchFileDeletions events
-        // This task processes batched file deletions emitted every 5 blocks
         subscribe_actor_event_map!(
             service: fisherman,
             spawner: &self.task_spawner,
             context: self.clone(),
             critical: true,
             [
+                // This task processes batched file deletions (for user deletion requests and incomplete storage requests) after every configured interval (`fisherman_batch_interval_seconds`) of time.
                 BatchFileDeletions => FishermanTask,
             ]
         );
