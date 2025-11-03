@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use futures::prelude::*;
-use std::{collections::BTreeMap, marker::PhantomData, path::PathBuf, sync::Arc};
+use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 
 use sc_client_api::{
     BlockImportNotification, BlockchainEvents, FinalityNotification, HeaderBackend,
@@ -117,14 +117,6 @@ where
         Runtime::Hash,
         TransactionStatus<Runtime::Hash, Runtime::Hash>,
     )>,
-    /// Channel receiver for processing transaction status updates.
-    pub(crate) tx_status_receiver: tokio::sync::mpsc::UnboundedReceiver<(
-        u32,
-        Runtime::Hash,
-        TransactionStatus<Runtime::Hash, Runtime::Hash>,
-    )>,
-    /// Phantom data for the Runtime type.
-    _runtime: PhantomData<Runtime>,
 }
 
 #[derive(Debug, Clone)]
@@ -184,6 +176,11 @@ where
 {
     receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand<Runtime>>,
     actor: BlockchainService<FSH, Runtime>,
+    tx_status_receiver: tokio::sync::mpsc::UnboundedReceiver<(
+        u32,
+        Runtime::Hash,
+        TransactionStatus<Runtime::Hash, Runtime::Hash>,
+    )>,
 }
 
 /// Merged event loop message for the BlockchainService actor.
@@ -214,7 +211,16 @@ where
         actor: BlockchainService<FSH, Runtime>,
         receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand<Runtime>>,
     ) -> Self {
-        Self { actor, receiver }
+        // Create transaction status channel and wire sender into actor
+        let (tx_status_sender, tx_status_receiver) = tokio::sync::mpsc::unbounded_channel();
+        let mut actor = actor;
+        actor.tx_status_sender = tx_status_sender;
+
+        Self {
+            actor,
+            receiver,
+            tx_status_receiver,
+        }
     }
 
     async fn run(mut self) {
@@ -231,13 +237,7 @@ where
         let finality_notification_stream = self.actor.client.finality_notification_stream();
 
         // Merging notification streams with command stream.
-        let tx_status_receiver = {
-            // Move the receiver out so we can build a stream from it
-            let (_tx, rx_empty) = tokio::sync::mpsc::unbounded_channel();
-            std::mem::replace(&mut self.actor.tx_status_receiver, rx_empty)
-        };
-
-        let tx_status_stream = futures::stream::unfold(tx_status_receiver, |mut rx| async {
+        let tx_status_stream = futures::stream::unfold(self.tx_status_receiver, |mut rx| async {
             match rx.recv().await {
                 Some(item) => Some((item, rx)),
                 None => None,
@@ -1294,9 +1294,6 @@ where
         capacity_request_queue: Option<CapacityRequestQueue<Runtime>>,
         maintenance_mode: bool,
     ) -> Self {
-        // Create channel for transaction status updates
-        let (tx_status_sender, tx_status_receiver) = tokio::sync::mpsc::unbounded_channel();
-
         Self {
             config,
             event_bus_provider: BlockchainServiceEventBusProvider::new(),
@@ -1314,9 +1311,11 @@ where
             capacity_manager: capacity_request_queue,
             maintenance_mode,
             transaction_manager: TransactionManager::new(TransactionManagerConfig::default()),
-            tx_status_sender,
-            tx_status_receiver,
-            _runtime: PhantomData,
+            // Temporary sender, will be replaced by the event loop during startup
+            tx_status_sender: {
+                let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+                tx
+            },
         }
     }
 
