@@ -248,10 +248,17 @@ mod tests {
         let retrieved = storage.get_nonce(message).await.unwrap();
         assert_eq!(retrieved, WithExpiry::Valid(address.to_string()));
 
+        // Since the `get_nonce` operation above removes the nonce, let's re-insert it
+        // Store nonce with 1 second expiration
+        storage
+            .store_nonce(message.to_string(), address.to_string(), expiration_seconds)
+            .await
+            .unwrap();
+
         // Advance time by 2 seconds to expire the nonce
         advance(Duration::from_secs(2)).await;
 
-        // Should return None since it's expired
+        // Should have been expired
         let retrieved_after_expiry = storage.get_nonce(message).await.unwrap();
         assert_eq!(retrieved_after_expiry, WithExpiry::Expired);
 
