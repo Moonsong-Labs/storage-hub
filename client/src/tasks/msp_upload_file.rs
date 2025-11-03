@@ -355,7 +355,7 @@ where
                 ),
             )
             .await?
-            .watch_for_success()
+            .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
 
         // Remove the files that were rejected from the File Storage.
@@ -578,7 +578,7 @@ where
                             ),
                         )
                         .await?
-                        .watch_for_success()
+                        .watch_for_success(&self.storage_hub_handler.blockchain)
                         .await?;
 
                     return Err(anyhow::anyhow!(err_msg));
@@ -937,7 +937,7 @@ where
                 ),
             )
             .await?
-            .watch_for_success()
+            .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
 
         // Unregister the file

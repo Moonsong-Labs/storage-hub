@@ -1,7 +1,11 @@
+use std::time::Duration;
+
 use anyhow::anyhow;
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::{commands::BlockchainServiceCommandInterface, events::NotifyPeriod};
+use shc_blockchain_service::{
+    commands::BlockchainServiceCommandInterface, events::NotifyPeriod, types::SendExtrinsicOptions,
+};
 use shc_common::{traits::StorageEnableRuntime, types::StorageProviderId};
 use sp_core::Get;
 use sp_runtime::traits::SaturatedConversion;
@@ -131,10 +135,20 @@ where
             .into();
 
             // TODO: watch for success (we might want to do it for BSP too)
+            let options = SendExtrinsicOptions::new(
+                Duration::from_secs(
+                    self.storage_hub_handler
+                        .provider_config
+                        .blockchain_service
+                        .extrinsic_retry_timeout,
+                ),
+                Some("paymentStreams".to_string()),
+                Some("chargeMultipleUsersPaymentStreams".to_string()),
+            );
             let charging_result = self
                 .storage_hub_handler
                 .blockchain
-                .send_extrinsic(call, Default::default())
+                .send_extrinsic(call, options)
                 .await;
 
             match charging_result {
