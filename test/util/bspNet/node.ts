@@ -50,6 +50,14 @@ export async function dropTransaction(
     const pendingAfter = await api.rpc.author.pendingExtrinsics();
     assert(result.length > 0, "No removal confirmation returned by RPC");
     assert(pendingBefore > pendingAfter, "Extrinsic not removed from txPool");
+    assert(
+      result.find((hash) => hash.toString() === extrinsic),
+      "Extrinsic not removed from txPool"
+    );
+    assert(
+      !pendingAfter.find((ext) => ext.hash.toString() === extrinsic),
+      "Extrinsic not removed from txPool"
+    );
   }
 
   if (sealAfter) {

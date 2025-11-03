@@ -3,7 +3,7 @@ import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
 import { bspKey, describeBspNet, type EnrichedBspApi, shUser, waitFor } from "../../../util";
 
-await describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUserApi }) => {
+await describeBspNet("BSPNet: Multiple Delete", ({ before, createBspApi, it, createUserApi }) => {
   let userApi: EnrichedBspApi;
   let bspApi: EnrichedBspApi;
 
@@ -112,12 +112,12 @@ await describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, cre
       }
     });
 
-    const stopStroringTxs = [];
+    const stopStoringTxs = [];
     for (let i = 0; i < fileKeys.length; i++) {
       const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
         fileKeys[i]
       ]);
-      stopStroringTxs.push(
+      stopStoringTxs.push(
         userApi.tx.fileSystem.bspRequestStopStoring(
           fileKeys[i],
           newBucketEventDataBlob.bucketId,
@@ -131,7 +131,7 @@ await describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, cre
       );
     }
 
-    await userApi.block.seal({ calls: stopStroringTxs, signer: bspKey });
+    await userApi.block.seal({ calls: stopStoringTxs, signer: bspKey });
     const stopStoringEvents = await userApi.assert.eventMany(
       "fileSystem",
       "BspRequestedToStopStoring"
@@ -266,12 +266,12 @@ await describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, cre
         }
       });
 
-      const stopStroringTxs = [];
+      const stopStoringTxs = [];
       for (let i = 0; i < fileKeys.length; i++) {
         const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
           fileKeys[i]
         ]);
-        stopStroringTxs.push(
+        stopStoringTxs.push(
           userApi.tx.fileSystem.bspRequestStopStoring(
             fileKeys[i],
             newBucketEventDataBlob.bucketId,
@@ -285,7 +285,7 @@ await describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, cre
         );
       }
 
-      await userApi.block.seal({ calls: stopStroringTxs, signer: bspKey });
+      await userApi.block.seal({ calls: stopStoringTxs, signer: bspKey });
       const stopStoringEvents = await userApi.assert.eventMany(
         "fileSystem",
         "BspRequestedToStopStoring"
@@ -307,7 +307,7 @@ await describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, cre
       const cooldown = currentBlockNumber + minWaitForStopStoring;
       await userApi.block.skipTo(cooldown);
 
-      // Batching the delete confirmation should fail because of the wrong inclusionForestProof for extrinsinc 2 and 3
+      // Batching the delete confirmation should fail because of the wrong inclusionForestProof for extrinsic 2 and 3
       const confirmStopStoringTxs = [];
       for (let i = 0; i < fileKeys.length; i++) {
         const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
@@ -342,7 +342,7 @@ await describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, cre
 
       assert(
         confirmStopStoringEvents.length === 1,
-        "two of the extrinsincs should fail because of wrong inclusion proof"
+        "two of the extrinsics should fail because of wrong inclusion proof"
       );
     }
   );

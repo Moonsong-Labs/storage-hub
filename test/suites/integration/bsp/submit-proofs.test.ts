@@ -10,7 +10,7 @@ import {
 import { BSP_THREE_ID, BSP_TWO_ID, DUMMY_BSP_ID, NODE_INFOS } from "../../../util/bspNet/consts";
 
 await describeBspNet(
-  "BSP: Many BSPs Submit Proofs",
+  "BSPNet: Many BSPs Submit Proofs",
   { initialised: "multi", networkConfig: "standard" },
   ({ before, createUserApi, after, it, createApi, createBspApi, getLaunchResponse }) => {
     let userApi: EnrichedBspApi;
@@ -388,18 +388,14 @@ await describeBspNet(
       await userApi.wait.nodeCatchUpToChainTip(bspThreeApi);
 
       // There shouldn't be any pending volunteer transactions.
-      await assert.rejects(
-        async () => {
-          await userApi.assert.extrinsicPresent({
-            module: "fileSystem",
-            method: "bspVolunteer",
-            checkTxPool: true,
-            timeout: 2000
-          });
-        },
-        /No matching extrinsic found for fileSystem\.bspVolunteer/,
-        "There should be no pending volunteer transactions"
-      );
+      await userApi.assert.extrinsicPresent({
+        module: "fileSystem",
+        method: "bspVolunteer",
+        checkTxPool: true,
+        timeout: 2000,
+        assertLength: 0,
+        exactLength: true
+      });
     });
 
     it("BSP-Two still correctly responds to challenges with same forest root", async () => {
