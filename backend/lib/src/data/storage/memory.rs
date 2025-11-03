@@ -244,28 +244,25 @@ mod tests {
             .await
             .unwrap();
 
-        // Should be retrievable immediately
-        let retrieved = storage.get_nonce(message).await.unwrap();
-        assert_eq!(retrieved, WithExpiry::Valid(address.to_string()));
-
-        // Since the `get_nonce` operation above removes the nonce, let's re-insert it
-        // Store nonce with 1 second expiration
-        storage
-            .store_nonce(message.to_string(), address.to_string(), expiration_seconds)
-            .await
-            .unwrap();
-
         // Advance time by 2 seconds to expire the nonce
         advance(Duration::from_secs(2)).await;
 
-        // Should have been expired
-        let retrieved_after_expiry = storage.get_nonce(message).await.unwrap();
-        assert_eq!(retrieved_after_expiry, WithExpiry::Expired);
+        // At this point the nonce should be expired, but it should still be in storage
+        {
+            let guard = storage.nonces.read();
+            let expired_entry = guard.get(message).expect("should still be present");
+            assert!(
+                expired_entry.expired_at(Instant::now()),
+                "Nonce should be expired by now"
+            );
+        }
 
         // Advance time to trigger cleanup task (runs every 10 seconds)
         advance(Duration::from_secs(10)).await;
 
-        // Should be gone from storage after cleanup task runs
+        // Should have been cleaned up
+        let retrieved_after_cleanup = storage.get_nonce(message).await.unwrap();
+        assert_eq!(retrieved_after_cleanup, WithExpiry::NotFound);
         assert!(storage.nonces.read().get(message).is_none());
     }
 }
