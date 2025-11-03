@@ -16,8 +16,7 @@ await describeBspNet(
   {
     initialised: true,
     networkConfig: "standard",
-    extrinsicRetryTimeout: 10,
-    logLevel: "debug"
+    extrinsicRetryTimeout: 10
   },
   ({ before, createUserApi, createBspApi, it }) => {
     let userApi: EnrichedBspApi;
