@@ -1047,5 +1047,5 @@ export type NetLaunchConfig = {
    * Optional parameter to set the Rust log level for all nodes.
    * Defaults to 'info' if not specified.
    */
-  logLevel?: "trace" | "debug" | "info" | "warn" | "error";
+  logLevel?: string;
 };
