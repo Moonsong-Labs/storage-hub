@@ -10,7 +10,7 @@ import {
 } from "../../../util";
 
 await describeBspNet(
-  "Single BSP Volunteering",
+  "BSPNet: Single BSP Volunteering",
   { initialised: false },
   ({ before, createBspApi, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
@@ -198,7 +198,7 @@ await describeBspNet(
 );
 
 await describeBspNet(
-  "Single BSP multi-volunteers",
+  "BSPNet: Single BSP multi-volunteers",
   { initialised: false },
   ({ before, createBspApi, createUserApi, it }) => {
     let userApi: EnrichedBspApi;

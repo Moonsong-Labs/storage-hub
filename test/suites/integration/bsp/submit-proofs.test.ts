@@ -10,7 +10,7 @@ import {
 import { BSP_THREE_ID, BSP_TWO_ID, DUMMY_BSP_ID, NODE_INFOS } from "../../../util/bspNet/consts";
 
 await describeBspNet(
-  "BSP: Many BSPs Submit Proofs",
+  "BSPNet: Many BSPs Submit Proofs",
   { initialised: "multi", networkConfig: "standard" },
   ({ before, createUserApi, after, it, createApi, createBspApi, getLaunchResponse }) => {
     let userApi: EnrichedBspApi;

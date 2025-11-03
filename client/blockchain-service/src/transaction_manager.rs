@@ -354,7 +354,8 @@ where
         if elapsed > timeout {
             error!(
                 target: LOG_TARGET,
-                "Timeout waiting for transaction to reach {:?}",
+                "Timeout waiting for transaction with nonce {} to reach {:?}",
+                nonce,
                 target_status
             );
             return Err(WatchTransactionError::Timeout);
@@ -399,7 +400,8 @@ where
                 // Timeout elapsed
                 error!(
                     target: LOG_TARGET,
-                    "Timeout waiting for transaction to reach {:?}",
+                    "Timeout waiting for transaction with nonce {} to reach {:?}",
+                    nonce,
                     target_status
                 );
                 return Err(WatchTransactionError::Timeout);

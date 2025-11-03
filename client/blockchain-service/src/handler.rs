@@ -194,6 +194,13 @@ where
     Command(BlockchainServiceCommand<Runtime>),
     BlockImportNotification(BlockImportNotification<OpaqueBlock>),
     FinalityNotification(FinalityNotification<OpaqueBlock>),
+    TxStatusUpdate(
+        (
+            u32,
+            Runtime::Hash,
+            TransactionStatus<Runtime::Hash, Runtime::Hash>,
+        ),
+    ),
 }
 
 /// Implement the ActorEventLoop trait for the BlockchainServiceEventLoop.
@@ -224,6 +231,19 @@ where
         let finality_notification_stream = self.actor.client.finality_notification_stream();
 
         // Merging notification streams with command stream.
+        let tx_status_receiver = {
+            // Move the receiver out so we can build a stream from it
+            let (_tx, rx_empty) = tokio::sync::mpsc::unbounded_channel();
+            std::mem::replace(&mut self.actor.tx_status_receiver, rx_empty)
+        };
+
+        let tx_status_stream = futures::stream::unfold(tx_status_receiver, |mut rx| async {
+            match rx.recv().await {
+                Some(item) => Some((item, rx)),
+                None => None,
+            }
+        });
+
         let mut merged_stream = stream::select_all(vec![
             self.receiver
                 .map(MergedEventLoopMessage::<Runtime>::Command)
@@ -233,6 +253,9 @@ where
                 .boxed(),
             finality_notification_stream
                 .map(|n| MergedEventLoopMessage::<Runtime>::FinalityNotification(n))
+                .boxed(),
+            tx_status_stream
+                .map(MergedEventLoopMessage::<Runtime>::TxStatusUpdate)
                 .boxed(),
         ]);
 
@@ -249,6 +272,10 @@ where
                 }
                 MergedEventLoopMessage::FinalityNotification(notification) => {
                     self.actor.handle_finality_notification(notification).await;
+                }
+                MergedEventLoopMessage::TxStatusUpdate((nonce, tx_hash, status)) => {
+                    self.actor
+                        .handle_transaction_status_update(nonce, tx_hash, status);
                 }
             };
         }
@@ -1394,10 +1421,6 @@ where
     ) {
         trace!(target: LOG_TARGET, "📠 Processing block import #{}: {}", block_number, block_hash);
 
-        // Process any pending transaction status updates from watchers
-        // This handles immediate removal from the transaction manager of all transactions in a terminal state
-        self.process_transaction_status_updates();
-
         // Clean up the stale nonce gaps in the transaction manager
         let on_chain_nonce = self.account_nonce(&self.client.info().best_hash);
         self.transaction_manager
@@ -1524,11 +1547,6 @@ where
         }
 
         info!(target: LOG_TARGET, "📨 Finality notification #{}: {}", block_number, block_hash);
-
-        // Process any pending transaction status updates from watchers
-        // This is important because watchers send Finalized status that could
-        // arrive in between block imports
-        self.process_transaction_status_updates();
 
         // Get events from storage.
         match get_events_at_block::<Runtime>(&self.client, &block_hash) {
