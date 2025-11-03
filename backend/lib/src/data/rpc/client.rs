@@ -27,12 +27,22 @@ impl StorageHubRpcClient {
         self.connection.is_connected().await
     }
 
+    /// Attempts to reconnect if the connection isn't connected
+    async fn ensure_connected(&self) {
+        if !self.is_connected().await {
+            // TODO: More robust reconnection mechanism, like we do for the original connection
+            _ = self.connection.reconnect().await;
+        }
+    }
+
     /// Call a JSON-RPC method on the connected node
     pub async fn call<P, R>(&self, method: &str, params: P) -> RpcResult<R>
     where
         P: ToRpcParams + Send,
         R: DeserializeOwned,
     {
+        self.ensure_connected().await;
+
         self.connection.call(method, params).await
     }
 
@@ -41,6 +51,8 @@ impl StorageHubRpcClient {
     where
         R: DeserializeOwned,
     {
+        self.ensure_connected().await;
+
         self.connection.call_no_params(method).await
     }
 
@@ -54,15 +66,14 @@ impl StorageHubRpcClient {
     pub async fn get_current_price_per_giga_unit_per_tick(&self) -> RpcResult<u128> {
         debug!(target: "rpc::client::get_current_price_per_giga_unit_per_tick", "RPC call: get_current_price_per_giga_unit_per_tick");
 
-        self.connection.call_no_params(methods::CURRENT_PRICE).await
+        self.call_no_params(methods::CURRENT_PRICE).await
     }
 
     /// Returns whether the given `file_key` is expected to be received by the MSP node
     pub async fn is_file_key_expected(&self, file_key: &str) -> RpcResult<bool> {
         debug!(target: "rpc::client::is_file_key_expected", file_key = %file_key, "RPC call: is_file_key_expected");
 
-        self.connection
-            .call(methods::FILE_KEY_EXPECTED, jsonrpsee::rpc_params![file_key])
+        self.call(methods::FILE_KEY_EXPECTED, jsonrpsee::rpc_params![file_key])
             .await
     }
 
@@ -77,12 +88,11 @@ impl StorageHubRpcClient {
         &self,
         file_key: &str,
     ) -> RpcResult<GetFileFromFileStorageResult> {
-        self.connection
-            .call(
-                methods::IS_FILE_IN_FILE_STORAGE,
-                jsonrpsee::rpc_params![file_key],
-            )
-            .await
+        self.call(
+            methods::IS_FILE_IN_FILE_STORAGE,
+            jsonrpsee::rpc_params![file_key],
+        )
+        .await
     }
 
     /// Request the MSP node to export the given `file_key` to the given URL
@@ -94,12 +104,11 @@ impl StorageHubRpcClient {
             "RPC call: save_file_to_disk"
         );
 
-        self.connection
-            .call(
-                methods::SAVE_FILE_TO_DISK,
-                jsonrpsee::rpc_params![file_key, url],
-            )
-            .await
+        self.call(
+            methods::SAVE_FILE_TO_DISK,
+            jsonrpsee::rpc_params![file_key, url],
+        )
+        .await
     }
 
     /// Request the MSP to accept a FileKeyProof (`proof`) for the given `file_key`
@@ -111,33 +120,32 @@ impl StorageHubRpcClient {
             "RPC call: receive_file_chunks"
         );
 
-        self.connection
-            .call(
-                methods::RECEIVE_FILE_CHUNKS,
-                jsonrpsee::rpc_params![file_key, proof],
-            )
-            .await
+        self.call(
+            methods::RECEIVE_FILE_CHUNKS,
+            jsonrpsee::rpc_params![file_key, proof],
+        )
+        .await
     }
 
     /// Retrieve the Onchain Provider ID of the MSP Node (therefore the MSP ID)
     pub async fn get_provider_id(&self) -> RpcResult<RpcProviderId> {
         debug!(target: "rpc::client::get_provider_id", "RPC call: get_provider_id");
 
-        self.connection.call_no_params(methods::PROVIDER_ID).await
+        self.call_no_params(methods::PROVIDER_ID).await
     }
 
     /// Retrieve the list of value propositions of the MSP Node
     pub async fn get_value_props(&self) -> RpcResult<GetValuePropositionsResult> {
         debug!(target: "rpc::client::get_value_props", "RPC call: get_value_props");
 
-        self.connection.call_no_params(methods::VALUE_PROPS).await
+        self.call_no_params(methods::VALUE_PROPS).await
     }
 
     /// Retrieve the list of multiaddresses associated with the MSP Node
     pub async fn get_multiaddresses(&self) -> RpcResult<Vec<String>> {
         debug!(target: "rpc::client::get_multiaddresses", "RPC call: get_multiaddresses");
 
-        self.connection.call_no_params(methods::PEER_IDS).await
+        self.call_no_params(methods::PEER_IDS).await
     }
 }
 
@@ -171,6 +179,27 @@ mod tests {
         let mock_conn = MockConnection::new();
         let connection = Arc::new(AnyRpcConnection::Mock(mock_conn));
         StorageHubRpcClient::new(connection)
+    }
+
+    #[tokio::test]
+    async fn reconnect_automatically() {
+        let conn = MockConnection::new();
+        conn.disconnect().await;
+        let conn = Arc::new(AnyRpcConnection::Mock(conn));
+        let client = StorageHubRpcClient::new(conn);
+
+        assert!(
+            !client.is_connected().await,
+            "Should not be connected initially"
+        );
+
+        let result = client.get_provider_id().await;
+        assert!(
+            result.is_ok(),
+            "Should reconnect and be able to retrieve provider id"
+        );
+
+        assert!(client.is_connected().await, "Should be connected now");
     }
 
     #[tokio::test]

@@ -103,7 +103,7 @@ impl MockConnection {
     }
 
     /// Simulate reconnection
-    pub async fn reconnect(&self) {
+    pub async fn connect(&self) {
         let mut connected = self.connected.write().await;
         *connected = true;
     }
@@ -289,8 +289,8 @@ impl RpcConnection for MockConnection {
         *connected
     }
 
-    async fn close(&self) -> RpcResult<()> {
-        self.disconnect().await;
+    async fn reconnect(&self) -> RpcResult<()> {
+        self.connect().await;
         Ok(())
     }
 }
@@ -323,8 +323,8 @@ mod tests {
         // Test connection status
         assert!(conn.is_connected().await);
 
-        // Test close
-        conn.close().await.unwrap();
+        // Test disconnection
+        conn.disconnect().await;
         assert!(!conn.is_connected().await);
     }
 
@@ -432,9 +432,6 @@ mod tests {
     async fn test_connection_disconnect_reconnect() {
         let conn = MockConnection::new();
 
-        // Initially connected
-        assert!(conn.is_connected().await);
-
         // Disconnect
         conn.disconnect().await;
         assert!(!conn.is_connected().await);
@@ -444,7 +441,7 @@ mod tests {
         assert!(matches!(result, Err(RpcConnectionError::ConnectionClosed)));
 
         // Reconnect
-        conn.reconnect().await;
+        conn.connect().await;
         assert!(conn.is_connected().await);
 
         // Call should work now

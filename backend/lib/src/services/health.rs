@@ -1,5 +1,11 @@
 use std::sync::Arc;
 
+use axum::{
+    body::Body,
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    Json,
+};
 use serde::Serialize;
 use shc_rpc::RpcProviderId;
 use tracing::{debug, error};
@@ -12,6 +18,24 @@ pub struct DetailedHealthStatus {
     pub version: String,
     pub service: String,
     pub components: HealthComponents,
+}
+
+impl DetailedHealthStatus {
+    pub fn is_healthy(&self) -> bool {
+        self.status == HealthService::HEALTHY
+    }
+}
+
+impl IntoResponse for DetailedHealthStatus {
+    fn into_response(self) -> Response<Body> {
+        let status = if self.is_healthy() {
+            StatusCode::OK
+        } else {
+            StatusCode::SERVICE_UNAVAILABLE
+        };
+
+        (status, Json(self)).into_response()
+    }
 }
 
 #[derive(Serialize)]
