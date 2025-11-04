@@ -10,7 +10,7 @@ import {
 /**
  * Validates fisherman only processes file deletions from FINALIZED blocks, ignoring unfinalized blocks and constructing valid forest proofs
  * based on finalized and unfinalized data.
- * 
+ *
  * Test coverage:
  * - Finalized user requested file deletions (URFDs) and incomplete storage requests (ISRs) are deleted by the fisherman.
  * - Unfinalized added and deleted file keys from BSP and MSP forests are caught up by the fisherman to construct valid forest proofs for ISRs.
