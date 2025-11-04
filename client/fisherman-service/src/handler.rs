@@ -37,16 +37,8 @@ pub(crate) const LOG_TARGET: &str = "fisherman-service";
 pub struct FishermanService<Runtime: StorageEnableRuntime> {
     /// Substrate client for blockchain interaction
     client: Arc<ParachainClient<Runtime::RuntimeApi>>,
-    /// Last processed block number to avoid reprocessing
-    last_processed_block: BlockNumber<Runtime>,
     /// Event bus provider for emitting fisherman events
     event_bus_provider: FishermanServiceEventBusProvider,
-    /// The minimum number of blocks behind the current best block to consider the fisherman out of sync
-    sync_mode_min_blocks_behind: BlockNumber<Runtime>,
-    /// Maximum number of incomplete storage requests to process during initial sync
-    incomplete_sync_max: u32,
-    /// Page size for incomplete storage request pagination
-    incomplete_sync_page_size: u32,
     /// Global lock to prevent overlapping batch processing cycles
     batch_processing_lock: Arc<Mutex<()>>,
     /// Hold the lock guard while batch is processing
@@ -81,18 +73,11 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
     /// Create a new FishermanService instance
     pub fn new(
         client: Arc<ParachainClient<Runtime::RuntimeApi>>,
-        incomplete_sync_max: u32,
-        incomplete_sync_page_size: u32,
-        sync_mode_min_blocks_behind: u32,
         batch_interval_seconds: u64,
     ) -> Self {
         Self {
             client,
-            last_processed_block: 0u32.into(),
             event_bus_provider: FishermanServiceEventBusProvider::new(),
-            sync_mode_min_blocks_behind: sync_mode_min_blocks_behind.into(),
-            incomplete_sync_max,
-            incomplete_sync_page_size,
             batch_processing_lock: Arc::new(Mutex::new(())),
             batch_lock_guard: None,
             last_deletion_type: None,
@@ -174,17 +159,6 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
     ) -> Result<(), FishermanServiceError> {
         debug!(target: LOG_TARGET, "🎣 Monitoring block #{}: {}", block_number, block_hash);
 
-        // Check if we just came out of syncing mode
-        // On initial startup, last_processed_block is 0, so if current block > sync_mode_min_blocks_behind,
-        // we trigger the sync. This matches the blockchain service behavior.
-        if block_number.saturating_sub(self.last_processed_block) > self.sync_mode_min_blocks_behind
-        {
-            info!(target: LOG_TARGET, "🎣 Handling coming out of sync mode (synced to #{}: {})", block_number, block_hash);
-            if let Err(e) = self.initial_incomplete_requests_sync().await {
-                error!(target: LOG_TARGET, "Failed initial incomplete requests sync: {:?}", e);
-            }
-        }
-
         // Check if enough time has elapsed since last batch
         let should_trigger = match self.last_batch_time {
             // First run
@@ -228,70 +202,6 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                 }
             }
         }
-
-        self.last_processed_block = block_number;
-        Ok(())
-    }
-
-    /// Perform initial catch-up for incomplete storage requests
-    async fn initial_incomplete_requests_sync(&mut self) -> Result<(), FishermanServiceError> {
-        info!(target: LOG_TARGET, "🎣 Starting initial incomplete storage requests sync");
-
-        let page_size = self.incomplete_sync_page_size;
-        let cap = self.incomplete_sync_max;
-        let mut processed: u32 = 0;
-        let mut cursor: Option<Runtime::Hash> = None;
-
-        let best_block_hash = self.client.info().best_hash;
-
-        'sync_loop: while processed < cap {
-            // Call the runtime API to get a page of incomplete storage request keys
-            let keys = self
-                .client
-                .runtime_api()
-                .list_incomplete_storage_request_keys(best_block_hash, cursor, page_size)
-                .map_err(|e| {
-                    FishermanServiceError::Client(format!("Runtime API error: {:?}", e))
-                })?;
-
-            if keys.is_empty() {
-                break;
-            }
-
-            let page_count = keys.len();
-            debug!(
-                target: LOG_TARGET,
-                "🎣 Processing page of {} incomplete storage requests",
-                page_count
-            );
-
-            for _key in &keys {
-                // TODO: Phase 8 - Emit batch of file keys per BSP/Bucket
-                // Old event emission commented out for now
-                /*
-                self.emit(crate::events::ProcessIncompleteStorageRequest {
-                    file_key: (*_key).into(),
-                });
-                */
-
-                processed = processed.saturating_add(1);
-
-                // Check if we've hit the cap
-                if processed >= cap {
-                    info!(
-                        target: LOG_TARGET,
-                        "🎣 Initial incomplete requests sync reached cap: {}",
-                        cap
-                    );
-                    break 'sync_loop;
-                }
-            }
-
-            // Advance cursor to last processed key
-            cursor = keys.last().cloned();
-        }
-
-        info!(target: LOG_TARGET, "🎣 Completed initial incomplete storage requests sync - processed {} requests", processed);
 
         Ok(())
     }

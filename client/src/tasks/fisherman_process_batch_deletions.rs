@@ -571,7 +571,11 @@ where
             .blockchain
             .send_extrinsic(
                 call.into(),
-                SendExtrinsicOptions::new(Duration::from_secs(120)), // Longer timeout for batch
+                SendExtrinsicOptions::new(
+                    Duration::from_secs(120),
+                    Some("fileSystem".to_string()),
+                    Some("deleteFiles".to_string()),
+                ),
             )
             .await
             .map_err(|e| {
@@ -637,7 +641,11 @@ where
             .blockchain
             .send_extrinsic(
                 call.into(),
-                SendExtrinsicOptions::new(Duration::from_secs(120)), // Longer timeout for batch
+                SendExtrinsicOptions::new(
+                    Duration::from_secs(120),
+                    Some("fileSystem".to_string()),
+                    Some("deleteFilesForIncompleteStorageRequest".to_string()),
+                ),
             )
             .await
             .map_err(|e| {
