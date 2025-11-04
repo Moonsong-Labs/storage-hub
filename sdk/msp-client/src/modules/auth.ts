@@ -39,7 +39,7 @@ export class AuthModule extends ModuleBase {
    */
   async SIWE(
     wallet: WalletClient,
-    retry = DEFAULT_SIWE_VERIFY_RETRY,
+    retry = DEFAULT_SIWE_VERIFY_RETRY_ATTEMPS,
     signal?: AbortSignal
   ): Promise<Session> {
     // Resolve the current active account from the WalletClient.
@@ -60,7 +60,7 @@ export class AuthModule extends ModuleBase {
     // Sign using the active account resolved above (string or Account object)
     const signature = await wallet.signMessage({ account, message });
 
-    // Retry verify up to `retry` times
+    // TODO: remove the retry logic once the backend is fixed.
     let lastError: unknown;
     for (let attemptIndex = 0; attemptIndex < retry; attemptIndex++) {
       try {
