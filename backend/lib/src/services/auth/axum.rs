@@ -145,7 +145,7 @@ where
         let maybe_auth = Self::from_request_parts_impl(parts, state).await;
 
         match maybe_auth {
-            Ok(ok) => Ok(ok),
+            Ok(user) => Ok(user),
             // if services are configured to not validate signature
             Err((claims, e)) if !services.auth.validate_signature => {
                 warn!(target: "auth_service::from_request_parts", error = ?e, "Authentication failed");
