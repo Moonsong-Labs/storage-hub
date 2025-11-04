@@ -73,7 +73,7 @@ mod tests {
             mocks::MOCK_ADDRESS,
         },
         models::auth::{
-            JwtClaims, NonceRequest, NonceResponse, TokenResponse, User, VerifyRequest,
+            JwtClaims, NonceRequest, NonceResponse, TokenResponse, UserProfile, VerifyRequest,
             VerifyResponse,
         },
         services::Services,
@@ -153,7 +153,7 @@ mod tests {
             .await;
 
         assert_eq!(response.status_code(), StatusCode::OK);
-        let user: User = response.json();
+        let user: UserProfile = response.json();
         assert_eq!(user.address, address);
         assert_eq!(user.ens, MOCK_ENS);
     }
@@ -455,7 +455,7 @@ mod tests {
             )
             .await;
 
-        let user1: User = response.json();
+        let user1: UserProfile = response.json();
         assert_eq!(user1.address, address1);
 
         let response = server
@@ -466,7 +466,7 @@ mod tests {
             )
             .await;
 
-        let user2: User = response.json();
+        let user2: UserProfile = response.json();
         assert_eq!(user2.address, address2);
     }
 
