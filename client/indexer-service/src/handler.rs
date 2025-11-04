@@ -120,18 +120,21 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
 
         conn.transaction::<(), IndexBlockError, _>(move |conn| {
             Box::pin(async move {
-                let block_number_u64: u64 = block_number.saturated_into();
-                let block_number_i64: i64 = block_number_u64 as i64;
-                ServiceState::update(conn, block_number_i64).await?;
-
                 for ev in block_events {
                     self.route_event(conn, &ev.event.into(), block_hash).await?;
                 }
+
+                // Update the last indexed finalized block after indexing all events
+                let block_number_u64: u64 = block_number.saturated_into();
+                let block_number_i64: i64 = block_number_u64 as i64;
+                ServiceState::update(conn, block_number_i64).await?;
 
                 Ok(())
             })
         })
         .await?;
+
+        info!(target: LOG_TARGET, "Successfully indexed block #{}: {}", block_number, block_hash);
 
         Ok(())
     }

@@ -77,7 +77,7 @@ await describeMspNet(
       indexerApi = await createIndexerApi();
 
       // Wait for indexer to process the finalized block (producerApi will seal a finalized block by default)
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
     });
 
     it("batches user-requested file deletions across multiple buckets with parallel BSP and bucket processing", async () => {
@@ -135,7 +135,7 @@ await describeMspNet(
 
       const { fileKeys, bucketIds, locations, fingerprints, fileSizes } = batchResult;
 
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
       // Wait for all files to be indexed
       for (const fileKey of fileKeys) {
@@ -189,7 +189,7 @@ await describeMspNet(
         `Should have ${fileKeys.length} FileDeletionRequested events`
       );
 
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
       // Verify deletion signatures are stored in database for the User deletion type
       await indexerApi.indexer.verifyDeletionSignaturesStored({ sql, fileKeys });
@@ -263,7 +263,7 @@ await describeMspNet(
 
       const { fileKeys } = batchResult;
 
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
       // Build all revocation calls
       const revocationCalls = fileKeys.map((fileKey) =>
@@ -304,7 +304,7 @@ await describeMspNet(
       assert(incompleteStorageRequests.length > 0, "Should have incomplete storage requests");
 
       // Seal and finalize block
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
       // Wait for fisherman to catch up with chain
       await userApi.wait.nodeCatchUpToChainTip(fishermanApi);

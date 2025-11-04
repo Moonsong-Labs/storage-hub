@@ -80,7 +80,7 @@ await describeMspNet(
       indexerApi = await createIndexerApi();
 
       // Wait for indexer to process the finalized block (producerApi will seal a finalized block by default)
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
     });
 
     it("pauses fisherman and creates finalized user deletion requests", async () => {
@@ -146,7 +146,7 @@ await describeMspNet(
       finalizedUserFileKeys = fileKeys;
       finalizedUserBucketIds = bucketIds;
 
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
       // Wait for all files to be indexed
       for (const fileKey of fileKeys) {
@@ -201,7 +201,7 @@ await describeMspNet(
       );
 
       // Wait for indexer to finalize these blocks
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
       // Verify deletion signatures are stored in database for the User deletion type
       await indexerApi.indexer.verifyDeletionSignaturesStored({ sql, fileKeys });
@@ -604,7 +604,7 @@ await describeMspNet(
       finalizedIncompleteFileKeys = fileKeys;
       finalizedIncompleteBucketIds = bucketIds;
 
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
       // Build all revocation calls for FINALIZED blocks
       const revocationCalls = fileKeys.map((fileKey) =>
@@ -645,7 +645,7 @@ await describeMspNet(
       assert(incompleteStorageRequests.length > 0, "Should have incomplete storage requests");
 
       // Wait for indexer to finalize these blocks
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
     });
 
     it("creates unfinalized incomplete storage requests and manually deletes files", async () => {

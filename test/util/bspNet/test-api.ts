@@ -41,7 +41,7 @@ import * as BspNetFisherman from "./fisherman";
 import { addBsp } from "./helpers";
 import * as BspNetIndexer from "./indexer";
 import * as NodeBspNet from "./node";
-import type { BspNetApi, BspStoredOptions, SealBlockOptions } from "./types";
+import type { BspNetApi, BspStoredOptions, SealBlockOptions, SqlClient } from "./types";
 import * as Waits from "./waits";
 
 /**
@@ -803,15 +803,18 @@ export class BspNetTestApi implements AsyncDisposable {
        *
        * @example
        * // Standalone indexer
-       * await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+       * await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
        *
        * @example
        * // Embedded indexer (simplified)
        * await userApi.indexer.waitForIndexing({});
        */
-      waitForIndexing: (
-        options: { producerApi?: any; sealBlock?: boolean; finalizeOnIndexer?: boolean } = {}
-      ) =>
+      waitForIndexing: (options: {
+        producerApi?: any;
+        sealBlock?: boolean;
+        finalizeOnIndexer?: boolean;
+        sql: SqlClient;
+      }) =>
         BspNetIndexer.waitForIndexing({
           indexerApi: this._api as any,
           ...options

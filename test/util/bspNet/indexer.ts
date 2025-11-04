@@ -9,12 +9,12 @@ import { hexToBuffer } from "./helpers";
 export interface WaitForIndexingOptions {
   /** The indexer API (the node doing the indexing/finalization) */
   indexerApi: EnrichedBspApi;
+  /** The SQL client instance */
+  sql: SqlClient;
   /** Optional. The producer API to get block number and finalization status from. Defaults to indexerApi if not provided (for embedded indexer scenarios). */
   producerApi?: EnrichedBspApi;
   /** Whether to seal a new block on the producer (default: true) */
   sealBlock?: boolean;
-  /** Whether to finalize blocks on the indexer node (default: true) */
-  finalizeOnIndexer?: boolean;
 }
 
 /**
@@ -28,17 +28,12 @@ export interface WaitForIndexingOptions {
  * 1. Optionally seals a new block on the producer node
  * 2. Gets the current block number from the producer node
  * 3. Waits for indexer to process the block via docker logs
- * 4. If `finalizeOnIndexer` is `true`:
- *    - Gets the finalized block hash from the producer chain
- *    - Waits for indexer to import that block
- *    - Explicitly finalizes the block on the indexer node
- *
- * This is necessary because non-producer nodes (like standalone indexers)
- * must explicitly finalize imported blocks to trigger the indexer's
- * finality notification stream.
+ * 4. Gets the finalized block hash from the producer chain
+ * 5. Waits for indexer to import that block
+ * 6. Explicitly finalizes the block on the indexer node
  */
 export const waitForIndexing = async (options: WaitForIndexingOptions): Promise<void> => {
-  const { indexerApi, producerApi, sealBlock = false, finalizeOnIndexer = true } = options;
+  const { indexerApi, sql, producerApi, sealBlock = false } = options;
 
   // Default to indexerApi when producerApi is not provided
   const blockProducerApi = producerApi ?? indexerApi;
@@ -50,20 +45,26 @@ export const waitForIndexing = async (options: WaitForIndexingOptions): Promise<
 
   const currentBlock = (await blockProducerApi.query.system.number()).toNumber();
 
-  // Finalize blocks on indexer node BEFORE waiting for indexing log
+  // Finalize block on indexer node
   // This is necessary because the indexer only processes finalized blocks
-  if (finalizeOnIndexer) {
-    const finalisedBlockHash = await blockProducerApi.rpc.chain.getFinalizedHead();
-    await indexerApi.wait.blockImported(finalisedBlockHash.toString());
-    await indexerApi.block.finaliseBlock(finalisedBlockHash.toString());
-  }
+  const finalisedBlockHash = await blockProducerApi.rpc.chain.getFinalizedHead();
+  await indexerApi.wait.blockImported(finalisedBlockHash.toString());
+  await indexerApi.block.finaliseBlock(finalisedBlockHash.toString());
 
-  // Wait for indexer to process this block (after finalization)
+  // Wait for indexer to process this block
   // Use the indexer's container name from its API connection
   await indexerApi.docker.waitForLog({
     searchString: `Indexing block #${currentBlock}:`,
     containerName: indexerApi.shConsts.NODE_INFOS.indexer.containerName,
     timeout: 30000
+  });
+
+  // Wait for indexer to successfully index the block
+  await waitFor({
+    lambda: async () => {
+      const lastIndexedBlock = await indexerApi.indexer.getLastIndexedBlock({ sql });
+      return lastIndexedBlock === currentBlock;
+    }
   });
 };
 

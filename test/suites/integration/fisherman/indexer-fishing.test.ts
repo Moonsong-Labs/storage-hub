@@ -96,7 +96,7 @@ await describeMspNet(
       });
 
       // Wait for indexer to process the finalized block (producerApi will seal a finalized block by default)
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
     });
 
     it("indexes NewStorageRequest events", async () => {
@@ -110,7 +110,7 @@ await describeMspNet(
         bucketName
       );
 
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
       await indexerApi.indexer.waitForFileIndexed({ sql, fileKey });
 
       const files = await sql`
@@ -158,7 +158,7 @@ await describeMspNet(
       );
       assert(bspConfirmedEvent, "BspConfirmedStoring event should be present");
 
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
       await indexerApi.indexer.waitForFileIndexed({ sql, fileKey });
 
@@ -212,7 +212,7 @@ await describeMspNet(
         timeoutMs: 30000
       });
 
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
       await indexerApi.indexer.waitForFileIndexed({ sql, fileKey: fileKey.toString() });
 
@@ -255,7 +255,7 @@ await describeMspNet(
           revokeStorageRequestResult.events
         );
 
-        await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+        await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
         await indexerApi.indexer.waitForFileDeleted({ sql, fileKey });
       } finally {
         // Always resume containers even if the test fails
@@ -351,7 +351,7 @@ await describeMspNet(
 
       await userApi.assert.eventPresent("fileSystem", "BspConfirmStoppedStoring");
 
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
       await indexerApi.indexer.verifyNoBspFileAssociation({ sql, fileKey });
     });
@@ -369,7 +369,7 @@ await describeMspNet(
 
       const bucketId = newBucketEventData.bucketId;
 
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
       await indexerApi.indexer.waitForBucketIndexed({ sql, bucketName });
 
@@ -385,7 +385,7 @@ await describeMspNet(
 
       await userApi.assert.eventPresent("fileSystem", "BucketDeleted", deleteBucketResult.events);
 
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
       buckets = await sql`
         SELECT * FROM bucket WHERE name = ${bucketName}
@@ -414,7 +414,7 @@ await describeMspNet(
       await userApi.wait.mspResponseInTxPool();
       await userApi.block.seal();
 
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
       await indexerApi.indexer.waitForFileIndexed({ sql, fileKey });
 
@@ -454,7 +454,7 @@ await describeMspNet(
 
       await userApi.block.skipTo(currentBlockNumber + 100);
 
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
       // For expired requests, file remains in database with expired status
       const files = await sql`
@@ -504,7 +504,7 @@ await describeMspNet(
         bspAccount: bspAddress
       });
 
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
       await indexerApi.indexer.waitForMspFileAssociation({ sql, fileKey });
 
       await indexerApi.indexer.waitForBspFileAssociation({ sql, fileKey });
@@ -545,7 +545,7 @@ await describeMspNet(
       );
 
       // Wait for indexer to process the FileDeletionRequested event
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
       // Verify deletion signatures are stored in database for the User deletion type
       await indexerApi.indexer.verifyDeletionSignaturesStored({ sql, fileKeys: [fileKey] });
@@ -562,7 +562,7 @@ await describeMspNet(
         maxRetries: 3
       });
 
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
       await indexerApi.indexer.waitForFileDeleted({ sql, fileKey });
       await indexerApi.indexer.verifyNoOrphanedMspAssociations({ sql, mspId });
       await indexerApi.indexer.verifyNoOrphanedBspAssociations({
@@ -601,7 +601,7 @@ await describeMspNet(
         bspAccount: bspAddress
       });
 
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
       const truncatedMspId = `${ShConsts.DUMMY_MSP_ID.slice(0, 6)}…${ShConsts.DUMMY_MSP_ID.slice(
         -4
@@ -650,7 +650,7 @@ await describeMspNet(
 
       await userApi.assert.eventPresent("fileSystem", "MoveBucketAccepted", events);
 
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
       const truncatedMspId2 = `${ShConsts.DUMMY_MSP_ID_2.slice(0, 6)}…${ShConsts.DUMMY_MSP_ID_2.slice(
         -4
@@ -709,7 +709,7 @@ await describeMspNet(
         bspAccount: bspAddress
       });
 
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
       await indexerApi.indexer.waitForFileIndexed({ sql, fileKey });
       await indexerApi.indexer.waitForBspFileAssociation({ sql, fileKey });
 
@@ -864,7 +864,7 @@ await describeMspNet(
         "Event should contain correct BSP ID"
       );
 
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
       await indexerApi.indexer.verifyNoBspFileAssociation({ sql, fileKey });
       await bspApi.wait.bspFileDeletionCompleted(fileKey);
     });
