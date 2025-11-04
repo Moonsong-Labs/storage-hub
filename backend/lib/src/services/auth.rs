@@ -3,16 +3,13 @@ use std::{str::FromStr, sync::Arc};
 use alloy_core::primitives::{eip191_hash_message, Address, PrimitiveSignature};
 use alloy_signer::utils::public_key_to_address;
 use axum_jwt::jsonwebtoken::{self, DecodingKey, EncodingKey, Header, Validation};
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use rand::{distributions::Alphanumeric, Rng};
-use tracing::debug;
+use tracing::{debug, error};
 
 use crate::{
     config::AuthConfig,
-    constants::{
-        auth::{AUTH_NONCE_ENDPOINT, MOCK_ENS},
-        mocks::MOCK_ADDRESS,
-    },
+    constants::auth::{AUTH_NONCE_ENDPOINT, MOCK_ENS},
     data::storage::{BoxedStorage, WithExpiry},
     error::Error,
     models::auth::{JwtClaims, NonceResponse, TokenResponse, UserProfile, VerifyResponse},
@@ -358,7 +355,10 @@ mod tests {
 
     use crate::{
         config::Config,
-        constants::{auth::MOCK_ENS, mocks::MOCK_ADDRESS},
+        constants::{
+            auth::{DEFAULT_AUTH_NONCE_EXPIRATION_SECONDS, MOCK_ENS},
+            mocks::MOCK_ADDRESS,
+        },
         data::storage::{BoxedStorageWrapper, InMemoryStorage},
         test_utils::auth::{eth_wallet, sign_message},
     };
@@ -499,7 +499,10 @@ mod tests {
         let sig_str = sign_message(&sk, &challenge.message);
 
         // Advance time to expire the nonce
-        tokio::time::advance(Duration::from_secs(AUTH_NONCE_EXPIRATION_SECONDS + 1)).await;
+        tokio::time::advance(Duration::from_secs(
+            DEFAULT_AUTH_NONCE_EXPIRATION_SECONDS as u64 + 1,
+        ))
+        .await;
 
         let result = auth_service.login(&challenge.message, &sig_str).await;
         assert!(result.is_err(), "Should fail if nonce has expired");

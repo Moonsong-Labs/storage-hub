@@ -30,15 +30,18 @@ use crate::{
 
 pub async fn get_file_info(
     State(services): State<Services>,
-    AuthenticatedUser { address }: AuthenticatedUser,
+    user: User,
     Path((_bucket_id, file_key)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, Error> {
     debug!(
         file_key = %file_key,
-        user = %address,
+        %user,
         "GET file info"
     );
-    let response = services.msp.get_file_info(&address, &file_key).await?;
+    let response = services
+        .msp
+        .get_file_info(user.address().ok(), &file_key)
+        .await?;
     Ok(Json(response))
 }
 
@@ -110,7 +113,7 @@ pub async fn download_by_key(
     user: User,
     Path(file_key): Path<String>,
 ) -> Result<impl IntoResponse, Error> {
-    debug!(file_key = %file_key, user = %address, "GET download file");
+    debug!(file_key = %file_key, %user, "GET download file");
 
     // Validate file_key is a hex string
     let key = file_key.trim_start_matches("0x");
@@ -122,7 +125,10 @@ pub async fn download_by_key(
     let file_metadata = services.msp.check_file_status(&file_key).await?;
 
     // Verify user has access to the requested file
-    let file_info = services.msp.get_file_info(&address, &file_key).await?;
+    let file_info = services
+        .msp
+        .get_file_info(user.address().ok(), &file_key)
+        .await?;
 
     // Generate a unique session ID for the download session
     let session_id = Uuid::now_v7().to_string();
@@ -247,7 +253,7 @@ pub async fn upload_file(
     // Process and upload the file using the MSP service
     let response = services
         .msp
-        .process_and_upload_file(&address, &file_key, file_data_stream, file_metadata)
+        .process_and_upload_file(Some(&address), &file_key, file_data_stream, file_metadata)
         .await?;
 
     Ok((StatusCode::CREATED, Json(response)))

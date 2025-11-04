@@ -216,17 +216,24 @@ impl MspService {
 
     /// Get a specific bucket by ID
     ///
-    /// Verifies ownership of bucket is `user`
-    pub async fn get_bucket(&self, bucket_id: &str, user: &Address) -> Result<Bucket, Error> {
-        debug!(target: "msp_service::get_bucket", bucket_id = %bucket_id, user = %user, "Getting bucket");
+    /// Verifies ownership of bucket is `user` (or that the bucket is public if `user` is `None`)
+    pub async fn get_bucket(
+        &self,
+        bucket_id: &str,
+        user: Option<&Address>,
+    ) -> Result<Bucket, Error> {
+        debug!(target: "msp_service::get_bucket", bucket_id = %bucket_id, user = ?user, "Getting bucket");
 
-        self.get_db_bucket(bucket_id, user).await.map(|bucket| {
-            // Convert BigDecimal to u64 for size (may lose precision)
-            let size_bytes = bucket.total_size.to_string().parse::<u64>().unwrap_or(0);
-            let file_count = bucket.file_count as u64;
+        self.get_db_bucket(bucket_id)
+            .await
+            .and_then(|bucket| self.can_user_view_bucket(bucket, user))
+            .map(|bucket| {
+                // Convert BigDecimal to u64 for size (may lose precision)
+                let size_bytes = bucket.total_size.to_string().parse::<u64>().unwrap_or(0);
+                let file_count = bucket.file_count as u64;
 
-            Bucket::from_db(&bucket, size_bytes, file_count)
-        })
+                Bucket::from_db(&bucket, size_bytes, file_count)
+            })
     }
 
     /// Get file tree for a bucket
@@ -243,15 +250,18 @@ impl MspService {
     pub async fn get_file_tree(
         &self,
         bucket_id: &str,
-        user: &Address,
+        user: Option<&Address>,
         path: &str,
         offset: i64,
         limit: i64,
     ) -> Result<FileTree, Error> {
-        debug!(target: "msp_service::get_file_tree", bucket_id = %bucket_id, user = %user, %limit, %offset,  "Getting file tree");
+        debug!(target: "msp_service::get_file_tree", bucket_id = %bucket_id, user = ?user, %limit, %offset,  "Getting file tree");
 
         // first, get the bucket from the db and determine if user can view the bucket
-        let bucket = self.get_db_bucket(bucket_id, user).await?;
+        let bucket = self
+            .get_db_bucket(bucket_id)
+            .await
+            .and_then(|bucket| self.can_user_view_bucket(bucket, user))?;
 
         // TODO: optimize query by requesting only matching paths
         // TODO: pagination doesn't account for path filtering
@@ -266,9 +276,13 @@ impl MspService {
 
     /// Get file information
     ///
-    /// Verifies ownership of bucket that the file belongs to is `user`
-    pub async fn get_file_info(&self, user: &Address, file_key: &str) -> Result<FileInfo, Error> {
-        debug!(target: "msp_service::get_file_info", user = %user, file_key = %file_key, "Getting file info");
+    /// Verifies ownership of bucket that the file belongs to is `user`, if private
+    pub async fn get_file_info(
+        &self,
+        user: Option<&Address>,
+        file_key: &str,
+    ) -> Result<FileInfo, Error> {
+        debug!(target: "msp_service::get_file_info", user = ?user, file_key = %file_key, "Getting file info");
 
         let file_key_hex = file_key.trim_start_matches("0x");
 
@@ -488,7 +502,7 @@ impl MspService {
     /// Verifies ownership of bucket that the file belongs to is `user`
     pub async fn process_and_upload_file(
         &self,
-        user: &Address,
+        user: Option<&Address>,
         file_key: &str,
         mut file_data_stream: Field,
         file_metadata: FileMetadata,
@@ -854,27 +868,37 @@ impl MspService {
 
 impl MspService {
     /// Verifies user can access the given bucket
-    fn can_user_view_bucket(&self, bucket: DBBucket, user: &Address) -> Result<DBBucket, Error> {
+    ///
+    /// If the bucket is public, the `user` may be `None`
+    ///
+    /// Will return the bucket if the user has the required permissions
+    fn can_user_view_bucket(
+        &self,
+        bucket: DBBucket,
+        user: Option<&Address>,
+    ) -> Result<DBBucket, Error> {
         // TODO: NFT ownership
         if bucket.private {
+            let Some(user) = user else {
+                return Err(Error::Unauthorized("This bucket is private".to_string()));
+            };
+
             if bucket.account.as_str() == user.to_string() {
                 Ok(bucket)
             } else {
-                Err(Error::Unauthorized(format!(
-                    "Specified user is not authorized to view this bucket"
-                )))
+                Err(Error::Unauthorized(
+                    "Specified user is not authorized to view this bucket".to_string(),
+                ))
             }
         } else {
             Ok(bucket)
         }
     }
 
-    /// Retrieve a bucket from the DB and verify read permission
-    async fn get_db_bucket(
-        &self,
-        bucket_id: &str,
-        user: &Address,
-    ) -> Result<shc_indexer_db::models::Bucket, Error> {
+    /// Retrieve a bucket from the DB
+    ///
+    /// Will NOT verify ownership, see [`can_user_view_bucket`]
+    async fn get_db_bucket(&self, bucket_id: &str) -> Result<DBBucket, Error> {
         let bucket_id_hex = bucket_id.trim_start_matches("0x");
 
         let bucket_id = hex::decode(bucket_id_hex)
@@ -887,10 +911,7 @@ impl MspService {
             )));
         }
 
-        self.postgres
-            .get_bucket(&bucket_id)
-            .await
-            .and_then(|bucket| self.can_user_view_bucket(bucket, user))
+        self.postgres.get_bucket(&bucket_id).await
     }
 }
 
@@ -1086,7 +1107,10 @@ mod tests {
             .await;
 
         let bucket_id = hex::encode(bucket_id);
-        let bucket = service.get_bucket(&bucket_id, &MOCK_ADDRESS).await.unwrap();
+        let bucket = service
+            .get_bucket(&bucket_id, Some(&MOCK_ADDRESS))
+            .await
+            .unwrap();
 
         assert_eq!(bucket.bucket_id, bucket_id);
         assert_eq!(bucket.name, bucket_name);
@@ -1142,7 +1166,7 @@ mod tests {
         let tree = service
             .get_file_tree(
                 hex::encode(bucket_id).as_ref(),
-                &MOCK_ADDRESS,
+                Some(&MOCK_ADDRESS),
                 filter,
                 0,
                 DEFAULT_PAGE_LIMIT,
@@ -1209,7 +1233,7 @@ mod tests {
         let file_key = hex::encode(file_key);
 
         let info = service
-            .get_file_info(&MOCK_ADDRESS, &file_key)
+            .get_file_info(Some(&MOCK_ADDRESS), &file_key)
             .await
             .expect("get_file_info should succeed");
 

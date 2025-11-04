@@ -1,3 +1,4 @@
+use alloy_core::primitives::Address;
 use axum::{
     extract::{FromRef, FromRequestParts},
     http::request::Parts,
@@ -22,12 +23,21 @@ pub enum User {
     /// Represents an authenticated user
     ///
     /// The user is identified by the address used during the login flow
-    Authenticated { address: String },
+    Authenticated { address: Address },
 
     /// Represents an unauthenticated user
     ///
     /// The user is identified by this ID, which holds no guarantees in terms of "stickiness" nor "uniqueness"
     Unauthenticated { id: String },
+}
+
+impl std::fmt::Display for User {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            User::Authenticated { address } => write!(f, "{address}"),
+            User::Unauthenticated { id } => write!(f, "{id}"),
+        }
+    }
 }
 
 enum AuthenticationResult {
@@ -41,15 +51,15 @@ impl User {
     /// Will return a string usable to identify the user for the session
     ///
     /// WARNING: Do not use for identify verification
-    pub fn id(&self) -> &String {
+    pub fn id(&self) -> String {
         match self {
-            User::Authenticated { address } => &address,
-            User::Unauthenticated { id } => &id,
+            User::Authenticated { address } => address.to_checksum(None),
+            User::Unauthenticated { id } => id.clone(),
         }
     }
 
     /// Will return the authenticated user address or error if the user is unauthenticated
-    pub fn address(&self) -> Result<&String, Error> {
+    pub fn address(&self) -> Result<&Address, Error> {
         match self {
             Self::Authenticated { address } => Ok(&address),
             _ => Err(Error::Unauthorized("User not authenticated".to_owned())),
@@ -156,9 +166,7 @@ where
                 warn!(target: "auth_service::from_request_parts", error = ?e, "Authentication failed");
 
                 // if we were able to retrieve the claims then use the passed in address
-                let address = claims
-                    .map(|claims| claims.address)
-                    .unwrap_or_else(|| MOCK_ADDRESS.to_string());
+                let address = claims.map(|claims| claims.address).unwrap_or(MOCK_ADDRESS);
                 debug!(target: "auth_service::from_request_parts", address = %address, "Bypassing authentication");
 
                 return Ok(Self::Authenticated { address });
@@ -170,7 +178,7 @@ where
 
 /// Identical to [`User::Authenticated`] variant
 pub struct AuthenticatedUser {
-    pub address: String,
+    pub address: Address,
 }
 
 impl<S> FromRequestParts<S> for AuthenticatedUser
