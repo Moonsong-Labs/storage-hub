@@ -2,7 +2,7 @@ import type { NonceResponse, Session, UserInfo } from "../types.js";
 import { getAddress, type WalletClient } from "viem";
 import { ModuleBase } from "../base.js";
 
-const DEFAULT_SIWE_VERIFY_RETRY = 10;
+const DEFAULT_SIWE_VERIFY_RETRY_ATTEMPS = 10;
 const DEFAULT_SIWE_VERIFY_BACKOFF_MS = 100;
 
 export class AuthModule extends ModuleBase {
