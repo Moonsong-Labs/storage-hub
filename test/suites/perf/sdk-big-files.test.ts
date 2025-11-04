@@ -4,7 +4,13 @@ import { createReadStream } from "node:fs";
 import { Readable } from "node:stream";
 import { TypeRegistry } from "@polkadot/types";
 import type { AccountId20, H256 } from "@polkadot/types/interfaces";
-import { FileManager, type HttpClientConfig, ReplicationLevel, SH_FILE_SYSTEM_PRECOMPILE_ADDRESS, StorageHubClient } from "@storagehub-sdk/core";
+import {
+  FileManager,
+  type HttpClientConfig,
+  ReplicationLevel,
+  SH_FILE_SYSTEM_PRECOMPILE_ADDRESS,
+  StorageHubClient
+} from "@storagehub-sdk/core";
 import { MspClient } from "@storagehub-sdk/msp-client";
 import { createPublicClient, createWalletClient, defineChain, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -73,7 +79,6 @@ await describeMspNet(
         filesystemContractAddress: SH_FILE_SYSTEM_PRECOMPILE_ADDRESS
       });
 
-
       const mspBackendHttpConfig: HttpClientConfig = {
         baseUrl: "http://127.0.0.1:8080",
         // Large files need longer than the HttpClient default (30s)
@@ -140,13 +145,13 @@ await describeMspNet(
       assert(afterBucket.isSome, "Perf bucket should exist");
     });
 
-
-
-
-    function makeInMemoryWebStream(totalBytes: number, chunkBytes: number): ReadableStream<Uint8Array> {
+    function makeInMemoryWebStream(
+      totalBytes: number,
+      chunkBytes: number
+    ): ReadableStream<Uint8Array> {
       const size = Math.max(1, Math.min(chunkBytes, totalBytes));
       const chunk = new Uint8Array(size);
-      chunk.fill(0xAA);
+      chunk.fill(0xaa);
       let remaining = totalBytes;
       return new ReadableStream<Uint8Array>({
         pull(controller) {
@@ -161,9 +166,8 @@ await describeMspNet(
       });
     }
 
-
     // Encapsulated (disabled) steps: upload and download
-    async function issueStorageRequestAndUpload(
+    async function _issueStorageRequestAndUpload(
       filePath: string,
       size: number,
       mgr: FileManager,
@@ -179,7 +183,10 @@ await describeMspNet(
       const fileSizeBig = BigInt(size);
       const peerIds = [userApi.shConsts.NODE_INFOS.msp1.expectedPeerId];
 
-      const t2 = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+      const t2 =
+        typeof performance !== "undefined" && typeof performance.now === "function"
+          ? performance.now()
+          : Date.now();
       const txHash = await storageHubClient.issueStorageRequest(
         bucketId as `0x${string}`,
         fileLocationPerf,
@@ -209,7 +216,7 @@ await describeMspNet(
               ok = true;
               break;
             }
-          } catch { }
+          } catch {}
           await new Promise((r) => setTimeout(r, stepMs));
         }
         assert(ok, "MSP did not register expected file key in time");
@@ -229,17 +236,28 @@ await describeMspNet(
       await msp1Api.wait.fileStorageComplete(hexKey);
       await userApi.wait.mspResponseInTxPool(1);
       await userApi.block.seal();
-      const t3 = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+      const t3 =
+        typeof performance !== "undefined" && typeof performance.now === "function"
+          ? performance.now()
+          : Date.now();
       const uploadMs = Math.round(t3 - t2);
       return { uploadMs, fileKeyHex: hexKey };
     }
 
-    async function downloadAndMeasure(fileKeyHex: string): Promise<{ downloadMs: number; downloadBlob: Blob }> {
-      const t4 = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+    async function _downloadAndMeasure(
+      fileKeyHex: string
+    ): Promise<{ downloadMs: number; downloadBlob: Blob }> {
+      const t4 =
+        typeof performance !== "undefined" && typeof performance.now === "function"
+          ? performance.now()
+          : Date.now();
       const downloadResponse = await mspClient.files.downloadFile(fileKeyHex);
       assert.equal(downloadResponse.status, 200);
       const downloadBlob = await new Response(downloadResponse.stream).blob();
-      const t5 = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+      const t5 =
+        typeof performance !== "undefined" && typeof performance.now === "function"
+          ? performance.now()
+          : Date.now();
       const downloadMs = Math.round(t5 - t4);
       return { downloadMs, downloadBlob };
     }
@@ -258,9 +276,15 @@ await describeMspNet(
         });
 
         // 1) Fingerprint timing
-        const t0 = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
-        const fingerprint = await mgr.getFingerprint();
-        const t1 = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+        const t0 =
+          typeof performance !== "undefined" && typeof performance.now === "function"
+            ? performance.now()
+            : Date.now();
+        const _fingerprint = await mgr.getFingerprint();
+        const t1 =
+          typeof performance !== "undefined" && typeof performance.now === "function"
+            ? performance.now()
+            : Date.now();
         const fingerprintMs = Math.round(t1 - t0);
 
         // Upload and download disabled; use placeholders
@@ -275,8 +299,6 @@ await describeMspNet(
           uploadMs,
           downloadMs
         });
-
-
       });
     }
 
@@ -287,6 +309,3 @@ await describeMspNet(
     });
   }
 );
-
-
-
