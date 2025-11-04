@@ -16533,6 +16533,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "shc-blockchain-service-db"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "diesel",
+ "diesel-async",
+ "diesel_migrations",
+ "futures",
+ "hex",
+ "log",
+ "rustls 0.23.32",
+ "rustls-pemfile 2.2.0",
+ "rustls-platform-verifier 0.5.3",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-postgres",
+ "tokio-postgres-rustls",
+]
+
+[[package]]
 name = "shc-client"
 version = "0.1.0"
 dependencies = [
