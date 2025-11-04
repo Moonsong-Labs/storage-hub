@@ -508,6 +508,29 @@ where
         let method = options.method().unwrap_or("unknown".to_string());
         info!(target: LOG_TARGET, "Transaction {}_{} submitted successfully with hash {:?} and nonce {}", module, method, tx_hash, nonce);
 
+        // Persist the transaction in the DB (best-effort) after RPC acceptance
+        if let Some(store) = &self.pending_tx_store {
+            let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
+            let account_id: shc_common::types::AccountId<Runtime> = caller_pub_key.into();
+            let account_bytes_owned: Vec<u8> = account_id.as_ref().to_vec();
+            let call_scale = call.encode();
+            // TODO: Use this when we implement multiple instances of the same provider.
+            let creator_id =
+                std::env::var("SH_NODE_INSTANCE_ID").unwrap_or_else(|_| "local".to_string());
+            if let Err(e) = store
+                .insert_sent(
+                    &account_bytes_owned,
+                    nonce as i32,
+                    tx_hash.as_bytes(),
+                    &call_scale,
+                    &creator_id,
+                )
+                .await
+            {
+                warn!(target: LOG_TARGET, "Failed to persist pending tx (nonce {}, and hash {:?}): {:?}", nonce, tx_hash, e);
+            }
+        }
+
         // Add the transaction to the transaction manager to track it
         if let Err(e) = self.transaction_manager.track_transaction(
             nonce,
@@ -748,6 +771,38 @@ where
         };
 
         (current_tick_minus_last_submission % provider_challenge_period) == Zero::zero()
+    }
+
+    /// Cleanup manager gaps and DB rows with nonce < on-chain nonce; then handle old gaps.
+    ///
+    /// This method performs the following steps:
+    /// 1. Cleans up the transaction manager's stale nonce gaps (i.e. nonce gaps whose nonce is less than the on-chain nonce).
+    /// 2. Cleans up the pending transaction store's rows with nonce < on-chain nonce, in the Postgres DB.
+    /// 3. Detects and handles old nonce gaps that haven't been filled in the transaction manager.
+    pub(crate) async fn cleanup_tx_manager_and_handle_nonce_gaps(
+        &mut self,
+        block_number: BlockNumber<Runtime>,
+    ) {
+        let on_chain_nonce = self.account_nonce(&self.client.info().best_hash);
+        self.transaction_manager
+            .cleanup_stale_nonce_gaps(on_chain_nonce);
+
+        // Also cleanup DB rows for our account with nonce < on_chain_nonce
+        if let Some(store) = &self.pending_tx_store {
+            let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
+            let account_id: shc_common::types::AccountId<Runtime> = caller_pub_key.into();
+            let account_bytes_owned: Vec<u8> = account_id.as_ref().to_vec();
+            // Fire-and-forget; log errors but don't block block processing on DB
+            if let Err(e) = store
+                .delete_below_nonce(&account_bytes_owned, on_chain_nonce as i32)
+                .await
+            {
+                warn!(target: LOG_TARGET, "Failed to cleanup DB pending txs below nonce {}: {:?}", on_chain_nonce, e);
+            }
+        }
+
+        // Handle old nonce gaps that haven't been filled in the transaction manager
+        self.handle_old_nonce_gaps(block_number).await;
     }
 
     /// Handle a single transaction status update, notifying subscribers and updating

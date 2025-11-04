@@ -23,6 +23,7 @@ use thiserror::Error;
 
 pub mod models;
 pub mod schema;
+pub mod store;
 
 const LOG_TARGET: &str = "shc-blockchain-service-db";
 

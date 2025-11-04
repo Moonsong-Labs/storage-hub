@@ -30,6 +30,7 @@ use pallet_storage_providers_runtime_api::{
     QueryProviderMultiaddressesError, QueryStorageProviderCapacityError, StorageProvidersApi,
 };
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
+use shc_blockchain_service_db::store::PendingTxStore;
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
@@ -117,6 +118,8 @@ where
         Runtime::Hash,
         TransactionStatus<Runtime::Hash, Runtime::Hash>,
     )>,
+    /// Optional pending tx store (Postgres). When present, tx sends and cleanups are persisted.
+    pub(crate) pending_tx_store: Option<PendingTxStore>,
 }
 
 #[derive(Debug, Clone)]
@@ -1316,6 +1319,7 @@ where
                 let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
                 tx
             },
+            pending_tx_store: None,
         }
     }
 
@@ -1420,13 +1424,9 @@ where
     ) {
         trace!(target: LOG_TARGET, "📠 Processing block import #{}: {}", block_number, block_hash);
 
-        // Clean up the stale nonce gaps in the transaction manager
-        let on_chain_nonce = self.account_nonce(&self.client.info().best_hash);
-        self.transaction_manager
-            .cleanup_stale_nonce_gaps(on_chain_nonce);
-
-        // Handle old nonce gaps that haven't been filled in the transaction manager
-        self.handle_old_nonce_gaps(*block_number).await;
+        // Cleanup manager and DB, and handle old nonce gaps in one helper
+        self.cleanup_tx_manager_and_handle_nonce_gaps(*block_number)
+            .await;
 
         // Provider-specific code to run at the start of every block import.
         match self.maybe_managed_provider {

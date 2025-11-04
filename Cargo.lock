@@ -16517,6 +16517,7 @@ dependencies = [
  "serde_json",
  "shc-actors-derive",
  "shc-actors-framework",
+ "shc-blockchain-service-db",
  "shc-common",
  "shc-forest-manager",
  "shp-constants",
