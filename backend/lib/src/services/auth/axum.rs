@@ -4,11 +4,14 @@ use axum::{
 };
 use axum_jwt::{Claims, Decoder};
 use chrono::{DateTime, Utc};
+
+#[cfg(feature = "mocks")]
 use tracing::{debug, warn};
 
-use crate::{
-    constants::mocks::MOCK_ADDRESS, error::Error, models::auth::JwtClaims, services::Services,
-};
+use crate::{error::Error, models::auth::JwtClaims, services::Services};
+
+#[cfg(feature = "mocks")]
+use crate::constants::mocks::MOCK_ADDRESS;
 
 /// Axum extractor to identify the user.
 ///
@@ -141,12 +144,14 @@ where
     type Rejection = Error;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        #[cfg(feature = "mocks")]
         let services = Services::from_ref(state);
         let maybe_auth = Self::from_request_parts_impl(parts, state).await;
 
         match maybe_auth {
             Ok(user) => Ok(user),
             // if services are configured to not validate signature
+            #[cfg(feature = "mocks")]
             Err((claims, e)) if !services.auth.validate_signature => {
                 warn!(target: "auth_service::from_request_parts", error = ?e, "Authentication failed");
 
