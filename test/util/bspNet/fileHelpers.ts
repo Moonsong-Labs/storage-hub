@@ -543,29 +543,39 @@ export const batchStorageRequests = async (
   );
 
   // Verify files are in BSP or MSP forests or file storages
-  for (let i = 0; i < fileKeys.length; i++) {
-    const fileKey = fileKeys[i];
 
-    const bspForestResult = await bspApi.rpc.storagehubclient.isFileInForest(null, fileKey);
-    if (!bspForestResult.isTrue) {
-      throw new Error(`File ${fileKey} is still in BSP forest after batch storage requests`);
-    }
+  await waitFor({
+    lambda: async () => {
+      for (let index = 0; index < fileKeys.length; index++) {
+        const fileKey = fileKeys[index];
+        const bucketId = bucketIds[index];
+        // Check file IS in BSP forest
+        const bspForestResult = await bspApi.rpc.storagehubclient.isFileInForest(null, fileKey);
+        if (!bspForestResult.isTrue) {
+          return false;
+        }
 
-    const bspFileStorageResult = await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey);
-    if (!bspFileStorageResult.isFileFound) {
-      throw new Error(`File ${fileKey} is still in BSP file storage after batch storage requests`);
-    }
+        // Check file IS in BSP file storage
+        const bspFileStorageResult = await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey);
+        if (!bspFileStorageResult.isFileFound) {
+          return false;
+        }
 
-    const mspForestResult = await mspApi.rpc.storagehubclient.isFileInForest(bucketIds[i], fileKey);
-    if (!mspForestResult.isTrue) {
-      throw new Error(`File ${fileKey} is still in MSP forest after batch storage requests`);
-    }
+        // Check file IS in MSP forest
+        const mspForestResult = await mspApi.rpc.storagehubclient.isFileInForest(bucketId, fileKey);
+        if (!mspForestResult.isTrue) {
+          return false;
+        }
 
-    const mspFileStorageResult = await mspApi.rpc.storagehubclient.isFileInFileStorage(fileKey);
-    if (!mspFileStorageResult.isFileFound) {
-      throw new Error(`File ${fileKey} is still in MSP file storage after batch storage requests`);
+        // Check file IS in MSP file storage
+        const mspFileStorageResult = await mspApi.rpc.storagehubclient.isFileInFileStorage(fileKey);
+        if (!mspFileStorageResult.isFileFound) {
+          return false;
+        }
+      }
+      return true;
     }
-  }
+  });
 
   return {
     fileKeys,
