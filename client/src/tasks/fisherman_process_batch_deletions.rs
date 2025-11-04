@@ -35,8 +35,8 @@ use shc_blockchain_service::{
 use shc_common::{
     traits::StorageEnableRuntime,
     types::{
-        FileDeletionRequest, ForestProof as CommonForestProof, OffchainSignature,
-        StorageProofsMerkleTrieLayout, StorageProviderId,
+        BackupStorageProviderId, BucketId, FileDeletionRequest, ForestProof as CommonForestProof,
+        OffchainSignature, StorageProofsMerkleTrieLayout, StorageProviderId,
     },
 };
 use shc_fisherman_service::{
@@ -44,7 +44,7 @@ use shc_fisherman_service::{
     events::FileDeletionTarget, FileKeyOperation, FishermanService,
 };
 use shc_forest_manager::{in_memory::InMemoryForestStorage, traits::ForestStorage};
-use shc_indexer_db::models::BspFile;
+use shc_indexer_db::models::{BspFile, FileDeletionType};
 use sp_core::H256;
 use sp_runtime::traits::SaturatedConversion;
 use std::time::Duration;
@@ -169,7 +169,7 @@ where
         &self,
         target: FileDeletionTarget<Runtime>,
         files: Vec<BatchFileDeletionData<Runtime>>,
-        deletion_type: shc_indexer_db::models::FileDeletionType,
+        deletion_type: FileDeletionType,
     ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
@@ -204,11 +204,11 @@ where
 
         // Submit extrinsic for the deletion type with only valid files
         match deletion_type {
-            shc_indexer_db::models::FileDeletionType::User => {
+            FileDeletionType::User => {
                 self.submit_user_deletion_extrinsic(&valid_files, provider_id, forest_proof)
                     .await?;
             }
-            shc_indexer_db::models::FileDeletionType::Incomplete => {
+            FileDeletionType::Incomplete => {
                 self.submit_incomplete_deletion_extrinsic(
                     &valid_file_keys,
                     provider_id,
@@ -676,16 +676,16 @@ where
     /// filtered by the specified deletion type.
     ///
     /// # Parameters
-    /// * `deletion_type` - Type of deletion to query ([`shc_indexer_db::models::FileDeletionType::User`] or [`shc_indexer_db::models::FileDeletionType::Incomplete`])
+    /// * `deletion_type` - Type of deletion to query ([`FileDeletionType::User`] or [`FileDeletionType::Incomplete`])
     /// * `bucket_id` - Optional filter to only return files from a specific bucket
     /// * `bsp_id` - Optional filter to only return files from a specific BSP
     /// * `limit` - Maximum number of files to return (default: 1000)
     /// * `offset` - Number of files to skip for pagination (default: 0)
     async fn get_pending_deletions(
         &self,
-        deletion_type: shc_indexer_db::models::FileDeletionType,
-        bucket_id: Option<shc_common::types::BucketId<Runtime>>,
-        bsp_id: Option<shc_common::types::BackupStorageProviderId<Runtime>>,
+        deletion_type: FileDeletionType,
+        bucket_id: Option<BucketId<Runtime>>,
+        bsp_id: Option<BackupStorageProviderId<Runtime>>,
         limit: Option<i64>,
         offset: Option<i64>,
     ) -> anyhow::Result<PendingDeletionsGrouped<Runtime>> {
@@ -793,6 +793,7 @@ where
         );
 
         // Query pending deletions with configured batch limit
+        // TODO: Implement deletion strategies(?) to limit the number of colliding deletions from other fisherman nodes.
         let grouped_deletions = self
             .get_pending_deletions(
                 event.deletion_type,

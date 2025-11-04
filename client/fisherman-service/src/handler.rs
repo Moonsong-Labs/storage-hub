@@ -156,6 +156,12 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
     }
 
     /// Monitor new blocks for file deletion request events
+    ///
+    /// Emits a [`BatchFileDeletions`](`crate::events::BatchFileDeletions`) event if a new batch deletion cycle should be attempted every [`batch_interval_duration`](`Self::batch_interval_duration`) seconds.
+    /// Interchanges between [`User`](`FileDeletionType::User`) and [`Incomplete`](`FileDeletionType::Incomplete`) deletion types across batch cycles.
+    ///
+    /// The [`batch_processing_lock`](`Self::batch_processing_lock`) is acquired and released by the [`BatchFileDeletions`](`crate::events::BatchFileDeletions`) event handler via the [`ReleaseBatchLock`](`FishermanServiceCommand::ReleaseBatchLock`) command.
+    /// This lock ensures that only a single batch deletion cycle is running at a time, preventing any possibility of colliding deletions with this node's own deletions.
     async fn monitor_block(
         &mut self,
         block_number: BlockNumber<Runtime>,
@@ -164,19 +170,19 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
         debug!(target: LOG_TARGET, "🎣 Monitoring block #{}: {}", block_number, block_hash);
 
         // Check if enough time has elapsed since last batch
-        let should_trigger = match self.last_batch_time {
-            // First run
+        let should_attempt_new_batch_deletion = match self.last_batch_time {
             None => true,
             Some(last_time) => last_time.elapsed() >= self.batch_interval_duration,
         };
 
-        if should_trigger {
+        if should_attempt_new_batch_deletion {
             // Try to acquire the lock (non-blocking)
+            // The lock prevents running multiple batch deletion cycles concurrently, preventing any possibility of colliding deletions with this node's own deletions.
             match self.batch_processing_lock.clone().try_lock_owned() {
                 Ok(guard) => {
                     // Determine next deletion type (alternate User ↔ Incomplete)
                     let deletion_type = match self.last_deletion_type {
-                        None => FileDeletionType::User, // First run defaults to User
+                        None => FileDeletionType::User,
                         Some(FileDeletionType::User) => FileDeletionType::Incomplete,
                         Some(FileDeletionType::Incomplete) => FileDeletionType::User,
                     };
@@ -187,11 +193,13 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                         deletion_type
                     );
 
-                    // Update state
+                    // Update state service state
                     self.last_deletion_type = Some(deletion_type);
                     self.last_batch_time = Some(Instant::now());
 
                     // Store the guard to keep lock held
+                    // This guard is released when the `BatchFileDeletions` event handler releases it via the `ReleaseBatchLock` command, notifying the
+                    // monitoring service that it can start a new batch deletion cycle.
                     self.batch_lock_guard = Some(guard);
 
                     // Emit event to trigger batch processing
@@ -201,11 +209,12 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                     });
                 }
                 Err(_) => {
-                    debug!(
+                    // The lock will eventually be released, so we do nothing here and will retry next block.
+                    // This is a warning because it could indicate a bug if the lock is held for too long, or indefinitely for that matter.
+                    warn!(
                         target: LOG_TARGET,
                         "🎣 Batch interval reached but lock is held (previous batch still processing), will retry next block"
                     );
-                    // Lock is busy - time keeps accumulating, will retry next block
                 }
             }
         }
