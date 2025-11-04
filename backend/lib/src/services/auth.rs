@@ -2,32 +2,25 @@ use std::{str::FromStr, sync::Arc};
 
 use alloy_core::primitives::{eip191_hash_message, PrimitiveSignature};
 use alloy_signer::utils::public_key_to_address;
-use axum::{
-    extract::{FromRef, FromRequestParts},
-    http::request::Parts,
-};
-use axum_jwt::{
-    jsonwebtoken::{self, DecodingKey, EncodingKey, Header, Validation},
-    Claims, Decoder,
-};
-use chrono::{DateTime, Utc};
+use axum_jwt::jsonwebtoken::{self, DecodingKey, EncodingKey, Header, Validation};
+use chrono::Utc;
 use rand::{distributions::Alphanumeric, Rng};
-use tracing::{debug, warn};
+use tracing::debug;
 
 use crate::{
     api::validation::validate_eth_address,
-    constants::{
-        auth::{
-            AUTH_NONCE_ENDPOINT, AUTH_NONCE_EXPIRATION_SECONDS, AUTH_SIWE_DOMAIN,
-            JWT_EXPIRY_OFFSET, MOCK_ENS,
-        },
-        mocks::MOCK_ADDRESS,
+    constants::auth::{
+        AUTH_NONCE_ENDPOINT, AUTH_NONCE_EXPIRATION_SECONDS, AUTH_SIWE_DOMAIN, JWT_EXPIRY_OFFSET,
+        MOCK_ENS,
     },
     data::storage::{BoxedStorage, WithExpiry},
     error::Error,
-    models::auth::{JwtClaims, NonceResponse, TokenResponse, User, VerifyResponse},
-    services::Services,
+    models::auth::{JwtClaims, NonceResponse, TokenResponse, UserProfile, VerifyResponse},
 };
+
+/// Implements Axum extractors for authentication
+mod axum;
+pub use axum::*;
 
 /// Authentication service for the backend
 ///
@@ -241,7 +234,7 @@ impl AuthService {
         // to allow users to logout (invalidate their session)
         Ok(VerifyResponse {
             token,
-            user: User {
+            user: UserProfile {
                 address,
                 ens: MOCK_ENS.to_string(),
             },
@@ -260,10 +253,10 @@ impl AuthService {
     }
 
     /// Retrieve the user profile from the corresponding `JwtClaims`
-    pub async fn profile(&self, user_address: &str) -> Result<User, Error> {
+    pub async fn profile(&self, user_address: &str) -> Result<UserProfile, Error> {
         debug!(target: "auth_service::profile", address = %user_address, "Profile requested");
 
-        Ok(User {
+        Ok(UserProfile {
             address: user_address.to_string(),
             // TODO: retrieve ENS (lookup or cache?)
             ens: MOCK_ENS.to_string(),
@@ -306,85 +299,6 @@ impl AuthService {
     pub fn encode_jwt(&self, claims: JwtClaims) -> Result<String, Error> {
         jsonwebtoken::encode(&Header::default(), &claims, &self.encoding_key)
             .map_err(|_| Error::Internal)
-    }
-}
-
-/// Axum extractor to verify the authenticated user.
-///
-/// Will error if the JWT token is expired or it is otherwise invalid
-pub struct AuthenticatedUser {
-    pub address: String,
-}
-
-impl AuthenticatedUser {
-    /// Verifies the passed in `JwtClaims`
-    ///
-    /// Returns the user information if the claims are valid and not expired
-    // TODO: user logout verification
-    pub fn from_claims(claims: &JwtClaims) -> Result<Self, Error> {
-        let now = Utc::now();
-        let exp = DateTime::<Utc>::from_timestamp(claims.exp, 0)
-            .ok_or_else(|| Error::Unauthorized("Invalid JWT expiry".to_string()))?;
-        let iat = DateTime::<Utc>::from_timestamp(claims.iat, 0)
-            .ok_or_else(|| Error::Unauthorized("Invalid JWT issuance time".to_string()))?;
-
-        if now >= exp {
-            return Err(Error::Unauthorized("Expired JWT".to_string()));
-        }
-
-        if iat > now {
-            return Err(Error::Unauthorized("JWT issued in the future".to_string()));
-        }
-
-        Ok(AuthenticatedUser {
-            address: claims.address.clone(),
-        })
-    }
-
-    async fn from_request_parts_impl<S>(
-        parts: &mut Parts,
-        state: &S,
-    ) -> Result<Self, (Option<JwtClaims>, Error)>
-    where
-        S: Send + Sync,
-        Decoder: FromRef<S>,
-    {
-        let claims = Claims::<JwtClaims>::from_request_parts(parts, state)
-            .await
-            .map_err(|e| (None, Error::Unauthorized(format!("Invalid JWT: {e:?}"))))?;
-
-        Self::from_claims(&claims.0).map_err(|e| (Some(claims.0), e))
-    }
-}
-
-impl<S> FromRequestParts<S> for AuthenticatedUser
-where
-    Decoder: FromRef<S>,
-    Services: FromRef<S>,
-    S: Send + Sync,
-{
-    type Rejection = Error;
-
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let services = Services::from_ref(state);
-        let maybe_auth = AuthenticatedUser::from_request_parts_impl(parts, state).await;
-
-        match maybe_auth {
-            Ok(ok) => Ok(ok),
-            // if services are configured to not validate signature
-            Err((claims, e)) if !services.auth.validate_signature => {
-                warn!(target: "auth_service::from_request_parts", error = ?e, "Authentication failed");
-
-                // if we were able to retrieve the claims then use the passed in address
-                let address = claims
-                    .map(|claims| claims.address)
-                    .unwrap_or_else(|| MOCK_ADDRESS.to_string());
-                debug!(target: "auth_service::from_request_parts", address = %address, "Bypassing authentication");
-
-                return Ok(AuthenticatedUser { address });
-            }
-            Err((_, e)) => Err(e),
-        }
     }
 }
 
