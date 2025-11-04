@@ -481,14 +481,9 @@ where
         Ok((remaining_file_keys, forest_proof_result))
     }
 
-    /// Submit user deletion extrinsic.
+    /// Submit user deletion extrinsic `pallet_file_system::Call::delete_files`.
     ///
-    /// This function:
-    /// 1. Determines BSP ID from provider_id
-    /// 2. Builds Vec<FileDeletionRequest> from files by extracting data from file_metadata
-    /// 3. Converts to BoundedVec (respecting MaxFileDeletionsPerExtrinsic limit)
-    /// 4. Builds pallet_file_system::Call::delete_files
-    /// 5. Submits extrinsic with timeout
+    /// Will always send `None` as the provider id when it is a bucket deletion (i.e. passing `None` or an MSP as the `provider_id) in the extrinsic call as per the specification of the extrinsic.
     async fn submit_user_deletion_extrinsic(
         &self,
         files: &[BatchFileDeletionData<Runtime>],
@@ -587,13 +582,9 @@ where
         Ok(())
     }
 
-    /// Submit incomplete deletion extrinsic.
+    /// Submit incomplete deletion extrinsic `pallet_file_system::Call::delete_files_for_incomplete_storage_request`.
     ///
-    /// This function:
-    /// 1. Determines BSP ID from provider_id
-    /// 2. Converts file keys to BoundedVec
-    /// 3. Builds pallet_file_system::Call::delete_files_for_incomplete_storage_request
-    /// 4. Submits extrinsic with timeout
+    /// Will always send `None` as the provider id when it is a bucket deletion (i.e. passing `None` or an MSP as the `provider_id) in the extrinsic call as per the specification of the extrinsic.
     async fn submit_incomplete_deletion_extrinsic(
         &self,
         file_keys: &[Runtime::Hash],
