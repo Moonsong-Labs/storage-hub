@@ -25,7 +25,7 @@ use tokio::{
 };
 use tracing::warn;
 
-use super::Storage;
+use super::{Storage, WithExpiry};
 
 /// Errors that can occur during in-memory storage operations
 #[derive(Debug, Error)]
@@ -39,8 +39,17 @@ pub enum InMemoryStorageError {
 struct NonceEntry {
     /// The user address associated with the nonce key
     address: Address,
-    /// Timestamp when the nonce will expire from storage
-    expires_at: Instant,
+    /// Timestamp when the nonce was issued
+    issued_at: Instant,
+    /// Duration from `issued_at` when the nonce will expire from storage
+    expiry: Duration,
+}
+
+impl NonceEntry {
+    /// Checks if the entry has expired by the given `at` timestamp
+    fn expired_at(&self, at: Instant) -> bool {
+        at.saturating_duration_since(self.issued_at) >= self.expiry
+    }
 }
 
 /// In-memory storage implementation
@@ -98,7 +107,7 @@ impl InMemoryStorage {
                 let now = Instant::now();
 
                 let mut nonces_guard = nonces.write();
-                nonces_guard.retain(|_, entry| entry.expires_at > now);
+                nonces_guard.retain(|_, entry| !entry.expired_at(now));
             }
         });
 
@@ -139,30 +148,35 @@ impl Storage for InMemoryStorage {
         address: &Address,
         expiration_seconds: u64,
     ) -> Result<(), Self::Error> {
-        let now = Instant::now();
-        let expires_at = now + Duration::from_secs(expiration_seconds);
+        let issued_at = Instant::now();
+        let expiry = Duration::from_secs(expiration_seconds);
 
         let entry = NonceEntry {
             address: *address,
-            expires_at,
+            issued_at,
+            expiry,
         };
 
         self.nonces.write().insert(message, entry);
         Ok(())
     }
 
-    async fn get_nonce(&self, message: &str) -> Result<Option<Address>, Self::Error> {
+    async fn get_nonce(&self, message: &str) -> Result<WithExpiry<Address>, Self::Error> {
         let mut nonces = self.nonces.write();
 
         if let Some(entry) = nonces.remove(message) {
             let now = Instant::now();
 
-            if now < entry.expires_at {
-                return Ok(Some(entry.address));
-            }
+            let value = if !entry.expired_at(now) {
+                WithExpiry::Valid(entry.address)
+            } else {
+                WithExpiry::Expired
+            };
+
+            return Ok(value);
         }
 
-        Ok(None)
+        Ok(WithExpiry::NotFound)
     }
 }
 
@@ -196,11 +210,11 @@ mod tests {
 
         // Retrieve nonce
         let retrieved = storage.get_nonce(message).await.unwrap();
-        assert_eq!(retrieved, Some(address));
+        assert_eq!(retrieved, WithExpiry::Valid(address));
 
         // Verify it can't be retrieved twice
         let retrieved_again = storage.get_nonce(message).await.unwrap();
-        assert_eq!(retrieved_again, None);
+        assert_eq!(retrieved_again, WithExpiry::NotFound);
     }
 
     #[tokio::test]
@@ -218,7 +232,7 @@ mod tests {
 
         // Try to retrieve - should be None since it's expired
         let retrieved = storage.get_nonce(message).await.unwrap();
-        assert_eq!(retrieved, None);
+        assert_eq!(retrieved, WithExpiry::Expired);
     }
 
     #[tokio::test(start_paused = true)]
@@ -234,21 +248,25 @@ mod tests {
             .await
             .unwrap();
 
-        // Should be retrievable immediately
-        let retrieved = storage.get_nonce(message).await.unwrap();
-        assert_eq!(retrieved, Some(address));
-
         // Advance time by 2 seconds to expire the nonce
         advance(Duration::from_secs(2)).await;
 
-        // Should return None since it's expired
-        let retrieved_after_expiry = storage.get_nonce(message).await.unwrap();
-        assert_eq!(retrieved_after_expiry, None);
+        // At this point the nonce should be expired, but it should still be in storage
+        {
+            let guard = storage.nonces.read();
+            let expired_entry = guard.get(message).expect("should still be present");
+            assert!(
+                expired_entry.expired_at(Instant::now()),
+                "Nonce should be expired by now"
+            );
+        }
 
         // Advance time to trigger cleanup task (runs every 10 seconds)
         advance(Duration::from_secs(10)).await;
 
-        // Should be gone from storage after cleanup task runs
+        // Should have been cleaned up
+        let retrieved_after_cleanup = storage.get_nonce(message).await.unwrap();
+        assert_eq!(retrieved_after_cleanup, WithExpiry::NotFound);
         assert!(storage.nonces.read().get(message).is_none());
     }
 }

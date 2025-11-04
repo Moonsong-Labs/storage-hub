@@ -22,7 +22,10 @@ use uuid::Uuid;
 use crate::{
     constants::download::QUEUE_BUFFER_SIZE,
     error::Error,
-    services::{auth::AuthenticatedUser, Services},
+    services::{
+        auth::{AuthenticatedUser, User},
+        Services,
+    },
 };
 
 pub async fn get_file_info(
@@ -104,7 +107,7 @@ pub async fn internal_upload_by_key(
 /// Maximum memory usage is limited by the channel buffer defined by QUEUE_BUFFER_SIZE (~1 MB).
 pub async fn download_by_key(
     State(services): State<Services>,
-    AuthenticatedUser { address }: AuthenticatedUser,
+    user: User,
     Path(file_key): Path<String>,
 ) -> Result<impl IntoResponse, Error> {
     debug!(file_key = %file_key, user = %address, "GET download file");

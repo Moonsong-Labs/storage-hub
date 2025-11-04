@@ -22,11 +22,11 @@ pub struct VerifyRequest {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VerifyResponse {
     pub token: String,
-    pub user: User,
+    pub user: UserProfile,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct User {
+pub struct UserProfile {
     #[serde(serialize_with = "crate::utils::serde::checksummed_address")]
     pub address: Address,
     pub ens: String,

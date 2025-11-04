@@ -5,7 +5,7 @@ use std::error::Error as StdError;
 use alloy_core::primitives::Address;
 use async_trait::async_trait;
 
-use super::Storage;
+use super::{Storage, WithExpiry};
 
 /// A boxed storage error that can wrap any storage implementation's error type
 pub type BoxedStorageError = Box<dyn StdError + Send + Sync>;
@@ -22,7 +22,7 @@ pub trait BoxedStorage: Send + Sync {
         expiration_seconds: u64,
     ) -> Result<(), BoxedStorageError>;
 
-    async fn get_nonce(&self, message: &str) -> Result<Option<Address>, BoxedStorageError>;
+    async fn get_nonce(&self, message: &str) -> Result<WithExpiry<Address>, BoxedStorageError>;
 }
 
 /// Wrapper struct that implements BoxedStorage for any Storage implementation
@@ -64,7 +64,7 @@ where
             .map_err(Self::wrap_err)
     }
 
-    async fn get_nonce(&self, message: &str) -> Result<Option<Address>, BoxedStorageError> {
+    async fn get_nonce(&self, message: &str) -> Result<WithExpiry<Address>, BoxedStorageError> {
         self.inner.get_nonce(message).await.map_err(Self::wrap_err)
     }
 }
