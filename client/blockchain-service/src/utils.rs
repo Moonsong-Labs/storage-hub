@@ -552,7 +552,7 @@ where
             if let Err(e) = store
                 .insert_sent(
                     &account_bytes_owned,
-                    nonce as i32,
+                    nonce as i64,
                     tx_hash.as_bytes(),
                     &call_scale,
                     &creator_id,
@@ -826,7 +826,7 @@ where
             let account_bytes_owned: Vec<u8> = account_id.as_ref().to_vec();
             // Fire-and-forget; log errors but don't block block processing on DB
             if let Err(e) = store
-                .delete_below_nonce(&account_bytes_owned, on_chain_nonce as i32)
+                .delete_below_nonce(&account_bytes_owned, on_chain_nonce as i64)
                 .await
             {
                 warn!(target: LOG_TARGET, "Failed to cleanup DB pending txs below nonce {}: {:?}", on_chain_nonce, e);
@@ -880,7 +880,7 @@ where
                 if let Err(e) = store
                     .update_state(
                         &account_bytes_owned,
-                        nonce as i32,
+                        nonce as i64,
                         &status,
                         tx_hash.as_bytes(),
                     )

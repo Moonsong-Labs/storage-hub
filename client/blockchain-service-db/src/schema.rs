@@ -3,7 +3,7 @@
 diesel::table! {
     pending_transactions (account_id, nonce) {
         account_id -> Bytea,
-        nonce -> Int4,
+        nonce -> Int8,
         hash -> Bytea,
         call_scale -> Bytea,
         state -> Text,

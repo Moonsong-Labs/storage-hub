@@ -1,10 +1,12 @@
 -- Create the pending_transactions table to coordinate txs across instances
 CREATE TABLE IF NOT EXISTS pending_transactions (
   account_id BYTEA NOT NULL,
-  nonce INT4 NOT NULL,
+  nonce BIGINT NOT NULL,
   hash BYTEA NOT NULL,
   call_scale BYTEA NOT NULL,
-  state TEXT NOT NULL CHECK (state IN ('queued','sent','in_block','finalized','dropped')),
+  state TEXT NOT NULL CHECK (state IN (
+    'future','ready','broadcast','queued','sent','in_block','retracted','finalized','invalid','dropped','usurped','finality_timeout'
+  )),
   creator_id TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),

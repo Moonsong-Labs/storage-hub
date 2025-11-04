@@ -1,5 +1,3 @@
-use std::default::Default;
-
 use diesel::{dsl::sql, prelude::*, sql_types::Bool};
 use diesel_async::RunQueryDsl;
 use log::{debug, info, warn};
@@ -20,7 +18,7 @@ impl PendingTxStore {
     pub async fn insert_sent(
         &self,
         account_id: &[u8],
-        nonce: i32,
+        nonce: i64,
         hash: &[u8],
         call_scale: &[u8],
         creator_id: &str,
@@ -68,7 +66,7 @@ impl PendingTxStore {
     pub async fn update_state<Hash>(
         &self,
         account_id: &[u8],
-        nonce: i32,
+        nonce: i64,
         status: &TransactionStatus<Hash, Hash>,
         tx_hash: &[u8],
     ) -> Result<(), diesel::result::Error> {
@@ -123,7 +121,7 @@ impl PendingTxStore {
         Ok(())
     }
 
-    pub async fn remove(&self, account_id: &[u8], nonce: i32) -> Result<(), diesel::result::Error> {
+    pub async fn remove(&self, account_id: &[u8], nonce: i64) -> Result<(), diesel::result::Error> {
         use pending_transactions::dsl as pt;
         let mut conn = self.pool.get().await.unwrap();
         diesel::delete(
@@ -149,7 +147,7 @@ impl PendingTxStore {
     pub async fn delete_below_nonce(
         &self,
         account_id: &[u8],
-        nonce_threshold: i32,
+        nonce_threshold: i64,
     ) -> Result<i64, diesel::result::Error> {
         use pending_transactions::dsl as pt;
         let mut conn = self.pool.get().await.unwrap();
@@ -182,25 +180,6 @@ impl PendingTxStore {
             TransactionStatus::Dropped => ("dropped", true),
             TransactionStatus::Invalid => ("invalid", true),
             TransactionStatus::FinalityTimeout(_) => ("finality_timeout", true),
-        }
-    }
-
-    /// Convert a database state string to a TransactionStatus.
-    ///
-    /// Returns a TransactionStatus enum variant.
-    /// Enum variants with inner fields will have default values.
-    pub fn db_state_to_status<Hash>(state: &str) -> TransactionStatus<Hash, Hash> {
-        match state {
-            "future" => TransactionStatus::Future,
-            "ready" => TransactionStatus::Ready,
-            "broadcast" => TransactionStatus::Broadcast(vec![]),
-            "in_block" => TransactionStatus::InBlock((Hash::default(), 0)),
-            "retracted" => TransactionStatus::Retracted((Hash::default(), 0)),
-            "finalized" => TransactionStatus::Finalized((Hash::default(), 0)),
-            "usurped" => TransactionStatus::Usurped((Hash::default(), 0)),
-            "dropped" => TransactionStatus::Dropped,
-            "invalid" => TransactionStatus::Invalid,
-            "finality_timeout" => TransactionStatus::FinalityTimeout((Hash::default(), 0)),
         }
     }
 }
