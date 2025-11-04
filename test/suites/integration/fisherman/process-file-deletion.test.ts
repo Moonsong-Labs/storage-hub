@@ -20,18 +20,16 @@ import {
  *   * FileDeletionRequested - direct user deletion requests
  *   * StorageRequestExpired - cleanup of expired storage requests
  *   * StorageRequestRevoked - cleanup of user-revoked requests
- *   * StorageRequestRejected - cleanup of provider-rejected requests
  * - Tests multiple provider scenarios (both BSP and MSP for same file)
- * - Includes extensive log verification for fisherman processing
  * - Uses container pausing/resuming to simulate network conditions
  * - Tests fisherman's preparation of delete_files extrinsics
+ * - Verifies database state and forest root updates after deletions
  *
  * Test Scenarios:
- * 1. FileDeletionRequested: Normal user-initiated deletion with multiple providers
- * 2. StorageRequestExpired: Paused providers causing expiration, fisherman cleanup
- * 3. StorageRequestRevoked: User revokes request before acceptance, fisherman cleanup
- * 4. Multiple providers: File stored by both BSP and MSP, deletion affects both
- * 5. StorageRequestRejected: Provider rejection scenarios (placeholder for future)
+ * 1. FileDeletionRequested: Normal user-initiated deletion with multiple providers (BSP + MSP)
+ * 2. StorageRequestExpired: MSP paused causing expiration, fisherman cleanup (BSP only)
+ * 3. StorageRequestRevoked: User revokes request after BSP acceptance, fisherman cleanup (BSP + MSP)
+ * 4. Multiple providers: File stored by both BSP and MSP, deletion affects both forests
  */
 await describeMspNet(
   "Fisherman Process File Deletion",

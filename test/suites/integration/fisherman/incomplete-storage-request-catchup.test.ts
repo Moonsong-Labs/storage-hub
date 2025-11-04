@@ -14,13 +14,22 @@ import {
  * FISHERMAN INCOMPLETE STORAGE REQUESTS WITH CATCHUP
  *
  * Purpose: Tests the fisherman's ability to build forest proofs with unfinalized files
- *          when processing incomplete storage request events (Expired, Revoked).
+ *          when processing incomplete storage request events.
  *
  * What makes this test unique:
  * - Pauses fisherman to accumulate events
- * - Creates finalized incomplete storage request events (expired/revoked)
+ * - Creates finalized incomplete storage request events (expired)
  * - Adds NEW files in unfinalized blocks to update forest state
  * - Verifies fisherman builds proofs with unfinalized forest state
+ * - Tests BSP-only scenario (MSP paused to prevent acceptance)
+ *
+ * Test Scenario:
+ * 1. Pauses MSP to ensure only BSP accepts storage request
+ * 2. Creates storage request that will expire (BSP volunteers and stores)
+ * 3. Pauses fisherman before expiration
+ * 4. Finalizes expiration to create IncompleteStorageRequest event
+ * 5. Adds 2 NEW files in unfinalized blocks (updates BSP forest)
+ * 6. Resumes fisherman - it should build proofs including unfinalized files
  */
 await describeMspNet(
   "Fisherman Incomplete Storage Requests with Catchup",

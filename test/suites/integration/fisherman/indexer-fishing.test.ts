@@ -11,6 +11,39 @@ import {
   waitFor
 } from "../../../util";
 
+/**
+ * FISHERMAN INDEXER - FISHING MODE INTEGRATION TESTS
+ *
+ * Purpose: Validates that the standalone indexer correctly processes and stores all blockchain
+ *          events in the database when running in "fishing" mode, which is required for the
+ *          fisherman service to build forest proofs and submit deletion extrinsics.
+ *
+ * What makes this test suite unique:
+ * - Tests comprehensive event indexing for all file system operations
+ * - Verifies database integrity and associations (BSP/MSP to files)
+ * - Tests complex scenarios like bucket moves and insolvent user cleanup
+ * - Uses standalone indexer node separate from the fisherman service
+ *
+ * Event Coverage (11 test scenarios):
+ * 1. NewStorageRequest - File storage request creation
+ * 2. BspConfirmedStoring - BSP confirms file storage
+ * 3. MspAcceptedStorageRequest - MSP accepts storage request
+ * 4. StorageRequestRevoked - User revokes storage request
+ * 5. BspConfirmStoppedStoring - BSP stops storing file
+ * 6. NewBucket & BucketDeleted - Bucket lifecycle
+ * 7. StorageRequestFulfilled - Storage request completion
+ * 8. StorageRequestExpired - Storage request expiration
+ * 9. BspFileDeletionCompleted & MspFileDeletionCompleted - File deletion completion
+ * 10. MoveBucketAccepted - Bucket ownership transfer between MSPs
+ * 11. SpStopStoringInsolventUser - Storage provider stops storing for insolvent users
+ *
+ * Database Verification:
+ * - File records and metadata
+ * - BSP/MSP associations to files
+ * - Bucket lifecycle (creation/deletion)
+ * - Orphaned associations cleanup
+ * - Payment stream and insolvency handling
+ */
 await describeMspNet(
   "Fisherman Indexer - Fishing Mode",
   {
