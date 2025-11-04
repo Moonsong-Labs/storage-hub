@@ -812,6 +812,9 @@ pub struct BlockchainServiceOptions {
     /// Whether MSP nodes should distribute files to BSPs.
     #[serde(default)]
     pub enable_msp_distribute_files: Option<bool>,
+    /// Postgres database URL for pending transactions persistence. If not provided, pending transactions will not be persisted.
+    #[serde(default)]
+    pub pending_db_url: Option<String>,
 }
 
 impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
@@ -839,6 +842,7 @@ impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
                 .saturated_into(),
             peer_id,
             enable_msp_distribute_files: self.enable_msp_distribute_files.unwrap_or(false),
+            pending_db_url: self.pending_db_url,
         }
     }
 }

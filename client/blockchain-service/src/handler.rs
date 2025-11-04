@@ -153,6 +153,8 @@ where
     /// If set to `false`, MSP distribution tasks will be disabled even if the node
     /// is otherwise configured as a distributor (e.g. has a peer_id).
     pub enable_msp_distribute_files: bool,
+    /// Optional Postgres URL for the pending transactions DB. If None, DB is disabled.
+    pub pending_db_url: Option<String>,
 }
 
 impl<Runtime> Default for BlockchainServiceConfig<Runtime>
@@ -167,6 +169,7 @@ where
             max_blocks_behind_to_catch_up_root_changes: 10u32.into(),
             peer_id: None,
             enable_msp_distribute_files: false,
+            pending_db_url: None,
         }
     }
 }
@@ -229,6 +232,9 @@ where
     async fn run(mut self) {
         info!(target: LOG_TARGET, "💾 StorageHub's Blockchain Service starting up!");
 
+        // Initialise pending transactions DB store if configured
+        self.actor.init_pending_tx_store().await;
+
         // Import notification stream to be notified of new blocks.
         // The behaviour of this stream is:
         // 1. While the node is syncing to the tip of the chain (initial sync, i.e. it just started
@@ -278,7 +284,8 @@ where
                 }
                 MergedEventLoopMessage::TxStatusUpdate((nonce, tx_hash, status)) => {
                     self.actor
-                        .handle_transaction_status_update(nonce, tx_hash, status);
+                        .handle_transaction_status_update(nonce, tx_hash, status)
+                        .await;
                 }
             };
         }
@@ -1425,6 +1432,7 @@ where
         trace!(target: LOG_TARGET, "📠 Processing block import #{}: {}", block_number, block_hash);
 
         // Cleanup manager and DB, and handle old nonce gaps in one helper
+        // TODO: Consider doing this in a spawned task to avoid blocking the main thread.
         self.cleanup_tx_manager_and_handle_nonce_gaps(*block_number)
             .await;
 

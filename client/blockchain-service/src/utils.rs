@@ -14,6 +14,7 @@ use sc_client_api::{BlockBackend, BlockImportNotification, HeaderBackend};
 use sc_network::Multiaddr;
 use sc_transaction_pool_api::TransactionStatus;
 use shc_actors_framework::actor::Actor;
+use shc_blockchain_service_db::{setup_db_pool, store::PendingTxStore};
 use shc_common::{
     blockchain_utils::{
         convert_raw_multiaddresses_to_multiaddr, get_events_at_block,
@@ -21,7 +22,7 @@ use shc_common::{
     },
     traits::{ExtensionOperations, KeyTypeOperations, StorageEnableRuntime},
     types::{
-        BlockNumber, FileKey, Fingerprint, ForestRoot, MinimalExtension, OpaqueBlock,
+        AccountId, BlockNumber, FileKey, Fingerprint, ForestRoot, MinimalExtension, OpaqueBlock,
         ParachainClient, ProofsDealerProviderId, StorageEnableEvents, StorageProviderId,
         TrieAddMutation, TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
     },
@@ -58,6 +59,36 @@ where
     FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
+    /// Initialise the pending transactions DB store if configured.
+    ///
+    /// If the pending transactions DB store is already initialised, this function does nothing.
+    /// If the pending transactions DB URL is not found in the configuration or environment variable, this function does nothing.
+    /// If the pending transactions DB URL is found, but the DB pool cannot be created, this panics.
+    pub(crate) async fn init_pending_tx_store(&mut self) {
+        if self.pending_tx_store.is_none() {
+            let maybe_url = self
+                .config
+                .pending_db_url
+                .clone()
+                .or_else(|| std::env::var("SH_PENDING_DB_URL").ok());
+            if let Some(db_url) = maybe_url {
+                match setup_db_pool(db_url).await {
+                    Ok(pool) => {
+                        self.pending_tx_store = Some(PendingTxStore::new(pool));
+                        info!(target: LOG_TARGET, "🗃️ Pending transactions store initialized");
+                    }
+                    Err(e) => {
+                        // Do not fail startup; just log and continue without DB persistence
+                        warn!(target: LOG_TARGET, "Pending transactions DB init failed: {:?}", e);
+                    }
+                }
+            } else {
+                warn!(target: LOG_TARGET, "Pending transactions DB URL not found in configuration or environment variable");
+                warn!(target: LOG_TARGET, "Pending transactions will not be persisted");
+            }
+        }
+    }
+
     /// Notify tasks waiting for a block number.
     pub(crate) fn notify_import_block_number(&mut self, block_number: &BlockNumber<Runtime>) {
         let mut keys_to_remove = Vec::new();
@@ -509,9 +540,10 @@ where
         info!(target: LOG_TARGET, "Transaction {}_{} submitted successfully with hash {:?} and nonce {}", module, method, tx_hash, nonce);
 
         // Persist the transaction in the DB (best-effort) after RPC acceptance
+        // TODO: Consider doing this in a spawned thread to avoid blocking the main thread.
         if let Some(store) = &self.pending_tx_store {
             let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
-            let account_id: shc_common::types::AccountId<Runtime> = caller_pub_key.into();
+            let account_id: AccountId<Runtime> = caller_pub_key.into();
             let account_bytes_owned: Vec<u8> = account_id.as_ref().to_vec();
             let call_scale = call.encode();
             // TODO: Use this when we implement multiple instances of the same provider.
@@ -790,7 +822,7 @@ where
         // Also cleanup DB rows for our account with nonce < on_chain_nonce
         if let Some(store) = &self.pending_tx_store {
             let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
-            let account_id: shc_common::types::AccountId<Runtime> = caller_pub_key.into();
+            let account_id: AccountId<Runtime> = caller_pub_key.into();
             let account_bytes_owned: Vec<u8> = account_id.as_ref().to_vec();
             // Fire-and-forget; log errors but don't block block processing on DB
             if let Err(e) = store
@@ -821,7 +853,7 @@ where
     /// - Broadcast
     /// - InBlock
     /// - Retracted
-    pub(crate) fn handle_transaction_status_update(
+    pub(crate) async fn handle_transaction_status_update(
         &mut self,
         nonce: u32,
         tx_hash: Runtime::Hash,
@@ -838,6 +870,25 @@ where
         if is_current_transaction_for_broadcast {
             self.transaction_manager
                 .notify_status_change(nonce, status.clone());
+
+            // Update Postgres state for this transaction
+            if let Some(store) = &self.pending_tx_store {
+                // TODO: Consider spawning this into a background worker to avoid blocking the watcher path
+                let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
+                let account_id: AccountId<Runtime> = caller_pub_key.into();
+                let account_bytes_owned: Vec<u8> = account_id.as_ref().to_vec();
+                if let Err(e) = store
+                    .update_state(
+                        &account_bytes_owned,
+                        nonce as i32,
+                        &status,
+                        tx_hash.as_bytes(),
+                    )
+                    .await
+                {
+                    error!(target: LOG_TARGET, "Failed to update DB state for nonce {}: {:?}", nonce, e);
+                }
+            }
         }
 
         // Check if this is a terminal state that requires immediate removal

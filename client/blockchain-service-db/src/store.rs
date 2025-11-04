@@ -1,8 +1,11 @@
-use diesel::prelude::*;
-use diesel::QueryDsl;
-use diesel_async::RunQueryDsl;
+use std::default::Default;
 
-use crate::{models::NewPendingTransaction, schema::pending_transactions, DbPool};
+use diesel::{dsl::sql, prelude::*, sql_types::Bool};
+use diesel_async::RunQueryDsl;
+use log::{debug, info, warn};
+use sc_transaction_pool_api::TransactionStatus;
+
+use crate::{models::NewPendingTransaction, schema::pending_transactions, DbPool, LOG_TARGET};
 
 #[derive(Clone)]
 pub struct PendingTxStore {
@@ -34,30 +37,89 @@ impl PendingTxStore {
         };
 
         let mut conn = self.pool.get().await.unwrap();
-        diesel::insert_into(pt::pending_transactions)
+        // Atomic upsert: insert or update on conflict
+        let inserted: bool = diesel::insert_into(pt::pending_transactions)
             .values(&new_row)
             .on_conflict((pt::account_id, pt::nonce))
-            .do_nothing()
-            .execute(&mut conn)
+            .do_update()
+            .set((
+                pt::hash.eq(hash),
+                pt::call_scale.eq(call_scale),
+                pt::state.eq("sent"),
+                pt::creator_id.eq(creator_id),
+            ))
+            // Detect whether the row was inserted (true) or updated (false)
+            .returning(sql::<Bool>("xmax = 0"))
+            .get_result(&mut conn)
             .await?;
+
+        if !inserted {
+            info!(
+                target: LOG_TARGET,
+                "🔄 Upserted existing pending tx (account ID: {:?}, nonce: {}) with new values",
+                hex::encode(account_id), nonce
+            );
+        }
 
         Ok(())
     }
 
-    pub async fn update_state(
+    /// Update state based on watcher status. If row doesn't exist, it will be created with minimal fields.
+    pub async fn update_state<Hash>(
         &self,
         account_id: &[u8],
         nonce: i32,
-        state: &str,
+        status: &TransactionStatus<Hash, Hash>,
+        tx_hash: &[u8],
     ) -> Result<(), diesel::result::Error> {
         use pending_transactions::dsl as pt;
+        let (state_str, is_terminal) = Self::status_to_db_state(status);
+
         let mut conn = self.pool.get().await.unwrap();
-        diesel::update(
-            pt::pending_transactions.filter(pt::account_id.eq(account_id).and(pt::nonce.eq(nonce))),
-        )
-        .set(pt::state.eq(state))
-        .execute(&mut conn)
-        .await?;
+
+        // If the row doesn't exist, create minimal row with empty call_scale and creator_id from env/default.
+        // TODO: Use this when we implement multiple instances of the same provider.
+        let creator_id =
+            std::env::var("SH_NODE_INSTANCE_ID").unwrap_or_else(|_| "local".to_string());
+        let new_row = NewPendingTransaction {
+            account_id,
+            nonce,
+            hash: tx_hash,
+            call_scale: &[],
+            state: state_str,
+            creator_id: &creator_id,
+        };
+
+        let inserted: bool = diesel::insert_into(pt::pending_transactions)
+            .values(&new_row)
+            .on_conflict((pt::account_id, pt::nonce))
+            .do_update()
+            .set(pt::state.eq(state_str))
+            .returning(sql::<Bool>("xmax = 0"))
+            .get_result(&mut conn)
+            .await?;
+
+        if inserted {
+            warn!(
+                target: LOG_TARGET,
+                "🆕 Missing row for update; inserted pending tx (account ID: {:?}, nonce: {}, state: {})",
+                hex::encode(account_id),
+                nonce,
+                state_str
+            );
+        }
+
+        if is_terminal {
+            debug!(
+                target: LOG_TARGET,
+                "Terminal state set for pending tx (account ID: {:?}, nonce: {}): {}",
+                hex::encode(account_id),
+                nonce,
+                state_str
+            );
+        }
+
+        // TODO: pg_notify on update so other nodes can mirror state
         Ok(())
     }
 
@@ -101,5 +163,44 @@ impl PendingTxStore {
         .execute(&mut conn)
         .await?;
         Ok(deleted as i64)
+    }
+
+    /// Convert a TransactionStatus to a database state string.
+    ///
+    /// Returns a tuple of the database state string and a boolean indicating if the state is terminal.
+    pub fn status_to_db_state<Hash>(
+        status: &TransactionStatus<Hash, Hash>,
+    ) -> (&'static str, bool) {
+        match status {
+            TransactionStatus::Future => ("future", false),
+            TransactionStatus::Ready => ("ready", false),
+            TransactionStatus::Broadcast(_) => ("broadcast", false),
+            TransactionStatus::InBlock(_) => ("in_block", false),
+            TransactionStatus::Retracted(_) => ("retracted", false),
+            TransactionStatus::Finalized(_) => ("finalized", true),
+            TransactionStatus::Usurped(_) => ("usurped", true),
+            TransactionStatus::Dropped => ("dropped", true),
+            TransactionStatus::Invalid => ("invalid", true),
+            TransactionStatus::FinalityTimeout(_) => ("finality_timeout", true),
+        }
+    }
+
+    /// Convert a database state string to a TransactionStatus.
+    ///
+    /// Returns a TransactionStatus enum variant.
+    /// Enum variants with inner fields will have default values.
+    pub fn db_state_to_status<Hash>(state: &str) -> TransactionStatus<Hash, Hash> {
+        match state {
+            "future" => TransactionStatus::Future,
+            "ready" => TransactionStatus::Ready,
+            "broadcast" => TransactionStatus::Broadcast(vec![]),
+            "in_block" => TransactionStatus::InBlock((Hash::default(), 0)),
+            "retracted" => TransactionStatus::Retracted((Hash::default(), 0)),
+            "finalized" => TransactionStatus::Finalized((Hash::default(), 0)),
+            "usurped" => TransactionStatus::Usurped((Hash::default(), 0)),
+            "dropped" => TransactionStatus::Dropped,
+            "invalid" => TransactionStatus::Invalid,
+            "finality_timeout" => TransactionStatus::FinalityTimeout((Hash::default(), 0)),
+        }
     }
 }
