@@ -308,7 +308,7 @@ export const batchStorageRequests = async (
     finaliseBlock = true,
     bspApi,
     mspApi,
-    maxAttempts = 3
+    maxAttempts = 5
   } = options;
 
   if (!owner) {
@@ -353,9 +353,33 @@ export const batchStorageRequests = async (
     }
   }
 
-  // Create all buckets first, mapping bucket name to bucket ID
+  // Derive bucket IDs and check if they exist on-chain
   const bucketNameToIdMap = new Map<string, H256>();
+  const bucketsToCreate = new Set<string>();
+
   for (const bucketName of uniqueBucketNames) {
+    // Derive the bucket ID deterministically (same logic as runtime):
+    // Hash(owner.encode() ++ bucket_name.encode())
+    const ownerEncoded = api.createType("AccountId32", localOwner.address).toU8a();
+    const nameEncoded = api.createType("Bytes", bucketName).toU8a();
+    const concat = new Uint8Array([...ownerEncoded, ...nameEncoded]);
+    const bucketId = api.createType("H256", api.registry.hash(concat));
+
+    // Check if bucket already exists on-chain
+    const bucketOption = await api.query.providers.buckets(bucketId);
+
+    if (bucketOption.isSome) {
+      // Bucket already exists, reuse it
+      bucketNameToIdMap.set(bucketName, bucketId);
+    } else {
+      // Bucket doesn't exist, mark it for creation
+      bucketsToCreate.add(bucketName);
+      bucketNameToIdMap.set(bucketName, bucketId);
+    }
+  }
+
+  // Create only the buckets that don't exist yet
+  for (const bucketName of bucketsToCreate) {
     const newBucketEvent = await createBucket(
       api,
       bucketName,
@@ -366,7 +390,13 @@ export const batchStorageRequests = async (
     const newBucketEventData =
       api.events.fileSystem.NewBucket.is(newBucketEvent) && newBucketEvent.data;
     assert(newBucketEventData, "NewBucket event data not found");
-    bucketNameToIdMap.set(bucketName, newBucketEventData.bucketId);
+
+    // Verify the derived bucket ID matches the one from the event
+    const derivedBucketId = bucketNameToIdMap.get(bucketName);
+    assert(
+      derivedBucketId?.eq(newBucketEventData.bucketId),
+      `Derived bucket ID ${derivedBucketId?.toHex()} doesn't match event bucket ID ${newBucketEventData.bucketId.toHex()}`
+    );
   }
 
   // Second pass: prepare storage request transactions
@@ -420,92 +450,84 @@ export const batchStorageRequests = async (
     );
   }
 
-  // Pause MSP container to deterministically control storage request flow
-  // This ensures we can control when MSP resumes and responds for easier verification
-  await api.docker.pauseContainer(api.shConsts.NODE_INFOS.msp1.containerName);
-
   // Seal all storage requests in a single block
   await sealBlock(api, storageRequestTxs, localOwner, undefined, undefined, finaliseBlock);
 
-  // Wait for all BSP volunteers to appear in tx pool
-  await api.wait.bspVolunteerInTxPool(fileKeys.length);
-  await sealBlock(api, undefined, localOwner, undefined, undefined, finaliseBlock);
-
-  // Wait for all BSP stored confirmations
-  // BSP batches extrinsics, so we need to iteratively seal blocks and count events
-  let totalConfirmations = 0;
-  for (let attempt = 0; attempt < maxAttempts && totalConfirmations < fileKeys.length; attempt++) {
-    // Wait for at least one bspConfirmStoring extrinsic in tx pool (don't check exact count)
-    await api.wait.bspStored({
-      sealBlock: false,
-      timeoutMs: 10000
-    });
-
-    // Seal the block and count BspConfirmedStoring events
-    const { events } = await sealBlock(
-      api,
-      undefined,
-      localOwner,
-      undefined,
-      undefined,
-      finaliseBlock
-    );
-    const confirmEvents = await api.assert.eventMany("fileSystem", "BspConfirmedStoring", events);
-
-    // Count total file keys in all BspConfirmedStoring events
-    for (const eventRecord of confirmEvents) {
-      if (api.events.fileSystem.BspConfirmedStoring.is(eventRecord.event)) {
-        totalConfirmations += eventRecord.event.data.confirmedFileKeys.length;
-      }
-    }
-  }
-
-  assert.strictEqual(
-    totalConfirmations,
-    fileKeys.length,
-    `Expected ${fileKeys.length} BSP confirmations, but got ${totalConfirmations}`
-  );
-
-  // Wait for BSP to store all files locally
+  // Wait for MSP to store all files
   for (const fileKey of fileKeys) {
     await waitFor({
       lambda: async () =>
-        (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
+        (await mspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
     });
   }
 
-  // Unpause MSP to process responses
-  await api.docker.resumeContainer({
-    containerName: api.shConsts.NODE_INFOS.msp1.containerName
-  });
-
-  // Wait for it to catch up to the tip of the chain
+  // Wait for MSP and BSP to catch up to the tip of the chain
   await api.wait.nodeCatchUpToChainTip(mspApi);
+  await api.wait.nodeCatchUpToChainTip(bspApi);
 
-  // Wait for all MSP acceptance
+  // Wait for all BSP volunteers to appear in tx pool
+  await api.wait.bspVolunteerInTxPool(fileKeys.length);
+
+  // Wait for all MSP acceptance and BSP stored confirmations
   // MSP batches extrinsics, so we need to iteratively seal blocks and count events
   let totalAcceptance = 0;
-  for (let attempt = 0; attempt < maxAttempts && totalAcceptance < fileKeys.length; attempt++) {
-    await api.wait.mspResponseInTxPool();
+  let totalConfirmations = 0;
+  for (
+    let attempt = 0;
+    attempt < maxAttempts &&
+    (totalAcceptance < fileKeys.length || totalConfirmations < fileKeys.length);
+    attempt++
+  ) {
+    // Wait for EITHER an MSP response OR a BSP stored event, whichever comes first, before proceeding to seal the block
+    // Wait up to 5 seconds for either process, giving time for both to run.
+    // Try both waits sequentially, only fail if both do not succeed (both time out)
+    let mspFound = false;
+    let bspFound = false;
 
-    // Seal the block and count MspAcceptedStorageRequest events
-    const { events } = await sealBlock(
-      api,
-      undefined,
-      localOwner,
-      undefined,
-      undefined,
-      finaliseBlock
-    );
+    try {
+      await api.wait.mspResponseInTxPool(1);
+      mspFound = true;
+    } catch {}
 
-    const acceptEvents = await api.assert.eventMany(
-      "fileSystem",
-      "MspAcceptedStorageRequest",
-      events
-    );
+    try {
+      await api.wait.bspStored({
+        sealBlock: false,
+        timeoutMs: 3000
+      });
+      bspFound = true;
+    } catch {}
 
-    // Count total MspAcceptedStorageRequest events
-    totalAcceptance += acceptEvents.length;
+    if (!mspFound && !bspFound) {
+      throw new Error("Neither MSP response nor BSP stored event was found within the timeout");
+    }
+
+    const { events } = await api.block.seal({
+      signer: localOwner,
+      finaliseBlock: finaliseBlock
+    });
+
+    if (mspFound) {
+      const acceptEvents = await api.assert.eventMany(
+        "fileSystem",
+        "MspAcceptedStorageRequest",
+        events
+      );
+
+      // Count total MspAcceptedStorageRequest events
+      totalAcceptance += acceptEvents.length;
+    }
+
+    if (bspFound) {
+      // Check if BSP confirmed storing events are present
+      const confirmEvents = await api.assert.eventMany("fileSystem", "BspConfirmedStoring", events);
+
+      // Count total file keys confirmed in all BspConfirmedStoring events
+      for (const eventRecord of confirmEvents) {
+        if (api.events.fileSystem.BspConfirmedStoring.is(eventRecord.event)) {
+          totalConfirmations += eventRecord.event.data.confirmedFileKeys.length;
+        }
+      }
+    }
   }
 
   assert.strictEqual(
@@ -514,12 +536,35 @@ export const batchStorageRequests = async (
     `Expected ${fileKeys.length} MSP acceptance, but got ${totalAcceptance}`
   );
 
-  // Wait for MSP to store all files
-  for (const fileKey of fileKeys) {
-    await waitFor({
-      lambda: async () =>
-        (await mspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
-    });
+  assert.strictEqual(
+    totalConfirmations,
+    fileKeys.length,
+    `Expected ${fileKeys.length} BSP confirmations, but got ${totalConfirmations}`
+  );
+
+  // Verify files are in BSP or MSP forests or file storages
+  for (let i = 0; i < fileKeys.length; i++) {
+    const fileKey = fileKeys[i];
+
+    const bspForestResult = await bspApi.rpc.storagehubclient.isFileInForest(null, fileKey);
+    if (!bspForestResult.isTrue) {
+      throw new Error(`File ${fileKey} is still in BSP forest after batch storage requests`);
+    }
+
+    const bspFileStorageResult = await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey);
+    if (!bspFileStorageResult.isFileFound) {
+      throw new Error(`File ${fileKey} is still in BSP file storage after batch storage requests`);
+    }
+
+    const mspForestResult = await mspApi.rpc.storagehubclient.isFileInForest(bucketIds[i], fileKey);
+    if (!mspForestResult.isTrue) {
+      throw new Error(`File ${fileKey} is still in MSP forest after batch storage requests`);
+    }
+
+    const mspFileStorageResult = await mspApi.rpc.storagehubclient.isFileInFileStorage(fileKey);
+    if (!mspFileStorageResult.isFileFound) {
+      throw new Error(`File ${fileKey} is still in MSP file storage after batch storage requests`);
+    }
   }
 
   return {
