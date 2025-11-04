@@ -23,7 +23,7 @@ use crate::{
         },
         mocks::MOCK_ADDRESS,
     },
-    data::storage::BoxedStorage,
+    data::storage::{BoxedStorage, WithExpiry},
     error::Error,
     models::auth::{JwtClaims, NonceResponse, TokenResponse, User, VerifyResponse},
     services::Services,
@@ -202,8 +202,12 @@ impl AuthService {
             .storage
             .get_nonce(message)
             .await
-            .map_err(|_| Error::Internal)?
-            .ok_or_else(|| Error::Unauthorized("Invalid or expired nonce".to_string()))?;
+            .map_err(|_| Error::Internal)
+            .and_then(|entry| match entry {
+                WithExpiry::Valid(address) => Ok(address),
+                WithExpiry::Expired => Err(Error::Unauthorized("Expired nonce".to_string())),
+                WithExpiry::NotFound => Err(Error::Unauthorized("Invalid nonce".to_string())),
+            })?;
 
         if self.validate_signature {
             let recovered_address = Self::recover_eth_address_from_sig(message, signature)?;
@@ -386,6 +390,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use jsonwebtoken::{decode, Algorithm, Validation};
 
     use crate::{
@@ -477,7 +483,7 @@ mod tests {
 
         // Check that message was stored in storage
         let stored_address = storage.get_nonce(&result.message).await.unwrap();
-        assert_eq!(stored_address, Some(MOCK_ADDRESS.to_string()));
+        assert_eq!(stored_address, WithExpiry::Valid(MOCK_ADDRESS.to_string()));
     }
 
     #[test]
@@ -528,8 +534,27 @@ mod tests {
         let result = auth_service.login(message, &sig_str).await;
         assert!(result.is_err(), "Should fail if challenge wasn't called");
         match result {
-            Err(Error::Unauthorized(msg)) => assert!(msg.contains("Invalid or expired nonce")),
+            Err(Error::Unauthorized(msg)) => assert!(msg.contains("Invalid nonce")),
             _ => panic!("Expected unauthorized error for missing nonce"),
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn login_fails_after_expiry() {
+        let (auth_service, _, _) = create_test_auth_service(true);
+        let (address, sk) = eth_wallet();
+
+        let challenge = auth_service.challenge(&address, 1).await.unwrap();
+        let sig_str = sign_message(&sk, &challenge.message);
+
+        // Advance time to expire the nonce
+        tokio::time::advance(Duration::from_secs(AUTH_NONCE_EXPIRATION_SECONDS + 1)).await;
+
+        let result = auth_service.login(&challenge.message, &sig_str).await;
+        assert!(result.is_err(), "Should fail if nonce has expired");
+        match result {
+            Err(Error::Unauthorized(msg)) => assert!(msg.contains("Expired nonce")),
+            _ => panic!("Expected unauthorized error for expired nonce"),
         }
     }
 

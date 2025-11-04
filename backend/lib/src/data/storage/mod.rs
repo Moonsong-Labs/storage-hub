@@ -10,6 +10,17 @@ pub mod memory;
 pub use boxed::{BoxedStorage, BoxedStorageWrapper};
 pub use memory::InMemoryStorage;
 
+/// Represents the various possibilities of retrieval for an expirable value
+#[derive(Debug, PartialEq, Eq)]
+pub enum WithExpiry<T> {
+    /// The value was found and is still valid
+    Valid(T),
+    /// The value was found but has expired
+    Expired,
+    /// The value was not found
+    NotFound,
+}
+
 /// Storage trait for backend-specific data operations
 #[async_trait]
 pub trait Storage: Send + Sync {
@@ -29,7 +40,5 @@ pub trait Storage: Send + Sync {
     ) -> Result<(), Self::Error>;
 
     /// Retrieve nonce data by message. Will remove the nonce from storage.
-    ///
-    /// Returns None if not found or expired
-    async fn get_nonce(&self, message: &str) -> Result<Option<String>, Self::Error>;
+    async fn get_nonce(&self, message: &str) -> Result<WithExpiry<String>, Self::Error>;
 }
