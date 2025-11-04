@@ -20,6 +20,8 @@ pub enum FileDeletionTarget<Runtime: StorageEnableRuntime> {
 pub struct BatchFileDeletions {
     /// Type of deletion to process in this batch cycle (User or Incomplete)
     pub deletion_type: shc_indexer_db::models::FileDeletionType,
+    /// Maximum number of files to process in this batch cycle
+    pub batch_deletion_limit: u64,
 }
 
 /// Event bus provider for fisherman service events

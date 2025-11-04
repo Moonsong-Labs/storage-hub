@@ -32,6 +32,7 @@ pub async fn spawn_fisherman_service<Runtime: StorageEnableRuntime>(
     task_spawner: &TaskSpawner,
     client: Arc<ParachainClient<Runtime::RuntimeApi>>,
     batch_interval_seconds: u64,
+    batch_deletion_limit: u64,
 ) -> ActorHandle<FishermanService<Runtime>> {
     // Create a named task spawner for the fisherman service
     let task_spawner = task_spawner
@@ -39,7 +40,8 @@ pub async fn spawn_fisherman_service<Runtime: StorageEnableRuntime>(
         .with_group("monitoring");
 
     // Create the fisherman service instance
-    let fisherman_service = FishermanService::new(client, batch_interval_seconds);
+    let fisherman_service =
+        FishermanService::new(client, batch_interval_seconds, batch_deletion_limit);
 
     // Spawn the actor and return the handle
     task_spawner.spawn_actor(fisherman_service)

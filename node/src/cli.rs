@@ -566,6 +566,10 @@ pub struct FishermanConfigurations {
     /// Duration between batch deletion processing cycles (in seconds).
     #[arg(long, default_value = "60", value_parser = clap::value_parser!(u64).range(1..))]
     pub fisherman_batch_interval_seconds: u64,
+
+    /// Maximum number of files to process per batch deletion cycle.
+    #[arg(long, default_value = "1000", value_parser = clap::value_parser!(u64).range(1..))]
+    pub fisherman_batch_deletion_limit: u64,
 }
 
 impl FishermanConfigurations {
@@ -577,6 +581,7 @@ impl FishermanConfigurations {
                     .clone()
                     .expect("Fisherman database URL is required"),
                 batch_interval_seconds: self.fisherman_batch_interval_seconds,
+                batch_deletion_limit: self.fisherman_batch_deletion_limit,
                 maintenance_mode,
             })
         } else {

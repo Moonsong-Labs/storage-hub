@@ -49,6 +49,8 @@ pub struct FishermanService<Runtime: StorageEnableRuntime> {
     batch_interval_duration: Duration,
     /// Timestamp of last batch emission
     last_batch_time: Option<Instant>,
+    /// Maximum number of files to process per batch deletion cycle
+    batch_deletion_limit: u64,
 }
 
 /// Represents a change to a file key between blocks
@@ -74,6 +76,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
     pub fn new(
         client: Arc<ParachainClient<Runtime::RuntimeApi>>,
         batch_interval_seconds: u64,
+        batch_deletion_limit: u64,
     ) -> Self {
         Self {
             client,
@@ -83,6 +86,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
             last_deletion_type: None,
             batch_interval_duration: Duration::from_secs(batch_interval_seconds),
             last_batch_time: None,
+            batch_deletion_limit,
         }
     }
 
@@ -191,7 +195,10 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                     self.batch_lock_guard = Some(guard);
 
                     // Emit event to trigger batch processing
-                    self.emit(crate::events::BatchFileDeletions { deletion_type });
+                    self.emit(crate::events::BatchFileDeletions {
+                        deletion_type,
+                        batch_deletion_limit: self.batch_deletion_limit,
+                    });
                 }
                 Err(_) => {
                     debug!(

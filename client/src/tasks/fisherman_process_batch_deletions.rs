@@ -787,13 +787,20 @@ where
     async fn handle_event(&mut self, event: BatchFileDeletions) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "🎣 Processing batch file deletions for {:?} deletion type",
-            event.deletion_type
+            "🎣 Processing batch file deletions for {:?} deletion type (limit: {})",
+            event.deletion_type,
+            event.batch_deletion_limit
         );
 
-        // Query pending deletions with limit of 1000 files
+        // Query pending deletions with configured batch limit
         let grouped_deletions = self
-            .get_pending_deletions(event.deletion_type, None, None, Some(1000), None)
+            .get_pending_deletions(
+                event.deletion_type,
+                None,
+                None,
+                Some(event.batch_deletion_limit as i64),
+                None,
+            )
             .await?;
 
         debug!(

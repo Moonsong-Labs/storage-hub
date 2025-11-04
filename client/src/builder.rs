@@ -211,10 +211,12 @@ where
                 .expect("Task spawner is not set."),
             client,
             fisherman_options.batch_interval_seconds,
+            fisherman_options.batch_deletion_limit,
         )
         .await;
 
         self.fisherman = Some(fisherman_service_handle);
+
         self
     }
 
@@ -866,7 +868,15 @@ pub struct FishermanOptions {
     pub database_url: String,
     /// Duration between batch deletion processing cycles (in seconds).
     pub batch_interval_seconds: u64,
+    /// Maximum number of files to process per batch deletion cycle.
+    #[serde(default = "default_batch_deletion_limit")]
+    pub batch_deletion_limit: u64,
     /// Whether the node is running in maintenance mode.
     #[serde(default)]
     pub maintenance_mode: bool,
+}
+
+/// Default value for batch deletion limit.
+fn default_batch_deletion_limit() -> u64 {
+    1000
 }
