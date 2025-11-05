@@ -533,7 +533,7 @@ await describeMspNet(
         deletionType: "User",
         expectExt: 1,
         userApi,
-        mspApi: mspApi,
+        mspApi: msp1Api,
         expectedBucketCount: 1,
         maxRetries: 3
       });
