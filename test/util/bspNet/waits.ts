@@ -262,14 +262,22 @@ export const waitForFileDeletionFromFileStorageComplete = async (
   api: ApiPromise,
   fileKey: H256 | string
 ) => {
-  await waitFor({
-    lambda: async () => {
+  // To allow time for deletion to complete (20s)
+  const iterations = 20;
+  const delay = 1000;
+  for (let i = 0; i < iterations + 1; i++) {
+    try {
+      await sleep(delay);
       const fileStorageResult = await api.rpc.storagehubclient.isFileInFileStorage(fileKey);
-      return fileStorageResult.isFileNotFound;
-    },
-    iterations: 200,
-    delay: 100
-  });
+      assert(fileStorageResult.isFileNotFound, "File still in file storage");
+      break;
+    } catch {
+      assert(
+        i !== iterations,
+        `Failed to detect file deletion from Provider's file storage after ${(i * delay) / 1000}s`
+      );
+    }
+  }
 };
 
 /**
@@ -313,14 +321,19 @@ export const waitForMspBucketFileDeletionComplete = async (
   fileKey: H256 | string,
   bucketId: H256 | string
 ) => {
-  await waitFor({
-    lambda: async () => {
+  // To allow time for file deletion to complete (10s)
+  const iterations = 20;
+  const delay = 500;
+  for (let i = 0; i < iterations + 1; i++) {
+    try {
+      await sleep(delay);
       const fileDeletionResult = await api.rpc.storagehubclient.isFileInForest(bucketId, fileKey);
-      return fileDeletionResult.isFalse;
-    },
-    iterations: 100,
-    delay: 100
-  });
+      assert(fileDeletionResult.isFalse, "File still in forest storage");
+      break;
+    } catch {
+      assert(i !== iterations, `Failed to detect MSP file deletion after ${(i * delay) / 1000}s`);
+    }
+  }
 };
 
 /**
