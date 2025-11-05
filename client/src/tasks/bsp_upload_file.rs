@@ -787,7 +787,7 @@ where
         &mut self,
         event: RemoteUploadRequest<Runtime>,
     ) -> anyhow::Result<bool> {
-        info!(target: LOG_TARGET, "Handling remote upload request for file key {:x}", event.file_key);
+        debug!(target: LOG_TARGET, "Handling remote upload request for file key {:x}", event.file_key);
 
         let file_key = event.file_key.into();
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
