@@ -68,6 +68,10 @@ pub struct ProviderOptions {
     /// Whether the node is running in maintenance mode.
     #[serde(default)]
     pub maintenance_mode: bool,
+    /// Database URL for provider operations (e.g., move bucket queries).
+    /// Provides database access without running the full indexer service.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_database_url: Option<String>,
 }
 
 /// Role configuration enum that ensures mutual exclusivity between Provider and Fisherman roles.

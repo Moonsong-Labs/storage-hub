@@ -350,6 +350,20 @@ pub struct ProviderConfigurations {
         ])
     )]
     pub bsp_submit_proof_max_attempts: Option<u32>,
+
+    /// Database URL for provider operations.
+    ///
+    /// Required for MSP nodes to perform move bucket operations.
+    #[arg(
+        long,
+        value_name = "DATABASE_URL",
+        help_heading = "Provider Database Options",
+        required_if_eq_all([
+            ("provider", "true"),
+            ("provider_type", "msp"),
+        ])
+    )]
+    pub provider_database_url: Option<String>,
 }
 
 impl ProviderConfigurations {
@@ -500,6 +514,7 @@ impl ProviderConfigurations {
             bsp_submit_proof,
             blockchain_service,
             maintenance_mode,
+            provider_database_url: self.provider_database_url.clone(),
         }
     }
 }
@@ -674,6 +689,7 @@ pub struct Cli {
         "bsp_move_bucket_task", "bsp_move_bucket_grace_period",
         "bsp_charge_fees_task", "bsp_charge_fees_min_debt",
         "bsp_submit_proof_task", "bsp_submit_proof_max_attempts",
+        "provider_database_url",
     ])]
     pub provider_config_file: Option<String>,
 

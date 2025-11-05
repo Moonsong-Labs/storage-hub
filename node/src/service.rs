@@ -189,10 +189,10 @@ async fn configure_and_spawn_indexer<Runtime: StorageEnableRuntime>(
     indexer_options: &Option<IndexerOptions>,
     task_manager: &TaskManager,
     client: Arc<StorageEnableClient<Runtime>>,
-) -> Result<Option<DbPool>, sc_service::Error> {
+) -> Result<(), sc_service::Error> {
     let indexer_options = match indexer_options {
         Some(config) => config,
-        None => return Ok(None),
+        None => return Ok(()),
     };
 
     // Setup database pool
@@ -212,7 +212,7 @@ async fn configure_and_spawn_indexer<Runtime: StorageEnableRuntime>(
     )
     .await;
 
-    Ok(Some(db_pool))
+    Ok(())
 }
 
 /// Initialize the StorageHub builder with configured services based on the node's role.
@@ -247,9 +247,7 @@ where
     StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder,
 {
     // Spawn indexer service if enabled. Runs before role check to allow standalone operation.
-    let maybe_indexer_db_pool =
-        configure_and_spawn_indexer::<Runtime>(&indexer_options, &task_manager, client.clone())
-            .await?;
+    configure_and_spawn_indexer::<Runtime>(&indexer_options, &task_manager, client.clone()).await?;
 
     let role_options = match role_options {
         Some(role) => role,
@@ -303,6 +301,7 @@ where
             bsp_charge_fees,
             bsp_submit_proof,
             blockchain_service,
+            provider_database_url,
             ..
         }) => {
             info!(
@@ -328,9 +327,24 @@ where
 
             // MSP-specific configuration
             if *provider_type == ProviderType::Msp {
+                // MSPs require database access for move bucket operations
+                let db_url = provider_database_url.clone().ok_or_else(|| {
+                    sc_service::Error::Other(
+                        "MSP nodes require --provider-database-url to be set for move bucket operations".to_string()
+                    )
+                })?;
+
+                info!("Setting up MSP database connection: {}", db_url);
+                let provider_db_pool = setup_database_pool(db_url).await?;
+
                 builder
                     .with_notify_period(*msp_charging_period)
-                    .with_indexer_db_pool(maybe_indexer_db_pool);
+                    .with_indexer_db_pool(Some(provider_db_pool));
+            } else if let Some(db_url) = provider_database_url {
+                // BSPs can optionally have database access
+                info!("Setting up BSP database connection: {}", db_url);
+                let provider_db_pool = setup_database_pool(db_url.clone()).await?;
+                builder.with_indexer_db_pool(Some(provider_db_pool));
             }
 
             if let Some(c) = blockchain_service {
