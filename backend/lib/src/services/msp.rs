@@ -499,7 +499,7 @@ impl MspService {
 
     /// Process a streamed file upload: validate metadata, chunk into trie, batch proofs, and send to MSP.
     ///
-    /// Verifies ownership of bucket that the file belongs to is `user`
+    /// Verifies that `user` owns the bucket that the file belongs to
     pub async fn process_and_upload_file(
         &self,
         user: Option<&Address>,
