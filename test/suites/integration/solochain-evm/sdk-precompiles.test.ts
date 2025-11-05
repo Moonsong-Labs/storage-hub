@@ -26,8 +26,7 @@ await describeMspNet(
     runtimeType: "solochain",
     indexer: true,
     backend: true,
-    fisherman: true,
-    standaloneIndexer: true
+    fisherman: true
   },
   ({ before, it, createUserApi, createMsp1Api }) => {
     let userApi: EnrichedBspApi;
@@ -539,35 +538,16 @@ await describeMspNet(
         maxRetries: 3
       });
 
-      // Non-producer nodes must explicitly finalize imported blocks to trigger file deletion
-      // Producer node (user) has finalized blocks, but BSP and MSP must finalize locally
-      const finalisedBlockHash = await userApi.rpc.chain.getFinalizedHead();
+      // Wait until the MSP detects the on-chain deletion and updates its local bucket forest
+      await msp1Api.wait.mspBucketFileDeletionCompleted(fileKey.toHex(), bucketId);
 
-      await mspApi.wait.blockImported(finalisedBlockHash.toString());
-      await mspApi.block.finaliseBlock(finalisedBlockHash.toString());
+      // Finalise the block containing the `BucketFileDeletionsCompleted` event in the MSP node
+      // so that the `BucketFileDeletionsCompleted` event is finalised on-chain and the MSP deletes the
+      // file from its file storage.
+      await msp1Api.rpc.engine.finalizeBlock(deleteFileBlock.blockReceipt.blockHash);
 
-      // Verify that the MSP has correctly deleted the file from its forest storage and file storage
-      await waitFor({
-        lambda: async () => {
-          // Check file is NOT in MSP forest
-          const mspForestResult = await mspApi.rpc.storagehubclient.isFileInForest(
-            bucketId,
-            fileKey.toHex()
-          );
-          if (mspForestResult.isTrue) {
-            return false;
-          }
-
-          // Check file is NOT in MSP file storage
-          const mspFileStorageResult = await mspApi.rpc.storagehubclient.isFileInFileStorage(
-            fileKey.toHex()
-          );
-          if (mspFileStorageResult.isFileFound) {
-            return false;
-          }
-          return true;
-        }
-      });
+      // Wait until the MSP detects the now finalised deletion and correctly deletes the file from its file storage
+      await msp1Api.wait.fileDeletionFromFileStorage(fileKey.toHex());
 
       // Attempt to download the file, it should fail with a 404 since the file was deleted
       const downloadResponse = await mspClient.files.downloadFile(fileKey.toHex());

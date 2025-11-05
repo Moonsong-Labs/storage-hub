@@ -245,6 +245,34 @@ export const waitForFileStorageComplete = async (api: ApiPromise, fileKey: H256 
 };
 
 /**
+ * Waits for a Provider to complete deleting a file from its file storage.
+ *
+ * This function performs the following steps:
+ * 1. Waits for a period of time to allow for deletion.
+ * 2. Checks for the FileNotFound return from the isFileInFileStorage RPC method.
+ * 3. Repeats until the timeout is reached.
+ *
+ * @param api - The ApiPromise instance to interact with the RPC.
+ * @param fileKey - The file key to check for in the file storage.
+ * @returns A Promise that resolves when the Provider has correctly deleted a file from its file storage.
+ *
+ * @throws Will throw an error if the file is not deleted from the file storage after a timeout.
+ */
+export const waitForFileDeletionFromFileStorageComplete = async (
+  api: ApiPromise,
+  fileKey: H256 | string
+) => {
+  await waitFor({
+    lambda: async () => {
+      const fileStorageResult = await api.rpc.storagehubclient.isFileInFileStorage(fileKey);
+      return fileStorageResult.isFileNotFound;
+    },
+    iterations: 200,
+    delay: 100
+  });
+};
+
+/**
  * Waits for a BSP to complete deleting a file from its forest storage.
  *
  * This function performs the following steps:
@@ -271,6 +299,28 @@ export const waitForBspFileDeletionComplete = async (api: ApiPromise, fileKey: H
       assert(i !== iterations, `Failed to detect BSP file deletion after ${(i * delay) / 1000}s`);
     }
   }
+};
+
+/**
+ * Waits for an MSP to complete deleting a file from a bucket in its forest.
+ * @param api - The ApiPromise instance to interact with the RPC.
+ * @param fileKey - The file key to check for deletion the forest storage.
+ * @param bucketId - The bucket ID to check for deletion the forest storage.
+ * @returns A Promise that resolves when the MSP has correctly deleted the file from its bucket forest storage.
+ */
+export const waitForMspBucketFileDeletionComplete = async (
+  api: ApiPromise,
+  fileKey: H256 | string,
+  bucketId: H256 | string
+) => {
+  await waitFor({
+    lambda: async () => {
+      const fileDeletionResult = await api.rpc.storagehubclient.isFileInForest(bucketId, fileKey);
+      return fileDeletionResult.isFalse;
+    },
+    iterations: 100,
+    delay: 100
+  });
 };
 
 /**
