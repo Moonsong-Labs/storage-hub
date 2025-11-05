@@ -380,8 +380,9 @@ export class NetworkLauncher {
         log: verbose
       });
 
-      // Run migrations for fullnet (MSPs need the schema) or when indexer is enabled
-      if (this.type === "fullnet" || this.config.indexer) {
+      // Only run external migrations when indexer enabled
+      // (MSPs and standalone indexer auto-migrate themselves)
+      if (this.config.indexer) {
         await this.runMigrations();
       }
 
