@@ -909,6 +909,14 @@ export class NetworkLauncher {
       for (const service of mspServices) {
         const mspContainerName = launchedNetwork.composeYaml.services[service].container_name;
         assert(mspContainerName, "MSP container name not found in compose file");
+
+        // Wait for MSP to be ready before fetching peer ID
+        await userApi.docker.waitForLog({
+          containerName: mspContainerName,
+          searchString: "💤 Idle",
+          timeout: 15000
+        });
+
         const mspIp = await getContainerIp(mspContainerName);
         const mspPeerId = await launchedNetwork.getPeerId(service);
         const multiAddressMsp = `/ip4/${mspIp}/tcp/30350/p2p/${mspPeerId}`;
