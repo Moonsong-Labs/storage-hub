@@ -15,7 +15,7 @@ import {
 import { MspClient } from "@storagehub-sdk/msp-client";
 import { createPublicClient, createWalletClient, defineChain, http, getAddress } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { describeMspNet, type EnrichedBspApi, ShConsts } from "../../../util";
+import { describeMspNet, type EnrichedBspApi, ShConsts, type SqlClient } from "../../../util";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import { ALITH_PRIVATE_KEY } from "../../../util/evmNet/keyring";
 
@@ -26,15 +26,18 @@ await describeMspNet(
     runtimeType: "solochain",
     indexer: true,
     backend: true,
-    fisherman: true
+    fisherman: true,
+    standaloneIndexer: true
   },
-  ({ before, it, createUserApi, createMsp1Api }) => {
+  ({ before, it, createUserApi, createMsp1Api, createSqlClient, createIndexerApi }) => {
     let userApi: EnrichedBspApi;
     let msp1Api: EnrichedBspApi;
+    let indexerApi: EnrichedBspApi;
     let storageHubClient: InstanceType<typeof StorageHubClient>;
     let publicClient: ReturnType<typeof createPublicClient>;
     let walletClient: ReturnType<typeof createWalletClient>;
     let account: ReturnType<typeof privateKeyToAccount>;
+    let sql: SqlClient;
     let bucketId: string;
     let fileManager: FileManager;
     let fileKey: H256;
@@ -52,6 +55,7 @@ await describeMspNet(
       } else {
         throw new Error("MSP API for first MSP not available");
       }
+      sql = createSqlClient();
 
       // Set up the StorageHub SDK client using viem
       const rpcUrl = `http://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`;
@@ -105,6 +109,10 @@ await describeMspNet(
       // Set up the authentication with the MSP backend
       const siweSession = await mspClient.auth.SIWE(walletClient);
       sessionToken = siweSession.token;
+
+      assert(createIndexerApi, "Indexer API not available");
+      indexerApi = await createIndexerApi();
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
     });
 
     it("Postgres DB is ready", async () => {
@@ -528,6 +536,10 @@ await describeMspNet(
       // Verify the deletion request was enqueued on-chain
       await userApi.assert.eventPresent("fileSystem", "FileDeletionRequested");
 
+      // Finalize the block on the indexer node and wait for the indexer to process the block
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
+
+      // Wait for fisherman to process the file deletions
       await userApi.fisherman.retryableWaitAndVerifyBatchDeletions({
         blockProducerApi: userApi,
         deletionType: "User",
