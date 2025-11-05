@@ -146,6 +146,10 @@ where
             }
         };
 
+        // Get the current tick number
+        let current_tick =
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+
         // Get the threshold for the BSP to be able to volunteer for the storage request.
         // The current eligibility value of this storage request for this BSP has to be greater than
         // this for the BSP to be able to volunteer.
@@ -167,8 +171,6 @@ where
                 Some(diff) => diff,
                 None => {
                     // The BSP's threshold is less than the eligibility current value, which means the BSP is already eligible to volunteer.
-                    let current_tick =
-                        <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
                     return Ok(current_tick);
                 }
             };
@@ -183,7 +185,7 @@ where
             };
 
         // Compute the earliest tick number at which the BSP can send the volunteer request.
-        let earliest_volunteer_tick = storage_request_tick.saturating_add(
+        let earliest_volunteer_tick = current_tick.saturating_add(
             T::ThresholdTypeToTickNumber::convert(min_ticks_to_wait_to_volunteer),
         );
 
