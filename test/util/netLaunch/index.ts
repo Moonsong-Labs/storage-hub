@@ -58,7 +58,7 @@ export class NetworkLauncher {
     const composeYaml = yaml.parse(composeFile);
 
     this.composeYaml = composeYaml;
-    console.log(`[NetworkLauncher] Compose file loaded successfully`);
+    console.log("[NetworkLauncher] Compose file loaded successfully");
     return this;
   }
 
@@ -77,7 +77,7 @@ export class NetworkLauncher {
   }
 
   private populateEntities() {
-    console.log(`[NetworkLauncher] Populating entities from compose file...`);
+    console.log("[NetworkLauncher] Populating entities from compose file...");
     assert(this.composeYaml, "Compose file has not been selected yet, run loadComposeFile() first");
     const shServices: ShEntity[] = Object.entries(this.composeYaml.services)
       .filter(([_serviceName, service]: [string, any]) => service.image === "storage-hub:local")
@@ -87,21 +87,28 @@ export class NetworkLauncher {
       }));
     assert(shServices.length > 0, "No storage-hub services found in compose file");
     this.entities = shServices;
-    console.log(`[NetworkLauncher] Found ${shServices.length} storage-hub services:`, shServices.map(s => s.name).join(", "));
+    console.log(
+      `[NetworkLauncher] Found ${shServices.length} storage-hub services:`,
+      shServices.map((s) => s.name).join(", ")
+    );
     return this;
   }
 
   // TODO: Turn this into a submodule system with separate handlers for each option
   private remapComposeYaml() {
-    console.log(`[NetworkLauncher] Remapping compose YAML with configuration...`);
+    console.log("[NetworkLauncher] Remapping compose YAML with configuration...");
     assert(this.composeYaml, "Compose file has not been selected yet, run loadComposeFile() first");
 
     const composeYaml = this.composeYaml;
 
     if (this.config.noisy) {
-      console.log(`[NetworkLauncher] Configuring noisy network mode...`);
-      const servicesToConfigure = Object.keys(composeYaml.services).filter(svc => svc !== "toxiproxy");
-      console.log(`[NetworkLauncher] Removing port mappings and configuring networks for ${servicesToConfigure.length} service(s)...`);
+      console.log("[NetworkLauncher] Configuring noisy network mode...");
+      const servicesToConfigure = Object.keys(composeYaml.services).filter(
+        (svc) => svc !== "toxiproxy"
+      );
+      console.log(
+        `[NetworkLauncher] Removing port mappings and configuring networks for ${servicesToConfigure.length} service(s)...`
+      );
       for (const svcName of Object.keys(composeYaml.services)) {
         if (svcName === "toxiproxy") {
           continue;
@@ -115,21 +122,23 @@ export class NetworkLauncher {
         );
         const portsAfter = composeYaml.services[`${svcName}`].ports?.length ?? 0;
         if (portsBefore !== portsAfter) {
-          console.log(`[NetworkLauncher] Removed ${portsBefore - portsAfter} port mapping(s) from ${svcName}`);
+          console.log(
+            `[NetworkLauncher] Removed ${portsBefore - portsAfter} port mapping(s) from ${svcName}`
+          );
         }
         composeYaml.services[`${svcName}`].networks = {
           "storage-hub-network": { aliases: [`${svcName}`] }
         };
       }
-      console.log(`[NetworkLauncher] Noisy network mode configured`);
+      console.log("[NetworkLauncher] Noisy network mode configured");
     } else {
-      console.log(`[NetworkLauncher] Removing toxiproxy service (not in noisy mode)...`);
+      console.log("[NetworkLauncher] Removing toxiproxy service (not in noisy mode)...");
       delete composeYaml.services.toxiproxy;
     }
 
     // If runtime is "parachain" there is no need to specify the runtime type, it's the default
     if (this.config.runtimeType === "solochain") {
-      console.log(`[NetworkLauncher] Configuring solochain runtime type...`);
+      console.log("[NetworkLauncher] Configuring solochain runtime type...");
       const servicesToConfigure: string[] = [];
       // Add the runtime type to the command for user and BSP nodes
       composeYaml.services["sh-bsp"].command.push("--chain=solochain-evm-dev");
@@ -155,45 +164,55 @@ export class NetworkLauncher {
         composeYaml.services["sh-indexer"].command.push("--chain=solochain-evm-dev");
         servicesToConfigure.push("sh-indexer");
       }
-      console.log(`[NetworkLauncher] Configured solochain runtime for services: ${servicesToConfigure.join(", ")}`);
+      console.log(
+        `[NetworkLauncher] Configured solochain runtime for services: ${servicesToConfigure.join(", ")}`
+      );
     } else {
-      console.log(`[NetworkLauncher] Using default parachain runtime`);
+      console.log("[NetworkLauncher] Using default parachain runtime");
     }
 
     // Configure fisherman service
     if (!this.config.fisherman || this.type !== "fullnet") {
       if (composeYaml.services["sh-fisherman"]) {
-        console.log(`[NetworkLauncher] Removing fisherman service (not enabled or not fullnet)...`);
+        console.log("[NetworkLauncher] Removing fisherman service (not enabled or not fullnet)...");
         delete composeYaml.services["sh-fisherman"];
       }
     } else {
-      console.log(`[NetworkLauncher] Configuring fisherman service...`);
+      console.log("[NetworkLauncher] Configuring fisherman service...");
       // Add fisherman incomplete sync parameters if specified
       if (this.config.fishermanIncompleteSyncMax !== undefined) {
-        console.log(`[NetworkLauncher] Setting fisherman incomplete sync max: ${this.config.fishermanIncompleteSyncMax}`);
+        console.log(
+          `[NetworkLauncher] Setting fisherman incomplete sync max: ${this.config.fishermanIncompleteSyncMax}`
+        );
         composeYaml.services["sh-fisherman"].command.push(
           `--fisherman-incomplete-sync-max=${this.config.fishermanIncompleteSyncMax}`
         );
       }
       if (this.config.fishermanIncompleteSyncPageSize !== undefined) {
-        console.log(`[NetworkLauncher] Setting fisherman incomplete sync page size: ${this.config.fishermanIncompleteSyncPageSize}`);
+        console.log(
+          `[NetworkLauncher] Setting fisherman incomplete sync page size: ${this.config.fishermanIncompleteSyncPageSize}`
+        );
         composeYaml.services["sh-fisherman"].command.push(
           `--fisherman-incomplete-sync-page-size=${this.config.fishermanIncompleteSyncPageSize}`
         );
       }
-      console.log(`[NetworkLauncher] Fisherman service configured`);
+      console.log("[NetworkLauncher] Fisherman service configured");
     }
 
     // Remove standalone indexer service if not enabled or not using standalone mode
     if (!this.config.indexer || !this.config.standaloneIndexer || this.type !== "fullnet") {
       if (composeYaml.services["sh-indexer"]) {
-        console.log(`[NetworkLauncher] Removing standalone indexer service (not enabled or not in standalone mode)...`);
+        console.log(
+          "[NetworkLauncher] Removing standalone indexer service (not enabled or not in standalone mode)..."
+        );
         delete composeYaml.services["sh-indexer"];
       }
     }
 
     if (this.config.extrinsicRetryTimeout) {
-      console.log(`[NetworkLauncher] Configuring extrinsic retry timeout: ${this.config.extrinsicRetryTimeout}`);
+      console.log(
+        `[NetworkLauncher] Configuring extrinsic retry timeout: ${this.config.extrinsicRetryTimeout}`
+      );
       const servicesToConfigure: string[] = [];
       composeYaml.services["sh-bsp"].command.push(
         `--extrinsic-retry-timeout=${this.config.extrinsicRetryTimeout}`
@@ -208,7 +227,9 @@ export class NetworkLauncher {
         );
         servicesToConfigure.push("sh-msp-1");
       }
-      console.log(`[NetworkLauncher] Extrinsic retry timeout configured for: ${servicesToConfigure.join(", ")}`);
+      console.log(
+        `[NetworkLauncher] Extrinsic retry timeout configured for: ${servicesToConfigure.join(", ")}`
+      );
     }
 
     // Configure log level for all services using -l flag
@@ -237,7 +258,7 @@ export class NetworkLauncher {
     }
 
     if (this.config.rocksdb) {
-      console.log(`[NetworkLauncher] Configuring RocksDB storage layer...`);
+      console.log("[NetworkLauncher] Configuring RocksDB storage layer...");
       const servicesToConfigure: string[] = [];
       composeYaml.services["sh-bsp"].command.push("--storage-layer=rocks-db");
       composeYaml.services["sh-bsp"].command.push(
@@ -263,29 +284,31 @@ export class NetworkLauncher {
         );
         servicesToConfigure.push("sh-msp-1", "sh-msp-2");
       }
-      console.log(`[NetworkLauncher] RocksDB storage configured for: ${servicesToConfigure.join(", ")}`);
+      console.log(
+        `[NetworkLauncher] RocksDB storage configured for: ${servicesToConfigure.join(", ")}`
+      );
     } else {
-      console.log(`[NetworkLauncher] Using default in-memory storage layer`);
+      console.log("[NetworkLauncher] Using default in-memory storage layer");
     }
 
     // MSPs always need database access for move bucket operations (required by CLI)
     // Always configure this for fullnet regardless of indexer setting
     if (this.type === "fullnet") {
-      console.log(`[NetworkLauncher] Configuring database URLs for MSP services...`);
+      console.log("[NetworkLauncher] Configuring database URLs for MSP services...");
       composeYaml.services["sh-msp-1"].command.push(
         "--provider-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
       );
       composeYaml.services["sh-msp-2"].command.push(
         "--provider-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
       );
-      console.log(`[NetworkLauncher] Database URLs configured for: sh-msp-1, sh-msp-2`);
+      console.log("[NetworkLauncher] Database URLs configured for: sh-msp-1, sh-msp-2");
     }
 
     if (this.config.indexer) {
-      console.log(`[NetworkLauncher] Configuring indexer service...`);
+      console.log("[NetworkLauncher] Configuring indexer service...");
       // If using standalone indexer, configure the sh-indexer service
       if (this.config.standaloneIndexer && this.type === "fullnet") {
-        console.log(`[NetworkLauncher] Configuring standalone indexer mode...`);
+        console.log("[NetworkLauncher] Configuring standalone indexer mode...");
         // Add indexer mode if specified
         if (this.config.indexerMode) {
           console.log(`[NetworkLauncher] Setting indexer mode: ${this.config.indexerMode}`);
@@ -293,9 +316,9 @@ export class NetworkLauncher {
             `--indexer-mode=${this.config.indexerMode}`
           );
         }
-        console.log(`[NetworkLauncher] Standalone indexer configured`);
+        console.log("[NetworkLauncher] Standalone indexer configured");
       } else {
-        console.log(`[NetworkLauncher] Configuring embedded indexer mode (sh-user)...`);
+        console.log("[NetworkLauncher] Configuring embedded indexer mode (sh-user)...");
         // Embedded mode: add indexer flags to sh-user
         composeYaml.services["sh-user"].command.push("--indexer");
         composeYaml.services["sh-user"].environment =
@@ -308,7 +331,7 @@ export class NetworkLauncher {
           console.log(`[NetworkLauncher] Setting indexer mode: ${this.config.indexerMode}`);
           composeYaml.services["sh-user"].command.push(`--indexer-mode=${this.config.indexerMode}`);
         }
-        console.log(`[NetworkLauncher] Embedded indexer configured for sh-user`);
+        console.log("[NetworkLauncher] Embedded indexer configured for sh-user");
       }
     }
 
@@ -334,14 +357,16 @@ export class NetworkLauncher {
       {}
     );
 
-    console.log(`[NetworkLauncher] Building final compose contents with ${Object.keys(remappedYamlContents).length} service(s)...`);
+    console.log(
+      `[NetworkLauncher] Building final compose contents with ${Object.keys(remappedYamlContents).length} service(s)...`
+    );
     let composeContents = {
       name: "storage-hub",
       services: remappedYamlContents
     };
 
     if (this.config.noisy) {
-      console.log(`[NetworkLauncher] Adding network configuration for noisy mode...`);
+      console.log("[NetworkLauncher] Adding network configuration for noisy mode...");
       composeContents = Object.assign(composeContents, {
         networks: {
           "storage-hub-network": { driver: "bridge" }
@@ -349,7 +374,7 @@ export class NetworkLauncher {
       });
     }
 
-    console.log(`[NetworkLauncher] Stringifying compose YAML...`);
+    console.log("[NetworkLauncher] Stringifying compose YAML...");
     const updatedCompose = yaml.stringify(composeContents, {
       collectionStyle: "flow",
       defaultStringType: "QUOTE_DOUBLE",
@@ -360,7 +385,7 @@ export class NetworkLauncher {
     console.log(`[NetworkLauncher] Creating tmp directory: ${tmpDir}`);
     fs.mkdirSync(tmpDir, { recursive: true });
     const tmpFile = tmp.fileSync({ postfix: ".yml" });
-    console.log(`[NetworkLauncher] Writing compose YAML to temporary file...`);
+    console.log("[NetworkLauncher] Writing compose YAML to temporary file...");
     fs.writeFileSync(tmpFile.name, updatedCompose);
     console.log(`[NetworkLauncher] Compose YAML remapped and saved to: ${tmpFile.name}`);
     return tmpFile.name;
@@ -372,35 +397,35 @@ export class NetworkLauncher {
     const tmpFile = this.remapComposeYaml();
 
     if (this.config.noisy) {
-      console.log(`[NetworkLauncher] Starting toxiproxy service...`);
+      console.log("[NetworkLauncher] Starting toxiproxy service...");
       await compose.upOne("toxiproxy", {
         cwd: cwd,
         config: tmpFile,
         log: verbose
       });
-      console.log(`[NetworkLauncher] toxiproxy service started`);
+      console.log("[NetworkLauncher] toxiproxy service started");
     }
 
-     // Postgres is always needed for fullnet because MSPs require database access
+    // Postgres is always needed for fullnet because MSPs require database access
     // For other network types, only start postgres if indexer is enabled
     if (this.type === "fullnet" || this.config.indexer) {
-      console.log(`[NetworkLauncher] Starting sh-postgres service...`);
+      console.log("[NetworkLauncher] Starting sh-postgres service...");
       await compose.upOne("sh-postgres", {
         cwd: cwd,
         config: tmpFile,
         log: verbose
       });
-      console.log(`[NetworkLauncher] sh-postgres service started`);
+      console.log("[NetworkLauncher] sh-postgres service started");
 
       // Only run external migrations when indexer enabled
       // (MSPs and standalone indexer auto-migrate themselves)
-      if (this.type === "fullnet" || this.config.indexer) {
+      if (this.config.indexer) {
         await this.runMigrations();
       }
 
       // Start backend only if backend flag is enabled (depends on msp-1 and postgres)
       if (this.config.backend && this.type === "fullnet") {
-        console.log(`[NetworkLauncher] Starting sh-backend service...`);
+        console.log("[NetworkLauncher] Starting sh-backend service...");
         await compose.upOne("sh-backend", {
           cwd: cwd,
           config: tmpFile,
@@ -410,17 +435,17 @@ export class NetworkLauncher {
             JWT_SECRET: JWT_SECRET
           }
         });
-        console.log(`[NetworkLauncher] sh-backend service started`);
+        console.log("[NetworkLauncher] sh-backend service started");
       }
     }
 
-    console.log(`[NetworkLauncher] Starting sh-bsp service...`);
+    console.log("[NetworkLauncher] Starting sh-bsp service...");
     await compose.upOne("sh-bsp", {
       cwd: cwd,
       config: tmpFile,
       log: verbose
     });
-    console.log(`[NetworkLauncher] sh-bsp service started`);
+    console.log("[NetworkLauncher] sh-bsp service started");
 
     const bspIp = await getContainerIp(
       this.config.noisy ? "toxiproxy" : ShConsts.NODE_INFOS.bsp.containerName
@@ -485,12 +510,10 @@ export class NetworkLauncher {
         });
         console.log(`[NetworkLauncher] ${mspService} started`);
       }
-      console.log(`[NetworkLauncher] All MSP services started`);
+      console.log("[NetworkLauncher] All MSP services started");
     }
 
-   
-
-    console.log(`[NetworkLauncher] Starting sh-user service...`);
+    console.log("[NetworkLauncher] Starting sh-user service...");
     await compose.upOne("sh-user", {
       cwd: cwd,
       config: tmpFile,
@@ -501,11 +524,11 @@ export class NetworkLauncher {
         BSP_PEER_ID: bspPeerId
       }
     });
-    console.log(`[NetworkLauncher] sh-user service started`);
+    console.log("[NetworkLauncher] sh-user service started");
 
     // Only start fisherman service if it's enabled and we're using fullnet
     if (this.config.fisherman && this.type === "fullnet") {
-      console.log(`[NetworkLauncher] Starting sh-fisherman service...`);
+      console.log("[NetworkLauncher] Starting sh-fisherman service...");
       await compose.upOne("sh-fisherman", {
         cwd: cwd,
         config: tmpFile,
@@ -514,12 +537,12 @@ export class NetworkLauncher {
           ...process.env
         }
       });
-      console.log(`[NetworkLauncher] sh-fisherman service started`);
+      console.log("[NetworkLauncher] sh-fisherman service started");
     }
 
     // Only start standalone indexer service if it's enabled and we're using fullnet
     if (this.config.indexer && this.config.standaloneIndexer && this.type === "fullnet") {
-      console.log(`[NetworkLauncher] Starting sh-indexer service...`);
+      console.log("[NetworkLauncher] Starting sh-indexer service...");
       await compose.upOne("sh-indexer", {
         cwd: cwd,
         config: tmpFile,
@@ -530,10 +553,10 @@ export class NetworkLauncher {
           BSP_PEER_ID: bspPeerId
         }
       });
-      console.log(`[NetworkLauncher] sh-indexer service started`);
+      console.log("[NetworkLauncher] sh-indexer service started");
     }
 
-    console.log(`[NetworkLauncher] Network startup completed`);
+    console.log("[NetworkLauncher] Network startup completed");
     return this;
   }
 
@@ -544,21 +567,21 @@ export class NetworkLauncher {
 
   private async runMigrations() {
     // Migrations are needed for indexer or for fullnet (MSPs require database schema)
-    console.log(`[NetworkLauncher] Running database migrations...`);
+    console.log("[NetworkLauncher] Running database migrations...");
     assert(
       this.config.indexer || this.type === "fullnet",
       "Indexer must be enabled or network type must be fullnet to run migrations"
     );
 
-    console.log(`[NetworkLauncher] Checking Diesel CLI availability...`);
+    console.log("[NetworkLauncher] Checking Diesel CLI availability...");
     const dieselCheck = spawnSync("diesel", ["--version"], { stdio: "ignore" });
     assert(
       dieselCheck.status === 0,
       "Error running Diesel CLI. Visit https://diesel.rs/guides/getting-started for install instructions."
     );
-    console.log(`[NetworkLauncher] Diesel CLI found`);
+    console.log("[NetworkLauncher] Diesel CLI found");
 
-    console.log(`[NetworkLauncher] Waiting for PostgreSQL to be ready...`);
+    console.log("[NetworkLauncher] Waiting for PostgreSQL to be ready...");
     await waitFor({
       lambda: async () => {
         try {
@@ -574,7 +597,7 @@ export class NetworkLauncher {
         }
       }
     });
-    console.log(`[NetworkLauncher] PostgreSQL is ready`);
+    console.log("[NetworkLauncher] PostgreSQL is ready");
 
     const cwd = path.resolve(process.cwd(), "..", "client", "indexer-db");
     console.log(`[NetworkLauncher] Running migrations from: ${cwd}`);
@@ -593,7 +616,7 @@ export class NetworkLauncher {
 
       diesel.on("close", (code) => {
         if (code === 0) {
-          console.log(`[NetworkLauncher] Database migrations completed successfully`);
+          console.log("[NetworkLauncher] Database migrations completed successfully");
           resolve(true);
         } else {
           reject(new Error(`Diesel migrations failed with code ${code}`));
@@ -630,7 +653,9 @@ export class NetworkLauncher {
   }
 
   public async setupBsp(api: EnrichedBspApi, who: string, multiaddress: string, bspId?: string) {
-    console.log(`[NetworkLauncher] Setting up BSP with address: ${who}, multiaddress: ${multiaddress}`);
+    console.log(
+      `[NetworkLauncher] Setting up BSP with address: ${who}, multiaddress: ${multiaddress}`
+    );
     await forceSignupBsp({
       api: api,
       who,
@@ -639,12 +664,12 @@ export class NetworkLauncher {
       capacity: this.config.capacity ?? ShConsts.CAPACITY_512,
       weight: this.config.bspStartingWeight
     });
-    console.log(`[NetworkLauncher] BSP setup completed`);
+    console.log("[NetworkLauncher] BSP setup completed");
     return this;
   }
 
   public async preFundAccounts(api: EnrichedBspApi) {
-    console.log(`[NetworkLauncher] Pre-funding accounts...`);
+    console.log("[NetworkLauncher] Pre-funding accounts...");
     const amount = 10000n * 10n ** 12n;
 
     const sudo = api.accounts.sudo;
@@ -671,14 +696,16 @@ export class NetworkLauncher {
 
     const sudoTxns = await Promise.all(signedCalls);
 
-    console.log(`[NetworkLauncher] Sealing block with pre-funding transactions...`);
+    console.log("[NetworkLauncher] Sealing block with pre-funding transactions...");
     await api.block.seal({ calls: sudoTxns });
-    console.log(`[NetworkLauncher] Accounts pre-funded successfully`);
+    console.log("[NetworkLauncher] Accounts pre-funded successfully");
     return;
   }
 
   public async setupMsp(api: EnrichedBspApi, who: string, multiAddressMsp: string, mspId?: string) {
-    console.log(`[NetworkLauncher] Setting up MSP with address: ${who}, multiaddress: ${multiAddressMsp}, mspId: ${mspId ?? ShConsts.DUMMY_MSP_ID}`);
+    console.log(
+      `[NetworkLauncher] Setting up MSP with address: ${who}, multiaddress: ${multiAddressMsp}, mspId: ${mspId ?? ShConsts.DUMMY_MSP_ID}`
+    );
     await api.block.seal({
       calls: [
         api.tx.sudo.sudo(
@@ -697,12 +724,12 @@ export class NetworkLauncher {
         )
       ]
     });
-    console.log(`[NetworkLauncher] MSP setup completed`);
+    console.log("[NetworkLauncher] MSP setup completed");
     return this;
   }
 
   public async setupRuntimeParams(api: EnrichedBspApi) {
-    console.log(`[NetworkLauncher] Setting up runtime parameters...`);
+    console.log("[NetworkLauncher] Setting up runtime parameters...");
     // Adjusting runtime parameters...
     // The `set_parameter` extrinsic receives an object like this:
     // {
@@ -738,7 +765,7 @@ export class NetworkLauncher {
     //     StakeToSeedPeriod: [null, {VALUE_YOU_WANT}],
     //   }
     // }
-    console.log(`[NetworkLauncher] Setting SlashAmountPerMaxFileSize...`);
+    console.log("[NetworkLauncher] Setting SlashAmountPerMaxFileSize...");
     const slashAmountPerMaxFileSizeRuntimeParameter = {
       RuntimeConfig: {
         SlashAmountPerMaxFileSize: [null, 20n * MILLIUNIT]
@@ -749,7 +776,7 @@ export class NetworkLauncher {
         api.tx.sudo.sudo(api.tx.parameters.setParameter(slashAmountPerMaxFileSizeRuntimeParameter))
       ]
     });
-    console.log(`[NetworkLauncher] Setting StakeToChallengePeriod...`);
+    console.log("[NetworkLauncher] Setting StakeToChallengePeriod...");
     const stakeToChallengePeriodRuntimeParameter = {
       RuntimeConfig: {
         StakeToChallengePeriod: [null, 1000n * UNIT]
@@ -760,7 +787,7 @@ export class NetworkLauncher {
         api.tx.sudo.sudo(api.tx.parameters.setParameter(stakeToChallengePeriodRuntimeParameter))
       ]
     });
-    console.log(`[NetworkLauncher] Setting CheckpointChallengePeriod...`);
+    console.log("[NetworkLauncher] Setting CheckpointChallengePeriod...");
     const checkpointChallengePeriodRuntimeParameter = {
       RuntimeConfig: {
         CheckpointChallengePeriod: [null, 10]
@@ -771,7 +798,7 @@ export class NetworkLauncher {
         api.tx.sudo.sudo(api.tx.parameters.setParameter(checkpointChallengePeriodRuntimeParameter))
       ]
     });
-    console.log(`[NetworkLauncher] Setting MinChallengePeriod...`);
+    console.log("[NetworkLauncher] Setting MinChallengePeriod...");
     const minChallengePeriodRuntimeParameter = {
       RuntimeConfig: {
         MinChallengePeriod: [null, 5]
@@ -780,7 +807,7 @@ export class NetworkLauncher {
     await api.block.seal({
       calls: [api.tx.sudo.sudo(api.tx.parameters.setParameter(minChallengePeriodRuntimeParameter))]
     });
-    console.log(`[NetworkLauncher] Setting BasicReplicationTarget...`);
+    console.log("[NetworkLauncher] Setting BasicReplicationTarget...");
     const basicReplicationTargetRuntimeParameter = {
       RuntimeConfig: {
         BasicReplicationTarget: [null, 3]
@@ -791,7 +818,7 @@ export class NetworkLauncher {
         api.tx.sudo.sudo(api.tx.parameters.setParameter(basicReplicationTargetRuntimeParameter))
       ]
     });
-    console.log(`[NetworkLauncher] Setting MaxReplicationTarget...`);
+    console.log("[NetworkLauncher] Setting MaxReplicationTarget...");
     const maxReplicationTargetRuntimeParameter = {
       RuntimeConfig: {
         MaxReplicationTarget: [null, 9]
@@ -802,7 +829,7 @@ export class NetworkLauncher {
         api.tx.sudo.sudo(api.tx.parameters.setParameter(maxReplicationTargetRuntimeParameter))
       ]
     });
-    console.log(`[NetworkLauncher] Setting TickRangeToMaximumThreshold...`);
+    console.log("[NetworkLauncher] Setting TickRangeToMaximumThreshold...");
     const tickRangeToMaximumThresholdRuntimeParameter = {
       RuntimeConfig: {
         TickRangeToMaximumThreshold: [null, 10]
@@ -815,7 +842,7 @@ export class NetworkLauncher {
         )
       ]
     });
-    console.log(`[NetworkLauncher] Setting MinWaitForStopStoring...`);
+    console.log("[NetworkLauncher] Setting MinWaitForStopStoring...");
     const minWaitForStopStoringRuntimeParameter = {
       RuntimeConfig: {
         MinWaitForStopStoring: [null, 15]
@@ -826,7 +853,7 @@ export class NetworkLauncher {
         api.tx.sudo.sudo(api.tx.parameters.setParameter(minWaitForStopStoringRuntimeParameter))
       ]
     });
-    console.log(`[NetworkLauncher] Setting StorageRequestTtl...`);
+    console.log("[NetworkLauncher] Setting StorageRequestTtl...");
     const storageRequestTtlRuntimeParameter = {
       RuntimeConfig: {
         StorageRequestTtl: [null, 20]
@@ -835,17 +862,19 @@ export class NetworkLauncher {
     await api.block.seal({
       calls: [api.tx.sudo.sudo(api.tx.parameters.setParameter(storageRequestTtlRuntimeParameter))]
     });
-    console.log(`[NetworkLauncher] Runtime parameters setup completed`);
+    console.log("[NetworkLauncher] Runtime parameters setup completed");
   }
 
   public async execDemoStorageRequest() {
-    console.log(`[NetworkLauncher] Executing demo storage request...`);
+    console.log("[NetworkLauncher] Executing demo storage request...");
     await using api = await this.getApi("sh-user");
 
     const source = "res/whatsup.jpg";
     const destination = "test/smile.jpg";
     const bucketName = "nothingmuch-1";
-    console.log(`[NetworkLauncher] Creating bucket "${bucketName}" and sending storage request for "${source}" -> "${destination}"`);
+    console.log(
+      `[NetworkLauncher] Creating bucket "${bucketName}" and sending storage request for "${source}" -> "${destination}"`
+    );
     const fileMetadata = await api.file.createBucketAndSendNewStorageRequest(
       source,
       destination,
@@ -857,34 +886,34 @@ export class NetworkLauncher {
     );
 
     if (this.type === "bspnet") {
-      console.log(`[NetworkLauncher] Waiting for BSP volunteer (bspnet)...`);
+      console.log("[NetworkLauncher] Waiting for BSP volunteer (bspnet)...");
       await api.wait.bspVolunteer();
-      console.log(`[NetworkLauncher] Waiting for BSP stored confirmation...`);
+      console.log("[NetworkLauncher] Waiting for BSP stored confirmation...");
       await api.wait.bspStored();
     }
 
     if (this.type === "fullnet") {
       // This will advance the block which also contains the BSP volunteer tx.
       // Hence why we can wait for the BSP to confirm storing.
-      console.log(`[NetworkLauncher] Waiting for MSP response in tx pool (fullnet)...`);
+      console.log("[NetworkLauncher] Waiting for MSP response in tx pool (fullnet)...");
       await api.wait.mspResponseInTxPool();
-      console.log(`[NetworkLauncher] Waiting for BSP volunteer in tx pool...`);
+      console.log("[NetworkLauncher] Waiting for BSP volunteer in tx pool...");
       await api.wait.bspVolunteerInTxPool();
-      console.log(`[NetworkLauncher] Sealing block...`);
+      console.log("[NetworkLauncher] Sealing block...");
       await api.block.seal();
-      console.log(`[NetworkLauncher] Waiting for BSP stored confirmation...`);
+      console.log("[NetworkLauncher] Waiting for BSP stored confirmation...");
       await api.wait.bspStored();
     }
 
-    console.log(`[NetworkLauncher] Demo storage request completed`);
+    console.log("[NetworkLauncher] Demo storage request completed");
     return { fileMetadata };
   }
 
   public async initExtraBsps() {
-    console.log(`[NetworkLauncher] Initializing extra BSPs...`);
+    console.log("[NetworkLauncher] Initializing extra BSPs...");
     await using api = await this.getApi("sh-user");
 
-    console.log(`[NetworkLauncher] Updating BasicReplicationTarget to 4...`);
+    console.log("[NetworkLauncher] Updating BasicReplicationTarget to 4...");
     const basicReplicationTargetRuntimeParameter = {
       RuntimeConfig: {
         BasicReplicationTarget: [null, 4]
@@ -896,7 +925,7 @@ export class NetworkLauncher {
       ]
     });
 
-    console.log(`[NetworkLauncher] Updating TickRangeToMaximumThreshold to 1...`);
+    console.log("[NetworkLauncher] Updating TickRangeToMaximumThreshold to 1...");
     const tickToMaximumThresholdRuntimeParameter = {
       RuntimeConfig: {
         TickRangeToMaximumThreshold: [null, 1]
@@ -912,7 +941,7 @@ export class NetworkLauncher {
     // One BSP will be down, two more will be up.
     const runtimeTypeArgs =
       this.config.runtimeType === "solochain" ? ["--chain=solochain-evm-dev"] : [];
-    console.log(`[NetworkLauncher] Adding BSP: sh-bsp-down...`);
+    console.log("[NetworkLauncher] Adding BSP: sh-bsp-down...");
     const { containerName: bspDownContainerName } = await addBsp(
       api,
       api.accounts.bspDownKey,
@@ -926,7 +955,7 @@ export class NetworkLauncher {
         additionalArgs: ["--keystore-path=/keystore/bsp-down", ...runtimeTypeArgs]
       }
     );
-    console.log(`[NetworkLauncher] Adding BSP: sh-bsp-two...`);
+    console.log("[NetworkLauncher] Adding BSP: sh-bsp-two...");
     const { rpcPort: bspTwoRpcPort } = await addBsp(
       api,
       api.accounts.bspTwoKey,
@@ -940,7 +969,7 @@ export class NetworkLauncher {
         additionalArgs: ["--keystore-path=/keystore/bsp-two", ...runtimeTypeArgs]
       }
     );
-    console.log(`[NetworkLauncher] Adding BSP: sh-bsp-three...`);
+    console.log("[NetworkLauncher] Adding BSP: sh-bsp-three...");
     const { rpcPort: bspThreeRpcPort } = await addBsp(
       api,
       api.accounts.bspThreeKey,
@@ -960,10 +989,12 @@ export class NetworkLauncher {
     const bucketName = "nothingmuch-1";
 
     // Wait for a few seconds for all BSPs to be synced
-    console.log(`[NetworkLauncher] Waiting 5 seconds for all BSPs to sync...`);
+    console.log("[NetworkLauncher] Waiting 5 seconds for all BSPs to sync...");
     await sleep(5000);
 
-    console.log(`[NetworkLauncher] Creating bucket "${bucketName}" and sending storage request for "${source}" -> "${location}"`);
+    console.log(
+      `[NetworkLauncher] Creating bucket "${bucketName}" and sending storage request for "${source}" -> "${location}"`
+    );
     const fileMetadata = await api.file.createBucketAndSendNewStorageRequest(
       source,
       location,
@@ -971,9 +1002,9 @@ export class NetworkLauncher {
       null,
       null
     );
-    console.log(`[NetworkLauncher] Waiting for 4 BSP volunteers...`);
+    console.log("[NetworkLauncher] Waiting for 4 BSP volunteers...");
     await api.wait.bspVolunteer(4);
-    console.log(`[NetworkLauncher] Waiting for 4 BSP stored confirmations...`);
+    console.log("[NetworkLauncher] Waiting for 4 BSP stored confirmations...");
     await api.wait.bspStored({ expectedExts: 4 });
 
     // Stop BSP that is supposed to be down
@@ -981,9 +1012,9 @@ export class NetworkLauncher {
     await api.docker.stopContainer(bspDownContainerName);
 
     // Attempt to debounce and stabilise
-    console.log(`[NetworkLauncher] Waiting 1.5 seconds for stabilization...`);
+    console.log("[NetworkLauncher] Waiting 1.5 seconds for stabilization...");
     await sleep(1500);
-    console.log(`[NetworkLauncher] Extra BSPs initialization completed`);
+    console.log("[NetworkLauncher] Extra BSPs initialization completed");
 
     return {
       bspTwoRpcPort,
@@ -1014,7 +1045,7 @@ export class NetworkLauncher {
       .populateEntities()
       .startNetwork();
 
-    console.log(`[NetworkLauncher] Getting API for sh-bsp...`);
+    console.log("[NetworkLauncher] Getting API for sh-bsp...");
     await using bspApi = await launchedNetwork.getApi("sh-bsp");
 
     // Wait for network to be in sync
@@ -1024,25 +1055,25 @@ export class NetworkLauncher {
       searchString: "💤 Idle",
       timeout: 15000
     });
-    console.log(`[NetworkLauncher] sh-bsp is in sync`);
+    console.log("[NetworkLauncher] sh-bsp is in sync");
 
-    console.log(`[NetworkLauncher] Getting peer ID for sh-user...`);
+    console.log("[NetworkLauncher] Getting peer ID for sh-user...");
     const userPeerId = await launchedNetwork.getPeerId("sh-user");
     console.log(`sh-user Peer ID: ${userPeerId}`);
 
     const bspContainerName = launchedNetwork.composeYaml.services["sh-bsp"].container_name;
     assert(bspContainerName, "BSP container name not found in compose file");
-    console.log(`[NetworkLauncher] Getting BSP IP address...`);
+    console.log("[NetworkLauncher] Getting BSP IP address...");
     const bspIp = await getContainerIp(
       launchedNetwork.config.noisy ? "toxiproxy" : bspContainerName
     );
 
-    console.log(`[NetworkLauncher] Getting peer ID for sh-bsp...`);
+    console.log("[NetworkLauncher] Getting peer ID for sh-bsp...");
     const bspPeerId = await launchedNetwork.getPeerId("sh-bsp");
     const multiAddressBsp = `/ip4/${bspIp}/tcp/30350/p2p/${bspPeerId}`;
     console.log(`[NetworkLauncher] BSP multiaddress: ${multiAddressBsp}`);
 
-    console.log(`[NetworkLauncher] Getting API for sh-user...`);
+    console.log("[NetworkLauncher] Getting API for sh-user...");
     await using userApi = await launchedNetwork.getApi("sh-user");
 
     console.log(`[NetworkLauncher] Waiting for sh-user to be in sync (looking for "💤 Idle")...`);
@@ -1051,25 +1082,29 @@ export class NetworkLauncher {
       searchString: "💤 Idle",
       timeout: 15000
     });
-    console.log(`[NetworkLauncher] sh-user is in sync`);
+    console.log("[NetworkLauncher] sh-user is in sync");
 
     await launchedNetwork.preFundAccounts(userApi);
     await launchedNetwork.setupBsp(userApi, userApi.accounts.bspKey.address, multiAddressBsp);
     await launchedNetwork.setupRuntimeParams(userApi);
-    console.log(`[NetworkLauncher] Sealing block after setup...`);
+    console.log("[NetworkLauncher] Sealing block after setup...");
     await userApi.block.seal();
 
     if (launchedNetwork.type === "fullnet") {
       const mspServices = Object.keys(launchedNetwork.composeYaml.services).filter((service) =>
         service.includes("sh-msp")
       );
-      console.log(`[NetworkLauncher] Setting up ${mspServices.length} MSP service(s) for fullnet...`);
+      console.log(
+        `[NetworkLauncher] Setting up ${mspServices.length} MSP service(s) for fullnet...`
+      );
       for (const service of mspServices) {
         const mspContainerName = launchedNetwork.composeYaml.services[service].container_name;
         assert(mspContainerName, "MSP container name not found in compose file");
 
         // Wait for MSP to be ready before fetching peer ID
-        console.log(`[NetworkLauncher] Waiting for ${service} to be in sync (looking for "💤 Idle")...`);
+        console.log(
+          `[NetworkLauncher] Waiting for ${service} to be in sync (looking for "💤 Idle")...`
+        );
         await userApi.docker.waitForLog({
           containerName: mspContainerName,
           searchString: "💤 Idle",
@@ -1112,25 +1147,25 @@ export class NetworkLauncher {
     }
 
     if (launchedNetwork.type === "bspnet") {
-      console.log(`[NetworkLauncher] Setting up mock MSP for bspnet...`);
+      console.log("[NetworkLauncher] Setting up mock MSP for bspnet...");
       const mockMspMultiAddress = `/ip4/${bspIp}/tcp/30350/p2p/${ShConsts.DUMMY_MSP_PEER_ID}`;
       await launchedNetwork.setupMsp(userApi, userApi.accounts.mspKey.address, mockMspMultiAddress);
     }
 
     if (launchedNetwork.config.initialised === "multi") {
-      console.log(`[NetworkLauncher] Network initialization mode: multi`);
+      console.log("[NetworkLauncher] Network initialization mode: multi");
       return await launchedNetwork.initExtraBsps();
     }
 
     if (launchedNetwork.config.initialised === true) {
-      console.log(`[NetworkLauncher] Network initialization mode: true`);
+      console.log("[NetworkLauncher] Network initialization mode: true");
       return await launchedNetwork.execDemoStorageRequest();
     }
 
     // Attempt to debounce and stabilise
-    console.log(`[NetworkLauncher] Waiting 1.5 seconds for stabilization...`);
+    console.log("[NetworkLauncher] Waiting 1.5 seconds for stabilization...");
     await sleep(1500);
-    console.log(`[NetworkLauncher] Network setup completed`);
+    console.log("[NetworkLauncher] Network setup completed");
     return undefined;
   }
 }
