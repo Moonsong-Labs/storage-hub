@@ -128,6 +128,11 @@ export class NetworkLauncher {
       if (this.config.fisherman && this.type === "fullnet") {
         composeYaml.services["sh-fisherman"].command.push("--chain=solochain-evm-dev");
       }
+
+      // Add the runtime type to the command for standalone indexer if enabled
+      if (this.config.indexer && this.config.standaloneIndexer && this.type === "fullnet") {
+        composeYaml.services["sh-indexer"].command.push("--chain=solochain-evm-dev");
+      }
     }
 
     // Configure fisherman service
@@ -209,6 +214,17 @@ export class NetworkLauncher {
       }
     }
 
+    // MSPs always need database access for move bucket operations (required by CLI)
+    // Always configure this for fullnet regardless of indexer setting
+    if (this.type === "fullnet") {
+      composeYaml.services["sh-msp-1"].command.push(
+        "--provider-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+      );
+      composeYaml.services["sh-msp-2"].command.push(
+        "--provider-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+      );
+    }
+
     if (this.config.indexer) {
       // If using standalone indexer, configure the sh-indexer service
       if (this.config.standaloneIndexer && this.type === "fullnet") {
@@ -231,15 +247,6 @@ export class NetworkLauncher {
           composeYaml.services["sh-user"].command.push(`--indexer-mode=${this.config.indexerMode}`);
         }
       }
-
-      // MSPs need database access for move bucket operations
-      // Use --provider-database-url instead of full indexer flags
-      composeYaml.services["sh-msp-1"].command.push(
-        "--provider-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
-      );
-      composeYaml.services["sh-msp-2"].command.push(
-        "--provider-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
-      );
     }
 
     const cwd = path.resolve(process.cwd(), "..", "docker");
@@ -364,14 +371,19 @@ export class NetworkLauncher {
       }
     }
 
-    if (this.config.indexer) {
+    // Postgres is always needed for fullnet because MSPs require database access
+    // For other network types, only start postgres if indexer is enabled
+    if (this.type === "fullnet" || this.config.indexer) {
       await compose.upOne("sh-postgres", {
         cwd: cwd,
         config: tmpFile,
         log: verbose
       });
 
-      await this.runMigrations();
+      // Run migrations for fullnet (MSPs need the schema) or when indexer is enabled
+      if (this.type === "fullnet" || this.config.indexer) {
+        await this.runMigrations();
+      }
 
       // Start backend only if backend flag is enabled (depends on msp-1 and postgres)
       if (this.config.backend && this.type === "fullnet") {
@@ -433,7 +445,11 @@ export class NetworkLauncher {
   }
 
   private async runMigrations() {
-    assert(this.config.indexer, "Indexer must be enabled to run migrations");
+    // Migrations are needed for indexer or for fullnet (MSPs require database schema)
+    assert(
+      this.config.indexer || this.type === "fullnet",
+      "Indexer must be enabled or network type must be fullnet to run migrations"
+    );
 
     const dieselCheck = spawnSync("diesel", ["--version"], { stdio: "ignore" });
     assert(
