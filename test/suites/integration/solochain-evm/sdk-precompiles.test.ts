@@ -531,7 +531,7 @@ await describeMspNet(
       await userApi.fisherman.retryableWaitAndVerifyBatchDeletions({
         blockProducerApi: userApi,
         deletionType: "User",
-        expectExt: 1,
+        expectExt: 2,
         userApi,
         mspApi: msp1Api,
         expectedBucketCount: 1,
@@ -541,10 +541,12 @@ await describeMspNet(
       // Wait until the MSP detects the on-chain deletion and updates its local bucket forest
       await msp1Api.wait.mspBucketFileDeletionCompleted(fileKey.toHex(), bucketId);
 
-      // Finalise the block containing the `BucketFileDeletionsCompleted` event in the MSP node
-      // so that the `BucketFileDeletionsCompleted` event is finalised on-chain and the MSP deletes the
-      // file from its file storage.
-      await msp1Api.rpc.engine.finalizeBlock(deleteFileBlock.blockReceipt.blockHash);
+      // Non-producer nodes must explicitly finalize imported blocks to trigger file deletion
+      // Producer node (user) has finalized blocks, but BSP and MSP must finalize locally
+      const finalisedBlockHash = await userApi.rpc.chain.getFinalizedHead();
+
+      await msp1Api.wait.blockImported(finalisedBlockHash.toString());
+      await msp1Api.block.finaliseBlock(finalisedBlockHash.toString());
 
       // Wait until the MSP detects the now finalised deletion and correctly deletes the file from its file storage
       await msp1Api.wait.fileDeletionFromFileStorage(fileKey.toHex());
