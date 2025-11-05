@@ -513,6 +513,23 @@ export class NetworkLauncher {
       console.log("[NetworkLauncher] All MSP services started");
     }
 
+    if (this.type === "fullnet" || this.config.indexer) {
+      // Start backend only if backend flag is enabled (depends on msp-1 and postgres)
+      if (this.config.backend) {
+        console.log("[NetworkLauncher] Starting sh-backend service...");
+        await compose.upOne("sh-backend", {
+          cwd: cwd,
+          config: tmpFile,
+          log: verbose,
+          env: {
+            ...process.env,
+            JWT_SECRET: JWT_SECRET
+          }
+        });
+        console.log("[NetworkLauncher] sh-backend service started");
+      }
+    }
+
     console.log("[NetworkLauncher] Starting sh-user service...");
     await compose.upOne("sh-user", {
       cwd: cwd,
