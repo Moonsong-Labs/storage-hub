@@ -1,28 +1,30 @@
 //! Fisherman batch file deletion task module.
 //!
 //! This module implements the single-task architecture for processing batched file deletions.
-//! The [`FishermanTask`] handles [`BatchFileDeletions`] events emitted every 5 blocks by the
+//! The [`FishermanTask`] handles [`BatchFileDeletions`] events emitted periodically by the
 //! fisherman service, processes files grouped by target (BSP/Bucket), and submits batch
 //! extrinsics for efficient deletion.
 //!
 //! ## Architecture
 //!
 //! - **Event-driven**: Responds to [`BatchFileDeletions`] events with specified deletion type
-//! - **Batch processing**: Queries up to 1000 files per cycle from indexer database
-//! - **Parallel execution**: Spawns futures for each target (BSP/Bucket) and processes them
-//!   concurrently using [`futures::future::join_all`]
+//! - **Batch processing**: Queries pending deletions from indexer database, grouped by target
+//! - **Parallel execution**: Processes each target (BSP/Bucket) concurrently in parallel futures
 //! - **Lock management**: Always releases the global lock after processing, even on errors
 //!
 //! ## Processing Flow
 //!
 //! 1. Receive [`BatchFileDeletions`] event with deletion type (User or Incomplete)
-//! 2. Query [`get_pending_deletions`] from indexer database
-//! 3. Spawn [`FishermanTask::process_target_batch`] futures for each BSP and Bucket group
+//! 2. Query pending deletions from indexer database, grouped by target (BSP/Bucket)
+//! 3. Spawn [`FishermanTask::batch_delete_files_for_target`] futures for each target group
 //! 4. Each target batch:
-//!    - Builds ephemeral forest proof for all files in the batch
+//!    - Reconstructs ephemeral forest state from indexer data at last finalized block
+//!    - Applies catch-up changes from finalized block to current best block
+//!    - Filters file keys to only those that exist in the forest after catch-up
+//!    - Generates forest proof for valid file keys
 //!    - Submits appropriate extrinsic for the deletion type
-//! 5. Await all futures with [`join_all`](futures::future::join_all)
-//! 6. Release global lock via [`FishermanServiceCommandInterface::release_batch_lock`]
+//! 5. Await all target processing futures
+//! 6. Release global lock via fisherman service
 
 use anyhow::anyhow;
 use codec::Decode;
@@ -92,7 +94,7 @@ pub struct BatchFileDeletionData<Runtime: StorageEnableRuntime> {
 
 /// Single task that handles [`BatchFileDeletions`] events.
 ///
-/// This task processes batch deletion events emitted by the fisherman service every 5 blocks.
+/// This task processes batch deletion events emitted periodically by the fisherman service.
 /// It queries pending deletions for the specified type (User or Incomplete), spawns parallel
 /// futures for each target (BSP/Bucket), awaits their completion, and releases the global lock.
 ///
@@ -154,8 +156,9 @@ where
 
     /// Process all files for a single target (BSP or Bucket).
     ///
-    /// This method generates a forest proof for all files in the batch and submits the
-    /// appropriate extrinsic based on the deletion type.
+    /// This method builds a forest proof for files in the batch, filters out files that don't
+    /// exist in the forest after catch-up, and submits the appropriate extrinsic based on
+    /// the deletion type.
     ///
     /// # Arguments
     /// * `target` - The deletion target (BSP ID or Bucket ID)
@@ -251,13 +254,13 @@ where
     /// Generate forest proof for batch of files.
     ///
     /// This function:
-    /// 1. Extracts bucket ID, provider ID from deletion target (all files in batch share same target)
-    /// 2. Gets indexer DB connection
+    /// 1. Gets indexer DB connection and retrieves last finalized block
+    /// 2. Fetches all file keys for the deletion target from finalized data
     /// 3. Builds ephemeral forest from indexer data at last finalized block
     /// 4. Applies catch-up changes from last finalized block to current best block
-    /// 5. Filters file keys to only those that exist in the forest
+    /// 5. Filters file keys to only those that exist in the forest after catch-up
     /// 6. Generates proof for the valid file keys
-    /// 7. Returns filtered file keys, provider ID, and forest proof
+    /// 7. Returns filtered file keys and forest proof
     async fn build_forest_proof_for_deletions(
         &self,
         file_keys: &[Runtime::Hash],
@@ -481,9 +484,9 @@ where
         Ok((remaining_file_keys, forest_proof_result))
     }
 
-    /// Submit user deletion extrinsic `pallet_file_system::Call::delete_files`.
+    /// Submit user deletion extrinsic.
     ///
-    /// Will always send `None` as the provider id when it is a bucket deletion (i.e. passing `None` or an MSP as the `provider_id) in the extrinsic call as per the specification of the extrinsic.
+    /// Will always send `None` as the provider id when it is a bucket deletion (i.e. passing `None` or an MSP as the `provider_id`) in the extrinsic call as per the specification of the extrinsic.
     async fn submit_user_deletion_extrinsic(
         &self,
         files: &[BatchFileDeletionData<Runtime>],
@@ -582,9 +585,9 @@ where
         Ok(())
     }
 
-    /// Submit incomplete deletion extrinsic `pallet_file_system::Call::delete_files_for_incomplete_storage_request`.
+    /// Submit incomplete deletion extrinsic.
     ///
-    /// Will always send `None` as the provider id when it is a bucket deletion (i.e. passing `None` or an MSP as the `provider_id) in the extrinsic call as per the specification of the extrinsic.
+    /// Will always send `None` as the provider id when it is a bucket deletion (i.e. passing `None` or an MSP as the `provider_id`) in the extrinsic call as per the specification of the extrinsic.
     async fn submit_incomplete_deletion_extrinsic(
         &self,
         file_keys: &[Runtime::Hash],
