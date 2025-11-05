@@ -671,8 +671,8 @@ where
         }
         .into();
 
-        // Send extrinsic and wait for it to be included in the block.
-        let result = self
+        // Try to send the volunteer extrinsic
+        let mut volunteer_result = self
             .storage_hub_handler
             .blockchain
             .send_extrinsic(
@@ -692,50 +692,87 @@ where
             .watch_for_success(&self.storage_hub_handler.blockchain)
             .await;
 
-        if let Err(e) = result {
+        // If the first attempt failed, check if we've already volunteered and retry if needed
+        if let Err(ref e) = volunteer_result {
             error!(
                 target: LOG_TARGET,
-                "Failed to volunteer for file {:?}: {:?}",
+                "Failed to volunteer for file {:x} on first attempt: {:?}",
                 file_key,
                 e
             );
 
             // If the initial call errored out, it could mean the chain was spammed so the tick did not advance.
             // Wait until the actual earliest volunteer tick to occur and retry volunteering.
+            info!(
+                target: LOG_TARGET,
+                "Retrying volunteer for file {:x} at tick {:?}",
+                file_key,
+                earliest_volunteer_tick
+            );
+
             self.storage_hub_handler
                 .blockchain
                 .wait_for_tick(earliest_volunteer_tick)
                 .await?;
 
-            // Send extrinsic and wait for it to be included in the block.
-            let result = self
+            // Check if we've already successfully volunteered despite the error.
+            // This is to avoid unvolunteering for the file if we've already successfully volunteered
+            // and registered it in the file transfer service.
+            let already_volunteered = self
                 .storage_hub_handler
                 .blockchain
-                .send_extrinsic(
-                    call,
-                    SendExtrinsicOptions::new(
-                        Duration::from_secs(
-                            self.storage_hub_handler
-                                .provider_config
-                                .blockchain_service
-                                .extrinsic_retry_timeout,
-                        ),
-                        Some("fileSystem".to_string()),
-                        Some("bspVolunteer".to_string()),
-                    ),
-                )
-                .await?
-                .watch_for_success(&self.storage_hub_handler.blockchain)
-                .await;
+                .query_bsp_volunteered_for_file(own_bsp_id, file_key.into())
+                .await
+                .unwrap_or(false);
 
-            if let Err(e) = result {
+            // If we have already successfully volunteered, skip retrying.
+            if already_volunteered {
+                info!(
+                    target: LOG_TARGET,
+                    "BSP already volunteered for file {:x} successfully",
+                    file_key
+                );
+                volunteer_result = Ok(());
+            } else {
+                // If we haven't successfully volunteered yet, retry sending the extrinsic.
+                volunteer_result = self
+                    .storage_hub_handler
+                    .blockchain
+                    .send_extrinsic(
+                        call,
+                        SendExtrinsicOptions::new(
+                            Duration::from_secs(
+                                self.storage_hub_handler
+                                    .provider_config
+                                    .blockchain_service
+                                    .extrinsic_retry_timeout,
+                            ),
+                            Some("fileSystem".to_string()),
+                            Some("bspVolunteer".to_string()),
+                        ),
+                    )
+                    .await?
+                    .watch_for_success(&self.storage_hub_handler.blockchain)
+                    .await;
+            }
+        }
+
+        // Handle the volunteer result.
+        match volunteer_result {
+            Ok(_) => {
+                info!(
+                    target: LOG_TARGET,
+                    "BSP volunteered for file {:x} successfully",
+                    file_key
+                );
+            }
+            Err(e) => {
                 error!(
                     target: LOG_TARGET,
-                    "Failed to volunteer for file {:?} after retry in volunteer tick: {:?}",
+                    "Failed to volunteer for file {:x} after all attempts: {:?}",
                     file_key,
                     e
                 );
-
                 self.unvolunteer_file(file_key.into()).await;
             }
         }
@@ -750,6 +787,8 @@ where
         &mut self,
         event: RemoteUploadRequest<Runtime>,
     ) -> anyhow::Result<bool> {
+        info!(target: LOG_TARGET, "Handling remote upload request for file key {:x}", event.file_key);
+
         let file_key = event.file_key.into();
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
 
