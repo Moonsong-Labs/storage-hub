@@ -381,6 +381,39 @@ export class NetworkLauncher {
       console.log(`[NetworkLauncher] toxiproxy service started`);
     }
 
+     // Postgres is always needed for fullnet because MSPs require database access
+    // For other network types, only start postgres if indexer is enabled
+    if (this.type === "fullnet" || this.config.indexer) {
+      console.log(`[NetworkLauncher] Starting sh-postgres service...`);
+      await compose.upOne("sh-postgres", {
+        cwd: cwd,
+        config: tmpFile,
+        log: verbose
+      });
+      console.log(`[NetworkLauncher] sh-postgres service started`);
+
+      // Only run external migrations when indexer enabled
+      // (MSPs and standalone indexer auto-migrate themselves)
+      if (this.type === "fullnet" || this.config.indexer) {
+        await this.runMigrations();
+      }
+
+      // Start backend only if backend flag is enabled (depends on msp-1 and postgres)
+      if (this.config.backend && this.type === "fullnet") {
+        console.log(`[NetworkLauncher] Starting sh-backend service...`);
+        await compose.upOne("sh-backend", {
+          cwd: cwd,
+          config: tmpFile,
+          log: verbose,
+          env: {
+            ...process.env,
+            JWT_SECRET: JWT_SECRET
+          }
+        });
+        console.log(`[NetworkLauncher] sh-backend service started`);
+      }
+    }
+
     console.log(`[NetworkLauncher] Starting sh-bsp service...`);
     await compose.upOne("sh-bsp", {
       cwd: cwd,
@@ -455,38 +488,7 @@ export class NetworkLauncher {
       console.log(`[NetworkLauncher] All MSP services started`);
     }
 
-    // Postgres is always needed for fullnet because MSPs require database access
-    // For other network types, only start postgres if indexer is enabled
-    if (this.type === "fullnet" || this.config.indexer) {
-      console.log(`[NetworkLauncher] Starting sh-postgres service...`);
-      await compose.upOne("sh-postgres", {
-        cwd: cwd,
-        config: tmpFile,
-        log: verbose
-      });
-      console.log(`[NetworkLauncher] sh-postgres service started`);
-
-      // Only run external migrations when indexer enabled
-      // (MSPs and standalone indexer auto-migrate themselves)
-      if (this.type === "fullnet" || this.config.indexer) {
-        await this.runMigrations();
-      }
-
-      // Start backend only if backend flag is enabled (depends on msp-1 and postgres)
-      if (this.config.backend && this.type === "fullnet") {
-        console.log(`[NetworkLauncher] Starting sh-backend service...`);
-        await compose.upOne("sh-backend", {
-          cwd: cwd,
-          config: tmpFile,
-          log: verbose,
-          env: {
-            ...process.env,
-            JWT_SECRET: JWT_SECRET
-          }
-        });
-        console.log(`[NetworkLauncher] sh-backend service started`);
-      }
-    }
+   
 
     console.log(`[NetworkLauncher] Starting sh-user service...`);
     await compose.upOne("sh-user", {
