@@ -120,9 +120,9 @@ export interface DownloadResult {
 
 // Buckets and files
 export interface Bucket {
-  bucketId: string;
+  bucketId: `0x${string}`;
   name: string;
-  root: string;
+  root: `0x${string}`;
   isPublic: boolean;
   sizeBytes: number;
   valuePropId: string;
@@ -134,12 +134,12 @@ export type FileStatus = "inProgress" | "ready" | "expired" | "deletionInProgres
 export type FileTree = {
   name: string;
 } & (
-  | { type: "file"; sizeBytes: number; fileKey: string; status: FileStatus }
+  | { type: "file"; sizeBytes: number; fileKey: `0x${string}`; status: FileStatus }
   | { type: "folder"; children: FileTree[] }
 );
 
 export interface FileListResponse {
-  bucketId: string;
+  bucketId: `0x${string}`;
   files: FileTree[];
 }
 
@@ -152,10 +152,10 @@ export interface GetFilesOptions {
 export interface InfoResponse {
   client: string;
   version: string;
-  mspId: string;
+  mspId: `0x${string}`;
   multiaddresses: string[];
-  ownerAccount: string;
-  paymentAccount: string;
+  ownerAccount: `0x${string}`;
+  paymentAccount: `0x${string}`;
   status: string;
   activeSince: number;
   uptime: string;
