@@ -381,6 +381,7 @@ const addContainer = async (
       "--rpc-cors=all",
       `--port=${p2pPort}`,
       "--base-path=/data",
+      "--provider-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub",
       bootNodeArg,
       ...(options?.additionalArgs || [])
     ]
