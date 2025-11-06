@@ -79,7 +79,7 @@ pub struct BspUploadFileTask<NT, Runtime>
 where
     NT: ShNodeType<Runtime>,
     NT::FSH: BspForestStorageHandlerT<Runtime>,
-    Runtime: StorageEnableRuntime,
+    Runtime: StorageEnableRuntime + 'static,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
     file_key_cleanup: Option<Runtime::Hash>,
