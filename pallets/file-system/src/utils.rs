@@ -178,13 +178,35 @@ where
 
         // If the BSP can't volunteer yet, calculate the number of ticks it has to wait for before it can.
         // We use ceiling division to ensure the BSP waits long enough for the threshold to be met.
-        // Formula: ceil(a / b) = (a + b - 1) / b
+        // Formula: ceil(a / b) = floor(a / b) + (1 if a % b != 0 else 0)
         let min_ticks_to_wait_to_volunteer = match eligibility_diff
-            .checked_add(&bsp_eligibility_slope)
-            .and_then(|sum| sum.checked_sub(&T::ThresholdType::one()))
-            .and_then(|numerator| numerator.checked_div(&bsp_eligibility_slope))
+            .checked_div(&bsp_eligibility_slope)
         {
-            Some(ticks) => max(ticks, T::ThresholdType::one()),
+            Some(quotient) => {
+                // Check if there's a remainder by verifying if quotient * slope == eligibility_diff
+                // If not equal, there's a remainder and we need to round up
+                let has_remainder = match quotient.checked_mul(&bsp_eligibility_slope) {
+                    Some(product) => product != eligibility_diff,
+                    None => {
+                        return Err(QueryFileEarliestVolunteerTickError::ThresholdArithmeticError);
+                    }
+                };
+
+                if !has_remainder {
+                    // Exact division, no rounding needed
+                    max(quotient, T::ThresholdType::one())
+                } else {
+                    // Round up by adding 1 to the quotient
+                    match quotient.checked_add(&T::ThresholdType::one()) {
+                        Some(result) => max(result, T::ThresholdType::one()),
+                        None => {
+                            return Err(
+                                QueryFileEarliestVolunteerTickError::ThresholdArithmeticError,
+                            );
+                        }
+                    }
+                }
+            }
             None => {
                 return Err(QueryFileEarliestVolunteerTickError::ThresholdArithmeticError);
             }
