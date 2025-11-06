@@ -311,6 +311,8 @@ await describeMspNet(
         "Bucket mspId should match expected MSP ID"
       );
 
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
+
       // Also verify through SDK / MSP backend endpoints
       const listedBuckets = await mspClient.buckets.listBuckets();
       assert(
@@ -453,6 +455,8 @@ await describeMspNet(
 
       // Ensure the file is now stored in the MSP's file storage
       await msp1Api.wait.fileStorageComplete(hexFileKey);
+
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
       // Ensure file tree and file info are available via backend for this bucket
       const fileTree = await mspClient.buckets.getFiles(bucketId);
