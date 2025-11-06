@@ -259,6 +259,10 @@ await describeBspNet(
     });
 
     it("Earliest volunteer tick is stable and deterministic for both BSPs", async () => {
+      // Stop the BSPs so they don't volunteer for the file
+      await userApi.docker.stopContainer("sh-bsp-1");
+      await userApi.docker.stopContainer("sh-bsp-two");
+
       // Create a new bucket and issue a storage request with replication target = 1
       fileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
