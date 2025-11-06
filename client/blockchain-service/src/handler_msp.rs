@@ -583,7 +583,7 @@ where
     ///   the in-memory `files_to_distribute` state to not spawn duplicate tasks or
     ///   re-emit for already-confirmed BSPs.
     pub(crate) fn spawn_distribute_file_to_bsps_tasks(&mut self, block_hash: &Runtime::Hash) {
-        info!(target: LOG_TARGET, "Spawning distribute file to BSPs tasks");
+        debug!(target: LOG_TARGET, "Spawning distribute file to BSPs tasks");
 
         // Only distribute files to BSPs when explicitly enabled via configuration.
         if !self.config.enable_msp_distribute_files {
