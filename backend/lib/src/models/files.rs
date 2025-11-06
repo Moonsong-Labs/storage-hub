@@ -27,7 +27,7 @@ pub struct FileInfo {
     #[serde(rename = "bucketId")]
     pub bucket_id: String,
     pub location: String,
-    pub size: u64,
+    pub size: String,
     #[serde(rename = "isPublic")]
     pub is_public: bool,
     #[serde(rename = "uploadedAt")]
@@ -57,7 +57,7 @@ impl FileInfo {
             bucket_id: hex::encode(&db.onchain_bucket_id),
             // TODO: determine if lossy conversion is acceptable here
             location: String::from_utf8_lossy(&db.location).into_owned(),
-            size: db.size as u64,
+            size: db.size.to_string(),
             is_public,
             uploaded_at: db.updated_at.and_utc(),
             status: Self::status_from_db(&db),
