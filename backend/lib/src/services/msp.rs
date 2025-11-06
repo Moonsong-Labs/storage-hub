@@ -1208,7 +1208,7 @@ mod tests {
         assert_eq!(info.bucket_id, bucket_id);
         assert_eq!(info.file_key, file_key);
         assert!(!info.location.is_empty());
-        assert!(info.size > 0);
+        assert!(info.size.parse::<u64>().unwrap() > 0);
     }
 
     #[tokio::test]
