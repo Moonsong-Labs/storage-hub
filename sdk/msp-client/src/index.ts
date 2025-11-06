@@ -5,7 +5,7 @@ export type {
   DownloadOptions,
   DownloadResult,
   FileTree,
-  FileInfo,
+  StorageFileInfo,
   FileListResponse,
   HealthStatus,
   InfoResponse,

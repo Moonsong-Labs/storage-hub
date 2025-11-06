@@ -1,3 +1,5 @@
+import type { FileInfo } from "@storagehub-sdk/core";
+
 export enum HealthState {
   Healthy = "healthy",
   Unhealthy = "unhealthy",
@@ -180,15 +182,7 @@ export interface ValueProp {
   isAvailable: boolean;
 }
 
-// TODO we can extend FileInfo from the following type
-// import type { FileInfo } from '@storagehub-sdk/core';
-export interface FileInfo {
-  fileKey: string;
-  fingerprint: string;
-  bucketId: string;
-  name: string;
-  location: string;
-  size: number;
+export interface StorageFileInfo extends FileInfo {
   isPublic: boolean;
   uploadedAt: Date;
   status: FileStatus;
