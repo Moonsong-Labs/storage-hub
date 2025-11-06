@@ -196,24 +196,6 @@ impl Bucket {
         Ok(total_size.unwrap_or_else(|| BigDecimal::from(0)))
     }
 
-    /// Update the total_size and file_count for a bucket
-    pub async fn update_size_and_count<'a>(
-        conn: &mut DbConnection<'a>,
-        bucket_id: i64,
-        total_size: BigDecimal,
-        file_count: i64,
-    ) -> Result<(), diesel::result::Error> {
-        diesel::update(bucket::table)
-            .filter(bucket::id.eq(bucket_id))
-            .set((
-                bucket::total_size.eq(total_size),
-                bucket::file_count.eq(file_count),
-            ))
-            .execute(conn)
-            .await?;
-        Ok(())
-    }
-
     /// Increment file count and update total size
     pub async fn increment_file_count_and_size<'a>(
         conn: &mut DbConnection<'a>,
