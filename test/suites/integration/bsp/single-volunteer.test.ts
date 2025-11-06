@@ -202,8 +202,7 @@ await describeBspNet(
   "BSPNet: Initial volunteer tick is different for different BSPs and stays constant over time",
   {
     initialised: false,
-    bspStartingWeight: 1n,
-    only: true
+    bspStartingWeight: 1n
   },
   ({ before, createBspApi, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
