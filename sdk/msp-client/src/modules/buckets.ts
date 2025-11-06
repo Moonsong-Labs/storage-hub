@@ -13,13 +13,12 @@ export class BucketsModule extends ModuleBase {
         fileKey: ensure0xPrefix(item.fileKey),
         status: item.status
       };
-    } else {
-      return {
-        name: item.name,
-        type: item.type,
-        children: item.children?.map((child: any) => this.fixFileTree(child)) || []
-      };
     }
+    return {
+      name: item.name,
+      type: item.type,
+      children: item.children?.map((child: any) => this.fixFileTree(child)) || []
+    };
   }
   /** List all buckets for the current authenticated user */
   async listBuckets(signal?: AbortSignal): Promise<Bucket[]> {
