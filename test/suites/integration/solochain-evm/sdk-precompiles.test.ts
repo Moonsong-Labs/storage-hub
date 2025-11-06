@@ -306,15 +306,11 @@ await describeMspNet(
       // Also verify through SDK / MSP backend endpoints
       const listedBuckets = await mspClient.buckets.listBuckets();
       assert(
-        listedBuckets.some((b) => `0x${b.bucketId}` === bucketId),
+        listedBuckets.some((b) => b.bucketId === bucketId),
         "MSP listBuckets should include the created bucket"
       );
       const sdkBucket = await mspClient.buckets.getBucket(bucketId);
-      strictEqual(
-        `0x${sdkBucket.bucketId}`,
-        bucketId,
-        "MSP getBucket should return the created bucket"
-      );
+      strictEqual(sdkBucket.bucketId, bucketId, "MSP getBucket should return the created bucket");
     });
 
     it("Should issue a storage request for Adolphus.jpg using the SDK's StorageHubClient", async () => {
@@ -453,8 +449,8 @@ await describeMspNet(
         "file tree should not be empty"
       );
       const fileInfo = await mspClient.files.getFileInfo(bucketId, fileKey.toHex());
-      strictEqual(`0x${fileInfo.bucketId}`, bucketId, "BucketId should match");
-      strictEqual(`0x${fileInfo.fileKey}`, fileKey.toHex(), "FileKey should match");
+      strictEqual(fileInfo.bucketId, bucketId, "BucketId should match");
+      strictEqual(fileInfo.fileKey, fileKey.toHex(), "FileKey should match");
     });
 
     it("Should fetch payment streams using the SDK's MspClient", async () => {
