@@ -151,7 +151,7 @@ where
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
 
         // Get the threshold for the BSP to be able to volunteer for the storage request.
-        // The current eligibility value of this storage request for this BSP has to be greater than
+        // The current eligibility value of this storage request for this BSP has to be greater than or equal to
         // this for the BSP to be able to volunteer.
         let bsp_volunteering_threshold = Self::get_volunteer_threshold_of_bsp(&bsp_id, &file_key);
 
@@ -168,21 +168,27 @@ where
         // Calculate the difference between the BSP's threshold and the current eligibility value.
         let eligibility_diff =
             match bsp_volunteering_threshold.checked_sub(&bsp_current_eligibility_value) {
-                Some(diff) => diff,
-                None => {
-                    // The BSP's threshold is less than the eligibility current value, which means the BSP is already eligible to volunteer.
+                Some(diff) if !diff.is_zero() => diff,
+                _ => {
+                    // The BSP's threshold is less than or equal to the current eligibility value,
+                    // which means the BSP is already eligible to volunteer.
                     return Ok(current_tick);
                 }
             };
 
         // If the BSP can't volunteer yet, calculate the number of ticks it has to wait for before it can.
-        let min_ticks_to_wait_to_volunteer =
-            match eligibility_diff.checked_div(&bsp_eligibility_slope) {
-                Some(ticks) => max(ticks, T::ThresholdType::one()),
-                None => {
-                    return Err(QueryFileEarliestVolunteerTickError::ThresholdArithmeticError);
-                }
-            };
+        // We use ceiling division to ensure the BSP waits long enough for the threshold to be met.
+        // Formula: ceil(a / b) = (a + b - 1) / b
+        let min_ticks_to_wait_to_volunteer = match eligibility_diff
+            .checked_add(&bsp_eligibility_slope)
+            .and_then(|sum| sum.checked_sub(&T::ThresholdType::one()))
+            .and_then(|numerator| numerator.checked_div(&bsp_eligibility_slope))
+        {
+            Some(ticks) => max(ticks, T::ThresholdType::one()),
+            None => {
+                return Err(QueryFileEarliestVolunteerTickError::ThresholdArithmeticError);
+            }
+        };
 
         // Compute the earliest tick number at which the BSP can send the volunteer request.
         let earliest_volunteer_tick = current_tick.saturating_add(
