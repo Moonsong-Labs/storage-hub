@@ -9,8 +9,12 @@ use tracing::debug;
 use shc_rpc::{
     GetFileFromFileStorageResult, GetValuePropositionsResult, RpcProviderId, SaveFileToDisk,
 };
+use sp_runtime::traits::UniqueSaturatedInto;
 
-use crate::data::rpc::{connection::error::RpcResult, methods, AnyRpcConnection, RpcConnection};
+use crate::data::rpc::{
+    connection::error::{RpcConnectionError, RpcResult},
+    methods, runtime_apis, AnyRpcConnection, RpcConnection,
+};
 
 /// StorageHub RPC client that uses an RpcConnection
 pub struct StorageHubRpcClient {
@@ -33,6 +37,39 @@ impl StorageHubRpcClient {
             // TODO: More robust reconnection mechanism, like we do for the original connection
             _ = self.connection.reconnect().await;
         }
+    }
+
+    /// Wrapper over [`call`] for runtime APIs
+    ///
+    /// Arguments:
+    /// - `api` is the api method to invoke
+    /// - `params` is the set of parameters for the api call
+    ///
+    /// The `api` method should look like "<TraitName>_<trait_method_name>",
+    /// for example "Core_version" to invoke the `version` method of the `core` runtime api
+    pub async fn call_runtime_api<P: codec::Encode, R: codec::Decode>(
+        &self,
+        api: &str,
+        params: P,
+    ) -> RpcResult<R> {
+        // the RPC method expectes the parameters to be scale encoded and as a hex string
+        let encoded = format!("0x{}", hex::encode(params.encode()));
+        debug!(method = %api, ?encoded, "calling runtime api");
+
+        let response = self
+            .call::<_, String>(methods::API_CALL, jsonrpsee::rpc_params![api, encoded])
+            .await?;
+
+        // the RPC also replies with scale-encoded response as a hex string
+        let response = hex::decode(response.trim_start_matches("0x")).map_err(|e| {
+            RpcConnectionError::Serialization(format!(
+                "RPC runtime API did not respond with a valid hex string: {}",
+                e.to_string()
+            ))
+        })?;
+
+        R::decode(&mut response.as_slice())
+            .map_err(|e| RpcConnectionError::Serialization(e.to_string()))
     }
 
     /// Call a JSON-RPC method on the connected node
@@ -66,7 +103,9 @@ impl StorageHubRpcClient {
     pub async fn get_current_price_per_giga_unit_per_tick(&self) -> RpcResult<u128> {
         debug!(target: "rpc::client::get_current_price_per_giga_unit_per_tick", "RPC call: get_current_price_per_giga_unit_per_tick");
 
-        self.call_no_params(methods::CURRENT_PRICE).await
+        self.call_runtime_api::<_, runtime_apis::CurrentPrice>(runtime_apis::CURRENT_PRICE, ())
+            .await
+            .map(|price| price.unique_saturated_into())
     }
 
     /// Returns whether the given `file_key` is expected to be received by the MSP node

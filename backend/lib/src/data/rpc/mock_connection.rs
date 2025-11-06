@@ -19,6 +19,7 @@ use shc_common::types::FileMetadata;
 use shc_rpc::{
     GetFileFromFileStorageResult, GetValuePropositionsResult, RpcProviderId, SaveFileToDisk,
 };
+use shp_types::Hash;
 use sp_core::H256;
 
 use crate::{
@@ -28,7 +29,7 @@ use crate::{
     },
     data::rpc::{
         connection::error::{RpcConnectionError, RpcResult},
-        methods, RpcConnection,
+        methods, runtime_apis, RpcConnection,
     },
     models::msp_info::{ValueProposition, ValuePropositionWithId},
     test_utils::random_bytes_32,
@@ -142,6 +143,25 @@ impl MockConnection {
         }
     }
 
+    async fn mock_runtime_apis<P>(&self, params: P) -> Value
+    where
+        P: ToRpcParams + Send,
+    {
+        // Extract [runtime_method, scale_encoded_parameters]
+        let raw = params.to_rpc_params().unwrap().unwrap();
+        let (method, params): (String, String) = serde_json::from_str(raw.get()).unwrap();
+        let _params = hex::decode(params.trim_start_matches("0x"))
+            .expect("runtime API params as encoded hex string");
+
+        match method.as_str() {
+            runtime_apis::CURRENT_PRICE => {
+                let price = format!("0x{}", hex::encode(MOCK_PRICE_PER_GIGA_UNIT.encode()));
+                serde_json::json!(price)
+            }
+            _ => serde_json::json!(null),
+        }
+    }
+
     /// Build mock JSON response for `storagehubclient_saveFileToDisk` and stream mock content
     async fn mock_save_file_to_disk<P>(&self, params: P) -> Value
     where
@@ -233,7 +253,7 @@ impl RpcConnection for MockConnection {
                 self.mock_save_file_to_disk(params).await
             }
             methods::PROVIDER_ID => serde_json::json!(RpcProviderId::Msp(
-                shp_types::Hash::from_slice(DUMMY_MSP_ID.as_slice())
+                Hash::from_slice(DUMMY_MSP_ID.as_slice())
             )),
             methods::VALUE_PROPS => {
                 serde_json::json!(GetValuePropositionsResult::Success(vec![
@@ -271,6 +291,7 @@ impl RpcConnection for MockConnection {
             methods::RECEIVE_FILE_CHUNKS => {
                 serde_json::json!([])
             }
+            methods::API_CALL => self.mock_runtime_apis(params).await,
             _ => {
                 let responses = self.responses.read().await;
                 responses
