@@ -4,7 +4,7 @@ use std::{sync::Mutex, time::Duration};
 
 use sc_tracing::tracing::*;
 use sp_core::H256;
-use sp_runtime::traits::{CheckedAdd, SaturatedConversion, Zero};
+use sp_runtime::traits::{CheckedAdd, CheckedSub, SaturatedConversion, Zero};
 
 use pallet_file_system::types::BucketMoveRequestResponse;
 use shc_actors_framework::event_bus::EventHandler;
@@ -544,6 +544,22 @@ where
         required_size: StorageDataUnit<Runtime>,
         own_msp_id: ProviderId<Runtime>,
     ) -> anyhow::Result<()> {
+        let max_storage_capacity = self
+            .storage_hub_handler
+            .provider_config
+            .capacity_config
+            .max_capacity();
+
+        let current_capacity = self
+            .storage_hub_handler
+            .blockchain
+            .query_storage_provider_capacity(own_msp_id)
+            .await
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "Failed to query storage provider capacity: {:?}", e);
+                anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
+            })?;
+
         let available_capacity = self
             .storage_hub_handler
             .blockchain
@@ -554,6 +570,32 @@ where
                 anyhow::anyhow!("Failed to query available storage capacity: {:?}", e)
             })?;
 
+        // Calculate currently used storage
+        let used_capacity = current_capacity
+            .checked_sub(&available_capacity)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Available capacity ({}) exceeds current capacity ({})",
+                    available_capacity,
+                    current_capacity
+                )
+            })?;
+
+        // Check if accepting this bucket would exceed our local max storage capacity limit
+        let projected_usage = used_capacity
+            .checked_add(&required_size)
+            .ok_or_else(|| anyhow::anyhow!("Overflow calculating projected storage usage"))?;
+
+        // Respect the maximum storage capacity limit set locally even if the available capacity is sufficient on chain.
+        if projected_usage > max_storage_capacity {
+            let err_msg = format!(
+                "Accepting bucket would exceed maximum storage capacity limit. Used: {}, Required: {}, Max: {}",
+                used_capacity, required_size, max_storage_capacity
+            );
+            warn!(target: LOG_TARGET, "{}", err_msg);
+            return Err(anyhow::anyhow!(err_msg));
+        }
+
         // Increase storage capacity if the available capacity is less than the required size
         if available_capacity < required_size {
             warn!(
@@ -562,22 +604,6 @@ where
                 available_capacity,
                 required_size
             );
-
-            let current_capacity = self
-                .storage_hub_handler
-                .blockchain
-                .query_storage_provider_capacity(own_msp_id)
-                .await
-                .map_err(|e| {
-                    error!(target: LOG_TARGET, "Failed to query storage provider capacity: {:?}", e);
-                    anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
-                })?;
-
-            let max_storage_capacity = self
-                .storage_hub_handler
-                .provider_config
-                .capacity_config
-                .max_capacity();
 
             if max_storage_capacity <= current_capacity {
                 let err_msg =
