@@ -10,7 +10,7 @@ use sc_tracing::tracing::*;
 use shc_blockchain_service::types::{MspRespondStorageRequest, RespondStorageRequest};
 use shc_blockchain_service::{capacity_manager::CapacityRequestData, types::SendExtrinsicOptions};
 use sp_core::H256;
-use sp_runtime::traits::{SaturatedConversion, Zero};
+use sp_runtime::traits::{CheckedAdd, CheckedSub, SaturatedConversion, Zero};
 
 use pallet_file_system::types::RejectedStorageRequest;
 use shc_actors_framework::event_bus::EventHandler;
@@ -471,6 +471,23 @@ where
         let file_in_forest_storage = read_fs.contains_file_key(&file_key.into())?;
         if !file_in_forest_storage {
             info!(target: LOG_TARGET, "File key {:?} not found in forest storage. Checking available storage capacity.", file_key);
+
+            let max_storage_capacity = self
+                .storage_hub_handler
+                .provider_config
+                .capacity_config
+                .max_capacity();
+
+            let current_capacity = self
+                .storage_hub_handler
+                .blockchain
+                .query_storage_provider_capacity(own_msp_id)
+                .await
+                .map_err(|e| {
+                    error!(target: LOG_TARGET, "Failed to query storage provider capacity: {:?}", e);
+                    anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
+                })?;
+
             let available_capacity = self
                 .storage_hub_handler
                 .blockchain
@@ -485,6 +502,31 @@ where
                     anyhow::anyhow!(err_msg)
                 })?;
 
+            // Calculate currently used storage
+            let used_capacity = current_capacity
+                .checked_sub(&available_capacity)
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Available capacity ({}) exceeds current capacity ({})",
+                        available_capacity,
+                        current_capacity
+                    )
+                })?;
+
+            // Check if accepting this file would exceed our local max storage capacity limit
+            let projected_usage = used_capacity
+                .checked_add(&event.size)
+                .ok_or_else(|| anyhow::anyhow!("Overflow calculating projected storage usage"))?;
+
+            if projected_usage > max_storage_capacity {
+                let err_msg = format!(
+                    "Accepting file would exceed maximum storage capacity limit. Used: {}, Required: {}, Max: {}",
+                    used_capacity, event.size, max_storage_capacity
+                );
+                warn!(target: LOG_TARGET, "{}", err_msg);
+                return Err(anyhow::anyhow!(err_msg));
+            }
+
             // Increase storage capacity if the available capacity is less than the file size.
             if available_capacity < event.size {
                 warn!(
@@ -492,26 +534,6 @@ where
                     "Insufficient storage capacity to volunteer for file key: {:?}",
                     event.file_key
                 );
-
-                // Check that the BSP has not reached the maximum storage capacity.
-                let current_capacity = self
-                    .storage_hub_handler
-                    .blockchain
-                    .query_storage_provider_capacity(own_msp_id)
-                    .await
-                    .map_err(|e| {
-                        error!(
-                            target: LOG_TARGET,
-                            "Failed to query storage provider capacity: {:?}", e
-                        );
-                        anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
-                    })?;
-
-                let max_storage_capacity = self
-                    .storage_hub_handler
-                    .provider_config
-                    .capacity_config
-                    .max_capacity();
 
                 if max_storage_capacity <= current_capacity {
                     let err_msg = "Reached maximum storage capacity limit. Unable to add more storage capacity.";

@@ -9,7 +9,7 @@ use frame_support::BoundedVec;
 use pallet_file_system_runtime_api::QueryBspConfirmChunksToProveForFileError;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
-use sp_runtime::traits::{Hash, SaturatedConversion, Zero};
+use sp_runtime::traits::{CheckedAdd, CheckedSub, Hash, SaturatedConversion, Zero};
 
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
@@ -503,6 +503,22 @@ where
             }
         };
 
+        let max_storage_capacity = self
+            .storage_hub_handler
+            .provider_config
+            .capacity_config
+            .max_capacity();
+
+        let current_capacity = self
+            .storage_hub_handler
+            .blockchain
+            .query_storage_provider_capacity(own_bsp_id)
+            .await
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "Failed to query storage provider capacity: {:?}", e);
+                anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
+            })?;
+
         let available_capacity = self
             .storage_hub_handler
             .blockchain
@@ -517,6 +533,31 @@ where
                 anyhow::anyhow!(err_msg)
             })?;
 
+        // Calculate currently used storage
+        let used_capacity = current_capacity
+            .checked_sub(&available_capacity)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Available capacity ({}) exceeds current capacity ({})",
+                    available_capacity,
+                    current_capacity
+                )
+            })?;
+
+        // Check if accepting this file would exceed our local max storage capacity limit
+        let projected_usage = used_capacity
+            .checked_add(&event.size)
+            .ok_or_else(|| anyhow::anyhow!("Overflow calculating projected storage usage"))?;
+
+        if projected_usage > max_storage_capacity {
+            let err_msg = format!(
+                "Accepting file would exceed maximum storage capacity limit. Used: {}, Required: {}, Max: {}",
+                used_capacity, event.size, max_storage_capacity
+            );
+            warn!(target: LOG_TARGET, "{}", err_msg);
+            return Err(anyhow::anyhow!(err_msg));
+        }
+
         // Increase storage capacity if the available capacity is less than the file size.
         if available_capacity < event.size {
             warn!(
@@ -524,26 +565,6 @@ where
                 "Insufficient storage capacity to volunteer for file key: {:?}",
                 event.file_key
             );
-
-            // Check that the BSP has not reached the maximum storage capacity.
-            let current_capacity = self
-                .storage_hub_handler
-                .blockchain
-                .query_storage_provider_capacity(own_bsp_id)
-                .await
-                .map_err(|e| {
-                    error!(
-                        target: LOG_TARGET,
-                        "Failed to query storage provider capacity: {:?}", e
-                    );
-                    anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
-                })?;
-
-            let max_storage_capacity = self
-                .storage_hub_handler
-                .provider_config
-                .capacity_config
-                .max_capacity();
 
             if max_storage_capacity <= current_capacity {
                 let err_msg =
