@@ -587,7 +587,7 @@ where
 
         // Only distribute files to BSPs when explicitly enabled via configuration.
         if !self.config.enable_msp_distribute_files {
-            trace!(target: LOG_TARGET, "MSP file distribution disabled by configuration. Skipping distribution scan.");
+            debug!(target: LOG_TARGET, "MSP file distribution disabled by configuration. Skipping distribution scan.");
             return;
         }
 
