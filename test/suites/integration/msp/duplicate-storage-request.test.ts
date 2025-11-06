@@ -365,6 +365,8 @@ await describeMspNet(
         signer: shUser
       });
 
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
+
       await userApi.fisherman.retryableWaitAndVerifyBatchDeletions({
         blockProducerApi: userApi,
         deletionType: "User",
