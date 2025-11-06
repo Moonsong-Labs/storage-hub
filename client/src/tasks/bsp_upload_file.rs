@@ -699,7 +699,8 @@ where
         };
 
         // Try to send the volunteer extrinsic
-        self.storage_hub_handler
+        if let Err(e) = self
+            .storage_hub_handler
             .blockchain
             .submit_extrinsic_with_retry(
                 call.clone(),
@@ -720,10 +721,9 @@ where
                 false,
             )
             .await
-            .map_err(|e| {
-                error!(target: LOG_TARGET, "Failed to volunteer for file {:x} after all attempts: {:?}", file_key, e);
-                anyhow!("Failed to volunteer for file {:x} after all attempts: {:?}", file_key, e)
-            })?;
+        {
+            error!(target: LOG_TARGET, "Failed to volunteer for file {:x}: {:?}", file_key, e);
+        }
 
         // Check if the BSP has been registered as a volunteer for the file.
         let volunteer_result = self
@@ -747,6 +747,10 @@ where
                 file_key
             );
             self.unvolunteer_file(file_key.into()).await;
+            return Err(anyhow!(
+                "BSP not registered as a volunteer for file {:x}",
+                file_key
+            ));
         }
 
         Ok(())
