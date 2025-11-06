@@ -372,7 +372,7 @@ where
                 if !accepted_file_keys.is_empty() {
                     info!(
                         target: LOG_TARGET,
-                        "Accepted {} file(s) for bucket {:?}: {:?}",
+                        "✅ Accepted {} file(s) for bucket {:?}: {:?}",
                         accepted_file_keys.len(),
                         storage_request_msp_bucket_response.bucket_id,
                         accepted_file_keys
@@ -390,7 +390,7 @@ where
 
                 info!(
                     target: LOG_TARGET,
-                    "Rejected {} file(s) for bucket {:?}: {:?}",
+                    "❌ Rejected {} file(s) for bucket {:?}: {:?}",
                     rejected_file_keys.len(),
                     storage_request_msp_bucket_response.bucket_id,
                     rejected_file_keys
