@@ -328,102 +328,106 @@ await describeBspNet("BSPNet: Change capacity tests.", ({ before, it, createUser
   });
 
   it("BSP does not increase its capacity over its configured maximum (and skips volunteering if that would be needed).", async () => {
-    // Max storage capacity such that the BSP can store one of the files we will request but no more.
-    const MAX_STORAGE_CAPACITY = 416600;
+    let bspTwoApi: EnrichedBspApi | undefined;
+    try {
+      // Max storage capacity such that the BSP can store one of the files we will request but no more.
+      const MAX_STORAGE_CAPACITY = 416600;
 
-    // Add a second BSP with the configured maximum storage capacity limit.
-    const { rpcPort } = await addBsp(userApi, bspTwoKey, userApi.accounts.sudo, {
-      name: "sh-bsp-two",
-      bspId: ShConsts.BSP_TWO_ID,
-      maxStorageCapacity: MAX_STORAGE_CAPACITY,
-      initialCapacity: BigInt(MAX_STORAGE_CAPACITY),
-      additionalArgs: ["--keystore-path=/keystore/bsp-two"]
-    });
-    await userApi.assert.eventPresent("providers", "BspSignUpSuccess");
+      // Add a second BSP with the configured maximum storage capacity limit.
+      const { rpcPort } = await addBsp(userApi, bspTwoKey, userApi.accounts.sudo, {
+        name: "sh-bsp-two",
+        bspId: ShConsts.BSP_TWO_ID,
+        maxStorageCapacity: MAX_STORAGE_CAPACITY,
+        initialCapacity: BigInt(MAX_STORAGE_CAPACITY),
+        additionalArgs: ["--keystore-path=/keystore/bsp-two"]
+      });
+      await userApi.assert.eventPresent("providers", "BspSignUpSuccess");
 
-    // Wait until the new BSP catches up to the chain tip.
-    const bspTwoApi = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
-    await userApi.wait.nodeCatchUpToChainTip(bspTwoApi);
+      // Wait until the new BSP catches up to the chain tip.
+      bspTwoApi = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
+      await userApi.wait.nodeCatchUpToChainTip(bspTwoApi);
 
-    // Stop the other BSP so it doesn't volunteer for the files.
-    await userApi.docker.pauseContainer("storage-hub-sh-bsp-1");
+      // Stop the other BSP so it doesn't volunteer for the files.
+      await userApi.docker.pauseContainer("storage-hub-sh-bsp-1");
 
-    // Issue the first storage request. The new BSP should have enough capacity to volunteer for it.
-    const source1 = "res/cloud.jpg";
-    const location1 = "test/cloud.jpg";
-    const bucketName1 = "kek1";
-    const fileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(
-      source1,
-      location1,
-      bucketName1
-    );
+      // Issue the first storage request. The new BSP should have enough capacity to volunteer for it.
+      const source1 = "res/cloud.jpg";
+      const location1 = "test/cloud.jpg";
+      const bucketName1 = "kek1";
+      const fileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(
+        source1,
+        location1,
+        bucketName1
+      );
 
-    // Check at which tick the new BSP can volunteer for the file.
-    // Note: since we set up the network to have instant acceptance, the new BSP should be able to volunteer immediately
-    // but we still check to be sure.
-    const bspVolunteerTick = (
-      await userApi.call.fileSystemApi.queryEarliestFileVolunteerTick(
-        ShConsts.BSP_TWO_ID,
-        fileMetadata.fileKey
-      )
-    ).asOk.toNumber();
+      // Check at which tick the new BSP can volunteer for the file.
+      // Note: since we set up the network to have instant acceptance, the new BSP should be able to volunteer immediately
+      // but we still check to be sure.
+      const bspVolunteerTick = (
+        await userApi.call.fileSystemApi.queryEarliestFileVolunteerTick(
+          ShConsts.BSP_TWO_ID,
+          fileMetadata.fileKey
+        )
+      ).asOk.toNumber();
 
-    // If the BSP can't volunteer yet, skips blocks until it can.
-    if ((await userApi.rpc.chain.getHeader()).number.toNumber() < bspVolunteerTick - 1) {
-      // If a BSP can volunteer in tick X, it sends the extrinsic once it imports block with tick X - 1, so it gets included directly in tick X
-      await userApi.block.skipTo(bspVolunteerTick - 1);
+      // If the BSP can't volunteer yet, skips blocks until it can.
+      if ((await userApi.rpc.chain.getHeader()).number.toNumber() < bspVolunteerTick - 1) {
+        // If a BSP can volunteer in tick X, it sends the extrinsic once it imports block with tick X - 1, so it gets included directly in tick X
+        await userApi.block.skipTo(bspVolunteerTick - 1);
+      }
+
+      // Wait until the BSP volunteers for the file.
+      await userApi.wait.bspVolunteer(1);
+
+      // Wait until the BSP confirms storing the file.
+      const bspTwpAddress = userApi.createType("Address", bspTwoKey.address);
+      await userApi.wait.bspStored({ expectedExts: 1, bspAccount: bspTwpAddress });
+
+      // Issue the second storage request. The BSP shouldn't be able to volunteer for this one since
+      // it would have to increase its capacity over its configured maximum.
+      const source2 = "res/adolphus.jpg";
+      const location2 = "test/adolphus.jpg";
+      const bucketName2 = "kek2";
+      const fileMetadata2 = await userApi.file.createBucketAndSendNewStorageRequest(
+        source2,
+        location2,
+        bucketName2
+      );
+
+      // Check at which tick the new BSP can volunteer for the file.
+      // Note: since we set up the network to have instant acceptance, the new BSP should be able to volunteer immediately
+      // but we still check to be sure.
+      const bspVolunteerTick2 = (
+        await userApi.call.fileSystemApi.queryEarliestFileVolunteerTick(
+          ShConsts.BSP_TWO_ID,
+          fileMetadata2.fileKey
+        )
+      ).asOk.toNumber();
+
+      // If the BSP can't volunteer yet, skips blocks until it can.
+      if ((await userApi.rpc.chain.getHeader()).number.toNumber() < bspVolunteerTick2) {
+        // If a BSP can volunteer in tick X, it sends the extrinsic once it imports block with tick X - 1, so it gets included directly in tick X
+        await userApi.block.skipTo(bspVolunteerTick2 - 1);
+      }
+
+      // The BSP should not volunteer for the second file. To check this we check that the wait for
+      // the BSP volunteer times out and throws.
+      assert.rejects(userApi.wait.bspVolunteer(1));
+
+      // Check that the BSP's capacity used is equal to the first file's size
+      const bspTwo = (
+        await userApi.query.providers.backupStorageProviders(ShConsts.BSP_TWO_ID)
+      ).unwrap();
+      assert.equal(
+        bspTwo.capacityUsed.toNumber(),
+        fileMetadata.fileSize,
+        "Used capacity is still equal to the first file's size"
+      );
+    } finally {
+      if (bspTwoApi) {
+        await bspTwoApi.disconnect();
+      }
+      await userApi.docker.stopContainer("sh-bsp-two");
     }
-
-    // Wait until the BSP volunteers for the file.
-    await userApi.wait.bspVolunteer(1);
-
-    // Wait until the BSP confirms storing the file.
-    const bspTwpAddress = userApi.createType("Address", bspTwoKey.address);
-    await userApi.wait.bspStored({ expectedExts: 1, bspAccount: bspTwpAddress });
-
-    // Issue the second storage request. The BSP shouldn't be able to volunteer for this one since
-    // it would have to increase its capacity over its configured maximum.
-    const source2 = "res/adolphus.jpg";
-    const location2 = "test/adolphus.jpg";
-    const bucketName2 = "kek2";
-    const fileMetadata2 = await userApi.file.createBucketAndSendNewStorageRequest(
-      source2,
-      location2,
-      bucketName2
-    );
-
-    // Check at which tick the new BSP can volunteer for the file.
-    // Note: since we set up the network to have instant acceptance, the new BSP should be able to volunteer immediately
-    // but we still check to be sure.
-    const bspVolunteerTick2 = (
-      await userApi.call.fileSystemApi.queryEarliestFileVolunteerTick(
-        ShConsts.BSP_TWO_ID,
-        fileMetadata2.fileKey
-      )
-    ).asOk.toNumber();
-
-    // If the BSP can't volunteer yet, skips blocks until it can.
-    if ((await userApi.rpc.chain.getHeader()).number.toNumber() < bspVolunteerTick2) {
-      // If a BSP can volunteer in tick X, it sends the extrinsic once it imports block with tick X - 1, so it gets included directly in tick X
-      await userApi.block.skipTo(bspVolunteerTick2 - 1);
-    }
-
-    // The BSP should not volunteer for the second file. To check this we check that the wait for
-    // the BSP volunteer times out and throws.
-    assert.rejects(userApi.wait.bspVolunteer(1));
-
-    // Check that the BSP's capacity used is equal to the first file's size
-    const bspTwo = (
-      await userApi.query.providers.backupStorageProviders(ShConsts.BSP_TWO_ID)
-    ).unwrap();
-    assert.equal(
-      bspTwo.capacityUsed.toNumber(),
-      fileMetadata.fileSize,
-      "Used capacity is still equal to the first file's size"
-    );
-
-    // Disconnect and stop the new BSP.
-    await userApi.docker.stopContainer("sh-bsp-two");
-    await bspTwoApi.disconnect();
   });
 });
