@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use bigdecimal::BigDecimal;
 use jsonrpsee::core::traits::ToRpcParams;
 use serde::de::DeserializeOwned;
 use tracing::debug;
@@ -98,14 +99,14 @@ impl StorageHubRpcClient {
 
     /// Get the current price per giga unit per tick
     ///
-    /// Returns the price value (u128) that represents the cost per giga unit per tick
+    /// Returns the price value that represents the cost per giga unit per tick
     /// in the StorageHub network.
-    pub async fn get_current_price_per_giga_unit_per_tick(&self) -> RpcResult<u128> {
+    pub async fn get_current_price_per_giga_unit_per_tick(&self) -> RpcResult<BigDecimal> {
         debug!(target: "rpc::client::get_current_price_per_giga_unit_per_tick", "RPC call: get_current_price_per_giga_unit_per_tick");
 
         self.call_runtime_api::<_, runtime_apis::CurrentPrice>(runtime_apis::CURRENT_PRICE, ())
             .await
-            .map(|price| price.unique_saturated_into())
+            .map(|price| price.into())
     }
 
     /// Returns whether the given `file_key` is expected to be received by the MSP node

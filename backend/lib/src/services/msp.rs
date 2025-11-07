@@ -359,13 +359,11 @@ impl MspService {
                     // This is a BSP (dynamic rate payment stream)
                     // Cost per tick = amount_provided * 1e-9 * current_price_per_giga_unit_per_tick
 
-                    // Convert u128 price to BigDecimal and multiply
-                    let price_bd = BigDecimal::from(current_price_per_giga_unit_per_tick);
-
                     // Matches the computation done in the runtime
                     //
                     // (price * amount) / gigaunit
-                    let cost = (price_bd * amount_provided) / shp_constants::GIGAUNIT;
+                    let cost = (current_price_per_giga_unit_per_tick * amount_provided)
+                        / shp_constants::GIGAUNIT;
 
                     // Truncate the decimal digits of the cost per tick
                     let cost = cost.with_scale_round(0, RoundingMode::Down);
