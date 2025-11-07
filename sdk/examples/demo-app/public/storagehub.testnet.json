@@ -1,8 +1,8 @@
 {
   "chain": {
-    "id": 1288,
-    "name": "DataHaven Stagenet",
-    "nativeCurrency": { "name": "DataHaven", "symbol": "HAVE", "decimals": 18 },
+    "id": 55931,
+    "name": "DataHaven Testnet",
+    "nativeCurrency": { "name": "Mock", "symbol": "MOCK", "decimals": 18 },
     "evmRpcHttpUrl": "https://services.datahaven-testnet.network/testnet",
     "substrateRpcWsUrl": "wss://services.datahaven-testnet.network/testnet",
     "filesystemPrecompileAddress": "0x0000000000000000000000000000000000000404"
