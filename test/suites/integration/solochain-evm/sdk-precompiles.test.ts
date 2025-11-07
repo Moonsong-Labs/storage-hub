@@ -393,6 +393,9 @@ await describeMspNet(
         fileSize.toString(),
         "Storage request fileSize should match expected fileSize"
       );
+
+      // Wait for indexer to process the storage request so the file record exists in DB
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
     });
 
     it("Should upload the file to the MSP through the backend using the SDK's StorageHubClient", async () => {
