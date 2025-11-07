@@ -38,7 +38,8 @@ async function bootStrapNetwork() {
     ...bspNetConfig,
     initialised: true,
     extrinsicRetryTimeout: 60 * 30, // 30 minutes
-    runtimeType: "solochain"
+    runtimeType: "solochain",
+    fisherman: true
   });
 
   console.log("✅ Solochain EVM Bootstrap success");
