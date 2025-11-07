@@ -2,18 +2,18 @@
 //!
 //! This module provides common utilities for testing authentication functionality
 
-use alloy_core::primitives::eip191_hash_message;
+use alloy_core::primitives::{eip191_hash_message, Address};
 use alloy_signer::{k256::ecdsa::SigningKey, utils::public_key_to_address};
 
 /// Generate a random ETH wallet
 ///
 /// Returns the corresponding address and signing key
-pub fn eth_wallet() -> (String, SigningKey) {
+pub fn eth_wallet() -> (Address, SigningKey) {
     let signing_key = SigningKey::random(&mut rand::thread_rng());
     let verifying_key = signing_key.verifying_key();
     let address = public_key_to_address(verifying_key);
 
-    (address.to_checksum(None), signing_key)
+    (address, signing_key)
 }
 
 /// Sign a message using EIP-191 personal_sign format

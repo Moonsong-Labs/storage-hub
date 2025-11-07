@@ -1,6 +1,4 @@
 //! This module contains the handlers for the file management endpoints
-//!
-//! TODO: move the rest of the endpoints as they are implemented
 
 use axum::{
     body::{Body, Bytes},
@@ -32,33 +30,33 @@ use crate::{
 
 pub async fn get_file_info(
     State(services): State<Services>,
-    AuthenticatedUser { address }: AuthenticatedUser,
-    Path((bucket_id, file_key)): Path<(String, String)>,
+    user: User,
+    Path((_bucket_id, file_key)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, Error> {
     debug!(
-        bucket_id = %bucket_id,
         file_key = %file_key,
-        user = %address,
+        %user,
         "GET file info"
     );
     let response = services
         .msp
-        .get_file_info(&bucket_id, &address, &file_key)
+        .get_file_info(user.address().ok(), &file_key)
         .await?;
     Ok(Json(response))
 }
 
-// Internal endpoint used by the MSP RPC to upload a file to the backend
-// This function streams the file chunks via a channel to the thread running download_by_key.
+/// Internal endpoint used by the MSP RPC to upload a file to the backend
+///
+/// This function streams the file chunks via a channel to the thread running download_by_key.
+// TODO(AUTH): Add MSP Node authentication
+// Currently this internal endpoint doesn't authenticate that
+// the client connecting to it is the MSP Node
 pub async fn internal_upload_by_key(
     State(services): State<Services>,
     Path((session_id, file_key)): Path<(String, String)>,
     body: Body,
 ) -> (StatusCode, impl IntoResponse) {
     debug!(file_key = %file_key, "PUT internal upload");
-    // TODO: re-add auth
-    // FIXME: make this only callable by the rpc itself
-    // let _auth = extract_bearer_token(&auth)?;
 
     // Validate file_key is a hex string
     let key = file_key.trim_start_matches("0x");
@@ -115,8 +113,8 @@ pub async fn download_by_key(
     user: User,
     Path(file_key): Path<String>,
 ) -> Result<impl IntoResponse, Error> {
-    debug!(file_key = %file_key, user = %user.id(), "GET download file");
-    // TODO(AUTH): verify that user has permissions to access this file
+    debug!(file_key = %file_key, %user, "GET download file");
+
     // Validate file_key is a hex string
     let key = file_key.trim_start_matches("0x");
     if hex::decode(key).is_err() {
@@ -125,6 +123,12 @@ pub async fn download_by_key(
 
     // Check if file exists in MSP storage
     let file_metadata = services.msp.check_file_status(&file_key).await?;
+
+    // Verify user has access to the requested file
+    let file_info = services
+        .msp
+        .get_file_info(user.address().ok(), &file_key)
+        .await?;
 
     // Generate a unique session ID for the download session
     let session_id = Uuid::now_v7().to_string();
@@ -141,13 +145,9 @@ pub async fn download_by_key(
         .add_session(&session_id, tx)
         .map_err(|e| Error::BadRequest(e.to_string()))?;
 
-    let file_key_clone = file_key.clone();
     tokio::spawn(async move {
         // We trigger the download process via RPC call
-        let _ = services
-            .msp
-            .get_file_from_key(&session_id, &file_key_clone)
-            .await;
+        _ = services.msp.get_file(&session_id, file_info).await;
     });
 
     // Extract filename from location or use file_key as fallback
@@ -185,16 +185,14 @@ pub async fn download_by_key(
 pub async fn upload_file(
     State(services): State<Services>,
     AuthenticatedUser { address }: AuthenticatedUser,
-    Path((bucket_id, file_key)): Path<(String, String)>,
+    Path((_bucket_id, file_key)): Path<(String, String)>,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, Error> {
     debug!(
-        bucket_id = %bucket_id,
         file_key = %file_key,
         user = %address,
         "PUT upload file"
     );
-    // TODO(AUTH): verify that user has permissions to access this file
 
     // Pre-check with MSP whether this file key is expected before doing heavy processing
     let is_expected = services
@@ -255,25 +253,8 @@ pub async fn upload_file(
     // Process and upload the file using the MSP service
     let response = services
         .msp
-        .process_and_upload_file(&bucket_id, &file_key, file_data_stream, file_metadata)
+        .process_and_upload_file(Some(&address), &file_key, file_data_stream, file_metadata)
         .await?;
 
     Ok((StatusCode::CREATED, Json(response)))
-}
-
-pub async fn distribute_file(
-    State(services): State<Services>,
-    AuthenticatedUser { address }: AuthenticatedUser,
-    Path((bucket_id, file_key)): Path<(String, String)>,
-) -> Result<impl IntoResponse, Error> {
-    debug!(
-        bucket_id = %bucket_id,
-        file_key = %file_key,
-        user = %address,
-        "POST distribute file"
-    );
-    // TODO(AUTH): verify that user has permissions to access this file
-
-    let response = services.msp.distribute_file(&bucket_id, &file_key).await?;
-    Ok(Json(response))
 }

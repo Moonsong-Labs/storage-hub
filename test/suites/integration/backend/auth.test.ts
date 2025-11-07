@@ -134,7 +134,7 @@ await describeMspNet(
 
       assert(profileResp.ok, `Profile request failed: ${profileResp.status}`);
       const profileJson = (await profileResp.json()) as { address: string; ens: string };
-      assert.strictEqual(
+      strictEqual(
         profileJson.address.toLowerCase(),
         ETH_SH_USER_ADDRESS.toLowerCase(),
         "Address should match"
@@ -164,7 +164,7 @@ await describeMspNet(
       });
 
       assert(!verifyResp.ok, "Verification should fail with wrong signer");
-      assert(verifyResp.status === 401, "Should return 401 Unauthorized");
+      strictEqual(verifyResp.status, 401, "Should return 401 Unauthorized");
     });
 
     it("Should not verify without a nonce request", async () => {
@@ -181,7 +181,7 @@ await describeMspNet(
       });
 
       assert(!verifyResp.ok, "Verification should fail without nonce request");
-      assert(verifyResp.status === 401, "Should return 401 Unauthorized");
+      strictEqual(verifyResp.status, 401, "Should return 401 Unauthorized");
     });
 
     it("Should reject an invalid address", async () => {
@@ -192,7 +192,7 @@ await describeMspNet(
       });
 
       assert(!nonceResp.ok, "Nonce request should fail with invalid address");
-      assert(nonceResp.status === 400, "Should return 400 Bad Request");
+      strictEqual(nonceResp.status, 422, "Should return 422 Unprocessable Entity");
     });
 
     it("Should reject an invalid signature", async () => {
@@ -215,7 +215,7 @@ await describeMspNet(
       });
 
       assert(!verifyResp.ok, "Verification should fail with invalid signature format");
-      assert(verifyResp.status === 401, "Should return 401 Unauthorized");
+      strictEqual(verifyResp.status, 401, "Should return 401 Unauthorized");
     });
 
     it.skip(
@@ -247,7 +247,7 @@ await describeMspNet(
         });
 
         assert(!verifyResp.ok, "Verification should fail with expired nonce");
-        assert(verifyResp.status === 401, "Should return 401 Unauthorized");
+        strictEqual(verifyResp.status, 401, "Should return 401 Unauthorized");
       }
     );
   }
