@@ -5,6 +5,7 @@ import { Settings, Wallet, Database, CheckCircle, AlertCircle, ExternalLink } fr
 import { createWalletClient, createPublicClient, custom, formatEther, getAddress, type WalletClient, type PublicClient } from 'viem';
 import { StorageHubClient } from '@storagehub-sdk/core';
 import { MspClient } from '@storagehub-sdk/msp-client';
+import type { Session } from '@storagehub-sdk/msp-client';
 import { FileManager } from './FileManager';
 import { loadAppConfig } from '../config/load';
 import type { AppConfig } from '../config/types';
@@ -216,15 +217,18 @@ export function OnePageDemo() {
     setMspError(null);
 
     try {
-      // Create MSP client
-      const mspClient = await MspClient.connect({ baseUrl: config.mspUrl });
+      // Create session provider and MSP client
+      let currentSession: Readonly<Session> | undefined;
+      const sessionProvider = async () => currentSession;
+      const mspClient = await MspClient.connect({ baseUrl: config.mspUrl }, sessionProvider);
 
       // REAL SIWE AUTHENTICATION ONLY
       console.log('🔐 MSP Authentication: Starting SIWE flow...');
       console.log('- Address:', walletAddress);
       console.log('- Chain ID:', config.chainId);
 
-      await mspClient.auth.SIWE(walletClient);
+      const session = await mspClient.auth.SIWE(walletClient);
+      currentSession = Object.freeze(session);
       console.log('✅ Authentication completed successfully');
 
       // Get user profile to verify authentication

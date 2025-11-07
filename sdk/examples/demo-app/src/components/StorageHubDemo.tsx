@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { WalletClient, PublicClient } from 'viem';
 import { Upload, Info, Settings } from 'lucide-react';
 import { MspClient } from '@storagehub-sdk/msp-client';
+import type { Session } from '@storagehub-sdk/msp-client';
 import { StorageHubClient } from '@storagehub-sdk/core';
 import { FileManager } from './FileManager';
 
@@ -54,11 +55,15 @@ export function StorageHubDemo({ walletClient, publicClient, walletAddress }: St
     setStatus('🔄 Connecting to MSP backend...');
 
     try {
+      // Prepare session provider for MSP auth token handling
+      let currentSession: Readonly<Session> | undefined;
+      const sessionProvider = async () => currentSession;
+
       // Connect to MSP backend (using default from configuration)
       const client = await MspClient.connect({
         baseUrl: 'http://127.0.0.1:8080',
         timeoutMs: 10000
-      });
+      }, sessionProvider);
 
       // Test connection
       const health = await client.info.getInfo();
@@ -66,7 +71,8 @@ export function StorageHubDemo({ walletClient, publicClient, walletAddress }: St
 
       // Authenticate with SIWE-style flow
       setStatus('🔄 Authenticating with MSP...');
-      await client.auth.SIWE(walletClient);
+      const session = await client.auth.SIWE(walletClient);
+      currentSession = Object.freeze(session);
       const profile = await client.auth.getProfile();
 
       // Also create StorageHubClient for blockchain operations

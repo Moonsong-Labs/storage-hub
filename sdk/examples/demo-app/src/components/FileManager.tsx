@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useRef, useCallback, useId } from 'react';
-import { Upload, Download, File, Folder, Hash, X, CheckCircle, AlertCircle, Plus, Database, ArrowLeft } from 'lucide-react';
+import { Upload, Download, File, Folder, Hash, X, CheckCircle, AlertCircle, Plus, Database, ArrowLeft, Trash2 } from 'lucide-react';
 import type { WalletClient, PublicClient } from 'viem';
-import { FileManager as StorageHubFileManager, initWasm, type StorageHubClient, ReplicationLevel } from '@storagehub-sdk/core';
+import { FileManager as StorageHubFileManager, initWasm, type StorageHubClient, ReplicationLevel, type FileInfo as CoreFileInfo } from '@storagehub-sdk/core';
 import type { MspClient } from '@storagehub-sdk/msp-client';
 import type { UploadReceipt, Bucket, FileTree } from '@storagehub-sdk/msp-client';
 
@@ -60,6 +60,11 @@ interface FileDownloadState {
   downloadError: string | null;
 }
 
+interface FileDeleteState {
+  deletingFiles: Set<string>;
+  deleteError: string | null;
+}
+
 export function FileManager({ publicClient, walletAddress, mspClient, storageHubClient }: FileManagerProps) {
   const bucketSelectId = useId();
   const folderNameInputId = useId();
@@ -112,6 +117,11 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
   const [downloadState, setDownloadState] = useState<FileDownloadState>({
     downloadingFiles: new Set(),
     downloadError: null,
+  });
+
+  const [deleteState, setDeleteState] = useState<FileDeleteState>({
+    deletingFiles: new Set(),
+    deleteError: null,
   });
 
   // File selection handler
@@ -856,6 +866,70 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
     }
   };
 
+  // File delete function
+  const deleteFile = async (file: FileTree) => {
+    if (!mspClient || !storageHubClient || !publicClient) {
+      console.error('Cannot delete: missing MSP client or StorageHub client');
+      return;
+    }
+
+    if (!(file.type === 'file' && 'fileKey' in file && file.fileKey)) {
+      console.error('Cannot delete: not a file or missing file key');
+      return;
+    }
+
+    const fileKey = file.fileKey;
+    const bucketId = fileBrowserState.selectedBucketId;
+    if (!bucketId) {
+      console.error('Cannot delete: no bucket selected');
+      return;
+    }
+
+    setDeleteState(prev => ({
+      ...prev,
+      deletingFiles: new Set([...prev.deletingFiles, fileKey]),
+      deleteError: null,
+    }));
+
+    const to0x = (hex: string): `0x${string}` => (hex.startsWith('0x') ? hex : (`0x${hex}`)) as `0x${string}`;
+
+    try {
+      // Retrieve file info from MSP to build the on-chain delete request
+      const info = await mspClient.files.getFileInfo(bucketId, fileKey);
+
+      const coreInfo: CoreFileInfo = {
+        fileKey: to0x(info.fileKey),
+        fingerprint: to0x(info.fingerprint),
+        bucketId: to0x(info.bucketId),
+        location: info.location,
+        size: BigInt(info.size),
+      };
+
+      const txHash = await storageHubClient.requestDeleteFile(coreInfo);
+
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+      if (receipt.status !== 'success') {
+        throw new Error('Deletion transaction failed');
+      }
+
+      // Refresh files after successful tx (status may show deletionInProgress until finalized)
+      if (fileBrowserState.selectedBucketId) {
+        await loadFiles(fileBrowserState.selectedBucketId, fileBrowserState.currentPath);
+      }
+    } catch (error: unknown) {
+      console.error('❌ Delete failed:', error);
+      setDeleteState(prev => ({
+        ...prev,
+        deleteError: error instanceof Error ? error.message : 'Delete failed',
+      }));
+    } finally {
+      setDeleteState(prev => ({
+        ...prev,
+        deletingFiles: new Set([...prev.deletingFiles].filter(key => key !== fileKey)),
+      }));
+    }
+  };
+
   const clearUpload = () => {
     setUploadState({
       file: null,
@@ -1269,6 +1343,29 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
                               )}
                             </button>
                           )}
+                          {file.type === 'file' && 'fileKey' in file && file.fileKey && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void deleteFile(file);
+                              }}
+                              disabled={deleteState.deletingFiles.has(('fileKey' in file && file.fileKey) ? file.fileKey : '')}
+                              className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
+                            >
+                              {deleteState.deletingFiles.has(('fileKey' in file && file.fileKey) ? file.fileKey : '') ? (
+                                <>
+                                  <div className="animate-spin h-3 w-3 border border-white border-t-transparent rounded-full inline mr-1" />
+                                  Deleting...
+                                </>
+                              ) : (
+                                <>
+                                  <Trash2 className="h-3 w-3 inline mr-1" />
+                                  Delete
+                                </>
+                              )}
+                            </button>
+                          )}
                           {file.type === 'folder' && (
                             <button
                               type="button"
@@ -1310,6 +1407,24 @@ export function FileManager({ publicClient, walletAddress, mspClient, storageHub
                 </button>
               </div>
               <p className="text-sm text-red-300 mt-2">{downloadState.downloadError}</p>
+            </div>
+          )}
+
+          {/* Delete Error */}
+          {deleteState.deleteError && (
+            <div className="p-4 bg-red-900/20 border border-red-900/50 rounded-lg">
+              <div className="flex items-center gap-2 text-red-400">
+                <AlertCircle className="h-4 w-4" />
+                <span className="text-sm font-medium">Delete Failed</span>
+                <button
+                  type="button"
+                  onClick={() => setDeleteState(prev => ({ ...prev, deleteError: null }))}
+                  className="ml-auto text-red-400 hover:text-red-300"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <p className="text-sm text-red-300 mt-2">{deleteState.deleteError}</p>
             </div>
           )}
 
