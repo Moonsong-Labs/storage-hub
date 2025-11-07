@@ -28,6 +28,9 @@ pub struct Bucket {
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
     pub merkle_root: Vec<u8>,
+    pub value_prop_id: String,
+    pub total_size: BigDecimal,
+    pub file_count: i64,
 }
 
 impl Bucket {
@@ -40,6 +43,7 @@ impl Bucket {
         collection_id: Option<String>,
         private: bool,
         merkle_root: Vec<u8>,
+        value_prop_id: String,
     ) -> Result<Self, diesel::result::Error> {
         let bucket = diesel::insert_into(bucket::table)
             .values((
@@ -50,6 +54,9 @@ impl Bucket {
                 bucket::collection_id.eq(collection_id),
                 bucket::private.eq(private),
                 bucket::merkle_root.eq(merkle_root),
+                bucket::value_prop_id.eq(value_prop_id),
+                bucket::total_size.eq(BigDecimal::from(0)),
+                bucket::file_count.eq(0i64),
             ))
             .returning(Bucket::as_select())
             .get_result(conn)
@@ -187,5 +194,41 @@ impl Bucket {
 
         // Return BigDecimal directly, defaulting to zero if None
         Ok(total_size.unwrap_or_else(|| BigDecimal::from(0)))
+    }
+
+    /// Increment file count and update total size
+    pub async fn increment_file_count_and_size<'a>(
+        conn: &mut DbConnection<'a>,
+        bucket_id: i64,
+        file_size: i64,
+    ) -> Result<(), diesel::result::Error> {
+        let size_decimal = BigDecimal::from(file_size);
+        diesel::update(bucket::table)
+            .filter(bucket::id.eq(bucket_id))
+            .set((
+                bucket::total_size.eq(bucket::total_size + size_decimal),
+                bucket::file_count.eq(bucket::file_count + 1),
+            ))
+            .execute(conn)
+            .await?;
+        Ok(())
+    }
+
+    /// Decrement file count and update total size
+    pub async fn decrement_file_count_and_size<'a>(
+        conn: &mut DbConnection<'a>,
+        bucket_id: i64,
+        file_size: i64,
+    ) -> Result<(), diesel::result::Error> {
+        let size_decimal = BigDecimal::from(file_size);
+        diesel::update(bucket::table)
+            .filter(bucket::id.eq(bucket_id))
+            .set((
+                bucket::total_size.eq(bucket::total_size - size_decimal),
+                bucket::file_count.eq(bucket::file_count - 1),
+            ))
+            .execute(conn)
+            .await?;
+        Ok(())
     }
 }
