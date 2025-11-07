@@ -28,6 +28,7 @@ use shc_common::{
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shp_file_metadata::FileMetadata;
+use shp_tx_implicits_runtime_api::TxImplicitsApi;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::{HashAndNumber, TreeRoute};
 use sp_core::{Blake2Hasher, Hasher, U256};
@@ -569,6 +570,7 @@ where
     > {
         let function = function.into();
         let current_block = client.info().best_number.saturated_into();
+        let current_block_hash = client.info().best_hash;
         let period = BlockHashCount::get()
             .checked_next_power_of_two()
             .map(|c| c / 2)
@@ -576,9 +578,20 @@ where
 
         let minimal_extra =
             MinimalExtension::new(generic::Era::mortal(period, current_block), nonce, tip);
+        let era_for_implicit = minimal_extra.era.clone();
         let extra: Runtime::Extension = Runtime::Extension::from_minimal_extension(minimal_extra);
 
-        let raw_payload = SignedPayload::new(function.clone(), extra.clone());
+        let implicit_bytes = client
+            .runtime_api()
+            .compute_signed_extra_implicit(current_block_hash, era_for_implicit, false)
+            .expect("Runtime API compute_signed_extra_implicit call should always succeed")
+            .expect("Runtime API compute_signed_extra_implicit returned error");
+        let implicit: <Runtime::Extension as sp_runtime::traits::TransactionExtension<
+            Runtime::Call,
+        >>::Implicit = Decode::decode(&mut &implicit_bytes[..])
+            .expect("Decoding implicit returned by runtime must succeed; qed");
+
+        let raw_payload = SignedPayload::from_raw(function.clone(), extra.clone(), implicit);
 
         let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
 

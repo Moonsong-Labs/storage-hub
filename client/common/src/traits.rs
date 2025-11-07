@@ -10,6 +10,7 @@ use polkadot_primitives::Nonce;
 use sc_service::TFullClient;
 use scale_info::StaticTypeInfo;
 use shp_opaque::Block;
+use shp_tx_implicits_runtime_api::TxImplicitsApi as TxImplicitsRuntimeApi;
 use sp_api::ConstructRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_core::{crypto::KeyTypeId, H256};
@@ -85,6 +86,7 @@ pub trait StorageEnableApiCollection<Runtime>:
     pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance<Runtime>>
     + substrate_frame_rpc_system::AccountNonceApi<Block, AccountId<Runtime>, Nonce>
     + BlockBuilder<Block>
+    + TxImplicitsRuntimeApi<Block>
     + ProofsDealerRuntimeApi<
         Block,
         ProofsDealerProviderId<Runtime>,
@@ -134,6 +136,7 @@ where
     T: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance<Runtime>>
         + substrate_frame_rpc_system::AccountNonceApi<Block, AccountId<Runtime>, Nonce>
         + BlockBuilder<Block>
+        + TxImplicitsRuntimeApi<Block>
         + ProofsDealerRuntimeApi<
             Block,
             ProofsDealerProviderId<Runtime>,
