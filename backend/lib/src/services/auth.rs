@@ -2,32 +2,25 @@ use std::{str::FromStr, sync::Arc};
 
 use alloy_core::primitives::{eip191_hash_message, PrimitiveSignature};
 use alloy_signer::utils::public_key_to_address;
-use axum::{
-    extract::{FromRef, FromRequestParts},
-    http::request::Parts,
-};
-use axum_jwt::{
-    jsonwebtoken::{self, DecodingKey, EncodingKey, Header, Validation},
-    Claims, Decoder,
-};
-use chrono::{DateTime, Utc};
+use axum_jwt::jsonwebtoken::{self, DecodingKey, EncodingKey, Header, Validation};
+use chrono::Utc;
 use rand::{distributions::Alphanumeric, Rng};
-use tracing::{debug, warn};
+use tracing::debug;
 
 use crate::{
     api::validation::validate_eth_address,
-    constants::{
-        auth::{
-            AUTH_NONCE_ENDPOINT, AUTH_NONCE_EXPIRATION_SECONDS, AUTH_SIWE_DOMAIN,
-            JWT_EXPIRY_OFFSET, MOCK_ENS,
-        },
-        mocks::MOCK_ADDRESS,
+    constants::auth::{
+        AUTH_NONCE_ENDPOINT, AUTH_NONCE_EXPIRATION_SECONDS, AUTH_SIWE_DOMAIN, JWT_EXPIRY_OFFSET,
+        MOCK_ENS,
     },
-    data::storage::BoxedStorage,
+    data::storage::{BoxedStorage, WithExpiry},
     error::Error,
-    models::auth::{JwtClaims, NonceResponse, TokenResponse, User, VerifyResponse},
-    services::Services,
+    models::auth::{JwtClaims, NonceResponse, TokenResponse, UserProfile, VerifyResponse},
 };
+
+/// Implements Axum extractors for authentication
+mod axum;
+pub use axum::*;
 
 /// Authentication service for the backend
 ///
@@ -202,8 +195,12 @@ impl AuthService {
             .storage
             .get_nonce(message)
             .await
-            .map_err(|_| Error::Internal)?
-            .ok_or_else(|| Error::Unauthorized("Invalid or expired nonce".to_string()))?;
+            .map_err(|_| Error::Internal)
+            .and_then(|entry| match entry {
+                WithExpiry::Valid(address) => Ok(address),
+                WithExpiry::Expired => Err(Error::Unauthorized("Expired nonce".to_string())),
+                WithExpiry::NotFound => Err(Error::Unauthorized("Invalid nonce".to_string())),
+            })?;
 
         if self.validate_signature {
             let recovered_address = Self::recover_eth_address_from_sig(message, signature)?;
@@ -237,7 +234,7 @@ impl AuthService {
         // to allow users to logout (invalidate their session)
         Ok(VerifyResponse {
             token,
-            user: User {
+            user: UserProfile {
                 address,
                 ens: MOCK_ENS.to_string(),
             },
@@ -256,10 +253,10 @@ impl AuthService {
     }
 
     /// Retrieve the user profile from the corresponding `JwtClaims`
-    pub async fn profile(&self, user_address: &str) -> Result<User, Error> {
+    pub async fn profile(&self, user_address: &str) -> Result<UserProfile, Error> {
         debug!(target: "auth_service::profile", address = %user_address, "Profile requested");
 
-        Ok(User {
+        Ok(UserProfile {
             address: user_address.to_string(),
             // TODO: retrieve ENS (lookup or cache?)
             ens: MOCK_ENS.to_string(),
@@ -305,87 +302,10 @@ impl AuthService {
     }
 }
 
-/// Axum extractor to verify the authenticated user.
-///
-/// Will error if the JWT token is expired or it is otherwise invalid
-pub struct AuthenticatedUser {
-    pub address: String,
-}
-
-impl AuthenticatedUser {
-    /// Verifies the passed in `JwtClaims`
-    ///
-    /// Returns the user information if the claims are valid and not expired
-    // TODO: user logout verification
-    pub fn from_claims(claims: &JwtClaims) -> Result<Self, Error> {
-        let now = Utc::now();
-        let exp = DateTime::<Utc>::from_timestamp(claims.exp, 0)
-            .ok_or_else(|| Error::Unauthorized("Invalid JWT expiry".to_string()))?;
-        let iat = DateTime::<Utc>::from_timestamp(claims.iat, 0)
-            .ok_or_else(|| Error::Unauthorized("Invalid JWT issuance time".to_string()))?;
-
-        if now >= exp {
-            return Err(Error::Unauthorized("Expired JWT".to_string()));
-        }
-
-        if iat > now {
-            return Err(Error::Unauthorized("JWT issued in the future".to_string()));
-        }
-
-        Ok(AuthenticatedUser {
-            address: claims.address.clone(),
-        })
-    }
-
-    async fn from_request_parts_impl<S>(
-        parts: &mut Parts,
-        state: &S,
-    ) -> Result<Self, (Option<JwtClaims>, Error)>
-    where
-        S: Send + Sync,
-        Decoder: FromRef<S>,
-    {
-        let claims = Claims::<JwtClaims>::from_request_parts(parts, state)
-            .await
-            .map_err(|e| (None, Error::Unauthorized(format!("Invalid JWT: {e:?}"))))?;
-
-        Self::from_claims(&claims.0).map_err(|e| (Some(claims.0), e))
-    }
-}
-
-impl<S> FromRequestParts<S> for AuthenticatedUser
-where
-    Decoder: FromRef<S>,
-    Services: FromRef<S>,
-    S: Send + Sync,
-{
-    type Rejection = Error;
-
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let services = Services::from_ref(state);
-        let maybe_auth = AuthenticatedUser::from_request_parts_impl(parts, state).await;
-
-        match maybe_auth {
-            Ok(ok) => Ok(ok),
-            // if services are configured to not validate signature
-            Err((claims, e)) if !services.auth.validate_signature => {
-                warn!(target: "auth_service::from_request_parts", error = ?e, "Authentication failed");
-
-                // if we were able to retrieve the claims then use the passed in address
-                let address = claims
-                    .map(|claims| claims.address)
-                    .unwrap_or_else(|| MOCK_ADDRESS.to_string());
-                debug!(target: "auth_service::from_request_parts", address = %address, "Bypassing authentication");
-
-                return Ok(AuthenticatedUser { address });
-            }
-            Err((_, e)) => Err(e),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use jsonwebtoken::{decode, Algorithm, Validation};
 
     use crate::{
@@ -477,7 +397,7 @@ mod tests {
 
         // Check that message was stored in storage
         let stored_address = storage.get_nonce(&result.message).await.unwrap();
-        assert_eq!(stored_address, Some(MOCK_ADDRESS.to_string()));
+        assert_eq!(stored_address, WithExpiry::Valid(MOCK_ADDRESS.to_string()));
     }
 
     #[test]
@@ -528,8 +448,27 @@ mod tests {
         let result = auth_service.login(message, &sig_str).await;
         assert!(result.is_err(), "Should fail if challenge wasn't called");
         match result {
-            Err(Error::Unauthorized(msg)) => assert!(msg.contains("Invalid or expired nonce")),
+            Err(Error::Unauthorized(msg)) => assert!(msg.contains("Invalid nonce")),
             _ => panic!("Expected unauthorized error for missing nonce"),
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn login_fails_after_expiry() {
+        let (auth_service, _, _) = create_test_auth_service(true);
+        let (address, sk) = eth_wallet();
+
+        let challenge = auth_service.challenge(&address, 1).await.unwrap();
+        let sig_str = sign_message(&sk, &challenge.message);
+
+        // Advance time to expire the nonce
+        tokio::time::advance(Duration::from_secs(AUTH_NONCE_EXPIRATION_SECONDS + 1)).await;
+
+        let result = auth_service.login(&challenge.message, &sig_str).await;
+        assert!(result.is_err(), "Should fail if nonce has expired");
+        match result {
+            Err(Error::Unauthorized(msg)) => assert!(msg.contains("Expired nonce")),
+            _ => panic!("Expected unauthorized error for expired nonce"),
         }
     }
 
