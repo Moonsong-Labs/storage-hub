@@ -451,6 +451,7 @@ where
         let is_allowed = self.is_allowed(&event).await?;
 
         if !is_allowed {
+            warn!(target: LOG_TARGET, "File with file key {:x} is in our exclude list. Skipping volunteer.", event.file_key);
             return Ok(());
         }
 
