@@ -569,21 +569,20 @@ where
         Runtime::Extension,
     > {
         let function = function.into();
-        let current_block = client.info().best_number.saturated_into();
+        let current_block: u64 = client.info().best_number.saturated_into();
         let current_block_hash = client.info().best_hash;
         let period = BlockHashCount::get()
             .checked_next_power_of_two()
             .map(|c| c / 2)
             .unwrap_or(2) as u64;
 
-        let minimal_extra =
-            MinimalExtension::new(generic::Era::mortal(period, current_block), nonce, tip);
-        let era_for_implicit = minimal_extra.era.clone();
+        let era = generic::Era::mortal(period, current_block.saturating_sub(1));
+        let minimal_extra = MinimalExtension::new(era, nonce, tip);
         let extra: Runtime::Extension = Runtime::Extension::from_minimal_extension(minimal_extra);
 
         let implicit_bytes = client
             .runtime_api()
-            .compute_signed_extra_implicit(current_block_hash, era_for_implicit, false)
+            .compute_signed_extra_implicit(current_block_hash, era, false)
             .expect("Runtime API compute_signed_extra_implicit call should always succeed")
             .expect("Runtime API compute_signed_extra_implicit returned error");
         let implicit: <Runtime::Extension as sp_runtime::traits::TransactionExtension<
