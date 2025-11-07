@@ -323,8 +323,8 @@ await describeBspNet(
       );
 
       // Drop the volunteer transaction (creates the gap at nonce n)
-      await bspApi.node.dropTxn(volunteerHash as `0x${string}`);
       await userApi.node.dropTxn(volunteerHash as `0x${string}`);
+      await bspApi.node.dropTxn(volunteerHash as `0x${string}`);
 
       // Verify the Invalid log was emitted
       await bspApi.docker.waitForLog({
@@ -386,8 +386,8 @@ await describeBspNet(
         );
 
         // Drop the retry volunteer transaction
-        await bspApi.node.dropTxn(retryVolunteerHash as `0x${string}`);
         await userApi.node.dropTxn(retryVolunteerHash as `0x${string}`);
+        await bspApi.node.dropTxn(retryVolunteerHash as `0x${string}`);
       }
 
       // Verify all retry volunteer extrinsics were dropped
