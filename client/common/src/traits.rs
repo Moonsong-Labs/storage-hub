@@ -493,20 +493,4 @@ pub trait ExtensionOperations<
     /// # Returns
     /// A fully constructed extension ready for use in transaction signing
     fn from_minimal_extension(minimal: MinimalExtension) -> Self;
-
-    /// Generates the implicit data required by this extension.
-    ///
-    /// Implicit data is information that is not explicitly included in the
-    /// transaction but is required for validation. This typically includes:
-    /// - The genesis block hash (for chain identification)
-    /// - The current block hash (for mortality checks)
-    /// - Runtime version information
-    ///
-    /// # Parameters
-    /// - `genesis_block_hash`: The hash of the genesis block
-    /// - `current_block_hash`: The hash of the current block
-    ///
-    /// # Returns
-    /// The implicit data structure required by this extension type
-    fn implicit(genesis_block_hash: Self::Hash, current_block_hash: Self::Hash) -> Self::Implicit;
 }
