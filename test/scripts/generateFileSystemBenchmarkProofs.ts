@@ -42,6 +42,23 @@ async function generateBenchmarkProofs() {
   await using mspApi = await BspNetTestApi.create(
     `ws://127.0.0.1:${ShConsts.NODE_INFOS.msp1.port}`
   );
+  await using msp2Api = await BspNetTestApi.create(
+    `ws://127.0.0.1:${ShConsts.NODE_INFOS.msp2.port}`
+  );
+
+  // Set StorageRequestTtl to 500 blocks to avoid storage requests expiring during the test.
+  const storageRequestTtlParameter = {
+    RuntimeConfig: {
+      StorageRequestTtl: [null, 500]
+    }
+  };
+  await userApi.block.seal({
+    calls: [
+      userApi.tx.sudo.sudo(
+        userApi.tx.parameters.setParameter(storageRequestTtlParameter)
+      )
+    ]
+  });
 
   const storedFileKeysPerBucket: string[][] = [];
   const nonStoredFileKeysPerBucket: string[][] = [];
@@ -148,83 +165,62 @@ async function generateBenchmarkProofs() {
 
   // Create 10 buckets and upload files to them.
   const bucketAmount = 10;
+  let totalStorageRequestsCompleted = 0;
+
   for (let i = 0; i < bucketAmount; i++) {
     const bucketName = `benchmarking-bucket-${i}`;
-    const storedFileKeysForBucket: string[] = [];
-    const nonStoredFileKeysForBucket: string[] = [];
-
-    // Create the bucket and get its ID.
-    const newBucketEvent = await userApi.file.newBucket(bucketName);
-    const newBucketEventDataBlob =
-      userApi.events.fileSystem.NewBucket.is(newBucketEvent) && newBucketEvent.data;
-    if (!newBucketEventDataBlob) {
-      throw new Error("Failed to create new bucket");
-    }
-    const bucketId = newBucketEventDataBlob.bucketId;
+    const otherBucketName = `other-benchmarking-bucket-${i}`;
 
     // Upload files to the MSP to that bucket, but not all since we need non-inclusion forest proofs.
+    // Build batch file configs for first half of files (stored in MSP forest)
+    const storedFilesConfig = [];
     for (let j = 0; j < sources.length / 2; j++) {
-      console.log(
-        `File upload: Uploading file ${j + 1} of ${sources.length / 2} to MSP bucket ${i + 1}...`
-      );
-      const source = sources[j];
-      const destination = locations[j];
-
-      const fileMetadata = await userApi.file.newStorageRequest(source, destination, bucketId);
-      storedFileKeysForBucket.push(fileMetadata.fileKey);
-
-      await userApi.wait.bspVolunteerInTxPool(1);
-      await userApi.wait.mspResponseInTxPool(1);
-      await userApi.block.seal();
-      await mspApi.wait.fileStorageComplete(fileMetadata.fileKey);
-      await bspApi.wait.fileStorageComplete(fileMetadata.fileKey);
-      await userApi.wait.bspStored({ expectedExts: 1 });
+      storedFilesConfig.push({
+        source: sources[j],
+        destination: locations[j],
+        bucketIdOrName: bucketName,
+        replicationTarget: 1
+      });
     }
 
-    // Save the bucket ID for later use.
-    bucketIds.push(bucketId);
+    // Batch upload first half of files
+    const storedBatchResult = await userApi.file.batchStorageRequests({
+      files: storedFilesConfig,
+      mspId: ShConsts.DUMMY_MSP_ID,
+      bspApi,
+      mspApi
+    });
 
-    // Save the stored file keys for this bucket.
-    storedFileKeysPerBucket.push(storedFileKeysForBucket);
+    // Save the stored file keys for this bucket
+    storedFileKeysPerBucket.push(storedBatchResult.fileKeys);
 
-    // Upload the remaining files to the BSP (with another MSP and bucket), to have all file keys and to be able to get all key proofs easily.
-    // Create the other bucket first and get its ID.
-    const otherBucketName = `other-benchmarking-bucket-${i}`;
-    const otherBucketEvent = await userApi.file.newBucket(
-      otherBucketName,
-      undefined,
-      undefined,
-      ShConsts.DUMMY_MSP_ID_2
-    );
-    const otherBucketEventDataBlob =
-      userApi.events.fileSystem.NewBucket.is(otherBucketEvent) && otherBucketEvent.data;
-    if (!otherBucketEventDataBlob) {
-      throw new Error("Failed to create new bucket");
-    }
-    const otherBucketId = otherBucketEventDataBlob.bucketId;
+    // Save the bucket ID for later use (all files in batch use same bucket)
+    bucketIds.push(userApi.createType("H256", storedBatchResult.bucketIds[0]));
 
-    // Upload the remaining files to the other bucket.
+    totalStorageRequestsCompleted += storedBatchResult.fileKeys.length;
+
+    // Upload the remaining files to MSP 2 and keep storage requests alive so we can generate Forest proofs via the rpc call to the BSP
+    // Build batch file configs for second half of files (NOT stored in MSP 1 Forest, for non-inclusion proofs)
+    const nonStoredFilesConfig = [];
     for (let j = sources.length / 2; j < sources.length; j++) {
-      console.log(`File upload: Uploading file ${j + 1} of ${sources.length} to BSP...`);
-      const source = sources[j];
-      const destination = locations[j];
-
-      const fileMetadata = await userApi.file.newStorageRequest(
-        source,
-        destination,
-        otherBucketId,
-        undefined,
-        ShConsts.DUMMY_MSP_ID_2
-      );
-      nonStoredFileKeysForBucket.push(fileMetadata.fileKey);
-
-      await userApi.wait.bspVolunteer(1);
-      await bspApi.wait.fileStorageComplete(fileMetadata.fileKey);
-      await userApi.wait.bspStored({ expectedExts: 1 });
+      nonStoredFilesConfig.push({
+        source: sources[j],
+        destination: locations[j],
+        bucketIdOrName: otherBucketName,
+        replicationTarget: 2 // Keep storage request alive to be able to generate a proof using `generateFileKeyProofBspConfirm` (which internally looks up the storage request)
+      });
     }
 
-    // Save the non-stored file keys for the MSP's bucket.
-    nonStoredFileKeysPerBucket.push(nonStoredFileKeysForBucket);
+    // Batch upload second half of files
+    const nonStoredBatchResult = await userApi.file.batchStorageRequests({
+      files: nonStoredFilesConfig,
+      mspId: ShConsts.DUMMY_MSP_ID_2,
+      bspApi,
+      mspApi: msp2Api,
+    });
+
+    // Save the non-stored file keys for the MSP's bucket
+    nonStoredFileKeysPerBucket.push(nonStoredBatchResult.fileKeys);
   }
 
   // Sort the stored and non-stored file keys.
@@ -369,7 +365,77 @@ async function generateBenchmarkProofs() {
   console.log("");
 
   console.log(
-    `${GREEN_TEXT}▶ 📦 Generating inclusion forest proof and the included file key proof.${RESET_TEXT}`
+    `${GREEN_TEXT}▶ 📦 Generating inclusion forest proofs for 1 to 10 file keys.${RESET_TEXT}`
+  );
+  console.log(
+    `${GREEN_TEXT} These are going to be used in extrinsics that allow multiple file deletions.${RESET_TEXT}`
+  );
+
+  // * For a fisherman that calls delete_files or delete_files_for_incomplete_storage_request with multiple keys for a Bucket, we need to generate inclusion forest proofs for 1 to 10 file keys.
+  const inclusionProofsCases: string[][] = [];
+  const amountOfInclusionProofsToGenerate = 10;
+
+  for (let i = 1; i <= amountOfInclusionProofsToGenerate; i++) {
+    // We generate an inclusion proof for i file keys from the storedFileKeys array for each bucket.
+    const inclusionProofsForCase: string[] = [];
+
+    // For each bucket, generate the inclusion proof for the first i file keys.
+    for (let j = 0; j < bucketIds.length; j++) {
+      const fileKeysToIncludeForBucket = storedFileKeysPerBucket[j].slice(0, i);
+      const bucketIdOption: Option<H256> = userApi.createType("Option<H256>", bucketIds[j]);
+      const inclusionProof = await mspApi.rpc.storagehubclient.generateForestProof(
+        bucketIdOption,
+        fileKeysToIncludeForBucket
+      );
+      verbose && console.log(`\n\n Inclusion proof for bucket ${j} with ${i} file keys:`);
+      verbose && console.log(inclusionProof);
+
+      // Remove the 0x prefix from the proof and push it to the array.
+      const inclusionProofHexStr = inclusionProof.toString().slice(2);
+      inclusionProofsForCase.push(inclusionProofHexStr);
+    }
+
+    // Add the inclusion proofs for this case to the array.
+    inclusionProofsCases.push(inclusionProofsForCase);
+  }
+
+  console.log(`${GREEN_TEXT}◀ ✅ Generated inclusion proofs for 1 to 10 file keys.${RESET_TEXT}`);
+  console.log("");
+
+  console.log(
+    `${GREEN_TEXT}▶ 📦 Generating BSP inclusion forest proofs for 1 to 10 file keys.${RESET_TEXT}`
+  );
+  console.log(
+    `${GREEN_TEXT} These are going to be used in extrinsics that allow multiple file deletions from BSP.${RESET_TEXT}`
+  );
+
+  // * For a fisherman that calls delete_files or delete_files_for_incomplete_storage_request with multiple keys for BSP, we need to generate inclusion forest proofs for 1 to 10 file keys.
+  const bspInclusionProofsCases: string[] = [];
+  const amountOfBspInclusionProofsToGenerate = 10;
+
+  for (let i = 1; i <= amountOfBspInclusionProofsToGenerate; i++) {
+    // We generate an inclusion proof for i file keys from the storedFileKeys array of the first bucket.
+    // Since BSP stores all files, we can use any bucket's file keys.
+    const fileKeysToIncludeForBsp = storedFileKeysPerBucket[0].slice(0, i);
+    const inclusionProof = await bspApi.rpc.storagehubclient.generateForestProof(
+      null,
+      fileKeysToIncludeForBsp
+    );
+    verbose && console.log(`\n\n BSP inclusion proof with ${i} file keys:`);
+    verbose && console.log(inclusionProof);
+
+    // Remove the 0x prefix from the proof and push it to the array.
+    const inclusionProofHexStr = inclusionProof.toString().slice(2);
+    bspInclusionProofsCases.push(inclusionProofHexStr);
+  }
+
+  console.log(
+    `${GREEN_TEXT}◀ ✅ Generated BSP inclusion proofs for 1 to 10 file keys.${RESET_TEXT}`
+  );
+  console.log("");
+
+  console.log(
+    `${GREEN_TEXT}▶ 📦 Generating single inclusion forest proof and the included file key proof.${RESET_TEXT}`
   );
   console.log(
     `${GREEN_TEXT} This is going to be used in extrinsics that allow a Provider to stop storing a file.${RESET_TEXT}`
@@ -494,6 +560,21 @@ async function generateBenchmarkProofs() {
     fileKeyProofsForBspConfirmStr += `${index} => ${fileKeyProofVec},\n        `;
   }
 
+  let inclusionProofsStr = "";
+  for (const [index, proofVector] of inclusionProofsCases.entries()) {
+    let inclusionProofForBucketStr = "";
+    for (const proof of proofVector) {
+      inclusionProofForBucketStr += `hex::decode("${proof}").expect("Proof should be a decodable hex string"),\n            `;
+    }
+    inclusionProofsStr += `${index + 1} => vec![\n            ${inclusionProofForBucketStr}\n        ],\n        `;
+  }
+
+  let bspInclusionProofsStr = "";
+  for (const [index, proof] of bspInclusionProofsCases.entries()) {
+    const proofVec = `hex::decode("${proof}").expect("Proof should be a decodable hex string")`;
+    bspInclusionProofsStr += `${index + 1} => ${proofVec},\n        `;
+  }
+
   const template = fs.readFileSync(
     "../pallets/file-system/src/benchmark_proofs_template.rs",
     "utf8"
@@ -517,7 +598,9 @@ async function generateBenchmarkProofs() {
     .replace("{{file_key_metadata_inclusion_proof_file_size}}", fileMetadata.file_size)
     .replace("{{file_key_metadata_inclusion_proof_fingerprint}}", fileMetadataFingerprintStr)
     .replace("{{file_keys_for_bsp_confirm}}", fileKeysForBspStr)
-    .replace("{{file_key_proofs_for_bsp_confirm}}", fileKeyProofsForBspConfirmStr);
+    .replace("{{file_key_proofs_for_bsp_confirm}}", fileKeyProofsForBspConfirmStr)
+    .replace("{{inclusion_proofs_multiple_bucket}}", inclusionProofsStr)
+    .replace("{{inclusion_proofs_multiple_bsp}}", bspInclusionProofsStr);
 
   fs.writeFileSync("../pallets/file-system/src/benchmark_proofs.rs", rustCode);
 

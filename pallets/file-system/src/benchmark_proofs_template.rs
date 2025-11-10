@@ -157,3 +157,27 @@ pub fn fetch_file_key_proof_for_bsp_confirm(file_key_index: u32) -> Vec<u8> {
 		),
 	}
 }
+
+#[rustfmt::skip]
+pub fn fetch_inclusion_proofs_multiple_bucket(number_of_file_keys: u32, bucket_index: u32) -> Vec<u8> {
+	let inclusion_proofs = match number_of_file_keys {
+		{{inclusion_proofs_multiple_bucket}}
+		_ => panic!(
+			"Number of file keys ({}) is not supported",
+			number_of_file_keys
+		),
+	};
+
+	inclusion_proofs[(bucket_index - 1) as usize].clone()
+}
+
+#[rustfmt::skip]
+pub fn fetch_inclusion_proofs_multiple_bsp(number_of_file_keys: u32) -> Vec<u8> {
+	match number_of_file_keys {
+		{{inclusion_proofs_multiple_bsp}}
+		_ => panic!(
+			"Number of file keys ({}) is not supported",
+			number_of_file_keys
+		),
+	}
+}
