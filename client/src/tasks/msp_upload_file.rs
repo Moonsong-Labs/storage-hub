@@ -7,7 +7,9 @@ use std::{
 
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
-use shc_blockchain_service::types::{MspRespondStorageRequest, RespondStorageRequest};
+use shc_blockchain_service::types::{
+    MspRespondStorageRequest, RespondStorageRequest, RetryStrategy,
+};
 use shc_blockchain_service::{capacity_manager::CapacityRequestData, types::SendExtrinsicOptions};
 use sp_core::H256;
 use sp_runtime::traits::{SaturatedConversion, Zero};
@@ -16,7 +18,8 @@ use pallet_file_system::types::RejectedStorageRequest;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::events::ProcessMspRespondStoringRequest;
 use shc_blockchain_service::{
-    commands::BlockchainServiceCommandInterface, events::NewStorageRequest,
+    commands::{BlockchainServiceCommandInterface, BlockchainServiceCommandInterfaceExt},
+    events::NewStorageRequest,
 };
 use shc_common::{
     traits::StorageEnableRuntime,
@@ -38,6 +41,24 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "msp-upload-file-task";
+
+/// Configuration for the MSP upload file task
+#[derive(Debug, Clone)]
+pub struct MspUploadFileConfig {
+    /// Maximum number of times to retry submitting respond storage request extrinsic
+    pub max_try_count: u32,
+    /// Maximum tip amount to use when submitting respond storage request extrinsic
+    pub max_tip: u128,
+}
+
+impl Default for MspUploadFileConfig {
+    fn default() -> Self {
+        Self {
+            max_try_count: 3,
+            max_tip: 500,
+        }
+    }
+}
 
 /// MSP Upload File Task: Handles the whole flow of a file being uploaded to a MSP, from
 /// the MSP's perspective.
@@ -69,6 +90,7 @@ where
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
     file_key_cleanup: Option<H256>,
+    config: MspUploadFileConfig,
 }
 
 impl<NT, Runtime> Clone for MspUploadFileTask<NT, Runtime>
@@ -81,6 +103,7 @@ where
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
             file_key_cleanup: self.file_key_cleanup,
+            config: self.config.clone(),
         }
     }
 }
@@ -95,7 +118,13 @@ where
         Self {
             storage_hub_handler,
             file_key_cleanup: None,
+            config: MspUploadFileConfig::default(),
         }
+    }
+
+    pub fn with_config(mut self, config: MspUploadFileConfig) -> Self {
+        self.config = config;
+        self
     }
 }
 
@@ -341,7 +370,7 @@ where
 
         self.storage_hub_handler
             .blockchain
-            .send_extrinsic(
+            .submit_extrinsic_with_retry(
                 call,
                 SendExtrinsicOptions::new(
                     Duration::from_secs(
@@ -353,9 +382,11 @@ where
                     Some("fileSystem".to_string()),
                     Some("mspRespondStorageRequestsMultipleBuckets".to_string()),
                 ),
+                RetryStrategy::default()
+                    .with_max_retries(self.config.max_try_count)
+                    .with_max_tip(self.config.max_tip.saturated_into()),
+                false,
             )
-            .await?
-            .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
 
         // Log accepted and rejected files, and remove rejected files from File Storage.

@@ -340,7 +340,6 @@
       try {
         if (!client) throw new Error('Connect MSP first');
         setStatus('Uploading...');
-        // Ensure we still have a valid session/profile
         await client.auth.getProfile();
         const owner = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
         const bucketId = '0xd8793e4187f5642e96016a96fb33849a7e03eda91358b311bbd426ed38b26692';
