@@ -604,7 +604,7 @@ where
         let managed_msp_peer_id = match self.config.peer_id.clone() {
             Some(peer_id) => peer_id,
             None => {
-                trace!(target: LOG_TARGET, "MSP node peer ID is not set, meaning it is not meant to be a distributor. Skipping distribution of files.");
+                debug!(target: LOG_TARGET, "MSP node peer ID is not set, meaning it is not meant to be a distributor. Skipping distribution of files.");
                 return;
             }
         };
