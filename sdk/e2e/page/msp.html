@@ -340,10 +340,9 @@
       try {
         if (!client) throw new Error('Connect MSP first');
         setStatus('Uploading...');
-        // Ensure we still have a valid session/profile
         await client.auth.getProfile();
         const owner = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
-        const bucketId = '0x34eb5f637e05fc18f857ccb013250076534192189894d174ee3aa6d3525f6970';
+        const bucketId = '0xd8793e4187f5642e96016a96fb33849a7e03eda91358b311bbd426ed38b26692';
         const adolphusFingerprint = client.files.hexToBytes('0x34eb5f637e05fc18f857ccb013250076534192189894d174ee3aa6d3525f6970');
         const location = 'files/e2e-bucket/adolphus.jpg';
         const blob = await loadAdolphusBlob();
@@ -364,7 +363,7 @@
       try {
         if (!client) throw new Error('Connect MSP first');
         setStatus('Downloading by key...');
-        const fileKey = '0xde4a17999bc1482ba71737367e5d858a133ed1e13327a29c495ab976004a138f';
+        const fileKey = '0xc4344065c2f4c1155008caf5d56bcbf59d2f37b276e566b2dcad4713904d88e8';
         await client.auth.getProfile();
         const dl = await client.files.downloadFile(fileKey);
         window.__msp.downloadMeta = { status: dl?.status, contentType: dl?.contentType, contentLength: dl?.contentLength, contentRange: dl?.contentRange };

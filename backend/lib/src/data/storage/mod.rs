@@ -2,6 +2,7 @@
 
 use std::error::Error;
 
+use alloy_core::primitives::Address;
 use async_trait::async_trait;
 
 pub mod boxed;
@@ -35,10 +36,10 @@ pub trait Storage: Send + Sync {
     async fn store_nonce(
         &self,
         message: String,
-        address: String,
+        address: &Address,
         expiration_seconds: u64,
     ) -> Result<(), Self::Error>;
 
     /// Retrieve nonce data by message. Will remove the nonce from storage.
-    async fn get_nonce(&self, message: &str) -> Result<WithExpiry<String>, Self::Error>;
+    async fn get_nonce(&self, message: &str) -> Result<WithExpiry<Address>, Self::Error>;
 }

@@ -358,16 +358,51 @@ where
             .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
 
-        // Remove the files that were rejected from the File Storage.
+        // Log accepted and rejected files, and remove rejected files from File Storage.
         // Accepted files will be added to the Bucket's Forest Storage by the BlockchainService.
         for storage_request_msp_bucket_response in storage_request_msp_response {
-            let mut fs = self.storage_hub_handler.file_storage.write().await;
+            // Log accepted file keys
+            if let Some(ref accepted) = storage_request_msp_bucket_response.accept {
+                let accepted_file_keys: Vec<_> = accepted
+                    .file_keys_and_proofs
+                    .iter()
+                    .map(|fk| fk.file_key)
+                    .collect();
 
-            for RejectedStorageRequest { file_key, .. } in
-                &storage_request_msp_bucket_response.reject
-            {
-                if let Err(e) = fs.delete_file(&file_key) {
-                    error!(target: LOG_TARGET, "Failed to delete file {:?}: {:?}", file_key, e);
+                if !accepted_file_keys.is_empty() {
+                    info!(
+                        target: LOG_TARGET,
+                        "✅ Accepted {} file(s) for bucket {:?}: {:?}",
+                        accepted_file_keys.len(),
+                        storage_request_msp_bucket_response.bucket_id,
+                        accepted_file_keys
+                    );
+                }
+            }
+
+            // Log and delete rejected file keys
+            if !storage_request_msp_bucket_response.reject.is_empty() {
+                let rejected_file_keys: Vec<_> = storage_request_msp_bucket_response
+                    .reject
+                    .iter()
+                    .map(|r| (r.file_key, &r.reason))
+                    .collect();
+
+                info!(
+                    target: LOG_TARGET,
+                    "❌ Rejected {} file(s) for bucket {:?}: {:?}",
+                    rejected_file_keys.len(),
+                    storage_request_msp_bucket_response.bucket_id,
+                    rejected_file_keys
+                );
+
+                let mut fs = self.storage_hub_handler.file_storage.write().await;
+                for RejectedStorageRequest { file_key, .. } in
+                    &storage_request_msp_bucket_response.reject
+                {
+                    if let Err(e) = fs.delete_file(&file_key) {
+                        error!(target: LOG_TARGET, "Failed to delete file {:?}: {:?}", file_key, e);
+                    }
                 }
             }
         }

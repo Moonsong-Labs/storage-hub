@@ -2,6 +2,9 @@ import type { NonceResponse, Session, UserInfo } from "../types.js";
 import { getAddress, type WalletClient } from "viem";
 import { ModuleBase } from "../base.js";
 
+const DEFAULT_SIWE_VERIFY_RETRY_ATTEMPS = 10;
+const DEFAULT_SIWE_VERIFY_BACKOFF_MS = 100;
+
 export class AuthModule extends ModuleBase {
   /**
    * Request nonce for SIWE.
@@ -34,7 +37,11 @@ export class AuthModule extends ModuleBase {
    * Full SIWE flow using a `WalletClient`.
    * - Derives address, fetches nonce, signs message, verifies and stores session.
    */
-  async SIWE(wallet: WalletClient, signal?: AbortSignal): Promise<Session> {
+  async SIWE(
+    wallet: WalletClient,
+    retry = DEFAULT_SIWE_VERIFY_RETRY_ATTEMPS,
+    signal?: AbortSignal
+  ): Promise<Session> {
     // Resolve the current active account from the WalletClient.
     // - Browser wallets (e.g., MetaMask) surface the user-selected address here.
     // - Viem/local wallets must set `wallet.account` explicitly before calling.
@@ -53,7 +60,21 @@ export class AuthModule extends ModuleBase {
     // Sign using the active account resolved above (string or Account object)
     const signature = await wallet.signMessage({ account, message });
 
-    return this.verify(message, signature, signal);
+    // TODO: remove the retry logic once the backend is fixed.
+    let lastError: unknown;
+    for (let attemptIndex = 0; attemptIndex < retry; attemptIndex++) {
+      try {
+        return await this.verify(message, signature, signal);
+      } catch (err) {
+        lastError = err;
+        await this.delay(DEFAULT_SIWE_VERIFY_BACKOFF_MS);
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error("SIWE verification failed");
+  }
+
+  private async delay(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**

@@ -1,6 +1,6 @@
 {
   "name": "@storagehub-sdk/core",
-  "version": "0.0.5",
+  "version": "0.3.1",
   "description": "Core primitives for StorageHub SDK (types, crypto, filemanager, storage, wasm bindings)",
   "type": "module",
   "main": "./dist/index.node.js",
@@ -41,11 +41,14 @@
   "dependencies": {
     "@polkadot/types": "^16.4.7",
     "abitype": "^1.0.0",
-    "ethers": "^6.15.0",
-    "viem": "^2.37.6"
+    "ethers": "^6.15.0"
+  },
+  "peerDependencies": {
+    "viem": ">=2.38.3"
   },
   "devDependencies": {
     "@types/node": "^20.11.19",
+    "viem": ">=2.38.3",
     "solc": "^0.8.26"
   },
   "engines": {

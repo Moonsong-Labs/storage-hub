@@ -5,9 +5,13 @@
 //! PostgreSQL and mock implementations for testing.
 
 use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use tokio::sync::RwLock;
 
 #[cfg(test)]
 use bigdecimal::BigDecimal;
+
 #[cfg(test)]
 use shc_indexer_db::OnchainBspId;
 use shc_indexer_db::{
@@ -17,13 +21,19 @@ use shc_indexer_db::{
 use tracing::debug;
 
 use crate::{
-    constants::database::DEFAULT_PAGE_LIMIT,
+    constants::database::{DEFAULT_PAGE_LIMIT, MSP_CACHE_TTL_SECS},
     data::indexer_db::repository::{PaymentStreamData, StorageOperations},
     error::Result,
 };
 
 #[cfg(test)]
 use crate::data::indexer_db::repository::PaymentStreamKind;
+
+/// Cache entry for MSP data
+struct MspCacheEntry {
+    msp: Msp,
+    last_refreshed: Instant,
+}
 
 /// Database client that delegates to a repository implementation
 ///
@@ -48,6 +58,7 @@ use crate::data::indexer_db::repository::PaymentStreamKind;
 #[derive(Clone)]
 pub struct DBClient {
     repository: Arc<dyn StorageOperations>,
+    msp_cache: Arc<RwLock<Option<MspCacheEntry>>>,
 }
 
 impl DBClient {
@@ -56,7 +67,10 @@ impl DBClient {
     /// # Arguments
     /// * `repository` - Repository implementation to use for database operations
     pub fn new(repository: Arc<dyn StorageOperations>) -> Self {
-        Self { repository }
+        Self {
+            repository,
+            msp_cache: Arc::new(RwLock::new(None)),
+        }
     }
 
     /// Test the database connection
@@ -81,15 +95,65 @@ impl DBClient {
     }
 
     /// Retrieve a given MSP's entry by its onchain ID
+    ///
+    /// This method caches the MSP data to avoid repeated database hits.
+    /// The cache is automatically refreshed after the configured TTL expires.
     pub async fn get_msp(&self, msp_onchain_id: &OnchainMspId) -> Result<Msp> {
         debug!(target: "indexer_db::client::get_msp", onchain_id = %msp_onchain_id, "Fetching MSP");
 
-        // TODO: should we cache this?
-        // since we always reference the same msp
-        self.repository
+        // Check if we have a valid cached entry
+        {
+            let cache = self.msp_cache.read().await;
+            if let Some(entry) = &*cache {
+                // Check if the cache entry matches the requested MSP and is still valid
+                if entry.msp.onchain_msp_id == *msp_onchain_id
+                    && entry.last_refreshed.elapsed() < Duration::from_secs(MSP_CACHE_TTL_SECS)
+                {
+                    return Ok(entry.msp.clone());
+                }
+            }
+        }
+
+        // Cache miss or expired, fetch from database
+        let msp = self
+            .repository
             .get_msp_by_onchain_id(msp_onchain_id)
             .await
-            .map_err(Into::into)
+            .map_err(Into::<crate::error::Error>::into)?;
+
+        // Update cache with the new value
+        {
+            let mut cache = self.msp_cache.write().await;
+            *cache = Some(MspCacheEntry {
+                msp: msp.clone(),
+                last_refreshed: Instant::now(),
+            });
+        }
+
+        Ok(msp)
+    }
+
+    /// Invalidate the MSP cache if it matches the given MSP
+    ///
+    /// # Arguments
+    /// * expected_id: the MSP for which the cache should be invalidated
+    ///
+    /// If no MSP was specified the cache is always invalidated.
+    pub async fn invalidate_msp_cache(&self, expected_id: Option<&OnchainMspId>) {
+        let mut cache = self.msp_cache.write().await;
+
+        match expected_id {
+            None => *cache = None,
+            Some(id)
+                if cache
+                    .as_ref()
+                    .map(|cache| &cache.msp.onchain_msp_id == id)
+                    .unwrap_or_default() =>
+            {
+                *cache = None
+            }
+            _ => {}
+        }
     }
 
     /// Retrieve info on a specific bucket given its onchain ID
@@ -186,18 +250,23 @@ impl DBClient {
 impl DBClient {
     /// Create a new MSP
     pub async fn create_msp(&self, account: &str, onchain_msp_id: OnchainMspId) -> Result<Msp> {
-        self.repository
-            .create_msp(account, onchain_msp_id)
-            .await
-            .map_err(Into::into)
+        let msp = self.repository.create_msp(account, onchain_msp_id).await?;
+
+        // Invalidate cache after creating the cached MSP
+        // NOTE: the operation described above is technically incorrect (creating an existing msp)
+        self.invalidate_msp_cache(Some(&onchain_msp_id)).await;
+
+        Ok(msp)
     }
 
     /// Delete an MSP
     pub async fn delete_msp(&self, onchain_msp_id: &OnchainMspId) -> Result<()> {
-        self.repository
-            .delete_msp(onchain_msp_id)
-            .await
-            .map_err(Into::into)
+        let result = self.repository.delete_msp(onchain_msp_id).await?;
+
+        // Invalidate cache after deleting the cached MSP
+        self.invalidate_msp_cache(Some(&onchain_msp_id)).await;
+
+        Ok(result)
     }
 
     /// Create a new BSP
