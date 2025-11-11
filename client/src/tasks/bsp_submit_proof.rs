@@ -302,9 +302,9 @@ where
             // - If the proof is outdated.
             // - If the Forest root of the BSP has changed.
             Box::pin(Self::should_retry_submit_proof(
-                cloned_sh_handler.clone(),
-                cloned_event.clone(),
-                cloned_forest_root.clone(),
+                cloned_sh_handler,
+                cloned_event,
+                cloned_forest_root,
                 error,
             )) as Pin<Box<dyn Future<Output = bool> + Send>>
         };

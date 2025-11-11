@@ -189,12 +189,8 @@ await describeMspNet(
 
       strictEqual(fileList.bucketId, bucketId, "file list's bucket id should match queried");
 
-      strictEqual(fileList.files.length, 1, "File list should have exactly 1 entry");
-
-      const files = fileList.files[0];
+      const files = fileList.tree;
       strictEqual(files.name, "/", "First entry of bucket should be root");
-      assert(files.type === "folder", "Root entry should be a folder");
-
       assert(files.children.length > 0, "At least one file in the root");
 
       const test = files.children.find((entry) => entry.name === fileLocationSubPath);
@@ -225,11 +221,8 @@ await describeMspNet(
 
       strictEqual(fileList.bucketId, bucketId, "file list's bucket id should match queried");
 
-      strictEqual(fileList.files.length, 1, "File list should have exactly 1 entry");
-
-      const files = fileList.files[0];
+      const files = fileList.tree;
       strictEqual(files.name, fileLocationSubPath, "First entry should be the folder of the path");
-      assert(files.type === "folder", "First entry should be a folder");
 
       assert(files.children.length > 0, `At least one file in the ${fileLocationSubPath} folder`);
 

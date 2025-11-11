@@ -73,7 +73,7 @@ mod tests {
             mocks::MOCK_ADDRESS,
         },
         models::auth::{
-            JwtClaims, NonceRequest, NonceResponse, TokenResponse, User, VerifyRequest,
+            JwtClaims, NonceRequest, NonceResponse, TokenResponse, UserProfile, VerifyRequest,
             VerifyResponse,
         },
         services::Services,
@@ -93,7 +93,7 @@ mod tests {
 
         // Step 1: Get nonce challenge
         let nonce_request = NonceRequest {
-            address: address.clone(),
+            address,
             chain_id: 1,
         };
 
@@ -101,7 +101,7 @@ mod tests {
 
         assert_eq!(response.status_code(), StatusCode::OK);
         let nonce_response: NonceResponse = response.json();
-        assert!(nonce_response.message.contains(&address));
+        assert!(nonce_response.message.contains(&address.to_string()));
 
         // Step 2: Sign the message and login
         let signature = sign_message(&signing_key, &nonce_response.message);
@@ -153,7 +153,7 @@ mod tests {
             .await;
 
         assert_eq!(response.status_code(), StatusCode::OK);
-        let user: User = response.json();
+        let user: UserProfile = response.json();
         assert_eq!(user.address, address);
         assert_eq!(user.ens, MOCK_ENS);
     }
@@ -163,17 +163,14 @@ mod tests {
         let app = mock_app().await;
         let server = TestServer::new(app).unwrap();
 
-        let invalid_request = NonceRequest {
-            address: "not_an_eth_address".to_string(),
-            chain_id: 1,
-        };
+        let invalid_json = serde_json::json!({
+            "address": "not_an_eth_address",
+            "chainId": 1
+        });
 
-        let response = server
-            .post(AUTH_NONCE_ENDPOINT)
-            .json(&invalid_request)
-            .await;
+        let response = server.post(AUTH_NONCE_ENDPOINT).json(&invalid_json).await;
 
-        assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+        assert_eq!(response.status_code(), StatusCode::UNPROCESSABLE_ENTITY);
     }
 
     #[tokio::test]
@@ -299,7 +296,7 @@ mod tests {
         // Unfortunately we can't easily advance system time
         // so instead we create an "old" token
         let old_claims = JwtClaims {
-            address: MOCK_ADDRESS.to_string(),
+            address: MOCK_ADDRESS,
             iat: Utc::now().timestamp() - 10, // issued 10 seconds ago
             exp: Utc::now().timestamp() + 10, // expires in 10 seconds
         };
@@ -408,7 +405,7 @@ mod tests {
 
         // Login with first wallet
         let nonce_request1 = NonceRequest {
-            address: address1.clone(),
+            address: address1,
             chain_id: 1,
         };
 
@@ -428,7 +425,7 @@ mod tests {
 
         // Login with second wallet
         let nonce_request2 = NonceRequest {
-            address: address2.clone(),
+            address: address2,
             chain_id: 1,
         };
 
@@ -455,7 +452,7 @@ mod tests {
             )
             .await;
 
-        let user1: User = response.json();
+        let user1: UserProfile = response.json();
         assert_eq!(user1.address, address1);
 
         let response = server
@@ -466,7 +463,7 @@ mod tests {
             )
             .await;
 
-        let user2: User = response.json();
+        let user2: UserProfile = response.json();
         assert_eq!(user2.address, address2);
     }
 
@@ -485,7 +482,7 @@ mod tests {
         // until the token is expired
         // so we create a token that's already expired
         let expired_claims = JwtClaims {
-            address: MOCK_ADDRESS.to_string(),
+            address: MOCK_ADDRESS,
             exp: Utc::now().timestamp() - 3600, // 1 hour ago
             iat: Utc::now().timestamp() - 7200, // 2 hours ago
         };
