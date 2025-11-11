@@ -17,7 +17,8 @@ use sp_runtime::{traits::Header, SaturatedConversion, Saturating};
 
 use pallet_file_system_runtime_api::{
     FileSystemApi, IsStorageRequestOpenToVolunteersError, QueryBspConfirmChunksToProveForFileError,
-    QueryFileEarliestVolunteerTickError, QueryMspConfirmChunksToProveForFileError,
+    QueryBspsVolunteeredForFileError, QueryFileEarliestVolunteerTickError,
+    QueryMspConfirmChunksToProveForFileError,
 };
 use pallet_payment_streams_runtime_api::{GetUsersWithDebtOverThresholdError, PaymentStreamsApi};
 use pallet_proofs_dealer_runtime_api::{
@@ -624,6 +625,30 @@ where
                         }
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send chunks to prove file: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueryBspVolunteeredForFile {
+                    bsp_id,
+                    file_key,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let bsps_volunteered = self
+                        .client
+                        .runtime_api()
+                        .query_bsps_volunteered_for_file(current_block_hash, file_key)
+                        .unwrap_or_else(|_| Err(QueryBspsVolunteeredForFileError::InternalError));
+
+                    let volunteered = bsps_volunteered.map(|bsps| bsps.contains(&bsp_id));
+
+                    match callback.send(volunteered) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "BSP volunteered status sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send BSP volunteered status: {:?}", e);
                         }
                     }
                 }
