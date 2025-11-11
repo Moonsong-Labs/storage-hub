@@ -1,4 +1,4 @@
-import { BspNetTestApi, sleep } from "../util";
+import { BspNetTestApi, sleep, waitFor } from "../util";
 import * as ShConsts from "../util/bspNet/consts";
 import { NetworkLauncher, type NetLaunchConfig } from "../util/netLaunch";
 import * as fs from "node:fs";
@@ -39,8 +39,11 @@ async function generateBenchmarkProofs() {
     `ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`
   );
   await using bspApi = await BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`);
-  await using mspApi = await BspNetTestApi.create(
+  await using msp1Api = await BspNetTestApi.create(
     `ws://127.0.0.1:${ShConsts.NODE_INFOS.msp1.port}`
+  );
+  await using msp2Api = await BspNetTestApi.create(
+    `ws://127.0.0.1:${ShConsts.NODE_INFOS.msp2.port}`
   );
 
   const storedFileKeysPerBucket: string[][] = [];
@@ -146,86 +149,115 @@ async function generateBenchmarkProofs() {
     "test/40.jpg"
   ];
 
+  // Set StorageRequestTtl to an arbitrary large number of blocks to avoid storage requests expiring during the test.
+  // Set StorageRequestTtl to 500 blocks to avoid storage requests expiring during the test.
+  const storageRequestTtlParameter = {
+    RuntimeConfig: {
+      StorageRequestTtl: [null, 500]
+    }
+  };
+  await userApi.block.seal({
+    calls: [
+      userApi.tx.sudo.sudo(
+        userApi.tx.parameters.setParameter(storageRequestTtlParameter)
+      )
+    ]
+  });
+
   // Create 10 buckets and upload files to them.
   const bucketAmount = 10;
   for (let i = 0; i < bucketAmount; i++) {
-    const bucketName = `benchmarking-bucket-${i}`;
-    const storedFileKeysForBucket: string[] = [];
-    const nonStoredFileKeysForBucket: string[] = [];
-
+    const batch1BucketName = `benchmarking-bucket-${i}`;
+    
     // Create the bucket and get its ID.
-    const newBucketEvent = await userApi.file.newBucket(bucketName);
-    const newBucketEventDataBlob =
-      userApi.events.fileSystem.NewBucket.is(newBucketEvent) && newBucketEvent.data;
-    if (!newBucketEventDataBlob) {
+    const batch1BucketEvent = await userApi.file.newBucket(batch1BucketName);
+    const batch1BucketEventDataBlob =
+      userApi.events.fileSystem.NewBucket.is(batch1BucketEvent) && batch1BucketEvent.data;
+    if (!batch1BucketEventDataBlob) {
       throw new Error("Failed to create new bucket");
     }
-    const bucketId = newBucketEventDataBlob.bucketId;
+    const batch1BucketId = batch1BucketEventDataBlob.bucketId;
 
-    // Upload files to the MSP to that bucket, but not all since we need non-inclusion forest proofs.
+    // Batch storage requests for the first half of the files with MSP 1.
+    // Set replication target to 1 to fulfill the storage request.
+    let filesToUploadBatch1 = [];
     for (let j = 0; j < sources.length / 2; j++) {
-      console.log(
-        `File upload: Uploading file ${j + 1} of ${sources.length / 2} to MSP bucket ${i + 1}...`
-      );
-      const source = sources[j];
-      const destination = locations[j];
-
-      const fileMetadata = await userApi.file.newStorageRequest(source, destination, bucketId);
-      storedFileKeysForBucket.push(fileMetadata.fileKey);
-
-      await userApi.wait.bspVolunteerInTxPool(1);
-      await userApi.wait.mspResponseInTxPool(1);
-      await userApi.block.seal();
-      await mspApi.wait.fileStorageComplete(fileMetadata.fileKey);
-      await bspApi.wait.fileStorageComplete(fileMetadata.fileKey);
-      await userApi.wait.bspStored({ expectedExts: 1 });
+      filesToUploadBatch1.push({
+        source: sources[j],
+        destination: locations[j],
+        bucketIdOrName: batch1BucketId,
+        replicationTarget: 1
+      });
     }
 
+    // Create all storage requests and have MSP 1 and BSP respond to them.
+    const msp1BatchStorageRequestsResult = await userApi.file.batchStorageRequests({
+      files: filesToUploadBatch1,
+      owner: userApi.accounts.shUser,
+      bspApi: bspApi,
+      mspId: ShConsts.DUMMY_MSP_ID,
+      mspApi: msp1Api
+    });
+
     // Save the bucket ID for later use.
-    bucketIds.push(bucketId);
+    bucketIds.push(batch1BucketId);
 
     // Save the stored file keys for this bucket.
-    storedFileKeysPerBucket.push(storedFileKeysForBucket);
+    storedFileKeysPerBucket.push(msp1BatchStorageRequestsResult.fileKeys);
 
     // Upload the remaining files to the BSP (with another MSP and bucket), to have all file keys and to be able to get all key proofs easily.
     // Create the other bucket first and get its ID.
-    const otherBucketName = `other-benchmarking-bucket-${i}`;
-    const otherBucketEvent = await userApi.file.newBucket(
-      otherBucketName,
+    const batch2BucketName = `other-benchmarking-bucket-${i}`;
+    const batch2BucketEvent = await userApi.file.newBucket(
+      batch2BucketName,
       undefined,
       undefined,
       ShConsts.DUMMY_MSP_ID_2
     );
-    const otherBucketEventDataBlob =
-      userApi.events.fileSystem.NewBucket.is(otherBucketEvent) && otherBucketEvent.data;
-    if (!otherBucketEventDataBlob) {
+    const batch2BucketEventDataBlob =
+      userApi.events.fileSystem.NewBucket.is(batch2BucketEvent) && batch2BucketEvent.data;
+    if (!batch2BucketEventDataBlob) {
       throw new Error("Failed to create new bucket");
     }
-    const otherBucketId = otherBucketEventDataBlob.bucketId;
+    const batch2BucketId = batch2BucketEventDataBlob.bucketId;
 
-    // Upload the remaining files to the other bucket.
+    // Batch storage requests for the second half of the files with MSP 2.
+    // Set replication target to 2 to have the storage request stay alive to be able to call `generateFileKeyProofBspConfirm` on the BSP node (this RPC will internally 
+    // query the storage request)
+    let filesToUploadBatch2 = [];
     for (let j = sources.length / 2; j < sources.length; j++) {
-      console.log(`File upload: Uploading file ${j + 1} of ${sources.length} to BSP...`);
-      const source = sources[j];
-      const destination = locations[j];
-
-      const fileMetadata = await userApi.file.newStorageRequest(
-        source,
-        destination,
-        otherBucketId,
-        undefined,
-        ShConsts.DUMMY_MSP_ID_2
-      );
-      nonStoredFileKeysForBucket.push(fileMetadata.fileKey);
-
-      await userApi.wait.bspVolunteer(1);
-      await bspApi.wait.fileStorageComplete(fileMetadata.fileKey);
-      await userApi.wait.bspStored({ expectedExts: 1 });
+      filesToUploadBatch2.push({
+        source: sources[j],
+        destination: locations[j],
+        bucketIdOrName: batch2BucketId,
+        replicationTarget: 2
+      });
     }
 
+    // Create all storage requests and have MSP 2 and BSP respond to them.
+    const msp2BatchStorageRequestsResult = await userApi.file.batchStorageRequests({
+      files: filesToUploadBatch2,
+      owner: userApi.accounts.shUser,
+      bspApi: bspApi,
+      mspId: ShConsts.DUMMY_MSP_ID_2,
+      mspApi: msp2Api
+    });
+
     // Save the non-stored file keys for the MSP's bucket.
-    nonStoredFileKeysPerBucket.push(nonStoredFileKeysForBucket);
+    nonStoredFileKeysPerBucket.push(msp2BatchStorageRequestsResult.fileKeys);
   }
+
+
+  // Wait for the BSP local forest root to match the on-chain forest root.
+  await waitFor({
+    lambda: async () => {
+      const bspForestRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
+      if (bspForestRoot.isSome) {
+        return bspForestRoot.unwrap().toString() === (await userApi.query.providers.backupStorageProviders(ShConsts.DUMMY_BSP_ID)).unwrap().root.toString();
+      }
+      return false;
+    }
+  });
 
   // Sort the stored and non-stored file keys.
   for (const storedFileKeys of storedFileKeysPerBucket) {
@@ -237,13 +269,11 @@ async function generateBenchmarkProofs() {
   }
   verbose && console.log("Sorted non-stored file keys per bucket: ", nonStoredFileKeysPerBucket);
 
-  // Wait for the BSP to add the last confirmed file to its Forest.
-  await sleep(500);
 
   // Get the root of each Bucket's forest after adding the 20 included files.
   for (const bucketId of bucketIds) {
     const bucketIdOption: Option<H256> = userApi.createType("Option<H256>", bucketId);
-    const bucketForestRoot = await mspApi.rpc.storagehubclient.getForestRoot(bucketIdOption);
+    const bucketForestRoot = await msp1Api.rpc.storagehubclient.getForestRoot(bucketIdOption);
     const bucketRoot = bucketForestRoot.toString().slice(2);
     verbose && console.log("Bucket forest root: ", bucketForestRoot.toString());
     bucketRoots.push(bucketRoot);
@@ -303,7 +333,7 @@ async function generateBenchmarkProofs() {
     for (let j = 0; j < bucketIds.length; j++) {
       const fileKeysToAcceptForBucket = nonStoredFileKeysPerBucket[j].slice(0, i);
       const bucketIdOption: Option<H256> = userApi.createType("Option<H256>", bucketIds[j]);
-      const nonInclusionProof = await mspApi.rpc.storagehubclient.generateForestProof(
+      const nonInclusionProof = await msp1Api.rpc.storagehubclient.generateForestProof(
         bucketIdOption,
         fileKeysToAcceptForBucket
       );
