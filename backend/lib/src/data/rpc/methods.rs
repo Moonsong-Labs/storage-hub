@@ -8,3 +8,4 @@ pub const VALUE_PROPS: &str = "storagehubclient_getValuePropositions";
 pub const PEER_IDS: &str = "system_localListenAddresses";
 
 pub const API_CALL: &str = "state_call";
+pub const STATE_QUERY: &str = "state_getStorage";

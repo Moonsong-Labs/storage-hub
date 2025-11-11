@@ -5,7 +5,7 @@
 use std::{collections::HashSet, sync::Arc};
 
 use axum_extra::extract::multipart::Field;
-use bigdecimal::{BigDecimal, RoundingMode};
+use bigdecimal::RoundingMode;
 use codec::{Decode, Encode};
 use sc_network::PeerId;
 use serde::{Deserialize, Serialize};
@@ -37,7 +37,7 @@ use crate::{
     models::{
         buckets::{Bucket, FileTree},
         files::{DistributeResponse, FileInfo, FileUploadResponse},
-        msp_info::{Capacity, InfoResponse, StatsResponse, ValuePropositionWithId},
+        msp_info::{InfoResponse, StatsResponse, ValuePropositionWithId},
         payment::{PaymentStreamInfo, PaymentStreamsResponse},
     },
 };
@@ -149,17 +149,42 @@ impl MspService {
     pub async fn get_stats(&self) -> Result<StatsResponse, Error> {
         debug!(target: "msp_service::get_stats", "Getting MSP stats");
 
-        Ok(StatsResponse {
-            capacity: Capacity {
-                total_bytes: 1099511627776,
-                available_bytes: 879609302220,
-                used_bytes: 219902325556,
-            },
-            active_users: 152,
-            last_capacity_change: 123,
-            value_props_amount: 42,
-            buckets_amount: 1024,
-        })
+        let info = self.rpc.get_msp_info(self.msp_id).await.map_err(|e| {
+            Error::BadRequest(format!("Failed to retrieve MSP stats from RPC: {e}"))
+        })?;
+        tracing::debug!(?info, "msp stats");
+
+        todo!()
+        // let available_capacity =
+        //     self.rpc
+        //         .get_available_capacity(self.msp_id)
+        //         .await
+        //         .map_err(|e| {
+        //             Error::BadRequest(format!(
+        //                 "Failed to retrieve available capacity from RPC: {e}"
+        //             ))
+        //         })?;
+        // let total_capacity = self
+        //     .postgres
+        //     .get_msp(&self.msp_id)
+        //     .await
+        //     .map_err(|e| {
+        //         Error::BadRequest(format!("Failed to retrieve MSP information from DB: {e}"))
+        //     })?
+        //     .capacity;
+        // let used_capacity = &total_capacity - &available_capacity;
+
+        // Ok(StatsResponse {
+        //     capacity: Capacity {
+        //         total_bytes: total_capacity.to_string(),
+        //         available_bytes: available_capacity.to_string(),
+        //         used_bytes: used_capacity.to_string(),
+        //     },
+        //     active_users: 152, // PaymentStreamsApi.get_users_of_payment_streams_of_provider / db
+        //     last_capacity_change: 123, // unavailable? (only for BSP)
+        //     value_props_amount: 42, // StorageProvidersApi.query_value_proposition_for_msp / db
+        //     buckets_amount: 1024, // StorageProvidersApi.query_buckets_for_msp / db
+        // })
     }
 
     /// Get MSP value propositions
@@ -362,7 +387,7 @@ impl MspService {
                     // Matches the computation done in the runtime
                     //
                     // (price * amount) / gigaunit
-                    let cost = (current_price_per_giga_unit_per_tick * amount_provided)
+                    let cost = (&current_price_per_giga_unit_per_tick * amount_provided)
                         / shp_constants::GIGAUNIT;
 
                     // Truncate the decimal digits of the cost per tick
@@ -893,7 +918,7 @@ impl MspService {
 mod tests {
     use std::{str::FromStr, sync::Arc};
 
-    use bigdecimal::BigDecimal;
+    use bigdecimal::{BigDecimal, Signed};
     use serde_json::Value;
 
     use shc_common::types::{FileKeyProof, FileMetadata};
@@ -901,7 +926,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        config::Config,
+        config::{Config, LogFormat},
         constants::{
             mocks::{MOCK_ADDRESS, MOCK_PRICE_PER_GIGA_UNIT},
             rpc::DUMMY_MSP_ID,
@@ -914,6 +939,7 @@ mod tests {
             rpc::{AnyRpcConnection, MockConnection, StorageHubRpcClient},
             storage::{BoxedStorageWrapper, InMemoryStorage},
         },
+        log::initialize_logging,
         test_utils::random_bytes_32,
     };
 
@@ -984,11 +1010,57 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_stats() {
-        let service = MockMspServiceBuilder::new().build().await;
+        initialize_logging(LogFormat::Auto);
+        let service = MockMspServiceBuilder::new()
+            .init_repository_with(|client| {
+                Box::pin(async move {
+                    // Create MSP with the ID that matches the default config
+                    let _ = client
+                        .create_msp(
+                            MOCK_ADDRESS,
+                            OnchainMspId::new(Hash::from_slice(&DUMMY_MSP_ID)),
+                        )
+                        .await
+                        .expect("should create MSP");
+                })
+            })
+            .await
+            .build()
+            .await;
         let stats = service.get_stats().await.unwrap();
 
-        assert!(stats.capacity.total_bytes > 0);
-        assert!(stats.capacity.available_bytes <= stats.capacity.total_bytes);
+        let total_bytes = stats
+            .capacity
+            .total_bytes
+            .parse::<BigDecimal>()
+            .expect("total_bytes to be a number");
+        let available_bytes = stats
+            .capacity
+            .available_bytes
+            .parse::<BigDecimal>()
+            .expect("available_bytes to be a number");
+        let used_bytes = stats
+            .capacity
+            .used_bytes
+            .parse::<BigDecimal>()
+            .expect("used_bytes to be a number");
+
+        assert!(
+            total_bytes.is_positive(),
+            "Total bytes should always be positive"
+        );
+        assert!(
+            total_bytes <= available_bytes,
+            "Available bytes should never be more than total bytes"
+        );
+        assert!(
+            used_bytes <= total_bytes,
+            "Used bytes should never be more than total bytes"
+        );
+        assert!(
+            used_bytes + available_bytes <= total_bytes,
+            "Available + used bytes should never be more than total bytes"
+        );
     }
 
     #[tokio::test]

@@ -13,7 +13,6 @@ use log::{debug, error, info};
 use tokio::{fs, io::AsyncReadExt, sync::RwLock};
 
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
-use pallet_payment_streams_runtime_api::PaymentStreamsApi as PaymentStreamsRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
 use pallet_storage_providers_runtime_api::StorageProvidersApi as StorageProvidersRuntimeApi;
 use sc_rpc_api::check_if_safe;

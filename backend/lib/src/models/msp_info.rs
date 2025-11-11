@@ -37,11 +37,11 @@ pub struct StatsResponse {
 #[derive(Debug, Serialize)]
 pub struct Capacity {
     #[serde(rename = "totalBytes")]
-    pub total_bytes: u64,
+    pub total_bytes: String,
     #[serde(rename = "availableBytes")]
-    pub available_bytes: u64,
+    pub available_bytes: String,
     #[serde(rename = "usedBytes")]
-    pub used_bytes: u64,
+    pub used_bytes: String,
 }
 
 // TODO: We should update this to somehow use the types configured in the runtime.

@@ -5,6 +5,8 @@ use std::fmt::Debug;
 use async_trait::async_trait;
 use jsonrpsee::core::traits::ToRpcParams;
 use serde::de::DeserializeOwned;
+use serde_json::value::RawValue;
+use subxt::backend::rpc::RpcClientT;
 
 #[cfg(feature = "mocks")]
 use crate::data::rpc::mock_connection::MockConnection;
@@ -77,5 +79,50 @@ impl RpcConnection for AnyRpcConnection {
             #[cfg(feature = "mocks")]
             AnyRpcConnection::Mock(conn) => conn.reconnect().await,
         }
+    }
+}
+
+struct Params(Option<Box<RawValue>>);
+
+impl ToRpcParams for Params {
+    fn to_rpc_params(self) -> Result<Option<Box<RawValue>>, serde_json::Error> {
+        Ok(self.0)
+    }
+}
+
+// FIXME: implement
+#[allow(unused_variables)]
+impl RpcClientT for AnyRpcConnection {
+    fn request_raw<'a>(
+        &'a self,
+        method: &'a str,
+        params: Option<Box<RawValue>>,
+    ) -> subxt::backend::rpc::RawRpcFuture<'a, Box<RawValue>> {
+        Box::pin(async move {
+            match self {
+                AnyRpcConnection::Real(conn) => {
+                    conn.call(method, Params(params)).await.map_err(|e| todo!())
+                }
+                #[cfg(feature = "mocks")]
+                AnyRpcConnection::Mock(conn) => {
+                    conn.call(method, Params(params)).await.map_err(|e| todo!())
+                }
+            }
+        })
+    }
+
+    fn subscribe_raw<'a>(
+        &'a self,
+        sub: &'a str,
+        params: Option<Box<RawValue>>,
+        unsub: &'a str,
+    ) -> subxt::backend::rpc::RawRpcFuture<'a, subxt::backend::rpc::RawRpcSubscription> {
+        Box::pin(async move {
+            match self {
+                AnyRpcConnection::Real(ws_connection) => todo!(),
+                #[cfg(feature = "mocks")]
+                AnyRpcConnection::Mock(conn) => todo!(),
+            }
+        })
     }
 }

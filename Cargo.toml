@@ -93,7 +93,6 @@ reference-trie = "0.29.1"
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 rustls-platform-verifier = "0.5"
 rustls-pemfile = "2.2"
-
 scale-info = { version = "2.11.0", default-features = false, features = [
 	"derive",
 ] }
@@ -101,6 +100,7 @@ serde = { version = "1.0.210", default-features = false }
 serde_json = { version = "1.0.121", default-features = false }
 smallvec = "1.11.0"
 strum = { version = "0.26.3", features = ["derive"] }
+subxt = { version = "0.44", default-features = false }
 thiserror = "1.0.48"
 tokio = "1.36.0"
 tokio-postgres = "0.7"

@@ -28,6 +28,36 @@ pub enum RpcConnectionError {
     Other(String),
 }
 
+impl From<subxt::Error> for RpcConnectionError {
+    fn from(value: subxt::Error) -> Self {
+        match value {
+            subxt::Error::Io(error) => Self::Transport(error.to_string()),
+            subxt::Error::Rpc(rpc_error) => Self::Rpc(rpc_error.to_string()),
+            err @ subxt::Error::Runtime(_) | err @ subxt::Error::Transaction(_) => {
+                Self::Other(err.to_string())
+            }
+            err @ subxt::Error::Metadata(_)
+            | err @ subxt::Error::Block(_)
+            | err @ subxt::Error::Codec(_)
+            | err @ subxt::Error::MetadataDecoding(_)
+            | err @ subxt::Error::Extrinsic(_)
+            | err @ subxt::Error::StorageAddress(_)
+            | err @ subxt::Error::Serialization(_)
+            | err @ subxt::Error::Decode(_)
+            | err @ subxt::Error::Encode(_) => Self::Serialization(err.to_string()),
+            subxt::Error::Unknown(items) => Self::Serialization(format!(
+                "Unable to decode received data: {}",
+                hex::encode(items)
+            )),
+            subxt::Error::Other(other) => Self::Other(other),
+            unknown_variant => Self::Other(format!(
+                "Unknown error received from subxt: {:?}",
+                unknown_variant
+            )),
+        }
+    }
+}
+
 /// Result type for RPC operations
 pub type RpcResult<T> = Result<T, RpcConnectionError>;
 

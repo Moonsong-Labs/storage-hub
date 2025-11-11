@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+alloy-core = "0.8"
+alloy-signer = "0.8"
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
@@ -15,8 +17,6 @@ chrono = { workspace = true, features = ["serde"] }
 diesel = { workspace = true }
 diesel-async = { workspace = true }
 futures = { workspace = true }
-alloy-core = "0.8"
-alloy-signer = "0.8"
 headers = { workspace = true }
 hex = { workspace = true }
 hex-literal = { workspace = true }
@@ -24,8 +24,13 @@ jsonrpsee = { workspace = true, features = ["client", "ws-client"] }
 jsonwebtoken = { workspace = true }
 parking_lot = { workspace = true }
 rand = { workspace = true }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
+rustls = { workspace = true }
+rustls-pemfile = { workspace = true }
+rustls-platform-verifier = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+subxt = { workspace = true, features = ["native", "jsonrpsee"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tokio-stream = { workspace = true }
@@ -35,18 +40,15 @@ tower-http = { workspace = true }
 tracing = { workspace = true }
 tracing-bunyan-formatter = { workspace = true }
 tracing-subscriber = { workspace = true }
-rustls = { workspace = true }
-rustls-platform-verifier = { workspace = true }
 tokio-postgres = { workspace = true }
 tokio-postgres-rustls = { workspace = true }
-rustls-pemfile = { workspace = true }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
 uuid = { version = "1.18", features = ["v7"] }
 
 # Workspace dependencies
 codec = { workspace = true }
 sc-network = { workspace = true }
 sc-network-types = { workspace = true }
+# sh-solochain-evm-runtime = { workspace = true, features = ["std"] }
 shc-common = { workspace = true, default-features = true }
 shc-file-manager = { workspace = true }
 shc-indexer-db = { workspace = true, default-features = true }
@@ -57,6 +59,7 @@ shp-types = { workspace = true }
 sp-core = { workspace = true }
 sp-runtime = { workspace = true }
 sp-trie = { workspace = true }
+# pallet-storage-providers = { workspace = true, features = ["std"] }
 trie-db = { workspace = true }
 
 [dev-dependencies]
