@@ -240,7 +240,7 @@ where
                     file_key,
                     msp_id,
                     bucket_id,
-                    reason,
+                    reason: _,
                 },
             ) => {
                 // Process either InternalError or RequestExpire if this provider is managing the bucket.
