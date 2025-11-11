@@ -183,11 +183,10 @@ where
         {
             warn!(
                 target: LOG_TARGET,
-                "StorageRequestExpired and finalised for file key {:?} in bucket {:?}, but file key is still in Forest.",
+                "StorageRequestExpired and finalised for file key {:?} in bucket {:?}, but file key is still in Forest. This can only happen if the same file key was added again after deleted by the user.",
                 event.file_key,
                 event.bucket_id
             );
-            return Err(anyhow!("File key is still in Forest"));
         }
 
         // Check that the file is present in the File Storage.

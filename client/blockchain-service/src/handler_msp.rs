@@ -243,16 +243,6 @@ where
                     reason,
                 },
             ) => {
-                // Other reason than RequestExpired means that the MSP proactively rejected the request.
-                // We also check for InternalError just to be sure we dont have an inconsistent state due the error.
-                if !matches!(
-                    reason,
-                    pallet_file_system::types::RejectedStorageRequestReason::RequestExpired
-                        | pallet_file_system::types::RejectedStorageRequestReason::InternalError
-                ) {
-                    return;
-                }
-
                 // Process either InternalError or RequestExpire if this provider is managing the bucket.
                 if managed_msp_id == &msp_id {
                     self.emit(FinalisedStorageRequestRejected {
