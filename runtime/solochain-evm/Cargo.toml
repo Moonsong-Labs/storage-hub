@@ -53,6 +53,7 @@ shp-opaque = { workspace = true }
 shp-traits = { workspace = true }
 shp-treasury-funding = { workspace = true }
 shp-types = { workspace = true }
+shp-tx-implicits-runtime-api = { workspace = true }
 
 # Substrate
 frame-support = { workspace = true }
@@ -192,6 +193,7 @@ std = [
 	"shp-forest-verifier/std",
 	"shp-traits/std",
 	"shp-treasury-funding/std",
+	"shp-tx-implicits-runtime-api/std",
 	"sp-api/std",
 	"sp-arithmetic/std",
 	"sp-block-builder/std",

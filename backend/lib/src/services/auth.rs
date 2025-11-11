@@ -1,18 +1,15 @@
 use std::{str::FromStr, sync::Arc};
 
-use alloy_core::primitives::{eip191_hash_message, PrimitiveSignature};
+use alloy_core::primitives::{eip191_hash_message, Address, PrimitiveSignature};
 use alloy_signer::utils::public_key_to_address;
 use axum_jwt::jsonwebtoken::{self, DecodingKey, EncodingKey, Header, Validation};
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use rand::{distributions::Alphanumeric, Rng};
-use tracing::debug;
+use tracing::{debug, error};
 
 use crate::{
-    api::validation::validate_eth_address,
-    constants::auth::{
-        AUTH_NONCE_ENDPOINT, AUTH_NONCE_EXPIRATION_SECONDS, AUTH_SIWE_DOMAIN, JWT_EXPIRY_OFFSET,
-        MOCK_ENS,
-    },
+    config::AuthConfig,
+    constants::auth::{AUTH_NONCE_ENDPOINT, MOCK_ENS},
     data::storage::{BoxedStorage, WithExpiry},
     error::Error,
     models::auth::{JwtClaims, NonceResponse, TokenResponse, UserProfile, VerifyResponse},
@@ -36,26 +33,71 @@ pub struct AuthService {
     validation: Validation,
     validate_signature: bool,
     storage: Arc<dyn BoxedStorage>,
+
+    /// The duration for generated JWTs
+    session_duration: Duration,
+    /// The duration for the stored nonces
+    nonce_duration: Duration,
+    /// The SIWE domain to use when generating messages
+    siwe_domain: String,
 }
 
 impl AuthService {
-    /// Crete a new instance of `AuthService` with the configured secret.
+    /// Create an instance of `AuthService` from the passed in `config`.
     ///
-    /// Arguments:
-    /// * `secret`: secret to use to initialize the JWT encoding and decoding keys
-    /// * `storage`: reference to the storage service to use to store nonce information
-    pub fn new(secret: &[u8], storage: Arc<dyn BoxedStorage>) -> Self {
+    /// Requires an existing `storage` instance
+    pub fn from_config(config: &AuthConfig, storage: Arc<dyn BoxedStorage>) -> Self {
+        let secret = config
+            .jwt_secret
+            .as_ref()
+            .ok_or_else(|| {
+                error!(target: "auth_service::from_config", "JWT_SECRET is not set. Please set it in the config file or as an environment variable.");
+                "JWT_SECRET is not configured"
+            })
+            .and_then(|secret| {
+                hex::decode(secret.trim_start_matches("0x"))
+                    .map_err(|e| {
+                        error!(target: "auth_service::from_config", error = %e, "Invalid JWT_SECRET format - must be a valid hex string");
+                        "Invalid JWT_SECRET format"
+                    })
+            })
+            .and_then(|decoded| {
+                if decoded.len() < 32 {
+                    error!(target: "auth_service::from_config", length = decoded.len(), "JWT_SECRET is too short - must be at least 32 bytes (64 hex characters)");
+                    Err("JWT_SECRET must be at least 32 bytes")
+                } else {
+                    Ok(decoded)
+                }
+            })
+            .expect("JWT secret configuration should be valid");
+
+        let session_duration = Duration::minutes(config.session_expiration_minutes as _);
+        let nonce_duration = Duration::seconds(config.nonce_expiration_seconds as _);
+
         // `Validation` is used by the underlying lib to determine how to decode
         // the JWT passed in
         let validation = Validation::default();
 
-        Self {
-            encoding_key: EncodingKey::from_secret(secret),
-            decoding_key: DecodingKey::from_secret(secret),
+        #[cfg_attr(not(feature = "mocks"), allow(unused_mut))]
+        let mut this = Self {
+            encoding_key: EncodingKey::from_secret(secret.as_slice()),
+            decoding_key: DecodingKey::from_secret(secret.as_slice()),
             validation,
             storage,
             validate_signature: true,
+            session_duration,
+            nonce_duration,
+            siwe_domain: config.siwe_domain.clone(),
+        };
+
+        #[cfg(feature = "mocks")]
+        {
+            if config.mock_mode {
+                this.insecure_disable_validation();
+            }
         }
+
+        this
     }
 
     /// Returns the configured JWT decoding key
@@ -89,12 +131,16 @@ impl AuthService {
     /// This follows the EIP-4361 standard for Sign-In with Ethereum messages.
     /// The message format ensures compatibility with wallet signing interfaces
     /// and provides a standardized authentication flow.
-    fn construct_auth_message(address: &str, domain: &str, nonce: &str, chain_id: u64) -> String {
+    fn construct_auth_message(
+        address: &Address,
+        domain: &str,
+        nonce: &str,
+        chain_id: u64,
+    ) -> String {
         debug!(target: "auth_service::construct_auth_message", address = %address, domain = %domain, nonce = %nonce, chain_id = chain_id, "Constructing auth message");
 
         let scheme = "https";
 
-        // TODO: make uri match endpoint
         let uri = format!("{scheme}://{domain}{AUTH_NONCE_ENDPOINT}");
         let statement = "I authenticate to this MSP Backend with my address";
         let version = 1;
@@ -118,14 +164,14 @@ impl AuthService {
     /// Generate a JWT for the given address
     ///
     /// The resulting JWT is already base64 encoded and signed by the service
-    fn generate_jwt(&self, address: &str) -> Result<String, Error> {
+    fn generate_jwt(&self, address: &Address) -> Result<String, Error> {
         debug!(target: "auth_service::generate_jwt", address = %address, "Generating JWT");
 
         let now = Utc::now();
-        let exp = now + JWT_EXPIRY_OFFSET;
+        let exp = now + self.session_duration;
 
         let claims = JwtClaims {
-            address: address.to_string(),
+            address: *address,
             exp: exp.timestamp(),
             iat: now.timestamp(),
         };
@@ -138,22 +184,23 @@ impl AuthService {
     /// Generate a SIWE-compliant message for the user to sign
     ///
     /// The message will expire after a given time
-    pub async fn challenge(&self, address: &str, chain_id: u64) -> Result<NonceResponse, Error> {
+    pub async fn challenge(
+        &self,
+        address: &Address,
+        chain_id: u64,
+    ) -> Result<NonceResponse, Error> {
         debug!(target: "auth_service::challenge", address = %address, chain_id = chain_id, "Generating challenge");
 
-        // Validate address before generating message or storing in cache
-        validate_eth_address(address)?;
-
         let nonce = Self::generate_random_nonce();
-        let message = Self::construct_auth_message(address, AUTH_SIWE_DOMAIN, &nonce, chain_id);
+        let message = Self::construct_auth_message(address, &self.siwe_domain, &nonce, chain_id);
 
         // Store message paired with address in storage
         // Using message as key and address as value
         self.storage
             .store_nonce(
                 message.clone(),
-                address.to_string(),
-                AUTH_NONCE_EXPIRATION_SECONDS,
+                address,
+                self.nonce_duration.num_seconds() as _,
             )
             .await
             .map_err(|_| Error::Internal)?;
@@ -163,7 +210,7 @@ impl AuthService {
     }
 
     /// Recovers the ethereum address that signed the EIP191 `message` and produced `signature`
-    fn recover_eth_address_from_sig(message: &str, signature: &str) -> Result<String, Error> {
+    fn recover_eth_address_from_sig(message: &str, signature: &str) -> Result<Address, Error> {
         debug!(target: "auth_service::recover_eth_address_from_sig", message_len = message.len(), signature_len = signature.len(), "Recovering Ethereum address from signature");
 
         let sig = PrimitiveSignature::from_str(signature)
@@ -177,8 +224,7 @@ impl AuthService {
             Error::Unauthorized(format!("Failed to recover public key from signature: {e}"))
         })?;
 
-        // NOTE: we avoid lowercasing the address and instead use the canonical encoding
-        let recovered_address = public_key_to_address(&recovered_pubkey).to_string();
+        let recovered_address = public_key_to_address(&recovered_pubkey);
 
         Ok(recovered_address)
     }
@@ -206,15 +252,14 @@ impl AuthService {
             let recovered_address = Self::recover_eth_address_from_sig(message, signature)?;
 
             // Verify that the recovered address matches the stored address
-            // NOTE: we compare the lowercase versions to avoid issues where the given user address is not
-            // in the right casing, but would otherwise be the correct address.
-            if recovered_address.as_str().to_lowercase() != address.as_str().to_lowercase() {
+            // NOTE: address comparison relies on the underlying library
+            if recovered_address != address {
                 // since verification failed, reinsert nonce
                 self.storage
                     .store_nonce(
                         message.to_string(),
-                        address.clone(),
-                        AUTH_NONCE_EXPIRATION_SECONDS,
+                        &address,
+                        self.nonce_duration.num_seconds() as _,
                     )
                     .await
                     .map_err(|_| Error::Internal)?;
@@ -243,7 +288,7 @@ impl AuthService {
 
     /// Generate a new JWT token, matching the same address as the valid token passed in
     // TODO: properly separate between the session and the refresh token
-    pub async fn refresh(&self, user_address: &str) -> Result<TokenResponse, Error> {
+    pub async fn refresh(&self, user_address: &Address) -> Result<TokenResponse, Error> {
         debug!(target: "auth_service::refresh", address = %user_address, "Refreshing token");
 
         let token = self.generate_jwt(user_address)?;
@@ -253,17 +298,17 @@ impl AuthService {
     }
 
     /// Retrieve the user profile from the corresponding `JwtClaims`
-    pub async fn profile(&self, user_address: &str) -> Result<UserProfile, Error> {
+    pub async fn profile(&self, user_address: &Address) -> Result<UserProfile, Error> {
         debug!(target: "auth_service::profile", address = %user_address, "Profile requested");
 
         Ok(UserProfile {
-            address: user_address.to_string(),
+            address: *user_address,
             // TODO: retrieve ENS (lookup or cache?)
             ens: MOCK_ENS.to_string(),
         })
     }
 
-    pub async fn logout(&self, user_address: &str) -> Result<(), Error> {
+    pub async fn logout(&self, user_address: &Address) -> Result<(), Error> {
         debug!(address = %user_address, "User logged out");
         // TODO: Invalidate the token in session storage
         // For now, the nonce cleanup happens automatically on expiration
@@ -310,7 +355,10 @@ mod tests {
 
     use crate::{
         config::Config,
-        constants::{auth::MOCK_ENS, mocks::MOCK_ADDRESS},
+        constants::{
+            auth::{DEFAULT_AUTH_NONCE_EXPIRATION_SECONDS, MOCK_ENS},
+            mocks::MOCK_ADDRESS,
+        },
         data::storage::{BoxedStorageWrapper, InMemoryStorage},
         test_utils::auth::{eth_wallet, sign_message},
     };
@@ -324,15 +372,13 @@ mod tests {
         let cfg = Config::default();
         let storage: Arc<dyn BoxedStorage> =
             Arc::new(BoxedStorageWrapper::new(InMemoryStorage::new()));
-        let jwt_secret = cfg
-            .auth
-            .jwt_secret
-            .as_ref()
-            .expect("JWT secret should be set in tests");
-        let mut auth_service = AuthService::new(jwt_secret.as_bytes(), storage.clone());
+
+        let mut auth_service = AuthService::from_config(&cfg.auth, storage.clone());
 
         if !validate_signature {
             auth_service.insecure_disable_validation();
+        } else {
+            auth_service.enable_validation();
         }
 
         (auth_service, storage, cfg)
@@ -345,11 +391,11 @@ mod tests {
         let nonce = "testNonce123";
         let chain_id = 1;
 
-        let message = AuthService::construct_auth_message(address, domain, nonce, chain_id);
+        let message = AuthService::construct_auth_message(&address, domain, nonce, chain_id);
 
         // Check that message contains the address
         assert!(
-            message.contains(address),
+            message.contains(&address.to_string()),
             "Message should contain the target address"
         );
         assert!(
@@ -368,7 +414,7 @@ mod tests {
         let (auth_service, _, _) = create_test_auth_service(true);
 
         let address = MOCK_ADDRESS;
-        let token = auth_service.generate_jwt(address).unwrap();
+        let token = auth_service.generate_jwt(&address).unwrap();
 
         // Try to decode the token
         let decoding_key = auth_service.jwt_decoding_key();
@@ -381,23 +427,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn challenge_rejects_invalid_address() {
-        let (auth_service, _, _) = create_test_auth_service(true);
-
-        let invalid_address = "not_an_eth_address";
-        let result = auth_service.challenge(invalid_address, 1).await;
-        assert!(result.is_err(), "Should reject invalid eth address");
-    }
-
-    #[tokio::test]
     async fn challenge_stores_nonce_for_valid_address() {
         let (auth_service, storage, _) = create_test_auth_service(true);
 
-        let result = auth_service.challenge(MOCK_ADDRESS, 1).await.unwrap();
+        let result = auth_service.challenge(&MOCK_ADDRESS, 1).await.unwrap();
 
         // Check that message was stored in storage
         let stored_address = storage.get_nonce(&result.message).await.unwrap();
-        assert_eq!(stored_address, WithExpiry::Valid(MOCK_ADDRESS.to_string()));
+        assert_eq!(stored_address, WithExpiry::Valid(MOCK_ADDRESS));
     }
 
     #[test]
@@ -410,7 +447,7 @@ mod tests {
 
         // Test with correct signature
         let recovered = AuthService::recover_eth_address_from_sig(message, &sig_str).unwrap();
-        assert_eq!(recovered, address.to_string());
+        assert_eq!(recovered, address, "Should recover correct address");
     }
 
     #[test]
@@ -432,7 +469,7 @@ mod tests {
         );
         assert_ne!(
             result.unwrap(),
-            address.to_string(),
+            address,
             "Recovered address should not match"
         );
     }
@@ -462,7 +499,10 @@ mod tests {
         let sig_str = sign_message(&sk, &challenge.message);
 
         // Advance time to expire the nonce
-        tokio::time::advance(Duration::from_secs(AUTH_NONCE_EXPIRATION_SECONDS + 1)).await;
+        tokio::time::advance(Duration::from_secs(
+            DEFAULT_AUTH_NONCE_EXPIRATION_SECONDS as u64 + 1,
+        ))
+        .await;
 
         let result = auth_service.login(&challenge.message, &sig_str).await;
         assert!(result.is_err(), "Should fail if nonce has expired");
@@ -477,7 +517,7 @@ mod tests {
         let (auth_service, _, _) = create_test_auth_service(true);
 
         // Get challenge for test address
-        let challenge = auth_service.challenge(MOCK_ADDRESS, 1).await.unwrap();
+        let challenge = auth_service.challenge(&MOCK_ADDRESS, 1).await.unwrap();
 
         // Give signature from different address
         let (_, sk) = eth_wallet();
@@ -494,7 +534,7 @@ mod tests {
     async fn login_accepts_invalid_signature_when_validation_disabled() {
         let (auth_service, _, _) = create_test_auth_service(false);
 
-        let challenge_result = auth_service.challenge(MOCK_ADDRESS, 1).await.unwrap();
+        let challenge_result = auth_service.challenge(&MOCK_ADDRESS, 1).await.unwrap();
         let invalid_sig = format!("0x{}", hex::encode(&[0u8; 32]));
 
         let result = auth_service
@@ -535,7 +575,7 @@ mod tests {
 
         let address = MOCK_ADDRESS;
 
-        let result = auth_service.profile(address).await.unwrap();
+        let result = auth_service.profile(&address).await.unwrap();
         assert_eq!(result.address, address, "Should return address from claims");
         assert_eq!(result.ens, MOCK_ENS, "Should return mock ENS");
     }

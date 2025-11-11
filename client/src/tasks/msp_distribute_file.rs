@@ -76,13 +76,15 @@ where
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: DistributeFileToBsp<Runtime>) -> anyhow::Result<()> {
-        info!(
-            target: LOG_TARGET,
-            "Distributing file to BSP",
-        );
-
         let file_key = event.file_key;
         let bsp_id = event.bsp_id;
+
+        info!(
+                target: LOG_TARGET,
+                "Distributing file {:x} to BSP {:?}",
+                file_key,
+                bsp_id
+        );
 
         // Register that this task is distributing the file to the BSP.
         // This avoids a second instance of this task from being spawned.

@@ -10,7 +10,8 @@ use sp_api::ApiError;
 
 use pallet_file_system_runtime_api::{
     IsStorageRequestOpenToVolunteersError, QueryBspConfirmChunksToProveForFileError,
-    QueryFileEarliestVolunteerTickError, QueryMspConfirmChunksToProveForFileError,
+    QueryBspsVolunteeredForFileError, QueryFileEarliestVolunteerTickError,
+    QueryMspConfirmChunksToProveForFileError,
 };
 use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
 use pallet_proofs_dealer_runtime_api::{
@@ -90,6 +91,11 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     #[command(success_type = Vec<ChunkId>, error_type = QueryMspConfirmChunksToProveForFileError)]
     QueryMspConfirmChunksToProveForFile {
         msp_id: ProofsDealerProviderId<Runtime>,
+        file_key: Runtime::Hash,
+    },
+    #[command(success_type = bool, error_type = QueryBspsVolunteeredForFileError)]
+    QueryBspVolunteeredForFile {
+        bsp_id: BackupStorageProviderId<Runtime>,
         file_key: Runtime::Hash,
     },
     #[command(success_type = Vec<Multiaddr>, error_type = QueryProviderMultiaddressesError)]

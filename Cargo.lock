@@ -16210,6 +16210,7 @@ dependencies = [
  "shp-opaque",
  "shp-traits",
  "shp-treasury-funding",
+ "shp-tx-implicits-runtime-api",
  "shp-types",
  "smallvec",
  "sp-api 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
@@ -16308,6 +16309,7 @@ dependencies = [
  "shp-opaque",
  "shp-traits",
  "shp-treasury-funding",
+ "shp-tx-implicits-runtime-api",
  "shp-types",
  "smallvec",
  "sp-api 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
@@ -16568,6 +16570,7 @@ dependencies = [
  "shp-constants",
  "shp-file-key-verifier",
  "shp-file-metadata",
+ "shp-tx-implicits-runtime-api",
  "sp-api 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-blockchain",
  "sp-core 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
@@ -16690,6 +16693,7 @@ dependencies = [
  "shp-forest-verifier",
  "shp-opaque",
  "shp-traits",
+ "shp-tx-implicits-runtime-api",
  "shp-types",
  "sp-api 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-block-builder 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
@@ -17087,6 +17091,18 @@ dependencies = [
  "shp-traits",
  "sp-arithmetic 26.0.0",
  "sp-core 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
+]
+
+[[package]]
+name = "shp-tx-implicits-runtime-api"
+version = "0.1.0"
+dependencies = [
+ "parity-scale-codec",
+ "scale-info",
+ "sp-api 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
+ "sp-core 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
+ "sp-runtime 40.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
+ "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
 ]
 
 [[package]]
