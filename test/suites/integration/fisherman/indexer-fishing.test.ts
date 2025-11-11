@@ -99,73 +99,7 @@ await describeMspNet(
       await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
     });
 
-    it("indexes NewStorageRequest events", async () => {
-      const bucketName = "test-bucket-fishing";
-      const source = "res/smile.jpg";
-      const destination = "test/file.txt";
-
-      const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
-        source,
-        destination,
-        bucketName
-      );
-
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
-      await indexerApi.indexer.waitForFileIndexed({ sql, fileKey });
-
-      const files = await sql`
-        SELECT * FROM file
-        WHERE bucket_id = (
-          SELECT id FROM bucket WHERE name = ${bucketName}
-        )
-      `;
-
-      assert.equal(files.length, 1);
-      const dbFileKey = `0x${files[0].file_key.toString("hex")}`;
-      assert.equal(dbFileKey, fileKey);
-    });
-
-    it("indexes BspConfirmedStoring events", async () => {
-      const bucketName = "test-bsp-confirm";
-      const source = "res/whatsup.jpg";
-      const destination = "test/bsp-file.txt";
-
-      const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
-        source,
-        destination,
-        bucketName
-      );
-
-      await userApi.wait.mspResponseInTxPool();
-
-      await userApi.wait.bspVolunteer();
-
-      await waitFor({
-        lambda: async () =>
-          (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
-      });
-
-      const bspAddress = userApi.createType("Address", bspKey.address);
-      await userApi.wait.bspStored({
-        expectedExts: 1,
-        sealBlock: true,
-        bspAccount: bspAddress
-      });
-
-      const { event: bspConfirmedEvent } = await userApi.assert.eventPresent(
-        "fileSystem",
-        "BspConfirmedStoring"
-      );
-      assert(bspConfirmedEvent, "BspConfirmedStoring event should be present");
-
-      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
-
-      await indexerApi.indexer.waitForFileIndexed({ sql, fileKey });
-
-      await indexerApi.indexer.waitForBspFileAssociation({ sql, fileKey });
-    });
-
-    it("indexes MspAcceptedStorageRequest events", async () => {
+    it("indexes storage request with MSP and BSP file association [NewStorageRequest, MspAcceptedStorageRequest, BspConfirmedStoring]", async () => {
       const bucketName = "test-msp-accept";
       const source = "res/smile.jpg";
       const destination = "test/msp-file.txt";
@@ -212,10 +146,14 @@ await describeMspNet(
         timeoutMs: 30000
       });
 
+      const { event: bspConfirmedEvent } = await userApi.assert.eventPresent(
+        "fileSystem",
+        "BspConfirmedStoring"
+      );
+      assert(bspConfirmedEvent, "BspConfirmedStoring event should be present");
+
       await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
-
       await indexerApi.indexer.waitForFileIndexed({ sql, fileKey: fileKey.toString() });
-
       await indexerApi.indexer.waitForMspFileAssociation({ sql, fileKey: fileKey.toString() });
       await indexerApi.indexer.waitForBspFileAssociation({
         sql,
@@ -276,18 +214,19 @@ await describeMspNet(
       const { fileKey, bucketId, location, fingerprint, fileSize } =
         await userApi.file.createBucketAndSendNewStorageRequest(source, destination, bucketName);
 
+      await userApi.wait.mspResponseInTxPool();
       await userApi.wait.bspVolunteer();
-
-      await waitFor({
-        lambda: async () =>
-          (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
-      });
 
       const bspAddress = userApi.createType("Address", bspKey.address);
       await userApi.wait.bspStored({
         expectedExts: 1,
         sealBlock: true,
         bspAccount: bspAddress
+      });
+
+      await bspApi.wait.fileStorageComplete(fileKey);
+      await waitFor({
+        lambda: async () => (await bspApi.rpc.storagehubclient.isFileInForest(null, fileKey)).isTrue
       });
 
       const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
