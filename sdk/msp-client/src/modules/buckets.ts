@@ -1,10 +1,10 @@
-import type { Bucket, FileListResponse, GetFilesOptions } from "../types.js";
+import type { Bucket, FileListResponse, GetFilesOptions, FileTree, FileStatus } from "../types.js";
 import { ModuleBase } from "../base.js";
 import { ensure0xPrefix } from "@storagehub-sdk/core";
 
 export class BucketsModule extends ModuleBase {
   /** Recursively fix hex prefixes in FileTree structures */
-  private fixFileTree(item: any): any {
+  private fixFileTree(item: FileTree): FileTree {
     if (item.type === "file") {
       return {
         name: item.name,
@@ -17,7 +17,7 @@ export class BucketsModule extends ModuleBase {
     return {
       name: item.name,
       type: item.type,
-      children: item.children?.map((child: any) => this.fixFileTree(child)) || []
+      children: item.children?.map((child) => this.fixFileTree(child)) || []
     };
   }
   /** List all buckets for the current authenticated user */
@@ -34,7 +34,7 @@ export class BucketsModule extends ModuleBase {
       root: ensure0xPrefix(bucket.root),
       isPublic: bucket.isPublic,
       sizeBytes: bucket.sizeBytes,
-      valuePropId: bucket.valuePropId, // "unknown" string, not hex
+      valuePropId: ensure0xPrefix(bucket.valuePropId),
       fileCount: bucket.fileCount
     }));
   }
@@ -55,7 +55,7 @@ export class BucketsModule extends ModuleBase {
       root: ensure0xPrefix(wire.root),
       isPublic: wire.isPublic,
       sizeBytes: wire.sizeBytes,
-      valuePropId: wire.valuePropId, // "unknown" string, not hex
+      valuePropId: ensure0xPrefix(wire.valuePropId),
       fileCount: wire.fileCount
     };
   }
@@ -65,17 +65,7 @@ export class BucketsModule extends ModuleBase {
     const headers = await this.withAuth();
     const path = `/buckets/${encodeURIComponent(bucketId)}/files`;
 
-    const wire = await this.ctx.http.get<{
-      bucketId: string;
-      files: Array<{
-        name: string;
-        type: "file" | "folder";
-        sizeBytes?: number;
-        fileKey?: string;
-        status?: string;
-        children?: Array<any>;
-      }>;
-    }>(path, {
+    const wire = await this.ctx.http.get<FileListResponse>(path, {
       ...(headers ? { headers } : {}),
       ...(options?.signal ? { signal: options.signal } : {}),
       ...(options?.path ? { query: { path: this.normalizePath(options.path) } } : {})
