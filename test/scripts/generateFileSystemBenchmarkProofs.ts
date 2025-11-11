@@ -247,17 +247,44 @@ async function generateBenchmarkProofs() {
     nonStoredFileKeysPerBucket.push(msp2BatchStorageRequestsResult.fileKeys);
   }
 
+  // Wait for the MSP 1 to update their forests.
+  await waitFor({
+    lambda: async () => {
+      for (const bucketId of bucketIds) {
+        const bucketIdOption: Option<H256> = userApi.createType("Option<H256>", bucketId);
+        const msp1ForestRoot = await msp1Api.rpc.storagehubclient.getForestRoot(bucketIdOption);
+        const bucket = (await userApi.query.providers.buckets(bucketId.toString())).unwrap();
+        if (msp1ForestRoot.unwrap().toString() !== bucket.root.toString()) {
+          return false;
+        }
+      }
+      return true;
+    }
+  });
 
-  // Wait for the BSP local forest root to match the on-chain forest root.
+  // Wait for the BSP to update their forest.
   await waitFor({
     lambda: async () => {
       const bspForestRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
-      if (bspForestRoot.isSome) {
-        return bspForestRoot.unwrap().toString() === (await userApi.query.providers.backupStorageProviders(ShConsts.DUMMY_BSP_ID)).unwrap().root.toString();
-      }
-      return false;
+      const bspBucket = (await userApi.query.providers.backupStorageProviders(ShConsts.DUMMY_BSP_ID)).unwrap();
+      return bspForestRoot.unwrap().toString() === bspBucket.root.toString();
     }
   });
+
+  console.log(`${GREEN_TEXT}◀ ✅ MSP's and BSP's forests updated${RESET_TEXT}`);
+  for (const bucketId of bucketIds) {
+    const bucketIdOption: Option<H256> = userApi.createType("Option<H256>", bucketId);
+    const msp1ForestRoot = await msp1Api.rpc.storagehubclient.getForestRoot(bucketIdOption);
+    console.log(`${GREEN_TEXT} MSP 1 forest root: ${msp1ForestRoot.unwrap().toString()}${RESET_TEXT}`);
+
+    const bucket = (await userApi.query.providers.buckets(bucketId.toString())).unwrap();
+    console.log(`${GREEN_TEXT} Bucket: ${bucket.root.toString()}${RESET_TEXT}`);
+  }
+
+  console.log(`${GREEN_TEXT} BSP forest root: ${(await bspApi.rpc.storagehubclient.getForestRoot(null)).unwrap().toString()}${RESET_TEXT}`);
+  const bspBucket = (await userApi.query.providers.backupStorageProviders(ShConsts.DUMMY_BSP_ID)).unwrap();
+  console.log(`${GREEN_TEXT} BSP bucket: ${bspBucket.root.toString()}${RESET_TEXT}`);
+  console.log("");
 
   // Sort the stored and non-stored file keys.
   for (const storedFileKeys of storedFileKeysPerBucket) {
