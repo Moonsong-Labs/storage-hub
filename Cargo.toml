@@ -311,6 +311,7 @@ shp-session-keys = { path = "primitives/session-keys", default-features = false 
 shp-traits = { path = "primitives/traits", default-features = false }
 shp-treasury-funding = { path = "primitives/treasury-funding", default-features = false }
 shp-types = { path = "primitives/types", default-features = false }
+shp-tx-implicits-runtime-api = { path = "primitives/tx-implicits-runtime-api", default-features = false }
 
 # Local - StorageHub Runtime
 sh-parachain-runtime = { path = "runtime/parachain", default-features = false }
