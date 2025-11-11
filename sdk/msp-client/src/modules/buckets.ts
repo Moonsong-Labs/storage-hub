@@ -1,4 +1,4 @@
-import type { Bucket, FileListResponse, GetFilesOptions, FileTree, FileStatus } from "../types.js";
+import type { Bucket, FileListResponse, GetFilesOptions, FileTree } from "../types.js";
 import { ModuleBase } from "../base.js";
 import { ensure0xPrefix } from "@storagehub-sdk/core";
 
