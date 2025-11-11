@@ -42,6 +42,7 @@ tokio-postgres-rustls = { workspace = true }
 rustls-pemfile = { workspace = true }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
 uuid = { version = "1.18", features = ["v7"] }
+serde_with = "3.15.1"
 
 # Workspace dependencies
 codec = { workspace = true }

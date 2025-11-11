@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
+use serde_with::{serde_as, DisplayFromStr};
 use tracing::error;
 
 use shc_indexer_db::models::{File as DBFile, FileStorageRequestStep};
@@ -19,6 +20,7 @@ pub enum FileStatus {
     DeletionInProgress,
 }
 
+#[serde_as]
 #[derive(Debug, Serialize)]
 pub struct FileInfo {
     #[serde(rename = "fileKey")]
@@ -27,7 +29,8 @@ pub struct FileInfo {
     #[serde(rename = "bucketId")]
     pub bucket_id: String,
     pub location: String,
-    pub size: String,
+    #[serde_as(as = "DisplayFromStr")]
+    pub size: u64,
     #[serde(rename = "isPublic")]
     pub is_public: bool,
     #[serde(rename = "uploadedAt")]
@@ -57,7 +60,7 @@ impl FileInfo {
             bucket_id: hex::encode(&db.onchain_bucket_id),
             // TODO: determine if lossy conversion is acceptable here
             location: String::from_utf8_lossy(&db.location).into_owned(),
-            size: db.size.to_string(),
+            size: db.size as u64,
             is_public,
             uploaded_at: db.updated_at.and_utc(),
             status: Self::status_from_db(&db),
