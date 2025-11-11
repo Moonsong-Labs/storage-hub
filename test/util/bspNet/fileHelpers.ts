@@ -465,46 +465,64 @@ export const batchStorageRequests = async (
   await api.wait.nodeCatchUpToChainTip(mspApi);
   await api.wait.nodeCatchUpToChainTip(bspApi);
 
-  // Wait for all BSP volunteers to appear in tx pool
-  await api.wait.bspVolunteerInTxPool(fileKeys.length);
-
-  // Wait for all MSP acceptance and BSP stored confirmations
-  // MSP batches extrinsics, so we need to iteratively seal blocks and count events
+  // Wait for all BSP volunteers, MSP acceptances and BSP stored confirmations
+  // Process them incrementally by sealing blocks as extrinsics accumulate
+  let totalVolunteers = 0;
   let totalAcceptance = 0;
   let totalConfirmations = 0;
   for (
     let attempt = 0;
     attempt < maxAttempts &&
-    (totalAcceptance < fileKeys.length || totalConfirmations < fileKeys.length);
+    (totalVolunteers < fileKeys.length ||
+      totalAcceptance < fileKeys.length ||
+      totalConfirmations < fileKeys.length);
     attempt++
   ) {
-    // Wait for EITHER an MSP response OR a BSP stored event, whichever comes first, before proceeding to seal the block
-    // Wait up to 5 seconds for either process, giving time for both to run.
-    // Try both waits sequentially, only fail if both do not succeed (both time out)
+    let volunteerFound = false;
     let mspFound = false;
     let bspFound = false;
 
-    try {
-      await api.wait.mspResponseInTxPool(1);
-      mspFound = true;
-    } catch {}
+    // Check for BSP volunteer extrinsics (only if we haven't received all volunteers yet)
+    if (totalVolunteers < fileKeys.length) {
+      try {
+        await api.wait.bspVolunteerInTxPool(1);
+        volunteerFound = true;
+      } catch {}
+    }
 
-    try {
-      await api.wait.bspStored({
-        sealBlock: false,
-        timeoutMs: 3000
-      });
-      bspFound = true;
-    } catch {}
+    // Check for MSP response extrinsics (only if we haven't received all acceptances yet)
+    if (totalAcceptance < fileKeys.length) {
+      try {
+        await api.wait.mspResponseInTxPool(1, 3000);
+        mspFound = true;
+      } catch {}
+    }
 
-    if (!mspFound && !bspFound) {
-      throw new Error("Neither MSP response nor BSP stored event was found within the timeout");
+    // Check for BSP stored events (only if we haven't received all confirmations yet)
+    if (totalConfirmations < fileKeys.length) {
+      try {
+        await api.wait.bspStored({
+          sealBlock: false,
+          timeoutMs: 3000
+        });
+        bspFound = true;
+      } catch {}
     }
 
     const { events } = await api.block.seal({
       signer: localOwner,
       finaliseBlock: finaliseBlock
     });
+
+    if (volunteerFound) {
+      // Count BSP volunteer events
+      const volunteerEvents = await api.assert.eventMany(
+        "fileSystem",
+        "AcceptedBspVolunteer",
+        events
+      );
+      totalVolunteers += volunteerEvents.length;
+    }
 
     if (mspFound) {
       const acceptEvents = await api.assert.eventMany(
@@ -531,6 +549,12 @@ export const batchStorageRequests = async (
   }
 
   assert.strictEqual(
+    totalVolunteers,
+    fileKeys.length,
+    `Expected ${fileKeys.length} BSP volunteers, but got ${totalVolunteers}`
+  );
+
+  assert.strictEqual(
     totalAcceptance,
     fileKeys.length,
     `Expected ${fileKeys.length} MSP acceptance, but got ${totalAcceptance}`
@@ -541,7 +565,6 @@ export const batchStorageRequests = async (
     fileKeys.length,
     `Expected ${fileKeys.length} BSP confirmations, but got ${totalConfirmations}`
   );
-
   // Verify files are in BSP or MSP forests or file storages
 
   await waitFor({
