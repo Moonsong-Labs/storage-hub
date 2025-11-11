@@ -23,17 +23,7 @@ export class BucketsModule extends ModuleBase {
   /** List all buckets for the current authenticated user */
   async listBuckets(signal?: AbortSignal): Promise<Bucket[]> {
     const headers = await this.withAuth();
-    const wire = await this.ctx.http.get<
-      Array<{
-        bucketId: string;
-        name: string;
-        root: string;
-        isPublic: boolean;
-        sizeBytes: number;
-        valuePropId: string;
-        fileCount: number;
-      }>
-    >("/buckets", {
+    const wire = await this.ctx.http.get<Bucket[]>("/buckets", {
       ...(headers ? { headers } : {}),
       ...(signal ? { signal } : {})
     });
@@ -54,15 +44,7 @@ export class BucketsModule extends ModuleBase {
     const headers = await this.withAuth();
     const path = `/buckets/${encodeURIComponent(bucketId)}`;
 
-    const wire = await this.ctx.http.get<{
-      bucketId: string;
-      name: string;
-      root: string;
-      isPublic: boolean;
-      sizeBytes: number;
-      valuePropId: string;
-      fileCount: number;
-    }>(path, {
+    const wire = await this.ctx.http.get<Bucket>(path, {
       ...(headers ? { headers } : {}),
       ...(signal ? { signal } : {})
     });
