@@ -28,7 +28,7 @@ export class BucketsModule extends ModuleBase {
       ...(signal ? { signal } : {})
     });
 
-    return wire.map((bucket) => ({
+    return wire.map((bucket: Bucket) => ({
       bucketId: ensure0xPrefix(bucket.bucketId),
       name: bucket.name,
       root: ensure0xPrefix(bucket.root),
@@ -65,15 +65,20 @@ export class BucketsModule extends ModuleBase {
     const headers = await this.withAuth();
     const path = `/buckets/${encodeURIComponent(bucketId)}/files`;
 
-    const wire = await this.ctx.http.get<FileListResponse>(path, {
+    const wire = await this.ctx.http.get<unknown>(path, {
       ...(headers ? { headers } : {}),
       ...(options?.signal ? { signal: options.signal } : {}),
       ...(options?.path ? { query: { path: this.normalizePath(options.path) } } : {})
     });
 
+    const w = wire as Partial<FileListResponse> & { tree?: FileTree };
+    const files = w.files ?? (w.tree ? [w.tree] : []);
+    const fixed = files.map((f) => this.fixFileTree(f));
+    const tree = fixed[0];
     return {
-      bucketId: ensure0xPrefix(wire.bucketId),
-      files: wire.files.map((file) => this.fixFileTree(file))
-    };
+      bucketId: ensure0xPrefix(w.bucketId ?? ""),
+      files: fixed,
+      ...(tree ? { tree } : {})
+    } as unknown as FileListResponse;
   }
 }

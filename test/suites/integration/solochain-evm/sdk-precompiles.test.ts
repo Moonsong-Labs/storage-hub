@@ -15,7 +15,7 @@ import {
 import { MspClient } from "@storagehub-sdk/msp-client";
 import { createPublicClient, createWalletClient, defineChain, http, getAddress } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { describeMspNet, type EnrichedBspApi, ShConsts } from "../../../util";
+import { describeMspNet, type EnrichedBspApi, ShConsts, waitFor } from "../../../util";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import { ALITH_PRIVATE_KEY } from "../../../util/evmNet/keyring";
 
@@ -382,6 +382,11 @@ await describeMspNet(
     });
 
     it("Should upload the file to the MSP through the backend using the SDK's StorageHubClient", async () => {
+      // Ensure the MSP expects this file key before attempting upload to the backend
+      await waitFor({
+        lambda: async () => (await msp1Api.rpc.storagehubclient.isFileKeyExpected(fileKey)).isTrue
+      });
+
       // Try to upload the file to the MSP through the SDK's MspClient that uses the MSP backend
       const uploadResponse = await mspClient.files.uploadFile(
         bucketId,
