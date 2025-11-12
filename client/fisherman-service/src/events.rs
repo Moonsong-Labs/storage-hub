@@ -11,7 +11,7 @@ pub enum FileDeletionTarget<Runtime: StorageEnableRuntime> {
     BucketId(BucketId<Runtime>),
 }
 
-/// Event triggered every 5 blocks (when lock is available) to process batched file deletions.
+/// Event triggered every time interval ([`batch_interval_duration`](`crate::handler::FishermanService::batch_interval_duration`)) to process batched file deletions.
 ///
 /// Contains the deletion type to process in this cycle. FishermanService alternates between
 /// User and Incomplete deletion types across batch cycles.

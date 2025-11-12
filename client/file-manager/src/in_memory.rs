@@ -348,7 +348,7 @@ where
                 debug!(target: LOG_TARGET, "Chunk {:?} already exists in shared trie for file key {:?}, incrementing count for progress tracking", chunk_id, file_key);
             }
             Err(other) => {
-                error!(target: LOG_TARGET, "{:?}", other);
+                error!(target: LOG_TARGET, "Error while writing chunk {:?} of file key {:?}: {:?}", chunk_id, file_key, other);
                 return Err(FileStorageWriteError::FailedToInsertFileChunk);
             }
         }

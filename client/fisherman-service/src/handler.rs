@@ -45,9 +45,13 @@ pub struct FishermanService<Runtime: StorageEnableRuntime> {
     batch_lock_guard: Option<tokio::sync::OwnedMutexGuard<()>>,
     /// Track last deletion type processed (for alternating User/Incomplete)
     last_deletion_type: Option<FileDeletionType>,
-    /// Duration between batch deletion processing cycles
+    /// Duration between batch deletion processing cycles.
+    ///
+    /// This value must be greater than the expected average block time to avoid processing a new batch deletion cycle at every block.
+    /// For example, a block time of 6 seconds and a batch interval of 5 seconds will result in a new batch deletion cycle being processed every block since the time
+    /// would have elapsed since the last batch (see. [`monitor_block`](Self::monitor_block)). It is still up to you to decide whether you want this behaviour or not.
     batch_interval_duration: Duration,
-    /// Timestamp of last batch emission
+    /// Timestamp of last batch emission.
     last_batch_time: Option<Instant>,
     /// Maximum number of files to process per batch deletion cycle
     batch_deletion_limit: u64,
@@ -167,7 +171,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
         block_number: BlockNumber<Runtime>,
         block_hash: Runtime::Hash,
     ) -> Result<(), FishermanServiceError> {
-        debug!(target: LOG_TARGET, "🎣 Monitoring block #{}: {}", block_number, block_hash);
+        info!(target: LOG_TARGET, "🎣 Monitoring block #{}: {}", block_number, block_hash);
 
         // Check if enough time has elapsed since last batch
         let should_attempt_new_batch_deletion = match self.last_batch_time {
@@ -211,7 +215,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                 Err(_) => {
                     // The lock will eventually be released, so we do nothing here and will retry next block.
                     // This is a warning because it could indicate a bug if the lock is held for too long, or indefinitely for that matter.
-                    warn!(
+                    debug!(
                         target: LOG_TARGET,
                         "🎣 Batch interval reached but lock is held (previous batch still processing), will retry next block"
                     );
