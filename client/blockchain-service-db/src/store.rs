@@ -159,8 +159,10 @@ impl PendingTxStore {
             ),
         )
         .execute(&mut conn)
-        .await?;
-        Ok(deleted as i64)
+        .await
+        .map(|deleted| deleted as i64)?;
+
+        Ok(deleted)
     }
 
     /// Convert a TransactionStatus to a database state string.

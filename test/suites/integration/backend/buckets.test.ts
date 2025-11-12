@@ -43,7 +43,7 @@ await describeMspNet(
 
     it("Postgres DB is ready", async () => {
       await userApi.docker.waitForLog({
-        containerName: "storage-hub-sh-postgres-1",
+        containerName: "storage-hub-sh-indexer-postgres-1",
         searchString: "database system is ready to accept connections",
         timeout: 10000
       });

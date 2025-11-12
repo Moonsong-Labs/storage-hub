@@ -1,8 +1,8 @@
 import assert, { strictEqual } from "node:assert";
-import { type EnrichedBspApi, describeMspNet, sleep } from "../../../util";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
+import { describeMspNet, type EnrichedBspApi, sleep } from "../../../util";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import { ETH_SH_USER_ADDRESS, ETH_SH_USER_PRIVATE_KEY } from "../../../util/evmNet/keyring";
-import { privateKeyToAccount, generatePrivateKey } from "viem/accounts";
 
 await describeMspNet(
   "Backend bucket endpoints",
@@ -32,7 +32,7 @@ await describeMspNet(
 
     it("Postgres DB is ready", async () => {
       await userApi.docker.waitForLog({
-        containerName: "storage-hub-sh-postgres-1",
+        containerName: "storage-hub-sh-indexer-postgres-1",
         searchString: "database system is ready to accept connections",
         timeout: 10000
       });

@@ -100,7 +100,7 @@ export const cleanupEnvironment = async (verbose = false) => {
   );
 
   const postgresContainer = allContainers.find((container) =>
-    container.Names.some((name) => name.includes("storage-hub-sh-postgres-1"))
+    container.Names.some((name) => name.includes("storage-hub-sh-indexer-postgres-1"))
   );
 
   const copypartyContainers = allContainers.filter((container) =>

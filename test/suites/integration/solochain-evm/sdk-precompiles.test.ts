@@ -13,7 +13,7 @@ import {
   StorageHubClient
 } from "@storagehub-sdk/core";
 import { MspClient } from "@storagehub-sdk/msp-client";
-import { createPublicClient, createWalletClient, defineChain, http, getAddress } from "viem";
+import { createPublicClient, createWalletClient, defineChain, getAddress, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { describeMspNet, type EnrichedBspApi, ShConsts } from "../../../util";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
@@ -109,7 +109,7 @@ await describeMspNet(
 
     it("Postgres DB is ready", async () => {
       await userApi.docker.waitForLog({
-        containerName: "storage-hub-sh-postgres-1",
+        containerName: "storage-hub-sh-indexer-postgres-1",
         searchString: "database system is ready to accept connections",
         timeout: 10000
       });

@@ -59,6 +59,30 @@ export class NetworkLauncher {
     return this;
   }
 
+  private async waitForPendingDbReady(serviceName: string, cwd: string, tmpFile: string) {
+    // Wait for the Postgres service to be ready by scanning logs for readiness message
+    const deadline = Date.now() + 30_000;
+    const readyMsg = "database system is ready to accept connections";
+    while (Date.now() < deadline) {
+      try {
+        const logs = await compose.logs(serviceName, {
+          cwd,
+          config: tmpFile,
+          log: false,
+          follow: false
+        });
+        const stdout = typeof logs === "string" ? logs : (logs.out || "") + (logs.err || "");
+        if (stdout.includes(readyMsg)) {
+          return;
+        }
+      } catch (_) {
+        // ignore transient compose log errors
+      }
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    throw new Error(`Timed out waiting for ${serviceName} to be ready`);
+  }
+
   public async getPeerId(serviceName: string) {
     assert(this.entities, "Entities have not been populated yet, run populateEntities() first");
     assert(
@@ -225,7 +249,7 @@ export class NetworkLauncher {
           composeYaml.services["sh-user"].environment ?? {};
         composeYaml.services["sh-user"].environment.SH_INDEXER_DB_AUTO_MIGRATE = "false";
         composeYaml.services["sh-user"].command.push(
-          "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+          "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-indexer-postgres-1:5432/storage_hub"
         );
         if (this.config.indexerMode) {
           composeYaml.services["sh-user"].command.push(`--indexer-mode=${this.config.indexerMode}`);
@@ -234,14 +258,14 @@ export class NetworkLauncher {
         // For fullnet, also configure MSPs
         if (this.type === "fullnet") {
           composeYaml.services["sh-msp-1"].command.push(
-            "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+            "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-indexer-postgres-1:5432/storage_hub"
           );
           composeYaml.services["sh-msp-2"].command.push("--indexer");
           composeYaml.services["sh-msp-2"].environment =
             composeYaml.services["sh-msp-2"].environment ?? {};
           composeYaml.services["sh-msp-2"].environment.SH_INDEXER_DB_AUTO_MIGRATE = "false";
           composeYaml.services["sh-msp-2"].command.push(
-            "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+            "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-indexer-postgres-1:5432/storage_hub"
           );
         }
       }
@@ -326,6 +350,19 @@ export class NetworkLauncher {
     process.env.BSP_IP = bspIp;
     process.env.BSP_PEER_ID = bspPeerId;
 
+    // Optional: start pending tx Postgres first (so MSP can connect on boot)
+    let pendingDbUrl: string | undefined;
+    if (this.type === "fullnet" && this.config.pendingTxDb) {
+      await compose.upOne("sh-pending-postgres", {
+        cwd,
+        config: tmpFile,
+        log: verbose
+      });
+      await this.waitForPendingDbReady("sh-pending-postgres", cwd, tmpFile);
+      pendingDbUrl =
+        "postgresql://postgres:postgres@storage-hub-sh-pending-postgres-1:5432/pending_tx";
+    }
+
     if (this.type === "fullnet") {
       const mspServices = Object.keys(this.composeYaml.services).filter((service) =>
         service.includes("sh-msp")
@@ -354,6 +391,15 @@ export class NetworkLauncher {
           `Service ${mspService} not msp-1/2, either add to hardcoded list or make this dynamic`
         );
 
+        // If pending DB is enabled, add CLI arg to MSP 1 only
+        if (pendingDbUrl && mspService === "sh-msp-1") {
+          const cmd: string[] = this.composeYaml.services[mspService].command || [];
+          if (!cmd.some((c: string) => c.startsWith("--pending-db-url"))) {
+            cmd.push(`--pending-db-url=${pendingDbUrl}`);
+          }
+          this.composeYaml.services[mspService].command = cmd;
+        }
+
         await compose.upOne(mspService, {
           cwd: cwd,
           config: tmpFile,
@@ -370,7 +416,7 @@ export class NetworkLauncher {
     }
 
     if (this.config.indexer) {
-      await compose.upOne("sh-postgres", {
+      await compose.upOne("sh-indexer-postgres", {
         cwd: cwd,
         config: tmpFile,
         log: verbose
@@ -450,7 +496,7 @@ export class NetworkLauncher {
       lambda: async () => {
         try {
           execSync(
-            "docker exec storage-hub-sh-postgres-1 pg_isready -U postgres -h 127.0.0.1 -p 5432 -t 1",
+            "docker exec storage-hub-sh-indexer-postgres-1 pg_isready -U postgres -h 127.0.0.1 -p 5432 -t 1",
             {
               stdio: "ignore"
             }
@@ -1048,4 +1094,9 @@ export type NetLaunchConfig = {
    * Defaults to 'info' if not specified.
    */
   logLevel?: string;
+  /**
+   * Optional parameter to enable pending transactions Postgres DB for MSP 1 (and other MSPs if extended).
+   * When true, launches a dedicated Postgres container and passes its URL to MSP 1 as a CLI arg.
+   */
+  pendingTxDb?: boolean;
 };

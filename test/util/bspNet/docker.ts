@@ -304,8 +304,17 @@ export const showContainers = () => {
 export const addBspContainer = async (options?: { name?: string; additionalArgs?: string[] }) =>
   addContainer("bsp", options);
 
-export const addMspContainer = async (options?: { name?: string; additionalArgs?: string[] }) =>
-  addContainer("msp", options);
+export const addMspContainer = async (options?: {
+  name?: string;
+  additionalArgs?: string[];
+  pendingDbUrl?: string;
+}) => {
+  const additionalArgs = options?.additionalArgs ?? [];
+  if (options?.pendingDbUrl) {
+    additionalArgs.push(`--pending-db-url=${options.pendingDbUrl}`);
+  }
+  return addContainer("msp", { name: options?.name, additionalArgs });
+};
 
 const addContainer = async (
   providerType: "bsp" | "msp",
