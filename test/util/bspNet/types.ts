@@ -435,6 +435,12 @@ export type TestOptions = {
    * Defaults to 'info' if not specified.
    */
   logLevel?: string;
+
+  /**
+   * Number of backend replicas to start behind the always-on load balancer.
+   * Defaults to 1 when not specified.
+   */
+  backendReplicas?: number;
 };
 
 /**
