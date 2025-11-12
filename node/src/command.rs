@@ -68,10 +68,10 @@ pub struct ProviderOptions {
     /// Whether the node is running in maintenance mode.
     #[serde(default)]
     pub maintenance_mode: bool,
-    /// Database URL for provider operations (e.g., move bucket queries).
+    /// Database URL for MSP operations (e.g., move bucket operations).
     /// Provides database access without running the full indexer service.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider_database_url: Option<String>,
+    pub msp_database_url: Option<String>,
 }
 
 /// Role configuration enum that ensures mutual exclusivity between Provider and Fisherman roles.
@@ -412,6 +412,20 @@ pub fn run() -> Result<()> {
                     "Cannot run as a fisherman and a provider at the same time. Please choose one role."
                         .into(),
                 );
+            }
+
+            // Validate that msp_database_url is only used for MSP
+            if cli.provider_config.provider {
+                if let Some(provider_type) = &cli.provider_config.provider_type {
+                    if provider_type != &crate::cli::ProviderType::Msp
+                        && cli.provider_config.msp_database_url.is_some()
+                    {
+                        return Err(
+                            "The --msp-database-url parameter can only be used when running as an MSP provider."
+                                .into(),
+                        );
+                    }
+                }
             }
 
             if cli.provider_config.provider {

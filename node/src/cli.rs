@@ -351,19 +351,14 @@ pub struct ProviderConfigurations {
     )]
     pub bsp_submit_proof_max_attempts: Option<u32>,
 
-    /// Database URL for provider operations.
-    ///
-    /// Required for MSP nodes to perform move bucket operations.
+    /// Optional database URL for MSP nodes only. If provided, enables database access
+    /// for operations such as move bucket operations without requiring the full indexer service.
     #[arg(
         long,
         value_name = "DATABASE_URL",
-        help_heading = "Provider Database Options",
-        required_if_eq_all([
-            ("provider", "true"),
-            ("provider_type", "msp"),
-        ])
+        help_heading = "MSP Database Options"
     )]
-    pub provider_database_url: Option<String>,
+    pub msp_database_url: Option<String>,
 }
 
 impl ProviderConfigurations {
@@ -514,7 +509,7 @@ impl ProviderConfigurations {
             bsp_submit_proof,
             blockchain_service,
             maintenance_mode,
-            provider_database_url: self.provider_database_url.clone(),
+            msp_database_url: self.msp_database_url.clone(),
         }
     }
 }

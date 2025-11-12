@@ -301,7 +301,7 @@ where
             bsp_charge_fees,
             bsp_submit_proof,
             blockchain_service,
-            provider_database_url,
+            msp_database_url,
             ..
         }) => {
             info!(
@@ -327,24 +327,14 @@ where
 
             // MSP-specific configuration
             if *provider_type == ProviderType::Msp {
-                // MSPs require database access for move bucket operations
-                let db_url = provider_database_url.clone().ok_or_else(|| {
-                    sc_service::Error::Other(
-                        "MSP nodes require --provider-database-url to be set for move bucket operations".to_string()
-                    )
-                })?;
+                builder.with_notify_period(*msp_charging_period);
 
-                info!("Setting up MSP database connection: {}", db_url);
-                let provider_db_pool = setup_database_pool(db_url).await?;
-
-                builder
-                    .with_notify_period(*msp_charging_period)
-                    .with_indexer_db_pool(Some(provider_db_pool));
-            } else if let Some(db_url) = provider_database_url {
-                // BSPs can optionally have database access
-                info!("Setting up BSP database connection: {}", db_url);
-                let provider_db_pool = setup_database_pool(db_url.clone()).await?;
-                builder.with_indexer_db_pool(Some(provider_db_pool));
+                // MSPs can optionally have database access to execute move bucket operations.
+                if let Some(db_url) = msp_database_url {
+                    info!("Setting up MSP database connection: {}", db_url);
+                    let msp_db_pool = setup_database_pool(db_url.clone()).await?;
+                    builder.with_indexer_db_pool(Some(msp_db_pool));
+                }
             }
 
             if let Some(c) = blockchain_service {
