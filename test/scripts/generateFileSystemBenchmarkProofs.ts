@@ -150,10 +150,9 @@ async function generateBenchmarkProofs() {
   ];
 
   // Set StorageRequestTtl to an arbitrary large number of blocks to avoid storage requests expiring during the test.
-  // Set StorageRequestTtl to 500 blocks to avoid storage requests expiring during the test.
   const storageRequestTtlParameter = {
     RuntimeConfig: {
-      StorageRequestTtl: [null, 500]
+      StorageRequestTtl: [null, 9999]
     }
   };
   await userApi.block.seal({
