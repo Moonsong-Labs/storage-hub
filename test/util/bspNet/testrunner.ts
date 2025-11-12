@@ -162,7 +162,8 @@ export async function describeMspNet<
           ...fullNetConfig,
           toxics: options?.toxics,
           initialised: options?.initialised,
-          runtimeType: options?.runtimeType
+          runtimeType: options?.runtimeType,
+          backendReplicas: options?.backendReplicas
         });
         launchEventEmitter.emit("networkLaunched", launchResponse);
 

@@ -107,7 +107,7 @@ export const cleanupEnvironment = async (verbose = false) => {
     container.Names.some((name) => name.includes("storage-hub-sh-copyparty"))
   );
 
-  const backendContainer = allContainers.find((container) =>
+  const backendContainers = allContainers.filter((container) =>
     container.Names.some((name) => name.includes("storage-hub-sh-backend"))
   );
 
@@ -163,11 +163,13 @@ export const cleanupEnvironment = async (verbose = false) => {
     verbose && console.log("No copyparty containers found, skipping");
   }
 
-  if (backendContainer) {
-    console.log("Stopping backend container");
-    promises.push(docker.getContainer(backendContainer.Id).remove({ force: true }));
+  if (backendContainers.length > 0) {
+    console.log(`Stopping ${backendContainers.length} backend container(s)`);
+    for (const container of backendContainers) {
+      promises.push(docker.getContainer(container.Id).remove({ force: true }));
+    }
   } else {
-    verbose && console.log("No backend container found, skipping");
+    verbose && console.log("No backend containers found, skipping");
   }
 
   await Promise.all(promises);

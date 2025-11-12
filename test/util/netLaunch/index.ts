@@ -5,7 +5,7 @@ import path from "node:path";
 import * as compose from "docker-compose";
 import tmp from "tmp";
 import yaml from "yaml";
-import { JWT_SECRET } from "../backend/consts";
+import { DEFAULT_BACKEND_REPLICAS, JWT_SECRET } from "../backend/consts";
 import {
   addBsp,
   BspNetTestApi,
@@ -92,6 +92,11 @@ export class NetworkLauncher {
 
     const composeYaml = this.composeYaml;
 
+    // Resolve desired backend replica count from config (fallback to default constant)
+    const resolvedBackendReplicas = this.config.backendReplicas ?? DEFAULT_BACKEND_REPLICAS;
+    const shouldSetupBackend =
+      this.type === "fullnet" && this.config.backend && this.config.indexer === true;
+
     if (this.config.noisy) {
       for (const svcName of Object.keys(composeYaml.services)) {
         if (svcName === "toxiproxy") {
@@ -145,6 +150,105 @@ export class NetworkLauncher {
           `--fisherman-incomplete-sync-page-size=${this.config.fishermanIncompleteSyncPageSize}`
         );
       }
+    }
+
+    // Always-on LB design: replace single backend with N replicas + LB when backend is requested
+    if (shouldSetupBackend) {
+      const baseBackendService = composeYaml.services["sh-backend"];
+      assert(
+        baseBackendService,
+        "Expected 'sh-backend' service in compose file to template backend replicas"
+      );
+
+      // Remove the original single-backend service to avoid duplicate container_name/port mappings
+      delete composeYaml.services["sh-backend"];
+
+      // Helper to clone a service spec deeply enough for our edits
+      const cloneSpec = (spec: any) => JSON.parse(JSON.stringify(spec));
+
+      // Create N replicas from the base spec
+      const replicaServiceNames: string[] = [];
+      for (let i = 1; i <= Math.max(1, resolvedBackendReplicas); i++) {
+        const svcName = `sh-backend-${i}`;
+        replicaServiceNames.push(svcName);
+        const replicaSpec = cloneSpec(baseBackendService);
+
+        // Ensure unique container_name per replica; keep first one as storage-hub-sh-backend-1
+        replicaSpec.container_name = `storage-hub-sh-backend-${i}`;
+
+        // Remove host port mappings; replicas should not expose host ports directly
+        if (Array.isArray(replicaSpec.ports)) {
+          delete replicaSpec.ports;
+        }
+
+        // Force MSP callback URL to go through the LB (non-sticky behavior even with N=1)
+        // Adjust the '--msp-callback-url', '<url>' pair within the command array
+        if (Array.isArray(replicaSpec.command)) {
+          const cmd: string[] = replicaSpec.command;
+          const idx = cmd.findIndex((t) => t === "--msp-callback-url");
+          if (idx !== -1 && idx + 1 < cmd.length) {
+            cmd[idx + 1] = "http://sh-backend-lb:8080";
+          } else {
+            // If not present, append the pair
+            cmd.push("--msp-callback-url", "http://sh-backend-lb:8080");
+          }
+          replicaSpec.command = cmd;
+        }
+
+        composeYaml.services[svcName] = replicaSpec;
+      }
+
+      // Add the nginx LB service that always exposes host:8080
+      composeYaml.services["sh-backend-lb"] = {
+        image: "nginx:1.27-alpine",
+        container_name: "storage-hub-sh-backend-lb-1",
+        platform: "linux/amd64",
+        depends_on: replicaServiceNames,
+        volumes: ["./tmp/sh-backend-lb.conf:/etc/nginx/conf.d/default.conf:ro"],
+        ports: ["8080:8080"]
+      };
+
+      // Generate nginx config file that round-robins across replicas
+      const cwd = path.resolve(process.cwd(), "..", "docker");
+      const tmpDir = path.join(cwd, "tmp");
+      fs.mkdirSync(tmpDir, { recursive: true });
+      const upstreamServers = replicaServiceNames.map((n) => `  server ${n}:8080;`).join("\n");
+      const nginxConf = [
+        "upstream sh_backend_upstream {",
+        "  # Round-robin to reproduce non-sticky behavior",
+        upstreamServers,
+        "  keepalive 64;",
+        "}",
+        "",
+        "server {",
+        "  listen 8080;",
+        "  server_name _;",
+        "",
+        "  client_max_body_size 0;",
+        "",
+        "  location / {",
+        "    proxy_http_version 1.1;",
+        '    proxy_set_header Connection "";',
+        "    proxy_set_header Host $host;",
+        "    proxy_set_header X-Forwarded-For $remote_addr;",
+        "",
+        "    # Streaming-friendly settings",
+        "    proxy_request_buffering off;",
+        "    proxy_buffering off;",
+        "    proxy_connect_timeout 10s;",
+        "    proxy_send_timeout 600s;",
+        "    proxy_read_timeout 600s;",
+        "",
+        "    add_header X-Upstream $upstream_addr;",
+        "    proxy_pass http://sh_backend_upstream;",
+        "  }",
+        "}"
+      ].join("\n");
+      fs.writeFileSync(path.join(tmpDir, "sh-backend-lb.conf"), nginxConf, "utf8");
+    } else {
+      // If backend is not requested, ensure any sh-backend-lb is removed (safety)
+      delete composeYaml.services["sh-backend-lb"];
+      // Keep original 'sh-backend' in place in this branch
     }
 
     // Remove standalone indexer service if not enabled or not using standalone mode
@@ -380,14 +484,26 @@ export class NetworkLauncher {
 
       // Start backend only if backend flag is enabled (depends on msp-1 and postgres)
       if (this.config.backend && this.type === "fullnet") {
-        await compose.upOne("sh-backend", {
+        const resolvedBackendReplicas = this.config.backendReplicas ?? DEFAULT_BACKEND_REPLICAS;
+
+        // Bring up replicas
+        for (let i = 1; i <= Math.max(1, resolvedBackendReplicas); i++) {
+          const svc = `sh-backend-${i}`;
+          await compose.upOne(svc, {
+            cwd: cwd,
+            config: tmpFile,
+            log: verbose,
+            env: {
+              ...process.env,
+              JWT_SECRET: JWT_SECRET
+            }
+          });
+        }
+        // Bring up LB that exposes host:8080
+        await compose.upOne("sh-backend-lb", {
           cwd: cwd,
           config: tmpFile,
-          log: verbose,
-          env: {
-            ...process.env,
-            JWT_SECRET: JWT_SECRET
-          }
+          log: verbose
         });
       }
     }
@@ -1048,4 +1164,10 @@ export type NetLaunchConfig = {
    * Defaults to 'info' if not specified.
    */
   logLevel?: string;
+
+  /**
+   * Number of backend replicas to start behind the always-on load balancer.
+   * Defaults to 1 when not specified.
+   */
+  backendReplicas?: number;
 };
