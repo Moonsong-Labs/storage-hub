@@ -605,15 +605,6 @@ where
                 required_size
             );
 
-            if max_storage_capacity <= current_capacity {
-                let err_msg =
-                    "Reached maximum storage capacity limit. Unable to add more storage capacity.";
-                error!(
-                    target: LOG_TARGET, "{}", err_msg
-                );
-                return Err(anyhow::anyhow!(err_msg));
-            }
-
             self.storage_hub_handler
                 .blockchain
                 .increase_capacity(CapacityRequestData::new(required_size))
