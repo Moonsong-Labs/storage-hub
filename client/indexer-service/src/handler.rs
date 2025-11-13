@@ -376,41 +376,20 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 .await?;
             }
             pallet_file_system::Event::StorageRequestRevoked { file_key } => {
-                // Check if file is in bucket or has BSP associations
-                let file_record = File::get_by_file_key(conn, file_key.as_ref().to_vec())
-                    .await
-                    .ok();
-                let is_in_bucket = file_record
-                    .as_ref()
-                    .map(|f| f.is_in_bucket)
-                    .unwrap_or(false);
-                let has_bsp = File::has_bsp_associations(conn, file_key.as_ref()).await?;
-
-                if !is_in_bucket && !has_bsp {
-                    // No storage, safe to delete immediately
-                    // This happens when storage request is revoked before any BSPs or MSP confirms
-                    File::delete(conn, file_key.as_ref().to_vec()).await?;
-                    log::debug!(
-                        "Storage request revoked for file {:?} with no storage, deleted immediately",
-                        file_key
-                    );
-                }
+                // Delete file if it has no storage (not in bucket forest and no BSP associations)
+                // This happens when storage request is revoked before any BSPs or MSP confirms or accepted respectively.
+                File::delete_if_orphaned(conn, file_key.as_ref()).await?;
                 // If the file has storage, the `IncompleteStorageRequest` event will handle it
             }
-            pallet_file_system::Event::StorageRequestRejected { file_key, reason } => {
-                // Check if the file has any BSP associations (it will not have MSP ones since the MSP did not accept it)
-                let has_bsp = File::has_bsp_associations(conn, file_key.as_ref()).await?;
-                if has_bsp {
-                    // If the file has BSP associations, the `IncompleteStorageRequest` event will handle it
-                    return Ok(());
-                }
-                // If the file does not have BSP associations, it's safe to delete immediately
-                File::delete(conn, file_key.as_ref().to_vec()).await?;
-                log::debug!(
-                    "Storage request rejected for file {:?} with reason {:?}, deleted immediately",
-                    file_key,
-                    reason
-                );
+            pallet_file_system::Event::StorageRequestRejected {
+                file_key,
+                reason: _,
+            } => {
+                // Delete file if it has no storage (not in bucket forest and no BSP associations)
+                // This happens when a storage request is rejected by the MSP.
+                // It is possible that there might be no BSP associations.
+                File::delete_if_orphaned(conn, file_key.as_ref()).await?;
+                // If the file has storage, the `IncompleteStorageRequest` event will handle it
             }
             pallet_file_system::Event::MspAcceptedStorageRequest {
                 file_key,

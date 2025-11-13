@@ -312,7 +312,8 @@ impl File {
         }
     }
 
-    /// Delete file only if it has no provider associations (orphaned)
+    /// Delete file only if it has no BSP associations and is not in the bucket forest.
+    /// The flag [`is_in_bucket`](File::is_in_bucket) is set to false or true based on the [`MutationsApplied`] event emitted by the proofs dealer pallet for catch all.
     pub async fn delete_if_orphaned<'a>(
         conn: &mut DbConnection<'a>,
         file_key: impl AsRef<[u8]>,
@@ -337,7 +338,7 @@ impl File {
         if !is_in_bucket && !has_bsp {
             // File is not in bucket forest and has no BSP associations, safe to delete
             Self::delete(conn, file_key).await?;
-            log::info!("Deleted orphaned file with key: {:?}", file_key);
+            log::debug!("Deleted orphaned file key: {:?}", file_key);
             Ok(true)
         } else {
             log::debug!(
