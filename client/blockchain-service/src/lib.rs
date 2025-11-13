@@ -9,6 +9,7 @@ pub mod transaction_manager;
 pub mod transaction_watchers;
 pub mod types;
 pub mod utils;
+mod forest_write_lock_manager;
 
 use std::{path::PathBuf, sync::Arc};
 
