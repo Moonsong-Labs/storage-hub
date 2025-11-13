@@ -239,10 +239,10 @@ export interface BatchStorageRequestsOptions {
   owner: KeyringPair;
   /** Whether to finalize blocks */
   finaliseBlock?: boolean;
-  /** BSP API instance for waiting for file storage (required) */
-  bspApi: EnrichedBspApi;
-  /** MSP API instance for waiting for file storage and catchup (required) */
-  mspApi: EnrichedBspApi;
+  /** BSP API instance for waiting for file storage (optional - if not provided, BSP checks are skipped) */
+  bspApi?: EnrichedBspApi;
+  /** MSP API instance for waiting for file storage and catchup (optional - if not provided, MSP checks are skipped) */
+  mspApi?: EnrichedBspApi;
   /** Maximum attempts for waiting for confirmations */
   maxAttempts?: number;
 }
@@ -266,30 +266,30 @@ export interface BatchStorageRequestsResult {
 /**
  * Batches multiple storage requests together for efficient processing.
  *
- * This function handles the complete flow where both BSP and MSP respond:
+ * This function handles the flow where BSP and/or MSP respond based on which APIs are provided:
  * 1. Creates buckets if bucket names are provided (deduplicates unique bucket names)
  * 2. Prepares all storage request transactions for the provided files
- * 3. Pauses MSP1 container to deterministically control storage request flow
- * 4. Seals all storage requests in a single block (finalized or unfinalized based on `finaliseBlock`)
- * 5. Waits for all BSP volunteers to appear in tx pool
- * 6. Processes BSP confirmations in batches (handles batched extrinsics)
- * 7. Verifies all files are confirmed by BSP
- * 8. Waits for BSP to store all files locally
- * 9. Unpauses MSP1 container
- * 10. Waits for MSP to catch up to chain tip
- * 11. Processes MSP acceptances in batches (handles batched extrinsics)
- * 12. Verifies all files are accepted by MSP
- * 13. Waits for MSP to store all files locally
- * 14. Returns all file metadata (fileKeys, bucketIds, locations, fingerprints, fileSizes)
+ * 3. Seals all storage requests in a single block (finalized or unfinalized based on `finaliseBlock`)
+ * 4. If `bspApi` is provided:
+ *    - Waits for all BSP volunteers to appear in tx pool
+ *    - Processes BSP confirmations in batches (handles batched extrinsics)
+ *    - Verifies all files are confirmed by BSP
+ *    - Waits for BSP to store all files locally
+ * 5. If `mspApi` is provided:
+ *    - Waits for MSP to catch up to chain tip
+ *    - Processes MSP acceptances in batches (handles batched extrinsics)
+ *    - Verifies all files are accepted by MSP
+ *    - Waits for MSP to store all files locally
+ * 6. Returns all file metadata (fileKeys, bucketIds, locations, fingerprints, fileSizes)
  *
  * **Purpose:**
- * This helper simplifies the common case of batch creating storage requests where both BSP and MSP
- * respond. For tests that need more granular control (e.g., BSP-only or MSP-only scenarios), write
- * custom logic instead of using this helper.
+ * This helper simplifies batch creating storage requests. It can handle:
+ * - Both BSP and MSP responding (pass both `bspApi` and `mspApi`)
+ * - BSP-only scenarios (pass only `bspApi`)
+ * - MSP-only scenarios (pass only `mspApi`)
  *
  * **Parameter Requirements:**
- * - `bspApi` is required for verifying BSP file storage
- * - `mspApi` is required for MSP catchup and verifying MSP file storage
+ * - At least one of `bspApi` or `mspApi` must be provided
  * - `owner` is always required
  *
  * @param api - The API instance
@@ -315,12 +315,8 @@ export const batchStorageRequests = async (
     throw new Error("Owner is required for batchStorageRequests");
   }
 
-  if (!bspApi) {
-    throw new Error("bspApi is required for batchStorageRequests");
-  }
-
-  if (!mspApi) {
-    throw new Error("mspApi is required for batchStorageRequests");
+  if (!bspApi && !mspApi) {
+    throw new Error("At least one of bspApi or mspApi must be provided for batchStorageRequests");
   }
 
   const localOwner = owner;
@@ -453,124 +449,154 @@ export const batchStorageRequests = async (
   // Seal all storage requests in a single block
   await sealBlock(api, storageRequestTxs, localOwner, undefined, undefined, finaliseBlock);
 
-  // Wait for MSP to store all files
-  for (const fileKey of fileKeys) {
-    await waitFor({
-      lambda: async () =>
-        (await mspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
-    });
+  // Wait for MSP to store all files (if mspApi is provided)
+  if (mspApi) {
+    for (const fileKey of fileKeys) {
+      await waitFor({
+        lambda: async () =>
+          (await mspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
+      });
+    }
   }
 
   // Wait for MSP and BSP to catch up to the tip of the chain
-  await api.wait.nodeCatchUpToChainTip(mspApi);
-  await api.wait.nodeCatchUpToChainTip(bspApi);
+  if (mspApi) {
+    await api.wait.nodeCatchUpToChainTip(mspApi);
+  }
+  if (bspApi) {
+    await api.wait.nodeCatchUpToChainTip(bspApi);
+  }
 
-  // Wait for all BSP volunteers to appear in tx pool
-  await api.wait.bspVolunteerInTxPool(fileKeys.length);
+  // Wait for all BSP volunteers to appear in tx pool (if bspApi is provided)
+  if (bspApi) {
+    await api.wait.bspVolunteerInTxPool(fileKeys.length);
+  }
 
-  // Wait for all MSP acceptance and BSP stored confirmations
+  // Wait for MSP acceptance and/or BSP stored confirmations (if APIs are provided)
   // MSP batches extrinsics, so we need to iteratively seal blocks and count events
   let totalAcceptance = 0;
   let totalConfirmations = 0;
-  for (
-    let attempt = 0;
-    attempt < maxAttempts &&
-    (totalAcceptance < fileKeys.length || totalConfirmations < fileKeys.length);
-    attempt++
-  ) {
-    // Wait for EITHER an MSP response OR a BSP stored event, whichever comes first, before proceeding to seal the block
-    // Wait up to 5 seconds for either process, giving time for both to run.
-    // Try both waits sequentially, only fail if both do not succeed (both time out)
-    let mspFound = false;
-    let bspFound = false;
+  const expectMspAcceptance = mspApi !== undefined;
+  const expectBspConfirmations = bspApi !== undefined;
 
-    try {
-      await api.wait.mspResponseInTxPool(1);
-      mspFound = true;
-    } catch {}
+  if (expectMspAcceptance || expectBspConfirmations) {
+    for (
+      let attempt = 0;
+      attempt < maxAttempts &&
+      ((expectMspAcceptance && totalAcceptance < fileKeys.length) ||
+        (expectBspConfirmations && totalConfirmations < fileKeys.length));
+      attempt++
+    ) {
+      // Wait for MSP response and/or BSP stored event, depending on what's expected
+      // Wait up to 5 seconds for each process, giving time for both to run.
+      // Try waits sequentially, only fail if none succeed (all time out)
+      let mspFound = false;
+      let bspFound = false;
 
-    try {
-      await api.wait.bspStored({
-        sealBlock: false,
-        timeoutMs: 3000
+      if (expectMspAcceptance) {
+        try {
+          await api.wait.mspResponseInTxPool(1);
+          mspFound = true;
+        } catch {}
+      }
+
+      if (expectBspConfirmations) {
+        try {
+          await api.wait.bspStored({
+            sealBlock: false,
+            timeoutMs: 3000
+          });
+          bspFound = true;
+        } catch {}
+      }
+
+      const { events } = await api.block.seal({
+        signer: localOwner,
+        finaliseBlock: finaliseBlock
       });
-      bspFound = true;
-    } catch {}
 
-    if (!mspFound && !bspFound) {
-      throw new Error("Neither MSP response nor BSP stored event was found within the timeout");
-    }
+      if (mspFound && expectMspAcceptance) {
+        const acceptEvents = await api.assert.eventMany(
+          "fileSystem",
+          "MspAcceptedStorageRequest",
+          events
+        );
 
-    const { events } = await api.block.seal({
-      signer: localOwner,
-      finaliseBlock: finaliseBlock
-    });
+        // Count total MspAcceptedStorageRequest events
+        totalAcceptance += acceptEvents.length;
+      }
 
-    if (mspFound) {
-      const acceptEvents = await api.assert.eventMany(
-        "fileSystem",
-        "MspAcceptedStorageRequest",
-        events
-      );
+      if (bspFound && expectBspConfirmations) {
+        // Check if BSP confirmed storing events are present
+        const confirmEvents = await api.assert.eventMany(
+          "fileSystem",
+          "BspConfirmedStoring",
+          events
+        );
 
-      // Count total MspAcceptedStorageRequest events
-      totalAcceptance += acceptEvents.length;
-    }
-
-    if (bspFound) {
-      // Check if BSP confirmed storing events are present
-      const confirmEvents = await api.assert.eventMany("fileSystem", "BspConfirmedStoring", events);
-
-      // Count total file keys confirmed in all BspConfirmedStoring events
-      for (const eventRecord of confirmEvents) {
-        if (api.events.fileSystem.BspConfirmedStoring.is(eventRecord.event)) {
-          totalConfirmations += eventRecord.event.data.confirmedFileKeys.length;
+        // Count total file keys confirmed in all BspConfirmedStoring events
+        for (const eventRecord of confirmEvents) {
+          if (api.events.fileSystem.BspConfirmedStoring.is(eventRecord.event)) {
+            totalConfirmations += eventRecord.event.data.confirmedFileKeys.length;
+          }
         }
       }
     }
+
+    if (expectMspAcceptance) {
+      assert.strictEqual(
+        totalAcceptance,
+        fileKeys.length,
+        `Expected ${fileKeys.length} MSP acceptance, but got ${totalAcceptance}`
+      );
+    }
+
+    if (expectBspConfirmations) {
+      assert.strictEqual(
+        totalConfirmations,
+        fileKeys.length,
+        `Expected ${fileKeys.length} BSP confirmations, but got ${totalConfirmations}`
+      );
+    }
   }
 
-  assert.strictEqual(
-    totalAcceptance,
-    fileKeys.length,
-    `Expected ${fileKeys.length} MSP acceptance, but got ${totalAcceptance}`
-  );
-
-  assert.strictEqual(
-    totalConfirmations,
-    fileKeys.length,
-    `Expected ${fileKeys.length} BSP confirmations, but got ${totalConfirmations}`
-  );
-
-  // Verify files are in BSP or MSP forests or file storages
+  // Verify files are in BSP and/or MSP forests or file storages (depending on which APIs are provided)
 
   await waitFor({
     lambda: async () => {
       for (let index = 0; index < fileKeys.length; index++) {
         const fileKey = fileKeys[index];
         const bucketId = bucketIds[index];
-        // Check file IS in BSP forest
-        const bspForestResult = await bspApi.rpc.storagehubclient.isFileInForest(null, fileKey);
-        if (!bspForestResult.isTrue) {
-          return false;
+
+        // Check file IS in BSP forest and file storage (if bspApi is provided)
+        if (bspApi) {
+          const bspForestResult = await bspApi.rpc.storagehubclient.isFileInForest(null, fileKey);
+          if (!bspForestResult.isTrue) {
+            return false;
+          }
+
+          const bspFileStorageResult =
+            await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey);
+          if (!bspFileStorageResult.isFileFound) {
+            return false;
+          }
         }
 
-        // Check file IS in BSP file storage
-        const bspFileStorageResult = await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey);
-        if (!bspFileStorageResult.isFileFound) {
-          return false;
-        }
+        // Check file IS in MSP forest and file storage (if mspApi is provided)
+        if (mspApi) {
+          const mspForestResult = await mspApi.rpc.storagehubclient.isFileInForest(
+            bucketId,
+            fileKey
+          );
+          if (!mspForestResult.isTrue) {
+            return false;
+          }
 
-        // Check file IS in MSP forest
-        const mspForestResult = await mspApi.rpc.storagehubclient.isFileInForest(bucketId, fileKey);
-        if (!mspForestResult.isTrue) {
-          return false;
-        }
-
-        // Check file IS in MSP file storage
-        const mspFileStorageResult = await mspApi.rpc.storagehubclient.isFileInFileStorage(fileKey);
-        if (!mspFileStorageResult.isFileFound) {
-          return false;
+          const mspFileStorageResult =
+            await mspApi.rpc.storagehubclient.isFileInFileStorage(fileKey);
+          if (!mspFileStorageResult.isFileFound) {
+            return false;
+          }
         }
       }
       return true;

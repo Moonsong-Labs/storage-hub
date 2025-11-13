@@ -11,7 +11,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::sync::Mutex;
+use tokio::sync::Semaphore;
 
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
@@ -39,10 +39,8 @@ pub struct FishermanService<Runtime: StorageEnableRuntime> {
     client: Arc<ParachainClient<Runtime::RuntimeApi>>,
     /// Event bus provider for emitting fisherman events
     event_bus_provider: FishermanServiceEventBusProvider,
-    /// Global lock to prevent overlapping batch processing cycles
-    batch_processing_lock: Arc<Mutex<()>>,
-    /// Hold the lock guard while batch is processing
-    batch_lock_guard: Option<tokio::sync::OwnedMutexGuard<()>>,
+    /// Semaphore to prevent overlapping batch processing cycles (size 1)
+    batch_processing_semaphore: Arc<Semaphore>,
     /// Track last deletion type processed (for alternating User/Incomplete)
     last_deletion_type: Option<FileDeletionType>,
     /// Duration between batch deletion processing cycles.
@@ -85,8 +83,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
         Self {
             client,
             event_bus_provider: FishermanServiceEventBusProvider::new(),
-            batch_processing_lock: Arc::new(Mutex::new(())),
-            batch_lock_guard: None,
+            batch_processing_semaphore: Arc::new(Semaphore::new(1)),
             last_deletion_type: None,
             batch_interval_duration: Duration::from_secs(batch_interval_seconds),
             last_batch_time: None,
@@ -164,8 +161,8 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
     /// Emits a [`BatchFileDeletions`](`crate::events::BatchFileDeletions`) event if a new batch deletion cycle should be attempted every [`batch_interval_duration`](`Self::batch_interval_duration`) seconds.
     /// Interchanges between [`User`](`FileDeletionType::User`) and [`Incomplete`](`FileDeletionType::Incomplete`) deletion types across batch cycles.
     ///
-    /// The [`batch_processing_lock`](`Self::batch_processing_lock`) is acquired and released by the [`BatchFileDeletions`](`crate::events::BatchFileDeletions`) event handler via the [`ReleaseBatchLock`](`FishermanServiceCommand::ReleaseBatchLock`) command.
-    /// This lock ensures that only a single batch deletion cycle is running at a time, preventing any possibility of colliding deletions with this node's own deletions.
+    /// The [`batch_processing_semaphore`](`Self::batch_processing_semaphore`) permit is passed through the [`BatchFileDeletions`](`crate::events::BatchFileDeletions`) event and automatically released when the event handler completes or fails.
+    /// This semaphore ensures that only a single batch deletion cycle is running at a time, preventing any possibility of colliding deletions with this node's own deletions.
     async fn monitor_block(
         &mut self,
         block_number: BlockNumber<Runtime>,
@@ -180,10 +177,10 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
         };
 
         if should_attempt_new_batch_deletion {
-            // Try to acquire the lock (non-blocking)
-            // The lock prevents running multiple batch deletion cycles concurrently, preventing any possibility of colliding deletions with this node's own deletions.
-            match self.batch_processing_lock.clone().try_lock_owned() {
-                Ok(guard) => {
+            // Try to acquire the semaphore permit (non-blocking)
+            // The semaphore prevents running multiple batch deletion cycles concurrently, preventing any possibility of colliding deletions with this node's own deletions.
+            match self.batch_processing_semaphore.clone().try_acquire_owned() {
+                Ok(permit) => {
                     // Determine next deletion type (alternate User ↔ Incomplete)
                     let deletion_type = match self.last_deletion_type {
                         None => FileDeletionType::User,
@@ -201,23 +198,24 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                     self.last_deletion_type = Some(deletion_type);
                     self.last_batch_time = Some(Instant::now());
 
-                    // Store the guard to keep lock held
-                    // This guard is released when the `BatchFileDeletions` event handler releases it via the `ReleaseBatchLock` command, notifying the
-                    // monitoring service that it can start a new batch deletion cycle.
-                    self.batch_lock_guard = Some(guard);
+                    // Wrap permit in Arc to satisfy Clone requirement for events
+                    // The permit will be held by the event handler for its lifetime,
+                    // automatically releasing when the handler completes or fails
+                    let permit_wrapper = Arc::new(permit);
 
                     // Emit event to trigger batch processing
                     self.emit(crate::events::BatchFileDeletions {
                         deletion_type,
                         batch_deletion_limit: self.batch_deletion_limit,
+                        permit: permit_wrapper,
                     });
                 }
                 Err(_) => {
-                    // The lock will eventually be released, so we do nothing here and will retry next block.
-                    // This is a warning because it could indicate a bug if the lock is held for too long, or indefinitely for that matter.
+                    // The permit will eventually be released, so we do nothing here and will retry next block.
+                    // This is a warning because it could indicate a bug if the permit is held for too long, or indefinitely for that matter.
                     debug!(
                         target: LOG_TARGET,
-                        "🎣 Batch interval reached but lock is held (previous batch still processing), will retry next block"
+                        "🎣 Batch interval reached but semaphore permit is held (previous batch still processing), will retry next block"
                     );
                 }
             }
@@ -497,20 +495,6 @@ impl<Runtime: StorageEnableRuntime> Actor for FishermanService<Runtime> {
                         warn!(
                             target: LOG_TARGET,
                             "Failed to send QueryIncompleteStorageRequest response - receiver dropped"
-                        );
-                    }
-                }
-                FishermanServiceCommand::ReleaseBatchLock { callback } => {
-                    debug!(target: LOG_TARGET, "🔓 Releasing batch processing lock");
-
-                    // Take and drop the guard to release the lock
-                    self.batch_lock_guard.take();
-
-                    // Send the result back through the callback
-                    if let Err(_) = callback.send(Ok(())) {
-                        warn!(
-                            target: LOG_TARGET,
-                            "Failed to send ReleaseBatchLock response - receiver dropped"
                         );
                     }
                 }

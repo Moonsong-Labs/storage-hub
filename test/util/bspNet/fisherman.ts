@@ -49,6 +49,8 @@ export interface VerifyBucketDeletionResultsOptions {
   returnResults?: boolean;
   /** Block data containing extrinsics (required when returnResults is true to identify which extrinsic failed) */
   blockData?: SignedBlock;
+  /** Optional. Array of bucket IDs to skip forest root verification for (e.g., when MSP stopped storing the bucket) */
+  skipBucketIds?: string[];
 }
 
 /**
@@ -174,6 +176,8 @@ export interface RetryableBatchDeletionsOptions {
   expectedBucketCount?: number;
   /** Maximum number of retry attempts. Defaults to 3. */
   maxRetries?: number;
+  /** Optional. Array of bucket IDs to skip forest root verification for (e.g., when MSP stopped storing the bucket) */
+  skipBucketIds?: string[];
 }
 
 /**
@@ -319,7 +323,15 @@ export const verifyBspDeletionResults = async (
 export const verifyBucketDeletionResults = async (
   options: VerifyBucketDeletionResultsOptions
 ): Promise<DeletionVerificationResult | undefined> => {
-  const { userApi, mspApi, events, expectedCount, returnResults = false, blockData } = options;
+  const {
+    userApi,
+    mspApi,
+    events,
+    expectedCount,
+    returnResults = false,
+    blockData,
+    skipBucketIds = []
+  } = options;
 
   if (returnResults) {
     // Validate blockData is provided when returnResults is true
@@ -343,25 +355,42 @@ export const verifyBucketDeletionResults = async (
       userApi.events.fileSystem.BucketFileDeletionsCompleted.is(event)
     );
 
+    // Validate expected count of bucket deletion events
+    strictEqual(
+      bucketDeletionEvents.length,
+      expectedCount,
+      `Should have exactly ${expectedCount} bucket deletion event(s)`
+    );
+
+    // If expected count is 0 and we have 0 events, that's correct - return success
+    if (expectedCount === 0 && bucketDeletionEvents.length === 0) {
+      return { successful: 1, failedWithForestProofError: 0 };
+    }
+
     if (bucketDeletionEvents.length > 0) {
-      // Completion events exist - verify forest root changes for all buckets
+      // Completion events exist - verify forest root changes for all buckets (except skipped ones)
       for (const bucketDeletionRecord of bucketDeletionEvents) {
         const bucketDeletionEvent = bucketDeletionRecord.event;
         assert(userApi.events.fileSystem.BucketFileDeletionsCompleted.is(bucketDeletionEvent));
+        const bucketId = bucketDeletionEvent.data.bucketId.toString();
+
+        // Skip forest root verification for buckets in the skip list
+        if (skipBucketIds.includes(bucketId)) {
+          continue;
+        }
+
         await waitFor({
           lambda: async () => {
             notEqual(
               bucketDeletionEvent.data.oldRoot.toString(),
               bucketDeletionEvent.data.newRoot.toString(),
-              `MSP forest root should have changed for bucket ${bucketDeletionEvent.data.bucketId.toString()}`
+              `MSP forest root should have changed for bucket ${bucketId}`
             );
-            const currentBucketRoot = await mspApi.rpc.storagehubclient.getForestRoot(
-              bucketDeletionEvent.data.bucketId.toString()
-            );
+            const currentBucketRoot = await mspApi.rpc.storagehubclient.getForestRoot(bucketId);
             strictEqual(
               currentBucketRoot.toString(),
               bucketDeletionEvent.data.newRoot.toString(),
-              `Current bucket forest root should match new root for bucket ${bucketDeletionEvent.data.bucketId.toString()}`
+              `Current bucket forest root should match new root for bucket ${bucketId}`
             );
             return true;
           }
@@ -374,7 +403,7 @@ export const verifyBucketDeletionResults = async (
         ? { successful: 0, failedWithForestProofError: 1 }
         : { successful: 1, failedWithForestProofError: 0 };
     }
-    // No completion event found
+    // No completion event found (but expectedCount > 0)
     if (hasForestProofError) {
       // Expected: extrinsic failed with ForestProofVerificationFailed
       return { successful: 0, failedWithForestProofError: 1 };
@@ -396,10 +425,17 @@ export const verifyBucketDeletionResults = async (
     `Should have exactly ${expectedCount} bucket deletion event(s)`
   );
 
-  // Verify MSP roots changed for all buckets
+  // Verify MSP roots changed for all buckets (except skipped ones)
   for (const bucketDeletionRecord of bucketDeletionEvents) {
     const bucketDeletionEvent = bucketDeletionRecord.event;
     if (userApi.events.fileSystem.BucketFileDeletionsCompleted.is(bucketDeletionEvent)) {
+      const bucketId = bucketDeletionEvent.data.bucketId.toString();
+
+      // Skip forest root verification for buckets in the skip list
+      if (skipBucketIds.includes(bucketId)) {
+        continue;
+      }
+
       await waitFor({
         lambda: async () => {
           notEqual(
@@ -407,9 +443,7 @@ export const verifyBucketDeletionResults = async (
             bucketDeletionEvent.data.newRoot.toString(),
             "MSP forest root should have changed after file deletion"
           );
-          const currentBucketRoot = await mspApi.rpc.storagehubclient.getForestRoot(
-            bucketDeletionEvent.data.bucketId.toString()
-          );
+          const currentBucketRoot = await mspApi.rpc.storagehubclient.getForestRoot(bucketId);
           strictEqual(
             currentBucketRoot.toString(),
             bucketDeletionEvent.data.newRoot.toString(),
@@ -547,7 +581,8 @@ export const retryableWaitAndVerifyBatchDeletions = async (
     expectedBspCount = 1,
     mspApi,
     expectedBucketCount,
-    maxRetries = 3
+    maxRetries = 3,
+    skipBucketIds
   } = options;
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -588,7 +623,8 @@ export const retryableWaitAndVerifyBatchDeletions = async (
             events: deletionResult.events,
             expectedCount: expectedBucketCount,
             returnResults: true,
-            blockData: deletionResult.blockData
+            blockData: deletionResult.blockData,
+            skipBucketIds
           })) as DeletionVerificationResult)
         : { successful: 0, failedWithForestProofError: 0 };
 

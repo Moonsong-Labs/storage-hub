@@ -30,7 +30,7 @@ use anyhow::anyhow;
 use codec::Decode;
 use futures::future::join_all;
 use sc_tracing::tracing::*;
-use shc_actors_framework::{actor::ActorHandle, event_bus::EventHandler};
+use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceCommandInterface, types::SendExtrinsicOptions,
 };
@@ -43,7 +43,7 @@ use shc_common::{
 };
 use shc_fisherman_service::{
     commands::FishermanServiceCommandInterface, events::BatchFileDeletions,
-    events::FileDeletionTarget, FileKeyOperation, FishermanService,
+    events::FileDeletionTarget, FileKeyOperation,
 };
 use shc_forest_manager::{in_memory::InMemoryForestStorage, traits::ForestStorage};
 use sp_core::H256;
@@ -96,13 +96,13 @@ pub struct BatchFileDeletionData<Runtime: StorageEnableRuntime> {
 ///
 /// This task processes batch deletion events emitted periodically by the fisherman service.
 /// It queries pending deletions for the specified type (User or Incomplete), spawns parallel
-/// futures for each target (BSP/Bucket), awaits their completion, and releases the global lock.
+/// futures for each target (BSP/Bucket), and awaits their completion.
 ///
 /// The task architecture ensures:
-/// - No per-target locks (global lock prevents overlapping batch cycles)
+/// - No per-target locks (semaphore permit prevents overlapping batch cycles)
 /// - Parallel processing of all targets within a cycle
 /// - Error isolation (one target's failure doesn't block others)
-/// - Lock is always released, even on error
+/// - Semaphore permit is automatically released when handler completes or fails
 pub struct FishermanTask<NT, Runtime>
 where
     NT: ShNodeType<Runtime>,
@@ -111,8 +111,6 @@ where
 {
     /// Handler providing access to blockchain, indexer database, and forest storage
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
-    /// Actor handle for communicating with the fisherman service
-    fisherman_service: ActorHandle<FishermanService<Runtime>>,
 }
 
 impl<NT, Runtime> Clone for FishermanTask<NT, Runtime>
@@ -124,7 +122,6 @@ where
     fn clone(&self) -> Self {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
-            fisherman_service: self.fisherman_service.clone(),
         }
     }
 }
@@ -136,6 +133,11 @@ where
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: BatchFileDeletions) -> anyhow::Result<()> {
+        // Hold the Arc reference to the permit for the lifetime of this handler
+        // The permit will be automatically released when this handler completes or fails
+        // (when the Arc is dropped, the permit is dropped, releasing the semaphore)
+        let permit_arc = event.permit;
+
         info!(
             target: LOG_TARGET,
             "🎣 Processing batch file deletions for {:?} deletion type (limit: {})",
@@ -203,11 +205,10 @@ where
         if futures.is_empty() {
             debug!(
                 target: LOG_TARGET,
-                "🎣 No pending {:?} deletions found, releasing lock",
+                "🎣 No pending {:?} deletions found",
                 event.deletion_type
             );
-            // Release lock and return early
-            self.fisherman_service.release_batch_lock().await?;
+            // Permit will be automatically released when handler returns
             return Ok(());
         }
 
@@ -250,13 +251,9 @@ where
             );
         }
 
-        // Always release lock, even if some targets failed
-        info!(
-            target: LOG_TARGET,
-            "🎣 Releasing batch processing lock"
-        );
-        self.fisherman_service.release_batch_lock().await?;
-
+        // Explicitly drop to release the semaphore permit
+        // Next batch deletion cycle will be able to acquire a new permit
+        drop(permit_arc);
         Ok(())
     }
 }
@@ -271,18 +268,9 @@ where
     ///
     /// # Arguments
     /// * `storage_hub_handler` - Handler providing access to required services
-    ///
-    /// # Panics
-    /// Panics if the fisherman service handle is not available in the storage hub handler
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
-        let fisherman_service = storage_hub_handler
-            .fisherman
-            .clone()
-            .expect("FishermanTask requires fisherman service handle");
-
         Self {
             storage_hub_handler,
-            fisherman_service,
         }
     }
 
@@ -445,9 +433,11 @@ where
                 .map_err(|e| anyhow!("Failed to get all file keys for BSP: {:?}", e))?
             }
             FileDeletionTarget::BucketId(bucket_id) => {
+                // Only get files that are in the bucket's forest
                 shc_indexer_db::models::file::File::get_all_file_keys_for_bucket(
                     &mut conn,
                     bucket_id.as_ref(),
+                    Some(true),
                 )
                 .await
                 .map_err(|e| anyhow!("Failed to get all file keys for bucket: {:?}", e))?
@@ -499,8 +489,12 @@ where
         );
 
         // Get file key changes since finalized block
-        let file_key_changes = self
-            .fisherman_service
+        let fisherman_service = self
+            .storage_hub_handler
+            .fisherman
+            .as_ref()
+            .ok_or_else(|| anyhow!("Fisherman service not available"))?;
+        let file_key_changes = fisherman_service
             .get_file_key_changes_since_block(last_indexed_finalized_block, deletion_target.clone())
             .await
             .map_err(|e| anyhow!("Failed to get file key changes: {:?}", e))?;
@@ -834,11 +828,13 @@ where
             let bucket_id_bytes = bucket_id.as_ref().map(|id| id.as_ref() as &[u8]);
 
             // Query bucket files from DB
+            // Only get files that are in the bucket's forest
             let bucket_files =
                 shc_indexer_db::models::File::get_files_pending_deletion_grouped_by_bucket(
                     &mut bucket_conn,
                     deletion_type,
                     bucket_id_bytes,
+                    Some(true),
                     limit,
                     offset,
                 )

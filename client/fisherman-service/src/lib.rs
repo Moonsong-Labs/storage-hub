@@ -20,7 +20,9 @@ use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::ParachainClient;
 
-pub use self::commands::{FishermanServiceCommand, FishermanServiceError};
+pub use self::commands::{
+    FishermanServiceCommand, FishermanServiceCommandInterface, FishermanServiceError,
+};
 pub use self::handler::{FileKeyChange, FileKeyOperation, FishermanService};
 pub use events::{BatchFileDeletions, FileDeletionTarget, FishermanServiceEventBusProvider};
 
