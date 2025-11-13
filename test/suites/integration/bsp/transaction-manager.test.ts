@@ -323,8 +323,8 @@ await describeBspNet(
       );
 
       // Drop the volunteer transaction (creates the gap at nonce n)
-      await bspApi.node.dropTxn(volunteerHash as `0x${string}`);
       await userApi.node.dropTxn(volunteerHash as `0x${string}`);
+      await bspApi.node.dropTxn(volunteerHash as `0x${string}`);
 
       // Verify the Invalid log was emitted
       await bspApi.docker.waitForLog({
@@ -386,8 +386,12 @@ await describeBspNet(
         );
 
         // Drop the retry volunteer transaction
-        await bspApi.node.dropTxn(retryVolunteerHash as `0x${string}`);
+        // Order matters: drop from USER first, then BSP. When USER drops bspVolunteer (nonce n),
+        // it automatically drops submitProof (nonce n+1) since it becomes invalid. If BSP drops
+        // first and retries immediately, it gossips the new bspVolunteer to USER, which replaces
+        // the old one but leaves submitProof valid in USER's pool.
         await userApi.node.dropTxn(retryVolunteerHash as `0x${string}`);
+        await bspApi.node.dropTxn(retryVolunteerHash as `0x${string}`);
       }
 
       // Verify all retry volunteer extrinsics were dropped

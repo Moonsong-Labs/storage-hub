@@ -1,7 +1,6 @@
 import assert from "node:assert";
 import Docker from "dockerode";
 import { describeMspNet, type EnrichedBspApi, type SqlClient, waitFor } from "../../../util";
-import { getLastIndexedBlock, waitForBucketIndexed } from "../../../util/indexerHelpers";
 
 await describeMspNet(
   "Indexer Service - Database Connection Resilience During Resync",
@@ -44,7 +43,7 @@ await describeMspNet(
 
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",
-        containerName: "storage-hub-sh-user-1",
+        containerName: userApi.shConsts.NODE_INFOS.user.containerName,
         timeout: 10000
       });
 
@@ -79,7 +78,7 @@ await describeMspNet(
       // Wait for indexer to catch up to initial buckets
       await waitFor({
         lambda: async () => {
-          const lastIndexed = await getLastIndexedBlock(sql);
+          const lastIndexed = await indexerApi.indexer.getLastIndexedBlock({ sql });
           return lastIndexed >= initialBlockNumber;
         },
         iterations: 100,
@@ -88,13 +87,13 @@ await describeMspNet(
 
       // Verify indexer processed initial buckets - establishes healthy baseline
       for (const bucketName of initialBuckets) {
-        await waitForBucketIndexed(sql, bucketName);
+        await indexerApi.indexer.waitForBucketIndexed({ sql, bucketName });
       }
 
-      const blockBeforePause = await getLastIndexedBlock(sql);
+      const blockBeforePause = await indexerApi.indexer.getLastIndexedBlock({ sql });
 
       // Phase 2: Create catchup scenario - pause indexer while blockchain advances
-      await userApi.docker.pauseContainer("storage-hub-sh-indexer-1");
+      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.indexer.containerName);
 
       // Produce blocks exceeding sync threshold (7 blocks > 5 threshold)
       const catchupBuckets: string[] = [];
@@ -109,7 +108,7 @@ await describeMspNet(
       }
 
       // Confirm indexer remained frozen at pre-pause block
-      const lastIndexedBeforeCatchup = await getLastIndexedBlock(sql);
+      const lastIndexedBeforeCatchup = await indexerApi.indexer.getLastIndexedBlock({ sql });
 
       assert.equal(
         lastIndexedBeforeCatchup,
@@ -122,11 +121,13 @@ await describeMspNet(
       await postgresContainer.pause();
 
       // Resume indexer first to start the resync process
-      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-indexer-1" });
+      await userApi.docker.resumeContainer({
+        containerName: userApi.shConsts.NODE_INFOS.indexer.containerName
+      });
 
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",
-        containerName: "storage-hub-sh-indexer-1",
+        containerName: userApi.shConsts.NODE_INFOS.indexer.containerName,
         timeout: 10000
       });
 
@@ -153,13 +154,13 @@ await describeMspNet(
 
       // Wait for database to be ready to accept connections again
       await userApi.docker.waitForLog({
-        containerName: "storage-hub-sh-postgres-1",
+        containerName: "storage-hub-sh-postgres-1", // Note: postgres is not in NODE_INFOS, keep hardcoded
         searchString: "database system is ready to accept connections",
         timeout: 10000
       });
 
       // Verify indexer is still stuck at the same block (no progress during DB outage)
-      const lastIndexedDuringOutage = await getLastIndexedBlock(sql);
+      const lastIndexedDuringOutage = await indexerApi.indexer.getLastIndexedBlock({ sql });
 
       assert.equal(
         lastIndexedDuringOutage,
@@ -183,7 +184,7 @@ await describeMspNet(
       // Wait for it to catch up to the trigger block number
       await waitFor({
         lambda: async () => {
-          const lastIndexed = await getLastIndexedBlock(sql);
+          const lastIndexed = await indexerApi.indexer.getLastIndexedBlock({ sql });
           return lastIndexed >= triggerBlockNumber;
         },
         iterations: 100,
@@ -192,11 +193,11 @@ await describeMspNet(
 
       // Verify all buckets from both phases are present - tests full consistency
       for (const bucketName of [...initialBuckets, ...catchupBuckets]) {
-        await waitForBucketIndexed(sql, bucketName);
+        await indexerApi.indexer.waitForBucketIndexed({ sql, bucketName });
       }
 
       // Final validation - indexer should have successfully processed all blocks including trigger
-      const lastIndexedBlock = await getLastIndexedBlock(sql);
+      const lastIndexedBlock = await indexerApi.indexer.getLastIndexedBlock({ sql });
 
       assert(
         lastIndexedBlock >= triggerBlockNumber,

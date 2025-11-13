@@ -6,7 +6,9 @@ import type { AccountId32, H256 } from "@polkadot/types/interfaces";
 import { u8aToHex } from "@polkadot/util";
 import type { HexString } from "@polkadot/util/types";
 import { decodeAddress } from "@polkadot/util-crypto";
+import type { EnrichedBspApi } from "./test-api";
 import { assertEventPresent } from "../asserts";
+import { waitFor } from "./waits";
 import { sealBlock } from "./block";
 import * as ShConsts from "./consts";
 import type { FileMetadata } from "./types";
@@ -207,4 +209,405 @@ export const createBucket = async (
   const { event } = assertEventPresent(api, "fileSystem", "NewBucket", createBucketResult.events);
 
   return event;
+};
+
+/**
+ * Configuration for a single file in a batch storage request.
+ */
+export interface BatchFileConfig {
+  /** Source file path (local file to load) */
+  source: string;
+  /** Destination/location path for the file */
+  destination: string;
+  /** Either a bucket name (will create bucket) or bucket ID (use existing bucket) */
+  bucketIdOrName: string | H256;
+  /** Optional replication target. If not provided, uses Basic replication target */
+  replicationTarget?: number | null;
+}
+
+/**
+ * Options for batch storage requests.
+ */
+export interface BatchStorageRequestsOptions {
+  /** Array of file configurations */
+  files: BatchFileConfig[];
+  /** MSP ID to use for storage requests */
+  mspId?: HexString | null;
+  /** Value proposition ID. If not provided, will be fetched from MSP */
+  valuePropId?: HexString | null;
+  /** Owner/signer for the storage requests (required) */
+  owner: KeyringPair;
+  /** Whether to finalize blocks */
+  finaliseBlock?: boolean;
+  /** BSP API instance for waiting for file storage (optional - if not provided, BSP checks are skipped) */
+  bspApi?: EnrichedBspApi;
+  /** MSP API instance for waiting for file storage and catchup (optional - if not provided, MSP checks are skipped) */
+  mspApi?: EnrichedBspApi;
+  /** Maximum attempts for waiting for confirmations */
+  maxAttempts?: number;
+}
+
+/**
+ * Result of batch storage requests operation.
+ */
+export interface BatchStorageRequestsResult {
+  /** Array of file keys created */
+  fileKeys: string[];
+  /** Array of bucket IDs (one per file) */
+  bucketIds: string[];
+  /** Array of file locations */
+  locations: string[];
+  /** Array of file fingerprints */
+  fingerprints: string[];
+  /** Array of file sizes */
+  fileSizes: number[];
+}
+
+/**
+ * Batches multiple storage requests together for efficient processing.
+ *
+ * This function handles the flow where BSP and/or MSP respond based on which APIs are provided:
+ * 1. Creates buckets if bucket names are provided (deduplicates unique bucket names)
+ * 2. Prepares all storage request transactions for the provided files
+ * 3. Seals all storage requests in a single block (finalized or unfinalized based on `finaliseBlock`)
+ * 4. If `bspApi` is provided:
+ *    - Waits for all BSP volunteers to appear in tx pool
+ *    - Processes BSP confirmations in batches (handles batched extrinsics)
+ *    - Verifies all files are confirmed by BSP
+ *    - Waits for BSP to store all files locally
+ * 5. If `mspApi` is provided:
+ *    - Waits for MSP to catch up to chain tip
+ *    - Processes MSP acceptances in batches (handles batched extrinsics)
+ *    - Verifies all files are accepted by MSP
+ *    - Waits for MSP to store all files locally
+ * 6. Returns all file metadata (fileKeys, bucketIds, locations, fingerprints, fileSizes)
+ *
+ * **Purpose:**
+ * This helper simplifies batch creating storage requests. It can handle:
+ * - Both BSP and MSP responding (pass both `bspApi` and `mspApi`)
+ * - BSP-only scenarios (pass only `bspApi`)
+ * - MSP-only scenarios (pass only `mspApi`)
+ *
+ * **Parameter Requirements:**
+ * - At least one of `bspApi` or `mspApi` must be provided
+ * - `owner` is always required
+ *
+ * @param api - The API instance
+ * @param options - Batch storage request options
+ * @returns Promise resolving to batch storage request result with all file metadata
+ */
+export const batchStorageRequests = async (
+  api: EnrichedBspApi,
+  options: BatchStorageRequestsOptions
+): Promise<BatchStorageRequestsResult> => {
+  const {
+    files,
+    mspId = ShConsts.DUMMY_MSP_ID,
+    valuePropId: providedValuePropId,
+    owner,
+    finaliseBlock = true,
+    bspApi,
+    mspApi,
+    maxAttempts = 5
+  } = options;
+
+  if (!owner) {
+    throw new Error("Owner is required for batchStorageRequests");
+  }
+
+  if (!bspApi && !mspApi) {
+    throw new Error("At least one of bspApi or mspApi must be provided for batchStorageRequests");
+  }
+
+  const localOwner = owner;
+  const ownerHex = u8aToHex(decodeAddress(localOwner.address)).slice(2);
+
+  // Get value proposition if not provided
+  let valuePropId = providedValuePropId;
+  if (!valuePropId) {
+    const valueProps = await api.call.storageProvidersApi.queryValuePropositionsForMsp(
+      mspId ?? ShConsts.DUMMY_MSP_ID
+    );
+    valuePropId = valueProps[0].id.toHex() as HexString;
+    if (!valuePropId) {
+      throw new Error("No value proposition found");
+    }
+  }
+
+  const fileKeys: string[] = [];
+  const bucketIds: string[] = [];
+  const locations: string[] = [];
+  const fingerprints: string[] = [];
+  const fileSizes: number[] = [];
+  const storageRequestTxs = [];
+
+  // First pass: identify unique bucket names that need to be created
+  const uniqueBucketNames = new Set<string>();
+  for (const file of files) {
+    if (typeof file.bucketIdOrName === "string") {
+      uniqueBucketNames.add(file.bucketIdOrName);
+    }
+  }
+
+  // Derive bucket IDs and check if they exist on-chain
+  const bucketNameToIdMap = new Map<string, H256>();
+  const bucketsToCreate = new Set<string>();
+
+  for (const bucketName of uniqueBucketNames) {
+    // Derive the bucket ID deterministically (same logic as runtime):
+    // Hash(owner.encode() ++ bucket_name.encode())
+    const ownerEncoded = api.createType("AccountId32", localOwner.address).toU8a();
+    const nameEncoded = api.createType("Bytes", bucketName).toU8a();
+    const concat = new Uint8Array([...ownerEncoded, ...nameEncoded]);
+    const bucketId = api.createType("H256", api.registry.hash(concat));
+
+    // Check if bucket already exists on-chain
+    const bucketOption = await api.query.providers.buckets(bucketId);
+
+    if (bucketOption.isSome) {
+      // Bucket already exists, reuse it
+      bucketNameToIdMap.set(bucketName, bucketId);
+    } else {
+      // Bucket doesn't exist, mark it for creation
+      bucketsToCreate.add(bucketName);
+      bucketNameToIdMap.set(bucketName, bucketId);
+    }
+  }
+
+  // Create only the buckets that don't exist yet
+  for (const bucketName of bucketsToCreate) {
+    const newBucketEvent = await createBucket(
+      api,
+      bucketName,
+      localOwner,
+      valuePropId,
+      mspId ?? ShConsts.DUMMY_MSP_ID
+    );
+    const newBucketEventData =
+      api.events.fileSystem.NewBucket.is(newBucketEvent) && newBucketEvent.data;
+    assert(newBucketEventData, "NewBucket event data not found");
+
+    // Verify the derived bucket ID matches the one from the event
+    const derivedBucketId = bucketNameToIdMap.get(bucketName);
+    assert(
+      derivedBucketId?.eq(newBucketEventData.bucketId),
+      `Derived bucket ID ${derivedBucketId?.toHex()} doesn't match event bucket ID ${newBucketEventData.bucketId.toHex()}`
+    );
+  }
+
+  // Second pass: prepare storage request transactions
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    let bucketId: H256;
+
+    if (typeof file.bucketIdOrName === "string") {
+      // Use the bucket we just created (look up by name)
+      const createdBucketId = bucketNameToIdMap.get(file.bucketIdOrName);
+      assert(createdBucketId, `Bucket ID not found for bucket name: ${file.bucketIdOrName}`);
+      bucketId = createdBucketId;
+    } else {
+      // Use the provided bucket ID
+      bucketId = file.bucketIdOrName;
+    }
+
+    const {
+      file_key,
+      file_metadata: { location, fingerprint, file_size }
+    } = await api.rpc.storagehubclient.loadFileInStorage(
+      file.source,
+      file.destination,
+      ownerHex,
+      bucketId.toString()
+    );
+
+    fileKeys.push(file_key.toString());
+    bucketIds.push(bucketId.toString());
+    locations.push(location.toHex());
+    fingerprints.push(fingerprint.toHex());
+    fileSizes.push(file_size.toNumber());
+
+    let replicationTargetToUse: { Custom: number } | { Basic: null };
+    if (file.replicationTarget !== undefined && file.replicationTarget !== null) {
+      replicationTargetToUse = { Custom: file.replicationTarget };
+    } else {
+      replicationTargetToUse = { Basic: null };
+    }
+
+    storageRequestTxs.push(
+      api.tx.fileSystem.issueStorageRequest(
+        bucketId,
+        location,
+        fingerprint,
+        file_size,
+        mspId ?? ShConsts.DUMMY_MSP_ID,
+        [ShConsts.NODE_INFOS.user.expectedPeerId],
+        replicationTargetToUse
+      )
+    );
+  }
+
+  // Seal all storage requests in a single block
+  await sealBlock(api, storageRequestTxs, localOwner, undefined, undefined, finaliseBlock);
+
+  // Wait for MSP to store all files (if mspApi is provided)
+  if (mspApi) {
+    for (const fileKey of fileKeys) {
+      await waitFor({
+        lambda: async () =>
+          (await mspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
+      });
+    }
+  }
+
+  // Wait for MSP and BSP to catch up to the tip of the chain
+  if (mspApi) {
+    await api.wait.nodeCatchUpToChainTip(mspApi);
+  }
+  if (bspApi) {
+    await api.wait.nodeCatchUpToChainTip(bspApi);
+  }
+
+  // Wait for all BSP volunteers to appear in tx pool (if bspApi is provided)
+  if (bspApi) {
+    await api.wait.bspVolunteerInTxPool(fileKeys.length);
+  }
+
+  // Wait for MSP acceptance and/or BSP stored confirmations (if APIs are provided)
+  // MSP batches extrinsics, so we need to iteratively seal blocks and count events
+  let totalAcceptance = 0;
+  let totalConfirmations = 0;
+  const expectMspAcceptance = mspApi !== undefined;
+  const expectBspConfirmations = bspApi !== undefined;
+
+  if (expectMspAcceptance || expectBspConfirmations) {
+    for (
+      let attempt = 0;
+      attempt < maxAttempts &&
+      ((expectMspAcceptance && totalAcceptance < fileKeys.length) ||
+        (expectBspConfirmations && totalConfirmations < fileKeys.length));
+      attempt++
+    ) {
+      // Wait for MSP response and/or BSP stored event, depending on what's expected
+      // Wait up to 5 seconds for each process, giving time for both to run.
+      // Try waits sequentially, only fail if none succeed (all time out)
+      let mspFound = false;
+      let bspFound = false;
+
+      if (expectMspAcceptance) {
+        try {
+          await api.wait.mspResponseInTxPool(1);
+          mspFound = true;
+        } catch {}
+      }
+
+      if (expectBspConfirmations) {
+        try {
+          await api.wait.bspStored({
+            sealBlock: false,
+            timeoutMs: 3000
+          });
+          bspFound = true;
+        } catch {}
+      }
+
+      const { events } = await api.block.seal({
+        signer: localOwner,
+        finaliseBlock: finaliseBlock
+      });
+
+      if (mspFound && expectMspAcceptance) {
+        const acceptEvents = await api.assert.eventMany(
+          "fileSystem",
+          "MspAcceptedStorageRequest",
+          events
+        );
+
+        // Count total MspAcceptedStorageRequest events
+        totalAcceptance += acceptEvents.length;
+      }
+
+      if (bspFound && expectBspConfirmations) {
+        // Check if BSP confirmed storing events are present
+        const confirmEvents = await api.assert.eventMany(
+          "fileSystem",
+          "BspConfirmedStoring",
+          events
+        );
+
+        // Count total file keys confirmed in all BspConfirmedStoring events
+        for (const eventRecord of confirmEvents) {
+          if (api.events.fileSystem.BspConfirmedStoring.is(eventRecord.event)) {
+            totalConfirmations += eventRecord.event.data.confirmedFileKeys.length;
+          }
+        }
+      }
+    }
+
+    if (expectMspAcceptance) {
+      assert.strictEqual(
+        totalAcceptance,
+        fileKeys.length,
+        `Expected ${fileKeys.length} MSP acceptance, but got ${totalAcceptance}`
+      );
+    }
+
+    if (expectBspConfirmations) {
+      assert.strictEqual(
+        totalConfirmations,
+        fileKeys.length,
+        `Expected ${fileKeys.length} BSP confirmations, but got ${totalConfirmations}`
+      );
+    }
+  }
+
+  // Verify files are in BSP and/or MSP forests or file storages (depending on which APIs are provided)
+
+  await waitFor({
+    lambda: async () => {
+      for (let index = 0; index < fileKeys.length; index++) {
+        const fileKey = fileKeys[index];
+        const bucketId = bucketIds[index];
+
+        // Check file IS in BSP forest and file storage (if bspApi is provided)
+        if (bspApi) {
+          const bspForestResult = await bspApi.rpc.storagehubclient.isFileInForest(null, fileKey);
+          if (!bspForestResult.isTrue) {
+            return false;
+          }
+
+          const bspFileStorageResult =
+            await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey);
+          if (!bspFileStorageResult.isFileFound) {
+            return false;
+          }
+        }
+
+        // Check file IS in MSP forest and file storage (if mspApi is provided)
+        if (mspApi) {
+          const mspForestResult = await mspApi.rpc.storagehubclient.isFileInForest(
+            bucketId,
+            fileKey
+          );
+          if (!mspForestResult.isTrue) {
+            return false;
+          }
+
+          const mspFileStorageResult =
+            await mspApi.rpc.storagehubclient.isFileInFileStorage(fileKey);
+          if (!mspFileStorageResult.isFileFound) {
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+  });
+
+  return {
+    fileKeys,
+    bucketIds,
+    locations,
+    fingerprints,
+    fileSizes
+  };
 };

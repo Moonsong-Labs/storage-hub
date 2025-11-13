@@ -5,6 +5,7 @@ import {
   type FileMetadata,
   shUser,
   sleep,
+  type SqlClient,
   waitFor
 } from "../../../util";
 
@@ -14,17 +15,30 @@ await describeMspNet(
     initialised: true,
     indexer: true,
     fisherman: true,
-    indexerMode: "fishing"
+    indexerMode: "fishing",
+    standaloneIndexer: true
   },
-  ({ before, createUserApi, createBspApi, createMsp1Api, it, getLaunchResponse }) => {
+  ({
+    before,
+    createUserApi,
+    createBspApi,
+    createMsp1Api,
+    createFishermanApi,
+    it,
+    getLaunchResponse,
+    createSqlClient,
+    createIndexerApi
+  }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
+    let sql: SqlClient;
 
     const bucketId1 = "cloud-bucket-1";
     const bucketId2 = "cloud-bucket-2";
     let file1: FileMetadata;
     let file2: FileMetadata;
+    let indexerApi: EnrichedBspApi;
 
     // Helper to build and sign a file deletion intention
     const buildSignedDelete = (fileKey: string) => {
@@ -43,9 +57,17 @@ await describeMspNet(
       userApi = await createUserApi();
       bspApi = await createBspApi();
       const maybeMspApi = await createMsp1Api();
+      sql = createSqlClient();
 
       assert(maybeMspApi, "MSP API not available");
       mspApi = maybeMspApi;
+
+      assert(createFishermanApi, "Fisherman API not available");
+      await createFishermanApi();
+
+      assert(createIndexerApi, "Indexer API not available");
+      indexerApi = await createIndexerApi();
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
     });
 
     it("Network launches and can be queried", async () => {
@@ -229,68 +251,73 @@ await describeMspNet(
         signer: shUser
       });
 
-      // Fisherman submits delete_files extrinsics (MSP + BSP)
-      await userApi.assert.extrinsicPresent({
-        method: "deleteFiles",
-        module: "fileSystem",
-        checkTxPool: true,
-        assertLength: 2 // 1 for MSP and 1 for BSP
-      });
-      const block = await userApi.block.seal();
+      // Finalize the block on the indexer node and wait for the indexer to process the block
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
-      // Verify file removed from first bucket's forest
-      await waitFor({
-        lambda: async () =>
-          (await mspApi.rpc.storagehubclient.isFileInForest(file1.bucketId, file1.fileKey)).isFalse
-      });
-
-      // Finalising block in MSP node to trigger the event to delete the file.
-      // First we make sure the MSP is caught up to the block.
-      // Actually, it should trigger, but the file still shouldn't be deleted.
-      await mspApi.wait.nodeCatchUpToChainTip(userApi);
-      await mspApi.block.finaliseBlock(block.blockReceipt.blockHash.toString());
-
-      // Verify that the file metadata from the first file was removed from
-      // the file storage of the MSP, meaning that it should respond that this
-      // fileKey is not in the file storage.
-      await waitFor({
-        lambda: async () =>
-          (await mspApi.rpc.storagehubclient.isFileInFileStorage(file1.fileKey)).isFileNotFound
+      // Wait for fisherman to process the file deletions
+      await userApi.fisherman.retryableWaitAndVerifyBatchDeletions({
+        blockProducerApi: userApi,
+        deletionType: "User",
+        expectExt: 2,
+        userApi,
+        bspApi,
+        expectedBspCount: 1,
+        mspApi: mspApi,
+        expectedBucketCount: 1,
+        maxRetries: 3
       });
 
-      // But verify MSP still has the file in file storage via the second file key,
-      // meaning that for that second file key it has both the file metadata and the file content
-      // (which was the same file content as the first file)
-      await waitFor({
-        lambda: async () =>
-          (await mspApi.rpc.storagehubclient.isFileInFileStorage(file2.fileKey)).isFileFound
-      });
+      // Non-producer nodes must explicitly finalize imported blocks to trigger file deletion
+      // Producer node (user) has finalized blocks, but BSP and MSP must finalize locally
+      const finalisedBlockHash = await userApi.rpc.chain.getFinalizedHead();
 
-      // Verify file removed from BSP's forest
-      await waitFor({
-        lambda: async () =>
-          (await bspApi.rpc.storagehubclient.isFileInForest(null, file1.fileKey)).isFalse
-      });
+      await bspApi.wait.blockImported(finalisedBlockHash.toString());
+      await bspApi.block.finaliseBlock(finalisedBlockHash.toString());
 
-      // Finalising block in BSP node to trigger the event to delete the file.
-      // First we make sure the BSP is caught up to the block.
-      await bspApi.wait.nodeCatchUpToChainTip(userApi);
-      await bspApi.block.finaliseBlock(block.blockReceipt.blockHash.toString());
+      await mspApi.wait.blockImported(finalisedBlockHash.toString());
+      await mspApi.block.finaliseBlock(finalisedBlockHash.toString());
 
-      // Verify that the file metadata from the first file was removed from
-      // the file storage of the BSP, meaning that it should respond that this
-      // fileKey is not in the file storage.
+      // Verify that the file metadata from the second file was removed from
+      // the file storage of the BSP and MSP, meaning that it should respond that this
+      // fileKey is not in the file storage. Now the file content should have
+      // been deleted from the file storage as well.
       await waitFor({
-        lambda: async () =>
-          (await bspApi.rpc.storagehubclient.isFileInFileStorage(file1.fileKey)).isFileNotFound
-      });
+        lambda: async () => {
+          // Check file is NOT in BSP forest
+          const bspForestResult = await bspApi.rpc.storagehubclient.isFileInForest(
+            null,
+            file1.fileKey
+          );
+          if (bspForestResult.isTrue) {
+            return false;
+          }
 
-      // But verify BSP still has the file in file storage via the second file key,
-      // meaning that for that second file key it has both the file metadata and the file content
-      // (which was the same file content as the first file)
-      await waitFor({
-        lambda: async () =>
-          (await bspApi.rpc.storagehubclient.isFileInFileStorage(file2.fileKey)).isFileFound
+          // Check file is NOT in BSP file storage
+          const bspFileStorageResult = await bspApi.rpc.storagehubclient.isFileInFileStorage(
+            file1.fileKey
+          );
+          if (bspFileStorageResult.isFileFound) {
+            return false;
+          }
+
+          // Check file is NOT in MSP forest
+          const mspForestResult = await mspApi.rpc.storagehubclient.isFileInForest(
+            file2.bucketId,
+            file1.fileKey
+          );
+          if (mspForestResult.isTrue) {
+            return false;
+          }
+
+          // Check file is NOT in MSP file storage
+          const mspFileStorageResult = await mspApi.rpc.storagehubclient.isFileInFileStorage(
+            file1.fileKey
+          );
+          if (mspFileStorageResult.isFileFound) {
+            return false;
+          }
+          return true;
+        }
       });
     });
 
@@ -338,51 +365,75 @@ await describeMspNet(
         signer: shUser
       });
 
-      await userApi.assert.extrinsicPresent({
-        method: "deleteFiles",
-        module: "fileSystem",
-        checkTxPool: true,
-        assertLength: 2 // 1 for MSP and 1 for BSP
-      });
-      const block = await userApi.block.seal({ finaliseBlock: true });
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
-      // Wait until MSP file storage no longer contains the file
-      await waitFor({
-        lambda: async () =>
-          (await mspApi.rpc.storagehubclient.isFileInForest(file2.bucketId, file2.fileKey)).isFalse
+      await userApi.fisherman.retryableWaitAndVerifyBatchDeletions({
+        blockProducerApi: userApi,
+        deletionType: "User",
+        expectExt: 2,
+        userApi,
+        bspApi,
+        expectedBspCount: 1,
+        mspApi: mspApi,
+        expectedBucketCount: 1,
+        maxRetries: 3
       });
 
-      // Finalising block in MSP node to trigger the event to delete the file.
-      // First we make sure the MSP is caught up to the block.
-      await mspApi.wait.nodeCatchUpToChainTip(userApi);
-      await mspApi.block.finaliseBlock(block.blockReceipt.blockHash.toString());
+      // Non-producer nodes must explicitly finalize imported blocks to trigger file deletion
+      // Producer node (user) has finalized blocks, but BSP and MSP must finalize locally
+      const finalisedBlockHash = await userApi.rpc.chain.getFinalizedHead();
+
+      await bspApi.wait.blockImported(finalisedBlockHash.toString());
+      await bspApi.block.finaliseBlock(finalisedBlockHash.toString());
+
+      await mspApi.wait.blockImported(finalisedBlockHash.toString());
+      await mspApi.block.finaliseBlock(finalisedBlockHash.toString());
 
       // Verify that the file metadata from the second file was removed from
-      // the file storage of the MSP, meaning that it should respond that this
+      // the file storage of the BSP and MSP, meaning that it should respond that this
       // fileKey is not in the file storage. Now the file content should have
       // been deleted from the file storage as well.
+
+      // Check file is NOT in BSP forest
       await waitFor({
-        lambda: async () =>
-          (await mspApi.rpc.storagehubclient.isFileInFileStorage(file2.fileKey)).isFileNotFound
+        lambda: async () => {
+          const bspForestResult = await bspApi.rpc.storagehubclient.isFileInForest(
+            null,
+            file2.fileKey
+          );
+          return !bspForestResult.isTrue;
+        }
       });
 
-      // Verify file removed from BSP's forest
+      // Check file is NOT in BSP file storage
       await waitFor({
-        lambda: async () =>
-          (await bspApi.rpc.storagehubclient.isFileInForest(null, file2.fileKey)).isFalse
+        lambda: async () => {
+          const bspFileStorageResult = await bspApi.rpc.storagehubclient.isFileInFileStorage(
+            file2.fileKey
+          );
+          return !bspFileStorageResult.isFileFound;
+        }
       });
 
-      // Finalising block in BSP node to trigger the event to delete the file.
-      await bspApi.wait.nodeCatchUpToChainTip(userApi);
-      await bspApi.block.finaliseBlock(block.blockReceipt.blockHash.toString());
-
-      // Verify that the file metadata from the second file was removed from
-      // the file storage of the BSP, meaning that it should respond that this
-      // fileKey is not in the file storage. Now the file content should have
-      // been deleted from the file storage as well.
+      // Check file is NOT in MSP forest
       await waitFor({
-        lambda: async () =>
-          (await bspApi.rpc.storagehubclient.isFileInFileStorage(file2.fileKey)).isFileNotFound
+        lambda: async () => {
+          const mspForestResult = await mspApi.rpc.storagehubclient.isFileInForest(
+            file2.bucketId,
+            file2.fileKey
+          );
+          return !mspForestResult.isTrue;
+        }
+      });
+
+      // Check file is NOT in MSP file storage
+      await waitFor({
+        lambda: async () => {
+          const mspFileStorageResult = await mspApi.rpc.storagehubclient.isFileInFileStorage(
+            file2.fileKey
+          );
+          return !mspFileStorageResult.isFileFound;
+        }
       });
     });
 
