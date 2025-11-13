@@ -414,6 +414,8 @@ export type TestOptions = {
   fisherman?: boolean;
   /** If true, runs backend service */
   backend?: boolean;
+  /** If true, enable Pending Transactions Postgres DB for MSP 1 during tests (fullnet only) */
+  pendingTxDb?: boolean;
   /**
    * Set the runtime type to use
    * 'parachain' - Polkadot parachain runtime (default)

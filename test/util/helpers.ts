@@ -103,6 +103,10 @@ export const cleanupEnvironment = async (verbose = false) => {
     container.Names.some((name) => name.includes("storage-hub-sh-indexer-postgres-1"))
   );
 
+  const pendingPostgresContainer = allContainers.find((container) =>
+    container.Names.some((name) => name.includes("storage-hub-sh-pending-postgres-1"))
+  );
+
   const copypartyContainers = allContainers.filter((container) =>
     container.Names.some((name) => name.includes("storage-hub-sh-copyparty"))
   );
@@ -152,6 +156,13 @@ export const cleanupEnvironment = async (verbose = false) => {
     promises.push(docker.getContainer(postgresContainer.Id).remove({ force: true }));
   } else {
     verbose && console.log("No postgres container found, skipping");
+  }
+
+  if (pendingPostgresContainer) {
+    console.log("Stopping pending postgres container");
+    promises.push(docker.getContainer(pendingPostgresContainer.Id).remove({ force: true }));
+  } else {
+    verbose && console.log("No pending postgres container found, skipping");
   }
 
   if (copypartyContainers.length > 0) {

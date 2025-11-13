@@ -162,7 +162,8 @@ export async function describeMspNet<
           ...fullNetConfig,
           toxics: options?.toxics,
           initialised: options?.initialised,
-          runtimeType: options?.runtimeType
+          runtimeType: options?.runtimeType,
+          pendingTxDb: options?.pendingTxDb
         });
         launchEventEmitter.emit("networkLaunched", launchResponse);
 

@@ -271,6 +271,13 @@ export class NetworkLauncher {
       }
     }
 
+    // If pending DB is enabled, add CLI arg to MSP 1 only
+    if (this.config.pendingTxDb && this.type === "fullnet") {
+      composeYaml.services["sh-msp-1"].command.push(
+        "--pending-db-url=postgresql://postgres:postgres@storage-hub-sh-pending-postgres-1:5432/pending_tx"
+      );
+    }
+
     const cwd = path.resolve(process.cwd(), "..", "docker");
     const entries = Object.entries(composeYaml.services).map(([key, value]: any) => {
       let remappedValue: any;
@@ -351,7 +358,6 @@ export class NetworkLauncher {
     process.env.BSP_PEER_ID = bspPeerId;
 
     // Optional: start pending tx Postgres first (so MSP can connect on boot)
-    let pendingDbUrl: string | undefined;
     if (this.type === "fullnet" && this.config.pendingTxDb) {
       await compose.upOne("sh-pending-postgres", {
         cwd,
@@ -359,8 +365,6 @@ export class NetworkLauncher {
         log: verbose
       });
       await this.waitForPendingDbReady("sh-pending-postgres", cwd, tmpFile);
-      pendingDbUrl =
-        "postgresql://postgres:postgres@storage-hub-sh-pending-postgres-1:5432/pending_tx";
     }
 
     if (this.type === "fullnet") {
@@ -390,15 +394,6 @@ export class NetworkLauncher {
           mspId,
           `Service ${mspService} not msp-1/2, either add to hardcoded list or make this dynamic`
         );
-
-        // If pending DB is enabled, add CLI arg to MSP 1 only
-        if (pendingDbUrl && mspService === "sh-msp-1") {
-          const cmd: string[] = this.composeYaml.services[mspService].command || [];
-          if (!cmd.some((c: string) => c.startsWith("--pending-db-url"))) {
-            cmd.push(`--pending-db-url=${pendingDbUrl}`);
-          }
-          this.composeYaml.services[mspService].command = cmd;
-        }
 
         await compose.upOne(mspService, {
           cwd: cwd,
