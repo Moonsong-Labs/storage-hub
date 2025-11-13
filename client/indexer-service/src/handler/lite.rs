@@ -219,7 +219,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         &'b self,
         conn: &mut DbConnection<'a>,
         event: &pallet_proofs_dealer::Event<Runtime>,
-        _block_hash: Runtime::Hash,
+        block_hash: Runtime::Hash,
     ) -> Result<(), diesel::result::Error> {
         let should_index = match event {
             // All events return true for now - ready for future filtering logic
@@ -238,7 +238,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         };
 
         if should_index {
-            self.index_proofs_dealer_event(conn, event).await?;
+            self.index_proofs_dealer_event(conn, event, block_hash)
+                .await?;
         }
 
         Ok(())

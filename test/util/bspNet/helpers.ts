@@ -175,6 +175,18 @@ export const createCheckBucket = async (api: EnrichedBspApi, bucketName: string)
   return newBucketEventDataBlob;
 };
 
+/**
+ * Converts a hex string to a Buffer.
+ * Handles hex strings with or without '0x' prefix.
+ *
+ * @param hex - The hex string to convert
+ * @returns Buffer representation of the hex string
+ */
+export const hexToBuffer = (hex: string): Buffer => {
+  const cleanHex = hex.startsWith("0x") ? hex.slice(2) : hex;
+  return Buffer.from(cleanHex, "hex");
+};
+
 export const addBsp = async (
   api: ApiPromise,
   bspKey: KeyringPair,

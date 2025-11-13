@@ -1,5 +1,5 @@
 use codec::{Decode, Encode};
-use log::{error, info};
+use log::{debug, error, info};
 use sp_trie::{recorder::Recorder, MemoryDB, Trie, TrieDBBuilder, TrieLayout, TrieMut};
 use std::collections::{HashMap, HashSet};
 use trie_db::TrieDBMutBuilder;
@@ -338,37 +338,43 @@ where
             .get_mut(file_key)
             .ok_or(FileStorageWriteError::FileDoesNotExist)?;
 
-        file_data.write_chunk(chunk_id, data)?;
+        match file_data.write_chunk(chunk_id, data) {
+            Ok(()) => {
+                // Chunk was successfully inserted into shared trie
+                debug!(target: LOG_TARGET, "Chunk {:?} successfully written to shared trie for file key {:?}", chunk_id, file_key);
+            }
+            Err(FileStorageWriteError::FileChunkAlreadyExists) => {
+                // Chunk already exists in shared trie - no need to update trie, just track progress
+                debug!(target: LOG_TARGET, "Chunk {:?} already exists in shared trie for file key {:?}, incrementing count for progress tracking", chunk_id, file_key);
+            }
+            Err(other) => {
+                error!(target: LOG_TARGET, "Error while writing chunk {:?} of file key {:?}: {:?}", chunk_id, file_key, other);
+                return Err(FileStorageWriteError::FailedToInsertFileChunk);
+            }
+        }
 
-        let metadata = self.metadata.get(file_key).expect(
-            format!("Key {:?} already associated with File Trie, but no File Metadata. Possible inconsistency between them.",
-            file_key
-        )
-            .as_str(),
-        );
-
-        // Increment chunk count
+        // Always increment chunk count for this file_key's progress tracking
+        // This happens regardless of whether the chunk was newly inserted or already existed
         let current_count = self
             .chunk_counts
             .get(file_key)
             .ok_or(FileStorageWriteError::FailedToGetStoredChunksCount)?;
+
         let new_count = current_count
             .checked_add(1)
             .ok_or(FileStorageWriteError::ChunkCountOverflow)?;
+
         self.chunk_counts.insert(*file_key, new_count);
 
-        // Check if we have all the chunks for the file using the count
-        if metadata.chunks_count() != new_count {
-            return Ok(FileStorageWriteOutcome::FileIncomplete);
+        // Check if file is complete using the helper method (only once at the end)
+        match self.is_file_complete(file_key) {
+            Ok(true) => Ok(FileStorageWriteOutcome::FileComplete),
+            Ok(false) => Ok(FileStorageWriteOutcome::FileIncomplete),
+            Err(e) => {
+                error!(target: LOG_TARGET, "Failed to check file completion status for file key {:?}: {:?}", file_key, e);
+                Err(FileStorageWriteError::FailedToCheckFileCompletion(e))
+            }
         }
-
-        // If we have all the chunks, check if the file metadata fingerprint and the file trie
-        // root matches.
-        if metadata.fingerprint() != file_data.get_root().as_ref() {
-            return Err(FileStorageWriteError::FingerprintAndStoredFileMismatch);
-        }
-
-        Ok(FileStorageWriteOutcome::FileComplete)
     }
 
     fn delete_files_with_prefix(&mut self, prefix: &[u8; 32]) -> Result<(), FileStorageError>

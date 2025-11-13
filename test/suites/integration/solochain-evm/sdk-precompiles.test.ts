@@ -15,7 +15,7 @@ import {
 import { MspClient } from "@storagehub-sdk/msp-client";
 import { createPublicClient, createWalletClient, defineChain, getAddress, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { describeMspNet, type EnrichedBspApi, ShConsts } from "../../../util";
+import { describeMspNet, type EnrichedBspApi, ShConsts, type SqlClient } from "../../../util";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import { ALITH_PRIVATE_KEY } from "../../../util/evmNet/keyring";
 
@@ -26,15 +26,18 @@ await describeMspNet(
     runtimeType: "solochain",
     indexer: true,
     backend: true,
-    fisherman: true
+    fisherman: true,
+    standaloneIndexer: true
   },
-  ({ before, it, createUserApi, createMsp1Api }) => {
+  ({ before, it, createUserApi, createMsp1Api, createSqlClient, createIndexerApi }) => {
     let userApi: EnrichedBspApi;
     let msp1Api: EnrichedBspApi;
+    let indexerApi: EnrichedBspApi;
     let storageHubClient: InstanceType<typeof StorageHubClient>;
     let publicClient: ReturnType<typeof createPublicClient>;
     let walletClient: ReturnType<typeof createWalletClient>;
     let account: ReturnType<typeof privateKeyToAccount>;
+    let sql: SqlClient;
     let bucketId: string;
     let fileManager: FileManager;
     let fileKey: H256;
@@ -52,6 +55,7 @@ await describeMspNet(
       } else {
         throw new Error("MSP API for first MSP not available");
       }
+      sql = createSqlClient();
 
       // Set up the StorageHub SDK client using viem
       const rpcUrl = `http://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`;
@@ -105,6 +109,10 @@ await describeMspNet(
       // Set up the authentication with the MSP backend
       const siweSession = await mspClient.auth.SIWE(walletClient);
       sessionToken = siweSession.token;
+
+      assert(createIndexerApi, "Indexer API not available");
+      indexerApi = await createIndexerApi();
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
     });
 
     it("Postgres DB is ready", async () => {
@@ -303,6 +311,8 @@ await describeMspNet(
         "Bucket mspId should match expected MSP ID"
       );
 
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
+
       // Also verify through SDK / MSP backend endpoints
       const listedBuckets = await mspClient.buckets.listBuckets();
       assert(
@@ -383,6 +393,9 @@ await describeMspNet(
         fileSize.toString(),
         "Storage request fileSize should match expected fileSize"
       );
+
+      // Wait for indexer to process the storage request so the file record exists in DB
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
     });
 
     it("Should upload the file to the MSP through the backend using the SDK's StorageHubClient", async () => {
@@ -449,6 +462,8 @@ await describeMspNet(
 
       // Ensure the file is now stored in the MSP's file storage
       await msp1Api.wait.fileStorageComplete(hexFileKey);
+
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
       // Ensure file tree and file info are available via backend for this bucket
       const fileTree = (await mspClient.buckets.getFiles(bucketId)).tree;
@@ -532,45 +547,29 @@ await describeMspNet(
       // Verify the deletion request was enqueued on-chain
       await userApi.assert.eventPresent("fileSystem", "FileDeletionRequested");
 
-      // Wait for the fisherman node's delete_files extrinsic to be in the tx pool and seal it
-      await userApi.wait.waitForTxInPool({
-        module: "fileSystem",
-        method: "deleteFiles"
-      });
-      const deleteFileBlock = await userApi.block.seal();
+      // Finalize the block on the indexer node and wait for the indexer to process the block
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
-      // Verify that the `BucketFileDeletionsCompleted` event was emitted and it contains the correct file key
-      const bucketFileDeletionsCompletedEvent = await userApi.assert.eventPresent(
-        "fileSystem",
-        "BucketFileDeletionsCompleted"
-      );
-      assert(bucketFileDeletionsCompletedEvent, "BucketFileDeletionsCompleted event not found");
-      const bucketFileDeletionsCompletedEventData =
-        userApi.events.fileSystem.BucketFileDeletionsCompleted.is(
-          bucketFileDeletionsCompletedEvent.event
-        ) && bucketFileDeletionsCompletedEvent.event.data;
-      assert(
-        bucketFileDeletionsCompletedEventData,
-        "BucketFileDeletionsCompleted event data not found"
-      );
-      strictEqual(
-        bucketFileDeletionsCompletedEventData.fileKeys.length,
-        1,
-        "Should have deleted 1 file"
-      );
-      strictEqual(
-        bucketFileDeletionsCompletedEventData.fileKeys[0].toString(),
-        fileKey.toHex(),
-        "File key should match the deleted file key"
-      );
+      // Wait for fisherman to process the file deletions
+      await userApi.fisherman.retryableWaitAndVerifyBatchDeletions({
+        blockProducerApi: userApi,
+        deletionType: "User",
+        expectExt: 2,
+        userApi,
+        mspApi: msp1Api,
+        expectedBucketCount: 1,
+        maxRetries: 3
+      });
 
       // Wait until the MSP detects the on-chain deletion and updates its local bucket forest
       await msp1Api.wait.mspBucketFileDeletionCompleted(fileKey.toHex(), bucketId);
 
-      // Finalise the block containing the `BucketFileDeletionsCompleted` event in the MSP node
-      // so that the `BucketFileDeletionsCompleted` event is finalised on-chain and the MSP deletes the
-      // file from its file storage.
-      await msp1Api.rpc.engine.finalizeBlock(deleteFileBlock.blockReceipt.blockHash);
+      // Non-producer nodes must explicitly finalize imported blocks to trigger file deletion
+      // Producer node (user) has finalized blocks, but BSP and MSP must finalize locally
+      const finalisedBlockHash = await userApi.rpc.chain.getFinalizedHead();
+
+      await msp1Api.wait.blockImported(finalisedBlockHash.toString());
+      await msp1Api.block.finaliseBlock(finalisedBlockHash.toString());
 
       // Wait until the MSP detects the now finalised deletion and correctly deletes the file from its file storage
       await msp1Api.wait.fileDeletionFromFileStorage(fileKey.toHex());

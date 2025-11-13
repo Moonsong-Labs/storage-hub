@@ -210,13 +210,13 @@ where
                 .as_ref()
                 .expect("Task spawner is not set."),
             client,
-            fisherman_options.incomplete_sync_max,
-            fisherman_options.incomplete_sync_page_size,
-            fisherman_options.sync_mode_min_blocks_behind,
+            fisherman_options.batch_interval_seconds,
+            fisherman_options.batch_deletion_limit,
         )
         .await;
 
         self.fisherman = Some(fisherman_service_handle);
+
         self
     }
 
@@ -694,7 +694,10 @@ where
                 bsp_submit_proof: Default::default(),
                 blockchain_service: self.blockchain_service_config.unwrap_or_default(),
             },
-            self.indexer_db_pool.clone(),
+            Some(
+                self.indexer_db_pool
+                    .expect("Indexer DB pool must be set for Fisherman role"),
+            ),
             // Not needed by the fisherman service
             self.peer_manager.expect("Peer Manager not set"),
             self.fisherman,
@@ -869,13 +872,17 @@ pub struct FishermanOptions {
     /// Deserializing as "fisherman_database_url" to match the expected field name in the toml file.
     #[serde(rename = "fisherman_database_url")]
     pub database_url: String,
-    /// Maximum number of incomplete storage requests to process after the first block processed coming out of syncing mode.
-    pub incomplete_sync_max: u32,
-    /// Page size for incomplete storage request pagination.
-    pub incomplete_sync_page_size: u32,
-    /// The minimum number of blocks behind the current best block to consider the fisherman out of sync.
-    pub sync_mode_min_blocks_behind: u32,
+    /// Duration between batch deletion processing cycles (in seconds).
+    pub batch_interval_seconds: u64,
+    /// Maximum number of files to process per batch deletion cycle.
+    #[serde(default = "default_batch_deletion_limit")]
+    pub batch_deletion_limit: u64,
     /// Whether the node is running in maintenance mode.
     #[serde(default)]
     pub maintenance_mode: bool,
+}
+
+/// Default value for batch deletion limit.
+fn default_batch_deletion_limit() -> u64 {
+    1000
 }
