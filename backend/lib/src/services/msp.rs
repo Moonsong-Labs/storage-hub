@@ -5,7 +5,7 @@
 use std::{collections::HashSet, sync::Arc};
 
 use axum_extra::extract::multipart::Field;
-use bigdecimal::RoundingMode;
+use bigdecimal::{BigDecimal, RoundingMode};
 use codec::{Decode, Encode};
 use sc_network::PeerId;
 use serde::{Deserialize, Serialize};
@@ -37,7 +37,7 @@ use crate::{
     models::{
         buckets::{Bucket, FileTree},
         files::{DistributeResponse, FileInfo, FileUploadResponse},
-        msp_info::{InfoResponse, StatsResponse, ValuePropositionWithId},
+        msp_info::{Capacity, InfoResponse, StatsResponse, ValuePropositionWithId},
         payment::{PaymentStreamInfo, PaymentStreamsResponse},
     },
 };
@@ -132,6 +132,7 @@ impl MspService {
                 Error::BadRequest(format!("Failed to get MSP multiaddresses: {}", e))
             })?;
 
+        // TODO: fetch from RPC the appropriate details
         Ok(InfoResponse {
             client: "storagehub-node v1.0.0".to_string(),
             version: "StorageHub MSP v0.1.0".to_string(),
@@ -149,42 +150,38 @@ impl MspService {
     pub async fn get_stats(&self) -> Result<StatsResponse, Error> {
         debug!(target: "msp_service::get_stats", "Getting MSP stats");
 
-        let info = self.rpc.get_msp_info(self.msp_id).await.map_err(|e| {
-            Error::BadRequest(format!("Failed to retrieve MSP stats from RPC: {e}"))
-        })?;
-        tracing::debug!(?info, "msp stats");
+        let info = self
+            .rpc
+            .get_msp_info(self.msp_id)
+            .await
+            .map_err(|e| Error::BadRequest(format!("Failed to retrieve MSP stats from RPC: {e}")))?
+            .ok_or(Error::BadRequest(
+                "Unable to retrieve MSP info: MSP not found".to_string(),
+            ))?;
 
-        todo!()
-        // let available_capacity =
-        //     self.rpc
-        //         .get_available_capacity(self.msp_id)
-        //         .await
-        //         .map_err(|e| {
-        //             Error::BadRequest(format!(
-        //                 "Failed to retrieve available capacity from RPC: {e}"
-        //             ))
-        //         })?;
-        // let total_capacity = self
-        //     .postgres
-        //     .get_msp(&self.msp_id)
-        //     .await
-        //     .map_err(|e| {
-        //         Error::BadRequest(format!("Failed to retrieve MSP information from DB: {e}"))
-        //     })?
-        //     .capacity;
-        // let used_capacity = &total_capacity - &available_capacity;
+        let active_users = self
+            .rpc
+            .get_number_of_active_users(self.msp_id)
+            .await
+            .map_err(|e| {
+                Error::BadRequest(format!(
+                    "Field to retrieve number of active users from RPC: {e}"
+                ))
+            })?;
 
-        // Ok(StatsResponse {
-        //     capacity: Capacity {
-        //         total_bytes: total_capacity.to_string(),
-        //         available_bytes: available_capacity.to_string(),
-        //         used_bytes: used_capacity.to_string(),
-        //     },
-        //     active_users: 152, // PaymentStreamsApi.get_users_of_payment_streams_of_provider / db
-        //     last_capacity_change: 123, // unavailable? (only for BSP)
-        //     value_props_amount: 42, // StorageProvidersApi.query_value_proposition_for_msp / db
-        //     buckets_amount: 1024, // StorageProvidersApi.query_buckets_for_msp / db
-        // })
+        debug!(?info, %active_users, "msp stats");
+
+        Ok(StatsResponse {
+            capacity: Capacity {
+                total_bytes: BigDecimal::from(info.capacity).to_string(),
+                available_bytes: BigDecimal::from(info.capacity - info.capacity_used).to_string(),
+                used_bytes: BigDecimal::from(info.capacity_used).to_string(),
+            },
+            active_users: active_users as u64,
+            last_capacity_change: BigDecimal::from(info.last_capacity_change).to_string(),
+            value_props_amount: BigDecimal::from(info.amount_of_value_props).to_string(),
+            buckets_amount: BigDecimal::from(info.amount_of_buckets).to_string(),
+        })
     }
 
     /// Get MSP value propositions

@@ -16,6 +16,7 @@ use tokio::{
 };
 use tracing::{debug, error};
 
+use frame_support::storage::StoragePrefixedMap;
 use shc_common::types::FileMetadata;
 use shc_rpc::{
     GetFileFromFileStorageResult, GetValuePropositionsResult, RpcProviderId, SaveFileToDisk,
@@ -30,7 +31,7 @@ use crate::{
     },
     data::rpc::{
         connection::error::{RpcConnectionError, RpcResult},
-        methods, runtime_apis, state_queries, RpcConnection,
+        methods, runtime_apis, RpcConnection,
     },
     models::msp_info::{ValueProposition, ValuePropositionWithId},
     test_utils::random_bytes_32,
@@ -159,9 +160,9 @@ impl MockConnection {
                 let price = format!("0x{}", hex::encode(MOCK_PRICE_PER_GIGA_UNIT.encode()));
                 serde_json::json!(price)
             }
-            runtime_apis::AVAILABLE_CAPACITY => {
-                // SCALE-encoded DUMMY MSP capacity
-                serde_json::json!("0x006db3fc1f00000000")
+            runtime_apis::NUM_OF_USERS => {
+                // SCALE-encoded DUMMY MSP users list
+                serde_json::json!("0x040b17ca3a1454cd058b231090c6fd635dd348659a")
             }
             api => {
                 error!(api= %hex::encode(api), "no mock registered for requested runtime api");
@@ -185,7 +186,10 @@ impl MockConnection {
 
         match storage_key {
             // we just always return the same MSP for this query
-            msp if msp.starts_with(state_queries::MSP_INFO_KEY_PREFIX.as_slice()) => {
+            msp if msp.starts_with(
+                crate::runtime::MainStorageProvidersStorageMap::final_prefix().as_slice(),
+            ) =>
+            {
                 // this is some sample data returned by the RPC during tests
                 // it should be the SCALE-encoded MainStorageProvider for the solochain runtime
                 serde_json::json!("0x0000002000000000934c0300000000000449012f6970342f3137322e31382e302e332f7463702f33303335302f7032702f313244334b6f6f575355767a38514d35583474664161534c4572415a6a523270756f6a6f313670554c42487971544d474b744e5601000000000000000000000000000000010000000d0000004c31b93792ab99e2553bff747199b7a4951185b24c31b93792ab99e2553bff747199b7a4951185b20d000000")
@@ -328,11 +332,13 @@ impl RpcConnection for MockConnection {
             }
             methods::API_CALL => self.mock_runtime_apis(params).await,
             methods::STATE_QUERY => self.mock_state_queries(params).await,
-            _ => {
+            method => {
                 let responses = self.responses.read().await;
-                responses
+                let response = responses
                     .get(method)
-                    .cloned()
+                    .cloned();
+
+                response
                     .unwrap_or(serde_json::json!(null))
             }
         };

@@ -1,25 +1,18 @@
 //! StorageHub RPC client implementation
 
-use std::{future::Future, sync::Arc};
+use std::sync::Arc;
 
 use bigdecimal::BigDecimal;
+use codec::Decode;
 use jsonrpsee::core::traits::ToRpcParams;
 use serde::de::DeserializeOwned;
-use subxt::{
-    dynamic::{DecodedValueThunk, Value},
-    storage::Address,
-    utils::Yes,
-    OnlineClient, PolkadotConfig,
-};
 use tracing::debug;
 
-// use pallet_storage_providers::types::MainStorageProvider;
-// use sh_solochain_evm_runtime::Runtime;
 use shc_indexer_db::OnchainMspId;
 use shc_rpc::{
     GetFileFromFileStorageResult, GetValuePropositionsResult, RpcProviderId, SaveFileToDisk,
 };
-// use sp_core::{blake2_256, storage::StorageKey, twox_128};
+use sp_core::storage::StorageKey;
 
 use crate::data::rpc::{
     connection::error::{RpcConnectionError, RpcResult},
@@ -86,20 +79,32 @@ impl StorageHubRpcClient {
     ///
     /// # Arguments:
     /// - `key` is the storage key to attempt reading
-    /// - `transform` is a closure to transform the raw storage value returned by the API into the target type
-    pub async fn query_storage<K, F, FT, R>(&self, key: K, transform: F) -> RpcResult<Option<R>>
+    pub async fn query_storage<R>(&self, key: StorageKey) -> RpcResult<Option<R>>
     where
-        K: Address<Target = DecodedValueThunk, IsFetchable = Yes>,
-        FT: Future<Output = RpcResult<Option<R>>>,
-        F: Fn(Result<Option<K::Target>, subxt::Error>) -> FT,
+        R: Decode,
     {
-        //FIXME: replace Config for DH/SH one
-        let api =
-            OnlineClient::<PolkadotConfig>::from_rpc_client(Arc::clone(&self.connection)).await?;
+        let encoded = format!("0x{}", hex::encode(&key.0));
+        debug!(key = encoded, "reading storage");
 
-        let result = api.storage().at_latest().await?.fetch(&key).await;
+        let response = self
+            .call::<_, Option<String>>(methods::STATE_QUERY, jsonrpsee::rpc_params![encoded])
+            .await?;
 
-        transform(result).await
+        let Some(response) = response else {
+            return Ok(None);
+        };
+
+        // the RPC replies with scale-encoded response as a hex string
+        let response = hex::decode(response.trim_start_matches("0x")).map_err(|e| {
+            RpcConnectionError::Serialization(format!(
+                "RPC runtime API did not respond with a valid hex string: {}",
+                e.to_string()
+            ))
+        })?;
+
+        R::decode(&mut response.as_slice())
+            .map(Some)
+            .map_err(|e| RpcConnectionError::Serialization(e.to_string()))
     }
 
     /// Call a JSON-RPC method on the connected node
@@ -138,47 +143,28 @@ impl StorageHubRpcClient {
             .map(|price| price.into())
     }
 
-    /// Retrieve the current available capacity for given provider, in storage units
-    pub async fn get_available_capacity(&self, provider: OnchainMspId) -> RpcResult<BigDecimal> {
-        debug!(target: "rpc::client::get_available_capacity", "Runtime API: get_available_capacity");
+    /// Retrieve the current number of active users
+    pub async fn get_number_of_active_users(&self, provider: OnchainMspId) -> RpcResult<usize> {
+        debug!(target: "rpc::client::get_number_of_active_users", "Runtime API: get_users_of_payment_streams_of_provider");
 
-        self.call_runtime_api::<_, runtime_apis::AvailableCapacity>(
-            runtime_apis::AVAILABLE_CAPACITY,
+        self.call_runtime_api::<_, runtime_apis::NumOfUsers>(
+            runtime_apis::NUM_OF_USERS,
             provider.as_h256(),
         )
         .await
-        .map(|capacity| capacity.into())
+        .map(|users| users.len())
     }
 
     /// Retrieve the MSP information for the given provider
     ///
     /// This function will read into the chain state from the Provider pallet's MainStorageProviders map
-    // TODO: replace return value with proper typing from runtime
     pub async fn get_msp_info(
         &self,
         provider: OnchainMspId,
     ) -> RpcResult<Option<state_queries::MspInfo>> {
         debug!(target: "rpc::client::get_msp", provider = %provider, "State Query: get_msp_info");
-        let key = subxt::dynamic::storage(
-            state_queries::MSP_INFO_MODULE,
-            state_queries::MSP_INFO_METHOD,
-            vec![Value::from_bytes(provider.as_bytes())],
-        );
-
-        self.query_storage(key, |storage| async move {
-            let Some(_value) = storage?
-                .map(|storage| storage.to_value())
-                .transpose()
-                .map_err(subxt::Error::from)?
-            else {
-                return Ok(None);
-            };
-
-            //FIXME: convert to MspInfo
-
-            Ok(None)
-        })
-        .await
+        self.query_storage(state_queries::msp_info_key(provider))
+            .await
     }
 
     /// Returns whether the given `file_key` is expected to be received by the MSP node

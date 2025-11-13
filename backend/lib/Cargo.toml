@@ -13,10 +13,13 @@ axum-extra = { workspace = true }
 axum-jwt = { workspace = true }
 base64 = { workspace = true }
 bigdecimal = { workspace = true }
+cfg-if = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
+codec = { workspace = true }
 diesel = { workspace = true }
 diesel-async = { workspace = true }
 futures = { workspace = true }
+frame-support = { workspace = true }
 headers = { workspace = true }
 hex = { workspace = true }
 hex-literal = { workspace = true }
@@ -30,7 +33,6 @@ rustls-pemfile = { workspace = true }
 rustls-platform-verifier = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-subxt = { workspace = true, features = ["native", "jsonrpsee"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tokio-stream = { workspace = true }
@@ -40,15 +42,14 @@ tower-http = { workspace = true }
 tracing = { workspace = true }
 tracing-bunyan-formatter = { workspace = true }
 tracing-subscriber = { workspace = true }
+trie-db = { workspace = true }
 tokio-postgres = { workspace = true }
 tokio-postgres-rustls = { workspace = true }
 uuid = { version = "1.18", features = ["v7"] }
 
 # Workspace dependencies
-codec = { workspace = true }
 sc-network = { workspace = true }
 sc-network-types = { workspace = true }
-# sh-solochain-evm-runtime = { workspace = true, features = ["std"] }
 shc-common = { workspace = true, default-features = true }
 shc-file-manager = { workspace = true }
 shc-indexer-db = { workspace = true, default-features = true }
@@ -59,8 +60,10 @@ shp-types = { workspace = true }
 sp-core = { workspace = true }
 sp-runtime = { workspace = true }
 sp-trie = { workspace = true }
-# pallet-storage-providers = { workspace = true, features = ["std"] }
-trie-db = { workspace = true }
+pallet-storage-providers = { workspace = true, features = ["std"] }
+
+# Optional deps
+sh-solochain-evm-runtime = { workspace = true, features = ["std"], optional = true }
 
 [dev-dependencies]
 alloy-signer = "0.8"
@@ -72,5 +75,8 @@ testcontainers = "0.24"
 testcontainers-modules = { version = "0.12", features = ["postgres"] }
 
 [features]
-default = []
-mocks = []
+default = ["solochain"]
+mocks = ["solochain"]
+
+# Runtime selection
+solochain = ["dep:sh-solochain-evm-runtime"]

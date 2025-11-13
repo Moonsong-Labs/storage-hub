@@ -56,6 +56,7 @@ axum-test = "18"
 base64 = "0.21"
 bigdecimal = { version = "0.4.5", features = ["serde"] }
 bincode = "1.3.3"
+cfg-if = { version = "1.0.4" }
 clap = { version = "4.5.3", features = ["derive", "env"] }
 chrono = "0.4"
 codec = { package = "parity-scale-codec", version = "3.0.0", features = [

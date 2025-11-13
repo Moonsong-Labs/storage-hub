@@ -8,7 +8,7 @@ pub const CURRENT_PRICE: &str = "PaymentStreamsApi_get_current_price_per_giga_un
 // TODO: get type from runtime
 pub type CurrentPrice = u128;
 
-pub const AVAILABLE_CAPACITY: &str = "StorageProvidersApi_query_available_storage_capacity";
+pub const NUM_OF_USERS: &str = "PaymentStreamsApi_get_users_of_payment_streams_of_provider";
 
 // TODO: get type from runtime
-pub type AvailableCapacity = u64;
+pub type NumOfUsers = Vec<crate::runtime::AccountId>;

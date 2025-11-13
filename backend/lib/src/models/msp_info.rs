@@ -27,11 +27,11 @@ pub struct StatsResponse {
     #[serde(rename = "activeUsers")]
     pub active_users: u64,
     #[serde(rename = "lastCapacityChange")]
-    pub last_capacity_change: u64,
+    pub last_capacity_change: String,
     #[serde(rename = "valuePropsAmount")]
-    pub value_props_amount: u64,
+    pub value_props_amount: String,
     #[serde(rename = "bucketsAmount")]
-    pub buckets_amount: u64,
+    pub buckets_amount: String,
 }
 
 #[derive(Debug, Serialize)]
