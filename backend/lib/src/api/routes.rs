@@ -21,7 +21,7 @@ pub fn routes(services: Services) -> Router {
 
     let internal_file_upload = Router::new()
         .route(
-            "{pod_id}/internal/uploads/{session_id}/{file_key}",
+            "/{pod_id}/internal/uploads/{session_id}/{file_key}",
             put(handlers::files::internal_upload_by_key),
         )
         .route_layer(DefaultBodyLimit::disable());
