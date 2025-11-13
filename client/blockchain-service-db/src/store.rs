@@ -91,7 +91,8 @@ impl PendingTxStore {
     ///   - `hash` set to `tx_hash`
     ///   - empty `call_scale`
     ///   - `creator_id` from the `SH_NODE_INSTANCE_ID` environment variable, or `"local"` if unset
-    /// - On conflict, only the `state` column is updated
+    /// - On conflict, only the `state` column is updated. If the hash of the transaction being
+    ///   updated is different from the stored hash, a warning is logged.
     /// - Terminal states are logged at debug level
     ///
     /// Parameters:
@@ -128,15 +129,18 @@ impl PendingTxStore {
             creator_id: &creator_id,
         };
 
-        let inserted: bool = diesel::insert_into(pt::pending_transactions)
-            .values(&new_row)
-            .on_conflict((pt::account_id, pt::nonce))
-            .do_update()
-            .set(pt::state.eq(state_str))
-            .returning(sql::<Bool>("xmax = 0"))
-            .get_result(&mut conn)
-            .await?;
+        // Upsert state and fetch whether it was inserted as well as the current stored hash
+        let (inserted, current_hash): (bool, Vec<u8>) =
+            diesel::insert_into(pt::pending_transactions)
+                .values(&new_row)
+                .on_conflict((pt::account_id, pt::nonce))
+                .do_update()
+                .set(pt::state.eq(state_str))
+                .returning((sql::<Bool>("xmax = 0"), pt::hash))
+                .get_result(&mut conn)
+                .await?;
 
+        // Case: Missing transaction, a new row was inserted. Logging a warning.
         if inserted {
             warn!(
                 target: LOG_TARGET,
@@ -144,6 +148,19 @@ impl PendingTxStore {
                 hex::encode(account_id),
                 nonce,
                 state_str
+            );
+        }
+
+        // Case: There was an existing transaction with that nonce, but the hash is different. Logging a warning.
+        if !inserted && current_hash != tx_hash {
+            // Hash mismatch: trying to update state for a different tx than stored for (account, nonce)
+            warn!(
+                target: LOG_TARGET,
+                "⚠️ Hash mismatch while updating pending tx state (account ID: {:?}, nonce: {}): stored hash {:?}, attempted hash {:?}",
+                hex::encode(account_id),
+                nonce,
+                hex::encode(&current_hash),
+                hex::encode(tx_hash)
             );
         }
 
