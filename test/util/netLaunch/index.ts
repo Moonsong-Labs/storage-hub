@@ -447,6 +447,22 @@ export class NetworkLauncher {
       });
     }
 
+    // Start backend only if backend flag is enabled (depends on postgres, so requires indexer)
+    if (this.config.backend) {
+      if (!this.config.indexer) {
+        throw new Error("Backend requires indexer to be enabled");
+      }
+      await compose.upOne("sh-backend", {
+        cwd: cwd,
+        config: tmpFile,
+        log: verbose,
+        env: {
+          ...process.env,
+          JWT_SECRET: JWT_SECRET
+        }
+      });
+    }
+
     await compose.upOne("sh-user", {
       cwd: cwd,
       config: tmpFile,
