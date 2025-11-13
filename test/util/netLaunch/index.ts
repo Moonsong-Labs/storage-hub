@@ -248,12 +248,12 @@ export class NetworkLauncher {
       // Only add for MSPs if they exist in the compose file
       if (composeYaml.services["sh-msp-1"]) {
         composeYaml.services["sh-msp-1"].command.push(
-          "--msp-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+          "--msp-database-url=postgresql://postgres:postgres@storage-hub-sh-indexer-postgres-1:5432/storage_hub"
         );
       }
       if (composeYaml.services["sh-msp-2"]) {
         composeYaml.services["sh-msp-2"].command.push(
-          "--msp-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+          "--msp-database-url=postgresql://postgres:postgres@storage-hub-sh-indexer-postgres-1:5432/storage_hub"
         );
       }
     }
@@ -346,7 +346,7 @@ export class NetworkLauncher {
 
     // Postgres is only needed when indexer is enabled
     if (this.config.indexer) {
-      await compose.upOne("sh-postgres", {
+      await compose.upOne("sh-indexer-postgres", {
         cwd: cwd,
         config: tmpFile,
         log: verbose

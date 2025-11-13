@@ -359,7 +359,7 @@ const addContainer = async (
   // Check if postgres container exists (indicates indexer is enabled)
   let indexerEnabled = false;
   try {
-    await docker.getContainer("storage-hub-sh-postgres-1").inspect();
+    await docker.getContainer("storage-hub-sh-indexer-postgres-1").inspect();
     indexerEnabled = true;
   } catch {
     // Postgres container doesn't exist, indexer is not enabled
@@ -403,7 +403,7 @@ const addContainer = async (
       // Only add database URL for MSP containers when indexer is enabled (MSP-only parameter)
       ...(providerType === "msp" && indexerEnabled
         ? [
-            "--msp-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+            "--msp-database-url=postgresql://postgres:postgres@storage-hub-sh-indexer-postgres-1:5432/storage_hub"
           ]
         : []),
       bootNodeArg,
