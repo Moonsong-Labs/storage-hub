@@ -53,7 +53,7 @@ pub async fn get_file_info(
 // the client connecting to it is the MSP Node
 pub async fn internal_upload_by_key(
     State(services): State<Services>,
-    Path((session_id, file_key)): Path<(String, String)>,
+    Path((_pod_id, session_id, file_key)): Path<(String, String, String)>,
     body: Body,
 ) -> (StatusCode, impl IntoResponse) {
     debug!(file_key = %file_key, "PUT internal upload");
