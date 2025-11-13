@@ -2,6 +2,7 @@ import assert, { notEqual, strictEqual } from "node:assert";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
 import {
+  bspTwoKey,
   describeBspNet,
   type EnrichedBspApi,
   type FileMetadata,
@@ -193,6 +194,159 @@ await describeBspNet(
         searchString: "Skipping file key",
         timeout: 15000
       });
+    });
+  }
+);
+
+await describeBspNet(
+  "BSPNet: Initial volunteer tick is different for different BSPs and stays constant over time",
+  {
+    initialised: false,
+    bspStartingWeight: 1n
+  },
+  ({ before, createBspApi, it, createUserApi }) => {
+    let userApi: EnrichedBspApi;
+    let bspApi: EnrichedBspApi;
+
+    const source = "res/adolphus.jpg";
+    const destination = "test/adolphus.jpg";
+    const bucketName = "initial-volunteer-tick-test";
+
+    let fileMetadata: FileMetadata;
+    let bspId: string;
+    let bsp2Id: string;
+
+    before(async () => {
+      userApi = await createUserApi();
+      bspApi = await createBspApi();
+
+      // Set TickRangeToMaximumThreshold to 1000 to ensure BSPs need to wait
+      const tickToMaximumThresholdRuntimeParameter = {
+        RuntimeConfig: {
+          TickRangeToMaximumThreshold: [null, 1000]
+        }
+      };
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.parameters.setParameter(tickToMaximumThresholdRuntimeParameter)
+          )
+        ]
+      });
+
+      // Get the BSP IDs for later use
+      bspId = userApi.shConsts.DUMMY_BSP_ID;
+      bsp2Id = userApi.shConsts.BSP_TWO_ID;
+
+      // Add the second BSP with weight=1
+      await userApi.docker.onboardBsp({
+        bspSigner: bspTwoKey,
+        name: "sh-bsp-two",
+        bspId: bsp2Id,
+        additionalArgs: ["--keystore-path=/keystore/bsp-two"],
+        waitForIdle: true,
+        bspStartingWeight: 1n
+      });
+    });
+
+    it("Network launches and can be queried", async () => {
+      const userNodePeerId = await userApi.rpc.system.localPeerId();
+      strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
+
+      const bspNodePeerId = await bspApi.rpc.system.localPeerId();
+      strictEqual(bspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.bsp.expectedPeerId);
+    });
+
+    it("Earliest volunteer tick is stable and deterministic for both BSPs", async () => {
+      // Stop the BSPs so they don't volunteer for the file
+      await userApi.docker.stopContainer("sh-bsp-1");
+      await userApi.docker.stopContainer("sh-bsp-two");
+
+      // Create a new bucket and issue a storage request with replication target = 1
+      fileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(
+        source,
+        destination,
+        bucketName,
+        null,
+        null,
+        null,
+        1
+      );
+
+      // Get the current tick for reference
+      const initialTick = (await userApi.call.proofsDealerApi.getCurrentTick()).toNumber();
+
+      // Query the earliest volunteer tick for both BSPs
+      const bsp1EarliestTick = (
+        await userApi.call.fileSystemApi.queryEarliestFileVolunteerTick(bspId, fileMetadata.fileKey)
+      ).asOk.toNumber();
+      const bsp2EarliestTick = (
+        await userApi.call.fileSystemApi.queryEarliestFileVolunteerTick(
+          bsp2Id,
+          fileMetadata.fileKey
+        )
+      ).asOk.toNumber();
+
+      // The two BSPs should have different thresholds so they should have different earliest volunteer ticks.
+      // We know that the BSP 2 can't volunteer immediately because the BSP IDs and the file key are
+      // deterministic in this test.
+      notEqual(
+        bsp1EarliestTick,
+        bsp2EarliestTick,
+        "Different BSPs should have different earliest volunteer ticks (based on their thresholds)"
+      );
+
+      // The BSP 1 should be able to volunteer immediately. Again, we know this is the case because
+      // the BSP IDs and the file key are deterministic in this test.
+      strictEqual(bsp1EarliestTick, initialTick, "BSP1 should be able to volunteer immediately");
+
+      // Seal a few blocks and query again - values should remain stable
+      await userApi.block.seal();
+      await userApi.block.seal();
+      await userApi.block.seal();
+
+      // Get the current tick after advancing time
+      const tickAfterAdvance = (await userApi.call.proofsDealerApi.getCurrentTick()).toNumber();
+
+      // Query both BSPs after advancing time
+      // The earliest volunteer tick should remain stable (except if the BSP was already eligible or
+      // became eligible in the meantime, in which case it should have increased to the current tick)
+      const bsp1EarliestTickAfterAdvance = (
+        await userApi.call.fileSystemApi.queryEarliestFileVolunteerTick(bspId, fileMetadata.fileKey)
+      ).asOk.toNumber();
+      const bsp2EarliestTickAfterAdvance = (
+        await userApi.call.fileSystemApi.queryEarliestFileVolunteerTick(
+          bsp2Id,
+          fileMetadata.fileKey
+        )
+      ).asOk.toNumber();
+
+      // Check if BSPs are now eligible (current tick >= their earliest tick)
+      if (tickAfterAdvance >= bsp1EarliestTick) {
+        assert(
+          bsp1EarliestTickAfterAdvance === tickAfterAdvance,
+          "If the BSP is eligible, its earliest volunteer tick should be the same as the current tick"
+        );
+      } else {
+        strictEqual(
+          bsp1EarliestTickAfterAdvance,
+          bsp1EarliestTick,
+          "If the BSP is not yet eligible, its earliest volunteer tick should remain stable"
+        );
+      }
+
+      if (tickAfterAdvance >= bsp2EarliestTick) {
+        assert(
+          bsp2EarliestTickAfterAdvance === tickAfterAdvance,
+          "If the BSP is eligible, its earliest volunteer tick should be the same as the current tick"
+        );
+      } else {
+        strictEqual(
+          bsp2EarliestTickAfterAdvance,
+          bsp2EarliestTick,
+          "If the BSP is not yet eligible, its earliest volunteer tick should remain stable"
+        );
+      }
     });
   }
 );

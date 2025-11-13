@@ -72,6 +72,7 @@ shp-forest-verifier = { workspace = true }
 shp-opaque = { workspace = true }
 shp-traits = { workspace = true }
 shp-types = { workspace = true }
+shp-tx-implicits-runtime-api = { workspace = true }
 
 # Local pallets
 pallet-bucket-nfts = { workspace = true }
@@ -120,6 +121,7 @@ std = [
 	"shp-traits/std",
 	"shp-opaque/std",
 	"shp-types/std",
+	"shp-tx-implicits-runtime-api/std",
 	"pallet-balances/std",
 	"pallet-bucket-nfts/std",
 	"pallet-file-system/std",

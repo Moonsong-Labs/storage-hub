@@ -28,6 +28,7 @@ use crate::{
     constants::{
         mocks::{DOWNLOAD_FILE_CONTENT, MOCK_PRICE_PER_GIGA_UNIT},
         rpc::{DUMMY_MSP_ID, TIMEOUT_MULTIPLIER},
+        test::file::DEFAULT_FINGERPRINT,
     },
     data::rpc::{
         connection::error::{RpcConnectionError, RpcResult},
@@ -220,19 +221,16 @@ impl MockConnection {
 
         // Best-effort: perform the request but don't fail hard if the server isn't running
         let client = reqwest::Client::new();
-        let _ = client
-            .put(upload_url)
-            .body(DOWNLOAD_FILE_CONTENT.as_bytes().to_vec())
-            .send()
-            .await;
+        let content = DOWNLOAD_FILE_CONTENT.as_bytes();
+        let _ = client.put(upload_url).body(content.to_vec()).send().await;
 
         // Return expected response shape
         let metadata = FileMetadata::new(
             vec![0; 32],
             vec![0; 32],
             file_name.as_bytes().to_vec(),
-            DOWNLOAD_FILE_CONTENT.as_bytes().len() as u64,
-            vec![0u8; 32].as_slice().into(),
+            content.len() as u64,
+            DEFAULT_FINGERPRINT.as_slice().into(),
         )
         .expect("a valid file metadata descriptor");
 
@@ -279,11 +277,11 @@ impl RpcConnection for MockConnection {
             methods::FILE_KEY_EXPECTED => serde_json::json!(true),
             methods::IS_FILE_IN_FILE_STORAGE => {
                 let metadata = FileMetadata::new(
-                    vec![1],
-                    vec![1],
+                    vec![0; 32],
+                    vec![0; 32],
                     b"mock_file.bin".to_vec(),
                     1u64,
-                    random_bytes_32().into(),
+                    DEFAULT_FINGERPRINT.as_slice().into(),
                 )
                 .expect("valid dummy metadata");
                 serde_json::json!(GetFileFromFileStorageResult::FileFound(metadata))
