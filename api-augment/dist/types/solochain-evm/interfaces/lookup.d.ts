@@ -862,6 +862,8 @@ declare const _default: {
             };
             StorageRequestRejected: {
                 fileKey: string;
+                mspId: string;
+                bucketId: string;
                 reason: string;
             };
             BspRequestedToStopStoring: {

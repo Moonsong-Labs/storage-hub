@@ -644,6 +644,8 @@ pub mod pallet {
         /// nodes will pick it up and delete the file from the confirmed BSPs as well as the Bucket.
         StorageRequestRejected {
             file_key: MerkleHash<T>,
+            msp_id: ProviderIdFor<T>,
+            bucket_id: BucketIdFor<T>,
             reason: RejectedStorageRequestReason,
         },
         BspRequestedToStopStoring {

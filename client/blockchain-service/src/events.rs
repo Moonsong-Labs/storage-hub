@@ -198,6 +198,17 @@ pub struct SlashableProvider<Runtime: StorageEnableRuntime> {
     pub next_challenge_deadline: BlockNumber<Runtime>,
 }
 
+// Storage Request Expired in a Finalised Block
+//
+// This event is emitted when a storage request expires in a finalised block.
+#[derive(Debug, Clone, ActorEvent)]
+#[actor(actor = "blockchain_service")]
+pub struct FinalisedStorageRequestRejected<Runtime: StorageEnableRuntime> {
+    pub file_key: FileKey,
+    pub provider_id: ProofsDealerProviderId<Runtime>,
+    pub bucket_id: BucketId<Runtime>,
+}
+
 /// Mutations applied event in a finalised block, for a BSP.
 ///
 /// This event is emitted when a finalised block is received by the Blockchain service,

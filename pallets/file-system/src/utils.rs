@@ -1153,7 +1153,12 @@ where
                 // We cleanup the storage request
                 Self::cleanup_storage_request(&file_key, &storage_request_metadata);
 
-                Self::deposit_event(Event::StorageRequestRejected { file_key, reason });
+                Self::deposit_event(Event::StorageRequestRejected {
+                    file_key,
+                    msp_id,
+                    bucket_id: storage_request_metadata.bucket_id,
+                    reason,
+                });
             }
         }
 
@@ -3332,7 +3337,7 @@ mod hooks {
                             ),
                         );
                     }
-                    Some((_msp_id, false)) => {
+                    Some((msp_id, false)) => {
                         // If the MSP did not accept the file in time, treat the storage request as rejected.
                         if !storage_request_metadata.bsps_confirmed.is_zero() {
                             // There are BSPs that have confirmed storing the file, so we need to create an incomplete storage request metadata
@@ -3357,6 +3362,8 @@ mod hooks {
                         // If there are no BSPs the event is just informative.
                         Self::deposit_event(Event::StorageRequestRejected {
                             file_key,
+                            msp_id,
+                            bucket_id: storage_request_metadata.bucket_id,
                             reason: RejectedStorageRequestReason::RequestExpired,
                         });
                     }
