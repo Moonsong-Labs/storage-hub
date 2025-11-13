@@ -151,6 +151,29 @@ impl PendingTxStore {
     ) -> Result<i64, diesel::result::Error> {
         use pending_transactions::dsl as pt;
         let mut conn = self.pool.get().await.unwrap();
+
+        let rows_to_delete = pt::pending_transactions
+            .filter(
+                pt::account_id
+                    .eq(account_id)
+                    .and(pt::nonce.lt(nonce_threshold)),
+            )
+            .load::<crate::models::PendingTransactionRow>(&mut conn)
+            .await?;
+
+        if !rows_to_delete.is_empty() {
+            for row in &rows_to_delete {
+                debug!(
+                    target: LOG_TARGET,
+                    "🗑️ Deleting pending tx (account ID: {:?}, nonce: {}, state: {}, threshold: {})",
+                    hex::encode(&row.account_id),
+                    row.nonce,
+                    row.state,
+                    nonce_threshold
+                );
+            }
+        }
+
         let deleted = diesel::delete(
             pt::pending_transactions.filter(
                 pt::account_id

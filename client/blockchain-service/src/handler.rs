@@ -81,6 +81,8 @@ where
     /// This is used to detect when the BlockchainService gets out of syncing mode and should therefore
     /// run some initialisation tasks. Also used to detect reorgs.
     pub(crate) best_block: MinimalBlockInfo<Runtime>,
+    /// The hash and number of the last finalised block processed by the BlockchainService.
+    pub(crate) last_finalised_block_processed: MinimalBlockInfo<Runtime>,
     /// Nonce counter for the extrinsics.
     pub(crate) nonce_counter: u32,
     /// A registry of waiters for a block number.
@@ -1337,6 +1339,7 @@ where
             rpc_handlers,
             forest_storage_handler,
             best_block: MinimalBlockInfo::default(),
+            last_finalised_block_processed: MinimalBlockInfo::default(),
             nonce_counter: 0,
             wait_for_block_request_by_number: BTreeMap::new(),
             wait_for_tick_request_by_number: BTreeMap::new(),
@@ -1458,7 +1461,7 @@ where
 
         // Cleanup manager and DB, and handle old nonce gaps in one helper
         // TODO: Consider doing this in a spawned task to avoid blocking the main thread.
-        self.cleanup_tx_manager_and_handle_nonce_gaps(*block_number)
+        self.cleanup_tx_manager_and_handle_nonce_gaps(*block_number, *block_hash)
             .await;
 
         // Provider-specific code to run at the start of every block import.
@@ -1607,5 +1610,18 @@ where
                 error!(target: LOG_TARGET, "Failed to get events storage element: {:?}", e);
             }
         }
+
+        // Cleanup the pending transaction store for the last finalised block processed.
+        // Transactions with a nonce below the on-chain nonce of this block are finalised.
+        // Still, we'll delete up to the last finalised block processed, to leave transactions with
+        // a terminal state in the pending DB for a short period of time.
+        self.cleanup_pending_tx_store(self.last_finalised_block_processed.hash)
+            .await;
+
+        // Update the last finalised block processed.
+        self.last_finalised_block_processed = MinimalBlockInfo {
+            number: block_number.saturated_into(),
+            hash: block_hash,
+        };
     }
 }

@@ -808,21 +808,30 @@ where
         (current_tick_minus_last_submission % provider_challenge_period) == Zero::zero()
     }
 
-    /// Cleanup manager gaps and DB rows with nonce < on-chain nonce; then handle old gaps.
+    /// Cleanup manager gaps with nonce < on-chain nonce; then handle old gaps.
     ///
     /// This method performs the following steps:
     /// 1. Cleans up the transaction manager's stale nonce gaps (i.e. nonce gaps whose nonce is less than the on-chain nonce).
-    /// 2. Cleans up the pending transaction store's rows with nonce < on-chain nonce, in the Postgres DB.
-    /// 3. Detects and handles old nonce gaps that haven't been filled in the transaction manager.
+    /// 2. Detects and handles old nonce gaps that haven't been filled in the transaction manager.
     pub(crate) async fn cleanup_tx_manager_and_handle_nonce_gaps(
         &mut self,
         block_number: BlockNumber<Runtime>,
+        block_hash: Runtime::Hash,
     ) {
-        let on_chain_nonce = self.account_nonce(&self.client.info().best_hash);
+        let on_chain_nonce = self.account_nonce(&block_hash);
         self.transaction_manager
             .cleanup_stale_nonce_gaps(on_chain_nonce);
 
-        // Also cleanup DB rows for our account with nonce < on_chain_nonce
+        // Handle old nonce gaps that haven't been filled in the transaction manager
+        self.handle_old_nonce_gaps(block_number, block_hash).await;
+    }
+
+    /// Cleanup the pending transaction store for the given block hash.
+    ///
+    /// Get the on-chain nonce for the given block hash and cleans up all pending transactions below that nonce.
+    pub(crate) async fn cleanup_pending_tx_store(&self, block_hash: Runtime::Hash) {
+        let on_chain_nonce = self.account_nonce(&block_hash);
+
         if let Some(store) = &self.pending_tx_store {
             let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
             let account_id: AccountId<Runtime> = caller_pub_key.into();
@@ -835,9 +844,6 @@ where
                 warn!(target: LOG_TARGET, "Failed to cleanup DB pending txs below nonce {}: {:?}", on_chain_nonce, e);
             }
         }
-
-        // Handle old nonce gaps that haven't been filled in the transaction manager
-        self.handle_old_nonce_gaps(block_number).await;
     }
 
     /// Handle a single transaction status update, notifying subscribers and updating
@@ -1025,9 +1031,13 @@ where
     /// Normally, nonce gaps are filled automatically when a new transaction is submitted, but in case
     /// a new transaction is not submitted after a certain number of blocks, we will send a `remark`
     /// transaction to fill the gap and avoid the client getting stuck.
-    pub(crate) async fn handle_old_nonce_gaps(&mut self, block_number: BlockNumber<Runtime>) {
+    pub(crate) async fn handle_old_nonce_gaps(
+        &mut self,
+        block_number: BlockNumber<Runtime>,
+        block_hash: Runtime::Hash,
+    ) {
         // Detect gaps in the nonce sequence
-        let on_chain_nonce = self.account_nonce(&self.client.info().best_hash);
+        let on_chain_nonce = self.account_nonce(&block_hash);
         let gaps =
             self.transaction_manager
                 .detect_gaps(on_chain_nonce, self.nonce_counter, block_number);
