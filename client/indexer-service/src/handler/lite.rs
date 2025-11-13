@@ -238,7 +238,6 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         };
 
         if should_index {
-            // Convert Runtime::Hash to H256 for the main handler
             self.index_proofs_dealer_event(conn, event, block_hash)
                 .await?;
         }
