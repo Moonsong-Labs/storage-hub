@@ -435,18 +435,6 @@ export class NetworkLauncher {
       }
     }
 
-    if (this.config.indexer) {
-      await compose.upOne("sh-indexer-postgres", {
-        cwd: cwd,
-        config: tmpFile,
-        log: verbose,
-        env: {
-          ...process.env,
-          JWT_SECRET: JWT_SECRET
-        }
-      });
-    }
-
     // Start backend only if backend flag is enabled (depends on postgres, so requires indexer)
     if (this.config.backend) {
       if (!this.config.indexer) {
@@ -488,7 +476,7 @@ export class NetworkLauncher {
 
     // Only start standalone indexer service if it's enabled and we're using fullnet
     if (this.config.indexer && this.config.standaloneIndexer && this.type === "fullnet") {
-      await compose.upOne("sh-indexer", {
+      await compose.upOne("sh-indexer-postgres", {
         cwd: cwd,
         config: tmpFile,
         log: verbose,
