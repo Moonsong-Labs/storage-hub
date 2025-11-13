@@ -347,6 +347,16 @@ const addContainer = async (
   const keystoreArg = Args.find((arg) => arg.includes("--keystore-path="));
   const keystorePath = keystoreArg ? keystoreArg.split("=")[1] : "/keystore";
 
+  // Check if postgres container exists (indicates indexer is enabled)
+  let indexerEnabled = false;
+  try {
+    await docker.getContainer("storage-hub-sh-postgres-1").inspect();
+    indexerEnabled = true;
+  } catch {
+    // Postgres container doesn't exist, indexer is not enabled
+    indexerEnabled = false;
+  }
+
   const container = await docker.createContainer({
     Image: DOCKER_IMAGE,
     name: containerName,
@@ -381,7 +391,12 @@ const addContainer = async (
       "--rpc-cors=all",
       `--port=${p2pPort}`,
       "--base-path=/data",
-      "--provider-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub",
+      // Only add database URL for MSP containers when indexer is enabled (MSP-only parameter)
+      ...(providerType === "msp" && indexerEnabled
+        ? [
+            "--msp-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+          ]
+        : []),
       bootNodeArg,
       ...(options?.additionalArgs || [])
     ]

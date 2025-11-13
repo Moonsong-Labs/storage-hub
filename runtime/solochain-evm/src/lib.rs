@@ -870,6 +870,29 @@ impl_runtime_apis! {
         }
     }
 
+    impl shp_tx_implicits_runtime_api::TxImplicitsApi<Block> for Runtime {
+        fn compute_signed_extra_implicit(
+            era: sp_runtime::generic::Era,
+            enable_metadata: bool,
+        ) -> Result<sp_std::vec::Vec<u8>, sp_runtime::transaction_validity::TransactionValidityError> {
+            // Build the TxExtension tuple with minimal values; only `era` and `enable_metadata`
+            // influence the implicit. Other extensions have `()` implicit.
+            let extra: crate::TxExtension = (
+                frame_system::CheckNonZeroSender::<Runtime>::new(),
+                frame_system::CheckSpecVersion::<Runtime>::new(),
+                frame_system::CheckTxVersion::<Runtime>::new(),
+                frame_system::CheckGenesis::<Runtime>::new(),
+                frame_system::CheckEra::<Runtime>::from(era),
+                frame_system::CheckNonce::<Runtime>::from(<Nonce as Default>::default()),
+                frame_system::CheckWeight::<Runtime>::new(),
+                pallet_transaction_payment::ChargeTransactionPayment::<Runtime>::from(<Balance as Default>::default()),
+                frame_metadata_hash_extension::CheckMetadataHash::<Runtime>::new(enable_metadata),
+            );
+            let implicit = <crate::TxExtension as sp_runtime::traits::TransactionExtension<crate::RuntimeCall>>::implicit(&extra)?;
+            Ok(implicit.encode())
+        }
+    }
+
     impl fp_rpc::EthereumRuntimeRPCApi<Block> for Runtime {
         fn chain_id() -> u64 {
             <Runtime as pallet_evm::Config>::ChainId::get()

@@ -10,6 +10,7 @@ use polkadot_primitives::Nonce;
 use sc_service::TFullClient;
 use scale_info::StaticTypeInfo;
 use shp_opaque::Block;
+use shp_tx_implicits_runtime_api::TxImplicitsApi as TxImplicitsRuntimeApi;
 use sp_api::ConstructRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_core::{crypto::KeyTypeId, H256};
@@ -85,6 +86,7 @@ pub trait StorageEnableApiCollection<Runtime>:
     pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance<Runtime>>
     + substrate_frame_rpc_system::AccountNonceApi<Block, AccountId<Runtime>, Nonce>
     + BlockBuilder<Block>
+    + TxImplicitsRuntimeApi<Block>
     + ProofsDealerRuntimeApi<
         Block,
         ProofsDealerProviderId<Runtime>,
@@ -134,6 +136,7 @@ where
     T: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance<Runtime>>
         + substrate_frame_rpc_system::AccountNonceApi<Block, AccountId<Runtime>, Nonce>
         + BlockBuilder<Block>
+        + TxImplicitsRuntimeApi<Block>
         + ProofsDealerRuntimeApi<
             Block,
             ProofsDealerProviderId<Runtime>,
@@ -493,20 +496,4 @@ pub trait ExtensionOperations<
     /// # Returns
     /// A fully constructed extension ready for use in transaction signing
     fn from_minimal_extension(minimal: MinimalExtension) -> Self;
-
-    /// Generates the implicit data required by this extension.
-    ///
-    /// Implicit data is information that is not explicitly included in the
-    /// transaction but is required for validation. This typically includes:
-    /// - The genesis block hash (for chain identification)
-    /// - The current block hash (for mortality checks)
-    /// - Runtime version information
-    ///
-    /// # Parameters
-    /// - `genesis_block_hash`: The hash of the genesis block
-    /// - `current_block_hash`: The hash of the current block
-    ///
-    /// # Returns
-    /// The implicit data structure required by this extension type
-    fn implicit(genesis_block_hash: Self::Hash, current_block_hash: Self::Hash) -> Self::Implicit;
 }

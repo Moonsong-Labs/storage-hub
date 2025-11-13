@@ -30,7 +30,7 @@ use anyhow::anyhow;
 use codec::Decode;
 use futures::future::join_all;
 use sc_tracing::tracing::*;
-use shc_actors_framework::{actor::ActorHandle, event_bus::EventHandler};
+use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceCommandInterface, types::SendExtrinsicOptions,
 };
@@ -43,7 +43,7 @@ use shc_common::{
 };
 use shc_fisherman_service::{
     commands::FishermanServiceCommandInterface, events::BatchFileDeletions,
-    events::FileDeletionTarget, FileKeyOperation, FishermanService,
+    events::FileDeletionTarget, FileKeyOperation,
 };
 use shc_forest_manager::{in_memory::InMemoryForestStorage, traits::ForestStorage};
 use sp_core::H256;
@@ -96,13 +96,13 @@ pub struct BatchFileDeletionData<Runtime: StorageEnableRuntime> {
 ///
 /// This task processes batch deletion events emitted periodically by the fisherman service.
 /// It queries pending deletions for the specified type (User or Incomplete), spawns parallel
-/// futures for each target (BSP/Bucket), awaits their completion, and releases the global lock.
+/// futures for each target (BSP/Bucket), and awaits their completion.
 ///
 /// The task architecture ensures:
-/// - No per-target locks (global lock prevents overlapping batch cycles)
+/// - No per-target locks (semaphore permit prevents overlapping batch cycles)
 /// - Parallel processing of all targets within a cycle
 /// - Error isolation (one target's failure doesn't block others)
-/// - Lock is always released, even on error
+/// - Semaphore permit is automatically released when handler completes or fails
 pub struct FishermanTask<NT, Runtime>
 where
     NT: ShNodeType<Runtime>,
@@ -111,8 +111,6 @@ where
 {
     /// Handler providing access to blockchain, indexer database, and forest storage
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
-    /// Actor handle for communicating with the fisherman service
-    fisherman_service: ActorHandle<FishermanService<Runtime>>,
 }
 
 impl<NT, Runtime> Clone for FishermanTask<NT, Runtime>
@@ -124,8 +122,139 @@ where
     fn clone(&self) -> Self {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
-            fisherman_service: self.fisherman_service.clone(),
         }
+    }
+}
+
+impl<NT, Runtime> EventHandler<BatchFileDeletions> for FishermanTask<NT, Runtime>
+where
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: FishermanForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
+{
+    async fn handle_event(&mut self, event: BatchFileDeletions) -> anyhow::Result<()> {
+        // Hold the Arc reference to the permit for the lifetime of this handler
+        // The permit will be automatically released when this handler completes or fails
+        // (when the Arc is dropped, the permit is dropped, releasing the semaphore)
+        let permit_arc = event.permit;
+
+        info!(
+            target: LOG_TARGET,
+            "🎣 Processing batch file deletions for {:?} deletion type (limit: {})",
+            event.deletion_type,
+            event.batch_deletion_limit
+        );
+
+        // Query pending deletions with configured batch limit
+        // TODO: Implement deletion strategies(?) to limit the number of colliding deletions from other fisherman nodes.
+        let grouped_deletions = self
+            .get_pending_deletions(
+                event.deletion_type,
+                None,
+                None,
+                Some(event.batch_deletion_limit as i64),
+                None,
+            )
+            .await?;
+
+        debug!(
+            target: LOG_TARGET,
+            "🎣 Found {} BSP groups and {} bucket groups to process",
+            grouped_deletions.bsp_deletions.len(),
+            grouped_deletions.bucket_deletions.len()
+        );
+
+        // Spawn futures for each target
+        let mut futures = Vec::new();
+
+        // Spawn for each BSP group
+        for (bsp_id, files) in grouped_deletions.bsp_deletions {
+            debug!(
+                target: LOG_TARGET,
+                "🎣 Spawning future for BSP {:?} with {} files",
+                bsp_id,
+                files.len()
+            );
+
+            let future = self.batch_delete_files_for_target(
+                FileDeletionTarget::BspId(bsp_id),
+                files,
+                event.deletion_type,
+            );
+            futures.push(future);
+        }
+
+        // Spawn for each Bucket group
+        for (bucket_id, files) in grouped_deletions.bucket_deletions {
+            debug!(
+                target: LOG_TARGET,
+                "🎣 Spawning future for Bucket {:?} with {} files",
+                bucket_id,
+                files.len()
+            );
+
+            let future = self.batch_delete_files_for_target(
+                FileDeletionTarget::BucketId(bucket_id),
+                files,
+                event.deletion_type,
+            );
+            futures.push(future);
+        }
+
+        // Check if there's any work to do
+        if futures.is_empty() {
+            debug!(
+                target: LOG_TARGET,
+                "🎣 No pending {:?} deletions found",
+                event.deletion_type
+            );
+            // Permit will be automatically released when handler returns
+            return Ok(());
+        }
+
+        // Await all futures
+        debug!(
+            target: LOG_TARGET,
+            "🎣 Awaiting {} target processing futures",
+            futures.len()
+        );
+        let results = join_all(futures).await;
+
+        // Log results
+        let successes = results.iter().filter(|r| r.is_ok()).count();
+        let failures = results.iter().filter(|r| r.is_err()).count();
+
+        if failures > 0 {
+            warn!(
+                target: LOG_TARGET,
+                "🎣 Batch processing complete: {} successes, {} failures",
+                successes,
+                failures
+            );
+
+            // Log individual errors
+            for (idx, result) in results.iter().enumerate() {
+                if let Err(e) = result {
+                    error!(
+                        target: LOG_TARGET,
+                        "🎣 Target {} failed: {:?}",
+                        idx,
+                        e
+                    );
+                }
+            }
+        } else {
+            info!(
+                target: LOG_TARGET,
+                "🎣 Batch processing complete: {} successes, 0 failures",
+                successes
+            );
+        }
+
+        // Explicitly drop to release the semaphore permit
+        // Next batch deletion cycle will be able to acquire a new permit
+        drop(permit_arc);
+        Ok(())
     }
 }
 
@@ -139,18 +268,9 @@ where
     ///
     /// # Arguments
     /// * `storage_hub_handler` - Handler providing access to required services
-    ///
-    /// # Panics
-    /// Panics if the fisherman service handle is not available in the storage hub handler
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
-        let fisherman_service = storage_hub_handler
-            .fisherman
-            .clone()
-            .expect("FishermanTask requires fisherman service handle");
-
         Self {
             storage_hub_handler,
-            fisherman_service,
         }
     }
 
@@ -313,9 +433,11 @@ where
                 .map_err(|e| anyhow!("Failed to get all file keys for BSP: {:?}", e))?
             }
             FileDeletionTarget::BucketId(bucket_id) => {
+                // Only get files that are in the bucket's forest
                 shc_indexer_db::models::file::File::get_all_file_keys_for_bucket(
                     &mut conn,
                     bucket_id.as_ref(),
+                    Some(true),
                 )
                 .await
                 .map_err(|e| anyhow!("Failed to get all file keys for bucket: {:?}", e))?
@@ -367,8 +489,12 @@ where
         );
 
         // Get file key changes since finalized block
-        let file_key_changes = self
-            .fisherman_service
+        let fisherman_service = self
+            .storage_hub_handler
+            .fisherman
+            .as_ref()
+            .ok_or_else(|| anyhow!("Fisherman service not available"))?;
+        let file_key_changes = fisherman_service
             .get_file_key_changes_since_block(last_indexed_finalized_block, deletion_target.clone())
             .await
             .map_err(|e| anyhow!("Failed to get file key changes: {:?}", e))?;
@@ -702,11 +828,13 @@ where
             let bucket_id_bytes = bucket_id.as_ref().map(|id| id.as_ref() as &[u8]);
 
             // Query bucket files from DB
+            // Only get files that are in the bucket's forest
             let bucket_files =
                 shc_indexer_db::models::File::get_files_pending_deletion_grouped_by_bucket(
                     &mut bucket_conn,
                     deletion_type,
                     bucket_id_bytes,
+                    Some(true),
                     limit,
                     offset,
                 )
@@ -760,138 +888,6 @@ where
             bsp_deletions,
             bucket_deletions,
         })
-    }
-}
-
-impl<NT, Runtime> EventHandler<BatchFileDeletions> for FishermanTask<NT, Runtime>
-where
-    NT: ShNodeType<Runtime> + 'static,
-    NT::FSH: FishermanForestStorageHandlerT<Runtime>,
-    Runtime: StorageEnableRuntime,
-{
-    async fn handle_event(&mut self, event: BatchFileDeletions) -> anyhow::Result<()> {
-        info!(
-            target: LOG_TARGET,
-            "🎣 Processing batch file deletions for {:?} deletion type (limit: {})",
-            event.deletion_type,
-            event.batch_deletion_limit
-        );
-
-        // Query pending deletions with configured batch limit
-        // TODO: Implement deletion strategies(?) to limit the number of colliding deletions from other fisherman nodes.
-        let grouped_deletions = self
-            .get_pending_deletions(
-                event.deletion_type,
-                None,
-                None,
-                Some(event.batch_deletion_limit as i64),
-                None,
-            )
-            .await?;
-
-        debug!(
-            target: LOG_TARGET,
-            "🎣 Found {} BSP groups and {} bucket groups to process",
-            grouped_deletions.bsp_deletions.len(),
-            grouped_deletions.bucket_deletions.len()
-        );
-
-        // Spawn futures for each target
-        let mut futures = Vec::new();
-
-        // Spawn for each BSP group
-        for (bsp_id, files) in grouped_deletions.bsp_deletions {
-            debug!(
-                target: LOG_TARGET,
-                "🎣 Spawning future for BSP {:?} with {} files",
-                bsp_id,
-                files.len()
-            );
-
-            let future = self.batch_delete_files_for_target(
-                FileDeletionTarget::BspId(bsp_id),
-                files,
-                event.deletion_type,
-            );
-            futures.push(future);
-        }
-
-        // Spawn for each Bucket group
-        for (bucket_id, files) in grouped_deletions.bucket_deletions {
-            debug!(
-                target: LOG_TARGET,
-                "🎣 Spawning future for Bucket {:?} with {} files",
-                bucket_id,
-                files.len()
-            );
-
-            let future = self.batch_delete_files_for_target(
-                FileDeletionTarget::BucketId(bucket_id),
-                files,
-                event.deletion_type,
-            );
-            futures.push(future);
-        }
-
-        // Check if there's any work to do
-        if futures.is_empty() {
-            debug!(
-                target: LOG_TARGET,
-                "🎣 No pending {:?} deletions found, releasing lock",
-                event.deletion_type
-            );
-            // Release lock and return early
-            self.fisherman_service.release_batch_lock().await?;
-            return Ok(());
-        }
-
-        // Await all futures
-        debug!(
-            target: LOG_TARGET,
-            "🎣 Awaiting {} target processing futures",
-            futures.len()
-        );
-        let results = join_all(futures).await;
-
-        // Log results
-        let successes = results.iter().filter(|r| r.is_ok()).count();
-        let failures = results.iter().filter(|r| r.is_err()).count();
-
-        if failures > 0 {
-            warn!(
-                target: LOG_TARGET,
-                "🎣 Batch processing complete: {} successes, {} failures",
-                successes,
-                failures
-            );
-
-            // Log individual errors
-            for (idx, result) in results.iter().enumerate() {
-                if let Err(e) = result {
-                    error!(
-                        target: LOG_TARGET,
-                        "🎣 Target {} failed: {:?}",
-                        idx,
-                        e
-                    );
-                }
-            }
-        } else {
-            info!(
-                target: LOG_TARGET,
-                "🎣 Batch processing complete: {} successes, 0 failures",
-                successes
-            );
-        }
-
-        // Always release lock, even if some targets failed
-        info!(
-            target: LOG_TARGET,
-            "🎣 Releasing batch processing lock"
-        );
-        self.fisherman_service.release_batch_lock().await?;
-
-        Ok(())
     }
 }
 

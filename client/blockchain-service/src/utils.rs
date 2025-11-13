@@ -28,6 +28,7 @@ use shc_common::{
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shp_file_metadata::FileMetadata;
+use shp_tx_implicits_runtime_api::TxImplicitsApi;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::{HashAndNumber, TreeRoute};
 use sp_core::{Blake2Hasher, Hasher, U256};
@@ -568,25 +569,26 @@ where
         Runtime::Extension,
     > {
         let function = function.into();
+        let current_block: u64 = client.info().best_number.saturated_into();
         let current_block_hash = client.info().best_hash;
-        let current_block = client.info().best_number.saturated_into();
-        let genesis_block = client
-            .hash(0)
-            .expect("Failed to get genesis block hash, always present; qed")
-            .expect("Genesis block hash should never not be on-chain; qed");
         let period = BlockHashCount::get()
             .checked_next_power_of_two()
             .map(|c| c / 2)
             .unwrap_or(2) as u64;
 
-        let minimal_extra =
-            MinimalExtension::new(generic::Era::mortal(period, current_block), nonce, tip);
+        let era = generic::Era::mortal(period, current_block.saturating_sub(1));
+        let minimal_extra = MinimalExtension::new(era, nonce, tip);
         let extra: Runtime::Extension = Runtime::Extension::from_minimal_extension(minimal_extra);
-        let implicit =
-            <Runtime::Extension as ExtensionOperations<Runtime::Call, Runtime>>::implicit(
-                genesis_block,
-                current_block_hash,
-            );
+
+        let implicit_bytes = client
+            .runtime_api()
+            .compute_signed_extra_implicit(current_block_hash, era, false)
+            .expect("Runtime API compute_signed_extra_implicit call should always succeed")
+            .expect("Runtime API compute_signed_extra_implicit returned error");
+        let implicit: <Runtime::Extension as sp_runtime::traits::TransactionExtension<
+            Runtime::Call,
+        >>::Implicit = Decode::decode(&mut &implicit_bytes[..])
+            .expect("Decoding implicit returned by runtime must succeed; qed");
 
         let raw_payload = SignedPayload::from_raw(function.clone(), extra.clone(), implicit);
 
@@ -662,9 +664,10 @@ where
         // Each event record is composed of the `phase`, `event` and `topics` fields.
         // We are interested in those events whose `phase` is equal to `ApplyExtrinsic` with the index of the extrinsic.
         // For more information see: https://polkadot.js.org/docs/api/cookbook/blocks/#how-do-i-map-extrinsics-to-their-events
+        let extrinsic_index_u32: u32 = extrinsic_index.saturated_into();
         let events = events_in_block
             .into_iter()
-            .filter(|ev| ev.phase == frame_system::Phase::ApplyExtrinsic(extrinsic_index as u32))
+            .filter(|ev| ev.phase == frame_system::Phase::ApplyExtrinsic(extrinsic_index_u32))
             .collect();
 
         // Construct the extrinsic.

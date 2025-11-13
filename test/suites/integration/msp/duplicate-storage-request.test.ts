@@ -393,42 +393,46 @@ await describeMspNet(
       // the file storage of the BSP and MSP, meaning that it should respond that this
       // fileKey is not in the file storage. Now the file content should have
       // been deleted from the file storage as well.
+
+      // Check file is NOT in BSP forest
       await waitFor({
         lambda: async () => {
-          // Check file is NOT in BSP forest
           const bspForestResult = await bspApi.rpc.storagehubclient.isFileInForest(
             null,
             file2.fileKey
           );
-          if (bspForestResult.isTrue) {
-            return false;
-          }
+          return !bspForestResult.isTrue;
+        }
+      });
 
-          // Check file is NOT in BSP file storage
+      // Check file is NOT in BSP file storage
+      await waitFor({
+        lambda: async () => {
           const bspFileStorageResult = await bspApi.rpc.storagehubclient.isFileInFileStorage(
             file2.fileKey
           );
-          if (bspFileStorageResult.isFileFound) {
-            return false;
-          }
+          return !bspFileStorageResult.isFileFound;
+        }
+      });
 
-          // Check file is NOT in MSP forest
+      // Check file is NOT in MSP forest
+      await waitFor({
+        lambda: async () => {
           const mspForestResult = await mspApi.rpc.storagehubclient.isFileInForest(
             file2.bucketId,
             file2.fileKey
           );
-          if (mspForestResult.isTrue) {
-            return false;
-          }
+          return !mspForestResult.isTrue;
+        }
+      });
 
-          // Check file is NOT in MSP file storage
+      // Check file is NOT in MSP file storage
+      await waitFor({
+        lambda: async () => {
           const mspFileStorageResult = await mspApi.rpc.storagehubclient.isFileInFileStorage(
             file2.fileKey
           );
-          if (mspFileStorageResult.isFileFound) {
-            return false;
-          }
-          return true;
+          return !mspFileStorageResult.isFileFound;
         }
       });
     });

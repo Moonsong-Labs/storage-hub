@@ -386,6 +386,10 @@ await describeBspNet(
         );
 
         // Drop the retry volunteer transaction
+        // Order matters: drop from USER first, then BSP. When USER drops bspVolunteer (nonce n),
+        // it automatically drops submitProof (nonce n+1) since it becomes invalid. If BSP drops
+        // first and retries immediately, it gossips the new bspVolunteer to USER, which replaces
+        // the old one but leaves submitProof valid in USER's pool.
         await userApi.node.dropTxn(retryVolunteerHash as `0x${string}`);
         await bspApi.node.dropTxn(retryVolunteerHash as `0x${string}`);
       }

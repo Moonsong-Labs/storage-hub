@@ -51,9 +51,6 @@ pub enum FishermanServiceCommand<Runtime: StorageEnableRuntime> {
         /// The file key to query
         file_key: H256,
     },
-    /// Release the batch processing lock after batch completion
-    #[command(success_type = ())]
-    ReleaseBatchLock,
 }
 
 /// Interface trait for interacting with the FishermanService actor.

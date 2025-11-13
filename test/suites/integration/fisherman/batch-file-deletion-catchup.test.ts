@@ -500,44 +500,55 @@ await describeMspNet(
 
       // Verify unfinalized files that were NOT manually deleted (indices 1, 3, 5) are still in storage
       const unfinalizedNonDeletedIndices = [1, 3, 5];
-      await waitFor({
-        lambda: async () => {
-          for (const idx of unfinalizedNonDeletedIndices) {
-            const fileKey = unfinalizedUserFileKeys[idx];
-            const bucketId = unfinalizedUserBucketIds[idx];
-
-            // Check file IS in BSP forest
+      // Check file IS in BSP forest
+      for (const idx of unfinalizedNonDeletedIndices) {
+        const fileKey = unfinalizedUserFileKeys[idx];
+        await waitFor({
+          lambda: async () => {
             const bspForestResult = await bspApi.rpc.storagehubclient.isFileInForest(null, fileKey);
-            if (!bspForestResult.isTrue) {
-              return false;
-            }
+            return bspForestResult.isTrue;
+          }
+        });
+      }
 
-            // Check file IS in BSP file storage
+      // Check file IS in BSP file storage
+      for (const idx of unfinalizedNonDeletedIndices) {
+        const fileKey = unfinalizedUserFileKeys[idx];
+        await waitFor({
+          lambda: async () => {
             const bspFileStorageResult =
               await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey);
-            if (!bspFileStorageResult.isFileFound) {
-              return false;
-            }
+            return bspFileStorageResult.isFileFound;
+          }
+        });
+      }
 
-            // Check file IS in MSP forest
+      // Check file IS in MSP forest
+      for (const idx of unfinalizedNonDeletedIndices) {
+        const fileKey = unfinalizedUserFileKeys[idx];
+        const bucketId = unfinalizedUserBucketIds[idx];
+        await waitFor({
+          lambda: async () => {
             const mspForestResult = await msp1Api.rpc.storagehubclient.isFileInForest(
               bucketId,
               fileKey
             );
-            if (!mspForestResult.isTrue) {
-              return false;
-            }
+            return mspForestResult.isTrue;
+          }
+        });
+      }
 
-            // Check file IS in MSP file storage
+      // Check file IS in MSP file storage
+      for (const idx of unfinalizedNonDeletedIndices) {
+        const fileKey = unfinalizedUserFileKeys[idx];
+        await waitFor({
+          lambda: async () => {
             const mspFileStorageResult =
               await msp1Api.rpc.storagehubclient.isFileInFileStorage(fileKey);
-            if (!mspFileStorageResult.isFileFound) {
-              return false;
-            }
+            return mspFileStorageResult.isFileFound;
           }
-          return true;
-        }
-      });
+        });
+      }
     });
 
     it("pauses fisherman and creates finalized incomplete storage requests", async () => {

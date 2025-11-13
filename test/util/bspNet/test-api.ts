@@ -1108,6 +1108,7 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param options.mspApi - Optional MSP API instance for bucket forest root verification
        * @param options.expectedBucketCount - Expected number of bucket deletion events. If provided, bucket deletions will be verified.
        * @param options.maxRetries - Maximum number of retry attempts. Defaults to 3.
+       * @param options.skipBucketIds - Optional. Array of bucket IDs to skip forest root verification for (e.g., when MSP stopped storing the bucket)
        */
       retryableWaitAndVerifyBatchDeletions: (options: {
         blockProducerApi: any;
@@ -1119,6 +1120,7 @@ export class BspNetTestApi implements AsyncDisposable {
         mspApi?: any;
         expectedBucketCount?: number;
         maxRetries?: number;
+        skipBucketIds?: string[];
       }) => BspNetFisherman.retryableWaitAndVerifyBatchDeletions(options)
     };
 
