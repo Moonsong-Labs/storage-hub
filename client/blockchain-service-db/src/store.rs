@@ -11,10 +11,32 @@ pub struct PendingTxStore {
 }
 
 impl PendingTxStore {
+    /// Create a new `PendingTxStore` backed by the provided asynchronous Diesel pool.
+    ///
+    /// This constructor does not perform any I/O. Connections are acquired lazily
+    /// for each operation. The store is cheap to clone as it only holds the pool.
+    ///
+    /// - `pool`: Asynchronous database pool used for all CRUD operations.
     pub fn new(pool: DbPool) -> Self {
         Self { pool }
     }
 
+    /// Insert or update a pending transaction in the database with state `"sent"`.
+    ///
+    /// This performs an atomic upsert keyed by the composite `(account_id, nonce)`:
+    /// - If no row exists, a new row is inserted.
+    /// - If a row exists, `hash`, `call_scale`, `state` and `creator_id` are updated.
+    ///
+    /// Parameters:
+    /// - `account_id`: Account identifier (raw bytes) that owns the transaction.
+    /// - `nonce`: Nonce of the transaction for the given account.
+    /// - `hash`: Extrinsic hash (raw bytes).
+    /// - `call_scale`: SCALE-encoded call bytes for the extrinsic.
+    /// - `creator_id`: Logical identifier of the node/instance that created the record.
+    ///
+    /// Returns:
+    /// - `Ok(())` on success.
+    /// - `Err(diesel::result::Error)` if the database operation fails.
     pub async fn insert_sent(
         &self,
         account_id: &[u8],
@@ -62,7 +84,25 @@ impl PendingTxStore {
         Ok(())
     }
 
-    /// Update state based on watcher status. If row doesn't exist, it will be created with minimal fields.
+    /// Update the persisted state for a pending transaction from a watcher status.
+    ///
+    /// Behaviour:
+    /// - If a row for `(account_id, nonce)` does not exist, a minimal row is inserted with:
+    ///   - `hash` set to `tx_hash`
+    ///   - empty `call_scale`
+    ///   - `creator_id` from the `SH_NODE_INSTANCE_ID` environment variable, or `"local"` if unset
+    /// - On conflict, only the `state` column is updated
+    /// - Terminal states are logged at debug level
+    ///
+    /// Parameters:
+    /// - `account_id`: Account identifier (raw bytes).
+    /// - `nonce`: Transaction nonce.
+    /// - `status`: Incoming `TransactionStatus` used to derive the DB state.
+    /// - `tx_hash`: Known transaction hash (raw bytes) used when inserting a missing row.
+    ///
+    /// Returns:
+    /// - `Ok(())` on success.
+    /// - `Err(diesel::result::Error)` if the database operation fails.
     pub async fn update_state<Hash>(
         &self,
         account_id: &[u8],
@@ -121,6 +161,17 @@ impl PendingTxStore {
         Ok(())
     }
 
+    /// Remove a single pending transaction by `(account_id, nonce)`.
+    ///
+    /// This operation succeeds even if the target row does not exist (deleting zero rows).
+    ///
+    /// Parameters:
+    /// - `account_id`: Account identifier (raw bytes).
+    /// - `nonce`: Transaction nonce to delete.
+    ///
+    /// Returns:
+    /// - `Ok(())` on success.
+    /// - `Err(diesel::result::Error)` if the database operation fails.
     pub async fn remove(&self, account_id: &[u8], nonce: i64) -> Result<(), diesel::result::Error> {
         use pending_transactions::dsl as pt;
         let mut conn = self.pool.get().await.unwrap();
@@ -132,6 +183,13 @@ impl PendingTxStore {
         Ok(())
     }
 
+    /// Load all active pending transactions.
+    ///
+    /// Active rows are those with `state` in `["queued", "sent", "in_block"]`.
+    ///
+    /// Returns:
+    /// - `Ok(Vec<PendingTransactionRow>)` containing all active rows.
+    /// - `Err(diesel::result::Error)` if the query fails.
     pub async fn load_active(
         &self,
     ) -> Result<Vec<crate::models::PendingTransactionRow>, diesel::result::Error> {
@@ -144,6 +202,17 @@ impl PendingTxStore {
         Ok(rows)
     }
 
+    /// Delete all pending transactions for `account_id` with `nonce` strictly below `nonce_threshold`.
+    ///
+    /// Each deletion is logged at debug level to aid in reconciliation and auditing.
+    ///
+    /// Parameters:
+    /// - `account_id`: Account identifier (raw bytes).
+    /// - `nonce_threshold`: Nonce threshold; all rows with `nonce < nonce_threshold` are removed.
+    ///
+    /// Returns:
+    /// - `Ok(i64)` indicating the number of rows deleted.
+    /// - `Err(diesel::result::Error)` if the database operation fails.
     pub async fn delete_below_nonce(
         &self,
         account_id: &[u8],
@@ -188,9 +257,16 @@ impl PendingTxStore {
         Ok(deleted)
     }
 
-    /// Convert a TransactionStatus to a database state string.
+    /// Convert a `TransactionStatus` into its database state string and terminal flag.
     ///
-    /// Returns a tuple of the database state string and a boolean indicating if the state is terminal.
+    /// This helper maps the Substrate transaction lifecycle to StorageHub's
+    /// persisted string states and indicates whether a state is terminal:
+    /// - Non-terminal: `"future"`, `"ready"`, `"broadcast"`, `"in_block"`, `"retracted"`
+    /// - Terminal: `"finalized"`, `"usurped"`, `"dropped"`, `"invalid"`, `"finality_timeout"`
+    ///
+    /// Returns:
+    /// - `(state_str, is_terminal)` where `state_str` is the database value and `is_terminal`
+    ///   signals whether no further updates are expected.
     pub fn status_to_db_state<Hash>(
         status: &TransactionStatus<Hash, Hash>,
     ) -> (&'static str, bool) {
