@@ -76,7 +76,7 @@ where
                 match setup_db_pool(db_url).await {
                     Ok(pool) => {
                         self.pending_tx_store = Some(PendingTxStore::new(pool));
-                        info!(target: LOG_TARGET, "🗃️ Pending transactions store initialized");
+                        info!(target: LOG_TARGET, "🗃️ Pending transactions store initialised");
                     }
                     Err(e) => {
                         // Do not fail startup; just log and continue without DB persistence
