@@ -1331,6 +1331,7 @@ where
         capacity_request_queue: Option<CapacityRequestQueue<Runtime>>,
         maintenance_mode: bool,
     ) -> Self {
+        let genesis_hash = client.info().genesis_hash;
         Self {
             config,
             event_bus_provider: BlockchainServiceEventBusProvider::new(),
@@ -1338,8 +1339,14 @@ where
             keystore,
             rpc_handlers,
             forest_storage_handler,
-            best_block: MinimalBlockInfo::default(),
-            last_finalised_block_processed: MinimalBlockInfo::default(),
+            best_block: MinimalBlockInfo {
+                number: 0u32.into(),
+                hash: genesis_hash,
+            },
+            last_finalised_block_processed: MinimalBlockInfo {
+                number: 0u32.into(),
+                hash: genesis_hash,
+            },
             nonce_counter: 0,
             wait_for_block_request_by_number: BTreeMap::new(),
             wait_for_tick_request_by_number: BTreeMap::new(),
