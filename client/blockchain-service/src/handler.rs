@@ -237,6 +237,10 @@ where
 
         // Initialise pending transactions DB store if configured
         self.actor.init_pending_tx_store().await;
+        // Re-subscribe watchers for eligible pending transactions persisted in DB
+        self.actor
+            .resubscribe_pending_transactions_on_startup()
+            .await;
 
         // Import notification stream to be notified of new blocks.
         // The behaviour of this stream is:

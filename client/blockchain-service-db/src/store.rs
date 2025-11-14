@@ -219,6 +219,29 @@ impl PendingTxStore {
         Ok(rows)
     }
 
+    /// Load pending transactions for a given `account_id` filtered by a set of states.
+    ///
+    /// Returns rows ordered by nonce ascending.
+    pub async fn load_for_account_with_states(
+        &self,
+        account_id: &[u8],
+        states: &[&str],
+    ) -> Result<Vec<crate::models::PendingTransactionRow>, diesel::result::Error> {
+        use pending_transactions::dsl as pt;
+        let mut conn = self.pool.get().await.unwrap();
+        let states_vec: Vec<String> = states.iter().map(|s| s.to_string()).collect();
+        let rows = pt::pending_transactions
+            .filter(
+                pt::account_id
+                    .eq(account_id)
+                    .and(pt::state.eq_any(states_vec)),
+            )
+            .order(pt::nonce.asc())
+            .load::<crate::models::PendingTransactionRow>(&mut conn)
+            .await?;
+        Ok(rows)
+    }
+
     /// Delete all pending transactions for `account_id` with `nonce` strictly below `nonce_threshold`.
     ///
     /// Each deletion is logged at debug level to aid in reconciliation and auditing.
