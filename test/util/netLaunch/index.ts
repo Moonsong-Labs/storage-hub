@@ -128,11 +128,18 @@ export class NetworkLauncher {
       if (this.config.fisherman && this.type === "fullnet") {
         composeYaml.services["sh-fisherman"].command.push("--chain=solochain-evm-dev");
       }
+
+      // Add the runtime type to the command for standalone indexer if enabled
+      if (this.config.indexer && this.config.standaloneIndexer && this.type === "fullnet") {
+        composeYaml.services["sh-indexer"].command.push("--chain=solochain-evm-dev");
+      }
     }
 
     // Configure fisherman service
     if (!this.config.fisherman || this.type !== "fullnet") {
-      delete composeYaml.services["sh-fisherman"];
+      if (composeYaml.services["sh-fisherman"]) {
+        delete composeYaml.services["sh-fisherman"];
+      }
     } else {
       // Add fisherman incomplete sync parameters if specified
       if (this.config.fishermanIncompleteSyncMax !== undefined) {
@@ -149,7 +156,9 @@ export class NetworkLauncher {
 
     // Remove standalone indexer service if not enabled or not using standalone mode
     if (!this.config.indexer || !this.config.standaloneIndexer || this.type !== "fullnet") {
-      delete composeYaml.services["sh-indexer"];
+      if (composeYaml.services["sh-indexer"]) {
+        delete composeYaml.services["sh-indexer"];
+      }
     }
 
     if (this.config.extrinsicRetryTimeout) {
@@ -209,6 +218,22 @@ export class NetworkLauncher {
       }
     }
 
+    // Configure database access for MSPs when indexer is enabled
+    // Only add --msp-database-url when indexer is enabled (MSPs need database for move bucket operations)
+    if (this.config.indexer) {
+      // Only add for MSPs if they exist in the compose file
+      if (composeYaml.services["sh-msp-1"]) {
+        composeYaml.services["sh-msp-1"].command.push(
+          "--msp-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+        );
+      }
+      if (composeYaml.services["sh-msp-2"]) {
+        composeYaml.services["sh-msp-2"].command.push(
+          "--msp-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+        );
+      }
+    }
+
     if (this.config.indexer) {
       // If using standalone indexer, configure the sh-indexer service
       if (this.config.standaloneIndexer && this.type === "fullnet") {
@@ -229,20 +254,6 @@ export class NetworkLauncher {
         );
         if (this.config.indexerMode) {
           composeYaml.services["sh-user"].command.push(`--indexer-mode=${this.config.indexerMode}`);
-        }
-
-        // For fullnet, also configure MSPs
-        if (this.type === "fullnet") {
-          composeYaml.services["sh-msp-1"].command.push(
-            "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
-          );
-          composeYaml.services["sh-msp-2"].command.push("--indexer");
-          composeYaml.services["sh-msp-2"].environment =
-            composeYaml.services["sh-msp-2"].environment ?? {};
-          composeYaml.services["sh-msp-2"].environment.SH_INDEXER_DB_AUTO_MIGRATE = "false";
-          composeYaml.services["sh-msp-2"].command.push(
-            "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
-          );
         }
       }
     }
@@ -283,7 +294,8 @@ export class NetworkLauncher {
       doubleQuotedAsJSON: true,
       flowCollectionPadding: true
     });
-    fs.mkdirSync(path.join(cwd, "tmp"), { recursive: true });
+    const tmpDir = path.join(cwd, "tmp");
+    fs.mkdirSync(tmpDir, { recursive: true });
     const tmpFile = tmp.fileSync({ postfix: ".yml" });
     fs.writeFileSync(tmpFile.name, updatedCompose);
     return tmpFile.name;
@@ -299,6 +311,19 @@ export class NetworkLauncher {
         config: tmpFile,
         log: verbose
       });
+    }
+
+    // Postgres is only needed when indexer is enabled
+    if (this.config.indexer) {
+      await compose.upOne("sh-postgres", {
+        cwd: cwd,
+        config: tmpFile,
+        log: verbose
+      });
+
+      // Run external migrations when indexer enabled
+      // (MSPs and standalone indexer auto-migrate themselves)
+      await this.runMigrations();
     }
 
     await compose.upOne("sh-bsp", {
@@ -369,27 +394,17 @@ export class NetworkLauncher {
       }
     }
 
-    if (this.config.indexer) {
-      await compose.upOne("sh-postgres", {
+    // Start backend only if backend flag is enabled (depends on postgres, so requires indexer)
+    if (this.config.backend) {
+      await compose.upOne("sh-backend", {
         cwd: cwd,
         config: tmpFile,
-        log: verbose
+        log: verbose,
+        env: {
+          ...process.env,
+          JWT_SECRET: JWT_SECRET
+        }
       });
-
-      await this.runMigrations();
-
-      // Start backend only if backend flag is enabled (depends on msp-1 and postgres)
-      if (this.config.backend && this.type === "fullnet") {
-        await compose.upOne("sh-backend", {
-          cwd: cwd,
-          config: tmpFile,
-          log: verbose,
-          env: {
-            ...process.env,
-            JWT_SECRET: JWT_SECRET
-          }
-        });
-      }
     }
 
     await compose.upOne("sh-user", {
@@ -438,6 +453,7 @@ export class NetworkLauncher {
   }
 
   private async runMigrations() {
+    // Migrations are needed when indexer is enabled
     assert(this.config.indexer, "Indexer must be enabled to run migrations");
 
     const dieselCheck = spawnSync("diesel", ["--version"], { stdio: "ignore" });
@@ -544,12 +560,16 @@ export class NetworkLauncher {
         .signAsync(sudo, { nonce: 3 }),
       api.tx.sudo
         .sudo(api.tx.balances.forceSetBalance(api.accounts.mspDownKey.address, amount))
-        .signAsync(sudo, { nonce: 4 })
+        .signAsync(sudo, { nonce: 4 }),
+      api.tx.sudo
+        .sudo(api.tx.balances.forceSetBalance(api.accounts.fishermanKey.address, amount))
+        .signAsync(sudo, { nonce: 5 })
     ];
 
     const sudoTxns = await Promise.all(signedCalls);
 
-    return api.block.seal({ calls: sudoTxns });
+    await api.block.seal({ calls: sudoTxns });
+    return;
   }
 
   public async setupMsp(api: EnrichedBspApi, who: string, multiAddressMsp: string, mspId?: string) {
@@ -895,6 +915,7 @@ export class NetworkLauncher {
       for (const service of mspServices) {
         const mspContainerName = launchedNetwork.composeYaml.services[service].container_name;
         assert(mspContainerName, "MSP container name not found in compose file");
+
         const mspIp = await getContainerIp(mspContainerName);
         const mspPeerId = await launchedNetwork.getPeerId(service);
         const multiAddressMsp = `/ip4/${mspIp}/tcp/30350/p2p/${mspPeerId}`;

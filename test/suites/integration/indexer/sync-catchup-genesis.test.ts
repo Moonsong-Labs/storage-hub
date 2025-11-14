@@ -1,6 +1,5 @@
 import assert from "node:assert";
 import { describeMspNet, type EnrichedBspApi, type SqlClient, waitFor } from "../../../util";
-import { getLastIndexedBlock, waitForBucketIndexed } from "../../../util/indexerHelpers";
 
 await describeMspNet(
   "Indexer Service - Block Notification Sync (Genesis Pause)",
@@ -37,7 +36,7 @@ await describeMspNet(
 
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",
-        containerName: "storage-hub-sh-user-1",
+        containerName: userApi.shConsts.NODE_INFOS.user.containerName,
         timeout: 10000
       });
 
@@ -51,10 +50,10 @@ await describeMspNet(
 
     it("indexes all events produced while behind and during sync", async () => {
       // Capture baseline state to verify indexer was truly paused during block production
-      await getLastIndexedBlock(sql);
+      await indexerApi.indexer.getLastIndexedBlock({ sql });
 
       // Simulate indexer falling behind by pausing its container while blockchain continues
-      await userApi.docker.pauseContainer("storage-hub-sh-indexer-1");
+      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.indexer.containerName);
 
       // Produce enough blocks (7) to exceed sync_mode_min_blocks_behind threshold (5)
       // This ensures the indexer will enter sync mode rather than processing blocks individually
@@ -70,10 +69,12 @@ await describeMspNet(
       const finalBlockNumber = finalBlockHeader.number.toNumber();
 
       // Confirm indexer remained frozen at initial block - ensures pause was effective
-      await getLastIndexedBlock(sql);
+      await indexerApi.indexer.getLastIndexedBlock({ sql });
 
       // Resume indexer to trigger catchup - it must now process backlog via finality notifications
-      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-indexer-1" });
+      await userApi.docker.resumeContainer({
+        containerName: userApi.shConsts.NODE_INFOS.indexer.containerName
+      });
 
       // Non-producer nodes must explicitly finalize imported blocks to trigger indexing
       // Producer node (user) has finalized blocks, but indexer node must finalize locally
@@ -86,7 +87,7 @@ await describeMspNet(
       // Block until indexer catches up - verifies finality notification pipeline works under load
       await waitFor({
         lambda: async () => {
-          const lastIndexed = await getLastIndexedBlock(sql);
+          const lastIndexed = await indexerApi.indexer.getLastIndexedBlock({ sql });
           return lastIndexed >= finalBlockNumber;
         },
         iterations: 100,
@@ -95,11 +96,11 @@ await describeMspNet(
 
       // Verify data consistency - all events from missed blocks should be present in database
       for (const bucketName of buckets) {
-        await waitForBucketIndexed(sql, bucketName);
+        await indexerApi.indexer.waitForBucketIndexed({ sql, bucketName });
       }
 
       // Validate service_state tracking is accurate after catchup
-      const lastIndexedBlock = await getLastIndexedBlock(sql);
+      const lastIndexedBlock = await indexerApi.indexer.getLastIndexedBlock({ sql });
 
       // Indexer should have processed at minimum the blocks we created, possibly more if chain advanced
       assert(

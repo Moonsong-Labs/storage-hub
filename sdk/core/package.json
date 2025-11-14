@@ -1,6 +1,6 @@
 {
   "name": "@storagehub-sdk/core",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Core primitives for StorageHub SDK (types, crypto, filemanager, storage, wasm bindings)",
   "type": "module",
   "main": "./dist/index.node.js",

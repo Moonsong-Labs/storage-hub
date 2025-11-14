@@ -3,15 +3,23 @@ use futures::stream::{self, StreamExt};
 use log::{debug, error, info, trace, warn};
 use pallet_file_system_runtime_api::FileSystemApi;
 use sc_client_api::{BlockImportNotification, BlockchainEvents, HeaderBackend};
-use shc_common::types::{FileOperation, OpaqueBlock, StorageEnableEvents};
-use shc_common::{blockchain_utils::get_events_at_block, traits::StorageEnableRuntime};
 use sp_api::ProvideRuntimeApi;
 use sp_core::H256;
 use sp_runtime::traits::{Header, One, SaturatedConversion, Saturating};
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+use tokio::sync::Semaphore;
 
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
-use shc_common::types::{BlockNumber, ParachainClient};
+use shc_common::{
+    blockchain_utils::get_events_at_block,
+    traits::StorageEnableRuntime,
+    types::{BlockNumber, OpaqueBlock, ParachainClient, StorageEnableEvents},
+};
+use shc_indexer_db::models::FileDeletionType;
 use shp_types::Hash;
 
 use crate::{
@@ -29,16 +37,22 @@ pub(crate) const LOG_TARGET: &str = "fisherman-service";
 pub struct FishermanService<Runtime: StorageEnableRuntime> {
     /// Substrate client for blockchain interaction
     client: Arc<ParachainClient<Runtime::RuntimeApi>>,
-    /// Last processed block number to avoid reprocessing
-    last_processed_block: BlockNumber<Runtime>,
     /// Event bus provider for emitting fisherman events
-    event_bus_provider: FishermanServiceEventBusProvider<Runtime>,
-    /// The minimum number of blocks behind the current best block to consider the fisherman out of sync
-    sync_mode_min_blocks_behind: BlockNumber<Runtime>,
-    /// Maximum number of incomplete storage requests to process during initial sync
-    incomplete_sync_max: u32,
-    /// Page size for incomplete storage request pagination
-    incomplete_sync_page_size: u32,
+    event_bus_provider: FishermanServiceEventBusProvider,
+    /// Semaphore to prevent overlapping batch processing cycles (size 1)
+    batch_processing_semaphore: Arc<Semaphore>,
+    /// Track last deletion type processed (for alternating User/Incomplete)
+    last_deletion_type: Option<FileDeletionType>,
+    /// Duration between batch deletion processing cycles.
+    ///
+    /// This value must be greater than the expected average block time to avoid processing a new batch deletion cycle at every block.
+    /// For example, a block time of 6 seconds and a batch interval of 5 seconds will result in a new batch deletion cycle being processed every block since the time
+    /// would have elapsed since the last batch (see. [`monitor_block`](Self::monitor_block)). It is still up to you to decide whether you want this behaviour or not.
+    batch_interval_duration: Duration,
+    /// Timestamp of last batch emission.
+    last_batch_time: Option<Instant>,
+    /// Maximum number of files to process per batch deletion cycle
+    batch_deletion_limit: u64,
 }
 
 /// Represents a change to a file key between blocks
@@ -63,17 +77,17 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
     /// Create a new FishermanService instance
     pub fn new(
         client: Arc<ParachainClient<Runtime::RuntimeApi>>,
-        incomplete_sync_max: u32,
-        incomplete_sync_page_size: u32,
-        sync_mode_min_blocks_behind: u32,
+        batch_interval_seconds: u64,
+        batch_deletion_limit: u64,
     ) -> Self {
         Self {
             client,
-            last_processed_block: 0u32.into(),
-            event_bus_provider: FishermanServiceEventBusProvider::<Runtime>::new(),
-            sync_mode_min_blocks_behind: sync_mode_min_blocks_behind.into(),
-            incomplete_sync_max,
-            incomplete_sync_page_size,
+            event_bus_provider: FishermanServiceEventBusProvider::new(),
+            batch_processing_semaphore: Arc::new(Semaphore::new(1)),
+            last_deletion_type: None,
+            batch_interval_duration: Duration::from_secs(batch_interval_seconds),
+            last_batch_time: None,
+            batch_deletion_limit,
         }
     }
 
@@ -143,140 +157,69 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
     }
 
     /// Monitor new blocks for file deletion request events
+    ///
+    /// Emits a [`BatchFileDeletions`](`crate::events::BatchFileDeletions`) event if a new batch deletion cycle should be attempted every [`batch_interval_duration`](`Self::batch_interval_duration`) seconds.
+    /// Interchanges between [`User`](`FileDeletionType::User`) and [`Incomplete`](`FileDeletionType::Incomplete`) deletion types across batch cycles.
+    ///
+    /// The [`batch_processing_semaphore`](`Self::batch_processing_semaphore`) permit is passed through the [`BatchFileDeletions`](`crate::events::BatchFileDeletions`) event and automatically released when the event handler completes or fails.
+    /// This semaphore ensures that only a single batch deletion cycle is running at a time, preventing any possibility of colliding deletions with this node's own deletions.
     async fn monitor_block(
         &mut self,
         block_number: BlockNumber<Runtime>,
         block_hash: Runtime::Hash,
     ) -> Result<(), FishermanServiceError> {
-        debug!(target: LOG_TARGET, "🎣 Monitoring block #{}: {}", block_number, block_hash);
+        info!(target: LOG_TARGET, "🎣 Monitoring block #{}: {}", block_number, block_hash);
 
-        // Check if we just came out of syncing mode
-        // On initial startup, last_processed_block is 0, so if current block > sync_mode_min_blocks_behind,
-        // we trigger the sync. This matches the blockchain service behavior.
-        if block_number.saturating_sub(self.last_processed_block) > self.sync_mode_min_blocks_behind
-        {
-            info!(target: LOG_TARGET, "🎣 Handling coming out of sync mode (synced to #{}: {})", block_number, block_hash);
-            if let Err(e) = self.initial_incomplete_requests_sync().await {
-                error!(target: LOG_TARGET, "Failed initial incomplete requests sync: {:?}", e);
-            }
-        }
+        // Check if enough time has elapsed since last batch
+        let should_attempt_new_batch_deletion = match self.last_batch_time {
+            None => true,
+            Some(last_time) => last_time.elapsed() >= self.batch_interval_duration,
+        };
 
-        let events = get_events_at_block::<Runtime>(&self.client, &block_hash)?;
-
-        for event_record in events.iter() {
-            let event: Result<StorageEnableEvents<Runtime>, _> =
-                event_record.event.clone().try_into();
-            let event = match event {
-                Ok(e) => e,
-                Err(e) => {
-                    warn!(
-                        target: LOG_TARGET,
-                        "Failed to decode event: {:?}",
-                        e
-                    );
-                    continue;
-                }
-            };
-            match event {
-                StorageEnableEvents::FileSystem(
-                    pallet_file_system::Event::FileDeletionRequested {
-                        signed_delete_intention,
-                        signature,
-                    },
-                ) if signed_delete_intention.operation == FileOperation::Delete => {
-                    info!(
-                        target: LOG_TARGET,
-                        "🎣 Found FileDeletionRequested event for file key: {:?}",
-                        signed_delete_intention.file_key
-                    );
-
-                    let event = crate::events::ProcessFileDeletionRequest {
-                        signed_file_operation_intention: signed_delete_intention,
-                        signature,
+        if should_attempt_new_batch_deletion {
+            // Try to acquire the semaphore permit (non-blocking)
+            // The semaphore prevents running multiple batch deletion cycles concurrently, preventing any possibility of colliding deletions with this node's own deletions.
+            match self.batch_processing_semaphore.clone().try_acquire_owned() {
+                Ok(permit) => {
+                    // Determine next deletion type (alternate User ↔ Incomplete)
+                    let deletion_type = match self.last_deletion_type {
+                        None => FileDeletionType::User,
+                        Some(FileDeletionType::User) => FileDeletionType::Incomplete,
+                        Some(FileDeletionType::Incomplete) => FileDeletionType::User,
                     };
 
-                    self.emit(event);
-                }
-                StorageEnableEvents::FileSystem(
-                    pallet_file_system::Event::IncompleteStorageRequest { file_key },
-                ) => {
-                    info!(
+                    debug!(
                         target: LOG_TARGET,
-                        "🎣 Found IncompleteStorageRequest event for file key: {:?}",
-                        file_key
+                        "🎣 Batch interval reached, emitting BatchFileDeletions event for {:?} deletions",
+                        deletion_type
                     );
 
-                    let event = crate::events::ProcessIncompleteStorageRequest {
-                        file_key: file_key.into(),
-                    };
+                    // Update state service state
+                    self.last_deletion_type = Some(deletion_type);
+                    self.last_batch_time = Some(Instant::now());
 
-                    self.emit(event);
+                    // Wrap permit in Arc to satisfy Clone requirement for events
+                    // The permit will be held by the event handler for its lifetime,
+                    // automatically releasing when the handler completes or fails
+                    let permit_wrapper = Arc::new(permit);
+
+                    // Emit event to trigger batch processing
+                    self.emit(crate::events::BatchFileDeletions {
+                        deletion_type,
+                        batch_deletion_limit: self.batch_deletion_limit,
+                        permit: permit_wrapper,
+                    });
                 }
-                _ => {}
-            }
-        }
-
-        self.last_processed_block = block_number;
-        Ok(())
-    }
-
-    /// Perform initial catch-up for incomplete storage requests
-    async fn initial_incomplete_requests_sync(&mut self) -> Result<(), FishermanServiceError> {
-        info!(target: LOG_TARGET, "🎣 Starting initial incomplete storage requests sync");
-
-        let page_size = self.incomplete_sync_page_size;
-        let cap = self.incomplete_sync_max;
-        let mut processed: u32 = 0;
-        let mut cursor: Option<Runtime::Hash> = None;
-
-        let best_block_hash = self.client.info().best_hash;
-
-        'sync_loop: while processed < cap {
-            // Call the runtime API to get a page of incomplete storage request keys
-            let keys = self
-                .client
-                .runtime_api()
-                .list_incomplete_storage_request_keys(best_block_hash, cursor, page_size)
-                .map_err(|e| {
-                    FishermanServiceError::Client(format!("Runtime API error: {:?}", e))
-                })?;
-
-            if keys.is_empty() {
-                break;
-            }
-
-            let page_count = keys.len();
-            debug!(
-                target: LOG_TARGET,
-                "🎣 Processing page of {} incomplete storage requests",
-                page_count
-            );
-
-            for key in &keys {
-                // Emit the event for each key
-                // TODO: Emit batch of file keys per BSP/Bucket
-                self.emit(crate::events::ProcessIncompleteStorageRequest {
-                    file_key: (*key).into(),
-                });
-
-                processed = processed.saturating_add(1);
-
-                // Check if we've hit the cap
-                if processed >= cap {
-                    info!(
+                Err(_) => {
+                    // The permit will eventually be released, so we do nothing here and will retry next block.
+                    // This is a warning because it could indicate a bug if the permit is held for too long, or indefinitely for that matter.
+                    debug!(
                         target: LOG_TARGET,
-                        "🎣 Initial incomplete requests sync reached cap: {}",
-                        cap
+                        "🎣 Batch interval reached but semaphore permit is held (previous batch still processing), will retry next block"
                     );
-                    break 'sync_loop;
                 }
             }
-
-            // Advance cursor to last processed key
-            cursor = keys.last().cloned();
         }
-
-        info!(target: LOG_TARGET, "🎣 Completed initial incomplete storage requests sync - processed {} requests", processed);
 
         Ok(())
     }
@@ -506,7 +449,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
 impl<Runtime: StorageEnableRuntime> Actor for FishermanService<Runtime> {
     type Message = FishermanServiceCommand<Runtime>;
     type EventLoop = FishermanServiceEventLoop<Runtime>;
-    type EventBusProvider = FishermanServiceEventBusProvider<Runtime>;
+    type EventBusProvider = FishermanServiceEventBusProvider;
 
     fn handle_message(
         &mut self,
