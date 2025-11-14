@@ -81,6 +81,17 @@ export const createSqlClient = () => {
   });
 };
 
+export const createPendingSqlClient = () => {
+  // Pending transactions DB (launched as sh-pending-postgres with host port 5433)
+  return postgres({
+    host: "localhost",
+    port: 5433,
+    database: "pending_tx",
+    username: "postgres",
+    password: "postgres"
+  });
+};
+
 export const checkSHRunningContainers = async (docker: Docker) => {
   const allContainers = await docker.listContainers({ all: true });
   return allContainers.filter((container) => container.Image === DOCKER_IMAGE);

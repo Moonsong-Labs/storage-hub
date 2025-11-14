@@ -68,6 +68,52 @@ export interface BspNetApi extends ApiPromise {
     method: string,
     events?: EventRecord[]
   ): { event: Event; data: Codec[] & IEventData };
+
+  /**
+   * Pending transactions DB helpers namespace.
+   * Provides convenience helpers to query/assert the pending transactions Postgres database.
+   */
+  pendingDb: {
+    /**
+     * Creates and returns a SQL client connected to the pending transactions DB.
+     */
+    createClient: () => SqlClient;
+    /**
+     * Converts an ss58 address to AccountId bytes for DB queries.
+     */
+    accountIdFromAddress: (address: string) => Buffer;
+    /**
+     * Returns the row for (accountId, nonce) if it exists.
+     */
+    getByNonce: (options: { sql: SqlClient; accountId: Buffer; nonce: bigint }) => Promise<any>;
+    /**
+     * Returns all rows for an account ordered by nonce.
+     */
+    getAllByAccount: (options: { sql: SqlClient; accountId: Buffer }) => Promise<any[]>;
+    /**
+     * Counts active-state rows for an account.
+     */
+    countActive: (options: { sql: SqlClient; accountId: Buffer }) => Promise<bigint>;
+    /**
+     * Waits until a given nonce reaches the provided state.
+     */
+    waitForState: (options: {
+      sql: SqlClient;
+      accountId: Buffer;
+      nonce: bigint;
+      state: string;
+      timeoutMs?: number;
+      pollMs?: number;
+    }) => Promise<void>;
+    /**
+     * Asserts there are no active rows with nonce < onChainNonce.
+     */
+    expectClearedBelow: (options: {
+      sql: SqlClient;
+      accountId: Buffer;
+      onChainNonce: bigint;
+    }) => Promise<void>;
+  };
 }
 
 /**
