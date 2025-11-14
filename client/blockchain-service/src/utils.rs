@@ -14,6 +14,7 @@ use sc_client_api::{BlockBackend, BlockImportNotification, HeaderBackend};
 use sc_network::Multiaddr;
 use sc_transaction_pool_api::TransactionStatus;
 use shc_actors_framework::actor::Actor;
+use shc_blockchain_service_db::{setup_db_pool, store::PendingTxStore};
 use shc_common::{
     blockchain_utils::{
         convert_raw_multiaddresses_to_multiaddr, get_events_at_block,
@@ -21,7 +22,7 @@ use shc_common::{
     },
     traits::{ExtensionOperations, KeyTypeOperations, StorageEnableRuntime},
     types::{
-        BlockNumber, FileKey, Fingerprint, ForestRoot, MinimalExtension, OpaqueBlock,
+        AccountId, BlockNumber, FileKey, Fingerprint, ForestRoot, MinimalExtension, OpaqueBlock,
         ParachainClient, ProofsDealerProviderId, StorageEnableEvents, StorageProviderId,
         TrieAddMutation, TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
     },
@@ -59,6 +60,36 @@ where
     FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
+    /// Initialise the pending transactions DB store if configured.
+    ///
+    /// If the pending transactions DB store is already initialised, this function does nothing.
+    /// If the pending transactions DB URL is not found in the configuration or environment variable, this function does nothing.
+    /// If the pending transactions DB URL is found, but the DB pool cannot be created, this panics.
+    pub(crate) async fn init_pending_tx_store(&mut self) {
+        if self.pending_tx_store.is_none() {
+            let maybe_url = self
+                .config
+                .pending_db_url
+                .clone()
+                .or_else(|| std::env::var("SH_PENDING_DB_URL").ok());
+            if let Some(db_url) = maybe_url {
+                match setup_db_pool(db_url).await {
+                    Ok(pool) => {
+                        self.pending_tx_store = Some(PendingTxStore::new(pool));
+                        info!(target: LOG_TARGET, "🗃️ Pending transactions store initialised");
+                    }
+                    Err(e) => {
+                        // Do not fail startup; just log and continue without DB persistence
+                        warn!(target: LOG_TARGET, "Pending transactions DB init failed: {:?}", e);
+                    }
+                }
+            } else {
+                warn!(target: LOG_TARGET, "Pending transactions DB URL not found in configuration or environment variable");
+                warn!(target: LOG_TARGET, "Pending transactions will not be persisted");
+            }
+        }
+    }
+
     /// Notify tasks waiting for a block number.
     pub(crate) fn notify_import_block_number(&mut self, block_number: &BlockNumber<Runtime>) {
         let mut keys_to_remove = Vec::new();
@@ -509,6 +540,30 @@ where
         let method = options.method().unwrap_or("unknown".to_string());
         info!(target: LOG_TARGET, "Transaction {}_{} submitted successfully with hash {:?} and nonce {}", module, method, tx_hash, nonce);
 
+        // Persist the transaction in the DB (best-effort) after RPC acceptance
+        // TODO: Consider doing this in a spawned thread to avoid blocking the main thread.
+        if let Some(store) = &self.pending_tx_store {
+            let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
+            let account_id: AccountId<Runtime> = caller_pub_key.into();
+            let account_bytes_owned: Vec<u8> = account_id.as_ref().to_vec();
+            let call_scale = call.encode();
+            // TODO: Use this when we implement multiple instances of the same provider.
+            let creator_id =
+                std::env::var("SH_NODE_INSTANCE_ID").unwrap_or_else(|_| "local".to_string());
+            if let Err(e) = store
+                .insert_sent(
+                    &account_bytes_owned,
+                    nonce as i64,
+                    tx_hash.as_bytes(),
+                    &call_scale,
+                    &creator_id,
+                )
+                .await
+            {
+                warn!(target: LOG_TARGET, "Failed to persist pending tx (nonce {}, and hash {:?}): {:?}", nonce, tx_hash, e);
+            }
+        }
+
         // Add the transaction to the transaction manager to track it
         if let Err(e) = self.transaction_manager.track_transaction(
             nonce,
@@ -753,6 +808,44 @@ where
         (current_tick_minus_last_submission % provider_challenge_period) == Zero::zero()
     }
 
+    /// Cleanup manager gaps with nonce < on-chain nonce; then handle old gaps.
+    ///
+    /// This method performs the following steps:
+    /// 1. Cleans up the transaction manager's stale nonce gaps (i.e. nonce gaps whose nonce is less than the on-chain nonce).
+    /// 2. Detects and handles old nonce gaps that haven't been filled in the transaction manager.
+    pub(crate) async fn cleanup_tx_manager_and_handle_nonce_gaps(
+        &mut self,
+        block_number: BlockNumber<Runtime>,
+        block_hash: Runtime::Hash,
+    ) {
+        let on_chain_nonce = self.account_nonce(&block_hash);
+        self.transaction_manager
+            .cleanup_stale_nonce_gaps(on_chain_nonce);
+
+        // Handle old nonce gaps that haven't been filled in the transaction manager
+        self.handle_old_nonce_gaps(block_number, block_hash).await;
+    }
+
+    /// Cleanup the pending transaction store for the given block hash.
+    ///
+    /// Get the on-chain nonce for the given block hash and cleans up all pending transactions below that nonce.
+    pub(crate) async fn cleanup_pending_tx_store(&self, block_hash: Runtime::Hash) {
+        let on_chain_nonce = self.account_nonce(&block_hash);
+
+        if let Some(store) = &self.pending_tx_store {
+            let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
+            let account_id: AccountId<Runtime> = caller_pub_key.into();
+            let account_bytes_owned: Vec<u8> = account_id.as_ref().to_vec();
+            // Fire-and-forget; log errors but don't block block processing on DB
+            if let Err(e) = store
+                .delete_below_nonce(&account_bytes_owned, on_chain_nonce as i64)
+                .await
+            {
+                warn!(target: LOG_TARGET, "Failed to cleanup DB pending txs below nonce {}: {:?}", on_chain_nonce, e);
+            }
+        }
+    }
+
     /// Handle a single transaction status update, notifying subscribers and updating
     /// the transaction manager state (including cleanup for terminal states).
     ///
@@ -769,7 +862,7 @@ where
     /// - Broadcast
     /// - InBlock
     /// - Retracted
-    pub(crate) fn handle_transaction_status_update(
+    pub(crate) async fn handle_transaction_status_update(
         &mut self,
         nonce: u32,
         tx_hash: Runtime::Hash,
@@ -786,6 +879,25 @@ where
         if is_current_transaction_for_broadcast {
             self.transaction_manager
                 .notify_status_change(nonce, status.clone());
+
+            // Update Postgres state for this transaction
+            if let Some(store) = &self.pending_tx_store {
+                // TODO: Consider spawning this into a background worker to avoid blocking the watcher path
+                let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
+                let account_id: AccountId<Runtime> = caller_pub_key.into();
+                let account_bytes_owned: Vec<u8> = account_id.as_ref().to_vec();
+                if let Err(e) = store
+                    .update_state(
+                        &account_bytes_owned,
+                        nonce as i64,
+                        &status,
+                        tx_hash.as_bytes(),
+                    )
+                    .await
+                {
+                    error!(target: LOG_TARGET, "Failed to update DB state for nonce {}: {:?}", nonce, e);
+                }
+            }
         }
 
         // Check if this is a terminal state that requires immediate removal
@@ -919,9 +1031,13 @@ where
     /// Normally, nonce gaps are filled automatically when a new transaction is submitted, but in case
     /// a new transaction is not submitted after a certain number of blocks, we will send a `remark`
     /// transaction to fill the gap and avoid the client getting stuck.
-    pub(crate) async fn handle_old_nonce_gaps(&mut self, block_number: BlockNumber<Runtime>) {
+    pub(crate) async fn handle_old_nonce_gaps(
+        &mut self,
+        block_number: BlockNumber<Runtime>,
+        block_hash: Runtime::Hash,
+    ) {
         // Detect gaps in the nonce sequence
-        let on_chain_nonce = self.account_nonce(&self.client.info().best_hash);
+        let on_chain_nonce = self.account_nonce(&block_hash);
         let gaps =
             self.transaction_manager
                 .detect_gaps(on_chain_nonce, self.nonce_counter, block_number);

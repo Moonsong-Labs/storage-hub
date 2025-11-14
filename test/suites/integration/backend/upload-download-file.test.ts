@@ -1,19 +1,19 @@
 import assert, { strictEqual } from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
+import type { H256 } from "@polkadot/types/interfaces";
 import { u8aToHex } from "@polkadot/util";
 import * as $ from "scale-codec";
 import { bspKey, describeMspNet, type EnrichedBspApi, waitFor } from "../../../util";
+import type { FileInfo, HealthResponse } from "../../../util/backend";
 import { fetchJwtToken } from "../../../util/backend/jwt";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import {
+  BALTATHAR_PRIVATE_KEY,
   ETH_SH_USER_ADDRESS,
   ETH_SH_USER_PRIVATE_KEY,
-  ethShUser,
-  BALTATHAR_PRIVATE_KEY
+  ethShUser
 } from "../../../util/evmNet/keyring";
-import type { H256 } from "@polkadot/types/interfaces";
-import type { FileInfo, HealthResponse } from "../../../util/backend";
 
 await describeMspNet(
   "Backend file upload integration",
@@ -51,7 +51,7 @@ await describeMspNet(
 
     it("Postgres DB is ready", async () => {
       await userApi.docker.waitForLog({
-        containerName: "storage-hub-sh-postgres-1",
+        containerName: "storage-hub-sh-indexer-postgres-1",
         searchString: "database system is ready to accept connections",
         timeout: 10000
       });

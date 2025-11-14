@@ -67,7 +67,7 @@ upload_retry_delay_secs = 1
 [database]
 # PostgreSQL connection URL
 # Format: postgresql://[user[:password]@][host][:port][/database]
-# Example for Docker environment: postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub
+# Example for Docker environment: postgresql://postgres:postgres@docker-sh-indexer-postgres-1:5432/storage_hub
 url = "postgresql://postgres:postgres@localhost:5432/storage_hub"
 # Enable mock mode for testing (requires 'mocks' feature to be enabled at compile time)
 # When true, uses in-memory mock database instead of real PostgreSQL connection

@@ -53,6 +53,7 @@ polkadot-primitives = { workspace = true }
 # Local
 shc-actors-framework = { workspace = true }
 shc-actors-derive = { workspace = true }
+shc-blockchain-service-db = { workspace = true }
 shc-forest-manager = { workspace = true }
 shc-common = { workspace = true }
 shp-constants = { workspace = true }

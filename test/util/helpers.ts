@@ -81,6 +81,17 @@ export const createSqlClient = () => {
   });
 };
 
+export const createPendingSqlClient = () => {
+  // Pending transactions DB (launched as sh-pending-postgres with host port 5433)
+  return postgres({
+    host: "localhost",
+    port: 5433,
+    database: "pending_tx",
+    username: "postgres",
+    password: "postgres"
+  });
+};
+
 export const checkSHRunningContainers = async (docker: Docker) => {
   const allContainers = await docker.listContainers({ all: true });
   return allContainers.filter((container) => container.Image === DOCKER_IMAGE);
@@ -100,7 +111,11 @@ export const cleanupEnvironment = async (verbose = false) => {
   );
 
   const postgresContainer = allContainers.find((container) =>
-    container.Names.some((name) => name.includes("storage-hub-sh-postgres-1"))
+    container.Names.some((name) => name.includes("storage-hub-sh-indexer-postgres-1"))
+  );
+
+  const pendingPostgresContainer = allContainers.find((container) =>
+    container.Names.some((name) => name.includes("storage-hub-sh-pending-postgres-1"))
   );
 
   const copypartyContainers = allContainers.filter((container) =>
@@ -152,6 +167,13 @@ export const cleanupEnvironment = async (verbose = false) => {
     promises.push(docker.getContainer(postgresContainer.Id).remove({ force: true }));
   } else {
     verbose && console.log("No postgres container found, skipping");
+  }
+
+  if (pendingPostgresContainer) {
+    console.log("Stopping pending postgres container");
+    promises.push(docker.getContainer(pendingPostgresContainer.Id).remove({ force: true }));
+  } else {
+    verbose && console.log("No pending postgres container found, skipping");
   }
 
   if (copypartyContainers.length > 0) {

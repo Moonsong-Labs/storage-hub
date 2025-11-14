@@ -20,6 +20,7 @@ import {
   ethMspTwoKey,
   ethShUser
 } from "../evmNet/keyring";
+import { createPendingSqlClient } from "../helpers";
 import {
   alice,
   bspDownKey,
@@ -41,6 +42,7 @@ import * as BspNetFisherman from "./fisherman";
 import { addBsp } from "./helpers";
 import * as BspNetIndexer from "./indexer";
 import * as NodeBspNet from "./node";
+import * as PendingDb from "./pending";
 import type { BspNetApi, BspStoredOptions, SealBlockOptions, SqlClient } from "./types";
 import * as Waits from "./waits";
 
@@ -1016,6 +1018,56 @@ export class BspNetTestApi implements AsyncDisposable {
     };
 
     /**
+     * Pending transactions DB namespace
+     * Helpers to interact with the pending transactions Postgres database.
+     */
+    const remappedPendingDbNs = {
+      /**
+       * Creates a client connected to the pending transactions DB.
+       * Default connection maps to docker compose service sh-pending-postgres -> localhost:5433.
+       */
+      createClient: () => createPendingSqlClient(),
+      /**
+       * Utility to convert an ss58 address into AccountId bytes for DB queries.
+       */
+      accountIdFromAddress: (address: string) => PendingDb.accountIdFromAddress(address),
+      /**
+       * Returns row (transaction) for (account, nonce) if present.
+       */
+      getByNonce: (options: { sql: SqlClient; accountId: Buffer; nonce: bigint }) =>
+        PendingDb.getByNonce(options),
+      /**
+       * Returns all rows (transactions) for an account ordered by nonce.
+       */
+      getAllByAccount: (options: { sql: SqlClient; accountId: Buffer }) =>
+        PendingDb.getAllByAccount(options),
+      /**
+       * Counts active-state rows for an account.
+       *
+       * Active-state rows are transactions which are not in terminal states.
+       * Terminal states are: "finalized", "dropped", "invalid", "usurped", "finality_timeout".
+       */
+      countActive: (options: { sql: SqlClient; accountId: Buffer }) =>
+        PendingDb.countActive(options),
+      /**
+       * Waits until a given nonce reaches target state, or times out.
+       */
+      waitForState: (options: {
+        sql: SqlClient;
+        accountId: Buffer;
+        nonce: bigint;
+        state: string;
+        timeoutMs?: number;
+        pollMs?: number;
+      }) => PendingDb.waitForState(options),
+      /**
+       * Asserts there are no active rows with nonce < onChainNonce.
+       */
+      expectClearedBelow: (options: { sql: SqlClient; accountId: Buffer; onChainNonce: bigint }) =>
+        PendingDb.expectClearedBelow(options)
+    };
+
+    /**
      * Fisherman operations namespace
      * Contains methods for interacting with and testing fisherman node functionality.
      */
@@ -1180,6 +1232,10 @@ export class BspNetTestApi implements AsyncDisposable {
        * Contains methods for interacting with the indexer and verifying indexed data.
        */
       indexer: remappedIndexerNs,
+      /**
+       * Pending transactions DB namespace
+       */
+      pendingDb: remappedPendingDbNs,
       /**
        * Fisherman operations namespace
        * Contains methods for interacting with and testing fisherman node functionality.
