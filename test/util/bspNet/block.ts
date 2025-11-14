@@ -599,3 +599,212 @@ export async function reOrgWithLongerChain(
     verbose: false
   });
 }
+
+/**
+ * Options for calculateNextChallengeTick
+ */
+export interface CalculateNextChallengeTickOptions {
+  /** The enriched BSP API instance */
+  api: ApiPromise;
+  /** The provider ID to calculate the next challenge tick for */
+  providerId: string;
+}
+
+/**
+ * Calculates the next challenge tick for a given provider.
+ *
+ * @returns The next challenge tick block number.
+ * @throws Error if the API call fails or returns an error.
+ */
+export const calculateNextChallengeTick = async (
+  options: CalculateNextChallengeTickOptions
+): Promise<number> => {
+  const { api, providerId } = options;
+  try {
+    // Use the proofs dealer API to query the next challenge tick for the provider
+    const result = await api.call.proofsDealerApi.getNextTickToSubmitProofFor(providerId);
+
+    if (result.isErr) {
+      throw new Error(`API returned error: ${result.asErr.toString()}`);
+    }
+
+    return result.asOk.toNumber();
+  } catch (error) {
+    throw new Error(
+      `Failed to calculate next challenge tick for provider ${providerId}: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+  }
+};
+
+/**
+ * Options for triggerProviderChargingCycle
+ */
+export interface TriggerProviderChargingCycleOptions {
+  /** The enriched BSP API instance */
+  api: ApiPromise;
+  /** The provider ID to trigger charging for */
+  providerId: string;
+  /** Optional user address for balance tracking */
+  userAddress?: string;
+}
+
+/**
+ * Triggers a complete provider charging cycle by advancing to the next challenge tick,
+ * waiting for proof submission, and processing the charge transaction.
+ *
+ * @returns Object containing charging event details including if user became insolvent.
+ */
+export const triggerProviderChargingCycle = async (
+  options: TriggerProviderChargingCycleOptions
+): Promise<{
+  proofAcceptedEvents: any[];
+  lastChargeableInfoUpdatedEvents: any[];
+  chargingCompleted: boolean;
+  userBecameInsolvent: boolean;
+  balanceBeforeCharge?: string;
+  balanceAfterCharge?: string;
+}> => {
+  const { api, providerId, userAddress } = options;
+
+  // Log balance before charging if user address provided
+  let balanceBeforeCharge: string | undefined;
+  if (userAddress) {
+    const beforeBalance = (await api.query.system.account(userAddress)).data.free;
+    balanceBeforeCharge = beforeBalance.toString();
+  }
+
+  // Calculate next challenge tick to trigger proof submission and charging
+  const nextChallengeTick = await calculateNextChallengeTick({ api, providerId });
+
+  // Advance to next challenge tick
+  const currentBlock = await api.rpc.chain.getBlock();
+  const currentBlockNumber = currentBlock.block.header.number.toNumber();
+  if (nextChallengeTick > currentBlockNumber) {
+    const blocksToAdvance = nextChallengeTick - currentBlockNumber;
+    for (let i = 0; i < blocksToAdvance; i++) {
+      await api.rpc.engine.createBlock(true, true);
+    }
+  }
+
+  // Wait for BSP to submit proof
+  await waitForTxInPool(api, {
+    module: "proofsDealer",
+    method: "submitProof",
+    checkQuantity: 1,
+    timeout: 15000
+  });
+
+  // Seal block to process proof submission
+  await api.rpc.engine.createBlock(true, true);
+
+  // Assert for the event of the proof successfully submitted and verified
+  const events = (await api.query.system.events()) as EventRecord[];
+  const proofAcceptedEvents = Assertions.assertEventMany(
+    api,
+    "proofsDealer",
+    "ProofAccepted",
+    events
+  );
+
+  // Seal another block to update last chargeable info
+  await api.rpc.engine.createBlock(true, true);
+
+  // Assert for the event of the last chargeable info being updated
+  const events2 = (await api.query.system.events()) as EventRecord[];
+  const lastChargeableInfoUpdatedEvents = Assertions.assertEventMany(
+    api,
+    "paymentStreams",
+    "LastChargeableInfoUpdated",
+    events2
+  );
+
+  // Wait for charging transaction to be submitted
+  await waitForTxInPool(api, {
+    module: "paymentStreams",
+    method: "chargeMultipleUsersPaymentStreams",
+    expectedEvent: "PaymentStreamCharged",
+    timeout: 45000,
+    shouldSeal: false
+  });
+
+  // Seal block to process charging
+  await api.rpc.engine.createBlock(true, true);
+  const blockEvents = (await api.query.system.events()) as EventRecord[];
+
+  // Check if charging completed successfully and if user became insolvent
+  const chargingCompleted =
+    blockEvents.find((event) => event.event.method === "PaymentStreamCharged") !== undefined;
+
+  const userBecameInsolvent =
+    blockEvents.find((event) => event.event.method === "UserWithoutFunds") !== undefined;
+
+  // Log balance after charging if user address provided
+  let balanceAfterCharge: string | undefined;
+  if (userAddress) {
+    const afterBalance = (await api.query.system.account(userAddress)).data.free;
+    balanceAfterCharge = afterBalance.toString();
+  }
+
+  return {
+    proofAcceptedEvents,
+    lastChargeableInfoUpdatedEvents,
+    chargingCompleted,
+    userBecameInsolvent,
+    balanceBeforeCharge,
+    balanceAfterCharge
+  };
+};
+
+/**
+ * Options for chargeUserUntilInsolvent
+ */
+export interface ChargeUserUntilInsolventOptions {
+  /** The enriched BSP API instance */
+  api: ApiPromise;
+  /** The provider ID to charge the user */
+  providerId: string;
+  /** Maximum number of charging attempts to prevent infinite loops (default: 10) */
+  maxAttempts?: number;
+  /** Optional user address for balance logging and debugging */
+  userAddress?: string;
+}
+
+/**
+ * Keeps charging a user until they become insolvent (UserWithoutFunds event is emitted).
+ * This function will repeatedly call triggerProviderChargingCycle until the user runs out of funds.
+ *
+ * @returns Object containing details about all charging cycles and final result.
+ */
+export const chargeUserUntilInsolvent = async (
+  options: ChargeUserUntilInsolventOptions
+): Promise<{
+  totalCharges: number;
+  userBecameInsolvent: boolean;
+  finalResult: Awaited<ReturnType<typeof triggerProviderChargingCycle>>;
+}> => {
+  const { api, providerId, maxAttempts = 10, userAddress } = options;
+  let attempts = 0;
+  let finalResult: Awaited<ReturnType<typeof triggerProviderChargingCycle>>;
+
+  do {
+    attempts++;
+
+    finalResult = await triggerProviderChargingCycle({ api, providerId, userAddress });
+
+    if (finalResult.userBecameInsolvent) {
+      break;
+    }
+
+    if (attempts >= maxAttempts) {
+      break;
+    }
+  } while (!finalResult.userBecameInsolvent && attempts < maxAttempts);
+
+  return {
+    totalCharges: attempts,
+    userBecameInsolvent: finalResult.userBecameInsolvent,
+    finalResult
+  };
+};

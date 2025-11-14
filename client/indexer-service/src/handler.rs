@@ -6,6 +6,7 @@ use log::{error, info};
 use std::sync::Arc;
 use thiserror::Error;
 
+use pallet_file_system_runtime_api::FileSystemApi;
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use sc_client_api::{BlockBackend, BlockchainEvents};
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
@@ -120,18 +121,21 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
 
         conn.transaction::<(), IndexBlockError, _>(move |conn| {
             Box::pin(async move {
-                let block_number_u64: u64 = block_number.saturated_into();
-                let block_number_i64: i64 = block_number_u64 as i64;
-                ServiceState::update(conn, block_number_i64).await?;
-
                 for ev in block_events {
                     self.route_event(conn, &ev.event.into(), block_hash).await?;
                 }
+
+                // Update the last indexed finalized block after indexing all events
+                let block_number_u64: u64 = block_number.saturated_into();
+                let block_number_i64: i64 = block_number_u64 as i64;
+                ServiceState::update(conn, block_number_i64).await?;
 
                 Ok(())
             })
         })
         .await?;
+
+        info!(target: LOG_TARGET, "Successfully indexed block #{}: {}", block_number, block_hash);
 
         Ok(())
     }
@@ -166,7 +170,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 self.index_payment_streams_event(conn, event).await?
             }
             StorageEnableEvents::ProofsDealer(event) => {
-                self.index_proofs_dealer_event(conn, event).await?
+                self.index_proofs_dealer_event(conn, event, block_hash)
+                    .await?
             }
             StorageEnableEvents::StorageProviders(event) => {
                 self.index_providers_event(conn, event, block_hash).await?
@@ -371,35 +376,20 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 .await?;
             }
             pallet_file_system::Event::StorageRequestRevoked { file_key } => {
-                // Check if file has any provider associations
-                let has_msp = File::has_msp_associations(conn, file_key.as_ref()).await?;
-                let has_bsp = File::has_bsp_associations(conn, file_key.as_ref()).await?;
-
-                if !has_msp && !has_bsp {
-                    // No associations, safe to delete immediately
-                    // This happens when storage request is revoked before any BSPs or MSP confirms
-                    File::delete(conn, file_key.as_ref().to_vec()).await?;
-                    log::debug!(
-                        "Storage request revoked for file {:?} with no associations, deleted immediately",
-                        file_key
-                    );
-                }
-                // If the file has associations, the `IncompleteStorageRequest` event will handle it
+                // Delete file if it has no storage (not in bucket forest and no BSP associations)
+                // This happens when storage request is revoked before any BSPs or MSP confirms or accepted respectively.
+                File::delete_if_orphaned(conn, file_key.as_ref()).await?;
+                // If the file has storage, the `IncompleteStorageRequest` event will handle it
             }
-            pallet_file_system::Event::StorageRequestRejected { file_key, reason } => {
-                // Check if the file has any BSP associations (it will not have MSP ones since the MSP did not accept it)
-                let has_bsp = File::has_bsp_associations(conn, file_key.as_ref()).await?;
-                if has_bsp {
-                    // If the file has BSP associations, the `IncompleteStorageRequest` event will handle it
-                    return Ok(());
-                }
-                // If the file does not have BSP associations, it's safe to delete immediately
-                File::delete(conn, file_key.as_ref().to_vec()).await?;
-                log::debug!(
-                    "Storage request rejected for file {:?} with reason {:?}, deleted immediately",
-                    file_key,
-                    reason
-                );
+            pallet_file_system::Event::StorageRequestRejected {
+                file_key,
+                reason: _,
+            } => {
+                // Delete file if it has no storage (not in bucket forest and no BSP associations)
+                // This happens when a storage request is rejected by the MSP.
+                // It is possible that there might be no BSP associations.
+                File::delete_if_orphaned(conn, file_key.as_ref()).await?;
+                // If the file has storage, the `IncompleteStorageRequest` event will handle it
             }
             pallet_file_system::Event::MspAcceptedStorageRequest {
                 file_key,
@@ -547,12 +537,18 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             // This event covers all scenarios where a storage request was unfulfilled while there were BSPs and/or the MSP who have confirmed to store the file
             // and necessitates a fisherman to delete this file.
             pallet_file_system::Event::IncompleteStorageRequest { file_key } => {
-                // Check if file has any provider associations
-                let has_msp = File::has_msp_associations(conn, file_key.as_ref()).await?;
+                // Check if file is in bucket or has BSP associations
+                let file_record = File::get_by_file_key(conn, file_key.as_ref().to_vec())
+                    .await
+                    .ok();
+                let is_in_bucket = file_record
+                    .as_ref()
+                    .map(|f| f.is_in_bucket)
+                    .unwrap_or(false);
                 let has_bsp = File::has_bsp_associations(conn, file_key.as_ref()).await?;
 
-                if has_msp || has_bsp {
-                    // File has associations, mark for deletion by fisherman
+                if is_in_bucket || has_bsp {
+                    // File is still being stored, mark for deletion
                     File::update_deletion_status(
                         conn,
                         file_key.as_ref(),
@@ -562,14 +558,14 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     .await?;
 
                     log::debug!(
-                        "Incomplete storage request for file {:?} with existing associations (MSP: {}, BSP: {}), marked for deletion without signature",
-                        file_key, has_msp, has_bsp
+                        "Incomplete storage request for file {:?} is still being stored (in_bucket: {}, BSP: {}), marked for deletion without signature",
+                        file_key, is_in_bucket, has_bsp
                     );
                 } else {
-                    // No associations, safe to delete immediately
+                    // No storage, safe to delete immediately
                     File::delete(conn, file_key.as_ref().to_vec()).await?;
                     log::debug!(
-                        "Incomplete storage request for file {:?} with no associations, deleted immediately",
+                        "Incomplete storage request for file {:?} is not being stored, deleted immediately",
                         file_key
                     );
                 }
@@ -687,10 +683,71 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         &'b self,
         conn: &mut DbConnection<'a>,
         event: &pallet_proofs_dealer::Event<Runtime>,
+        block_hash: H256,
     ) -> Result<(), diesel::result::Error> {
         match event {
             pallet_proofs_dealer::Event::MutationsAppliedForProvider { .. } => {}
-            pallet_proofs_dealer::Event::MutationsApplied { .. } => {}
+            pallet_proofs_dealer::Event::MutationsApplied {
+                mutations,
+                event_info,
+                ..
+            } => {
+                // In StorageHub, we assume that all `MutationsApplied` events are emitted by bucket
+                // root changes, and they should contain the encoded `BucketId` of the bucket that was mutated
+                // in the `event_info` field.
+                let Some(event_info) = event_info else {
+                    error!(
+                        target: LOG_TARGET,
+                        "MutationsApplied event with `None` event info, when it is expected to contain the BucketId of the bucket that was mutated."
+                    );
+                    return Ok(());
+                };
+
+                let bucket_id = match self
+                    .client
+                    .runtime_api()
+                    .decode_generic_apply_delta_event_info(block_hash, event_info.clone())
+                {
+                    Ok(runtime_api_result) => match runtime_api_result {
+                        Ok(bucket_id) => bucket_id,
+                        Err(e) => {
+                            error!(
+                                target: LOG_TARGET,
+                                "Failed to decode BucketId from event info: {:?}",
+                                e
+                            );
+                            return Ok(());
+                        }
+                    },
+                    Err(e) => {
+                        error!(
+                            target: LOG_TARGET,
+                            "Error while calling runtime API to decode BucketId from event info: {:?}",
+                            e
+                        );
+                        return Ok(());
+                    }
+                };
+
+                let onchain_bucket_id = bucket_id.as_ref().to_vec();
+
+                // Process each mutation to update file bucket membership
+                for (file_key, mutation) in mutations {
+                    let file_key_bytes = file_key.as_ref().to_vec();
+
+                    // Index whether the file is in the bucket's forest based on the mutation type
+                    // - `Add` mutation: file was added to the bucket's forest
+                    // - `Remove` mutation: file was removed from the bucket's forest
+                    let is_in_bucket = matches!(mutation, shc_common::types::TrieMutation::Add(_));
+                    File::update_bucket_membership(
+                        conn,
+                        &file_key_bytes,
+                        &onchain_bucket_id,
+                        is_in_bucket,
+                    )
+                    .await?;
+                }
+            }
             pallet_proofs_dealer::Event::NewChallenge { .. } => {}
             pallet_proofs_dealer::Event::NewPriorityChallenge { .. } => {}
             pallet_proofs_dealer::Event::ProofAccepted {

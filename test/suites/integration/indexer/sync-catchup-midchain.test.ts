@@ -1,6 +1,5 @@
 import assert from "node:assert";
 import { describeMspNet, type EnrichedBspApi, type SqlClient, waitFor } from "../../../util";
-import { getLastIndexedBlock, waitForBucketIndexed } from "../../../util/indexerHelpers";
 
 await describeMspNet(
   "Indexer Service - Block Notification Sync (Mid-Chain Pause)",
@@ -37,7 +36,7 @@ await describeMspNet(
 
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",
-        containerName: "storage-hub-sh-user-1",
+        containerName: userApi.shConsts.NODE_INFOS.user.containerName,
         timeout: 10000
       });
 
@@ -73,7 +72,7 @@ await describeMspNet(
       // Wait for indexer to catch up to initial buckets
       await waitFor({
         lambda: async () => {
-          const lastIndexed = await getLastIndexedBlock(sql);
+          const lastIndexed = await indexerApi.indexer.getLastIndexedBlock({ sql });
           return lastIndexed >= initialBlockNumber;
         },
         iterations: 100,
@@ -82,13 +81,13 @@ await describeMspNet(
 
       // Verify indexer processed initial buckets - establishes non-genesis baseline
       for (const bucketName of initialBuckets) {
-        await waitForBucketIndexed(sql, bucketName);
+        await indexerApi.indexer.waitForBucketIndexed({ sql, bucketName });
       }
 
-      const blockBeforePause = await getLastIndexedBlock(sql);
+      const blockBeforePause = await indexerApi.indexer.getLastIndexedBlock({ sql });
 
       // Simulate indexer failure mid-chain - more realistic than genesis pause
-      await userApi.docker.pauseContainer("storage-hub-sh-indexer-1");
+      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.indexer.containerName);
 
       // Produce additional blocks exceeding sync threshold while indexer is down
       // Capture block number after each seal to avoid race conditions
@@ -104,7 +103,7 @@ await describeMspNet(
       }
 
       // Confirm indexer remained frozen at pre-pause block
-      const lastIndexedBeforeCatchup = await getLastIndexedBlock(sql);
+      const lastIndexedBeforeCatchup = await indexerApi.indexer.getLastIndexedBlock({ sql });
 
       assert.equal(
         lastIndexedBeforeCatchup,
@@ -113,7 +112,9 @@ await describeMspNet(
       );
 
       // Resume indexer to trigger mid-chain catchup scenario
-      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-indexer-1" });
+      await userApi.docker.resumeContainer({
+        containerName: userApi.shConsts.NODE_INFOS.indexer.containerName
+      });
 
       // Non-producer nodes must explicitly finalize imported blocks to trigger indexing
       // We need to finalize the exact target block, not just the current finalized head
@@ -127,7 +128,7 @@ await describeMspNet(
       // Block until indexer processes backlog from mid-chain position
       await waitFor({
         lambda: async () => {
-          const lastIndexed = await getLastIndexedBlock(sql);
+          const lastIndexed = await indexerApi.indexer.getLastIndexedBlock({ sql });
           return lastIndexed >= finalBlockNumber;
         },
         iterations: 100,
@@ -136,11 +137,11 @@ await describeMspNet(
 
       // Verify both initial and catchup buckets are present - tests full consistency
       for (const bucketName of [...initialBuckets, ...catchupBuckets]) {
-        await waitForBucketIndexed(sql, bucketName);
+        await indexerApi.indexer.waitForBucketIndexed({ sql, bucketName });
       }
 
       // Validate indexer reached target block after mid-chain resume
-      const lastIndexedBlock = await getLastIndexedBlock(sql);
+      const lastIndexedBlock = await indexerApi.indexer.getLastIndexedBlock({ sql });
 
       assert(
         lastIndexedBlock >= finalBlockNumber,

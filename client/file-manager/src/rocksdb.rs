@@ -698,20 +698,22 @@ where
             FileStorageWriteError::FailedToConstructFileTrie
         })?;
 
-        if let Err(e) = file_trie.write_chunk(chunk_id, data) {
-            match e {
-                FileStorageWriteError::FileChunkAlreadyExists => {
-                    // Treat as no-op: chunk already present (e.g., shared trie across buckets)
-                    debug!(target: LOG_TARGET, "Chunk {:?} already exists in file storage for file key {:?}", chunk_id, file_key);
-                }
-                other => {
-                    error!(target: LOG_TARGET, "{:?}", other);
-                    return Err(FileStorageWriteError::FailedToInsertFileChunk);
-                }
+        match file_trie.write_chunk(chunk_id, data) {
+            Ok(()) => {
+                // Chunk was successfully inserted into shared trie - need to update root
+                debug!(target: LOG_TARGET, "Chunk {:?} successfully written to shared trie for file key {:?}", chunk_id, file_key);
             }
-        }
+            Err(FileStorageWriteError::FileChunkAlreadyExists) => {
+                // Chunk already exists in shared trie - no need to update root
+                debug!(target: LOG_TARGET, "Chunk {:?} already exists in shared trie for file key {:?}, incrementing count for progress tracking", chunk_id, file_key);
+            }
+            Err(other) => {
+                error!(target: LOG_TARGET, "Error while writing chunk {:?} of file key {:?}: {:?}", chunk_id, file_key, other);
+                return Err(FileStorageWriteError::FailedToInsertFileChunk);
+            }
+        };
 
-        // Update partial root.
+        // Update the root of the file trie.
         let new_partial_root = file_trie.get_root();
         let mut transaction = DBTransaction::new();
         transaction.put(
@@ -720,7 +722,6 @@ where
             new_partial_root.as_ref(),
         );
 
-        // Get current chunk count or initialise to 0
         let current_count = self.stored_chunks_count(file_key).map_err(|e| {
             error!(target: LOG_TARGET, "{:?}", e);
             FileStorageWriteError::FailedToGetStoredChunksCount
@@ -732,6 +733,8 @@ where
         let new_count = current_count
             .checked_add(1)
             .ok_or(FileStorageWriteError::ChunkCountOverflow)?;
+
+        // Update the chunk count.
         transaction.put(
             Column::ChunkCount.into(),
             file_key.as_ref(),
@@ -743,23 +746,15 @@ where
             FileStorageWriteError::FailedToUpdatePartialRoot
         })?;
 
-        // Check if we have all the chunks for the file using the count
-        if metadata.chunks_count() != new_count {
-            return Ok(FileStorageWriteOutcome::FileIncomplete);
+        // Check if file is complete using the helper method (only once at the end)
+        match self.is_file_complete(file_key) {
+            Ok(true) => Ok(FileStorageWriteOutcome::FileComplete),
+            Ok(false) => Ok(FileStorageWriteOutcome::FileIncomplete),
+            Err(e) => {
+                error!(target: LOG_TARGET, "Failed to check file completion status for file key {:?}: {:?}", file_key, e);
+                Err(FileStorageWriteError::FailedToCheckFileCompletion(e))
+            }
         }
-
-        // Verify that the final root matches the expected fingerprint
-        if metadata.fingerprint() != file_trie.get_root().as_ref() {
-            error!(
-                target: LOG_TARGET,
-                "Fingerprint mismatch. Expected: {:?}, got: {:?}",
-                metadata.fingerprint(),
-                file_trie.get_root()
-            );
-            return Err(FileStorageWriteError::FingerprintAndStoredFileMismatch);
-        }
-
-        Ok(FileStorageWriteOutcome::FileComplete)
     }
 
     /// Checks if all chunks are stored for a given file key.
