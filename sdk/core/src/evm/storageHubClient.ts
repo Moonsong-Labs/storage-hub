@@ -19,7 +19,6 @@ import {
   type GetContractReturnType,
   hexToBytes,
   http,
-  keccak256,
   parseGwei,
   type PublicClient,
   stringToBytes,
