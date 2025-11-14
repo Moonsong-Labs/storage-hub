@@ -4,12 +4,12 @@
 
 cfg_if::cfg_if! {
     // if #[cfg(all(feature = "solochain", ...))] {
-    //     compile_error!("Please select only 1 runtime")
+    //     compile_error!("Please select only 1 runtime");
     // } else
     if #[cfg(feature = "solochain")] {
         use sh_solochain_evm_runtime::Runtime;
     } else {
-        compile_error!("No runtime selected")
+        compile_error!("No runtime selected");
     }
 }
 

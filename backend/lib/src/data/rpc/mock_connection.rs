@@ -321,10 +321,6 @@ impl RpcConnection for MockConnection {
             methods::PEER_IDS => serde_json::json!(vec![
                 "/ip4/192.168.0.10/tcp/30333/p2p/12D3KooWSUvz8QM5X4tfAaSLErAZjR2puojo16pULBHyqTMGKtNV"
             ]),
-            methods::CURRENT_PRICE => {
-                // Return a mock price value (e.g., 100 units)
-                serde_json::json!(MOCK_PRICE_PER_GIGA_UNIT)
-            },
             methods::RECEIVE_FILE_CHUNKS => {
                 serde_json::json!([])
             }
