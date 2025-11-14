@@ -1,6 +1,7 @@
 use wasm_bindgen::prelude::*;
 
 use parity_scale_codec::Encode;
+use shp_constants::FILE_CHUNK_SIZE;
 use shp_file_metadata::{Chunk, ChunkId, ChunkWithId};
 use sp_core::{hashing::blake2_256, Hasher};
 use sp_trie::{LayoutV1, MemoryDB, TrieDBMutBuilder, TrieMut};
@@ -107,7 +108,6 @@ impl FileTrie {
     /// This preserves the canonical chunking while dramatically reducing JS→WASM calls.
     #[wasm_bindgen(js_name = push_chunks_batched)]
     pub fn push_chunks_batched(&mut self, bytes: &[u8]) {
-        use shp_constants::FILE_CHUNK_SIZE;
         let chunk_size = FILE_CHUNK_SIZE as usize;
         if chunk_size == 0 {
             return;
@@ -156,6 +156,12 @@ impl FileTrie {
     #[wasm_bindgen(js_name = get_root)]
     pub fn get_root(&self) -> Vec<u8> {
         self.inner.get_root().to_vec()
+    }
+}
+
+impl Default for FileTrie {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

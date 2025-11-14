@@ -1,7 +1,10 @@
 // @ts-nocheck - SDK dependencies are not available during general typecheck in CI
 import assert, { strictEqual } from "node:assert";
 import { createReadStream } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { Readable } from "node:stream";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { TypeRegistry } from "@polkadot/types";
 import type { AccountId20, H256 } from "@polkadot/types/interfaces";
 import {
@@ -19,7 +22,7 @@ import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../util/evmNet/consts";
 import { ALITH_PRIVATE_KEY } from "../../util/evmNet/keyring";
 
 await describeMspNet(
-  "Solochain EVM SDK Precompiles Integration",
+  "SDK Big Files Performance",
   {
     initialised: false,
     runtimeType: "solochain",
@@ -263,9 +266,9 @@ await describeMspNet(
     }
 
     // Generic perf test: fingerprint, upload (issue+upload), download timings
-    const PERF_SIZES_MB = [10, 50, 100, 500, 1024];
-    for (const sizeMB of PERF_SIZES_MB) {
-      it(`Perf timings for ${sizeMB}MB.bin: fingerprint only`, async () => {
+    it("Perf timings across file sizes: fingerprint only", async () => {
+      const PERF_SIZES_MB = [10, 50, 100, 500, 1024];
+      for (const sizeMB of PERF_SIZES_MB) {
         const filename = `${sizeMB}MB.bin`;
         const sizeBytes = sizeMB * 1024 * 1024;
 
@@ -299,13 +302,12 @@ await describeMspNet(
           uploadMs,
           downloadMs
         });
-      });
-    }
+      }
 
-    // Summary table across all files
-    it("Perf summary (fingerprint/upload/download)", async () => {
+      const outPath = join(tmpdir(), `sdk-big-files-perf-${Date.now()}.json`);
+      await writeFile(outPath, JSON.stringify(perfRows, null, 2), "utf8");
       // eslint-disable-next-line no-console
-      console.table(perfRows);
+      console.log(`Perf results written to: ${outPath}`);
     });
   }
 );
