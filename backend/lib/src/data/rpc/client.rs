@@ -2,15 +2,22 @@
 
 use std::sync::Arc;
 
+use bigdecimal::BigDecimal;
+use codec::Decode;
 use jsonrpsee::core::traits::ToRpcParams;
 use serde::de::DeserializeOwned;
 use tracing::debug;
 
+use shc_indexer_db::OnchainMspId;
 use shc_rpc::{
     GetFileFromFileStorageResult, GetValuePropositionsResult, RpcProviderId, SaveFileToDisk,
 };
+use sp_core::storage::StorageKey;
 
-use crate::data::rpc::{connection::error::RpcResult, methods, AnyRpcConnection, RpcConnection};
+use crate::data::rpc::{
+    connection::error::{RpcConnectionError, RpcResult},
+    methods, runtime_apis, state_queries, AnyRpcConnection, RpcConnection,
+};
 
 /// StorageHub RPC client that uses an RpcConnection
 pub struct StorageHubRpcClient {
@@ -33,6 +40,71 @@ impl StorageHubRpcClient {
             // TODO: More robust reconnection mechanism, like we do for the original connection
             _ = self.connection.reconnect().await;
         }
+    }
+
+    /// Wrapper over [`call`] for runtime APIs
+    ///
+    /// # Arguments:
+    /// - `api` is the api method to invoke
+    /// - `params` is the set of parameters for the api call
+    ///
+    /// The `api` method should look like "<TraitName>_<trait_method_name>",
+    /// for example "Core_version" to invoke the `version` method of the `core` runtime api
+    pub async fn call_runtime_api<P: codec::Encode, R: codec::Decode>(
+        &self,
+        api: &str,
+        params: P,
+    ) -> RpcResult<R> {
+        // the RPC method expectes the parameters to be scale encoded and as a hex string
+        let encoded = format!("0x{}", hex::encode(params.encode()));
+        debug!(method = %api, ?encoded, "calling runtime api");
+
+        let response = self
+            .call::<_, String>(methods::API_CALL, jsonrpsee::rpc_params![api, encoded])
+            .await?;
+
+        // the RPC also replies with scale-encoded response as a hex string
+        let response = hex::decode(response.trim_start_matches("0x")).map_err(|e| {
+            RpcConnectionError::Serialization(format!(
+                "RPC runtime API did not respond with a valid hex string: {}",
+                e.to_string()
+            ))
+        })?;
+
+        R::decode(&mut response.as_slice())
+            .map_err(|e| RpcConnectionError::Serialization(e.to_string()))
+    }
+
+    /// Wrapper over [`call`] for reading storage
+    ///
+    /// # Arguments:
+    /// - `key` is the storage key to attempt reading
+    pub async fn query_storage<R>(&self, key: StorageKey) -> RpcResult<Option<R>>
+    where
+        R: Decode,
+    {
+        let encoded = format!("0x{}", hex::encode(&key.0));
+        debug!(key = encoded, "reading storage");
+
+        let response = self
+            .call::<_, Option<String>>(methods::STATE_QUERY, jsonrpsee::rpc_params![encoded])
+            .await?;
+
+        let Some(response) = response else {
+            return Ok(None);
+        };
+
+        // the RPC replies with scale-encoded response as a hex string
+        let response = hex::decode(response.trim_start_matches("0x")).map_err(|e| {
+            RpcConnectionError::Serialization(format!(
+                "RPC runtime API did not respond with a valid hex string: {}",
+                e.to_string()
+            ))
+        })?;
+
+        R::decode(&mut response.as_slice())
+            .map(Some)
+            .map_err(|e| RpcConnectionError::Serialization(e.to_string()))
     }
 
     /// Call a JSON-RPC method on the connected node
@@ -61,12 +133,38 @@ impl StorageHubRpcClient {
 
     /// Get the current price per giga unit per tick
     ///
-    /// Returns the price value (u128) that represents the cost per giga unit per tick
+    /// Returns the price value that represents the cost per giga unit per tick
     /// in the StorageHub network.
-    pub async fn get_current_price_per_giga_unit_per_tick(&self) -> RpcResult<u128> {
+    pub async fn get_current_price_per_giga_unit_per_tick(&self) -> RpcResult<BigDecimal> {
         debug!(target: "rpc::client::get_current_price_per_giga_unit_per_tick", "RPC call: get_current_price_per_giga_unit_per_tick");
 
-        self.call_no_params(methods::CURRENT_PRICE).await
+        self.call_runtime_api::<_, runtime_apis::CurrentPrice>(runtime_apis::CURRENT_PRICE, ())
+            .await
+            .map(|price| price.into())
+    }
+
+    /// Retrieve the current number of active users
+    pub async fn get_number_of_active_users(&self, provider: OnchainMspId) -> RpcResult<usize> {
+        debug!(target: "rpc::client::get_number_of_active_users", "Runtime API: get_users_of_payment_streams_of_provider");
+
+        self.call_runtime_api::<_, runtime_apis::NumOfUsers>(
+            runtime_apis::NUM_OF_USERS,
+            provider.as_h256(),
+        )
+        .await
+        .map(|users| users.len())
+    }
+
+    /// Retrieve the MSP information for the given provider
+    ///
+    /// This function will read into the chain state from the Provider pallet's MainStorageProviders map
+    pub async fn get_msp_info(
+        &self,
+        provider: OnchainMspId,
+    ) -> RpcResult<Option<state_queries::MspInfo>> {
+        debug!(target: "rpc::client::get_msp", provider = %provider, "State Query: get_msp_info");
+        self.query_storage(state_queries::msp_info_key(provider))
+            .await
     }
 
     /// Returns whether the given `file_key` is expected to be received by the MSP node
@@ -151,6 +249,7 @@ impl StorageHubRpcClient {
 
 #[cfg(all(test, feature = "mocks"))]
 mod tests {
+    use bigdecimal::Signed;
     use codec::Decode;
 
     use shp_types::Hash;
@@ -211,7 +310,10 @@ mod tests {
             .get_current_price_per_giga_unit_per_tick()
             .await
             .expect("able to retrieve current price per giga unit");
-        assert!(price > 0);
+        assert!(
+            price.is_positive(),
+            "Price per giga unit should always be > 0"
+        );
     }
 
     #[tokio::test]
