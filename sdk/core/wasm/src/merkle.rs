@@ -1,6 +1,7 @@
 use wasm_bindgen::prelude::*;
 
 use parity_scale_codec::Encode;
+use shp_constants::FILE_CHUNK_SIZE;
 use shp_file_metadata::{Chunk, ChunkId, ChunkWithId};
 use sp_core::{hashing::blake2_256, Hasher};
 use sp_trie::{LayoutV1, MemoryDB, TrieDBMutBuilder, TrieMut};
@@ -102,10 +103,65 @@ impl FileTrie {
         self.next_id += 1;
     }
 
+    /// Push many chunks at once. The input buffer is split into FILE_CHUNK_SIZE-sized
+    /// windows, and any remainder (< FILE_CHUNK_SIZE) is pushed as the final chunk.
+    /// This preserves the canonical chunking while dramatically reducing JS→WASM calls.
+    #[wasm_bindgen(js_name = push_chunks_batched)]
+    pub fn push_chunks_batched(&mut self, bytes: &[u8]) {
+        let chunk_size = FILE_CHUNK_SIZE as usize;
+        if chunk_size == 0 {
+            return;
+        }
+        // Open one mutable trie view and insert all chunks within this call.
+        let builder = if self.inner.memdb.keys().is_empty() {
+            TrieDBMutBuilder::<TrieLayout>::new(&mut self.inner.memdb, &mut self.inner.root)
+        } else {
+            TrieDBMutBuilder::<TrieLayout>::from_existing(
+                &mut self.inner.memdb,
+                &mut self.inner.root,
+            )
+        };
+        let mut trie = builder.build();
+
+        let mut offset = 0usize;
+        while offset + chunk_size <= bytes.len() {
+            let end = offset + chunk_size;
+            let cid = ChunkId::new(self.next_id);
+            let value = ChunkWithId {
+                chunk_id: cid,
+                data: bytes[offset..end].to_vec(),
+            }
+            .encode();
+            trie.insert(&cid.as_trie_key(), &value)
+                .expect("in-memory insert cannot fail");
+            self.next_id += 1;
+            offset = end;
+        }
+
+        if offset < bytes.len() {
+            let cid = ChunkId::new(self.next_id);
+            let value = ChunkWithId {
+                chunk_id: cid,
+                data: bytes[offset..].to_vec(),
+            }
+            .encode();
+            trie.insert(&cid.as_trie_key(), &value)
+                .expect("in-memory insert cannot fail");
+            self.next_id += 1;
+        }
+        // trie drops here → commits to memdb/root
+    }
+
     /// Current Merkle root as a hex string.
     #[wasm_bindgen(js_name = get_root)]
     pub fn get_root(&self) -> Vec<u8> {
         self.inner.get_root().to_vec()
+    }
+}
+
+impl Default for FileTrie {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
