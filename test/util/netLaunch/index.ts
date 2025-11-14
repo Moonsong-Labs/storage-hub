@@ -474,9 +474,11 @@ export class NetworkLauncher {
       });
     }
 
-    // Only start standalone indexer service if it's enabled and we're using fullnet
+    // Only start standalone indexer service if it's enabled and we're using fullnet.
+    // The indexer itself runs in the `sh-indexer` service, while its Postgres
+    // backend is provided by the `sh-indexer-postgres` service started earlier.
     if (this.config.indexer && this.config.standaloneIndexer && this.type === "fullnet") {
-      await compose.upOne("sh-indexer-postgres", {
+      await compose.upOne("sh-indexer", {
         cwd: cwd,
         config: tmpFile,
         log: verbose,
