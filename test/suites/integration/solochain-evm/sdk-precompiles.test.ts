@@ -15,7 +15,13 @@ import {
 import { MspClient } from "@storagehub-sdk/msp-client";
 import { createPublicClient, createWalletClient, defineChain, http, getAddress } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { describeMspNet, type EnrichedBspApi, ShConsts, waitFor, type SqlClient } from "../../../util";
+import {
+  describeMspNet,
+  type EnrichedBspApi,
+  ShConsts,
+  waitFor,
+  type SqlClient
+} from "../../../util";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import { ALITH_PRIVATE_KEY } from "../../../util/evmNet/keyring";
 
