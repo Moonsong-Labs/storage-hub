@@ -1031,7 +1031,7 @@ mod tests {
                     // Create MSP with the ID that matches the default config
                     let _ = client
                         .create_msp(
-                            MOCK_ADDRESS,
+                            &MOCK_ADDRESS.to_string(),
                             OnchainMspId::new(Hash::from_slice(&DUMMY_MSP_ID)),
                         )
                         .await
@@ -1064,7 +1064,7 @@ mod tests {
             "Total bytes should always be positive"
         );
         assert!(
-            total_bytes <= available_bytes,
+            available_bytes <= total_bytes,
             "Available bytes should never be more than total bytes"
         );
         assert!(
