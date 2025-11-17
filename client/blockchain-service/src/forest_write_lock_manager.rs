@@ -2,7 +2,7 @@ use crate::events::ForestWriteLockTaskData;
 use shc_common::traits::StorageEnableRuntime;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
-use tokio::sync::Semaphore;
+use tokio::sync::{Notify, Semaphore};
 
 /// Priority value for forest write lock tickets
 #[derive(Clone, Debug)]
@@ -18,6 +18,8 @@ pub enum ForestWriteLockPriority {
 /// Ticket structure for managing forest write lock requests
 #[derive(Clone, Debug)]
 pub struct ForestWriteLockTicket<Runtime: StorageEnableRuntime> {
+    /// Identifier for the ticket
+    pub id: String,
     /// Priority of the lock request
     pub priority: ForestWriteLockPriority,
     /// Data associated with the lock request ticket
@@ -29,6 +31,7 @@ impl<Runtime: StorageEnableRuntime> ForestWriteLockTicket<Runtime> {
     /// Since MSPs and BSPs will have a separate queues, we can assign high priority to both types of requests
     pub fn new(data: ForestWriteLockTaskData<Runtime>) -> Self {
         Self {
+            id: format!("{:?}", data),
             priority: match data {
                 ForestWriteLockTaskData::SubmitProofRequest(_) => ForestWriteLockPriority::High,
                 ForestWriteLockTaskData::MspRespondStorageRequest(_) => {
@@ -54,6 +57,8 @@ pub struct ForestWriteLockManager<Runtime: StorageEnableRuntime> {
     pub queue: Arc<Mutex<VecDeque<ForestWriteLockTicket<Runtime>>>>,
     /// Current holder of the write lock
     pub current_holder: Arc<Mutex<Option<ForestWriteLockTicket<Runtime>>>>,
+    /// Notify mechanism to signal when the lock becomes available
+    pub notifier: Arc<Notify>,
 }
 
 impl<Runtime: StorageEnableRuntime> ForestWriteLockManager<Runtime> {
@@ -65,6 +70,7 @@ impl<Runtime: StorageEnableRuntime> ForestWriteLockManager<Runtime> {
             lock: Arc::new(Semaphore::const_new(1)),
             queue: Arc::new(Mutex::new(VecDeque::new())),
             current_holder: Arc::new(Mutex::new(None)),
+            notifier: Arc::new(Notify::new()),
         }
     }
 
@@ -84,21 +90,41 @@ impl<Runtime: StorageEnableRuntime> ForestWriteLockManager<Runtime> {
         data: ForestWriteLockTaskData<Runtime>,
     ) -> ForestWriteLockGuard<Runtime> {
         let ticket = ForestWriteLockTicket::new(data);
+
+        // Add the ticket to the priority queue first
         // TODO: Handle the edge case where the acquire request is already in the queue
-        let mut queue_guard = self.queue.lock().unwrap();
-        if self.lock.available_permits() > 0 && queue_guard.is_empty() {
-            let _permit = self.lock.acquire().await.unwrap();
-            *self.current_holder.lock().unwrap() = Some(ticket.clone());
-        } else {
-            // If the lock is available but there are pending requests
-            // We grant  it to the next ticket in the queue
-            if self.lock.available_permits() > 0 {
-                if let Some(next_ticket) = queue_guard.pop_front() {
-                    let _permit = self.lock.acquire().await.unwrap();
-                    *self.current_holder.lock().unwrap() = Some(next_ticket);
+        {
+            self.enqueue(ticket.clone());
+        }
+
+        // If the ticket is at the front of the queue, try to acquire the lock
+        // Otherwise, wait until it's our turn
+        loop {
+            let permit = self.lock.acquire().await.unwrap();
+
+            let should_proceed = {
+                let mut queue = self.queue.lock().unwrap();
+                if let Some(next_task) = queue.front() {
+                    if next_task.id == ticket.id {
+                        queue.pop_front();
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    false
                 }
+            };
+
+            if should_proceed {
+                *self.current_holder.lock().unwrap() = Some(ticket);
+                permit.forget(); // We'll manually release when guard is dropped
+                break;
+            } else {
+                // Not our turn, wait for notification
+                drop(permit);
+                self.notifier.notified().await;
             }
-            self.enqueue(ticket);
         }
 
         ForestWriteLockGuard {
@@ -147,9 +173,11 @@ impl<Runtime: StorageEnableRuntime> Drop for ForestWriteLockGuard<Runtime> {
         self.manager.lock.add_permits(1);
         // Clear the current holder
         *self.manager.current_holder.lock().unwrap() = None;
-        // TODO: Implement logic to acquire the next ticket from the queue if available
+        // Notify next waiter
+        self.manager.notifier.notify_one();
     }
 }
+
 // TODO: Implement unit tests for ForestWriteLockManager and ForestWriteLockGuard
 // Verify that:
 // a) With empty queue, acquire grants the lock immediately
