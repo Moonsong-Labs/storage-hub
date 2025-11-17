@@ -2501,7 +2501,7 @@ mod benchmarks {
                 operation: FileOperation::Delete,
             };
 
-            // Debug: pre-verify signature using the same adapter and owner as in the pallet
+            // pre-verify signature
             let signed_intention_encoded = signed_intention.encode();
             let to_verify = <T as crate::Config>::IntentionMsgAdapter::bytes_to_verify(
                 &signed_intention_encoded,
@@ -2775,7 +2775,7 @@ mod benchmarks {
                 operation: FileOperation::Delete,
             };
 
-            // Debug: pre-verify signature using the same adapter and owner as in the pallet
+            // pre-verify signature
             let signed_intention_encoded = signed_intention.encode();
             let to_verify = <T as crate::Config>::IntentionMsgAdapter::bytes_to_verify(
                 &signed_intention_encoded,
