@@ -15,6 +15,7 @@ await describeMspNet(
   {
     initialised: true,
     pendingTxDb: true,
+    only: true,
     networkConfig: [{ noisy: false, rocksdb: true }]
   },
   ({ before, after, createUserApi, createMsp1Api, createApi, it }) => {
@@ -561,12 +562,148 @@ await describeMspNet(
       }
     });
 
-    it(
-      "Turn off MSP 1, build block with pending transaction, turn it back on and check transaction is not watched anymore",
-      { skip: "TODO" },
-      async () => {
-        // TODO: Implement this test
+    it("Turn off MSP 1, build block with pending transaction, turn it back on and check transaction is not watched anymore", async () => {
+      const mspAddress = userApi.accounts.mspKey.address;
+      const accountId = userApi.pendingDb.accountIdFromAddress(mspAddress);
+
+      // Ensure MSP is free of pending extrinsics before starting this scenario.
+      await mspApi.wait.waitForAvailabilityToSendTx(mspAddress);
+
+      // Advance to the next MSP charging period so that a new chargeMultipleUsersPaymentStreams
+      // extrinsic is submitted to the tx pool.
+      const currentHeader = await userApi.rpc.chain.getHeader();
+      const currentBlockNumber = currentHeader.number.toNumber();
+      const blocksToAdvance =
+        MSP_CHARGING_PERIOD - (currentBlockNumber % MSP_CHARGING_PERIOD || MSP_CHARGING_PERIOD);
+      await userApi.block.skipTo(currentBlockNumber + blocksToAdvance);
+
+      await userApi.assert.extrinsicPresent({
+        module: "paymentStreams",
+        method: "chargeMultipleUsersPaymentStreams",
+        checkTxPool: true
+      });
+
+      // Wait until a pending DB row exists for this MSP account in a non-terminal state and capture its nonce.
+      let restartNonce: bigint | undefined;
+      let prePauseState: string | undefined;
+      try {
+        await waitFor({
+          lambda: async () => {
+            const rows = await userApi.pendingDb.getAllByAccount({ sql, accountId });
+            const nonTerminal = rows.filter(
+              (row) =>
+                row.state === "sent" ||
+                row.state === "future" ||
+                row.state === "ready" ||
+                row.state === "broadcast"
+            );
+            if (nonTerminal.length === 0) {
+              return false;
+            }
+            // Pick the highest nonce non-terminal row
+            const latest = nonTerminal.reduce((acc, row) => (row.nonce > acc.nonce ? row : acc));
+            restartNonce = BigInt(latest.nonce);
+            prePauseState = latest.state;
+            return true;
+          }
+        });
+      } catch (error) {
+        const rows = await userApi.pendingDb.getAllByAccount({ sql, accountId });
+        // eslint-disable-next-line no-console
+        console.error(
+          "[multi-msp-instances] Failed while waiting for non-terminal charge tx before MSP restart",
+          {
+            accountId: mspAddress,
+            rows
+          }
+        );
+        throw error;
       }
-    );
+
+      assert(
+        restartNonce !== undefined,
+        "Expected at least one non-terminal pending tx before MSP restart"
+      );
+
+      // Pause MSP node so that it doesn't observe the upcoming block.
+      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.msp1.containerName);
+
+      // Build a block including the charge tx but do not finalise yet.
+      // Note: MSP is paused, so it won't update its watcher/DB state.
+      await userApi.block.seal({ finaliseBlock: false });
+
+      // Restart MSP 1 container (will unpause due to restart).
+      await mspApi.disconnect();
+      await restartContainer({ containerName: userApi.shConsts.NODE_INFOS.msp1.containerName });
+
+      // Wait for MSP RPC to be back up and service to be idle again.
+      await getContainerPeerId(`http://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`, true);
+      await userApi.docker.waitForLog({
+        containerName: userApi.shConsts.NODE_INFOS.msp1.containerName,
+        searchString: "💤 Idle",
+        timeout: 20000,
+        tail: 50
+      });
+
+      // Recreate MSP API and ensure it catches up to the chain tip.
+      {
+        const newMspApiMaybe = await createApi(
+          `ws://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`
+        );
+        assert(newMspApiMaybe, "Failed to recreate MSP API after restart");
+        mspApi = newMspApiMaybe;
+        await userApi.wait.nodeCatchUpToChainTip(mspApi);
+      }
+
+      // The transaction should not have been re-watched because its nonce is now < on-chain nonce.
+      // It should still be in the DB with the same state it had before MSP was turned off.
+      {
+        const row = await userApi.pendingDb.getByNonce({ sql, accountId, nonce: restartNonce });
+        assert(row, "Expected pending tx row to still exist after MSP restart");
+        strictEqual(
+          row.state,
+          prePauseState,
+          "Pending tx state changed after restart; it should not have been re-watched"
+        );
+      }
+
+      // Finalise the block on user and MSP nodes, but the extrinsic should not be updated because it's not watched anymore.
+      const latestHeader = await userApi.rpc.chain.getHeader();
+      const latestBlockHash = latestHeader.hash.toString();
+      await userApi.block.finaliseBlock(latestBlockHash);
+      await mspApi.wait.blockImported(latestBlockHash);
+      await mspApi.block.finaliseBlock(latestBlockHash);
+
+      // Build and finalise one more block and wait for the row to be cleared by cleanup.
+      await userApi.block.seal({ finaliseBlock: true });
+      const nextFinalisedHash = await userApi.rpc.chain.getFinalizedHead();
+      await mspApi.wait.blockImported(nextFinalisedHash.toString());
+      await mspApi.block.finaliseBlock(nextFinalisedHash.toString());
+
+      try {
+        await waitFor({
+          lambda: async () => {
+            assert(restartNonce !== undefined, "Expected restart nonce to be set");
+            const row = await userApi.pendingDb.getByNonce({
+              sql,
+              accountId,
+              nonce: restartNonce
+            });
+            return row === null;
+          }
+        });
+      } catch (error) {
+        const rows = await userApi.pendingDb.getAllByAccount({ sql, accountId });
+        // eslint-disable-next-line no-console
+        console.error(
+          "[multi-msp-instances] Pending transactions still present after final cleanup in non-rewatch scenario",
+          {
+            accountId: mspAddress,
+            rows
+          }
+        );
+        throw error;
+      }
+    });
   }
 );
