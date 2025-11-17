@@ -38,7 +38,7 @@ mod benchmarks {
     use super::*;
     use codec::Encode;
     use frame_support::{
-        assert_ok,
+        assert_ok, ensure,
         traits::{
             fungible::{Mutate, MutateHold},
             Get, OnFinalize, OnPoll,
@@ -2507,6 +2507,10 @@ mod benchmarks {
                 &signed_intention_encoded,
             );
             let is_valid_pre_check = signature.verify(&to_verify[..], &user_account);
+            ensure!(
+                is_valid_pre_check,
+                BenchmarkError::Stop("Signature should be valid")
+            );
 
             // Create FileDeletionRequest
             file_deletions.push(FileDeletionRequest::<T> {
@@ -2777,6 +2781,10 @@ mod benchmarks {
                 &signed_intention_encoded,
             );
             let is_valid_pre_check = signature.verify(&to_verify[..], &user_account);
+            ensure!(
+                is_valid_pre_check,
+                BenchmarkError::Stop("Signature should be valid")
+            );
 
             // Create FileDeletionRequest
             file_deletions.push(FileDeletionRequest::<T> {
