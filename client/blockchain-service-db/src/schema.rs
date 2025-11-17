@@ -7,6 +7,7 @@ diesel::table! {
         hash -> Bytea,
         call_scale -> Bytea,
         extrinsic_scale -> Bytea,
+        watched -> Bool,
         state -> Text,
         creator_id -> Text,
         created_at -> Timestamptz,

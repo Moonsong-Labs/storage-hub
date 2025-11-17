@@ -657,15 +657,22 @@ await describeMspNet(
 
       // The transaction should not have been re-watched because its nonce is now < on-chain nonce.
       // It should still be in the DB with the same state it had before MSP was turned off.
-      {
-        const row = await userApi.pendingDb.getByNonce({ sql, accountId, nonce: restartNonce });
-        assert(row, "Expected pending tx row to still exist after MSP restart");
-        strictEqual(
-          row.state,
-          prePauseState,
-          "Pending tx state changed after restart; it should not have been re-watched"
-        );
-      }
+      // Also, the watched flag should be false.
+
+      await waitFor({
+        lambda: async () => {
+          assert(restartNonce !== undefined, "Expected restart nonce to be set");
+          const row = await userApi.pendingDb.getByNonce({ sql, accountId, nonce: restartNonce });
+          assert(row, "Expected pending tx row to still exist after MSP restart");
+          strictEqual(
+            row.state,
+            prePauseState,
+            "Pending tx state changed after restart; it should not have been re-watched"
+          );
+          strictEqual(row.watched, false, "Expected watched flag to be false");
+          return true;
+        }
+      });
 
       // Finalise the block on user and MSP nodes, but the extrinsic should not be updated because it's not watched anymore.
       const latestHeader = await userApi.rpc.chain.getHeader();

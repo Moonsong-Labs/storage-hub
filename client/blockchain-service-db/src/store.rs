@@ -54,6 +54,7 @@ impl PendingTxStore {
             hash,
             call_scale,
             extrinsic_scale,
+            watched: true,
             state: "sent",
             creator_id,
         };
@@ -68,6 +69,7 @@ impl PendingTxStore {
                 pt::hash.eq(hash),
                 pt::call_scale.eq(call_scale),
                 pt::extrinsic_scale.eq(extrinsic_scale),
+                pt::watched.eq(true),
                 pt::state.eq("sent"),
                 pt::creator_id.eq(creator_id),
             ))
@@ -129,6 +131,7 @@ impl PendingTxStore {
             hash: tx_hash,
             call_scale: &[],
             extrinsic_scale: &[],
+            watched: true,
             state: state_str,
             creator_id: &creator_id,
         };
@@ -179,6 +182,24 @@ impl PendingTxStore {
         }
 
         // TODO: pg_notify on update so other nodes can mirror state
+        Ok(())
+    }
+
+    /// Update watched flag for a specific (account_id, nonce)
+    pub async fn set_watched(
+        &self,
+        account_id: &[u8],
+        nonce: i64,
+        watched: bool,
+    ) -> Result<(), diesel::result::Error> {
+        use pending_transactions::dsl as pt;
+        let mut conn = self.pool.get().await.unwrap();
+        diesel::update(
+            pt::pending_transactions.filter(pt::account_id.eq(account_id).and(pt::nonce.eq(nonce))),
+        )
+        .set(pt::watched.eq(watched))
+        .execute(&mut conn)
+        .await?;
         Ok(())
     }
 

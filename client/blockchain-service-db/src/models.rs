@@ -12,6 +12,7 @@ pub struct PendingTransactionRow {
     pub hash: Vec<u8>,
     pub call_scale: Vec<u8>,
     pub extrinsic_scale: Vec<u8>,
+    pub watched: bool,
     pub state: String,
     pub creator_id: String,
     pub created_at: DateTime<Utc>,
@@ -26,6 +27,7 @@ pub struct NewPendingTransaction<'a> {
     pub hash: &'a [u8],
     pub call_scale: &'a [u8],
     pub extrinsic_scale: &'a [u8],
+    pub watched: bool,
     pub state: &'a str,
     pub creator_id: &'a str,
 }

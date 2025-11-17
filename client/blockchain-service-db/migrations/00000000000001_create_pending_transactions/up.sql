@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS pending_transactions (
   call_scale BYTEA NOT NULL,
   -- Full signed extrinsic bytes for re-subscription on restart
   extrinsic_scale BYTEA NOT NULL,
+  -- Whether the node is actively watching this transaction via RPC subscription
+  watched BOOLEAN NOT NULL DEFAULT TRUE,
   state TEXT NOT NULL CHECK (state IN (
     'future','ready','broadcast','queued','sent','in_block','retracted','finalized','invalid','dropped','usurped','finality_timeout'
   )),

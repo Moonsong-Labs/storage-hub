@@ -725,83 +725,123 @@ where
 
         for row in rows {
             let nonce_i64 = row.nonce;
-            if nonce_i64 < on_chain_nonce as i64 {
-                // Below on-chain nonce; skip
-                continue;
-            }
-            let nonce_u32 = match u32::try_from(nonce_i64) {
-                Ok(n) => n,
-                Err(_) => {
-                    error!(target: LOG_TARGET, "CRITICAL❗️❗️ Skipping pending tx with out-of-range nonce {}. The chain has gone beyond the 2^32 nonce limit. This is a critical bug. Please report it to the StorageHub team.", nonce_i64);
-                    continue;
-                }
-            };
+            let watched = self
+                .resubscribe_one_pending(
+                    nonce_i64,
+                    &row.extrinsic_scale,
+                    &row.call_scale,
+                    &row.state,
+                    on_chain_nonce as i64,
+                    block_number,
+                )
+                .await;
+            // Single DB update per row
+            self.mark_pending_tx_watched(&account_bytes_owned, nonce_i64, watched)
+                .await;
+        }
+    }
 
-            // Skip if we are already tracking this nonce
-            if self.transaction_manager.pending.contains_key(&nonce_u32) {
-                warn!(target: LOG_TARGET, "Skipping pending tx (nonce {}) because we are already tracking it", nonce_u32);
-                continue;
+    /// Attempt to re-subscribe a single pending transaction row using stored extrinsic bytes.
+    /// Returns true if the transaction is being watched after this call (either already tracked or successfully re-subscribed).
+    async fn resubscribe_one_pending(
+        &mut self,
+        nonce_i64: i64,
+        extrinsic_scale: &[u8],
+        call_scale: &[u8],
+        state: &str,
+        on_chain_nonce_i64: i64,
+        block_number: BlockNumber<Runtime>,
+    ) -> bool {
+        // Skip if nonce below on-chain nonce
+        if nonce_i64 < on_chain_nonce_i64 {
+            return false;
+        }
+        // Convert nonce to u32 bound used by manager/watcher
+        let nonce_u32 = match u32::try_from(nonce_i64) {
+            Ok(n) => n,
+            Err(_) => {
+                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Skipping pending tx with out-of-range nonce {}. The chain has gone beyond the 2^32 nonce limit. This is a critical bug. Please report it to the StorageHub team.", nonce_i64);
+                return false;
             }
+        };
+        // Already tracked -> considered watched
+        if self.transaction_manager.pending.contains_key(&nonce_u32) {
+            warn!(
+                target: LOG_TARGET,
+                "Skipping pending tx (nonce {}) because we are already tracking it",
+                nonce_u32
+            );
+            return true;
+        }
+        // Need full extrinsic bytes to attach watcher
+        if extrinsic_scale.is_empty() {
+            warn!(
+                target: LOG_TARGET,
+                "Cannot resubscribe pending tx (nonce {}) due to empty extrinsic_scale; skipping",
+                nonce_u32
+            );
+            return false;
+        }
 
-            // We need full signed extrinsic bytes to re-submit and watch
-            if row.extrinsic_scale.is_empty() {
-                warn!(
+        let id_hash = Blake2Hasher::hash(extrinsic_scale);
+        match self
+            .submit_and_watch_extrinsic(extrinsic_scale.to_vec(), nonce_u32, id_hash)
+            .await
+        {
+            Ok((tx_hash, watch_rx)) => {
+                info!(
                     target: LOG_TARGET,
-                    "Cannot resubscribe pending tx (nonce {}) due to empty extrinsic_scale; skipping",
-                    nonce_u32
+                    "🔁 Re-subscribed watcher for pending tx (nonce {}, state {}, hash {:?})",
+                    nonce_u32,
+                    state,
+                    tx_hash
                 );
-                continue;
-            }
-
-            // Submit-and-watch using the exact same signed extrinsic bytes
-            let id_hash = Blake2Hasher::hash(&row.extrinsic_scale);
-
-            match self
-                .submit_and_watch_extrinsic(row.extrinsic_scale.clone(), nonce_u32, id_hash)
-                .await
-            {
-                Ok((tx_hash, watch_rx)) => {
-                    info!(
-                        target: LOG_TARGET,
-                        "🔁 Re-subscribed watcher for pending tx (nonce {}, state {}, hash {:?})",
-                        nonce_u32,
-                        row.state,
-                        tx_hash
-                    );
-
-                    // Decode call_scale solely to enrich manager tracking; skip tracking if decode fails
-                    if !row.call_scale.is_empty() {
-                        if let Ok(call) =
-                            <Runtime::Call as Decode>::decode(&mut &row.call_scale[..])
-                        {
-                            if let Err(e) = self.transaction_manager.track_transaction(
-                                nonce_u32,
-                                id_hash,
-                                call,
-                                0,
-                                block_number,
-                            ) {
-                                warn!(target: LOG_TARGET, "Failed to track re-subscribed tx (nonce {}): {:?}", nonce_u32, e);
-                            }
+                // Decode call_scale solely to enrich manager tracking; skip tracking if decode fails
+                if !call_scale.is_empty() {
+                    if let Ok(call) = <Runtime::Call as Decode>::decode(&mut &call_scale[..]) {
+                        if let Err(e) = self.transaction_manager.track_transaction(
+                            nonce_u32,
+                            id_hash,
+                            call,
+                            0,
+                            block_number,
+                        ) {
+                            warn!(target: LOG_TARGET, "Failed to track re-subscribed tx (nonce {}): {:?}", nonce_u32, e);
                         }
                     }
+                }
+                // Spawn watcher
+                spawn_transaction_watcher::<Runtime>(
+                    nonce_u32,
+                    tx_hash,
+                    watch_rx,
+                    self.tx_status_sender.clone(),
+                );
+                true
+            }
+            Err(e) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "Failed to submitAndWatch for pending tx (nonce {}): {:?}",
+                    nonce_u32,
+                    e
+                );
+                false
+            }
+        }
+    }
 
-                    // Spawn watcher
-                    spawn_transaction_watcher::<Runtime>(
-                        nonce_u32,
-                        tx_hash,
-                        watch_rx,
-                        self.tx_status_sender.clone(),
-                    );
-                }
-                Err(e) => {
-                    warn!(
-                        target: LOG_TARGET,
-                        "Failed to submitAndWatch for pending tx (nonce {}): {:?}",
-                        nonce_u32,
-                        e
-                    );
-                }
+    /// Helper to mark a pending transaction as watched/unwatched in the DB.
+    async fn mark_pending_tx_watched(&self, account_id_bytes: &[u8], nonce: i64, watched: bool) {
+        if let Some(store) = &self.pending_tx_store {
+            if let Err(e) = store.set_watched(account_id_bytes, nonce, watched).await {
+                warn!(
+                    target: LOG_TARGET,
+                    "Failed to mark pending tx (nonce {}) as {}watched: {:?}",
+                    nonce,
+                    if watched { "" } else { "un" },
+                    e
+                );
             }
         }
     }
