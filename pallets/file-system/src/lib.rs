@@ -1518,7 +1518,14 @@ pub mod pallet {
         /// If `bsp_id` is `None`, files will be deleted from the bucket forest.
         /// If `bsp_id` is `Some(id)`, files will be deleted from the specified BSP's forest.
         #[pallet::call_index(17)]
-        #[pallet::weight(Weight::zero())]
+        #[pallet::weight({
+            let n = file_deletions.len() as u32;
+            if bsp_id.is_none() {
+                T::WeightInfo::delete_files_bucket(n)
+            } else {
+                T::WeightInfo::delete_files_bsp(n)
+            }
+        })]
         pub fn delete_files(
             origin: OriginFor<T>,
             file_deletions: BoundedVec<FileDeletionRequest<T>, T::MaxFileDeletionsPerExtrinsic>,
@@ -1542,7 +1549,14 @@ pub mod pallet {
         ///
         /// Multiple files can be deleted in a single call using one forest proof bounded by [`MaxFileDeletionsPerExtrinsic`](Config::MaxFileDeletionsPerExtrinsic).
         #[pallet::call_index(18)]
-        #[pallet::weight(Weight::zero())]
+        #[pallet::weight({
+            let n = file_keys.len() as u32;
+            if bsp_id.is_none() {
+                T::WeightInfo::delete_files_for_incomplete_storage_request_bucket(n)
+            } else {
+                T::WeightInfo::delete_files_for_incomplete_storage_request_bsp(n)
+            }
+        })]
         pub fn delete_files_for_incomplete_storage_request(
             origin: OriginFor<T>,
             file_keys: BoundedVec<MerkleHash<T>, T::MaxFileDeletionsPerExtrinsic>,

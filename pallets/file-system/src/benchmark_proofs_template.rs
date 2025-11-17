@@ -157,3 +157,67 @@ pub fn fetch_file_key_proof_for_bsp_confirm(file_key_index: u32) -> Vec<u8> {
 		),
 	}
 }
+
+#[rustfmt::skip]
+pub fn fetch_bucket_inclusion_proofs(number_of_file_keys: u32, bucket_index: u32) -> Vec<u8> {
+	let bucket_inclusion_proofs = match number_of_file_keys {
+		{{bucket_inclusion_proofs}}
+		_ => panic!(
+			"Number of file keys ({}) is not supported",
+			number_of_file_keys
+		),
+	};
+
+	bucket_inclusion_proofs[(bucket_index - 1) as usize].clone()
+}
+
+#[rustfmt::skip]
+pub fn fetch_bsp_inclusion_proofs(number_of_file_keys: u32) -> Vec<u8> {
+	match number_of_file_keys {
+		{{bsp_inclusion_proofs}}
+		_ => panic!(
+			"Number of file keys ({}) is not supported",
+			number_of_file_keys
+		),
+	}
+}
+
+#[rustfmt::skip]
+pub fn fetch_file_deletion_signatures(number_of_file_keys: u32, bucket_index: u32) -> Vec<Vec<u8>> {
+	let all_signatures = match number_of_file_keys {
+		{{file_deletion_signatures}}
+		_ => panic!(
+			"Number of file keys ({}) is not supported",
+			number_of_file_keys
+		),
+	};
+
+	// We only need to keep the signatures that correspond to the bucket. That is:
+	// - If the bucket index is 1, we keep the first `number_of_file_keys` signatures.
+	// - If the bucket index is 2, we keep the second `number_of_file_keys` signatures.
+	// - Etc
+	let start_index = ((bucket_index - 1) * number_of_file_keys) as usize;
+	let end_index = start_index + number_of_file_keys as usize;
+	all_signatures[start_index..end_index].to_vec()
+}
+
+#[rustfmt::skip]
+pub fn fetch_file_metadata_for_deletion(number_of_file_keys: u32, bucket_index: u32, file_key_index: u32) -> (Vec<u8>, u64, Vec<u8>) {
+	// Get all metadata tuples (location, size, fingerprint) for this case
+	let all_metadata = match number_of_file_keys {
+		{{file_metadata_for_deletion}}
+		_ => panic!(
+			"Number of file keys ({}) is not supported",
+			number_of_file_keys
+		),
+	};
+
+	// Extract metadata for the specific bucket
+	// - If bucket_index is 1, we get metadata at indices [0..number_of_file_keys)
+	// - If bucket_index is 2, we get metadata at indices [number_of_file_keys..2*number_of_file_keys)
+	// - Etc
+	let start_index = ((bucket_index - 1) * number_of_file_keys) as usize;
+	let metadata_index = start_index + file_key_index as usize;
+	
+	all_metadata[metadata_index].clone()
+}

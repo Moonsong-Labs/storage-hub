@@ -1,10 +1,11 @@
-import { BspNetTestApi, sleep, waitFor } from "../util";
+import { BspNetTestApi, waitFor } from "../util";
 import * as ShConsts from "../util/bspNet/consts";
 import { NetworkLauncher, type NetLaunchConfig } from "../util/netLaunch";
 import * as fs from "node:fs";
 import { exec } from "node:child_process";
 import type { Option } from "@polkadot/types";
 import type { H256 } from "@polkadot/types/interfaces";
+import type { EnrichedBspApi } from "../util/bspNet/test-api";
 
 //! Configuration options for debugging
 const skipProofGeneration = false;
@@ -53,6 +54,9 @@ async function generateBenchmarkProofs() {
   const nonInclusionProofsCases: string[][] = [];
   const fileKeysForBspConfirmCases: string[][] = [];
   const fileKeyProofsForBspConfirmCases: string[] = [];
+  const bucketInclusionProofsCases: string[][] = [];
+  const bspInclusionProofsCases: string[] = [];
+  const fileDeletionSignaturesCases: string[][] = [];
   const bucketIds: H256[] = [];
   const bucketRoots: string[] = [];
 
@@ -156,18 +160,14 @@ async function generateBenchmarkProofs() {
     }
   };
   await userApi.block.seal({
-    calls: [
-      userApi.tx.sudo.sudo(
-        userApi.tx.parameters.setParameter(storageRequestTtlParameter)
-      )
-    ]
+    calls: [userApi.tx.sudo.sudo(userApi.tx.parameters.setParameter(storageRequestTtlParameter))]
   });
 
   // Create 10 buckets and upload files to them.
   const bucketAmount = 10;
   for (let i = 0; i < bucketAmount; i++) {
     const batch1BucketName = `benchmarking-bucket-${i}`;
-    
+
     // Create the bucket and get its ID.
     const batch1BucketEvent = await userApi.file.newBucket(batch1BucketName);
     const batch1BucketEventDataBlob =
@@ -179,7 +179,7 @@ async function generateBenchmarkProofs() {
 
     // Batch storage requests for the first half of the files with MSP 1.
     // Set replication target to 1 to fulfill the storage request.
-    let filesToUploadBatch1 = [];
+    const filesToUploadBatch1 = [];
     for (let j = 0; j < sources.length / 2; j++) {
       filesToUploadBatch1.push({
         source: sources[j],
@@ -221,9 +221,9 @@ async function generateBenchmarkProofs() {
     const batch2BucketId = batch2BucketEventDataBlob.bucketId;
 
     // Batch storage requests for the second half of the files with MSP 2.
-    // Set replication target to 2 to have the storage request stay alive to be able to call `generateFileKeyProofBspConfirm` on the BSP node (this RPC will internally 
+    // Set replication target to 2 to have the storage request stay alive to be able to call `generateFileKeyProofBspConfirm` on the BSP node (this RPC will internally
     // query the storage request)
-    let filesToUploadBatch2 = [];
+    const filesToUploadBatch2 = [];
     for (let j = sources.length / 2; j < sources.length; j++) {
       filesToUploadBatch2.push({
         source: sources[j],
@@ -265,7 +265,9 @@ async function generateBenchmarkProofs() {
   await waitFor({
     lambda: async () => {
       const bspForestRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
-      const bspBucket = (await userApi.query.providers.backupStorageProviders(ShConsts.DUMMY_BSP_ID)).unwrap();
+      const bspBucket = (
+        await userApi.query.providers.backupStorageProviders(ShConsts.DUMMY_BSP_ID)
+      ).unwrap();
       return bspForestRoot.unwrap().toString() === bspBucket.root.toString();
     }
   });
@@ -274,14 +276,20 @@ async function generateBenchmarkProofs() {
   for (const bucketId of bucketIds) {
     const bucketIdOption: Option<H256> = userApi.createType("Option<H256>", bucketId);
     const msp1ForestRoot = await msp1Api.rpc.storagehubclient.getForestRoot(bucketIdOption);
-    console.log(`${GREEN_TEXT} MSP 1 forest root: ${msp1ForestRoot.unwrap().toString()}${RESET_TEXT}`);
+    console.log(
+      `${GREEN_TEXT} MSP 1 forest root: ${msp1ForestRoot.unwrap().toString()}${RESET_TEXT}`
+    );
 
     const bucket = (await userApi.query.providers.buckets(bucketId.toString())).unwrap();
     console.log(`${GREEN_TEXT} Bucket: ${bucket.root.toString()}${RESET_TEXT}`);
   }
 
-  console.log(`${GREEN_TEXT} BSP forest root: ${(await bspApi.rpc.storagehubclient.getForestRoot(null)).unwrap().toString()}${RESET_TEXT}`);
-  const bspBucket = (await userApi.query.providers.backupStorageProviders(ShConsts.DUMMY_BSP_ID)).unwrap();
+  console.log(
+    `${GREEN_TEXT} BSP forest root: ${(await bspApi.rpc.storagehubclient.getForestRoot(null)).unwrap().toString()}${RESET_TEXT}`
+  );
+  const bspBucket = (
+    await userApi.query.providers.backupStorageProviders(ShConsts.DUMMY_BSP_ID)
+  ).unwrap();
   console.log(`${GREEN_TEXT} BSP bucket: ${bspBucket.root.toString()}${RESET_TEXT}`);
   console.log("");
 
@@ -294,7 +302,6 @@ async function generateBenchmarkProofs() {
     nonStoredFileKeys.sort();
   }
   verbose && console.log("Sorted non-stored file keys per bucket: ", nonStoredFileKeysPerBucket);
-
 
   // Get the root of each Bucket's forest after adding the 20 included files.
   for (const bucketId of bucketIds) {
@@ -424,6 +431,136 @@ async function generateBenchmarkProofs() {
   );
   console.log("");
 
+  //* =============================================================================
+  console.log(
+    `${GREEN_TEXT}▶ 📦 Generating bucket and BSP inclusion forest proofs for 1 to 10 file keys.${RESET_TEXT}`
+  );
+  console.log(
+    `${GREEN_TEXT} These are going to be used in benchmarks that require inclusion proofs for multiple file keys${RESET_TEXT}`
+  );
+
+  // Generate bucket inclusion proofs for 1 to 10 file keys using the first bucket
+  // and the first N stored file keys deterministically.
+  for (let i = 1; i <= amountOfNonInclusionProofsToGenerate; i++) {
+    // Get the first i stored file keys from the first bucket
+    const fileKeysForBucketInclusion = storedFileKeysPerBucket[0].slice(0, i);
+    const bucketIdOption: Option<H256> = userApi.createType("Option<H256>", bucketIds[0]);
+
+    // Generate the inclusion proof for these file keys in the first bucket
+    const bucketInclusionProof = await msp1Api.rpc.storagehubclient.generateForestProof(
+      bucketIdOption,
+      fileKeysForBucketInclusion
+    );
+    verbose && console.log(`\n\n Bucket inclusion proof for ${i} file keys:`);
+    verbose && console.log(bucketInclusionProof);
+
+    // Remove the 0x prefix and push to array (only one proof per case for bucket 1)
+    const bucketInclusionProofHexStr = bucketInclusionProof.toString().slice(2);
+    bucketInclusionProofsCases.push([bucketInclusionProofHexStr]);
+
+    // Generate BSP inclusion proofs for 1 to 10 file keys
+    // Use the first i file keys from stored file keys (BSP stores the same files as bucket backup)
+    const fileKeysForBspInclusion = storedFileKeysPerBucket[0].slice(0, i);
+
+    // Generate the inclusion proof for these file keys in the BSP's forest
+    const bspInclusionProof = await bspApi.rpc.storagehubclient.generateForestProof(
+      null,
+      fileKeysForBspInclusion
+    );
+    verbose && console.log(`\n\n BSP inclusion proof for ${i} file keys:`);
+    verbose && console.log(bspInclusionProof);
+
+    // Remove the 0x prefix and push to array
+    const bspInclusionProofHexStr = bspInclusionProof.toString().slice(2);
+    bspInclusionProofsCases.push(bspInclusionProofHexStr);
+  }
+
+  console.log(
+    `${GREEN_TEXT}◀ ✅ Generated bucket and BSP inclusion proofs for 1 to 10 file keys.${RESET_TEXT}`
+  );
+  console.log("");
+
+  //* =============================================================================
+  console.log(
+    `${GREEN_TEXT}▶ 📦 Generating file deletion signatures and metadata for 1 to 10 file keys.${RESET_TEXT}`
+  );
+  console.log(
+    `${GREEN_TEXT} These are going to be used in benchmarks that require deletion signatures for multiple file keys${RESET_TEXT}`
+  );
+
+  // Generate deletion signatures and metadata for 1 to 10 file keys
+  // Use storedFileKeysPerBucket (files that are actually in the buckets and can be deleted)
+  // For each case (1-10 file keys), we generate signatures for all buckets in order:
+  // [bucket0's first i files, bucket1's first i files, ..., bucket9's first i files]
+  const fileMetadataForDeletionCases: string[][] = [];
+
+  for (let i = 1; i <= amountOfNonInclusionProofsToGenerate; i++) {
+    const signaturesForCase: string[] = [];
+    const metadataForCase: string[] = [];
+
+    // For each bucket, generate signatures and metadata for the first i stored file keys
+    for (let j = 0; j < bucketIds.length; j++) {
+      const fileKeys = storedFileKeysPerBucket[j].slice(0, i);
+      const bucketIdOption: Option<H256> = userApi.createType("Option<H256>", bucketIds[j]);
+
+      for (const fileKey of fileKeys) {
+        // Create FileOperationIntention with Delete operation
+        const fileOperationIntention = {
+          fileKey: fileKey,
+          operation: { Delete: null }
+        };
+
+        // Create the codec type and encode it
+        const intentionCodec = userApi.createType(
+          "PalletFileSystemFileOperationIntention",
+          fileOperationIntention
+        );
+        const intentionPayload = intentionCodec.toU8a();
+
+        // Sign with user account key
+        const rawSignature = userApi.accounts.shUser.sign(intentionPayload);
+        const userSignature = userApi.createType("MultiSignature", {
+          Sr25519: rawSignature
+        });
+
+        // Encode the signature to hex and remove 0x prefix
+        const signatureHex = userSignature.toHex().slice(2);
+        signaturesForCase.push(signatureHex);
+
+        // Get file metadata from MSP's forest for this file key
+        const fileMetadataResult = await msp1Api.rpc.storagehubclient.getFileMetadata(
+          bucketIdOption,
+          fileKey
+        );
+
+        if (!fileMetadataResult.isSome) {
+          throw new Error(
+            `Failed to get file metadata for stored file key ${fileKey} in bucket ${bucketIds[j].toString()}`
+          );
+        }
+
+        const fileMetadata = fileMetadataResult.unwrap();
+
+        // Extract and encode metadata tuple: (location, size, fingerprint)
+        const locationHex = fileMetadata.location.toString().slice(2);
+        const size = fileMetadata.file_size.toString();
+        const fingerprintHex = fileMetadata.fingerprint.toString().slice(2);
+
+        // Encode as Rust tuple string: (hex::decode("location"), size_u64, hex::decode("fingerprint"))
+        const metadataTuple = `(hex::decode("${locationHex}").expect("Location should be decodable"), ${size}, hex::decode("${fingerprintHex}").expect("Fingerprint should be decodable"))`;
+        metadataForCase.push(metadataTuple);
+      }
+    }
+
+    fileDeletionSignaturesCases.push(signaturesForCase);
+    fileMetadataForDeletionCases.push(metadataForCase);
+  }
+
+  console.log(
+    `${GREEN_TEXT}◀ ✅ Generated file deletion signatures and metadata for 1 to 10 file keys.${RESET_TEXT}`
+  );
+  console.log("");
+
   console.log(
     `${GREEN_TEXT}▶ 📦 Generating inclusion forest proof and the included file key proof.${RESET_TEXT}`
   );
@@ -465,6 +602,26 @@ async function generateBenchmarkProofs() {
   );
   console.log("");
 
+  //* =============================================================================
+  console.log(
+    `${GREEN_TEXT}▶ ✅ Validating generated deletion signatures and forest proofs${RESET_TEXT}`
+  );
+  console.log(
+    `${GREEN_TEXT} Testing delete_files extrinsic with generated data to ensure consistency${RESET_TEXT}`
+  );
+
+  await validateDeletionSignaturesAndProofs({
+    userApi,
+    msp1Api,
+    storedFileKeysPerBucket,
+    bucketIds,
+    bucketInclusionProofsCases,
+    fileDeletionSignaturesCases,
+    amountOfNonInclusionProofsToGenerate
+  });
+
+  console.log("");
+
   if (skipWritingProofs) {
     console.log(`${GRAY_TEXT}Skipping writing proofs${RESET_TEXT}`);
     console.log(`${GRAY_TEXT}Exiting...${RESET_TEXT}`);
@@ -479,6 +636,7 @@ async function generateBenchmarkProofs() {
     `${GREEN_TEXT}▶ 📦 Writing rust file with MSP and BSP info, buckets info, required proofs and file keys${RESET_TEXT}`
   );
 
+  // Generate all the data strings for template replacement
   const mspIdStr = `hex::decode("${ShConsts.DUMMY_MSP_ID.slice(2)}").expect("MSP ID should be a decodable hex string")`;
 
   const userAccountStr = `<AccountId32 as Ss58Codec>::from_ss58check("${ShConsts.NODE_INFOS.user.AddressId}").expect("User account should be a decodable string")`;
@@ -550,6 +708,40 @@ async function generateBenchmarkProofs() {
     fileKeyProofsForBspConfirmStr += `${index} => ${fileKeyProofVec},\n        `;
   }
 
+  let bucketInclusionProofsStr = "";
+  for (const [index, proofVector] of bucketInclusionProofsCases.entries()) {
+    let bucketInclusionProofForBucketStr = "";
+    for (const proof of proofVector) {
+      bucketInclusionProofForBucketStr += `hex::decode("${proof}").expect("Bucket inclusion proof should be a decodable hex string"),\n            `;
+    }
+    bucketInclusionProofsStr += `${index + 1} => vec![\n            ${bucketInclusionProofForBucketStr}\n        ],\n        `;
+  }
+
+  let bspInclusionProofsStr = "";
+  for (const [index, proof] of bspInclusionProofsCases.entries()) {
+    const proofVec = `hex::decode("${proof}").expect("BSP inclusion proof should be a decodable hex string")`;
+    bspInclusionProofsStr += `${index + 1} => ${proofVec},\n        `;
+  }
+
+  let fileDeletionSignaturesStr = "";
+  for (const [index, signatures] of fileDeletionSignaturesCases.entries()) {
+    let signaturesArrayStr = "";
+    for (const sig of signatures) {
+      signaturesArrayStr += `hex::decode("${sig}").expect("Deletion signature should be a decodable hex string"),\n            `;
+    }
+    fileDeletionSignaturesStr += `${index + 1} => vec![\n            ${signaturesArrayStr}\n        ],\n        `;
+  }
+
+  let fileMetadataForDeletionStr = "";
+  for (const [index, metadataList] of fileMetadataForDeletionCases.entries()) {
+    let metadataArrayStr = "";
+    for (const metadata of metadataList) {
+      metadataArrayStr += `${metadata},\n            `;
+    }
+    fileMetadataForDeletionStr += `${index + 1} => vec![\n            ${metadataArrayStr}\n        ],\n        `;
+  }
+
+  // Read the template file and replace all placeholders
   const template = fs.readFileSync(
     "../pallets/file-system/src/benchmark_proofs_template.rs",
     "utf8"
@@ -573,7 +765,11 @@ async function generateBenchmarkProofs() {
     .replace("{{file_key_metadata_inclusion_proof_file_size}}", fileMetadata.file_size)
     .replace("{{file_key_metadata_inclusion_proof_fingerprint}}", fileMetadataFingerprintStr)
     .replace("{{file_keys_for_bsp_confirm}}", fileKeysForBspStr)
-    .replace("{{file_key_proofs_for_bsp_confirm}}", fileKeyProofsForBspConfirmStr);
+    .replace("{{file_key_proofs_for_bsp_confirm}}", fileKeyProofsForBspConfirmStr)
+    .replace("{{bucket_inclusion_proofs}}", bucketInclusionProofsStr)
+    .replace("{{bsp_inclusion_proofs}}", bspInclusionProofsStr)
+    .replace("{{file_deletion_signatures}}", fileDeletionSignaturesStr)
+    .replace("{{file_metadata_for_deletion}}", fileMetadataForDeletionStr);
 
   fs.writeFileSync("../pallets/file-system/src/benchmark_proofs.rs", rustCode);
 
@@ -609,3 +805,161 @@ generateBenchmarkProofs().catch((e) => {
 
   process.exitCode = 1;
 });
+
+interface ValidationParams {
+  userApi: EnrichedBspApi;
+  msp1Api: EnrichedBspApi;
+  storedFileKeysPerBucket: string[][];
+  bucketIds: H256[];
+  bucketInclusionProofsCases: string[][];
+  fileDeletionSignaturesCases: string[][];
+  amountOfNonInclusionProofsToGenerate: number;
+}
+
+/**
+ * Validates generated deletion signatures and forest proofs by calling delete_files extrinsic.
+ * This function tests that the generated data is consistent and can successfully delete files.
+ */
+export async function validateDeletionSignaturesAndProofs({
+  userApi,
+  msp1Api,
+  storedFileKeysPerBucket,
+  bucketIds,
+  bucketInclusionProofsCases,
+  fileDeletionSignaturesCases,
+  amountOfNonInclusionProofsToGenerate
+}: ValidationParams): Promise<void> {
+  // Validate generated deletion signatures and forest proofs by calling delete_files
+  // Use the last case (maximum batch size) for bucket index 0 (first bucket)
+  const validationCaseIndex = amountOfNonInclusionProofsToGenerate - 1; // 0-indexed, so last case is 9 (for 10 file keys)
+  const numberOfFileKeysToValidate = validationCaseIndex + 1; // Convert to 1-indexed count
+
+  // Get file keys for the first bucket (bucket index 0)
+  // Use storedFileKeysPerBucket since that's what we generate signatures for
+  const bucketIndexForValidation = 0;
+  const fileKeysToValidate = storedFileKeysPerBucket[bucketIndexForValidation].slice(
+    0,
+    numberOfFileKeysToValidate
+  );
+  const bucketIdForValidation = bucketIds[bucketIndexForValidation];
+
+  // Decode signatures for this case and bucket
+  // fileDeletionSignaturesCases[validationCaseIndex] contains signatures for all buckets
+  // For bucket 0, we need the first numberOfFileKeysToValidate signatures
+  const allSignaturesForCase = fileDeletionSignaturesCases[validationCaseIndex];
+  const signaturesForBucket = allSignaturesForCase.slice(0, numberOfFileKeysToValidate);
+
+  // Decode each signature hex string back to MultiSignature
+  const decodedSignatures = signaturesForBucket.map((sigHex) => {
+    const signatureHex = `0x${sigHex}`;
+    return userApi.createType("MultiSignature", signatureHex);
+  });
+
+  // Get bucket inclusion proof for this case
+  const bucketInclusionProofHex = bucketInclusionProofsCases[validationCaseIndex][0];
+  const bucketInclusionProof = `0x${bucketInclusionProofHex}`;
+
+  // Fetch file metadata from chain for each file key
+  const fileDeletionRequests = [];
+  const bucketIdOption: Option<H256> = userApi.createType("Option<H256>", bucketIdForValidation);
+
+  for (let i = 0; i < fileKeysToValidate.length; i++) {
+    const fileKey = fileKeysToValidate[i];
+    const signature = decodedSignatures[i];
+
+    // Get file metadata from MSP's forest (bucket forest)
+    const fileMetadataResult = await msp1Api.rpc.storagehubclient.getFileMetadata(
+      bucketIdOption,
+      fileKey
+    );
+
+    if (!fileMetadataResult.isSome) {
+      throw new Error(
+        `Failed to get file metadata for file key ${fileKey} in bucket ${bucketIdForValidation.toString()}`
+      );
+    }
+
+    const fileMetadata = fileMetadataResult.unwrap();
+
+    // Create FileOperationIntention
+    const fileOperationIntention = {
+      fileKey: fileKey,
+      operation: { Delete: null }
+    };
+
+    // Build FileDeletionRequest matching the Rust struct structure
+    fileDeletionRequests.push({
+      fileOwner: userApi.accounts.shUser.address,
+      signedIntention: fileOperationIntention,
+      signature: signature,
+      bucketId: bucketIdForValidation,
+      location: fileMetadata.location,
+      size: fileMetadata.file_size,
+      fingerprint: fileMetadata.fingerprint
+    });
+  }
+
+  // Call delete_files extrinsic with the generated data
+  const deletionResult = await userApi.block.seal({
+    calls: [
+      userApi.tx.fileSystem.deleteFiles(
+        fileDeletionRequests,
+        null, // bsp_id = null means bucket deletion
+        bucketInclusionProof
+      )
+    ],
+    signer: userApi.accounts.shUser
+  });
+
+  // Verify the extrinsic succeeded
+  const failedEvents = (deletionResult.events || []).filter((record: any) =>
+    userApi.events.system.ExtrinsicFailed?.is?.(record.event)
+  );
+
+  if (failedEvents.length > 0) {
+    const error = failedEvents[0].event.data;
+    throw new Error(
+      `delete_files extrinsic failed: ${JSON.stringify(error)}. Generated file deletion signatures/proofs are invalid – aborting benchmark proof generation.`
+    );
+  }
+
+  // Verify BucketFileDeletionsCompleted event is present
+  const bucketDeletionEvents = (deletionResult.events || []).filter((record: any) =>
+    userApi.events.fileSystem.BucketFileDeletionsCompleted.is(record.event)
+  );
+
+  if (bucketDeletionEvents.length === 0) {
+    throw new Error(
+      "Expected BucketFileDeletionsCompleted event not found. Generated file deletion signatures/proofs are invalid – aborting benchmark proof generation."
+    );
+  }
+
+  // Verify the event has the correct bucket ID and number of file keys
+  const eventRecord = bucketDeletionEvents[0];
+  const eventData =
+    userApi.events.fileSystem.BucketFileDeletionsCompleted.is(eventRecord.event) &&
+    eventRecord.event.data;
+  if (!eventData) {
+    throw new Error(
+      "Failed to extract event data from BucketFileDeletionsCompleted event. Generated file deletion signatures/proofs are invalid – aborting benchmark proof generation."
+    );
+  }
+  const eventBucketId = eventData.bucketId?.toString();
+  const eventFileKeysCount = eventData.fileKeys?.length || 0;
+
+  if (eventBucketId !== bucketIdForValidation.toString()) {
+    throw new Error(
+      `BucketFileDeletionsCompleted event has incorrect bucket ID: expected ${bucketIdForValidation.toString()}, got ${eventBucketId}. Generated file deletion signatures/proofs are invalid – aborting benchmark proof generation.`
+    );
+  }
+
+  if (eventFileKeysCount !== numberOfFileKeysToValidate) {
+    throw new Error(
+      `BucketFileDeletionsCompleted event has incorrect number of file keys: expected ${numberOfFileKeysToValidate}, got ${eventFileKeysCount}. Generated file deletion signatures/proofs are invalid – aborting benchmark proof generation.`
+    );
+  }
+
+  console.log(
+    `${GREEN_TEXT}◀ ✅ Validation successful: delete_files extrinsic completed with ${numberOfFileKeysToValidate} file keys${RESET_TEXT}`
+  );
+}
