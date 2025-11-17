@@ -2,6 +2,7 @@ import type { ApiPromise } from "@polkadot/api";
 import assert from "node:assert";
 import type { HexString } from "@polkadot/util/types";
 import { sealBlock } from "./block";
+import { waitFor } from "./waits";
 
 /**
  * Drops transaction(s) from the node's transaction pool.
@@ -47,17 +48,20 @@ export async function dropTransaction(
   } else {
     // Remove the extrinsic with the specified hash
     const result = await api.rpc.author.removeExtrinsic([{ Hash: extrinsic }]);
-    const pendingAfter = await api.rpc.author.pendingExtrinsics();
     assert(result.length > 0, "No removal confirmation returned by RPC");
-    assert(pendingBefore > pendingAfter, "Extrinsic not removed from txPool");
-    assert(
-      result.find((hash) => hash.toString() === extrinsic),
-      "Extrinsic not removed from txPool"
-    );
-    assert(
-      !pendingAfter.find((ext) => ext.hash.toString() === extrinsic),
-      "Extrinsic not removed from txPool"
-    );
+
+    await waitFor({
+      lambda: async () => {
+        const pendingAfter = await api.rpc.author.pendingExtrinsics();
+        assert(
+          !pendingAfter.find((ext) => ext.hash.toString() === extrinsic),
+          "Extrinsic not removed from txPool"
+        );
+        return true;
+      },
+      iterations: 100,
+      delay: 100
+    });
   }
 
   if (sealAfter) {

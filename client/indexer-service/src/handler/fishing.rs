@@ -13,6 +13,7 @@ use shc_indexer_db::DbConnection;
 use super::IndexerService;
 
 use pallet_file_system;
+use pallet_proofs_dealer;
 use pallet_storage_providers;
 
 const LOG_TARGET: &str = "indexer-service::fishing_handlers";
@@ -103,6 +104,10 @@ where
                         signed_delete_intention.file_key);
                     self.index_file_system_event(conn, fs_event).await?
                 }
+                pallet_file_system::Event::IncompleteStorageRequest { file_key } => {
+                    trace!(target: LOG_TARGET, "Indexing incomplete storage request event for file key: {:?}", file_key);
+                    self.index_file_system_event(conn, fs_event).await?
+                }
                 pallet_file_system::Event::BucketPrivacyUpdated { .. }
                 | pallet_file_system::Event::MoveBucketRequested { .. }
                 | pallet_file_system::Event::NewCollectionAndAssociation { .. }
@@ -112,7 +117,6 @@ where
                 | pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. }
                 | pallet_file_system::Event::FailedToQueuePriorityChallenge { .. }
                 | pallet_file_system::Event::FileDeletionRequest { .. }
-                | pallet_file_system::Event::IncompleteStorageRequest { .. }
                 | pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest {
                     ..
                 }
@@ -173,10 +177,29 @@ where
                     trace!(target: LOG_TARGET, "Ignoring non-essential provider event in fishing mode");
                 }
             },
+            StorageEnableEvents::ProofsDealer(proofs_dealer_event) => match proofs_dealer_event {
+                pallet_proofs_dealer::Event::MutationsApplied { .. } => {
+                    trace!(target: LOG_TARGET, "Indexing MutationsApplied event");
+                    self.index_proofs_dealer_event(conn, proofs_dealer_event, block_hash)
+                        .await?
+                }
+                pallet_proofs_dealer::Event::MutationsAppliedForProvider { .. }
+                | pallet_proofs_dealer::Event::NewChallenge { .. }
+                | pallet_proofs_dealer::Event::NewPriorityChallenge { .. }
+                | pallet_proofs_dealer::Event::ProofAccepted { .. }
+                | pallet_proofs_dealer::Event::NewChallengeSeed { .. }
+                | pallet_proofs_dealer::Event::NewCheckpointChallenge { .. }
+                | pallet_proofs_dealer::Event::SlashableProvider { .. }
+                | pallet_proofs_dealer::Event::NoRecordOfLastSubmittedProof { .. }
+                | pallet_proofs_dealer::Event::NewChallengeCycleInitialised { .. }
+                | pallet_proofs_dealer::Event::ChallengesTickerSet { .. }
+                | pallet_proofs_dealer::Event::__Ignore(_, _) => {
+                    trace!(target: LOG_TARGET, "Ignoring non-essential ProofsDealer event in fishing mode");
+                }
+            },
             // Explicitly list all other runtime events to ensure compilation errors on new events
             StorageEnableEvents::BucketNfts(_) => {}
             StorageEnableEvents::PaymentStreams(_) => {}
-            StorageEnableEvents::ProofsDealer(_) => {}
             StorageEnableEvents::Randomness(_) => {}
             StorageEnableEvents::System(_) => {}
             StorageEnableEvents::Balances(_) => {}

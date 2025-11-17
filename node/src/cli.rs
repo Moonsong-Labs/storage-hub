@@ -350,6 +350,15 @@ pub struct ProviderConfigurations {
         ])
     )]
     pub bsp_submit_proof_max_attempts: Option<u32>,
+
+    /// Optional database URL for MSP nodes only. If provided, enables database access
+    /// for operations such as move bucket operations without requiring the full indexer service.
+    #[arg(
+        long,
+        value_name = "DATABASE_URL",
+        help_heading = "MSP Database Options"
+    )]
+    pub msp_database_url: Option<String>,
 }
 
 impl ProviderConfigurations {
@@ -500,6 +509,7 @@ impl ProviderConfigurations {
             bsp_submit_proof,
             blockchain_service,
             maintenance_mode,
+            msp_database_url: self.msp_database_url.clone(),
         }
     }
 }
@@ -563,18 +573,13 @@ pub struct FishermanConfigurations {
     )]
     pub fisherman_database_url: Option<String>,
 
-    /// Maximum number of incomplete storage requests to process after the first block processed coming out of syncing mode.
-    #[arg(long, value_name = "COUNT", default_value = "10000", value_parser = clap::value_parser!(u32).range(1..))]
-    pub fisherman_incomplete_sync_max: u32,
+    /// Duration between batch deletion processing cycles (in seconds).
+    #[arg(long, default_value = "60", value_parser = clap::value_parser!(u64).range(1..))]
+    pub fisherman_batch_interval_seconds: u64,
 
-    /// Page size for incomplete storage request pagination.
-    /// Must be at least 1.
-    #[arg(long, value_name = "SIZE", default_value = "256", value_parser = clap::value_parser!(u32).range(1..))]
-    pub fisherman_incomplete_sync_page_size: u32,
-
-    /// The minimum number of blocks between the last processed block and the current best block to consider the fisherman out of sync.
-    #[arg(long, default_value = "5")]
-    pub fisherman_sync_mode_min_blocks_behind: u32,
+    /// Maximum number of files to process per batch deletion cycle.
+    #[arg(long, default_value = "1000", value_parser = clap::value_parser!(u64).range(1..))]
+    pub fisherman_batch_deletion_limit: u64,
 }
 
 impl FishermanConfigurations {
@@ -585,9 +590,8 @@ impl FishermanConfigurations {
                     .fisherman_database_url
                     .clone()
                     .expect("Fisherman database URL is required"),
-                incomplete_sync_max: self.fisherman_incomplete_sync_max,
-                incomplete_sync_page_size: self.fisherman_incomplete_sync_page_size,
-                sync_mode_min_blocks_behind: self.fisherman_sync_mode_min_blocks_behind,
+                batch_interval_seconds: self.fisherman_batch_interval_seconds,
+                batch_deletion_limit: self.fisherman_batch_deletion_limit,
                 maintenance_mode,
             })
         } else {
@@ -680,6 +684,7 @@ pub struct Cli {
         "bsp_move_bucket_task", "bsp_move_bucket_grace_period",
         "bsp_charge_fees_task", "bsp_charge_fees_min_debt",
         "bsp_submit_proof_task", "bsp_submit_proof_max_attempts",
+        "provider_database_url",
     ])]
     pub provider_config_file: Option<String>,
 
