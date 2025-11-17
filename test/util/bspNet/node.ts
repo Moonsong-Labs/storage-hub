@@ -44,7 +44,7 @@ export async function dropTransaction(
     const result = await api.rpc.author.removeExtrinsic(matches.map((hash) => ({ Hash: hash })));
     const pendingAfter = await api.rpc.author.pendingExtrinsics();
     assert(result.length > 0, "No removal confirmation returned by RPC");
-    assert(pendingBefore > pendingAfter, "Extrinsic not removed from txPool");
+    assert(pendingBefore.length > pendingAfter.length, "Extrinsic not removed from txPool");
   } else {
     // Remove the extrinsic with the specified hash
     const result = await api.rpc.author.removeExtrinsic([{ Hash: extrinsic }]);

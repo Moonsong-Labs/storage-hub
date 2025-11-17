@@ -937,6 +937,8 @@ export default {
       },
       StorageRequestRejected: {
         fileKey: "H256",
+        mspId: "H256",
+        bucketId: "H256",
         reason: "PalletFileSystemRejectedStorageRequestReason"
       },
       BspRequestedToStopStoring: {
