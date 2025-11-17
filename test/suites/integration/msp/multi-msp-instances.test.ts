@@ -15,7 +15,6 @@ await describeMspNet(
   {
     initialised: true,
     pendingTxDb: true,
-    only: true,
     networkConfig: [{ noisy: false, rocksdb: true }]
   },
   ({ before, after, createUserApi, createMsp1Api, createApi, it }) => {
@@ -343,9 +342,9 @@ await describeMspNet(
       );
       const previousHashHex = Buffer.from(previousRow.hash).toString("hex");
 
-      // Advance to the next MSP charging period so that a new chargeMultipleUsersPaymentStreams
-      // extrinsic is submitted to the tx pool, reusing the same nonce.
-      // !WARNING: The nonce could have been already filled by a remark transaction to fill in the nonce gap.
+      // Advance to the next MSP charging period.
+      // Either a new chargeMultipleUsersPaymentStreams extrinsic or a remark transaction
+      // acting as gap-filling will be submitted to the tx pool, reusing the same nonce.
       const currentHeader = await userApi.rpc.chain.getHeader();
       const currentBlockNumber = currentHeader.number.toNumber();
       const blocksToAdvance =
@@ -359,6 +358,8 @@ await describeMspNet(
       });
 
       // Wait until the pending DB row for this nonce is upserted with a new hash and non-invalid state.
+      // This could be a new chargeMultipleUsersPaymentStreams extrinsic or a remark transaction
+      // acting as gap-filling.
       try {
         await waitFor({
           lambda: async () => {

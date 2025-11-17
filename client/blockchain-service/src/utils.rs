@@ -1261,16 +1261,40 @@ where
         let extrinsic = self.construct_extrinsic(self.client.clone(), call.clone(), nonce, 0);
 
         // Calculate the transaction hash
-        let id_hash = sp_core::Blake2Hasher::hash(&extrinsic.encode());
+        let extrinsic_bytes = extrinsic.encode();
+        let id_hash = sp_core::Blake2Hasher::hash(&extrinsic_bytes);
 
         // Submit the transaction and set up the watcher infrastructure for it.
         // We submit before tracking because Substrate's transaction pool validates everything
         // (including nonce conflicts, tip comparisons, etc.). If the RPC accepts it, it's safe to track
         let (tx_hash, watch_rx) = self
-            .submit_and_watch_extrinsic(extrinsic.encode(), nonce, id_hash)
+            .submit_and_watch_extrinsic(extrinsic_bytes.clone(), nonce, id_hash)
             .await?;
 
-        // TODO: Consider persisting the gap-filling transaction in the DB.
+        // Persist the transaction in the DB (best-effort) after RPC acceptance
+        // TODO: Consider doing this in a spawned thread to avoid blocking the main thread.
+        if let Some(store) = &self.pending_tx_store {
+            let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
+            let account_id: AccountId<Runtime> = caller_pub_key.into();
+            let account_bytes_owned: Vec<u8> = account_id.as_ref().to_vec();
+            let call_scale = call.encode();
+            // TODO: Use this when we implement multiple instances of the same provider.
+            let creator_id =
+                std::env::var("SH_NODE_INSTANCE_ID").unwrap_or_else(|_| "local".to_string());
+            if let Err(e) = store
+                .insert_sent(
+                    &account_bytes_owned,
+                    nonce as i64,
+                    tx_hash.as_bytes(),
+                    &call_scale,
+                    &extrinsic_bytes,
+                    &creator_id,
+                )
+                .await
+            {
+                warn!(target: LOG_TARGET, "Failed to persist pending tx (nonce {}, and hash {:?}): {:?}", nonce, tx_hash, e);
+            }
+        }
 
         // Add the transaction to the transaction manager to track it
         let block_number = self.client.info().best_number.saturated_into();
