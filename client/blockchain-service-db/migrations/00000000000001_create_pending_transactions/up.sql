@@ -4,6 +4,8 @@ CREATE TABLE IF NOT EXISTS pending_transactions (
   nonce BIGINT NOT NULL,
   hash BYTEA NOT NULL,
   call_scale BYTEA NOT NULL,
+  -- Full signed extrinsic bytes for re-subscription on restart
+  extrinsic_scale BYTEA NOT NULL,
   state TEXT NOT NULL CHECK (state IN (
     'future','ready','broadcast','queued','sent','in_block','retracted','finalized','invalid','dropped','usurped','finality_timeout'
   )),

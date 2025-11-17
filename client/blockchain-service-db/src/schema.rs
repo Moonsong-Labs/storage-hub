@@ -6,6 +6,7 @@ diesel::table! {
         nonce -> Int8,
         hash -> Bytea,
         call_scale -> Bytea,
+        extrinsic_scale -> Bytea,
         state -> Text,
         creator_id -> Text,
         created_at -> Timestamptz,

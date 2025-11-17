@@ -528,13 +528,14 @@ where
             self.construct_extrinsic(self.client.clone(), call.clone(), nonce, options.tip());
 
         // Generate a unique ID for this query.
-        let id_hash = Blake2Hasher::hash(&extrinsic.encode());
+        let extrinsic_bytes = extrinsic.encode();
+        let id_hash = Blake2Hasher::hash(&extrinsic_bytes);
 
         // Submit the transaction and set up the watcher infrastructure for it.
         // We submit before tracking because Substrate's transaction pool validates everything
         // (including nonce conflicts, tip comparisons, etc.). If the RPC accepts it, it's safe to track
         let (tx_hash, watch_rx) = self
-            .submit_and_watch_extrinsic(extrinsic.encode(), nonce, id_hash)
+            .submit_and_watch_extrinsic(extrinsic_bytes.clone(), nonce, id_hash)
             .await?;
         let module = options.module().unwrap_or("unknown".to_string());
         let method = options.method().unwrap_or("unknown".to_string());
@@ -556,6 +557,7 @@ where
                     nonce as i64,
                     tx_hash.as_bytes(),
                     &call_scale,
+                    &extrinsic_bytes,
                     &creator_id,
                 )
                 .await
@@ -679,6 +681,129 @@ where
                 .as_str(),
             );
         caller_pub_key
+    }
+
+    /// Re-subscribe transaction watchers from the pending transactions DB on startup.
+    ///
+    /// Behaviour:
+    /// - Loads non-terminal rows for this node's account with states:
+    ///   "sent", "future", "ready", "broadcast", "retracted".
+    /// - Filters to only rows with nonce >= on-chain nonce at current best block.
+    /// - Skips rows with empty `extrinsic_scale` (cannot re-submit for watcher).
+    /// - Skips rows already tracked in the transaction manager.
+    /// - Re-attaches the watcher by submitAndWatch using stored `extrinsic_scale` (full signed bytes).
+    ///   Decodes `call_scale` only to enrich transaction-manager tracking.
+    pub(crate) async fn resubscribe_pending_transactions_on_startup(&mut self) {
+        // If DB is not configured, there is nothing to do.
+        let Some(store) = &self.pending_tx_store else {
+            return;
+        };
+
+        let best_hash = self.client.info().best_hash;
+        let on_chain_nonce = self.account_nonce(&best_hash);
+        let block_number = self.client.info().best_number.saturated_into();
+
+        // Resolve our account id bytes to filter by account in DB
+        let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
+        let account_id: AccountId<Runtime> = caller_pub_key.into();
+        let account_bytes_owned: Vec<u8> = account_id.as_ref().to_vec();
+
+        // Allowed non-terminal states for re-subscription
+        let allowed_states = ["sent", "future", "ready", "broadcast", "retracted"];
+
+        // Fetch candidate rows with full extrinsic bytes
+        let rows = match store
+            .load_resubscribe_rows(&account_bytes_owned, &allowed_states)
+            .await
+        {
+            Ok(rows) => rows,
+            Err(e) => {
+                warn!(target: LOG_TARGET, "Failed to load pending txs for re-subscription: {:?}", e);
+                return;
+            }
+        };
+
+        for row in rows {
+            let nonce_i64 = row.nonce;
+            if nonce_i64 < on_chain_nonce as i64 {
+                // Below on-chain nonce; skip
+                continue;
+            }
+            let nonce_u32 = match u32::try_from(nonce_i64) {
+                Ok(n) => n,
+                Err(_) => {
+                    error!(target: LOG_TARGET, "CRITICAL❗️❗️ Skipping pending tx with out-of-range nonce {}. The chain has gone beyond the 2^32 nonce limit. This is a critical bug. Please report it to the StorageHub team.", nonce_i64);
+                    continue;
+                }
+            };
+
+            // Skip if we are already tracking this nonce
+            if self.transaction_manager.pending.contains_key(&nonce_u32) {
+                warn!(target: LOG_TARGET, "Skipping pending tx (nonce {}) because we are already tracking it", nonce_u32);
+                continue;
+            }
+
+            // We need full signed extrinsic bytes to re-submit and watch
+            if row.extrinsic_scale.is_empty() {
+                warn!(
+                    target: LOG_TARGET,
+                    "Cannot resubscribe pending tx (nonce {}) due to empty extrinsic_scale; skipping",
+                    nonce_u32
+                );
+                continue;
+            }
+
+            // Submit-and-watch using the exact same signed extrinsic bytes
+            let id_hash = Blake2Hasher::hash(&row.extrinsic_scale);
+
+            match self
+                .submit_and_watch_extrinsic(row.extrinsic_scale.clone(), nonce_u32, id_hash)
+                .await
+            {
+                Ok((tx_hash, watch_rx)) => {
+                    info!(
+                        target: LOG_TARGET,
+                        "🔁 Re-subscribed watcher for pending tx (nonce {}, state {}, hash {:?})",
+                        nonce_u32,
+                        row.state,
+                        tx_hash
+                    );
+
+                    // Decode call_scale solely to enrich manager tracking; skip tracking if decode fails
+                    if !row.call_scale.is_empty() {
+                        if let Ok(call) =
+                            <Runtime::Call as Decode>::decode(&mut &row.call_scale[..])
+                        {
+                            if let Err(e) = self.transaction_manager.track_transaction(
+                                nonce_u32,
+                                id_hash,
+                                call,
+                                0,
+                                block_number,
+                            ) {
+                                warn!(target: LOG_TARGET, "Failed to track re-subscribed tx (nonce {}): {:?}", nonce_u32, e);
+                            }
+                        }
+                    }
+
+                    // Spawn watcher
+                    spawn_transaction_watcher::<Runtime>(
+                        nonce_u32,
+                        tx_hash,
+                        watch_rx,
+                        self.tx_status_sender.clone(),
+                    );
+                }
+                Err(e) => {
+                    warn!(
+                        target: LOG_TARGET,
+                        "Failed to submitAndWatch for pending tx (nonce {}): {:?}",
+                        nonce_u32,
+                        e
+                    );
+                }
+            }
+        }
     }
 
     /// Get an extrinsic from a block.
@@ -1104,6 +1229,8 @@ where
         let (tx_hash, watch_rx) = self
             .submit_and_watch_extrinsic(extrinsic.encode(), nonce, id_hash)
             .await?;
+
+        // TODO: Consider persisting the gap-filling transaction in the DB.
 
         // Add the transaction to the transaction manager to track it
         let block_number = self.client.info().best_number.saturated_into();

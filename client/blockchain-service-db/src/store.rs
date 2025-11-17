@@ -43,6 +43,7 @@ impl PendingTxStore {
         nonce: i64,
         hash: &[u8],
         call_scale: &[u8],
+        extrinsic_scale: &[u8],
         creator_id: &str,
     ) -> Result<(), diesel::result::Error> {
         use pending_transactions::dsl as pt;
@@ -52,6 +53,7 @@ impl PendingTxStore {
             nonce,
             hash,
             call_scale,
+            extrinsic_scale,
             state: "sent",
             creator_id,
         };
@@ -65,6 +67,7 @@ impl PendingTxStore {
             .set((
                 pt::hash.eq(hash),
                 pt::call_scale.eq(call_scale),
+                pt::extrinsic_scale.eq(extrinsic_scale),
                 pt::state.eq("sent"),
                 pt::creator_id.eq(creator_id),
             ))
@@ -116,7 +119,7 @@ impl PendingTxStore {
 
         let mut conn = self.pool.get().await.unwrap();
 
-        // If the row doesn't exist, create minimal row with empty call_scale and creator_id from env/default.
+        // If the row doesn't exist, create minimal row with empty call_scale, extrinsic_scale, and creator_id from env/default.
         // TODO: Use this when we implement multiple instances of the same provider.
         let creator_id =
             std::env::var("SH_NODE_INSTANCE_ID").unwrap_or_else(|_| "local".to_string());
@@ -125,6 +128,7 @@ impl PendingTxStore {
             nonce,
             hash: tx_hash,
             call_scale: &[],
+            extrinsic_scale: &[],
             state: state_str,
             creator_id: &creator_id,
         };
@@ -238,6 +242,34 @@ impl PendingTxStore {
             )
             .order(pt::nonce.asc())
             .load::<crate::models::PendingTransactionRow>(&mut conn)
+            .await?;
+        Ok(rows)
+    }
+
+    /// Load rows for resubscribe flow, selecting only needed columns via Diesel DSL.
+    pub async fn load_resubscribe_rows(
+        &self,
+        account_id: &[u8],
+        states: &[&str],
+    ) -> Result<Vec<crate::models::PendingResubscribeRow>, diesel::result::Error> {
+        use pending_transactions::dsl as pt;
+        let mut conn = self.pool.get().await.unwrap();
+        let states_vec: Vec<String> = states.iter().map(|s| s.to_string()).collect();
+        let rows = pt::pending_transactions
+            .filter(
+                pt::account_id
+                    .eq(account_id)
+                    .and(pt::state.eq_any(states_vec)),
+            )
+            .select((
+                pt::account_id,
+                pt::nonce,
+                pt::extrinsic_scale,
+                pt::call_scale,
+                pt::state,
+            ))
+            .order(pt::nonce.asc())
+            .load::<crate::models::PendingResubscribeRow>(&mut conn)
             .await?;
         Ok(rows)
     }

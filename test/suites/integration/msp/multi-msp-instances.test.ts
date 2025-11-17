@@ -15,7 +15,6 @@ await describeMspNet(
   {
     initialised: true,
     pendingTxDb: true,
-    only: true,
     networkConfig: [{ noisy: false, rocksdb: true }]
   },
   ({ before, after, createUserApi, createMsp1Api, createApi, it }) => {
@@ -423,146 +422,150 @@ await describeMspNet(
       });
     });
 
+    it("Turn off MSP 1, turn it back on and check persisted transactions are still there", async () => {
+      const mspAddress = userApi.accounts.mspKey.address;
+      const accountId = userApi.pendingDb.accountIdFromAddress(mspAddress);
+
+      // Ensure MSP is free of pending extrinsics before starting this scenario.
+      await mspApi.wait.waitForAvailabilityToSendTx(mspAddress);
+
+      // Advance to the next MSP charging period so that a new chargeMultipleUsersPaymentStreams
+      // extrinsic is submitted to the tx pool.
+      const currentHeader = await userApi.rpc.chain.getHeader();
+      const currentBlockNumber = currentHeader.number.toNumber();
+      const blocksToAdvance =
+        MSP_CHARGING_PERIOD - (currentBlockNumber % MSP_CHARGING_PERIOD || MSP_CHARGING_PERIOD);
+      await userApi.block.skipTo(currentBlockNumber + blocksToAdvance);
+
+      await userApi.assert.extrinsicPresent({
+        module: "paymentStreams",
+        method: "chargeMultipleUsersPaymentStreams",
+        checkTxPool: true
+      });
+
+      // Wait until a pending DB row exists for this MSP account in a non-terminal state and capture its nonce.
+      let restartNonce: bigint | undefined;
+      try {
+        await waitFor({
+          lambda: async () => {
+            const rows = await userApi.pendingDb.getAllByAccount({ sql, accountId });
+            const nonTerminal = rows.filter(
+              (row) =>
+                row.state === "sent" ||
+                row.state === "future" ||
+                row.state === "ready" ||
+                row.state === "broadcast"
+            );
+            if (nonTerminal.length === 0) {
+              return false;
+            }
+            restartNonce = nonTerminal.reduce<bigint>((acc, row) => {
+              const n = BigInt(row.nonce);
+              return n > acc ? n : acc;
+            }, BigInt(nonTerminal[0].nonce));
+            return true;
+          }
+        });
+      } catch (error) {
+        const rows = await userApi.pendingDb.getAllByAccount({ sql, accountId });
+        // eslint-disable-next-line no-console
+        console.error(
+          "[multi-msp-instances] Failed while waiting for non-terminal charge tx before MSP restart",
+          {
+            accountId: mspAddress,
+            rows
+          }
+        );
+        throw error;
+      }
+
+      assert(
+        restartNonce !== undefined,
+        "Expected at least one non-terminal pending tx before MSP restart"
+      );
+
+      // Restart MSP 1 container.
+      await mspApi.disconnect();
+      await restartContainer({ containerName: userApi.shConsts.NODE_INFOS.msp1.containerName });
+
+      // Wait for MSP RPC to be back up.
+      await getContainerPeerId(`http://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`, true);
+
+      // Wait for MSP service to be idle again.
+      await userApi.docker.waitForLog({
+        containerName: userApi.shConsts.NODE_INFOS.msp1.containerName,
+        searchString: "💤 Idle",
+        timeout: 20000,
+        tail: 50
+      });
+
+      // Recreate MSP API and ensure it catches up to the chain tip.
+      const newMspApiMaybe = await createApi(
+        `ws://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`
+      );
+      assert(newMspApiMaybe, "Failed to recreate MSP API after restart");
+      mspApi = newMspApiMaybe;
+      await userApi.wait.nodeCatchUpToChainTip(mspApi);
+
+      const nonce = restartNonce;
+
+      // Build a block including the charge tx but do not finalise yet, then wait for "in_block".
+      await userApi.block.seal({ finaliseBlock: false });
+      await userApi.pendingDb.waitForState({
+        sql,
+        accountId,
+        nonce,
+        state: "in_block"
+      });
+
+      // Finalise the block on user and MSP nodes, then wait for "finalized".
+      const latestHeader = await userApi.rpc.chain.getHeader();
+      const latestBlockHash = latestHeader.hash.toString();
+
+      await userApi.block.finaliseBlock(latestBlockHash);
+      await mspApi.wait.blockImported(latestBlockHash);
+      await mspApi.block.finaliseBlock(latestBlockHash);
+
+      await userApi.pendingDb.waitForState({
+        sql,
+        accountId,
+        nonce,
+        state: "finalized"
+      });
+
+      // Build and finalise one more block and wait for the row to be cleared.
+      await userApi.block.seal({ finaliseBlock: true });
+      const nextFinalisedHash = await userApi.rpc.chain.getFinalizedHead();
+
+      await mspApi.wait.blockImported(nextFinalisedHash.toString());
+      await mspApi.block.finaliseBlock(nextFinalisedHash.toString());
+
+      try {
+        await waitFor({
+          lambda: async () => {
+            const row = await userApi.pendingDb.getByNonce({ sql, accountId, nonce });
+            return row === null;
+          }
+        });
+      } catch (error) {
+        const rows = await userApi.pendingDb.getAllByAccount({ sql, accountId });
+        // eslint-disable-next-line no-console
+        console.error(
+          "[multi-msp-instances] Pending transactions still present after MSP restart final cleanup",
+          {
+            accountId: mspAddress,
+            rows
+          }
+        );
+        throw error;
+      }
+    });
+
     it(
-      "Turn off MSP 1, turn it back on and check persisted transactions are still there",
-      { skip: "Skipping until persisted transactions are re-watched at startup" },
+      "Turn off MSP 1, build block with pending transaction, turn it back on and check transaction is not watched anymore",
+      { skip: "TODO" },
       async () => {
-        const mspAddress = userApi.accounts.mspKey.address;
-        const accountId = userApi.pendingDb.accountIdFromAddress(mspAddress);
-
-        // Ensure MSP is free of pending extrinsics before starting this scenario.
-        await mspApi.wait.waitForAvailabilityToSendTx(mspAddress);
-
-        // Advance to the next MSP charging period so that a new chargeMultipleUsersPaymentStreams
-        // extrinsic is submitted to the tx pool.
-        const currentHeader = await userApi.rpc.chain.getHeader();
-        const currentBlockNumber = currentHeader.number.toNumber();
-        const blocksToAdvance =
-          MSP_CHARGING_PERIOD - (currentBlockNumber % MSP_CHARGING_PERIOD || MSP_CHARGING_PERIOD);
-        await userApi.block.skipTo(currentBlockNumber + blocksToAdvance);
-
-        await userApi.assert.extrinsicPresent({
-          module: "paymentStreams",
-          method: "chargeMultipleUsersPaymentStreams",
-          checkTxPool: true
-        });
-
-        // Wait until a pending DB row exists for this MSP account in a non-terminal state and capture its nonce.
-        let restartNonce: bigint | undefined;
-        try {
-          await waitFor({
-            lambda: async () => {
-              const rows = await userApi.pendingDb.getAllByAccount({ sql, accountId });
-              const nonTerminal = rows.filter(
-                (row) =>
-                  row.state === "sent" ||
-                  row.state === "future" ||
-                  row.state === "ready" ||
-                  row.state === "broadcast"
-              );
-              if (nonTerminal.length === 0) {
-                return false;
-              }
-              restartNonce = nonTerminal.reduce<bigint>((acc, row) => {
-                const n = BigInt(row.nonce);
-                return n > acc ? n : acc;
-              }, BigInt(nonTerminal[0].nonce));
-              return true;
-            }
-          });
-        } catch (error) {
-          const rows = await userApi.pendingDb.getAllByAccount({ sql, accountId });
-          // eslint-disable-next-line no-console
-          console.error(
-            "[multi-msp-instances] Failed while waiting for non-terminal charge tx before MSP restart",
-            {
-              accountId: mspAddress,
-              rows
-            }
-          );
-          throw error;
-        }
-
-        assert(
-          restartNonce !== undefined,
-          "Expected at least one non-terminal pending tx before MSP restart"
-        );
-
-        // Restart MSP 1 container.
-        await mspApi.disconnect();
-        await restartContainer({ containerName: userApi.shConsts.NODE_INFOS.msp1.containerName });
-
-        // Wait for MSP RPC to be back up.
-        await getContainerPeerId(`http://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`, true);
-
-        // Wait for MSP service to be idle again.
-        await userApi.docker.waitForLog({
-          containerName: userApi.shConsts.NODE_INFOS.msp1.containerName,
-          searchString: "💤 Idle",
-          timeout: 20000,
-          tail: 50
-        });
-
-        // Recreate MSP API and ensure it catches up to the chain tip.
-        const newMspApiMaybe = await createApi(
-          `ws://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`
-        );
-        assert(newMspApiMaybe, "Failed to recreate MSP API after restart");
-        mspApi = newMspApiMaybe;
-        await userApi.wait.nodeCatchUpToChainTip(mspApi);
-
-        const nonce = restartNonce;
-
-        // Build a block including the charge tx but do not finalise yet, then wait for "in_block".
-        await userApi.block.seal({ finaliseBlock: false });
-        await userApi.pendingDb.waitForState({
-          sql,
-          accountId,
-          nonce,
-          state: "in_block"
-        });
-
-        // Finalise the block on user and MSP nodes, then wait for "finalized".
-        const latestHeader = await userApi.rpc.chain.getHeader();
-        const latestBlockHash = latestHeader.hash.toString();
-
-        await userApi.block.finaliseBlock(latestBlockHash);
-        await mspApi.wait.blockImported(latestBlockHash);
-        await mspApi.block.finaliseBlock(latestBlockHash);
-
-        await userApi.pendingDb.waitForState({
-          sql,
-          accountId,
-          nonce,
-          state: "finalized"
-        });
-
-        // Build and finalise one more block and wait for the row to be cleared.
-        await userApi.block.seal({ finaliseBlock: true });
-        const nextFinalisedHash = await userApi.rpc.chain.getFinalizedHead();
-
-        await mspApi.wait.blockImported(nextFinalisedHash.toString());
-        await mspApi.block.finaliseBlock(nextFinalisedHash.toString());
-
-        try {
-          await waitFor({
-            lambda: async () => {
-              const row = await userApi.pendingDb.getByNonce({ sql, accountId, nonce });
-              return row === null;
-            }
-          });
-        } catch (error) {
-          const rows = await userApi.pendingDb.getAllByAccount({ sql, accountId });
-          // eslint-disable-next-line no-console
-          console.error(
-            "[multi-msp-instances] Pending transactions still present after MSP restart final cleanup",
-            {
-              accountId: mspAddress,
-              rows
-            }
-          );
-          throw error;
-        }
+        // TODO: Implement this test
       }
     );
   }

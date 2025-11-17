@@ -11,6 +11,7 @@ pub struct PendingTransactionRow {
     pub nonce: i64,
     pub hash: Vec<u8>,
     pub call_scale: Vec<u8>,
+    pub extrinsic_scale: Vec<u8>,
     pub state: String,
     pub creator_id: String,
     pub created_at: DateTime<Utc>,
@@ -24,6 +25,17 @@ pub struct NewPendingTransaction<'a> {
     pub nonce: i64,
     pub hash: &'a [u8],
     pub call_scale: &'a [u8],
+    pub extrinsic_scale: &'a [u8],
     pub state: &'a str,
     pub creator_id: &'a str,
+}
+
+/// Minimal row for resubscribe flow, selected via Diesel projection.
+#[derive(Debug, Clone, Queryable)]
+pub struct PendingResubscribeRow {
+    pub account_id: Vec<u8>,
+    pub nonce: i64,
+    pub extrinsic_scale: Vec<u8>,
+    pub call_scale: Vec<u8>,
+    pub state: String,
 }
