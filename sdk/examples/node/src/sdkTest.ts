@@ -57,11 +57,11 @@ async function authenticateMspClient(
 }
 
 async function main() {
-  const baseUrl = 'https://deo-dh-backend.testnet.datahaven-infra.network';
-  const rpcUrl = 'https://services.datahaven-testnet.network/testnet';
+  const baseUrl = 'https://deo-dh-backend.stagenet.datahaven-infra.network';
+  const rpcUrl = 'https://services.datahaven-dev.network/stagenet';
   const chainId = 1288;
   const fileKey =
-    '0xe8ce2a70c51bcf4985962fbf29d05dfa06fbc59cd38c5812f675969f6d4a8cc2';
+    'd43e23e8fe8e34ac367744de6cbeec08b6c099bcb46dd515fe65c11a1727e3d1';
   // const chainId = 181222;
   // const rpcUrl = `http://127.0.0.1:9888`;
   // const baseUrl = "http://127.0.0.1:8080"
