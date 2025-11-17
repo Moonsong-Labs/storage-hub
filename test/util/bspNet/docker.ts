@@ -463,6 +463,17 @@ export const pauseContainer = async (containerName: string) => {
   const docker = new Docker();
   const container = docker.getContainer(containerName);
   await container.pause();
+
+  await waitFor({
+    lambda: async () => {
+      try {
+        const info = await container.inspect();
+        return info?.State?.Paused === true;
+      } catch {
+        return false;
+      }
+    }
+  });
 };
 
 export const stopContainer = async (containerName: string) => {
