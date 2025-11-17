@@ -1,7 +1,7 @@
 use crate::events::ForestWriteLockTaskData;
 use shc_common::traits::StorageEnableRuntime;
 use std::collections::VecDeque;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::sync::Semaphore;
 
 /// Priority value for forest write lock tickets
@@ -46,37 +46,25 @@ impl<Runtime: StorageEnableRuntime> ForestWriteLockTicket<Runtime> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ForestWriteLockManager<Runtime: StorageEnableRuntime> {
     /// Semaphore to limit concurrent write operations
     pub lock: Arc<Semaphore>,
     /// Queue to manage pending write requests
-    pub queue: Arc<VecDeque<ForestWriteLockTicket<Runtime>>>,
+    pub queue: Arc<Mutex<VecDeque<ForestWriteLockTicket<Runtime>>>>,
+    /// Current holder of the write lock
+    pub current_holder: Arc<Mutex<Option<ForestWriteLockTicket<Runtime>>>>,
 }
 
 impl<Runtime: StorageEnableRuntime> ForestWriteLockManager<Runtime> {
     /// Creates a new ForestWriteLockManager instance
-    /// - The lock is initialized with a single permit semaphore
+    /// - The lock is initialized with a  max single permit semaphore
     // TODO: Allow the queue to be pre-populated with existing tickets if necessary
     pub fn new() -> Self {
         Self {
-            lock: Arc::new(Semaphore::new(1)),
-            queue: Arc::new(VecDeque::new()),
-        }
-    }
-
-    /// Attempts to acquire the forest write lock or enqueues the request if the lock is not available
-    pub async fn acquire(&mut self, data: ForestWriteLockTaskData<Runtime>) -> ForestWriteLockGuard<Runtime> {
-        let ticket = ForestWriteLockTicket::new(data);
-
-        if self.lock.available_permits() > 0 {
-            let _permit = self.lock.acquire().await.unwrap();
-        } else {
-            self.enqueue(ticket);
-        }
-
-        ForestWriteLockGuard {
-            manager: Arc::new(self.clone()),
+            lock: Arc::new(Semaphore::const_new(1)),
+            queue: Arc::new(Mutex::new(VecDeque::new())),
+            current_holder: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -85,24 +73,56 @@ impl<Runtime: StorageEnableRuntime> ForestWriteLockManager<Runtime> {
         self.lock.available_permits() > 0
     }
 
+    /// Attempts to acquire the forest write lock or enqueues the request if the lock is not available
+    /// - If the lock is available and the queue is empty, it is granted immediately
+    /// - If the lock is unavailable, the request is enqueued based on its priority
+    /// - If the lock is available but there are pending requests in the queue, the request is enqueued
+    /// and the next ticket in the queue is granted the lock
+    /// Returns a ForestWriteLockGuard that manages the lifetime of the acquired lock
+    pub async fn acquire(
+        &self,
+        data: ForestWriteLockTaskData<Runtime>,
+    ) -> ForestWriteLockGuard<Runtime> {
+        let ticket = ForestWriteLockTicket::new(data);
+        // TODO: Handle the edge case where the acquire request is already in the queue
+        let mut queue_guard = self.queue.lock().unwrap();
+        if self.lock.available_permits() > 0 && queue_guard.is_empty() {
+            let _permit = self.lock.acquire().await.unwrap();
+            *self.current_holder.lock().unwrap() = Some(ticket.clone());
+        } else {
+            // If the lock is available but there are pending requests
+            // We grant  it to the next ticket in the queue
+            if self.lock.available_permits() > 0 {
+                if let Some(next_ticket) = queue_guard.pop_front() {
+                    let _permit = self.lock.acquire().await.unwrap();
+                    *self.current_holder.lock().unwrap() = Some(next_ticket);
+                }
+            }
+            self.enqueue(ticket);
+        }
+
+        ForestWriteLockGuard {
+            manager: Arc::new(self.clone()),
+        }
+    }
+
     /// Enqueues a ticket based on its priority
     /// - High priority tickets are placed before any medium and low priority tickets
     /// - Medium priority tickets are placed before any low priority tickets
     /// - Low priority tickets are placed at the back of the queue
-    fn enqueue(&mut self, ticket: ForestWriteLockTicket<Runtime>) {
+    fn enqueue(&self, ticket: ForestWriteLockTicket<Runtime>) {
+        let mut queue = self.queue.lock().unwrap();
         match ticket.priority {
-            ForestWriteLockPriority::Low => self.queue.push_back(ticket),
+            ForestWriteLockPriority::Low => queue.push_back(ticket),
             ForestWriteLockPriority::Medium => {
-                let insert_pos = self
-                    .queue
+                let insert_pos = queue
                     .iter()
                     .position(|item| matches!(item.priority, ForestWriteLockPriority::Low))
-                    .unwrap_or(self.queue.len());
-                self.queue.insert(insert_pos, ticket);
+                    .unwrap_or(queue.len());
+                queue.insert(insert_pos, ticket);
             }
             ForestWriteLockPriority::High => {
-                let insert_pos = self
-                    .queue
+                let insert_pos = queue
                     .iter()
                     .position(|item| {
                         matches!(
@@ -110,8 +130,8 @@ impl<Runtime: StorageEnableRuntime> ForestWriteLockManager<Runtime> {
                             ForestWriteLockPriority::Medium | ForestWriteLockPriority::Low
                         )
                     })
-                    .unwrap_or(self.queue.len());
-                self.queue.insert(insert_pos, ticket);
+                    .unwrap_or(queue.len());
+                queue.insert(insert_pos, ticket);
             }
         }
     }
@@ -123,7 +143,16 @@ pub struct ForestWriteLockGuard<Runtime: StorageEnableRuntime> {
 impl<Runtime: StorageEnableRuntime> Drop for ForestWriteLockGuard<Runtime> {
     /// Release the semaphore permit when the guard is dropped and acquire the next ticket if available
     fn drop(&mut self) {
+        // Release the permit back to the semaphore
         self.manager.lock.add_permits(1);
+        // Clear the current holder
+        *self.manager.current_holder.lock().unwrap() = None;
         // TODO: Implement logic to acquire the next ticket from the queue if available
     }
 }
+// TODO: Implement unit tests for ForestWriteLockManager and ForestWriteLockGuard
+// Verify that:
+// a) With empty queue, acquire grants the lock immediately
+// b) With non-empty queue, and free lock, the lock is granted to the next ticket in the queue
+// c) With non-empty queue, and occupied lock, the ticket is enqueued correctly based
+// d) Dropping the guard releases the lock and allows the next ticket to acquire it
