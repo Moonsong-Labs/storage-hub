@@ -719,8 +719,18 @@ declare module "@polkadot/api-base/types/events" {
        **/
       StorageRequestRejected: AugmentedEvent<
         ApiType,
-        [fileKey: H256, reason: PalletFileSystemRejectedStorageRequestReason],
-        { fileKey: H256; reason: PalletFileSystemRejectedStorageRequestReason }
+        [
+          fileKey: H256,
+          mspId: H256,
+          bucketId: H256,
+          reason: PalletFileSystemRejectedStorageRequestReason
+        ],
+        {
+          fileKey: H256;
+          mspId: H256;
+          bucketId: H256;
+          reason: PalletFileSystemRejectedStorageRequestReason;
+        }
       >;
       /**
        * Notifies that a storage request has been revoked by the user who initiated it.
