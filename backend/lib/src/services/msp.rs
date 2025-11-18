@@ -524,6 +524,10 @@ impl MspService {
         }
 
         // Get the bucket ID from the metadata and verify that the user is its owner.
+        // We check the bucket ownership instead of the file ownership as the file might not be in
+        // the indexer at this point (since the storage request would have to have been finalised).
+        // TODO: This could still fail as the bucket creation extrinsic might not have been finalised yet,
+        // ideally we should have a way to directly check on-chain (like an RPC).
         let bucket_id = hex::encode(file_metadata.bucket_id());
         let bucket = self.get_db_bucket(&bucket_id).await?;
         self.can_user_view_bucket(bucket, user)?;
