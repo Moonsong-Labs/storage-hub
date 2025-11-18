@@ -229,14 +229,17 @@ impl PendingTxStore {
     /// Load pending transactions for a given `account_id` filtered by a set of states.
     ///
     /// Returns rows ordered by nonce ascending.
-    pub async fn load_for_account_with_states(
+    pub async fn load_for_account_with_states<Hash>(
         &self,
         account_id: &[u8],
-        states: &[&str],
+        states: Vec<TransactionStatus<Hash, Hash>>,
     ) -> Result<Vec<crate::models::PendingTransactionRow>, diesel::result::Error> {
         use pending_transactions::dsl as pt;
         let mut conn = self.pool.get().await.unwrap();
-        let states_vec: Vec<String> = states.iter().map(|s| s.to_string()).collect();
+        let states_vec: Vec<String> = states
+            .iter()
+            .map(|status| Self::status_to_db_state(status).0.to_string())
+            .collect();
         let rows = pt::pending_transactions
             .filter(
                 pt::account_id
@@ -250,15 +253,23 @@ impl PendingTxStore {
     }
 
     /// Load rows for resubscribe flow, selecting only needed columns via Diesel DSL.
-    pub async fn load_resubscribe_rows(
+    pub async fn load_resubscribe_rows<Hash>(
         &self,
         account_id: &[u8],
-        states: Vec<String>,
+        states: Vec<TransactionStatus<Hash, Hash>>,
     ) -> Result<Vec<crate::models::PendingResubscribeRow>, diesel::result::Error> {
         use pending_transactions::dsl as pt;
         let mut conn = self.pool.get().await.unwrap();
+        let states_vec: Vec<String> = states
+            .iter()
+            .map(|status| Self::status_to_db_state(status).0.to_string())
+            .collect();
         let rows = pt::pending_transactions
-            .filter(pt::account_id.eq(account_id).and(pt::state.eq_any(states)))
+            .filter(
+                pt::account_id
+                    .eq(account_id)
+                    .and(pt::state.eq_any(states_vec)),
+            )
             .select((
                 pt::account_id,
                 pt::nonce,
