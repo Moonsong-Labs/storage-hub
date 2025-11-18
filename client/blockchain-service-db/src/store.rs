@@ -253,17 +253,12 @@ impl PendingTxStore {
     pub async fn load_resubscribe_rows(
         &self,
         account_id: &[u8],
-        states: &[&str],
+        states: Vec<String>,
     ) -> Result<Vec<crate::models::PendingResubscribeRow>, diesel::result::Error> {
         use pending_transactions::dsl as pt;
         let mut conn = self.pool.get().await.unwrap();
-        let states_vec: Vec<String> = states.iter().map(|s| s.to_string()).collect();
         let rows = pt::pending_transactions
-            .filter(
-                pt::account_id
-                    .eq(account_id)
-                    .and(pt::state.eq_any(states_vec)),
-            )
+            .filter(pt::account_id.eq(account_id).and(pt::state.eq_any(states)))
             .select((
                 pt::account_id,
                 pt::nonce,

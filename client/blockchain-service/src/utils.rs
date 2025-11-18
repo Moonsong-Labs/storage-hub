@@ -709,11 +709,14 @@ where
         let account_bytes_owned: Vec<u8> = account_id.as_ref().to_vec();
 
         // Allowed non-terminal states for re-subscription
-        let allowed_states = ["sent", "future", "ready", "broadcast", "retracted"];
+        let allowed_states = vec!["sent", "future", "ready", "broadcast", "retracted"]
+            .into_iter()
+            .map(String::from)
+            .collect::<Vec<String>>();
 
         // Fetch candidate rows with full extrinsic bytes
         let rows = match store
-            .load_resubscribe_rows(&account_bytes_owned, &allowed_states)
+            .load_resubscribe_rows(&account_bytes_owned, allowed_states)
             .await
         {
             Ok(rows) => rows,
