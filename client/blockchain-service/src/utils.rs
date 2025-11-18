@@ -687,7 +687,7 @@ where
     ///
     /// Behaviour:
     /// - Loads non-terminal rows for this node's account with states:
-    ///   "sent", "future", "ready", "broadcast", "retracted".
+    ///   "future", "ready", "broadcast", "retracted".
     /// - Filters to only rows with nonce >= on-chain nonce at current best block.
     /// - Skips rows with empty `extrinsic_scale` (cannot re-submit for watcher).
     /// - Skips rows already tracked in the transaction manager.
@@ -709,7 +709,7 @@ where
         let account_bytes_owned: Vec<u8> = account_id.as_ref().to_vec();
 
         // Allowed non-terminal states for re-subscription
-        let allowed_states = vec!["sent", "future", "ready", "broadcast", "retracted"]
+        let allowed_states = vec!["future", "ready", "broadcast", "retracted"]
             .into_iter()
             .map(String::from)
             .collect::<Vec<String>>();

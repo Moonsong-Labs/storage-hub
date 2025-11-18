@@ -39,7 +39,7 @@ export const countActive = async (options: { sql: SqlClient; accountId: Buffer }
     SELECT COUNT(*)::BIGINT AS cnt
     FROM pending_transactions
     WHERE account_id = ${accountId}
-      AND state IN ('sent','future','ready','broadcast','in_block','retracted')
+      AND state IN ('future','ready','broadcast','in_block','retracted')
   `;
   return BigInt(rows[0]?.cnt ?? 0n);
 };

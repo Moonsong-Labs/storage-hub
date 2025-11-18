@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS pending_transactions (
   -- Whether the node is actively watching this transaction via RPC subscription
   watched BOOLEAN NOT NULL DEFAULT TRUE,
   state TEXT NOT NULL CHECK (state IN (
-    'future','ready','broadcast','queued','sent','in_block','retracted','finalized','invalid','dropped','usurped','finality_timeout'
+    'future','ready','broadcast','in_block','retracted','finality_timeout','finalized','usurped','dropped','invalid'
   )),
   creator_id TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

@@ -452,11 +452,7 @@ await describeMspNet(
           lambda: async () => {
             const rows = await userApi.pendingDb.getAllByAccount({ sql, accountId });
             const nonTerminal = rows.filter(
-              (row) =>
-                row.state === "sent" ||
-                row.state === "future" ||
-                row.state === "ready" ||
-                row.state === "broadcast"
+              (row) => row.state === "future" || row.state === "ready" || row.state === "broadcast"
             );
             if (nonTerminal.length === 0) {
               return false;
@@ -592,11 +588,7 @@ await describeMspNet(
           lambda: async () => {
             const rows = await userApi.pendingDb.getAllByAccount({ sql, accountId });
             const nonTerminal = rows.filter(
-              (row) =>
-                row.state === "sent" ||
-                row.state === "future" ||
-                row.state === "ready" ||
-                row.state === "broadcast"
+              (row) => row.state === "future" || row.state === "ready" || row.state === "broadcast"
             );
             if (nonTerminal.length === 0) {
               return false;

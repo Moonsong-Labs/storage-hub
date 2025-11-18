@@ -21,7 +21,7 @@ impl PendingTxStore {
         Self { pool }
     }
 
-    /// Insert or update a pending transaction in the database with state `"sent"`.
+    /// Insert or update a pending transaction in the database with state `"future"`.
     ///
     /// This performs an atomic upsert keyed by the composite `(account_id, nonce)`:
     /// - If no row exists, a new row is inserted.
@@ -55,7 +55,7 @@ impl PendingTxStore {
             call_scale,
             extrinsic_scale,
             watched: true,
-            state: "sent",
+            state: "future",
             creator_id,
         };
 
@@ -70,7 +70,7 @@ impl PendingTxStore {
                 pt::call_scale.eq(call_scale),
                 pt::extrinsic_scale.eq(extrinsic_scale),
                 pt::watched.eq(true),
-                pt::state.eq("sent"),
+                pt::state.eq("future"),
                 pt::creator_id.eq(creator_id),
             ))
             // Detect whether the row was inserted (true) or updated (false)
