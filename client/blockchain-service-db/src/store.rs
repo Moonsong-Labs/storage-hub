@@ -226,25 +226,6 @@ impl PendingTxStore {
         Ok(())
     }
 
-    /// Load all active pending transactions.
-    ///
-    /// Active rows are those with `state` in `["queued", "sent", "in_block"]`.
-    ///
-    /// Returns:
-    /// - `Ok(Vec<PendingTransactionRow>)` containing all active rows.
-    /// - `Err(diesel::result::Error)` if the query fails.
-    pub async fn load_active(
-        &self,
-    ) -> Result<Vec<crate::models::PendingTransactionRow>, diesel::result::Error> {
-        use pending_transactions::dsl as pt;
-        let mut conn = self.pool.get().await.unwrap();
-        let rows = pt::pending_transactions
-            .filter(pt::state.eq_any(vec!["queued", "sent", "in_block"]))
-            .load::<crate::models::PendingTransactionRow>(&mut conn)
-            .await?;
-        Ok(rows)
-    }
-
     /// Load pending transactions for a given `account_id` filtered by a set of states.
     ///
     /// Returns rows ordered by nonce ascending.
