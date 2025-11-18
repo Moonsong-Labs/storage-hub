@@ -4,6 +4,7 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     future::Future,
     pin::Pin,
+    sync::Arc,
     time::Duration,
 };
 
@@ -811,6 +812,8 @@ pub struct MspHandler<Runtime: StorageEnableRuntime> {
     /// This is used to keep track of the BSPs for which there are tasks currently distributing the file,
     /// and the BSPs for which the file has been confirmed to be stored.
     pub(crate) files_to_distribute: HashMap<FileKey, FileDistributionInfo<Runtime>>,
+    /// Semaphore to prevent overlapping batch processing cycles (size 1)
+    pub(crate) batch_processing_semaphore: Arc<tokio::sync::Semaphore>,
 }
 
 impl<Runtime: StorageEnableRuntime> MspHandler<Runtime> {
@@ -820,6 +823,7 @@ impl<Runtime: StorageEnableRuntime> MspHandler<Runtime> {
             forest_root_write_lock: None,
             forest_root_snapshots: BTreeMap::new(),
             files_to_distribute: HashMap::new(),
+            batch_processing_semaphore: Arc::new(tokio::sync::Semaphore::new(1)),
         }
     }
 }

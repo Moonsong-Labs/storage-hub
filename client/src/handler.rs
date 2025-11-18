@@ -12,13 +12,13 @@ use shc_actors_framework::{
 use shc_blockchain_service::{
     capacity_manager::CapacityConfig,
     events::{
-        AcceptedBspVolunteer, DistributeFileToBsp, FinalisedBspConfirmStoppedStoring,
-        FinalisedBucketMovedAway, FinalisedBucketMutationsApplied,
-        FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
-        FinalisedStorageRequestRejected, FinalisedTrieRemoveMutationsAppliedForBsp,
-        LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
-        MoveBucketRequested, MoveBucketRequestedForMsp, MultipleNewChallengeSeeds,
-        NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
+        AcceptedBspVolunteer, BatchProcessStorageRequests, DistributeFileToBsp,
+        FinalisedBspConfirmStoppedStoring, FinalisedBucketMovedAway,
+        FinalisedBucketMutationsApplied, FinalisedMspStopStoringBucketInsolventUser,
+        FinalisedMspStoppedStoringBucket, FinalisedStorageRequestRejected,
+        FinalisedTrieRemoveMutationsAppliedForBsp, LastChargeableInfoUpdated, MoveBucketAccepted,
+        MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MoveBucketRequestedForMsp,
+        MultipleNewChallengeSeeds, NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
         ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
         ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser,
         StartMovedBucketDownload, UserWithoutFunds, VerifyMspBucketForests,
@@ -281,8 +281,9 @@ where
     fn start_msp_tasks(&self) {
         log::info!("Starting MSP tasks");
 
-        // MspUploadFileTask is triggered by a NewStorageRequest event which registers the user's peer address for
-        // an upcoming RemoteUploadRequest events, which happens when the user connects to the MSP and submits chunks of the file,
+        // MspUploadFileTask is triggered by a BatchProcessStorageRequests event which queries pending storage requests
+        // and processes them (which registers the user's peer address for upcoming RemoteUploadRequest events).
+        // RemoteUploadRequest events happen when the user connects to the MSP and submits chunks of the file,
         // along with a proof of storage, which is then queued to batch accept many storage requests at once.
         // Finally once the ProcessMspRespondStoringRequest event is emitted, the MSP will respond to the user with a confirmation.
 
@@ -306,7 +307,7 @@ where
             [
                 FinalisedBucketMovedAway<Runtime> => MspDeleteBucketTask,
                 FinalisedMspStoppedStoringBucket<Runtime> => MspDeleteBucketTask,
-                NewStorageRequest<Runtime> => MspUploadFileTask,
+                BatchProcessStorageRequests => MspUploadFileTask,
                 ProcessMspRespondStoringRequest<Runtime> => MspUploadFileTask,
                 MoveBucketRequestedForMsp<Runtime> => MspRespondMoveBucketTask,
                 StartMovedBucketDownload<Runtime> => MspRespondMoveBucketTask,

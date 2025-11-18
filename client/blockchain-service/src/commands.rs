@@ -188,6 +188,8 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     },
     #[command(success_type = Vec<BucketId<Runtime>>)]
     QueryBucketsForMsp { msp_id: ProviderId<Runtime> },
+    #[command(success_type = Vec<crate::events::NewStorageRequest<Runtime>>)]
+    QueryPendingStorageRequests,
 }
 
 /// Interface for interacting with the BlockchainService actor.

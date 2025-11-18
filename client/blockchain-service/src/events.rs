@@ -393,6 +393,19 @@ pub struct DistributeFileToBsp<Runtime: StorageEnableRuntime> {
 #[actor(actor = "blockchain_service")]
 pub struct VerifyMspBucketForests {}
 
+/// Event triggered periodically to process batched storage requests for MSPs.
+///
+/// The semaphore permit is automatically released when the event handler completes or fails,
+/// ensuring only one batch processing cycle runs at a time.
+#[derive(Debug, Clone, ActorEvent)]
+#[actor(actor = "blockchain_service")]
+pub struct BatchProcessStorageRequests {
+    /// Semaphore permit wrapped in Arc to satisfy Clone requirement for events.
+    /// The permit is held by the event handler for its lifetime,
+    /// automatically releasing when the handler completes or fails.
+    pub permit: Arc<tokio::sync::OwnedSemaphorePermit>,
+}
+
 /// The event bus provider for the BlockchainService actor.
 ///
 /// It holds the event buses for the different events that the BlockchainService actor

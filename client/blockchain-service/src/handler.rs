@@ -1238,6 +1238,63 @@ where
                         }
                     }
                 }
+                BlockchainServiceCommand::QueryPendingStorageRequests { callback } => {
+                    let managed_msp_id = match &self.maybe_managed_provider {
+                        Some(ManagedProvider::Msp(msp_handler)) => msp_handler.msp_id.clone(),
+                        _ => {
+                            error!(target: LOG_TARGET, "`QueryPendingStorageRequests` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
+                            match callback.send(Err(anyhow!("Node is not managing an MSP"))) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!(target: LOG_TARGET, "Failed to send error: {:?}", e);
+                                }
+                            }
+                            return;
+                        }
+                    };
+
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let storage_requests = match self
+                        .client
+                        .runtime_api()
+                        .pending_storage_requests_by_msp(current_block_hash, managed_msp_id)
+                    {
+                        Ok(sr) => sr,
+                        Err(_) => {
+                            warn!(target: LOG_TARGET, "Failed to get pending storage request");
+                            match callback.send(Ok(Vec::new())) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!(target: LOG_TARGET, "Failed to send empty result: {:?}", e);
+                                }
+                            }
+                            return;
+                        }
+                    };
+
+                    let new_storage_requests: Vec<crate::events::NewStorageRequest<Runtime>> =
+                        storage_requests
+                            .into_iter()
+                            .map(|(file_key, sr)| crate::events::NewStorageRequest {
+                                who: sr.owner,
+                                file_key: file_key.into(),
+                                bucket_id: sr.bucket_id,
+                                location: sr.location,
+                                fingerprint: sr.fingerprint.as_ref().into(),
+                                size: sr.size,
+                                user_peer_ids: sr.user_peer_ids,
+                                expires_at: sr.expires_at,
+                            })
+                            .collect();
+
+                    match callback.send(Ok(new_storage_requests)) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send pending storage requests: {:?}", e);
+                        }
+                    }
+                }
                 BlockchainServiceCommand::ReleaseForestRootWriteLock {
                     forest_root_write_tx,
                     callback,
@@ -1539,6 +1596,7 @@ where
                     .await;
             }
             Some(ManagedProvider::Msp(_)) => {
+                self.msp_monitor_block();
                 self.msp_end_block_processing(block_hash, block_number, tree_route)
                     .await;
             }

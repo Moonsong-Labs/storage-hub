@@ -823,4 +823,54 @@ where
             })
         }
     }
+
+    /// Monitor new blocks for batch storage request processing.
+    ///
+    /// Emits a [`BatchProcessStorageRequests`] event on each block if no batch processing is currently running.
+    ///
+    /// The [`batch_processing_semaphore`](`crate::types::MspHandler::batch_processing_semaphore`) permit is passed
+    /// through the [`BatchProcessStorageRequests`] event and automatically released when the event handler completes or fails.
+    /// This semaphore ensures that only a single batch processing cycle is running at a time.
+    pub(crate) fn msp_monitor_block(&mut self) {
+        let managed_msp = match &mut self.maybe_managed_provider {
+            Some(ManagedProvider::Msp(msp_handler)) => msp_handler,
+            _ => {
+                trace!(target: LOG_TARGET, "`msp_monitor_block` called but node is not managing an MSP");
+                return;
+            }
+        };
+
+        // Try to acquire the semaphore permit (non-blocking)
+        // The semaphore prevents running multiple batch processing cycles concurrently
+        match managed_msp
+            .batch_processing_semaphore
+            .clone()
+            .try_acquire_owned()
+        {
+            Ok(permit) => {
+                debug!(
+                    target: LOG_TARGET,
+                    "Emitting BatchProcessStorageRequests event"
+                );
+
+                // Wrap permit in Arc to satisfy Clone requirement for events
+                // The permit will be held by the event handler for its lifetime,
+                // automatically releasing when the handler completes or fails
+                let permit_wrapper = std::sync::Arc::new(permit);
+
+                // Emit event to trigger batch processing
+                self.emit(crate::events::BatchProcessStorageRequests {
+                    permit: permit_wrapper,
+                });
+            }
+            Err(_) => {
+                // The permit will eventually be released, so we do nothing here and will retry next block.
+                // This is a trace message because it's expected behavior when a batch is still processing.
+                trace!(
+                    target: LOG_TARGET,
+                    "Semaphore permit is held (previous batch still processing), will retry next block"
+                );
+            }
+        }
+    }
 }
