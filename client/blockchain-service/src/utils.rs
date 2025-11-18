@@ -801,20 +801,25 @@ where
                     state,
                     tx_hash
                 );
-                // Decode call_scale solely to enrich manager tracking; skip tracking if decode fails
-                if !call_scale.is_empty() {
-                    if let Ok(call) = <Runtime::Call as Decode>::decode(&mut &call_scale[..]) {
-                        if let Err(e) = self.transaction_manager.track_transaction(
-                            nonce_u32,
-                            id_hash,
-                            call,
-                            0,
-                            block_number,
-                        ) {
-                            warn!(target: LOG_TARGET, "Failed to track re-subscribed tx (nonce {}): {:?}", nonce_u32, e);
-                        }
-                    }
+                // Decode call_scale solely to enrich manager tracking.
+                // If we can't decode, we just set it as a remark (we don't care about the call in this case).
+                let call = if !call_scale.is_empty() {
+                    <Runtime::Call as Decode>::decode(&mut &call_scale[..]).unwrap_or_else(|_| {
+                        frame_system::Call::<Runtime>::remark { remark: vec![] }.into()
+                    })
+                } else {
+                    frame_system::Call::<Runtime>::remark { remark: vec![] }.into()
+                };
+                if let Err(e) = self.transaction_manager.track_transaction(
+                    nonce_u32,
+                    id_hash,
+                    call,
+                    0,
+                    block_number,
+                ) {
+                    warn!(target: LOG_TARGET, "Failed to track re-subscribed tx (nonce {}): {:?}", nonce_u32, e);
                 }
+
                 // Spawn watcher
                 spawn_transaction_watcher::<Runtime>(
                     nonce_u32,
