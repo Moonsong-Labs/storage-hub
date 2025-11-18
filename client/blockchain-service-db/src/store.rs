@@ -37,7 +37,7 @@ impl PendingTxStore {
     /// Returns:
     /// - `Ok(())` on success.
     /// - `Err(diesel::result::Error)` if the database operation fails.
-    pub async fn insert_sent(
+    pub async fn upsert_sent(
         &self,
         account_id: &[u8],
         nonce: i64,
@@ -143,6 +143,7 @@ impl PendingTxStore {
                 .on_conflict((pt::account_id, pt::nonce))
                 .do_update()
                 .set(pt::state.eq(state_str))
+                // Detect whether the row was inserted (true) or updated (false)
                 .returning((sql::<Bool>("xmax = 0"), pt::hash))
                 .get_result(&mut conn)
                 .await?;

@@ -552,7 +552,7 @@ where
             let creator_id =
                 std::env::var("SH_NODE_INSTANCE_ID").unwrap_or_else(|_| "local".to_string());
             if let Err(e) = store
-                .insert_sent(
+                .upsert_sent(
                     &account_bytes_owned,
                     nonce as i64,
                     tx_hash.as_bytes(),
@@ -1282,7 +1282,7 @@ where
             let creator_id =
                 std::env::var("SH_NODE_INSTANCE_ID").unwrap_or_else(|_| "local".to_string());
             if let Err(e) = store
-                .insert_sent(
+                .upsert_sent(
                     &account_bytes_owned,
                     nonce as i64,
                     tx_hash.as_bytes(),
