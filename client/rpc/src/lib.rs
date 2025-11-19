@@ -1,8 +1,3 @@
-use std::{
-    collections::HashSet, fmt::Debug, marker::PhantomData, path::PathBuf, str::FromStr, sync::Arc,
-};
-
-use futures::StreamExt;
 use jsonrpsee::{
     core::{async_trait, RpcResult},
     proc_macros::rpc,
@@ -10,7 +5,14 @@ use jsonrpsee::{
     Extensions,
 };
 use log::{debug, error, info};
-use tokio::{fs, io::AsyncReadExt, sync::RwLock};
+use std::{
+    collections::HashSet, fmt::Debug, marker::PhantomData, path::PathBuf, str::FromStr, sync::Arc,
+};
+use tokio::{
+    fs,
+    io::AsyncReadExt,
+    sync::{mpsc, RwLock},
+};
 
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
 use pallet_payment_streams_runtime_api::PaymentStreamsApi as PaymentStreamsRuntimeApi;
@@ -43,6 +45,25 @@ use sp_runtime_interface::pass_by::PassByInner;
 
 pub mod remote_file;
 use remote_file::{RemoteFileConfig, RemoteFileHandlerFactory};
+
+/// Simple wrapper to expose an `mpsc::Receiver` as a `Stream` of chunk results.
+struct ChunkStream {
+    rx: mpsc::Receiver<Result<bytes::Bytes, std::io::Error>>,
+}
+
+impl futures::Stream for ChunkStream {
+    type Item = Result<bytes::Bytes, std::io::Error>;
+
+    fn poll_next(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+        this.rx.poll_recv(cx)
+    }
+}
+
+impl Unpin for ChunkStream {}
 
 const LOG_TARGET: &str = "storage-hub-client-rpc";
 
@@ -593,7 +614,7 @@ where
         // Check if the execution is safe.
         check_if_safe(ext)?;
 
-        // Acquire FileStorage read lock.
+        // Acquire FileStorage read lock to validate metadata and completeness.
         let read_file_storage = self.file_storage.read().await;
 
         // Retrieve file metadata from File Storage.
@@ -619,39 +640,79 @@ where
             }));
         }
 
+        // Release the read lock before performing the potentially long-running streaming operation.
+        drop(read_file_storage);
+
         // Create file handler for writing to local or remote destination.
         let remote_file_config = self.config.remote_file.clone();
         let (handler, _url) =
             RemoteFileHandlerFactory::create_from_string(&file_path, remote_file_config)
                 .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;
 
-        // TODO: Optimize memory usage for large file transfers
-        // Current implementation loads all chunks into memory before streaming to remote location.
-        // This can cause memory exhaustion for large files.
+        // Stream file chunks from FileStorage to the destination using a bounded channel.
         //
-        // Proposed solution: Implement true streaming by:
-        // 1. Create a custom Stream implementation that reads chunks on-demand
-        // 2. Then, pass this stream directly to the remote handler
-        // 3. This would allow chunks to be read from source and written to destination
-        //    without buffering the entire file in memory
+        // This avoids loading the entire file into memory:
+        // - A small, bounded channel limits the number of in-flight chunks.
+        // - Chunks are read from storage in small batches under a short-lived read lock.
+        // - Backpressure from the upload side naturally slows down chunk production.
+        const CHANNEL_CAPACITY: usize = 3;
+        let (tx, rx) = mpsc::channel::<Result<bytes::Bytes, std::io::Error>>(CHANNEL_CAPACITY);
+
+        let file_storage = Arc::clone(&self.file_storage);
+        let file_key_clone = file_key.clone();
+        let total_chunks_u64 = total_chunks;
+
+        // Batch size is capped to avoid large per-batch memory spikes while still
+        // amortizing the cost of acquiring the read lock.
+        let batch_size = std::cmp::min(self.config.remote_file.chunks_buffer.max(1), 32) as u64;
+
+        // Producer task: reads chunks from FileStorage in small batches and sends them through the channel.
         //
-        // This has the problem of holding onto the file storage read lock, perhaps that's ok?
-        // If it is we would need to shield against slow peers. We already have timeouts but not on the transfer as a whole
-        // We also might need to allow pagination to resume transfer
-        let mut chunks = Vec::new();
-        for chunk_idx in 0..total_chunks {
-            let chunk_id = ChunkId::new(chunk_idx);
-            let chunk = read_file_storage
-                .get_chunk(&file_key, &chunk_id)
-                .map_err(into_rpc_error)?;
-            chunks.push(chunk);
-        }
-        drop(read_file_storage);
+        // Errors while reading are propagated via the channel as `std::io::Error`. The consumer side
+        // (HTTP upload) will surface these as request errors.
+        let _producer_handle = tokio::spawn(async move {
+            let mut current_chunk: u64 = 0;
 
-        let chunks = futures::stream::iter(chunks.into_iter().map(Ok::<_, std::io::Error>));
+            while current_chunk < total_chunks_u64 {
+                let batch_end =
+                    std::cmp::min(total_chunks_u64, current_chunk.saturating_add(batch_size));
 
-        let reader =
-            tokio_util::io::StreamReader::new(chunks.map(|result| result.map(bytes::Bytes::from)));
+                // Read a batch of chunks under a single read lock.
+                let mut batch = Vec::with_capacity((batch_end - current_chunk) as usize);
+                {
+                    let read_storage = file_storage.read().await;
+                    for idx in current_chunk..batch_end {
+                        let chunk_id = ChunkId::new(idx);
+                        match read_storage.get_chunk(&file_key_clone, &chunk_id) {
+                            Ok(chunk) => batch.push(chunk),
+                            Err(e) => {
+                                // Propagate the error to the consumer and stop producing.
+                                let _ = tx
+                                    .send(Err(std::io::Error::new(
+                                        std::io::ErrorKind::Other,
+                                        format!("Error reading chunk {idx}: {:?}", e),
+                                    )))
+                                    .await;
+                                return;
+                            }
+                        }
+                    }
+                }
+
+                // Send the batch to the consumer, honoring backpressure from the bounded channel.
+                for chunk in batch {
+                    if tx.send(Ok(bytes::Bytes::from(chunk))).await.is_err() {
+                        // Consumer dropped (e.g., RPC cancelled or upload failed); stop producing.
+                        return;
+                    }
+                }
+
+                current_chunk = batch_end;
+            }
+        });
+
+        let stream = ChunkStream { rx };
+        let reader = tokio_util::io::StreamReader::new(stream);
         let boxed_reader = Box::new(reader) as _;
 
         let file_size = file_metadata.file_size();
