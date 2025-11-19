@@ -2,7 +2,7 @@
 
 use std::{collections::HashSet, sync::Arc};
 
-use alloy_core::primitives::Address;
+use alloy_core::{hex::ToHexExt, primitives::Address};
 use axum_extra::extract::multipart::Field;
 use bigdecimal::{BigDecimal, RoundingMode};
 use codec::{Decode, Encode};
@@ -214,9 +214,9 @@ impl MspService {
             }))
     }
 
-    /// Get a specific bucket by ID
+    /// Get a specific bucket by its ID
     ///
-    /// Verifies ownership of bucket is `user` (or that the bucket is public if `user` is `None`)
+    /// Verifies that the owner of the bucket is `user`. If the bucket is public, this check always passes.
     pub async fn get_bucket(
         &self,
         bucket_id: &str,
@@ -514,18 +514,7 @@ impl MspService {
             "Starting file upload"
         );
 
-        // Retrieve the onchain file info and verify user has permission to access the file
-        let info = self.get_file_info(user, &file_key).await?;
-
-        // Validate bucket id and file key against metadata
-        let expected_bucket_id = hex::encode(file_metadata.bucket_id());
-        let bucket_id_without_prefix = info.bucket_id.trim_start_matches("0x");
-        if bucket_id_without_prefix != expected_bucket_id {
-            return Err(Error::BadRequest(
-                format!("Bucket ID in URL does not match file metadata: {expected_bucket_id} != {bucket_id_without_prefix}"),
-            ));
-        }
-
+        // Validate the received file key against the one corresponding to the file metadata.
         let expected_file_key = hex::encode(file_metadata.file_key::<Blake2Hasher>());
         let file_key_without_prefix = file_key.trim_start_matches("0x");
         if file_key_without_prefix != expected_file_key {
@@ -533,6 +522,15 @@ impl MspService {
                 "File key in URL does not match file metadata: {expected_file_key} != {file_key_without_prefix}"
             )));
         }
+
+        // Get the bucket ID from the metadata and verify that the user is its owner.
+        // We check the bucket ownership instead of the file ownership as the file might not be in
+        // the indexer at this point (since the storage request would have to have been finalised).
+        // TODO: This could still fail as the bucket creation extrinsic might not have been finalised yet,
+        // ideally we should have a way to directly check on-chain (like an RPC).
+        let bucket_id = hex::encode(file_metadata.bucket_id());
+        let bucket = self.get_db_bucket(&bucket_id).await?;
+        self.can_user_view_bucket(bucket, user)?;
 
         // Initialize the trie that will hold the chunked file data.
         let mut trie = InMemoryFileDataTrie::<StorageProofsMerkleTrieLayout>::new();
@@ -674,20 +672,20 @@ impl MspService {
         // If the complete file was uploaded to the MSP successfully, we can return the response.
         let bytes_location = file_metadata.location();
         let location = str::from_utf8(&bytes_location)
-            .unwrap_or(&info.file_key)
+            .unwrap_or(&file_key)
             .to_string();
 
         debug!(
-            file_key = %info.file_key,
+            file_key = %file_key,
             chunks = total_chunks,
             "File upload completed"
         );
 
         Ok(FileUploadResponse {
             status: "upload_successful".to_string(),
-            fingerprint: info.fingerprint_hexstr(),
-            file_key: info.file_key,
-            bucket_id: info.bucket_id,
+            fingerprint: file_metadata.fingerprint().encode_hex_with_prefix(),
+            file_key: file_key.to_string(),
+            bucket_id: bucket_id,
             location,
         })
     }
@@ -867,11 +865,11 @@ impl MspService {
 }
 
 impl MspService {
-    /// Verifies user can access the given bucket
+    /// Verifies that a user can access the given bucket.
     ///
-    /// If the bucket is public, the `user` may be `None`
+    /// If the bucket is public, this check always passes.
     ///
-    /// Will return the bucket if the user has the required permissions
+    /// Will return the bucket metadata if the user has the required permissions, or an error otherwise.
     fn can_user_view_bucket(
         &self,
         bucket: DBBucket,
@@ -880,15 +878,20 @@ impl MspService {
         // TODO: NFT ownership
         if bucket.private {
             let Some(user) = user else {
-                return Err(Error::Unauthorized("This bucket is private".to_string()));
+                return Err(Error::Unauthorized(format!(
+                    "Bucket with ID {} is private and no user received.",
+                    bucket.onchain_bucket_id.encode_hex_with_prefix()
+                )));
             };
 
             if bucket.account.as_str() == user.to_string() {
                 Ok(bucket)
             } else {
-                Err(Error::Unauthorized(
-                    "Specified user is not authorized to view this bucket".to_string(),
-                ))
+                Err(Error::Unauthorized(format!(
+                    "User {} is not authorized to view bucket with ID {}",
+                    user,
+                    bucket.onchain_bucket_id.encode_hex_with_prefix()
+                )))
             }
         } else {
             Ok(bucket)
