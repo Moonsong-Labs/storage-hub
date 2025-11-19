@@ -18,8 +18,7 @@ await describeMspNet(
     initialised: false,
     runtimeType: "solochain",
     indexer: true,
-    backend: true,
-    only: true
+    backend: true
   },
   ({ before, it, createUserApi, createMsp1Api }) => {
     let userApi: EnrichedBspApi;
@@ -49,7 +48,7 @@ await describeMspNet(
 
     it("Postgres DB is ready", async () => {
       await userApi.docker.waitForLog({
-        containerName: "storage-hub-sh-postgres-1",
+        containerName: userApi.shConsts.NODE_INFOS.indexerDb.containerName,
         searchString: "database system is ready to accept connections",
         timeout: 10000
       });
