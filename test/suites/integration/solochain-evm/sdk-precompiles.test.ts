@@ -421,7 +421,7 @@ await describeMspNet(
         "Upload should return expected bucket ID"
       );
       strictEqual(
-        `0x${uploadResponse.fingerprint}`,
+        uploadResponse.fingerprint,
         (await fileManager.getFingerprint()).toString(),
         "Upload should return expected fingerprint"
       );
@@ -473,7 +473,7 @@ await describeMspNet(
       );
       const fileInfo = await mspClient.files.getFileInfo(bucketId, fileKey.toHex());
       strictEqual(`0x${fileInfo.bucketId}`, bucketId, "BucketId should match");
-      strictEqual(`0x${fileInfo.fileKey}`, fileKey.toHex(), "FileKey should match");
+      strictEqual(fileInfo.fileKey, fileKey.toHex(), "FileKey should match");
     });
 
     it("Should fetch payment streams using the SDK's MspClient", async () => {
