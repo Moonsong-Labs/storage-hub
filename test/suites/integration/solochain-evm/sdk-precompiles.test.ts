@@ -473,7 +473,7 @@ await describeMspNet(
       );
       const fileInfo = await mspClient.files.getFileInfo(bucketId, fileKey.toHex());
       strictEqual(`0x${fileInfo.bucketId}`, bucketId, "BucketId should match");
-      strictEqual(fileInfo.fileKey, fileKey.toHex(), "FileKey should match");
+      strictEqual(`0x${fileInfo.fileKey}`, fileKey.toHex(), "FileKey should match");
     });
 
     it("Should fetch payment streams using the SDK's MspClient", async () => {
