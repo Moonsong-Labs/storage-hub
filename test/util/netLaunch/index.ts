@@ -248,12 +248,12 @@ export class NetworkLauncher {
       // Only add for MSPs if they exist in the compose file
       if (composeYaml.services["sh-msp-1"]) {
         composeYaml.services["sh-msp-1"].command.push(
-          "--msp-database-url=postgresql://postgres:postgres@storage-hub-sh-indexer-postgres-1:5432/storage_hub"
+          `--msp-database-url=postgresql://postgres:postgres@${ShConsts.NODE_INFOS.indexerDb.containerName}:5432/storage_hub`
         );
       }
       if (composeYaml.services["sh-msp-2"]) {
         composeYaml.services["sh-msp-2"].command.push(
-          "--msp-database-url=postgresql://postgres:postgres@storage-hub-sh-indexer-postgres-1:5432/storage_hub"
+          `--msp-database-url=postgresql://postgres:postgres@${ShConsts.NODE_INFOS.indexerDb.containerName}:5432/storage_hub`
         );
       }
     }
@@ -274,7 +274,7 @@ export class NetworkLauncher {
           composeYaml.services["sh-user"].environment ?? {};
         composeYaml.services["sh-user"].environment.SH_INDEXER_DB_AUTO_MIGRATE = "false";
         composeYaml.services["sh-user"].command.push(
-          "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-indexer-postgres-1:5432/storage_hub"
+          `--indexer-database-url=postgresql://postgres:postgres@${ShConsts.NODE_INFOS.indexerDb.containerName}:5432/storage_hub`
         );
         if (this.config.indexerMode) {
           composeYaml.services["sh-user"].command.push(`--indexer-mode=${this.config.indexerMode}`);
@@ -285,7 +285,7 @@ export class NetworkLauncher {
     // If pending DB is enabled, add CLI arg to MSP 1 only
     if (this.config.pendingTxDb && this.type === "fullnet") {
       composeYaml.services["sh-msp-1"].command.push(
-        "--pending-db-url=postgresql://postgres:postgres@storage-hub-sh-pending-postgres-1:5432/pending_tx"
+        `--pending-db-url=postgresql://postgres:postgres@${ShConsts.NODE_INFOS.pendingDb.containerName}:5432/pending_tx`
       );
     }
 
@@ -512,7 +512,7 @@ export class NetworkLauncher {
       lambda: async () => {
         try {
           execSync(
-            "docker exec storage-hub-sh-indexer-postgres-1 pg_isready -U postgres -h 127.0.0.1 -p 5432 -t 1",
+            `docker exec ${ShConsts.NODE_INFOS.indexerDb.containerName} pg_isready -U postgres -h 127.0.0.1 -p 5432 -t 1`,
             {
               stdio: "ignore"
             }

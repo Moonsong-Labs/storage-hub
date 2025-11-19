@@ -1,8 +1,8 @@
 import assert, { strictEqual } from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
-import * as $ from "scale-codec";
 import type { H256 } from "@polkadot/types/interfaces";
+import * as $ from "scale-codec";
 import { describeMspNet, type EnrichedBspApi, waitFor } from "../../../util";
 import { fetchJwtToken } from "../../../util/backend/jwt";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
@@ -57,7 +57,7 @@ await describeMspNet(
 
     it("Backend service is ready", async () => {
       await userApi.docker.waitForLog({
-        containerName: "storage-hub-sh-backend-1",
+        containerName: userApi.shConsts.NODE_INFOS.backend.containerName,
         searchString: "Server listening",
         timeout: 15000
       });

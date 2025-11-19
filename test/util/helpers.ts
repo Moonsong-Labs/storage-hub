@@ -5,6 +5,7 @@ import postgres from "postgres";
 import stripAnsi from "strip-ansi";
 import tmp from "tmp";
 import { DOCKER_IMAGE } from ".";
+import * as ShConsts from "./bspNet/consts";
 
 export const printDockerStatus = async (verbose = false) => {
   const docker = new Docker();
@@ -50,7 +51,7 @@ export const verifyContainerFreshness = async () => {
     (container) =>
       container.Image === DOCKER_IMAGE ||
       container.Names.some((name) => name.includes("toxiproxy")) ||
-      container.Names.some((name) => name.includes("storage-hub-sh-backend"))
+      container.Names.some((name) => name.includes(ShConsts.NODE_INFOS.backend.containerName))
   );
 
   if (existingContainers.length > 0) {
@@ -111,11 +112,11 @@ export const cleanupEnvironment = async (verbose = false) => {
   );
 
   const postgresContainer = allContainers.find((container) =>
-    container.Names.some((name) => name.includes("storage-hub-sh-indexer-postgres-1"))
+    container.Names.some((name) => name.includes(ShConsts.NODE_INFOS.indexerDb.containerName))
   );
 
   const pendingPostgresContainer = allContainers.find((container) =>
-    container.Names.some((name) => name.includes("storage-hub-sh-pending-postgres-1"))
+    container.Names.some((name) => name.includes(ShConsts.NODE_INFOS.pendingDb.containerName))
   );
 
   const copypartyContainers = allContainers.filter((container) =>
@@ -123,7 +124,7 @@ export const cleanupEnvironment = async (verbose = false) => {
   );
 
   const backendContainer = allContainers.find((container) =>
-    container.Names.some((name) => name.includes("storage-hub-sh-backend"))
+    container.Names.some((name) => name.includes(ShConsts.NODE_INFOS.backend.containerName))
   );
 
   const tmpDir = tmp.dirSync({ prefix: "bsp-logs-", unsafeCleanup: true });

@@ -847,9 +847,9 @@ where
             if let Err(e) = store.set_watched(account_id_bytes, nonce, watched).await {
                 warn!(
                     target: LOG_TARGET,
-                    "Failed to mark pending tx (nonce {}) as {}watched: {:?}",
+                    "Failed to mark pending tx (nonce {}) as {}: {:?}",
                     nonce,
-                    if watched { "" } else { "un" },
+                    if watched { "watched" } else { "unwatched" },
                     e
                 );
             }

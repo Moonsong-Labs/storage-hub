@@ -39,7 +39,7 @@ await describeMspNet(
 
       // Initialize Docker client for database container control
       docker = new Docker();
-      postgresContainer = docker.getContainer("storage-hub-sh-indexer-postgres-1");
+      postgresContainer = docker.getContainer(userApi.shConsts.NODE_INFOS.indexerDb.containerName);
 
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",
@@ -154,7 +154,7 @@ await describeMspNet(
 
       // Wait for database to be ready to accept connections again
       await userApi.docker.waitForLog({
-        containerName: "storage-hub-sh-indexer-postgres-1",
+        containerName: userApi.shConsts.NODE_INFOS.indexerDb.containerName,
         searchString: "database system is ready to accept connections",
         timeout: 10000
       });

@@ -7,6 +7,7 @@ import Docker from "dockerode";
 import { DOCKER_IMAGE } from "../constants";
 import { sendCustomRpc } from "../rpc";
 import { sleep } from "../timer";
+import * as ShConsts from "./consts";
 import * as NodeBspNet from "./node";
 import { BspNetTestApi } from "./test-api";
 import { waitFor } from "./waits";
@@ -368,7 +369,7 @@ const addContainer = async (
   // Check if postgres container exists (indicates indexer is enabled)
   let indexerEnabled = false;
   try {
-    await docker.getContainer("storage-hub-sh-indexer-postgres-1").inspect();
+    await docker.getContainer(ShConsts.NODE_INFOS.indexerDb.containerName).inspect();
     indexerEnabled = true;
   } catch {
     // Postgres container doesn't exist, indexer is not enabled
@@ -412,7 +413,7 @@ const addContainer = async (
       // Only add database URL for MSP containers when indexer is enabled (MSP-only parameter)
       ...(providerType === "msp" && indexerEnabled
         ? [
-            "--msp-database-url=postgresql://postgres:postgres@storage-hub-sh-indexer-postgres-1:5432/storage_hub"
+            `--msp-database-url=postgresql://postgres:postgres@${ShConsts.NODE_INFOS.indexerDb.containerName}:5432/storage_hub`
           ]
         : []),
       bootNodeArg,
