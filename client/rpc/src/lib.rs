@@ -13,6 +13,7 @@ use tokio::{
     io::AsyncReadExt,
     sync::{mpsc, RwLock},
 };
+use tokio_stream::wrappers::ReceiverStream;
 
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
 use pallet_payment_streams_runtime_api::PaymentStreamsApi as PaymentStreamsRuntimeApi;
@@ -45,25 +46,6 @@ use sp_runtime_interface::pass_by::PassByInner;
 
 pub mod remote_file;
 use remote_file::{RemoteFileConfig, RemoteFileHandlerFactory};
-
-/// Simple wrapper to expose an `mpsc::Receiver` as a `Stream` of chunk results.
-struct ChunkStream {
-    rx: mpsc::Receiver<Result<bytes::Bytes, std::io::Error>>,
-}
-
-impl futures::Stream for ChunkStream {
-    type Item = Result<bytes::Bytes, std::io::Error>;
-
-    fn poll_next(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Self::Item>> {
-        let this = self.get_mut();
-        this.rx.poll_recv(cx)
-    }
-}
-
-impl Unpin for ChunkStream {}
 
 const LOG_TARGET: &str = "storage-hub-client-rpc";
 
@@ -711,7 +693,7 @@ where
             }
         });
 
-        let stream = ChunkStream { rx };
+        let stream = ReceiverStream::new(rx);
         let reader = tokio_util::io::StreamReader::new(stream);
         let boxed_reader = Box::new(reader) as _;
 
