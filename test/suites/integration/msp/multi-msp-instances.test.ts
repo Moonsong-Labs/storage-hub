@@ -6,6 +6,7 @@ import {
   restartContainer,
   type SqlClient,
   shUser,
+  sleep,
   waitFor
 } from "../../../util";
 import { MSP_CHARGING_PERIOD } from "../../../util/bspNet/consts";
@@ -625,6 +626,25 @@ await describeMspNet(
       // Note: MSP is paused, so it won't update its watcher/DB state.
       await userApi.block.seal({ finaliseBlock: false });
 
+      // The transaction should still be in the DB with the same state it had before MSP was turned off,
+      // as it's not being updated by the paused MSP node.
+      // Also, the watched flag should still be true so far.
+      await sleep(3000); // This sleep is here on purpose to ensure the DB is not updated even after some time.
+      await waitFor({
+        lambda: async () => {
+          assert(restartNonce !== undefined, "Expected restart nonce to be set");
+          const row = await userApi.pendingDb.getByNonce({ sql, accountId, nonce: restartNonce });
+          assert(row, "Expected pending tx row to still exist after MSP restart");
+          strictEqual(
+            row.state,
+            prePauseState,
+            "Pending tx state should not have changed after sealing block"
+          );
+          strictEqual(row.watched, true, "Expected watched flag to be true");
+          return true;
+        }
+      });
+
       // Restart MSP 1 container (will unpause due to restart).
       await mspApi.disconnect();
       await restartContainer({ containerName: userApi.shConsts.NODE_INFOS.msp1.containerName });
@@ -651,7 +671,6 @@ await describeMspNet(
       // The transaction should not have been re-watched because its nonce is now < on-chain nonce.
       // It should still be in the DB with the same state it had before MSP was turned off.
       // Also, the watched flag should be false.
-
       await waitFor({
         lambda: async () => {
           assert(restartNonce !== undefined, "Expected restart nonce to be set");
