@@ -805,10 +805,16 @@ where
                 // If we can't decode, we just set it as a remark (we don't care about the call in this case).
                 let call = if !call_scale.is_empty() {
                     <Runtime::Call as Decode>::decode(&mut &call_scale[..]).unwrap_or_else(|_| {
-                        frame_system::Call::<Runtime>::remark { remark: vec![] }.into()
+                        frame_system::Call::<Runtime>::remark {
+                            remark: "Couldn't decode call scale".into(),
+                        }
+                        .into()
                     })
                 } else {
-                    frame_system::Call::<Runtime>::remark { remark: vec![] }.into()
+                    frame_system::Call::<Runtime>::remark {
+                        remark: "No call scale to decode".into(),
+                    }
+                    .into()
                 };
                 if let Err(e) = self.transaction_manager.track_transaction(
                     nonce_u32,
