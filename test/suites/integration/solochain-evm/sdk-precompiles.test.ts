@@ -411,7 +411,7 @@ await describeMspNet(
       // Check that the upload was successful
       strictEqual(uploadResponse.status, "upload_successful", "Upload should return success");
       strictEqual(
-        `0x${uploadResponse.fileKey}`,
+        uploadResponse.fileKey,
         fileKey.toHex(),
         "Upload should return expected file key"
       );
@@ -421,7 +421,7 @@ await describeMspNet(
         "Upload should return expected bucket ID"
       );
       strictEqual(
-        `0x${uploadResponse.fingerprint}`,
+        uploadResponse.fingerprint,
         (await fileManager.getFingerprint()).toString(),
         "Upload should return expected fingerprint"
       );
