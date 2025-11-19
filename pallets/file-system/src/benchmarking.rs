@@ -15,7 +15,7 @@ use frame_benchmarking::v2::*;
 	// The Providers element of this pallet's config has to implement the `MutateStorageProvidersInterface`, `ReadProvidersInterface`, `ReadBucketsInterface` and `MutateBucketsInterface` traits with the following types:
     <T as crate::Config>::Providers: shp_traits::MutateStorageProvidersInterface<StorageDataUnit = u64>
         + shp_traits::ReadProvidersInterface<ProviderId = <T as frame_system::Config>::Hash, MerkleHash = <T as frame_system::Config>::Hash>
-		+ shp_traits::ReadBucketsInterface<BucketId = <T as frame_system::Config>::Hash, AccountId = <T as frame_system::Config>::AccountId, ProviderId = <T as frame_system::Config>::Hash, ReadAccessGroupId = <T as pallet_nfts::Config>::CollectionId>
+		+ shp_traits::ReadBucketsInterface<BucketId = <T as frame_system::Config>::Hash, AccountId = <T as frame_system::Config>::AccountId, ProviderId = <T as frame_system::Config>::Hash, ReadAccessGroupId = <T as pallet_nfts::Config>::CollectionId, MerkleHash = <T as frame_system::Config>::Hash>
 		+ shp_traits::MutateBucketsInterface<AccountId = <T as frame_system::Config>::AccountId, ProviderId = <T as frame_system::Config>::Hash ,ValuePropId = <T as pallet_storage_providers::Config>::ValuePropId, BucketId = <T as frame_system::Config>::Hash>,
     // The ProofDealer element of this pallet's config has to implement the `ProofsDealerInterface` trait with the following types:
 	<T as crate::Config>::ProofDealer: shp_traits::ProofsDealerInterface<TickNumber = BlockNumberFor<T>, MerkleHash = <T as frame_system::Config>::Hash, KeyProof = shp_file_key_verifier::types::FileKeyProof<{shp_constants::H_LENGTH}, {shp_constants::FILE_CHUNK_SIZE}, {shp_constants::FILE_SIZE_TO_CHALLENGES}>>,
@@ -23,13 +23,22 @@ use frame_benchmarking::v2::*;
 	<T as crate::Config>::Nfts: frame_support::traits::nonfungibles_v2::Inspect<<T as frame_system::Config>::AccountId, CollectionId = <T as pallet_nfts::Config>::CollectionId>,
 	// The ProvidersPallet element of the Payment Streams pallet's config has to implement the `ReadProvidersInterface` trait with the following types:
 	<T as pallet_payment_streams::Config>::ProvidersPallet: shp_traits::ReadProvidersInterface<ProviderId = <T as frame_system::Config>::Hash>,
+	// The PaymentStreams element of this pallet's config has to implement the `PaymentStreamsInterface` trait with Balance matching the payment streams pallet's NativeBalance:
+	<T as crate::Config>::PaymentStreams: shp_traits::PaymentStreamsInterface<Balance = <T as pallet_payment_streams::Config>::NativeBalance>,
 	// The Storage Providers pallet's `HoldReason` type must be able to be converted into the Currency's `Reason`.
 	pallet_payment_streams::HoldReason: Into<<<T as pallet::Config>::Currency as frame_support::traits::fungible::InspectHold<<T as frame_system::Config>::AccountId>>::Reason>,
+    // Payment streams balance type conversion
+	<<T as pallet_payment_streams::Config>::NativeBalance as frame_support::traits::fungible::Inspect<<T as frame_system::Config>::AccountId>>::Balance: From<u64>,
+	// Payment streams Units type conversion
+	<T as pallet_payment_streams::Config>::Units: From<u64>,
+	// Ensure balance types match between payment streams and storage providers
+	<<T as pallet_payment_streams::Config>::NativeBalance as frame_support::traits::fungible::Inspect<<T as frame_system::Config>::AccountId>>::Balance: From<<<T as pallet_storage_providers::Config>::NativeBalance as frame_support::traits::fungible::Inspect<<T as frame_system::Config>::AccountId>>::Balance>,
 )]
 mod benchmarks {
     use super::*;
+    use codec::Encode;
     use frame_support::{
-        assert_ok,
+        assert_ok, ensure,
         traits::{
             fungible::{Mutate, MutateHold},
             Get, OnFinalize, OnPoll,
@@ -42,10 +51,11 @@ mod benchmarks {
     use pallet_payment_streams::types::DynamicRatePaymentStream;
     use pallet_storage_providers::types::ValueProposition;
     use shp_traits::{
-        MutateBucketsInterface, ProofsDealerInterface, ReadBucketsInterface,
-        ReadProvidersInterface, ReadStorageProvidersInterface,
+        MessageAdapter, MutateBucketsInterface, PaymentStreamsInterface, ProofsDealerInterface,
+        ReadBucketsInterface, ReadProvidersInterface, ReadStorageProvidersInterface,
     };
     use sp_core::{Decode, Hasher};
+    use sp_runtime::traits::Verify;
     use sp_runtime::{
         traits::{Bounded, Hash, One, Zero},
         Saturating,
@@ -53,6 +63,11 @@ mod benchmarks {
     use sp_std::{vec, vec::Vec};
 
     use crate::benchmark_proofs::*;
+
+    // Type alias for payment streams balance type (NativeBalance)
+    type PaymentStreamsBalanceOf<T> = <<T as pallet_payment_streams::Config>::NativeBalance as frame_support::traits::fungible::Inspect<
+        <T as frame_system::Config>::AccountId,
+    >>::Balance;
 
     #[benchmark]
     fn create_bucket() -> Result<(), BenchmarkError> {
@@ -2403,5 +2418,961 @@ mod benchmarks {
         });
 
         bsp_id
+    }
+
+    #[benchmark]
+    fn delete_files_bucket(n: Linear<1, 10>) -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Get the number of file keys to delete from the linear parameter
+        let number_of_file_keys: u32 = n.into();
+
+        // Get the user account for the generated proofs and load it up with some balance.
+        let user_as_bytes: [u8; 32] = get_user_account().clone().try_into().unwrap();
+        let user_account: T::AccountId = T::AccountId::decode(&mut &user_as_bytes[..]).unwrap();
+        mint_into_account::<T>(user_account.clone(), 1_000_000_000_000_000_000_000)?;
+
+        // Register an account as a MSP with the specific MSP ID from the generated proofs
+        let msp_account: T::AccountId = account("MSP", 0, 0);
+        mint_into_account::<T>(msp_account.clone(), 1_000_000_000_000_000_000_000)?;
+        let encoded_msp_id = get_msp_id();
+        let msp_id = <T as frame_system::Config>::Hash::decode(&mut encoded_msp_id.as_ref())
+            .expect("Failed to decode provider ID from bytes.");
+        let (_, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account, Some(msp_id));
+
+        // Create the bucket to store in the MSP (bucket 1)
+        let encoded_bucket_id = get_bucket_id(1);
+        let bucket_id = <T as frame_system::Config>::Hash::decode(&mut encoded_bucket_id.as_ref())
+            .expect("Bucket ID should be decodable as it is a hash");
+        <<T as crate::Config>::Providers as MutateBucketsInterface>::add_bucket(
+            msp_id,
+            user_account.clone(),
+            bucket_id,
+            false,
+            None,
+            value_prop_id,
+        )?;
+
+        // Update the bucket's root to match the generated proofs
+        let encoded_bucket_root = get_bucket_root(1);
+        let bucket_root =
+            <T as frame_system::Config>::Hash::decode(&mut encoded_bucket_root.as_ref())
+                .expect("Bucket root should be decodable as it is a hash");
+        let mut total_bucket_size: StorageDataUnit<T> = 0;
+
+        // Get file keys and metadata for deletion
+        // We use fetch_file_metadata_for_deletion to get metadata directly, then reconstruct file keys
+        // Note: These correspond to stored files in bucket 1 (same as bucket inclusion proofs)
+        let mut file_deletions: Vec<FileDeletionRequest<T>> = Vec::new();
+        let mut file_keys_for_deletion: Vec<MerkleHash<T>> = Vec::new();
+
+        for j in 0..number_of_file_keys {
+            // Get file metadata for deletion (location, size, fingerprint)
+            let (location_bytes, size, fingerprint_bytes) =
+                fetch_file_metadata_for_deletion(number_of_file_keys, 1, j);
+
+            let location: FileLocation<T> = location_bytes
+                .try_into()
+                .expect("Location bytes should convert to FileLocation");
+            let fingerprint =
+                <T as frame_system::Config>::Hash::decode(&mut fingerprint_bytes.as_ref())
+                    .expect("Fingerprint should be decodable as it is a hash");
+            total_bucket_size += size;
+
+            // Reconstruct file key from metadata
+            let file_key = Pallet::<T>::compute_file_key(
+                user_account.clone(),
+                bucket_id,
+                location.clone(),
+                size,
+                fingerprint.into(),
+            )?;
+            file_keys_for_deletion.push(file_key);
+
+            // Get deletion signature
+            let encoded_signatures = fetch_file_deletion_signatures(number_of_file_keys, 1);
+            let signature_bytes = encoded_signatures[j as usize].clone();
+            let signature =
+                <<T as pallet::Config>::OffchainSignature>::decode(&mut signature_bytes.as_ref())
+                    .expect("Deletion signature should be decodable");
+
+            // Create FileOperationIntention
+            let signed_intention = FileOperationIntention::<T> {
+                file_key,
+                operation: FileOperation::Delete,
+            };
+
+            // pre-verify signature
+            let signed_intention_encoded = signed_intention.encode();
+            let to_verify = <T as crate::Config>::IntentionMsgAdapter::bytes_to_verify(
+                &signed_intention_encoded,
+            );
+            let is_valid_pre_check = signature.verify(&to_verify[..], &user_account);
+            ensure!(
+                is_valid_pre_check,
+                BenchmarkError::Stop("Signature should be valid")
+            );
+
+            // Create FileDeletionRequest
+            file_deletions.push(FileDeletionRequest::<T> {
+                file_owner: user_account.clone(),
+                signed_intention,
+                signature,
+                bucket_id,
+                location: location.clone(),
+                size,
+                fingerprint: fingerprint.into(),
+            });
+        }
+
+        // Update bucket size to match total
+        pallet_storage_providers::Buckets::<T>::mutate(&bucket_id, |bucket| {
+            let bucket = bucket.as_mut().expect("Bucket should exist.");
+            bucket.size = total_bucket_size;
+            bucket.root = bucket_root;
+        });
+
+        // Increase MSP used capacity to match bucket size
+        pallet_storage_providers::MainStorageProviders::<T>::mutate(&msp_id, |msp| {
+            let msp = msp.as_mut().expect("MSP should exist.");
+            msp.capacity_used += total_bucket_size;
+        });
+
+        // Create fixed-rate payment stream between user and MSP
+        let value_prop =
+            pallet_storage_providers::MainStorageProviderIdsToValuePropositions::<T>::get(
+                &msp_id,
+                &value_prop_id,
+            )
+            .unwrap();
+        let price_per_giga_unit = value_prop.price_per_giga_unit_of_data_per_block;
+        // ZeroSizeBucketFixedRate returns NativeBalance balance type from storage-providers
+        let zero_sized_bucket_rate_providers =
+            <T as pallet_storage_providers::Config>::ZeroSizeBucketFixedRate::get();
+        // Convert to payment streams balance type
+        let zero_sized_bucket_rate: PaymentStreamsBalanceOf<T> =
+            zero_sized_bucket_rate_providers.into();
+        let bucket_size_in_giga_units: u64 = total_bucket_size / (shp_constants::GIGAUNIT as u64);
+        // Convert price_per_giga_unit to payment streams balance type and calculate rate
+        let price_per_giga_unit_ps: PaymentStreamsBalanceOf<T> = price_per_giga_unit.into();
+        let payment_stream_rate = PaymentStreamsBalanceOf::<T>::from(bucket_size_in_giga_units)
+            .saturating_mul(price_per_giga_unit_ps)
+            .saturating_add(zero_sized_bucket_rate);
+
+        pallet_payment_streams::FixedRatePaymentStreams::<T>::insert(
+            &msp_id,
+            &user_account,
+            pallet_payment_streams::types::FixedRatePaymentStream {
+                rate: payment_stream_rate,
+                last_charged_tick: frame_system::Pallet::<T>::block_number(),
+                user_deposit: PaymentStreamsBalanceOf::<T>::from(0u64),
+                out_of_funds_tick: None,
+            },
+        );
+
+        // Get bucket inclusion forest proof
+        let encoded_inclusion_proof = fetch_bucket_inclusion_proofs(number_of_file_keys, 1);
+        let forest_proof = <ForestProof<T>>::decode(&mut encoded_inclusion_proof.as_ref())
+            .expect("Bucket inclusion proof should be decodable");
+
+        // Get old bucket root for event assertion
+        let old_bucket_root_buckets =
+            <<T as crate::Config>::Providers as ReadBucketsInterface>::get_root_bucket(&bucket_id)
+                .unwrap();
+        // Types are constrained to be equal, so no conversion needed
+        let old_bucket_root: MerkleHash<T> = old_bucket_root_buckets;
+
+        // Get some variables for comparison after the call
+        let previous_msp_capacity_used =
+            <<T as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(
+                &msp_id,
+            );
+        let previous_bucket_size = pallet_storage_providers::Buckets::<T>::get(&bucket_id)
+            .unwrap()
+            .size;
+
+        // Sanity check: ensure each deletion request's signed intention file key matches
+        // the file key we reconstructed from metadata and are passing to delete_files.
+        for (request, expected_file_key) in file_deletions.iter().zip(file_keys_for_deletion.iter())
+        {
+            assert_eq!(
+                request.signed_intention.file_key,
+                *expected_file_key,
+                "Signed intention file key does not match reconstructed file key for bucket deletion benchmark"
+            );
+        }
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        let file_deletions_bounded: BoundedVec<
+            FileDeletionRequest<T>,
+            T::MaxFileDeletionsPerExtrinsic,
+        > = file_deletions
+            .try_into()
+            .expect("Should fit in bounded vec");
+        let file_keys_bounded: BoundedVec<MerkleHash<T>, T::MaxFileDeletionsPerExtrinsic> =
+            file_keys_for_deletion
+                .try_into()
+                .expect("Should fit in bounded vec");
+
+        #[extrinsic_call]
+        delete_files(
+            RawOrigin::Signed(user_account.clone()),
+            file_deletions_bounded,
+            None,
+            forest_proof,
+        );
+
+        /*********** Post-benchmark checks: ***********/
+        // Get new values after calling the extrinsic
+        let new_msp_capacity_used =
+            <<T as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(
+                &msp_id,
+            );
+        let new_bucket_size = pallet_storage_providers::Buckets::<T>::get(&bucket_id)
+            .unwrap()
+            .size;
+        let new_bucket_root_storage = pallet_storage_providers::Buckets::<T>::get(&bucket_id)
+            .unwrap()
+            .root;
+        // Convert to MerkleHash<T> for event and assertions
+        let new_bucket_root: MerkleHash<T> = new_bucket_root_storage.into();
+
+        // Ensure the expected event was emitted
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::BucketFileDeletionsCompleted {
+                user: user_account.clone(),
+                file_keys: file_keys_bounded,
+                bucket_id,
+                msp_id: Some(msp_id),
+                old_root: old_bucket_root,
+                new_root: new_bucket_root,
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // Ensure MSP capacity decreased by total file size
+        assert_eq!(
+            new_msp_capacity_used,
+            previous_msp_capacity_used - total_bucket_size,
+            "MSP capacity used should have decreased by total file size"
+        );
+
+        // Ensure bucket size decreased by total file size
+        assert_eq!(
+            new_bucket_size,
+            previous_bucket_size - total_bucket_size,
+            "Bucket size should have decreased by total file size"
+        );
+
+        // Ensure bucket root was updated
+        assert_ne!(
+            new_bucket_root, old_bucket_root,
+            "Bucket root should have been updated"
+        );
+
+        // Ensure payment stream was updated (should be zero-sized bucket rate now)
+        let payment_stream_value = <<T as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &user_account);
+        let zero_sized_bucket_rate_providers =
+            <T as pallet_storage_providers::Config>::ZeroSizeBucketFixedRate::get();
+        let expected_zero_rate: PaymentStreamsBalanceOf<T> =
+            zero_sized_bucket_rate_providers.into();
+        assert_eq!(
+            payment_stream_value,
+            Some(expected_zero_rate),
+            "Payment stream should be updated to zero-sized bucket rate"
+        );
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn delete_files_bsp(n: Linear<1, 10>) -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Get the number of file keys to delete from the linear parameter
+        let number_of_file_keys: u32 = n.into();
+
+        // Get the user account for the generated proofs and load it up with some balance.
+        let user_as_bytes: [u8; 32] = get_user_account().clone().try_into().unwrap();
+        let user_account: T::AccountId = T::AccountId::decode(&mut &user_as_bytes[..]).unwrap();
+        mint_into_account::<T>(user_account.clone(), 1_000_000_000_000_000_000_000)?;
+
+        // Register an account as a MSP (needed for bucket creation)
+        let msp_account: T::AccountId = account("MSP", 0, 0);
+        mint_into_account::<T>(msp_account.clone(), 1_000_000_000_000_000_000_000)?;
+        let encoded_msp_id = get_msp_id();
+        let msp_id = <T as frame_system::Config>::Hash::decode(&mut encoded_msp_id.as_ref())
+            .expect("Failed to decode provider ID from bytes.");
+        let (_, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account, Some(msp_id));
+
+        // Register the BSP which will have files deleted
+        let bsp_account: T::AccountId = account("BSP", 0, 0);
+        mint_into_account::<T>(bsp_account.clone(), 1_000_000_000_000_000)?;
+        let encoded_bsp_id = get_bsp_id();
+        let bsp_id = <T as frame_system::Config>::Hash::decode(&mut encoded_bsp_id.as_ref())
+            .expect("Failed to decode provider ID from bytes.");
+        add_bsp_to_provider_storage::<T>(&bsp_account, Some(bsp_id));
+
+        // Create a bucket for the user (needed for file ownership validation)
+        let encoded_bucket_id = get_bucket_id(1);
+        let bucket_id = <T as frame_system::Config>::Hash::decode(&mut encoded_bucket_id.as_ref())
+            .expect("Bucket ID should be decodable as it is a hash");
+        <<T as crate::Config>::Providers as MutateBucketsInterface>::add_bucket(
+            msp_id,
+            user_account.clone(),
+            bucket_id,
+            false,
+            None,
+            value_prop_id,
+        )?;
+
+        // Set BSP root to match the generated proofs
+        let encoded_bsp_root = get_bsp_root();
+        let bsp_root = <T as frame_system::Config>::Hash::decode(&mut encoded_bsp_root.as_ref())
+            .expect("BSP root should be decodable as it is a hash");
+        pallet_storage_providers::BackupStorageProviders::<T>::mutate(&bsp_id, |bsp| {
+            let bsp = bsp.as_mut().expect("BSP should exist.");
+            bsp.root = bsp_root;
+        });
+
+        // Get file keys and metadata for deletion
+        // We use fetch_file_metadata_for_deletion to get metadata directly, then reconstruct file keys
+        // Note: These correspond to stored files in bucket 1 that are also in the BSP's forest
+        let mut file_deletions: Vec<FileDeletionRequest<T>> = Vec::new();
+        let mut file_keys_for_deletion: Vec<MerkleHash<T>> = Vec::new();
+        let mut total_file_size: StorageDataUnit<T> = 0;
+
+        for j in 0..number_of_file_keys {
+            // Get file metadata for deletion (location, size, fingerprint)
+            let (location_bytes, size, fingerprint_bytes) =
+                fetch_file_metadata_for_deletion(number_of_file_keys, 1, j);
+
+            let location: FileLocation<T> = location_bytes
+                .try_into()
+                .expect("Location bytes should convert to FileLocation");
+            let fingerprint =
+                <T as frame_system::Config>::Hash::decode(&mut fingerprint_bytes.as_ref())
+                    .expect("Fingerprint should be decodable as it is a hash");
+            total_file_size += size;
+
+            // Reconstruct file key from metadata
+            let file_key = Pallet::<T>::compute_file_key(
+                user_account.clone(),
+                bucket_id,
+                location.clone(),
+                size,
+                fingerprint.into(),
+            )?;
+            file_keys_for_deletion.push(file_key);
+
+            // Get deletion signature
+            let encoded_signatures = fetch_file_deletion_signatures(number_of_file_keys, 1);
+            let signature_bytes = encoded_signatures[j as usize].clone();
+            let signature =
+                <<T as pallet::Config>::OffchainSignature>::decode(&mut signature_bytes.as_ref())
+                    .expect("Deletion signature should be decodable");
+
+            // Create FileOperationIntention
+            let signed_intention = FileOperationIntention::<T> {
+                file_key,
+                operation: FileOperation::Delete,
+            };
+
+            // pre-verify signature
+            let signed_intention_encoded = signed_intention.encode();
+            let to_verify = <T as crate::Config>::IntentionMsgAdapter::bytes_to_verify(
+                &signed_intention_encoded,
+            );
+            let is_valid_pre_check = signature.verify(&to_verify[..], &user_account);
+            ensure!(
+                is_valid_pre_check,
+                BenchmarkError::Stop("Signature should be valid")
+            );
+
+            // Create FileDeletionRequest
+            file_deletions.push(FileDeletionRequest::<T> {
+                file_owner: user_account.clone(),
+                signed_intention,
+                signature,
+                bucket_id,
+                location: location.clone(),
+                size,
+                fingerprint: fingerprint.into(),
+            });
+        }
+
+        // Increase BSP used capacity to match file size
+        pallet_storage_providers::BackupStorageProviders::<T>::mutate(&bsp_id, |bsp| {
+            let bsp = bsp.as_mut().expect("BSP should exist.");
+            bsp.capacity_used += total_file_size;
+        });
+
+        // Create dynamic-rate payment stream between user and BSP
+        let amount_provided = total_file_size;
+        pallet_payment_streams::DynamicRatePaymentStreams::<T>::insert(
+            &bsp_id,
+            &user_account,
+            DynamicRatePaymentStream {
+                amount_provided: <T as pallet_payment_streams::Config>::Units::from(
+                    amount_provided,
+                ),
+                price_index_when_last_charged: PaymentStreamsBalanceOf::<T>::from(0u64),
+                user_deposit: PaymentStreamsBalanceOf::<T>::from(100u64),
+                out_of_funds_tick: None,
+            },
+        );
+
+        // Set the used capacity to the total capacity to simulate worst-case scenario
+        pallet_storage_providers::UsedBspsCapacity::<T>::set(total_file_size);
+        pallet_storage_providers::TotalBspsCapacity::<T>::set(total_file_size);
+
+        // Get BSP inclusion forest proof
+        let encoded_inclusion_proof = fetch_bsp_inclusion_proofs(number_of_file_keys);
+        let forest_proof = <ForestProof<T>>::decode(&mut encoded_inclusion_proof.as_ref())
+            .expect("BSP inclusion proof should be decodable");
+
+        // Get old BSP root for event assertion
+        let old_bsp_root_providers =
+            <<T as crate::Config>::Providers as ReadProvidersInterface>::get_root(bsp_id).unwrap();
+        // Convert to MerkleHash<T> for event
+        let old_bsp_root: MerkleHash<T> = old_bsp_root_providers.into();
+
+        // Get some variables for comparison after the call
+        let previous_bsp_capacity_used =
+            <<T as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(
+                &bsp_id,
+            );
+
+        // Sanity check: ensure each deletion request's signed intention file key matches
+        // the file key we reconstructed from metadata and are passing to delete_files.
+        for (request, expected_file_key) in file_deletions.iter().zip(file_keys_for_deletion.iter())
+        {
+            assert_eq!(
+                request.signed_intention.file_key,
+                *expected_file_key,
+                "Signed intention file key does not match reconstructed file key for BSP deletion benchmark"
+            );
+        }
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        let file_deletions_bounded: BoundedVec<
+            FileDeletionRequest<T>,
+            T::MaxFileDeletionsPerExtrinsic,
+        > = file_deletions
+            .try_into()
+            .expect("Should fit in bounded vec");
+        let file_keys_bounded: BoundedVec<MerkleHash<T>, T::MaxFileDeletionsPerExtrinsic> =
+            file_keys_for_deletion
+                .try_into()
+                .expect("Should fit in bounded vec");
+        let users_bounded: BoundedVec<T::AccountId, T::MaxFileDeletionsPerExtrinsic> =
+            vec![user_account.clone(); number_of_file_keys as usize]
+                .try_into()
+                .expect("Should fit in bounded vec");
+
+        #[extrinsic_call]
+        delete_files(
+            RawOrigin::Signed(user_account.clone()),
+            file_deletions_bounded,
+            Some(bsp_id),
+            forest_proof,
+        );
+
+        /*********** Post-benchmark checks: ***********/
+        // Get new values after calling the extrinsic
+        let new_bsp_capacity_used =
+            <<T as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(
+                &bsp_id,
+            );
+        let new_bsp_root_providers =
+            <<T as crate::Config>::Providers as ReadProvidersInterface>::get_root(bsp_id).unwrap();
+        // Convert to MerkleHash<T> for event and assertions
+        let new_bsp_root: MerkleHash<T> = new_bsp_root_providers.into();
+
+        // Ensure the expected event was emitted
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspFileDeletionsCompleted {
+                users: users_bounded,
+                file_keys: file_keys_bounded,
+                bsp_id,
+                old_root: old_bsp_root,
+                new_root: new_bsp_root,
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // Ensure BSP capacity decreased by total file size
+        assert_eq!(
+            new_bsp_capacity_used,
+            previous_bsp_capacity_used - total_file_size,
+            "BSP capacity used should have decreased by total file size"
+        );
+
+        // Ensure BSP root was updated
+        assert_ne!(
+            new_bsp_root, old_bsp_root,
+            "BSP root should have been updated"
+        );
+
+        // Ensure dynamic-rate payment stream was removed
+        assert!(
+            !pallet_payment_streams::DynamicRatePaymentStreams::<T>::contains_key(
+                &bsp_id,
+                &user_account
+            ),
+            "Dynamic-rate payment stream should be removed after deletion"
+        );
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn delete_files_for_incomplete_storage_request_bucket(
+        n: Linear<1, 10>,
+    ) -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Get the number of file keys to delete from the linear parameter
+        let number_of_file_keys: u32 = n.into();
+
+        // Get the user account for the generated proofs and load it up with some balance.
+        let user_as_bytes: [u8; 32] = get_user_account().clone().try_into().unwrap();
+        let user_account: T::AccountId = T::AccountId::decode(&mut &user_as_bytes[..]).unwrap();
+        mint_into_account::<T>(user_account.clone(), 1_000_000_000_000_000_000_000)?;
+
+        // Register an account as a MSP with the specific MSP ID from the generated proofs
+        let msp_account: T::AccountId = account("MSP", 0, 0);
+        mint_into_account::<T>(msp_account.clone(), 1_000_000_000_000_000_000_000)?;
+        let encoded_msp_id = get_msp_id();
+        let msp_id = <T as frame_system::Config>::Hash::decode(&mut encoded_msp_id.as_ref())
+            .expect("Failed to decode provider ID from bytes.");
+        let (_, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account, Some(msp_id));
+
+        // Create the bucket to store in the MSP (bucket 1)
+        let encoded_bucket_id = get_bucket_id(1);
+        let bucket_id = <T as frame_system::Config>::Hash::decode(&mut encoded_bucket_id.as_ref())
+            .expect("Bucket ID should be decodable as it is a hash");
+        <<T as crate::Config>::Providers as MutateBucketsInterface>::add_bucket(
+            msp_id,
+            user_account.clone(),
+            bucket_id,
+            false,
+            None,
+            value_prop_id,
+        )?;
+
+        // Update the bucket's root to match the generated proofs
+        let encoded_bucket_root = get_bucket_root(1);
+        let bucket_root =
+            <T as frame_system::Config>::Hash::decode(&mut encoded_bucket_root.as_ref())
+                .expect("Bucket root should be decodable as it is a hash");
+        let mut total_bucket_size: StorageDataUnit<T> = 0;
+
+        // Get file keys and metadata for deletion
+        // We use fetch_file_metadata_for_deletion to get metadata directly, then reconstruct file keys
+        // Note: These correspond to stored files in bucket 1 (same as bucket inclusion proofs)
+        let mut file_keys_for_deletion: Vec<MerkleHash<T>> = Vec::new();
+
+        for j in 0..number_of_file_keys {
+            // Get file metadata for deletion (location, size, fingerprint)
+            let (location_bytes, size, fingerprint_bytes) =
+                fetch_file_metadata_for_deletion(number_of_file_keys, 1, j);
+
+            let location: FileLocation<T> = location_bytes
+                .try_into()
+                .expect("Location bytes should convert to FileLocation");
+            let fingerprint =
+                <T as frame_system::Config>::Hash::decode(&mut fingerprint_bytes.as_ref())
+                    .expect("Fingerprint should be decodable as it is a hash");
+            total_bucket_size += size;
+
+            // Reconstruct file key from metadata
+            let file_key = Pallet::<T>::compute_file_key(
+                user_account.clone(),
+                bucket_id,
+                location.clone(),
+                size,
+                fingerprint.into(),
+            )?;
+            file_keys_for_deletion.push(file_key);
+
+            // Create IncompleteStorageRequestMetadata for bucket deletion
+            let incomplete_metadata = IncompleteStorageRequestMetadata::<T> {
+                owner: user_account.clone(),
+                bucket_id,
+                location: location.clone(),
+                file_size: size,
+                fingerprint: fingerprint.into(),
+                pending_bsp_removals: BoundedVec::default(),
+                pending_bucket_removal: true,
+            };
+
+            // Insert into IncompleteStorageRequests storage map
+            crate::IncompleteStorageRequests::<T>::insert(&file_key, incomplete_metadata);
+        }
+
+        // Update bucket size to match total
+        pallet_storage_providers::Buckets::<T>::mutate(&bucket_id, |bucket| {
+            let bucket = bucket.as_mut().expect("Bucket should exist.");
+            bucket.size = total_bucket_size;
+            bucket.root = bucket_root;
+        });
+
+        // Increase MSP used capacity to match bucket size
+        pallet_storage_providers::MainStorageProviders::<T>::mutate(&msp_id, |msp| {
+            let msp = msp.as_mut().expect("MSP should exist.");
+            msp.capacity_used += total_bucket_size;
+        });
+
+        // Create fixed-rate payment stream between user and MSP
+        let value_prop =
+            pallet_storage_providers::MainStorageProviderIdsToValuePropositions::<T>::get(
+                &msp_id,
+                &value_prop_id,
+            )
+            .unwrap();
+        let price_per_giga_unit = value_prop.price_per_giga_unit_of_data_per_block;
+        // ZeroSizeBucketFixedRate returns NativeBalance balance type from storage-providers
+        let zero_sized_bucket_rate_providers =
+            <T as pallet_storage_providers::Config>::ZeroSizeBucketFixedRate::get();
+        // Convert to payment streams balance type
+        let zero_sized_bucket_rate: PaymentStreamsBalanceOf<T> =
+            zero_sized_bucket_rate_providers.into();
+        let bucket_size_in_giga_units: u64 = total_bucket_size / (shp_constants::GIGAUNIT as u64);
+        // Convert price_per_giga_unit to payment streams balance type and calculate rate
+        let price_per_giga_unit_ps: PaymentStreamsBalanceOf<T> = price_per_giga_unit.into();
+        let payment_stream_rate = PaymentStreamsBalanceOf::<T>::from(bucket_size_in_giga_units)
+            .saturating_mul(price_per_giga_unit_ps)
+            .saturating_add(zero_sized_bucket_rate);
+
+        pallet_payment_streams::FixedRatePaymentStreams::<T>::insert(
+            &msp_id,
+            &user_account,
+            pallet_payment_streams::types::FixedRatePaymentStream {
+                rate: payment_stream_rate,
+                last_charged_tick: frame_system::Pallet::<T>::block_number(),
+                user_deposit: PaymentStreamsBalanceOf::<T>::from(0u64),
+                out_of_funds_tick: None,
+            },
+        );
+
+        // Get bucket inclusion forest proof
+        let encoded_inclusion_proof = fetch_bucket_inclusion_proofs(number_of_file_keys, 1);
+        let forest_proof = <ForestProof<T>>::decode(&mut encoded_inclusion_proof.as_ref())
+            .expect("Bucket inclusion proof should be decodable");
+
+        // Get old bucket root for event assertion
+        let old_bucket_root_buckets =
+            <<T as crate::Config>::Providers as ReadBucketsInterface>::get_root_bucket(&bucket_id)
+                .unwrap();
+        // Types are constrained to be equal, so no conversion needed
+        let old_bucket_root: MerkleHash<T> = old_bucket_root_buckets;
+
+        // Get some variables for comparison after the call
+        let previous_msp_capacity_used =
+            <<T as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(
+                &msp_id,
+            );
+        let previous_bucket_size = pallet_storage_providers::Buckets::<T>::get(&bucket_id)
+            .unwrap()
+            .size;
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        // Clone file_keys_for_deletion before converting to BoundedVec so we can use it later
+        let file_keys_for_deletion_clone = file_keys_for_deletion.clone();
+        let file_keys_bounded: BoundedVec<MerkleHash<T>, T::MaxFileDeletionsPerExtrinsic> =
+            file_keys_for_deletion
+                .try_into()
+                .expect("Should fit in bounded vec");
+        // Clone file_keys_bounded before passing to extrinsic call so we can use it in event assertion
+        let file_keys_bounded_clone = file_keys_bounded.clone();
+
+        #[extrinsic_call]
+        delete_files_for_incomplete_storage_request(
+            RawOrigin::Signed(user_account.clone()),
+            file_keys_bounded,
+            None,
+            forest_proof,
+        );
+
+        /*********** Post-benchmark checks: ***********/
+        // Get new values after calling the extrinsic
+        let new_msp_capacity_used =
+            <<T as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(
+                &msp_id,
+            );
+        let new_bucket_size = pallet_storage_providers::Buckets::<T>::get(&bucket_id)
+            .unwrap()
+            .size;
+        let new_bucket_root_storage = pallet_storage_providers::Buckets::<T>::get(&bucket_id)
+            .unwrap()
+            .root;
+        // Convert to MerkleHash<T> for event and assertions
+        let new_bucket_root: MerkleHash<T> = new_bucket_root_storage.into();
+
+        // Ensure the expected event was emitted
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::BucketFileDeletionsCompleted {
+                user: user_account.clone(),
+                file_keys: file_keys_bounded_clone,
+                bucket_id,
+                msp_id: Some(msp_id),
+                old_root: old_bucket_root,
+                new_root: new_bucket_root,
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // Ensure MSP capacity decreased by total file size
+        assert_eq!(
+            new_msp_capacity_used,
+            previous_msp_capacity_used - total_bucket_size,
+            "MSP capacity used should have decreased by total file size"
+        );
+
+        // Ensure bucket size decreased by total file size
+        assert_eq!(
+            new_bucket_size,
+            previous_bucket_size - total_bucket_size,
+            "Bucket size should have decreased by total file size"
+        );
+
+        // Ensure bucket root was updated
+        assert_ne!(
+            new_bucket_root, old_bucket_root,
+            "Bucket root should have been updated"
+        );
+
+        // Ensure payment stream was updated (should be zero-sized bucket rate now)
+        let payment_stream_value = <<T as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &user_account);
+        let zero_sized_bucket_rate_providers =
+            <T as pallet_storage_providers::Config>::ZeroSizeBucketFixedRate::get();
+        let expected_zero_rate: PaymentStreamsBalanceOf<T> =
+            zero_sized_bucket_rate_providers.into();
+        assert_eq!(
+            payment_stream_value,
+            Some(expected_zero_rate),
+            "Payment stream should be updated to zero-sized bucket rate"
+        );
+
+        // Ensure IncompleteStorageRequests entries were removed (since pending_bucket_removal becomes false and pending_bsp_removals is empty)
+        for file_key in file_keys_for_deletion_clone.iter() {
+            assert!(
+                !crate::IncompleteStorageRequests::<T>::contains_key(file_key),
+                "IncompleteStorageRequest should be removed after deletion"
+            );
+        }
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn delete_files_for_incomplete_storage_request_bsp(
+        n: Linear<1, 10>,
+    ) -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Get the number of file keys to delete from the linear parameter
+        let number_of_file_keys: u32 = n.into();
+
+        // Get the user account for the generated proofs and load it up with some balance.
+        let user_as_bytes: [u8; 32] = get_user_account().clone().try_into().unwrap();
+        let user_account: T::AccountId = T::AccountId::decode(&mut &user_as_bytes[..]).unwrap();
+        mint_into_account::<T>(user_account.clone(), 1_000_000_000_000_000_000_000)?;
+
+        // Register an account as a MSP (needed for bucket creation)
+        let msp_account: T::AccountId = account("MSP", 0, 0);
+        mint_into_account::<T>(msp_account.clone(), 1_000_000_000_000_000_000_000)?;
+        let encoded_msp_id = get_msp_id();
+        let msp_id = <T as frame_system::Config>::Hash::decode(&mut encoded_msp_id.as_ref())
+            .expect("Failed to decode provider ID from bytes.");
+        let (_, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account, Some(msp_id));
+
+        // Register the BSP which will have files deleted
+        let bsp_account: T::AccountId = account("BSP", 0, 0);
+        mint_into_account::<T>(bsp_account.clone(), 1_000_000_000_000_000)?;
+        let encoded_bsp_id = get_bsp_id();
+        let bsp_id = <T as frame_system::Config>::Hash::decode(&mut encoded_bsp_id.as_ref())
+            .expect("Failed to decode provider ID from bytes.");
+        add_bsp_to_provider_storage::<T>(&bsp_account, Some(bsp_id));
+
+        // Create a bucket for the user (needed for file ownership validation)
+        let encoded_bucket_id = get_bucket_id(1);
+        let bucket_id = <T as frame_system::Config>::Hash::decode(&mut encoded_bucket_id.as_ref())
+            .expect("Bucket ID should be decodable as it is a hash");
+        <<T as crate::Config>::Providers as MutateBucketsInterface>::add_bucket(
+            msp_id,
+            user_account.clone(),
+            bucket_id,
+            false,
+            None,
+            value_prop_id,
+        )?;
+
+        // Set BSP root to match the generated proofs
+        let encoded_bsp_root = get_bsp_root();
+        let bsp_root = <T as frame_system::Config>::Hash::decode(&mut encoded_bsp_root.as_ref())
+            .expect("BSP root should be decodable as it is a hash");
+        pallet_storage_providers::BackupStorageProviders::<T>::mutate(&bsp_id, |bsp| {
+            let bsp = bsp.as_mut().expect("BSP should exist.");
+            bsp.root = bsp_root;
+        });
+
+        // Get file keys and metadata for deletion
+        // We use fetch_file_metadata_for_deletion to get metadata directly, then reconstruct file keys
+        // Note: These correspond to stored files in bucket 1 that are also in the BSP's forest
+        let mut file_keys_for_deletion: Vec<MerkleHash<T>> = Vec::new();
+        let mut total_file_size: StorageDataUnit<T> = 0;
+
+        for j in 0..number_of_file_keys {
+            // Get file metadata for deletion (location, size, fingerprint)
+            let (location_bytes, size, fingerprint_bytes) =
+                fetch_file_metadata_for_deletion(number_of_file_keys, 1, j);
+
+            let location: FileLocation<T> = location_bytes
+                .try_into()
+                .expect("Location bytes should convert to FileLocation");
+            let fingerprint =
+                <T as frame_system::Config>::Hash::decode(&mut fingerprint_bytes.as_ref())
+                    .expect("Fingerprint should be decodable as it is a hash");
+            total_file_size += size;
+
+            // Reconstruct file key from metadata
+            let file_key = Pallet::<T>::compute_file_key(
+                user_account.clone(),
+                bucket_id,
+                location.clone(),
+                size,
+                fingerprint.into(),
+            )?;
+            file_keys_for_deletion.push(file_key);
+
+            // Create IncompleteStorageRequestMetadata for BSP deletion
+            let pending_bsp_removals: BoundedVec<ProviderIdFor<T>, MaxReplicationTarget<T>> =
+                vec![bsp_id].try_into().expect("Should fit in bounded vec");
+            let incomplete_metadata = IncompleteStorageRequestMetadata::<T> {
+                owner: user_account.clone(),
+                bucket_id,
+                location: location.clone(),
+                file_size: size,
+                fingerprint: fingerprint.into(),
+                pending_bsp_removals,
+                pending_bucket_removal: false,
+            };
+
+            // Insert into IncompleteStorageRequests storage map
+            crate::IncompleteStorageRequests::<T>::insert(&file_key, incomplete_metadata);
+        }
+
+        // Increase BSP used capacity to match file size
+        pallet_storage_providers::BackupStorageProviders::<T>::mutate(&bsp_id, |bsp| {
+            let bsp = bsp.as_mut().expect("BSP should exist.");
+            bsp.capacity_used += total_file_size;
+        });
+
+        // Create dynamic-rate payment stream between user and BSP
+        let amount_provided = total_file_size;
+        pallet_payment_streams::DynamicRatePaymentStreams::<T>::insert(
+            &bsp_id,
+            &user_account,
+            DynamicRatePaymentStream {
+                amount_provided: <T as pallet_payment_streams::Config>::Units::from(
+                    amount_provided,
+                ),
+                price_index_when_last_charged: PaymentStreamsBalanceOf::<T>::from(0u64),
+                user_deposit: PaymentStreamsBalanceOf::<T>::from(100u64),
+                out_of_funds_tick: None,
+            },
+        );
+
+        // Set the used capacity to the total capacity to simulate worst-case scenario
+        pallet_storage_providers::UsedBspsCapacity::<T>::set(total_file_size);
+        pallet_storage_providers::TotalBspsCapacity::<T>::set(total_file_size);
+
+        // Get BSP inclusion forest proof
+        let encoded_inclusion_proof = fetch_bsp_inclusion_proofs(number_of_file_keys);
+        let forest_proof = <ForestProof<T>>::decode(&mut encoded_inclusion_proof.as_ref())
+            .expect("BSP inclusion proof should be decodable");
+
+        // Get old BSP root for event assertion
+        let old_bsp_root_providers =
+            <<T as crate::Config>::Providers as ReadProvidersInterface>::get_root(bsp_id).unwrap();
+        // Convert to MerkleHash<T> for event
+        let old_bsp_root: MerkleHash<T> = old_bsp_root_providers.into();
+
+        // Get some variables for comparison after the call
+        let previous_bsp_capacity_used =
+            <<T as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(
+                &bsp_id,
+            );
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        // Clone file_keys_for_deletion before converting to BoundedVec so we can use it later
+        let file_keys_for_deletion_clone = file_keys_for_deletion.clone();
+        let file_keys_bounded: BoundedVec<MerkleHash<T>, T::MaxFileDeletionsPerExtrinsic> =
+            file_keys_for_deletion
+                .try_into()
+                .expect("Should fit in bounded vec");
+        // Clone file_keys_bounded before passing to extrinsic call so we can use it in event assertion
+        let file_keys_bounded_clone = file_keys_bounded.clone();
+        let users_bounded: BoundedVec<T::AccountId, T::MaxFileDeletionsPerExtrinsic> =
+            vec![user_account.clone(); number_of_file_keys as usize]
+                .try_into()
+                .expect("Should fit in bounded vec");
+
+        #[extrinsic_call]
+        delete_files_for_incomplete_storage_request(
+            RawOrigin::Signed(user_account.clone()),
+            file_keys_bounded,
+            Some(bsp_id),
+            forest_proof,
+        );
+
+        /*********** Post-benchmark checks: ***********/
+        // Get new values after calling the extrinsic
+        let new_bsp_capacity_used =
+            <<T as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(
+                &bsp_id,
+            );
+        let new_bsp_root_providers =
+            <<T as crate::Config>::Providers as ReadProvidersInterface>::get_root(bsp_id).unwrap();
+        // Convert to MerkleHash<T> for event and assertions
+        let new_bsp_root: MerkleHash<T> = new_bsp_root_providers.into();
+
+        // Ensure the expected event was emitted
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspFileDeletionsCompleted {
+                users: users_bounded,
+                file_keys: file_keys_bounded_clone,
+                bsp_id,
+                old_root: old_bsp_root,
+                new_root: new_bsp_root,
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // Ensure BSP capacity decreased by total file size
+        assert_eq!(
+            new_bsp_capacity_used,
+            previous_bsp_capacity_used - total_file_size,
+            "BSP capacity used should have decreased by total file size"
+        );
+
+        // Ensure BSP root was updated
+        assert_ne!(
+            new_bsp_root, old_bsp_root,
+            "BSP root should have been updated"
+        );
+
+        // Ensure dynamic-rate payment stream was removed
+        assert!(
+            !pallet_payment_streams::DynamicRatePaymentStreams::<T>::contains_key(
+                &bsp_id,
+                &user_account
+            ),
+            "Dynamic-rate payment stream should be removed after deletion"
+        );
+
+        // Ensure IncompleteStorageRequests entries were removed
+        for file_key in file_keys_for_deletion_clone.iter() {
+            assert!(
+                !crate::IncompleteStorageRequests::<T>::contains_key(file_key),
+                "IncompleteStorageRequest should be removed after deletion"
+            );
+        }
+
+        Ok(())
     }
 }
