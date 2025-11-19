@@ -637,27 +637,27 @@ where
         // - A small, bounded channel limits the number of in-flight chunks.
         // - Chunks are read from storage in small batches under a short-lived read lock.
         // - Backpressure from the upload side naturally slows down chunk production.
-        const CHANNEL_CAPACITY: usize = 3;
-        let (tx, rx) = mpsc::channel::<Result<bytes::Bytes, std::io::Error>>(CHANNEL_CAPACITY);
+        //
+        // The maximum default buffered size will be chunks_buffer (default 512) * FILE_CHUNK_SIZE (1Kb) = 512 Kb
+        // We cap this at 1Mb (TODO: make it configurable)
+        let queue_buffered_size =
+            std::cmp::min(self.config.remote_file.chunks_buffer.max(512), 1024);
+        let (tx, rx) = mpsc::channel::<Result<bytes::Bytes, std::io::Error>>(queue_buffered_size);
 
         let file_storage = Arc::clone(&self.file_storage);
         let file_key_clone = file_key.clone();
-        let total_chunks_u64 = total_chunks;
 
-        // Batch size is capped to avoid large per-batch memory spikes while still
-        // amortizing the cost of acquiring the read lock.
-        let batch_size = std::cmp::min(self.config.remote_file.chunks_buffer.max(1), 32) as u64;
+        // We read chunks in batches to amortize the cost of acquiring the read lock.
+        // Note: we don't leave it locked as the download process velocity depends on the client receiving the file.
+        let batch_size = queue_buffered_size as u64;
 
-        // Producer task: reads chunks from FileStorage in small batches and sends them through the channel.
-        //
-        // Errors while reading are propagated via the channel as `std::io::Error`. The consumer side
-        // (HTTP upload) will surface these as request errors.
-        let _producer_handle = tokio::spawn(async move {
+        // Channel Sender: reads chunks from FileStorage in batches and sends them through the channel.
+        tokio::spawn(async move {
             let mut current_chunk: u64 = 0;
 
-            while current_chunk < total_chunks_u64 {
+            while current_chunk < total_chunks {
                 let batch_end =
-                    std::cmp::min(total_chunks_u64, current_chunk.saturating_add(batch_size));
+                    std::cmp::min(total_chunks, current_chunk.saturating_add(batch_size));
 
                 // Read a batch of chunks under a single read lock.
                 let mut batch = Vec::with_capacity((batch_end - current_chunk) as usize);
@@ -681,7 +681,7 @@ where
                     }
                 }
 
-                // Send the batch to the consumer, honoring backpressure from the bounded channel.
+                // Send the batch to the consumer, backpressure ensured by the bounded channel.
                 for chunk in batch {
                     if tx.send(Ok(bytes::Bytes::from(chunk))).await.is_err() {
                         // Consumer dropped (e.g., RPC cancelled or upload failed); stop producing.
