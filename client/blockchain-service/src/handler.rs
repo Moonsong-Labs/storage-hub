@@ -1442,6 +1442,7 @@ where
         let block_number = *notification.header.number();
 
         // Re-subscribe watchers for eligible pending transactions persisted in DB
+        // TODO: Only the MSP instance that is the "leader" should re-subscribe. The other ones are only followers.
         self.resubscribe_pending_transactions_on_startup().await;
 
         // If this is the first block import notification, we might need to catch up.

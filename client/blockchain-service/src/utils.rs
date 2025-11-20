@@ -695,7 +695,7 @@ where
     ///   Decodes `call_scale` only to enrich transaction-manager tracking.
     pub(crate) async fn resubscribe_pending_transactions_on_startup(&mut self) {
         // If DB is not configured, there is nothing to do.
-        let Some(store) = &self.pending_tx_store else {
+        let Some(store) = self.pending_tx_store.clone() else {
             return;
         };
 
@@ -708,7 +708,18 @@ where
         let account_id: AccountId<Runtime> = caller_pub_key.into();
         let account_bytes_owned: Vec<u8> = account_id.as_ref().to_vec();
 
-        // Allowed non-terminal states for re-subscription
+        // On startup, pessimistically mark all pending transactions as not watched.
+        // We will only flip `watched=true` again for rows that end up re-attached.
+        if let Err(e) = store.set_watched_for_all(false).await {
+            warn!(
+                target: LOG_TARGET,
+                "Failed to reset watched flags for pending txs on startup: {:?}",
+                e
+            );
+            return;
+        }
+
+        // Allowed non-terminal states for re-subscription.
         let allowed_states = vec![
             TransactionStatus::Future,
             TransactionStatus::Ready,
@@ -728,6 +739,10 @@ where
             }
         };
 
+        // Collect the nonces that end up being watched so we can perform a single
+        // bulk `watched=true` update at the end.
+        let mut re_watched_nonces: Vec<i64> = Vec::new();
+
         for row in rows {
             let nonce_i64 = row.nonce;
             let watched = self
@@ -740,9 +755,20 @@ where
                     block_number,
                 )
                 .await;
-            // Single DB update per row
-            self.mark_pending_tx_watched(&account_bytes_owned, nonce_i64, watched)
-                .await;
+            if watched {
+                re_watched_nonces.push(nonce_i64);
+            }
+        }
+
+        if let Err(e) = store
+            .set_watched_for_nonces(&account_bytes_owned, &re_watched_nonces, true)
+            .await
+        {
+            error!(
+                target: LOG_TARGET,
+                "Failed to mark re-watched pending txs on startup: {:?}",
+                e
+            );
         }
     }
 
@@ -843,21 +869,6 @@ where
                     e
                 );
                 false
-            }
-        }
-    }
-
-    /// Helper to mark a pending transaction as watched/unwatched in the DB.
-    async fn mark_pending_tx_watched(&self, account_id_bytes: &[u8], nonce: i64, watched: bool) {
-        if let Some(store) = &self.pending_tx_store {
-            if let Err(e) = store.set_watched(account_id_bytes, nonce, watched).await {
-                warn!(
-                    target: LOG_TARGET,
-                    "Failed to mark pending tx (nonce {}) as {}: {:?}",
-                    nonce,
-                    if watched { "watched" } else { "unwatched" },
-                    e
-                );
             }
         }
     }

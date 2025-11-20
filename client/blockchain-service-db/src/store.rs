@@ -186,7 +186,7 @@ impl PendingTxStore {
         Ok(())
     }
 
-    /// Update watched flag for a specific (account_id, nonce)
+    /// Update watched flag for a specific `(account_id, nonce)`.
     pub async fn set_watched(
         &self,
         account_id: &[u8],
@@ -197,6 +197,47 @@ impl PendingTxStore {
         let mut conn = self.pool.get().await.unwrap();
         diesel::update(
             pt::pending_transactions.filter(pt::account_id.eq(account_id).and(pt::nonce.eq(nonce))),
+        )
+        .set(pt::watched.eq(watched))
+        .execute(&mut conn)
+        .await?;
+        Ok(())
+    }
+
+    /// Set the `watched` flag for **all** pending transactions in the table.
+    ///
+    /// This is primarily used on startup to reset watcher state before
+    /// selectively re-marking rows as watched again.
+    pub async fn set_watched_for_all(&self, watched: bool) -> Result<(), diesel::result::Error> {
+        use pending_transactions::dsl as pt;
+        let mut conn = self.pool.get().await.unwrap();
+        diesel::update(pt::pending_transactions)
+            .set(pt::watched.eq(watched))
+            .execute(&mut conn)
+            .await?;
+        Ok(())
+    }
+
+    /// Bulk update the `watched` flag for a set of nonces belonging to a single account.
+    ///
+    /// This allows us to avoid one UPDATE per row when re-attaching watchers
+    /// on startup.
+    pub async fn set_watched_for_nonces(
+        &self,
+        account_id: &[u8],
+        nonces: &[i64],
+        watched: bool,
+    ) -> Result<(), diesel::result::Error> {
+        use pending_transactions::dsl as pt;
+
+        if nonces.is_empty() {
+            return Ok(());
+        }
+
+        let mut conn = self.pool.get().await.unwrap();
+        diesel::update(
+            pt::pending_transactions
+                .filter(pt::account_id.eq(account_id).and(pt::nonce.eq_any(nonces))),
         )
         .set(pt::watched.eq(watched))
         .execute(&mut conn)
