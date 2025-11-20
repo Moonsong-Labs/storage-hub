@@ -688,12 +688,15 @@ where
     ///
     /// Behaviour:
     /// - Loads non-terminal rows for this node's account with states:
-    ///   "future", "ready", "broadcast", "retracted".
-    /// - Filters to only rows with nonce >= on-chain nonce at current best block.
+    ///   "future", "ready", "broadcast", "retracted", "in_block".
     /// - Skips rows with empty `extrinsic_scale` (cannot re-submit for watcher).
     /// - Skips rows already tracked in the transaction manager.
     /// - Re-attaches the watcher by submitAndWatch using stored `extrinsic_scale` (full signed bytes).
     ///   Decodes `call_scale` only to enrich transaction-manager tracking.
+    ///
+    /// If the transaction re-watched returns an InvalidTransactionOutdated error,
+    /// we skip it and do not mark it as watched. That would be the case if a transaction
+    /// we're trying to re-watch is now included in a block. This is an acceptable scenario.
     pub(crate) async fn resubscribe_pending_transactions_on_startup(&mut self) {
         // If DB is not configured, there is nothing to do.
         let Some(store) = self.pending_tx_store.clone() else {
@@ -856,6 +859,10 @@ where
                     self.tx_status_sender.clone(),
                 );
                 true
+            }
+            Err(SubmitAndWatchError::InvalidTransactionOutdated { nonce }) => {
+                info!(target: LOG_TARGET, "Skipping pending tx (nonce {}) because it is outdated", nonce);
+                false
             }
             Err(e) => {
                 warn!(
