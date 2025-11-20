@@ -724,11 +724,10 @@ impl MspService {
         ret
     }
 
-    /// Send an upload request to a specific peer ID of the MSP with retry logic.
     async fn send_upload_request_to_msp(&self, file_key_proof: FileKeyProof) -> Result<(), Error> {
         debug!(
             target: "msp_service::send_upload_request",
-            "Attempting to send upload request to MSP peer"
+            "Attempting to send upload request to MSP"
         );
 
         // Get fhe file metadata from the received FileKeyProof.
@@ -746,7 +745,7 @@ impl MspService {
         let delay_between_retries_secs = self.msp_config.upload_retry_delay_secs;
 
         while retry_attempts < max_retries {
-            debug!(target: "msp_service::send_upload_request_to_msp", "Sending file chunks to MSP peer via RPC");
+            debug!(target: "msp_service::send_upload_request_to_msp", "Sending file chunks to MSP via RPC");
             let result: Result<Vec<u8>, _> = self
                 .rpc
                 .receive_file_chunks(&file_key_hexstr, encoded_proof.clone())
@@ -754,7 +753,7 @@ impl MspService {
 
             match result {
                 Ok(_raw) => {
-                    debug!("Successfully sent upload request to MSP peer");
+                    debug!("Successfully sent upload request to MSP");
                     return Ok(());
                 }
                 Err(e) => {
