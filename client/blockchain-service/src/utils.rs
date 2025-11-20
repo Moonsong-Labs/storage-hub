@@ -50,7 +50,8 @@ use crate::{
     transaction_watchers::spawn_transaction_watcher,
     types::{
         BspHandler, Extrinsic, ManagedProvider, MinimalBlockInfo, MspHandler,
-        NewBlockNotificationKind, SendExtrinsicOptions, SubmittedExtrinsicInfo,
+        NewBlockNotificationKind, SendExtrinsicOptions, SubmitAndWatchError,
+        SubmittedExtrinsicInfo,
     },
     BlockchainService,
 };
@@ -1364,7 +1365,10 @@ where
         extrinsic_encoded: Vec<u8>,
         nonce: u32,
         id_hash: Runtime::Hash,
-    ) -> Result<(Runtime::Hash, tokio::sync::mpsc::Receiver<String>)> {
+    ) -> std::result::Result<
+        (Runtime::Hash, tokio::sync::mpsc::Receiver<String>),
+        SubmitAndWatchError,
+    > {
         // Submit the transaction via RPC
         let (result, rx) = match self
             .rpc_handlers
@@ -1388,7 +1392,9 @@ where
                     nonce,
                     e
                 );
-                return Err(anyhow::anyhow!("RPC query failed: {}", e));
+                return Err(SubmitAndWatchError::RpcTransport {
+                    message: e.to_string(),
+                });
             }
         };
 
@@ -1402,7 +1408,9 @@ where
                     nonce,
                     e
                 );
-                return Err(anyhow::anyhow!("Failed to parse RPC response: {}", e));
+                return Err(SubmitAndWatchError::MalformedResponse {
+                    message: e.to_string(),
+                });
             }
         };
 
@@ -1415,12 +1423,50 @@ where
                     "RPC response is not a JSON object for nonce {}",
                     nonce
                 );
-                return Err(anyhow::anyhow!("RPC response is not a JSON object"));
+                return Err(SubmitAndWatchError::MalformedResponse {
+                    message: "RPC response is not a JSON object".into(),
+                });
             }
         };
 
         if let Some(error) = error {
-            return Err(anyhow::anyhow!("Error in RPC call: {}", error.to_string()));
+            // Try to decode the standard JSON-RPC error shape
+            if let Some(err_obj) = error.as_object() {
+                let code = err_obj
+                    .get("code")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or_default();
+                let message = err_obj
+                    .get("message")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Unknown error")
+                    .to_string();
+                let data_str_opt = err_obj
+                    .get("data")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+
+                // Special-case: Invalid Transaction, Transaction is outdated (code 1010)
+                if code == 1010
+                    && message == "Invalid Transaction"
+                    && data_str_opt
+                        .as_ref()
+                        .map(|s| s.to_ascii_lowercase().contains("outdated"))
+                        .unwrap_or(false)
+                {
+                    return Err(SubmitAndWatchError::InvalidTransactionOutdated { nonce });
+                }
+
+                return Err(SubmitAndWatchError::RpcError {
+                    code,
+                    message,
+                    data: data_str_opt,
+                });
+            } else {
+                return Err(SubmitAndWatchError::MalformedResponse {
+                    message: "RPC error field is not a JSON object".into(),
+                });
+            }
         }
 
         // Return the RPC receiver
