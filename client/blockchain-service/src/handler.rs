@@ -237,6 +237,10 @@ where
 
         // Initialise pending transactions DB store if configured
         self.actor.init_pending_tx_store().await;
+        // Re-subscribe watchers for eligible pending transactions persisted in DB
+        self.actor
+            .resubscribe_pending_transactions_on_startup()
+            .await;
 
         // Import notification stream to be notified of new blocks.
         // The behaviour of this stream is:
@@ -1440,10 +1444,6 @@ where
     async fn handle_initial_sync(&mut self, notification: BlockImportNotification<OpaqueBlock>) {
         let block_hash = notification.hash;
         let block_number = *notification.header.number();
-
-        // Re-subscribe watchers for eligible pending transactions persisted in DB
-        // TODO: Only the MSP instance that is the "leader" should re-subscribe. The other ones are only followers.
-        self.resubscribe_pending_transactions_on_startup().await;
 
         // If this is the first block import notification, we might need to catch up.
         info!(target: LOG_TARGET, "🥱 Handling coming out of sync mode (synced to #{}: {})", block_number, block_hash);
