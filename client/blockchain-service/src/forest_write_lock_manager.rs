@@ -1,8 +1,13 @@
-use crate::events::ForestWriteLockTaskData;
-use shc_common::traits::StorageEnableRuntime;
-use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
-use tokio::sync::{Notify, Semaphore};
+use {
+    crate::{events::ForestWriteLockTaskData, handler::LOG_TARGET},
+    log::{error, trace, warn},
+    shc_common::traits::StorageEnableRuntime,
+    std::{
+        collections::VecDeque,
+        sync::{Arc, Mutex},
+    },
+    tokio::sync::{Notify, Semaphore},
+};
 
 /// Priority value for forest write lock tickets
 #[derive(Clone, Debug)]
@@ -63,7 +68,7 @@ pub struct ForestWriteLockManager<Runtime: StorageEnableRuntime> {
 
 impl<Runtime: StorageEnableRuntime> ForestWriteLockManager<Runtime> {
     /// Creates a new ForestWriteLockManager instance
-    /// - The lock is initialized with a  max single permit semaphore
+    /// - The lock is initialized with a max single permit semaphore
     // TODO: Allow the queue to be pre-populated with existing tickets if necessary
     pub fn new() -> Self {
         Self {
@@ -100,35 +105,47 @@ impl<Runtime: StorageEnableRuntime> ForestWriteLockManager<Runtime> {
         // If the ticket is at the front of the queue, try to acquire the lock
         // Otherwise, wait until it's our turn
         loop {
-            let permit = self.lock.acquire().await.unwrap();
-
-            let should_proceed = {
-                let mut queue = self.queue.lock().unwrap();
-                if let Some(next_task) = queue.front() {
-                    if next_task.id == ticket.id {
-                        queue.pop_front();
-                        true
+            if let Ok(permit) = self.lock.acquire().await {
+                if self.should_aquire_lock(&ticket) {
+                    if let Ok(mut current_holder) = self.current_holder.try_lock() {
+                        *current_holder = Some(ticket.clone());
+                        permit.forget(); // Will be released manually when the guard is dropped
+                        break;
                     } else {
-                        false
+                        warn!(target: LOG_TARGET, "TicketId {}: Failed to acquire lock on the current holder when acquiring forest write lock", ticket.id);
+                        drop(permit);
                     }
                 } else {
-                    false
+                    drop(permit);
                 }
-            };
-
-            if should_proceed {
-                *self.current_holder.lock().unwrap() = Some(ticket);
-                permit.forget(); // We'll manually release when guard is dropped
-                break;
             } else {
-                // Not our turn, wait for notification
-                drop(permit);
-                self.notifier.notified().await;
+                warn!(target: LOG_TARGET,"TicketId {}: Failed to acquire forest write lock semaphore", ticket.id);
             }
+            // Not our turn, wait for notification
+            self.notifier.notified().await;
         }
 
         ForestWriteLockGuard {
             manager: Arc::new(self.clone()),
+            ticket_id: ticket.id,
+        }
+    }
+
+    fn should_aquire_lock(&self, ticket: &ForestWriteLockTicket<Runtime>) -> bool {
+        if let Ok(mut queue) = self.queue.try_lock() {
+            if let Some(next_task) = queue.front() {
+                if next_task.id == ticket.id {
+                    queue.pop_front();
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        } else {
+            warn!(target: LOG_TARGET, "TicketId {}: Failed to acquire lock on the queue to check next ticket", ticket.id);
+            false
         }
     }
 
@@ -137,50 +154,51 @@ impl<Runtime: StorageEnableRuntime> ForestWriteLockManager<Runtime> {
     /// - Medium priority tickets are placed before any low priority tickets
     /// - Low priority tickets are placed at the back of the queue
     fn enqueue(&self, ticket: ForestWriteLockTicket<Runtime>) {
-        let mut queue = self.queue.lock().unwrap();
-        match ticket.priority {
-            ForestWriteLockPriority::Low => queue.push_back(ticket),
-            ForestWriteLockPriority::Medium => {
-                let insert_pos = queue
-                    .iter()
-                    .position(|item| matches!(item.priority, ForestWriteLockPriority::Low))
-                    .unwrap_or(queue.len());
-                queue.insert(insert_pos, ticket);
+        if let Ok(mut queue) = self.queue.try_lock() {
+            match ticket.priority {
+                ForestWriteLockPriority::Low => queue.push_back(ticket),
+                ForestWriteLockPriority::Medium => {
+                    let insert_pos = queue
+                        .iter()
+                        .position(|item| matches!(item.priority, ForestWriteLockPriority::Low))
+                        .unwrap_or(queue.len());
+                    queue.insert(insert_pos, ticket);
+                }
+                ForestWriteLockPriority::High => {
+                    let insert_pos = queue
+                        .iter()
+                        .position(|item| {
+                            matches!(
+                                item.priority,
+                                ForestWriteLockPriority::Medium | ForestWriteLockPriority::Low
+                            )
+                        })
+                        .unwrap_or(queue.len());
+                    queue.insert(insert_pos, ticket);
+                }
             }
-            ForestWriteLockPriority::High => {
-                let insert_pos = queue
-                    .iter()
-                    .position(|item| {
-                        matches!(
-                            item.priority,
-                            ForestWriteLockPriority::Medium | ForestWriteLockPriority::Low
-                        )
-                    })
-                    .unwrap_or(queue.len());
-                queue.insert(insert_pos, ticket);
-            }
+        } else {
+            error!(target: LOG_TARGET,"TicketId {}, Failed to acquire lock on the queue to enqueue ticket", ticket.id);
         }
     }
 }
 #[derive(Debug)]
 pub struct ForestWriteLockGuard<Runtime: StorageEnableRuntime> {
     manager: Arc<ForestWriteLockManager<Runtime>>,
+    ticket_id: String,
 }
+
 impl<Runtime: StorageEnableRuntime> Drop for ForestWriteLockGuard<Runtime> {
     /// Release the semaphore permit when the guard is dropped and acquire the next ticket if available
     fn drop(&mut self) {
         // Release the permit back to the semaphore
         self.manager.lock.add_permits(1);
         // Clear the current holder
-        *self.manager.current_holder.lock().unwrap() = None;
-        // Notify next waiter
+        if let Ok(mut holder) = self.manager.current_holder.try_lock() {
+            *holder = None;
+        };
+        // Notify next ticket in the queue
         self.manager.notifier.notify_one();
+        trace!(target: LOG_TARGET, "TicketId {}: Forest root write lock released by ticket", self.ticket_id);
     }
 }
-
-// TODO: Implement unit tests for ForestWriteLockManager and ForestWriteLockGuard
-// Verify that:
-// a) With empty queue, acquire grants the lock immediately
-// b) With non-empty queue, and free lock, the lock is granted to the next ticket in the queue
-// c) With non-empty queue, and occupied lock, the ticket is enqueued correctly based
-// d) Dropping the guard releases the lock and allows the next ticket to acquire it
