@@ -699,8 +699,6 @@ where
             return;
         };
 
-        let best_hash = self.client.info().best_hash;
-        let on_chain_nonce = self.account_nonce(&best_hash);
         let block_number = self.client.info().best_number.saturated_into();
 
         // Resolve our account id bytes to filter by account in DB
@@ -754,7 +752,6 @@ where
                     &row.extrinsic_scale,
                     &row.call_scale,
                     &row.state,
-                    on_chain_nonce as i64,
                     block_number,
                 )
                 .await;
@@ -783,13 +780,8 @@ where
         extrinsic_scale: &[u8],
         call_scale: &[u8],
         state: &str,
-        on_chain_nonce_i64: i64,
         block_number: BlockNumber<Runtime>,
     ) -> bool {
-        // Skip if nonce below on-chain nonce
-        if nonce_i64 < on_chain_nonce_i64 {
-            return false;
-        }
         // Convert nonce to u32 bound used by manager/watcher
         let nonce_u32 = match u32::try_from(nonce_i64) {
             Ok(n) => n,
