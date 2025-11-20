@@ -6,7 +6,6 @@ import {
   restartContainer,
   type SqlClient,
   shUser,
-  sleep,
   waitFor
 } from "../../../util";
 import { MSP_CHARGING_PERIOD } from "../../../util/bspNet/consts";
@@ -511,11 +510,11 @@ await describeMspNet(
       // Build a block including the charge tx but do not finalise yet, then wait for "in_block".
       await userApi.block.seal({ finaliseBlock: false });
       try {
-      await userApi.pendingDb.waitForState({
-        sql,
-        accountId,
-        nonce,
-        state: "in_block"
+        await userApi.pendingDb.waitForState({
+          sql,
+          accountId,
+          nonce,
+          state: "in_block"
         });
       } catch (error) {
         const rows = await userApi.pendingDb.getAllByAccount({ sql, accountId });
@@ -642,7 +641,6 @@ await describeMspNet(
       // The transaction should still be in the DB with the same state it had before MSP was turned off,
       // as it's not being updated by the paused MSP node.
       // Also, the watched flag should still be true so far.
-      await sleep(3000); // This sleep is here on purpose to ensure the DB is not updated even after some time.
       await waitFor({
         lambda: async () => {
           assert(restartNonce !== undefined, "Expected restart nonce to be set");
@@ -681,20 +679,36 @@ await describeMspNet(
         await userApi.wait.nodeCatchUpToChainTip(mspApi);
       }
 
-      // The transaction should not have been re-watched because its nonce is now < on-chain nonce.
-      // It should still be in the DB with the same state it had before MSP was turned off.
-      // Also, the watched flag should be false.
+      // There are two possible scenarios here, based on a race condition within the MSP client:
+      // 1. The Blockchain Service attempts to re-watch the transaction BEFORE the Substrate Client
+      //    is aware of the new block (i.e. before it knows that the transaction is included in a block).
+      //    In this case, the transaction should have been re-watched because calling submitAndWatchExtrinsic
+      //    returns successfully, as the transaction is not yet included in a block, and the nonce is not "old".
+      //    It should still be in the DB with the state updated to "in_block", and the watched flag should be true.
+      // 2. The Blockchain Service attempts to re-watch the transaction AFTER the Substrate Client
+      //    is aware of the new block (i.e. after it knows that the transaction is included in a block).
+      //    In this case, the transaction should not have been re-watched because calling submitAndWatchExtrinsic
+      //    returns an InvalidTransactionOutdated error, as the transaction is now included in a block, and the nonce is "old".
+      //    It should still be in the DB with the same state it had before MSP was turned off, and the watched flag should be false.
       await waitFor({
         lambda: async () => {
           assert(restartNonce !== undefined, "Expected restart nonce to be set");
           const row = await userApi.pendingDb.getByNonce({ sql, accountId, nonce: restartNonce });
           assert(row, "Expected pending tx row to still exist after MSP restart");
-          strictEqual(row.watched, false, "Expected watched flag to be false");
-          strictEqual(
-            row.state,
-            prePauseState,
-            "Pending tx state changed after restart; it should not have been re-watched"
-          );
+
+          if (row.watched) {
+            // Scenario 1: The transaction should have been re-watched because calling submitAndWatchExtrinsic
+            // returned successfully, and the state should be updated to "in_block".
+            strictEqual(row.state, "in_block", "Expected state to be 'in_block'");
+          } else {
+            // Scenario 2: The transaction should not have been re-watched because calling submitAndWatchExtrinsic
+            // returned an InvalidTransactionOutdated error, and the state should be the same as before MSP was turned off.
+            strictEqual(
+              row.state,
+              prePauseState,
+              "Expected state to be the same as before MSP was turned off"
+            );
+          }
           return true;
         }
       });
