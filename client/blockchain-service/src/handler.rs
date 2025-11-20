@@ -238,6 +238,7 @@ where
         // Initialise pending transactions DB store if configured
         self.actor.init_pending_tx_store().await;
         // Re-subscribe watchers for eligible pending transactions persisted in DB
+        // TODO: Only the MSP instance that is the "leader" should re-subscribe. The other ones are only followers.
         self.actor
             .resubscribe_pending_transactions_on_startup()
             .await;

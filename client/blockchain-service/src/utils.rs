@@ -720,10 +720,13 @@ where
         }
 
         // Allowed non-terminal states for re-subscription.
+        // For transactions that are InBlock, we attempt to re-subscribe in case they were retracted
+        // while this node was out of sync.
         let allowed_states = vec![
             TransactionStatus::Future,
             TransactionStatus::Ready,
-            TransactionStatus::Broadcast(vec![]),
+            TransactionStatus::Broadcast(Default::default()),
+            TransactionStatus::InBlock(Default::default()),
             TransactionStatus::Retracted(Default::default()),
         ];
 
@@ -864,8 +867,9 @@ where
             Err(e) => {
                 warn!(
                     target: LOG_TARGET,
-                    "Failed to submitAndWatch for pending tx (nonce {}): {:?}",
+                    "Failed to re-watch with submitAndWatchExtrinsic for pending tx (nonce {}, old status '{}'): {:?}",
                     nonce_u32,
+                    state,
                     e
                 );
                 false
