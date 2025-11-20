@@ -27,7 +27,8 @@ use sp_runtime::{
 };
 
 use crate::{
-    commands::BlockchainServiceCommandInterfaceExt, handler::LOG_TARGET,
+    commands::BlockchainServiceCommandInterfaceExt,
+    forest_write_lock_manager::ForestWriteLockManager, handler::LOG_TARGET,
     transaction_manager::wait_for_transaction_status,
 };
 
@@ -765,6 +766,8 @@ pub struct BspHandler<Runtime: StorageEnableRuntime> {
     /// thread (Blockchain Service) and unlock it at the end of the spawned task. The alternative
     /// would be to send a [`MutexGuard`].
     pub(crate) forest_root_write_lock: Option<tokio::sync::oneshot::Receiver<()>>,
+    ///  Forest write lock manager, to prevent multiple tasks from writing to the runtime forest root (send transactions) concurrently.
+    pub(crate) forest_write_lock_manager: ForestWriteLockManager<Runtime>,
     /// A set of Forest Storage snapshots, ordered by block number and block hash.
     ///
     /// A BSP can have multiple Forest Storage snapshots.
@@ -778,6 +781,7 @@ impl<Runtime: StorageEnableRuntime> BspHandler<Runtime> {
         Self {
             bsp_id,
             pending_submit_proof_requests: BTreeSet::new(),
+            forest_write_lock_manager: ForestWriteLockManager::new(),
             forest_root_write_lock: None,
             forest_root_snapshots: BTreeSet::new(),
         }
@@ -798,6 +802,8 @@ pub struct MspHandler<Runtime: StorageEnableRuntime> {
     /// thread (Blockchain Service) and unlock it at the end of the spawned task. The alternative
     /// would be to send a [`MutexGuard`].
     pub(crate) forest_root_write_lock: Option<tokio::sync::oneshot::Receiver<()>>,
+    ///  Forest write lock manager, to prevent multiple tasks from writing to the runtime forest root (send transactions) concurrently.
+    pub(crate) forest_write_lock_manager: ForestWriteLockManager<Runtime>,
     /// A map of [`BucketId`] to the Forest Storage snapshots.
     ///
     /// Forest Storage snapshots are stored in a BTreeSet, ordered by block number and block hash.
@@ -818,6 +824,7 @@ impl<Runtime: StorageEnableRuntime> MspHandler<Runtime> {
         Self {
             msp_id,
             forest_root_write_lock: None,
+            forest_write_lock_manager: ForestWriteLockManager::new(),
             forest_root_snapshots: BTreeMap::new(),
             files_to_distribute: HashMap::new(),
         }
