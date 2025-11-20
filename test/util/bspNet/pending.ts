@@ -25,7 +25,7 @@ export const getByNonce = async (options: { sql: SqlClient; accountId: Buffer; n
 export const getAllByAccount = async (options: { sql: SqlClient; accountId: Buffer }) => {
   const { sql, accountId } = options;
   const rows = await sql`
-    SELECT account_id, nonce, hash, call_scale, state, creator_id, created_at, updated_at
+    SELECT account_id, nonce, hash, call_scale, state, creator_id, created_at, updated_at, watched
     FROM pending_transactions
     WHERE account_id = ${accountId}
     ORDER BY nonce

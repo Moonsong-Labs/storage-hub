@@ -510,12 +510,25 @@ await describeMspNet(
 
       // Build a block including the charge tx but do not finalise yet, then wait for "in_block".
       await userApi.block.seal({ finaliseBlock: false });
+      try {
       await userApi.pendingDb.waitForState({
         sql,
         accountId,
         nonce,
         state: "in_block"
-      });
+        });
+      } catch (error) {
+        const rows = await userApi.pendingDb.getAllByAccount({ sql, accountId });
+        // eslint-disable-next-line no-console
+        console.error(
+          "[multi-msp-instances] Failed while waiting for non-terminal charge tx before MSP restart",
+          {
+            accountId: mspAddress,
+            rows
+          }
+        );
+        throw error;
+      }
 
       // Finalise the block on user and MSP nodes, then wait for "finalized".
       const latestHeader = await userApi.rpc.chain.getHeader();
@@ -676,12 +689,12 @@ await describeMspNet(
           assert(restartNonce !== undefined, "Expected restart nonce to be set");
           const row = await userApi.pendingDb.getByNonce({ sql, accountId, nonce: restartNonce });
           assert(row, "Expected pending tx row to still exist after MSP restart");
+          strictEqual(row.watched, false, "Expected watched flag to be false");
           strictEqual(
             row.state,
             prePauseState,
             "Pending tx state changed after restart; it should not have been re-watched"
           );
-          strictEqual(row.watched, false, "Expected watched flag to be false");
           return true;
         }
       });
