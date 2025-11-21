@@ -31,6 +31,7 @@ use pallet_storage_providers_runtime_api::{
     QueryProviderMultiaddressesError, QueryStorageProviderCapacityError, StorageProvidersApi,
 };
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
+use shc_blockchain_service_db::store::PendingTxStore;
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
@@ -80,6 +81,8 @@ where
     /// This is used to detect when the BlockchainService gets out of syncing mode and should therefore
     /// run some initialisation tasks. Also used to detect reorgs.
     pub(crate) best_block: MinimalBlockInfo<Runtime>,
+    /// The hash and number of the last finalised block processed by the BlockchainService.
+    pub(crate) last_finalised_block_processed: MinimalBlockInfo<Runtime>,
     /// Nonce counter for the extrinsics.
     pub(crate) nonce_counter: u32,
     /// A registry of waiters for a block number.
@@ -118,6 +121,8 @@ where
         Runtime::Hash,
         TransactionStatus<Runtime::Hash, Runtime::Hash>,
     )>,
+    /// Optional pending tx store (Postgres). When present, tx sends and cleanups are persisted.
+    pub(crate) pending_tx_store: Option<PendingTxStore>,
 }
 
 #[derive(Debug, Clone)]
@@ -151,6 +156,8 @@ where
     /// If set to `false`, MSP distribution tasks will be disabled even if the node
     /// is otherwise configured as a distributor (e.g. has a peer_id).
     pub enable_msp_distribute_files: bool,
+    /// Optional Postgres URL for the pending transactions DB. If None, DB is disabled.
+    pub pending_db_url: Option<String>,
 }
 
 impl<Runtime> Default for BlockchainServiceConfig<Runtime>
@@ -165,6 +172,7 @@ where
             max_blocks_behind_to_catch_up_root_changes: 10u32.into(),
             peer_id: None,
             enable_msp_distribute_files: false,
+            pending_db_url: None,
         }
     }
 }
@@ -227,6 +235,14 @@ where
     async fn run(mut self) {
         info!(target: LOG_TARGET, "💾 StorageHub's Blockchain Service starting up!");
 
+        // Initialise pending transactions DB store if configured
+        self.actor.init_pending_tx_store().await;
+        // Re-subscribe watchers for eligible pending transactions persisted in DB
+        // TODO: Only the MSP instance that is the "leader" should re-subscribe. The other ones are only followers.
+        self.actor
+            .resubscribe_pending_transactions_on_startup()
+            .await;
+
         // Import notification stream to be notified of new blocks.
         // The behaviour of this stream is:
         // 1. While the node is syncing to the tip of the chain (initial sync, i.e. it just started
@@ -276,7 +292,8 @@ where
                 }
                 MergedEventLoopMessage::TxStatusUpdate((nonce, tx_hash, status)) => {
                     self.actor
-                        .handle_transaction_status_update(nonce, tx_hash, status);
+                        .handle_transaction_status_update(nonce, tx_hash, status)
+                        .await;
                 }
             };
         }
@@ -1376,6 +1393,7 @@ where
         capacity_request_queue: Option<CapacityRequestQueue<Runtime>>,
         maintenance_mode: bool,
     ) -> Self {
+        let genesis_hash = client.info().genesis_hash;
         Self {
             config,
             event_bus_provider: BlockchainServiceEventBusProvider::new(),
@@ -1383,7 +1401,14 @@ where
             keystore,
             rpc_handlers,
             forest_storage_handler,
-            best_block: MinimalBlockInfo::default(),
+            best_block: MinimalBlockInfo {
+                number: 0u32.into(),
+                hash: genesis_hash,
+            },
+            last_finalised_block_processed: MinimalBlockInfo {
+                number: 0u32.into(),
+                hash: genesis_hash,
+            },
             nonce_counter: 0,
             wait_for_block_request_by_number: BTreeMap::new(),
             wait_for_tick_request_by_number: BTreeMap::new(),
@@ -1398,6 +1423,7 @@ where
                 let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
                 tx
             },
+            pending_tx_store: None,
         }
     }
 
@@ -1502,13 +1528,10 @@ where
     ) {
         trace!(target: LOG_TARGET, "📠 Processing block import #{}: {}", block_number, block_hash);
 
-        // Clean up the stale nonce gaps in the transaction manager
-        let on_chain_nonce = self.account_nonce(&self.client.info().best_hash);
-        self.transaction_manager
-            .cleanup_stale_nonce_gaps(on_chain_nonce);
-
-        // Handle old nonce gaps that haven't been filled in the transaction manager
-        self.handle_old_nonce_gaps(*block_number).await;
+        // Cleanup manager and DB, and handle old nonce gaps in one helper
+        // TODO: Consider doing this in a spawned task to avoid blocking the main thread.
+        self.cleanup_tx_manager_and_handle_nonce_gaps(*block_number, *block_hash)
+            .await;
 
         // Provider-specific code to run at the start of every block import.
         match self.maybe_managed_provider {
@@ -1657,5 +1680,18 @@ where
                 error!(target: LOG_TARGET, "Failed to get events storage element: {:?}", e);
             }
         }
+
+        // Cleanup the pending transaction store for the last finalised block processed.
+        // Transactions with a nonce below the on-chain nonce of this block are finalised.
+        // Still, we'll delete up to the last finalised block processed, to leave transactions with
+        // a terminal state in the pending DB for a short period of time.
+        self.cleanup_pending_tx_store(self.last_finalised_block_processed.hash)
+            .await;
+
+        // Update the last finalised block processed.
+        self.last_finalised_block_processed = MinimalBlockInfo {
+            number: block_number.saturated_into(),
+            hash: block_hash,
+        };
     }
 }
