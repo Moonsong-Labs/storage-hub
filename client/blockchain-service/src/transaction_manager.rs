@@ -37,7 +37,7 @@ pub struct PendingTransaction<Hash, Call, BlockNumber> {
     /// Hash of the transaction.
     pub hash: Hash,
     /// The extrinsic call.
-    pub call: Call,
+    pub call: Option<Call>,
     /// The tip used when submitting this transaction.
     pub tip: u128,
     /// Block number when transaction was submitted.
@@ -106,7 +106,7 @@ where
         &mut self,
         nonce: u32,
         hash: Hash,
-        call: Call,
+        call: Option<Call>,
         tip: u128,
         submitted_at: BlockNumber,
     ) -> Result<()> {

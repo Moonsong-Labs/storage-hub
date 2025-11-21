@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS pending_transactions (
   account_id BYTEA NOT NULL,
   nonce BIGINT NOT NULL,
   hash BYTEA NOT NULL,
-  call_scale BYTEA NOT NULL,
+  call_scale BYTEA NULL,
   -- Full signed extrinsic bytes for re-subscription on restart
   extrinsic_scale BYTEA NOT NULL,
   -- Whether the node is actively watching this transaction via RPC subscription
