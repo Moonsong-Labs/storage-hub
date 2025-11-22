@@ -16,7 +16,9 @@ use sp_runtime::traits::{CheckedAdd, CheckedSub, SaturatedConversion, Zero};
 
 use pallet_file_system::types::RejectedStorageRequest;
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::events::ProcessMspRespondStoringRequest;
+use shc_blockchain_service::events::{
+    BatchProcessStorageRequests, ProcessMspRespondStoringRequest,
+};
 use shc_blockchain_service::{
     commands::{BlockchainServiceCommandInterface, BlockchainServiceCommandInterfaceExt},
     events::NewStorageRequest,
@@ -125,39 +127,6 @@ where
     pub fn with_config(mut self, config: MspUploadFileConfig) -> Self {
         self.config = config;
         self
-    }
-}
-
-/// Handles the [`NewStorageRequest`] event.
-///
-/// This event is triggered by an on-chain event of a user submitting a storage request to StorageHub.
-///
-/// This task will:
-/// - Check if the MSP has enough storage capacity to store the file and increase it if necessary (up to a maximum).
-/// - Register the user and file key in the registry of the File Transfer Service, which handles incoming p2p
-/// upload requests.
-impl<NT, Runtime> EventHandler<NewStorageRequest<Runtime>> for MspUploadFileTask<NT, Runtime>
-where
-    NT: ShNodeType<Runtime> + 'static,
-    NT::FSH: MspForestStorageHandlerT<Runtime>,
-    Runtime: StorageEnableRuntime,
-{
-    async fn handle_event(&mut self, event: NewStorageRequest<Runtime>) -> anyhow::Result<()> {
-        info!(
-            target: LOG_TARGET,
-            "Registering user peer for file_key {:x}, location 0x{}, fingerprint {:x}",
-            event.file_key,
-            hex::encode(event.location.as_slice()),
-            event.fingerprint
-        );
-
-        let result = self.handle_new_storage_request_event(event).await;
-        if result.is_err() {
-            if let Some(file_key) = &self.file_key_cleanup {
-                self.unregister_file(*file_key).await?;
-            }
-        }
-        result
     }
 }
 
@@ -446,6 +415,64 @@ where
     }
 }
 
+/// Handles the [`BatchProcessStorageRequests`] event.
+///
+/// This event is triggered periodically by the BlockchainService to process pending storage requests
+/// that may have been missed. The handler queries the runtime for pending storage requests and processes
+/// each one using the existing `handle_new_storage_request_event` logic.
+impl<NT, Runtime> EventHandler<BatchProcessStorageRequests> for MspUploadFileTask<NT, Runtime>
+where
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
+{
+    async fn handle_event(&mut self, event: BatchProcessStorageRequests) -> anyhow::Result<()> {
+        // Hold the Arc reference to the permit for the lifetime of this handler
+        // The permit will be automatically released when this handler completes or fails
+        // (when the Arc is dropped, the permit is dropped, releasing the semaphore)
+        let _permit_arc = event.permit;
+
+        info!(
+            target: LOG_TARGET,
+            "Processing batch storage requests"
+        );
+
+        // Query pending storage requests from the blockchain service
+        let pending_requests = self
+            .storage_hub_handler
+            .blockchain
+            .query_pending_storage_requests()
+            .await
+            .map_err(|e| anyhow!("Failed to query pending storage requests: {:?}", e))?;
+
+        info!(
+            target: LOG_TARGET,
+            "Found {} pending storage requests to process",
+            pending_requests.len()
+        );
+
+        // Process each pending storage request using the existing logic
+        for request in pending_requests {
+            if let Err(e) = self.handle_new_storage_request_event(request).await {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to process storage request in batch: {:?}",
+                    e
+                );
+                // Continue processing other requests even if one fails
+            }
+        }
+
+        info!(
+            target: LOG_TARGET,
+            "Completed batch processing of storage requests"
+        );
+
+        // Permit is automatically released when handler returns
+        Ok(())
+    }
+}
+
 impl<NT, Runtime> MspUploadFileTask<NT, Runtime>
 where
     NT: ShNodeType<Runtime>,
@@ -689,10 +716,14 @@ where
             debug!(target: LOG_TARGET, "File key {:?} found in file storage.", file_key);
         }
 
-        // If the file is in both file storage and forest storage, we can skip the file transfer,
+        // If the file is in file storage, we can skip the file transfer,
         // and proceed to accepting the storage request directly, provided that we have the entire file in file storage.
-        if file_in_file_storage && file_in_forest_storage {
-            info!(target: LOG_TARGET, "File key {:?} found in both file storage and forest storage. No need to receive the file from the user.", file_key);
+        if file_in_file_storage {
+            info!(target: LOG_TARGET, "File key {:?} found in both file storage. No need to receive the file from the user.", file_key);
+
+            if file_in_forest_storage {
+                warn!(target: LOG_TARGET, "File key {:?} found in forest storage when storage request is still open. This is an odd state as the file key should not be in the forest storage until the storage request is accepted.", file_key);
+            }
 
             // Check if the file is complete in file storage.
             let file_complete = match write_file_storage.is_file_complete(&file_key.into()) {
