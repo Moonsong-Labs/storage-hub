@@ -15,7 +15,13 @@ import {
 import { MspClient } from "@storagehub-sdk/msp-client";
 import { createPublicClient, createWalletClient, defineChain, getAddress, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { describeMspNet, type EnrichedBspApi, ShConsts, type SqlClient } from "../../../util";
+import {
+  describeMspNet,
+  type EnrichedBspApi,
+  ShConsts,
+  waitFor,
+  type SqlClient
+} from "../../../util";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import { ALITH_PRIVATE_KEY } from "../../../util/evmNet/keyring";
 
@@ -316,15 +322,11 @@ await describeMspNet(
       // Also verify through SDK / MSP backend endpoints
       const listedBuckets = await mspClient.buckets.listBuckets();
       assert(
-        listedBuckets.some((b) => `0x${b.bucketId}` === bucketId),
+        listedBuckets.some((b) => b.bucketId === bucketId),
         "MSP listBuckets should include the created bucket"
       );
       const sdkBucket = await mspClient.buckets.getBucket(bucketId);
-      strictEqual(
-        `0x${sdkBucket.bucketId}`,
-        bucketId,
-        "MSP getBucket should return the created bucket"
-      );
+      strictEqual(sdkBucket.bucketId, bucketId, "MSP getBucket should return the created bucket");
     });
 
     it("Should issue a storage request for Adolphus.jpg using the SDK's StorageHubClient", async () => {
@@ -399,6 +401,11 @@ await describeMspNet(
     });
 
     it("Should upload the file to the MSP through the backend using the SDK's StorageHubClient", async () => {
+      // Ensure the MSP expects this file key before attempting upload to the backend
+      await waitFor({
+        lambda: async () => (await msp1Api.rpc.storagehubclient.isFileKeyExpected(fileKey)).isTrue
+      });
+
       // Try to upload the file to the MSP through the SDK's MspClient that uses the MSP backend
       const uploadResponse = await mspClient.files.uploadFile(
         bucketId,
@@ -472,8 +479,8 @@ await describeMspNet(
         "file tree should not be empty"
       );
       const fileInfo = await mspClient.files.getFileInfo(bucketId, fileKey.toHex());
-      strictEqual(`0x${fileInfo.bucketId}`, bucketId, "BucketId should match");
-      strictEqual(`0x${fileInfo.fileKey}`, fileKey.toHex(), "FileKey should match");
+      strictEqual(fileInfo.bucketId, bucketId, "BucketId should match");
+      strictEqual(fileInfo.fileKey, fileKey.toHex(), "FileKey should match");
     });
 
     it("Should fetch payment streams using the SDK's MspClient", async () => {
