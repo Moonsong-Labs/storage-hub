@@ -1702,9 +1702,9 @@ dependencies = [
 
 [[package]]
 name = "cfg-if"
-version = "1.0.3"
+version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2fd1289c04a9ea8cb22300a459a72a385d7c73d3259e2ed7dcb2af674838cfa9"
+checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
 name = "cfg_aliases"
@@ -16052,16 +16052,19 @@ dependencies = [
  "axum-test",
  "base64 0.21.7",
  "bigdecimal",
+ "cfg-if",
  "chrono",
  "diesel",
  "diesel-async",
  "diesel_migrations",
+ "frame-support 39.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "futures",
  "headers",
  "hex",
  "hex-literal",
  "jsonrpsee 0.24.9",
  "jsonwebtoken",
+ "pallet-storage-providers",
  "parity-scale-codec",
  "parking_lot 0.12.4",
  "rand 0.8.5",
@@ -16073,6 +16076,7 @@ dependencies = [
  "sc-network-types",
  "serde",
  "serde_json",
+ "sh-solochain-evm-runtime",
  "shc-common",
  "shc-file-manager",
  "shc-indexer-db",
