@@ -19,7 +19,6 @@ import {
   type GetContractReturnType,
   hexToBytes,
   http,
-  keccak256,
   parseGwei,
   type PublicClient,
   stringToBytes,
@@ -180,10 +179,6 @@ export class StorageHubClient {
     }
 
     const serialized = new Uint8Array([...fileKeyBytes, operation]);
-    // TODO: we need to replace this with signMessage or EIP-712 (sign structure data)
-    // we cannot sign this raw message/bytes with Metamask or any other EIP1193 wallet
-    // const hash = keccak256(serialized);
-    // const signature = await this.walletClient.account!.sign!({ hash });
     if (!this.walletClient.account) {
       throw new Error("Wallet client must have an account to sign messages");
     }

@@ -64,7 +64,9 @@
     "test:backend": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/integration/backend/**.test.ts",
     "test:backend:only": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test --test-only ./suites/integration/backend/**.test.ts",
     "test:indexer": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/integration/indexer/**.test.ts",
-    "test:indexer:only": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test --test-only ./suites/integration/indexer/**.test.ts"
+    "test:indexer:only": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test --test-only ./suites/integration/indexer/**.test.ts",
+    "test:perf": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/benchmarking/**.test.ts",
+    "test:benchmark": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/benchmarking/**.test.ts"
   },
   "keywords": [],
   "author": "",
