@@ -341,7 +341,7 @@ where
         // Release the forest root write "lock" and finish the task.
         self.storage_hub_handler
             .blockchain
-            .release_forest_root_write_lock(forest_root_write_tx)
+            .release_forest_root_write_lock(forest_root_write_tx, None)
             .await
     }
 }

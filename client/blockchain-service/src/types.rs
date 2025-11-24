@@ -766,8 +766,8 @@ pub struct BspHandler<Runtime: StorageEnableRuntime> {
     /// thread (Blockchain Service) and unlock it at the end of the spawned task. The alternative
     /// would be to send a [`MutexGuard`].
     pub(crate) forest_root_write_lock: Option<tokio::sync::oneshot::Receiver<()>>,
-    ///  Forest write lock manager, to prevent multiple tasks from writing to the runtime forest root (send transactions) concurrently.
-    pub(crate) forest_write_lock_manager: ForestWriteLockManager<Runtime>,
+    // TODO: Use  Forest write lock manager, to prevent multiple tasks from writing to the runtime forest root (send transactions) concurrently.
+    //pub(crate) forest_write_lock_manager: ForestWriteLockManager<Runtime>,
     /// A set of Forest Storage snapshots, ordered by block number and block hash.
     ///
     /// A BSP can have multiple Forest Storage snapshots.
@@ -781,7 +781,7 @@ impl<Runtime: StorageEnableRuntime> BspHandler<Runtime> {
         Self {
             bsp_id,
             pending_submit_proof_requests: BTreeSet::new(),
-            forest_write_lock_manager: ForestWriteLockManager::new(),
+            //forest_write_lock_manager: ForestWriteLockManager::new(),
             forest_root_write_lock: None,
             forest_root_snapshots: BTreeSet::new(),
         }

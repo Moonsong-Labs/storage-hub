@@ -4,6 +4,10 @@ use codec::{Decode, Encode};
 use sc_network::Multiaddr;
 use tokio::sync::{oneshot, Mutex};
 
+use crate::forest_write_lock_manager::ForestWriteLockManager;
+use crate::types::{
+    ConfirmStoringRequest, FileDeletionRequest as FileDeletionRequestType, RespondStorageRequest,
+};
 use shc_actors_derive::{ActorEvent, ActorEventBus};
 use shc_common::{
     traits::StorageEnableRuntime,
@@ -12,10 +16,6 @@ use shc_common::{
         FileLocation, Fingerprint, Hash, PeerIds, ProofsDealerProviderId, ProviderId,
         RandomnessOutput, StorageDataUnit, TickNumber, TrieMutation, ValuePropId,
     },
-};
-
-use crate::types::{
-    ConfirmStoringRequest, FileDeletionRequest as FileDeletionRequestType, RespondStorageRequest,
 };
 
 // TODO: Add the events from the `pallet-cr-randomness` here to process them in the BlockchainService.
@@ -174,6 +174,7 @@ pub struct ProcessMspRespondStoringRequestData<Runtime: StorageEnableRuntime> {
 pub struct ProcessMspRespondStoringRequest<Runtime: StorageEnableRuntime> {
     pub data: ProcessMspRespondStoringRequestData<Runtime>,
     pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    pub forest_write_lock_manager: Arc<Mutex<ForestWriteLockManager<Runtime>>>,
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
