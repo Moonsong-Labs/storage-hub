@@ -309,10 +309,21 @@ where
         // This is done in a closure to avoid borrowing `self` immutably and then mutably.
         // Inside of this closure, we borrow `self` mutably when taking ownership of the lock.
         {
-            let forest_root_write_lock = match &mut self.maybe_managed_provider {
-                Some(ManagedProvider::Msp(msp_handler)) => &mut msp_handler.forest_root_write_lock,
-                _ => unreachable!("We just checked this is a MSP"),
-            };
+            let (forest_root_write_lock, forest_write_lock_manager) =
+                match &mut self.maybe_managed_provider {
+                    Some(ManagedProvider::Msp(msp_handler)) => (
+                        &mut msp_handler.forest_root_write_lock,
+                        &mut msp_handler.forest_write_lock_manager,
+                    ),
+                    _ => unreachable!("We just checked this is a MSP"),
+                };
+
+            if !forest_write_lock_manager.is_available() {
+                trace!(target: LOG_TARGET, "Waiting for current Forest root write task to finish");
+                return;
+            } else {
+                trace!(target: LOG_TARGET, "Forest root write task finished, lock is released!");
+            }
 
             if let Some(mut rx) = forest_root_write_lock.take() {
                 // Note: tasks that get ownership of the lock are responsible for sending a message back when done processing.
