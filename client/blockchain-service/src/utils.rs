@@ -571,7 +571,7 @@ where
         if let Err(e) = self.transaction_manager.track_transaction(
             nonce,
             id_hash,
-            call,
+            Some(call),
             options.tip(),
             block_number,
         ) {
@@ -754,7 +754,7 @@ where
                 .resubscribe_one_pending(
                     nonce_i64,
                     &row.extrinsic_scale,
-                    &row.call_scale,
+                    row.call_scale.as_deref(),
                     &row.state,
                     block_number,
                 )
@@ -782,7 +782,7 @@ where
         &mut self,
         nonce_i64: i64,
         extrinsic_scale: &[u8],
-        call_scale: &[u8],
+        call_scale: Option<&[u8]>,
         state: &str,
         block_number: BlockNumber<Runtime>,
     ) -> bool {
@@ -826,21 +826,15 @@ where
                     state,
                     tx_hash
                 );
-                // Decode call_scale solely to enrich manager tracking.
-                // If we can't decode, we just set it as a remark (we don't care about the call in this case).
-                let call = if !call_scale.is_empty() {
-                    <Runtime::Call as Decode>::decode(&mut &call_scale[..]).unwrap_or_else(|_| {
-                        frame_system::Call::<Runtime>::remark {
-                            remark: "Couldn't decode call scale".into(),
-                        }
-                        .into()
-                    })
-                } else {
-                    frame_system::Call::<Runtime>::remark {
-                        remark: "No call scale to decode".into(),
+                // Decode call_scale (if present) solely to enrich manager tracking.
+                // If unavailable or decoding fails, we track without the call.
+                let call: Option<Runtime::Call> = call_scale.and_then(|bytes| {
+                    if bytes.is_empty() {
+                        None
+                    } else {
+                        <Runtime::Call as Decode>::decode(&mut &bytes[..]).ok()
                     }
-                    .into()
-                };
+                });
                 if let Err(e) = self.transaction_manager.track_transaction(
                     nonce_u32,
                     id_hash,
@@ -1332,7 +1326,7 @@ where
         if let Err(e) = self.transaction_manager.track_transaction(
             nonce,
             id_hash,
-            call.clone(),
+            Some(call.clone()),
             0,
             block_number,
         ) {
