@@ -5,7 +5,7 @@ diesel::table! {
         account_id -> Bytea,
         nonce -> Int8,
         hash -> Bytea,
-        call_scale -> Bytea,
+        call_scale -> Nullable<Bytea>,
         extrinsic_scale -> Bytea,
         watched -> Bool,
         state -> Text,
