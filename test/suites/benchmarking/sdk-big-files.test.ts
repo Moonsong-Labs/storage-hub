@@ -169,7 +169,9 @@ await describeMspNet(
       });
     }
 
-    // Encapsulated (disabled) steps: upload and download
+    // DISABLED: This method is intended to benchmark the upload process.
+    // Once the flow is improved and the bottleneck removed, enable this to benchmark the full flow.
+    // Note: Changes may be needed to match the latest updates to the upload path.
     async function _issueStorageRequestAndUpload(
       filePath: string,
       size: number,
@@ -247,6 +249,9 @@ await describeMspNet(
       return { uploadMs, fileKeyHex: hexKey };
     }
 
+    // DISABLED: This method is intended to benchmark the download process.
+    // Enable together with the upload benchmark when running the full flow.
+    // Note: Changes may be needed to match the latest SDK/backend interfaces.
     async function _downloadAndMeasure(
       fileKeyHex: string
     ): Promise<{ downloadMs: number; downloadBlob: Blob }> {
