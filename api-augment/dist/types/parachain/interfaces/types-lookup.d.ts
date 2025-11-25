@@ -1659,6 +1659,8 @@ declare module '@polkadot/types/lookup' {
         readonly isStorageRequestRejected: boolean;
         readonly asStorageRequestRejected: {
             readonly fileKey: H256;
+            readonly mspId: H256;
+            readonly bucketId: H256;
             readonly reason: PalletFileSystemRejectedStorageRequestReason;
         } & Struct;
         readonly isBspRequestedToStopStoring: boolean;

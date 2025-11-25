@@ -77,6 +77,10 @@ export const ETH_SH_USER_ADDRESS: `0x${string}` = "0x0B17ca3A1454cD058B231090C6f
 export const ETH_SH_USER_PRIVATE_KEY: `0x${string}` =
   "0x7b0ea7019f6644a02ff36d8135a55db4db8c4d4727e349c2f2a7463e6aff963c";
 
+export const ETH_FISHERMAN_ADDRESS: `0x${string}` = "0x1B27ca3B1464cD058B231090C6fd635dD348669B";
+export const ETH_FISHERMAN_PRIVATE_KEY: `0x${string}` =
+  "0x8b0ea7019f6644a02ff36d8135a55db4db8c4d4727e349c2f2a7463e6aff974d";
+
 export const ethBspKey = keyringEth.addFromUri(ETH_BSP_PRIVATE_KEY, { name: "Sh-BSP" });
 export const ethBspDownKey = keyringEth.addFromUri(ETH_BSP_DOWN_PRIVATE_KEY, {
   name: "Sh-BSP-Down"
@@ -95,6 +99,9 @@ export const ethMspThreeKey = keyringEth.addFromUri(ETH_MSP_THREE_PRIVATE_KEY, {
 });
 export const ethShUser = keyringEth.addFromUri(ETH_SH_USER_PRIVATE_KEY, {
   name: "Sh-User"
+});
+export const ethFishermanKey = keyringEth.addFromUri(ETH_FISHERMAN_PRIVATE_KEY, {
+  name: "Sh-Fisherman"
 });
 
 export const ethSudo = alith;

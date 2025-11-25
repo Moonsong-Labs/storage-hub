@@ -31,6 +31,7 @@ members = [
 	"client/indexer-db",
 	"client/indexer-service",
 	"client/rpc",
+	"client/blockchain-service-db",
 	"primitives/*",
 	"xcm-simulator",
 	"sdk/core/wasm",
@@ -290,6 +291,7 @@ pallet-evm-precompile-file-system = { path = "precompiles/pallet-file-system", d
 shc-actors-framework = { path = "client/actors-framework", default-features = false }
 shc-actors-derive = { path = "client/actors-derive", default-features = false }
 shc-blockchain-service = { path = "client/blockchain-service", default-features = false }
+shc-blockchain-service-db = { path = "client/blockchain-service-db", default-features = false }
 shc-file-transfer-service = { path = "client/file-transfer-service", default-features = false }
 shc-indexer-service = { path = "client/indexer-service", default-features = false }
 shc-indexer-db = { path = "client/indexer-db", default-features = false }
@@ -311,6 +313,7 @@ shp-session-keys = { path = "primitives/session-keys", default-features = false 
 shp-traits = { path = "primitives/traits", default-features = false }
 shp-treasury-funding = { path = "primitives/treasury-funding", default-features = false }
 shp-types = { path = "primitives/types", default-features = false }
+shp-tx-implicits-runtime-api = { path = "primitives/tx-implicits-runtime-api", default-features = false }
 
 # Local - StorageHub Runtime
 sh-parachain-runtime = { path = "runtime/parachain", default-features = false }

@@ -18,8 +18,21 @@ default_page_size = 20
 # Requests exceeding this limit will be capped to this value
 max_page_size = 100
 
+# Authentication configuration
 [auth]
+# JWT secret key for signing and verifying tokens (required)
+# Must be at least 32 bytes (64 hex characters) for HS256 algorithm
+# Can also be set via JWT_SECRET environment variable (takes precedence)
 jwt_secret = "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+# JWT token expiration time in minutes (default: 300 = 5 hours)
+# This determines how long a user session remains valid
+session_expiration_minutes = 300
+# Authentication nonce expiration time in seconds (default: 300 = 5 minutes)
+# This determines how long a user has to complete the authentication flow
+nonce_expiration_seconds = 300
+# SIWE (Sign-In with Ethereum) domain used in authentication messages
+# Should match the domain where this backend is accessible (default: "localhost")
+siwe_domain = "localhost"
 
 # StorageHub RPC configuration
 [storage_hub]
@@ -54,7 +67,7 @@ upload_retry_delay_secs = 1
 [database]
 # PostgreSQL connection URL
 # Format: postgresql://[user[:password]@][host][:port][/database]
-# Example for Docker environment: postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub
+# Example for Docker environment: postgresql://postgres:postgres@docker-sh-indexer-postgres-1:5432/storage_hub
 url = "postgresql://postgres:postgres@localhost:5432/storage_hub"
 # Enable mock mode for testing (requires 'mocks' feature to be enabled at compile time)
 # When true, uses in-memory mock database instead of real PostgreSQL connection

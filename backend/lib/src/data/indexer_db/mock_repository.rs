@@ -499,6 +499,7 @@ impl IndexerOpsMut for MockRepository {
             deletion_requested_at: None,
             created_at: now,
             updated_at: now,
+            is_in_bucket: false,
         };
 
         // Update bucket statistics

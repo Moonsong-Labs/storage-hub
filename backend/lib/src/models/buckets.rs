@@ -215,6 +215,7 @@ mod tests {
             deletion_requested_at: None,
             created_at: DateTime::from_timestamp(0, 0).unwrap().naive_utc(),
             updated_at: DateTime::from_timestamp(0, 0).unwrap().naive_utc(),
+            is_in_bucket: false,
         }
     }
 

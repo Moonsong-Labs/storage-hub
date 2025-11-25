@@ -150,6 +150,7 @@ export async function describeMspNet<
       let msp1ApiPromise: Promise<EnrichedBspApi>;
       let msp2ApiPromise: Promise<EnrichedBspApi>;
       let fishermanApiPromise: Promise<EnrichedBspApi> | undefined;
+      let indexerApiPromise: Promise<EnrichedBspApi> | undefined;
       let responseListenerPromise: ReturnType<typeof NetworkLauncher.create>;
 
       before(async () => {
@@ -162,7 +163,8 @@ export async function describeMspNet<
           ...fullNetConfig,
           toxics: options?.toxics,
           initialised: options?.initialised,
-          runtimeType: options?.runtimeType
+          runtimeType: options?.runtimeType,
+          pendingTxDb: options?.pendingTxDb
         });
         launchEventEmitter.emit("networkLaunched", launchResponse);
 
@@ -195,6 +197,19 @@ export async function describeMspNet<
           const fishermanApi = await fishermanApiPromise;
           await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
         }
+
+        // Create indexer API if standalone indexer is enabled
+        if (fullNetConfig.standaloneIndexer && fullNetConfig.indexer) {
+          indexerApiPromise = BspNetTestApi.create(
+            `ws://127.0.0.1:${ShConsts.NODE_INFOS.indexer.port}`,
+            options?.runtimeType
+          );
+
+          // Ensure indexer node is ready and synced
+          const userApi = await userApiPromise;
+          const indexerApi = await indexerApiPromise;
+          await userApi.wait.nodeCatchUpToChainTip(indexerApi);
+        }
       });
 
       after(async () => {
@@ -207,6 +222,10 @@ export async function describeMspNet<
 
         if (fishermanApiPromise) {
           apis.push(await fishermanApiPromise);
+        }
+
+        if (indexerApiPromise) {
+          apis.push(await indexerApiPromise);
         }
 
         await cleardownTest({
@@ -237,6 +256,10 @@ export async function describeMspNet<
         createFishermanApi: fullNetConfig.fisherman
           ? () => fishermanApiPromise as Promise<EnrichedBspApi>
           : undefined,
+        createIndexerApi:
+          fullNetConfig.standaloneIndexer && fullNetConfig.indexer
+            ? () => indexerApiPromise as Promise<EnrichedBspApi>
+            : undefined,
         createApi: (endpoint) => BspNetTestApi.create(endpoint, options?.runtimeType),
         createSqlClient: () => createSqlClient(),
         bspNetConfig: fullNetConfig,

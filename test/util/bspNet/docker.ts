@@ -7,6 +7,7 @@ import Docker from "dockerode";
 import { DOCKER_IMAGE } from "../constants";
 import { sendCustomRpc } from "../rpc";
 import { sleep } from "../timer";
+import * as ShConsts from "./consts";
 import * as NodeBspNet from "./node";
 import { BspNetTestApi } from "./test-api";
 import { waitFor } from "./waits";
@@ -301,11 +302,29 @@ export const showContainers = () => {
   }
 };
 
-export const addBspContainer = async (options?: { name?: string; additionalArgs?: string[] }) =>
-  addContainer("bsp", options);
+export const addBspContainer = async (options?: {
+  name?: string;
+  additionalArgs?: string[];
+  pendingDbUrl?: string;
+}) => {
+  const additionalArgs = options?.additionalArgs ?? [];
+  if (options?.pendingDbUrl) {
+    additionalArgs.push(`--pending-db-url=${options.pendingDbUrl}`);
+  }
+  return addContainer("bsp", { name: options?.name, additionalArgs });
+};
 
-export const addMspContainer = async (options?: { name?: string; additionalArgs?: string[] }) =>
-  addContainer("msp", options);
+export const addMspContainer = async (options?: {
+  name?: string;
+  additionalArgs?: string[];
+  pendingDbUrl?: string;
+}) => {
+  const additionalArgs = options?.additionalArgs ?? [];
+  if (options?.pendingDbUrl) {
+    additionalArgs.push(`--pending-db-url=${options.pendingDbUrl}`);
+  }
+  return addContainer("msp", { name: options?.name, additionalArgs });
+};
 
 const addContainer = async (
   providerType: "bsp" | "msp",
@@ -347,6 +366,16 @@ const addContainer = async (
   const keystoreArg = Args.find((arg) => arg.includes("--keystore-path="));
   const keystorePath = keystoreArg ? keystoreArg.split("=")[1] : "/keystore";
 
+  // Check if postgres container exists (indicates indexer is enabled)
+  let indexerEnabled = false;
+  try {
+    await docker.getContainer(ShConsts.NODE_INFOS.indexerDb.containerName).inspect();
+    indexerEnabled = true;
+  } catch {
+    // Postgres container doesn't exist, indexer is not enabled
+    indexerEnabled = false;
+  }
+
   const container = await docker.createContainer({
     Image: DOCKER_IMAGE,
     name: containerName,
@@ -381,6 +410,12 @@ const addContainer = async (
       "--rpc-cors=all",
       `--port=${p2pPort}`,
       "--base-path=/data",
+      // Only add database URL for MSP containers when indexer is enabled (MSP-only parameter)
+      ...(providerType === "msp" && indexerEnabled
+        ? [
+            `--msp-database-url=postgresql://postgres:postgres@${ShConsts.NODE_INFOS.indexerDb.containerName}:5432/storage_hub`
+          ]
+        : []),
       bootNodeArg,
       ...(options?.additionalArgs || [])
     ]
@@ -438,6 +473,17 @@ export const pauseContainer = async (containerName: string) => {
   const docker = new Docker();
   const container = docker.getContainer(containerName);
   await container.pause();
+
+  await waitFor({
+    lambda: async () => {
+      try {
+        const info = await container.inspect();
+        return info?.State?.Paused === true;
+      } catch {
+        return false;
+      }
+    }
+  });
 };
 
 export const stopContainer = async (containerName: string) => {
