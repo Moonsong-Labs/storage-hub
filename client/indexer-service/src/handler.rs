@@ -383,6 +383,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             }
             pallet_file_system::Event::StorageRequestRejected {
                 file_key,
+                msp_id: _,
+                bucket_id: _,
                 reason: _,
             } => {
                 // Delete file if it has no storage (not in bucket forest and no BSP associations)

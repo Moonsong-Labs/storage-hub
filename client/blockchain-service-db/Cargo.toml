@@ -1,0 +1,38 @@
+[package]
+name = "shc-blockchain-service-db"
+version = "0.1.0"
+description = "StorageHub Blockchain Service DB (pending tx coordination for multi-instance)."
+homepage = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+edition = { workspace = true }
+publish = false
+
+[lib]
+
+[lints]
+workspace = true
+
+[dependencies]
+chrono = { workspace = true }
+diesel = { workspace = true }
+diesel-async = { workspace = true }
+diesel_migrations = { workspace = true }
+futures = { workspace = true }
+hex = { workspace = true }
+log = { workspace = true }
+rustls = { workspace = true }
+rustls-platform-verifier = { workspace = true }
+serde = { workspace = true, default-features = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-postgres = { workspace = true }
+tokio-postgres-rustls = { workspace = true }
+rustls-pemfile = { workspace = true }
+sc-transaction-pool-api = { workspace = true }
+
+[features]
+default = ["std"]
+std = []

@@ -13,7 +13,7 @@ import {
   StorageHubClient
 } from "@storagehub-sdk/core";
 import { MspClient } from "@storagehub-sdk/msp-client";
-import { createPublicClient, createWalletClient, defineChain, http, getAddress } from "viem";
+import { createPublicClient, createWalletClient, defineChain, getAddress, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import {
   describeMspNet,
@@ -103,7 +103,7 @@ await describeMspNet(
 
       // Wait for the backend to be ready
       await userApi.docker.waitForLog({
-        containerName: "storage-hub-sh-backend-1",
+        containerName: userApi.shConsts.NODE_INFOS.backend.containerName,
         searchString: "Server listening",
         timeout: 10000
       });
@@ -123,7 +123,7 @@ await describeMspNet(
 
     it("Postgres DB is ready", async () => {
       await userApi.docker.waitForLog({
-        containerName: "storage-hub-sh-postgres-1",
+        containerName: userApi.shConsts.NODE_INFOS.indexerDb.containerName,
         searchString: "database system is ready to accept connections",
         timeout: 10000
       });
@@ -418,7 +418,7 @@ await describeMspNet(
       // Check that the upload was successful
       strictEqual(uploadResponse.status, "upload_successful", "Upload should return success");
       strictEqual(
-        `0x${uploadResponse.fileKey}`,
+        uploadResponse.fileKey,
         fileKey.toHex(),
         "Upload should return expected file key"
       );
@@ -428,7 +428,7 @@ await describeMspNet(
         "Upload should return expected bucket ID"
       );
       strictEqual(
-        `0x${uploadResponse.fingerprint}`,
+        uploadResponse.fingerprint,
         (await fileManager.getFingerprint()).toString(),
         "Upload should return expected fingerprint"
       );
