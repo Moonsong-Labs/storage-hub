@@ -308,7 +308,7 @@ export const batchStorageRequests = async (
     finaliseBlock = true,
     bspApi,
     mspApi,
-    maxAttempts = 5
+    maxAttempts = 10
   } = options;
 
   if (!owner) {
@@ -493,14 +493,14 @@ export const batchStorageRequests = async (
       let mspFound = false;
       let bspFound = false;
 
-      if (expectMspAcceptance) {
+      if (expectMspAcceptance && totalAcceptance < fileKeys.length) {
         try {
           await api.wait.mspResponseInTxPool(1);
           mspFound = true;
         } catch {}
       }
 
-      if (expectBspConfirmations) {
+      if (expectBspConfirmations && totalConfirmations < fileKeys.length) {
         try {
           await api.wait.bspStored({
             sealBlock: false,
@@ -510,57 +510,35 @@ export const batchStorageRequests = async (
         } catch {}
       }
 
-      // For MSP acceptance, we may need to seal multiple blocks due to semaphore blocking
-      let mspEventsFound = false;
-      const maxBlockSealsForMsp = 4; // Try up to 4 blocks (initial + 3 retries)
-      let blockSealsForMsp = 0;
+      const { events } = await api.block.seal({
+        signer: localOwner,
+        finaliseBlock: finaliseBlock
+      });
 
-      while (blockSealsForMsp < maxBlockSealsForMsp) {
-        const { events } = await api.block.seal({
-          signer: localOwner,
-          finaliseBlock: finaliseBlock
-        });
-        blockSealsForMsp++;
+      if (mspFound && expectMspAcceptance) {
+        const acceptEvents = await api.assert.eventMany(
+          "fileSystem",
+          "MspAcceptedStorageRequest",
+          events
+        );
 
-        if (mspFound && expectMspAcceptance && !mspEventsFound) {
-          const acceptEvents = await api.assert.eventMany(
-            "fileSystem",
-            "MspAcceptedStorageRequest",
-            events
-          );
+        // Count total MspAcceptedStorageRequest events
+        totalAcceptance += acceptEvents.length;
+      }
 
-          // Count total MspAcceptedStorageRequest events
-          if (acceptEvents.length > 0) {
-            totalAcceptance += acceptEvents.length;
-            mspEventsFound = true;
-          } else if (blockSealsForMsp < maxBlockSealsForMsp) {
-            // No events found, semaphore might be blocking - try next block
-            // Add small delay to allow processing to complete
-            await new Promise((resolve) => setTimeout(resolve, 100));
-            continue; // Seal another block
+      if (bspFound && expectBspConfirmations) {
+        // Check if BSP confirmed storing events are present
+        const confirmEvents = await api.assert.eventMany(
+          "fileSystem",
+          "BspConfirmedStoring",
+          events
+        );
+
+        // Count total file keys confirmed in all BspConfirmedStoring events
+        for (const eventRecord of confirmEvents) {
+          if (api.events.fileSystem.BspConfirmedStoring.is(eventRecord.event)) {
+            totalConfirmations += eventRecord.event.data.confirmedFileKeys.length;
           }
-        }
-
-        // Process BSP events from the first sealed block
-        if (blockSealsForMsp === 1 && bspFound && expectBspConfirmations) {
-          // Check if BSP confirmed storing events are present
-          const confirmEvents = await api.assert.eventMany(
-            "fileSystem",
-            "BspConfirmedStoring",
-            events
-          );
-
-          // Count total file keys confirmed in all BspConfirmedStoring events
-          for (const eventRecord of confirmEvents) {
-            if (api.events.fileSystem.BspConfirmedStoring.is(eventRecord.event)) {
-              totalConfirmations += eventRecord.event.data.confirmedFileKeys.length;
-            }
-          }
-        }
-
-        // Break if we're not waiting for MSP events, or if we found them
-        if (!expectMspAcceptance || mspEventsFound || !mspFound) {
-          break;
         }
       }
     }
@@ -569,9 +547,7 @@ export const batchStorageRequests = async (
       assert.strictEqual(
         totalAcceptance,
         fileKeys.length,
-        `Expected ${fileKeys.length} MSP acceptance, but got ${totalAcceptance}. ` +
-          "This may be due to MSP batch processing semaphore blocking. " +
-          `Tried sealing ${maxAttempts} attempts with up to 4 blocks each.`
+        `Expected ${fileKeys.length} MSP acceptance, but got ${totalAcceptance}`
       );
     }
 
