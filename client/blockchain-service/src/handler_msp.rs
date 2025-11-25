@@ -47,7 +47,11 @@ where
     ///
     /// Steps:
     /// TODO
-    pub(crate) fn msp_initial_sync(&self, _block_hash: Runtime::Hash, _msp_id: ProviderId<Runtime>) {
+    pub(crate) fn msp_initial_sync(
+        &self,
+        _block_hash: Runtime::Hash,
+        _msp_id: ProviderId<Runtime>,
+    ) {
         // TODO: Catch up to Forest root writes in the Bucket's Forests.
         // Emit event to check that this node has a Forest Storage for each Bucket this MSP manages.
         self.emit(VerifyMspBucketForests {});
