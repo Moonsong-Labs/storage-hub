@@ -374,6 +374,10 @@ where
             blockchain_service_config.enable_msp_distribute_files = enable_msp_distribute_files;
         }
 
+        if let Some(pending_db_url) = config.pending_db_url {
+            blockchain_service_config.pending_db_url = Some(pending_db_url);
+        }
+
         self.blockchain_service_config = Some(blockchain_service_config);
         self
     }
@@ -813,8 +817,9 @@ pub struct BlockchainServiceOptions {
     /// The peer ID of this node.
     pub peer_id: Option<Vec<u8>>,
     /// Whether MSP nodes should distribute files to BSPs.
-    #[serde(default)]
     pub enable_msp_distribute_files: Option<bool>,
+    /// Postgres database URL for pending transactions persistence. If not provided, pending transactions will not be persisted.
+    pub pending_db_url: Option<String>,
 }
 
 impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
@@ -842,6 +847,7 @@ impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
                 .saturated_into(),
             peer_id,
             enable_msp_distribute_files: self.enable_msp_distribute_files.unwrap_or(false),
+            pending_db_url: self.pending_db_url,
         }
     }
 }

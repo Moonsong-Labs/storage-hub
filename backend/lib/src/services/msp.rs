@@ -2,11 +2,10 @@
 
 use std::{collections::HashSet, sync::Arc};
 
-use alloy_core::primitives::Address;
+use alloy_core::{hex::ToHexExt, primitives::Address};
 use axum_extra::extract::multipart::Field;
 use bigdecimal::{BigDecimal, RoundingMode};
 use codec::{Decode, Encode};
-use sc_network::PeerId;
 use serde::{Deserialize, Serialize};
 use shc_common::types::{
     ChunkId, FileKeyProof, FileMetadata, StorageProofsMerkleTrieLayout,
@@ -236,9 +235,9 @@ impl MspService {
             }))
     }
 
-    /// Get a specific bucket by ID
+    /// Get a specific bucket by its ID
     ///
-    /// Verifies ownership of bucket is `user` (or that the bucket is public if `user` is `None`)
+    /// Verifies that the owner of the bucket is `user`. If the bucket is public, this check always passes.
     pub async fn get_bucket(
         &self,
         bucket_id: &str,
@@ -462,7 +461,7 @@ impl MspService {
         // Make the RPC call to download file and get metadata
         let rpc_response: SaveFileToDisk = self
             .rpc
-            .save_file_to_disk(&file_key, upload_url.as_str())
+            .save_file_to_disk(file_key, upload_url.as_str())
             .await
             .map_err(|e| {
                 Error::BadRequest(format!("Failed to save file to disk via RPC: {}", e))
@@ -534,18 +533,7 @@ impl MspService {
             "Starting file upload"
         );
 
-        // Retrieve the onchain file info and verify user has permission to access the file
-        let info = self.get_file_info(user, &file_key).await?;
-
-        // Validate bucket id and file key against metadata
-        let expected_bucket_id = hex::encode(file_metadata.bucket_id());
-        let bucket_id_without_prefix = info.bucket_id.trim_start_matches("0x");
-        if bucket_id_without_prefix != expected_bucket_id {
-            return Err(Error::BadRequest(
-                format!("Bucket ID in URL does not match file metadata: {expected_bucket_id} != {bucket_id_without_prefix}"),
-            ));
-        }
-
+        // Validate the received file key against the one corresponding to the file metadata.
         let expected_file_key = hex::encode(file_metadata.file_key::<Blake2Hasher>());
         let file_key_without_prefix = file_key.trim_start_matches("0x");
         if file_key_without_prefix != expected_file_key {
@@ -553,6 +541,15 @@ impl MspService {
                 "File key in URL does not match file metadata: {expected_file_key} != {file_key_without_prefix}"
             )));
         }
+
+        // Get the bucket ID from the metadata and verify that the user is its owner.
+        // We check the bucket ownership instead of the file ownership as the file might not be in
+        // the indexer at this point (since the storage request would have to have been finalised).
+        // TODO: This could still fail as the bucket creation extrinsic might not have been finalised yet,
+        // ideally we should have a way to directly check on-chain (like an RPC).
+        let bucket_id = hex::encode(file_metadata.bucket_id());
+        let bucket = self.get_db_bucket(&bucket_id).await?;
+        self.can_user_view_bucket(bucket, user)?;
 
         // Initialize the trie that will hold the chunked file data.
         let mut trie = InMemoryFileDataTrie::<StorageProofsMerkleTrieLayout>::new();
@@ -575,7 +572,7 @@ impl MspService {
                 let chunk = overflow_buffer[..FILE_CHUNK_SIZE as usize].to_vec();
 
                 // Insert the chunk into the trie.
-                trie.write_chunk(&ChunkId::new(chunk_index as u64), &chunk)
+                trie.write_chunk(&ChunkId::new(chunk_index), &chunk)
                     .map_err(|e| {
                         Error::BadRequest(format!(
                             "Failed to write chunk {} to trie: {}",
@@ -594,7 +591,7 @@ impl MspService {
         // Check the overflow buffer to see if the file didn't fit exactly in an integer number of chunks.
         if !overflow_buffer.is_empty() {
             // Insert the chunk into the trie.
-            trie.write_chunk(&ChunkId::new(chunk_index as u64), &overflow_buffer)
+            trie.write_chunk(&ChunkId::new(chunk_index), &overflow_buffer)
                 .map_err(|e| {
                     Error::BadRequest(format!(
                         "Failed to write final chunk {} to trie: {}",
@@ -643,7 +640,7 @@ impl MspService {
             // Get the chunks to send in this batch, capping at the total amount of chunks of the file.
             let chunks = (batch_start_chunk_index
                 ..(batch_start_chunk_index + CHUNKS_PER_BATCH).min(total_chunks))
-                .map(|chunk_index| ChunkId::new(chunk_index as u64))
+                .map(ChunkId::new)
                 .collect::<HashSet<_>>();
             let chunks_in_batch = chunks.len() as u64;
 
@@ -693,34 +690,26 @@ impl MspService {
 
         // If the complete file was uploaded to the MSP successfully, we can return the response.
         let bytes_location = file_metadata.location();
-        let location = str::from_utf8(&bytes_location)
-            .unwrap_or(&info.file_key)
+        let location = str::from_utf8(bytes_location)
+            .unwrap_or(file_key)
             .to_string();
 
         debug!(
-            file_key = %info.file_key,
+            file_key = %file_key,
             chunks = total_chunks,
             "File upload completed"
         );
 
         Ok(FileUploadResponse {
             status: "upload_successful".to_string(),
-            fingerprint: info.fingerprint_hexstr(),
-            file_key: info.file_key,
-            bucket_id: info.bucket_id,
+            fingerprint: file_metadata.fingerprint().encode_hex_with_prefix(),
+            file_key: file_key.to_string(),
+            bucket_id,
             location,
         })
     }
 
     /// Upload a batch of file chunks with their FileKeyProof to the MSP via its RPC.
-    ///
-    /// This implementation:
-    /// 1. Gets the MSP info to get its multiaddresses.
-    /// 2. Extracts the peer IDs from the multiaddresses.
-    /// 3. Sends the FileKeyProof with the batch of chunks to the MSP through the `receiveBackendFileChunks` RPC method.
-    ///
-    /// Note: obtaining the peer ID previous to sending the request is needed as this is the peer ID that the MSP
-    /// will send the file to. If it's different than its local one, it will probably fail.
     pub async fn upload_to_msp(
         &self,
         chunk_ids: &HashSet<ChunkId>,
@@ -739,100 +728,26 @@ impl MspService {
             ));
         }
 
-        // Get the MSP's info including its multiaddresses.
-        let msp_info = self.get_info().await?;
-
-        // Extract the peer IDs from the multiaddresses.
-        let peer_ids = self.extract_peer_ids_from_multiaddresses(&msp_info.multiaddresses)?;
-
-        // Try to send the chunks batch to each peer until one succeeds.
-        debug!(target: "msp_service::upload_to_msp", "Trying to send the chunks batch to each peer until one succeeds");
-        let mut last_err = None;
-        for peer_id in peer_ids {
-            match self
-                .send_upload_request_to_msp_peer(peer_id, file_key_proof.clone())
-                .await
-            {
-                Ok(()) => {
-                    debug!(
-                        target: "msp_service::upload_to_msp",
-                        chunk_count = chunk_ids.len(),
-                        msp_id = %msp_info.msp_id,
-                        file_key = %format!("0x{}", hex::encode(file_key_proof.file_metadata.file_key::<Blake2Hasher>())),
-                        bucket_id = %format!("0x{}", hex::encode(file_key_proof.file_metadata.bucket_id())),
-                        "Successfully uploaded chunks to MSP"
-                    );
-                    return Ok(());
-                }
-                Err(e) => {
-                    warn!(target: "msp_service::upload_to_msp", peer_id = ?peer_id, error = ?e, "Failed to send chunks to peer");
-                    last_err = Some(e);
-                    continue;
-                }
-            }
+        debug!(target: "msp_service::upload_to_msp", "Trying to send the chunks batch");
+        let ret = self
+            .send_upload_request_to_msp(file_key_proof.clone())
+            .await;
+        if ret.is_ok() {
+            debug!(
+                target: "msp_service::upload_to_msp",
+                chunk_count = chunk_ids.len(),
+                file_key = %format!("0x{}", hex::encode(file_key_proof.file_metadata.file_key::<Blake2Hasher>())),
+                bucket_id = %format!("0x{}", hex::encode(file_key_proof.file_metadata.bucket_id())),
+                "Successfully uploaded chunks to MSP"
+            );
         }
-
-        Err(last_err.expect("At least one peer_id was tried, so last_err must be Some"))
+        ret
     }
 
-    /// Extract peer IDs from multiaddresses
-    fn extract_peer_ids_from_multiaddresses(
-        &self,
-        multiaddresses: &[String],
-    ) -> Result<Vec<PeerId>, Error> {
-        debug!(target: "msp_service::extract_peer_ids_from_multiaddresses", "Extracting peer IDs from MSP's multiaddresses");
-        let mut peer_ids = HashSet::new();
-
-        for multiaddr_str in multiaddresses {
-            // Parse multiaddress string to extract peer ID
-            // Format example: "/ip4/192.168.0.10/tcp/30333/p2p/12D3KooWJAgnKUrQkGsKxRxojxcFRhtH6ovWfJTPJjAkhmAz2yC8"
-            if let Some(p2p_part) = multiaddr_str.split("/p2p/").nth(1) {
-                // Extract the peer ID part (everything after /p2p/)
-                let peer_id_str = p2p_part.split('/').next().unwrap_or(p2p_part);
-
-                match peer_id_str.parse::<PeerId>() {
-                    Ok(peer_id) => {
-                        debug!(
-                            target: "msp_service::extract_peer_ids_from_multiaddresses",
-                            peer_id = ?peer_id,
-                            multiaddress = %multiaddr_str,
-                            "Extracted peer ID from multiaddress"
-                        );
-                        peer_ids.insert(peer_id);
-                    }
-                    Err(e) => {
-                        warn!(
-                            target: "msp_service::extract_peer_ids_from_multiaddresses",
-                            multiaddress = %multiaddr_str,
-                            error = ?e,
-                            "Failed to parse peer ID from multiaddress"
-                        );
-                    }
-                }
-            } else {
-                warn!(target: "msp_service::extract_peer_ids_from_multiaddresses", multiaddress = %multiaddr_str, "No /p2p/ section found in multiaddress");
-            }
-        }
-
-        if peer_ids.is_empty() {
-            return Err(Error::BadRequest(
-                "No valid peer IDs found in multiaddresses".to_string(),
-            ));
-        }
-
-        Ok(peer_ids.into_iter().collect())
-    }
-
-    /// Send an upload request to a specific peer ID of the MSP with retry logic.
-    async fn send_upload_request_to_msp_peer(
-        &self,
-        peer_id: PeerId,
-        file_key_proof: FileKeyProof,
-    ) -> Result<(), Error> {
+    async fn send_upload_request_to_msp(&self, file_key_proof: FileKeyProof) -> Result<(), Error> {
         debug!(
-            target: "msp_service::send_upload_request_to_msp_peer",
-            peer_id = ?peer_id,
-            "Attempting to send upload request to MSP peer"
+            target: "msp_service::send_upload_request",
+            "Attempting to send upload request to MSP"
         );
 
         // Get fhe file metadata from the received FileKeyProof.
@@ -850,7 +765,7 @@ impl MspService {
         let delay_between_retries_secs = self.msp_config.upload_retry_delay_secs;
 
         while retry_attempts < max_retries {
-            debug!(target: "msp_service::send_upload_request_to_msp_peer", peer_id = ?peer_id, retry_attempt = retry_attempts, "Sending file chunks to MSP peer via RPC");
+            debug!(target: "msp_service::send_upload_request_to_msp", "Sending file chunks to MSP via RPC");
             let result: Result<Vec<u8>, _> = self
                 .rpc
                 .receive_file_chunks(&file_key_hexstr, encoded_proof.clone())
@@ -858,18 +773,17 @@ impl MspService {
 
             match result {
                 Ok(_raw) => {
-                    debug!(peer_id = ?peer_id, "Successfully sent upload request to MSP peer");
+                    debug!("Successfully sent upload request to MSP");
                     return Ok(());
                 }
                 Err(e) => {
                     retry_attempts += 1;
                     if retry_attempts < max_retries {
                         warn!(
-                            target: "msp_service::send_upload_request_to_msp_peer",
-                            peer_id = ?peer_id,
+                            target: "msp_service::send_upload_request_to_msp",
                             retry_attempt = retry_attempts,
                             error = ?e,
-                            "Upload request to MSP peer {peer_id} failed via RPC, retrying... (attempt {retry_attempts})",
+                            "Upload request to MSP failed via RPC, retrying... (attempt {retry_attempts})",
                         );
                         tokio::time::sleep(std::time::Duration::from_secs(
                             delay_between_retries_secs,
@@ -887,11 +801,11 @@ impl MspService {
 }
 
 impl MspService {
-    /// Verifies user can access the given bucket
+    /// Verifies that a user can access the given bucket.
     ///
-    /// If the bucket is public, the `user` may be `None`
+    /// If the bucket is public, this check always passes.
     ///
-    /// Will return the bucket if the user has the required permissions
+    /// Will return the bucket metadata if the user has the required permissions, or an error otherwise.
     fn can_user_view_bucket(
         &self,
         bucket: DBBucket,
@@ -900,15 +814,20 @@ impl MspService {
         // TODO: NFT ownership
         if bucket.private {
             let Some(user) = user else {
-                return Err(Error::Unauthorized("This bucket is private".to_string()));
+                return Err(Error::Unauthorized(format!(
+                    "Bucket with ID {} is private and no user received.",
+                    bucket.onchain_bucket_id.encode_hex_with_prefix()
+                )));
             };
 
             if bucket.account.as_str() == user.to_string() {
                 Ok(bucket)
             } else {
-                Err(Error::Unauthorized(
-                    "Specified user is not authorized to view this bucket".to_string(),
-                ))
+                Err(Error::Unauthorized(format!(
+                    "User {} is not authorized to view bucket with ID {}",
+                    user,
+                    bucket.onchain_bucket_id.encode_hex_with_prefix()
+                )))
             }
         } else {
             Ok(bucket)

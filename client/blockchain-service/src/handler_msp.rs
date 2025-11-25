@@ -24,8 +24,8 @@ use crate::{
     events::{
         DistributeFileToBsp, FinalisedBucketMovedAway, FinalisedBucketMutationsApplied,
         FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
-        ForestWriteLockTaskData, MoveBucketRequestedForMsp, NewStorageRequest,
-        ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData,
+        FinalisedStorageRequestRejected, ForestWriteLockTaskData, MoveBucketRequestedForMsp,
+        NewStorageRequest, ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData,
         ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
         StartMovedBucketDownload, VerifyMspBucketForests,
     },
@@ -235,6 +235,23 @@ where
                     }
                 }
             }
+            StorageEnableEvents::FileSystem(
+                pallet_file_system::Event::StorageRequestRejected {
+                    file_key,
+                    msp_id,
+                    bucket_id,
+                    reason: _,
+                },
+            ) => {
+                // Process either InternalError or RequestExpire if this provider is managing the bucket.
+                if managed_msp_id == &msp_id {
+                    self.emit(FinalisedStorageRequestRejected {
+                        file_key: file_key.into(),
+                        provider_id: msp_id.into(),
+                        bucket_id,
+                    })
+                }
+            }
             StorageEnableEvents::ProofsDealer(pallet_proofs_dealer::Event::MutationsApplied {
                 mutations,
                 old_root: _,
@@ -279,9 +296,8 @@ where
     /// Check if there are any pending requests to update the Forest root on the runtime, and process them.
     ///
     /// The priority is given by:
-    /// 1. `FileDeletionRequest` over...
-    /// 2. `RespondStorageRequest` over...
-    /// 3. `StopStoringForInsolventUserRequest`.
+    /// 1. `RespondStorageRequest` over...
+    /// 2. `StopStoringForInsolventUserRequest`.
     ///
     /// This function is called every time a new block is imported and after each request is queued.
     ///
@@ -342,8 +358,8 @@ where
             return;
         }
 
-        // If we have no pending file deletion requests, we can also check for pending respond storing requests.
-        if next_event_data.is_none() {
+        // Check for pending respond storing requests.
+        {
             let max_batch_respond = MAX_BATCH_MSP_RESPOND_STORE_REQUESTS;
 
             // Batch multiple respond storing requests up to the runtime configured maximum.

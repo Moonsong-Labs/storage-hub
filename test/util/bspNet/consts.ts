@@ -50,6 +50,15 @@ export const NODE_INFOS = {
   toxiproxy: {
     containerName: "toxiproxy",
     port: 8474
+  },
+  indexerDb: {
+    containerName: "storage-hub-sh-indexer-postgres-1"
+  },
+  pendingDb: {
+    containerName: "storage-hub-sh-pending-postgres-1"
+  },
+  backend: {
+    containerName: "storage-hub-sh-backend-1"
   }
 } as const;
 

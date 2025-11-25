@@ -1,8 +1,8 @@
+import assert from "node:assert";
 import type { ApiPromise } from "@polkadot/api";
 import type { EventRecord } from "@polkadot/types/interfaces";
 import type { IsEvent } from "@polkadot/types/metadata/decorate/types";
 import type { AnyTuple, IEvent } from "@polkadot/types/types";
-import assert from "node:assert";
 import { sealBlock, waitForLog } from "./bspNet";
 import { sleep } from "./timer";
 
@@ -120,7 +120,7 @@ export const assertExtrinsicPresent = async (
         return matches;
       }
 
-      // If we are expecing 0 extrinsics and we found none, return an empty array instead of throwing an error.
+      // If we are expecting 0 extrinsics and we found none, return an empty array instead of throwing an error.
       if (matches.length === 0 && options.assertLength === 0 && options.exactLength === true) {
         return [];
       }
