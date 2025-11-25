@@ -217,6 +217,10 @@ pub struct ProviderConfigurations {
     #[arg(long, value_name = "COUNT", default_value = "512")]
     pub chunks_buffer: Option<u64>,
 
+    /// The number of 1KB (FILE_CHUNK_SIZE) chunks we batch and queue from the db while transferring the file on a save_file_to_disk call.
+    #[arg(long, value_name = "COUNT", default_value = "1024")]
+    pub internal_buffer_size: Option<u64>,
+
     // ============== MSP Charge Fees task options ==============
     /// Enable and configure MSP Charge Fees task.
     #[arg(long)]
