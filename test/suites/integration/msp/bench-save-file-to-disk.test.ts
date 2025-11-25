@@ -6,15 +6,14 @@
  */
 
 import assert from "node:assert";
-import { describeMspNet, type EnrichedBspApi, waitFor } from "../../../util";
+import { describeMspNet, type EnrichedBspApi } from "../../../util";
 import { getFileSize, deleteFileIfExists } from "../../../util/fileGeneration";
 
 await describeMspNet(
   "MSP Big File Download Benchmark",
   {
-    initialised_big: 0.02, // 1GB file (use smaller for faster tests, increase for real benchmarks)
+    initialised_big: 0.025,
     networkConfig: [{ noisy: false, rocksdb: true }],
-    only: true,
   },
   ({ before, after, it, createMsp1Api, getLaunchResponse }) => {
     let mspApi: EnrichedBspApi;
@@ -40,16 +39,9 @@ await describeMspNet(
 
       console.log(`📊 File: ${(originalFileSize / 1024 / 1024 / 1024).toFixed(1)}GB | Key: ${fileKey.slice(0, 16)}...`);
 
-      // Wait for the MSP to actually have the file in storage (can take time for large files)
-      console.log(`⏳ Waiting for MSP to store the file...`);
-      await waitFor({
-        lambda: async () => {
-          const result = await mspApi.rpc.storagehubclient.isFileInFileStorage(fileKey);
-          return result.isFileFound;
-        },
-        delay: 5000,
-        iterations: 120 // Wait up to 10 minutes for large files
-      });
+      // Ensure MSP has the file in storage
+      const result = await mspApi.rpc.storagehubclient.isFileInFileStorage(fileKey);
+      assert(result.isFileFound, "File should be in MSP storage");
       console.log(`✅ File is in MSP storage`);
     });
 
