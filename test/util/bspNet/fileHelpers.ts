@@ -624,7 +624,7 @@ export const batchStorageRequests = async (
       if (Object.keys(targetMethods).length > 0) {
         const failures = logFailedTargetExtrinsics(
           api,
-          events,
+          events || [],
           targetMethods,
           `[Attempt ${attempt + 1}/${maxAttempts}]`
         );
@@ -638,7 +638,7 @@ export const batchStorageRequests = async (
         const acceptEvents = await api.assert.eventMany(
           "fileSystem",
           "MspAcceptedStorageRequest",
-          events
+          events || []
         );
 
         // Count total MspAcceptedStorageRequest events
@@ -661,7 +661,7 @@ export const batchStorageRequests = async (
         const confirmEvents = await api.assert.eventMany(
           "fileSystem",
           "BspConfirmedStoring",
-          events
+          events || []
         );
 
         // Count total file keys confirmed in all BspConfirmedStoring events
