@@ -68,6 +68,7 @@ export async function describeBspNet<
           ...bspNetConfig,
           toxics: options?.toxics,
           initialised: options?.initialised,
+          initialised_big: options?.initialised_big,
           runtimeType: options?.runtimeType
         });
         launchEventEmitter.emit("networkLaunched", launchResponse);
@@ -163,6 +164,7 @@ export async function describeMspNet<
           ...fullNetConfig,
           toxics: options?.toxics,
           initialised: options?.initialised,
+          initialised_big: options?.initialised_big,
           runtimeType: options?.runtimeType
         });
         launchEventEmitter.emit("networkLaunched", launchResponse);
