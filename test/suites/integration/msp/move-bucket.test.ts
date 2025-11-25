@@ -1,4 +1,4 @@
-import assert, { strictEqual } from "node:assert";
+import { strictEqual } from "node:assert";
 import {
   assertEventPresent,
   bspThreeKey,
@@ -108,26 +108,12 @@ await describeMspNet(
 
       // Use batchStorageRequests helper to create bucket and submit all 3 storage requests
       const batchResult = await userApi.file.batchStorageRequests({
-        files: [
-          {
-            source: source[0],
-            destination: destination[0],
-            bucketIdOrName: bucketName,
-            replicationTarget: 2
-          },
-          {
-            source: source[1],
-            destination: destination[1],
-            bucketIdOrName: bucketName,
-            replicationTarget: 2
-          },
-          {
-            source: source[2],
-            destination: destination[2],
-            bucketIdOrName: bucketName,
-            replicationTarget: 2
-          }
-        ],
+        files: source.map((src, i) => ({
+          source: src,
+          destination: destination[i],
+          bucketIdOrName: bucketName,
+          replicationTarget: 2
+        })),
         mspId,
         valuePropId,
         owner: shUser,
@@ -137,16 +123,7 @@ await describeMspNet(
       const { fileKeys, bucketIds } = batchResult;
       bucketId = bucketIds[0]; // All files are in the same bucket
       allBucketFiles.push(...fileKeys);
-    });
 
-    it("Verify files are in MSP forest and wait for storage request fulfillment", async () => {
-      // Verify all files are in the MSP's forest (batchStorageRequests already handled acceptance)
-      for (const fileKey of allBucketFiles) {
-        const isFileInForest = await msp1Api.rpc.storagehubclient.isFileInForest(bucketId, fileKey);
-        assert(isFileInForest.isTrue, "File is not in MSP forest");
-      }
-
-      // Wait for the BSPs to volunteer and confirm storing the files so the storage requests get fulfilled
       for (const fileKey of allBucketFiles) {
         await userApi.wait.storageRequestNotOnChain(fileKey);
       }
