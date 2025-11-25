@@ -397,6 +397,11 @@ impl ProviderConfigurations {
                 rpc_config.remote_file.chunks_buffer = chunks_buffer as usize;
             }
         }
+        if let Some(internal_buffer_size) = self.internal_buffer_size {
+            if internal_buffer_size > 0 {
+                rpc_config.remote_file.internal_buffer_size = internal_buffer_size as usize;
+            }
+        }
 
         // Get provider type to conditionally apply options
         let provider_type = self
