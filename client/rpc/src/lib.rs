@@ -638,10 +638,8 @@ where
         // - Chunks are read from storage in small batches under a short-lived read lock.
         // - Backpressure from the upload side naturally slows down chunk production.
         //
-        // The maximum default buffered size will be chunks_buffer (default 512) * FILE_CHUNK_SIZE (1Kb) = 512 Kb
-        // We cap this at 1Mb (TODO: make it configurable)
-        let queue_buffered_size =
-            std::cmp::min(self.config.remote_file.chunks_buffer.max(512), 1024);
+        // The maximum default buffered size will be internal_buffer_size (default 1024) * FILE_CHUNK_SIZE (1Kb) = 1 Mb
+        let queue_buffered_size = self.config.remote_file.internal_buffer_size;
         let (tx, rx) = mpsc::channel::<Result<bytes::Bytes, std::io::Error>>(queue_buffered_size);
 
         let file_storage = Arc::clone(&self.file_storage);

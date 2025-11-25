@@ -73,6 +73,8 @@ pub struct RemoteFileConfig {
     /// Buffer size multiplier. The actual buffer size used will be chunk_size * chunks_buffer.
     /// This allows efficient buffering of multiple chunks (minimum 1, default 512).
     pub chunks_buffer: usize,
+    /// The number of 1KB (FILE_CHUNK_SIZE) chunks we batch and queue from the db while transferring the file on a save_file_to_disk call.
+    pub internal_buffer_size: usize,
 }
 
 impl RemoteFileConfig {
@@ -88,8 +90,9 @@ impl RemoteFileConfig {
             follow_redirects: true,
             max_redirects: 10,
             user_agent: "StorageHub-Client/1.0".to_string(),
-            chunk_size: 8192,   // 8KB default
-            chunks_buffer: 512, // 512 chunks default (4MB)
+            chunk_size: 8192,           // 8KB default
+            chunks_buffer: 512,         // 512 chunks default (4MB)
+            internal_buffer_size: 1024, // 1MB default (db chunk size = 1KB)
         }
     }
 
