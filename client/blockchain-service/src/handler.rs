@@ -42,7 +42,7 @@ use shc_forest_manager::traits::ForestStorageHandler;
 use crate::{
     capacity_manager::{CapacityRequest, CapacityRequestQueue},
     commands::BlockchainServiceCommand,
-    events::BlockchainServiceEventBusProvider,
+    events::{BlockchainServiceEventBusProvider, NewStorageRequest},
     state::{BlockchainServiceStateStore, LastProcessedBlockNumberCf},
     transaction_manager::{TransactionManager, TransactionManagerConfig},
     types::{FileDistributionInfo, ManagedProvider, MinimalBlockInfo, NewBlockNotificationKind},
@@ -1290,20 +1290,19 @@ where
                         }
                     };
 
-                    let new_storage_requests: Vec<crate::events::NewStorageRequest<Runtime>> =
-                        storage_requests
-                            .into_iter()
-                            .map(|(file_key, sr)| crate::events::NewStorageRequest {
-                                who: sr.owner,
-                                file_key: file_key.into(),
-                                bucket_id: sr.bucket_id,
-                                location: sr.location,
-                                fingerprint: sr.fingerprint.as_ref().into(),
-                                size: sr.size,
-                                user_peer_ids: sr.user_peer_ids,
-                                expires_at: sr.expires_at,
-                            })
-                            .collect();
+                    let new_storage_requests: Vec<NewStorageRequest<Runtime>> = storage_requests
+                        .into_iter()
+                        .map(|(file_key, sr)| NewStorageRequest {
+                            who: sr.owner,
+                            file_key: file_key.into(),
+                            bucket_id: sr.bucket_id,
+                            location: sr.location,
+                            fingerprint: sr.fingerprint.as_ref().into(),
+                            size: sr.size,
+                            user_peer_ids: sr.user_peer_ids,
+                            expires_at: sr.expires_at,
+                        })
+                        .collect();
 
                     match callback.send(Ok(new_storage_requests)) {
                         Ok(_) => {}

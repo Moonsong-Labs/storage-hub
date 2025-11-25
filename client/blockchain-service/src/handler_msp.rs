@@ -22,10 +22,11 @@ use shc_forest_manager::traits::ForestStorageHandler;
 
 use crate::{
     events::{
-        DistributeFileToBsp, FinalisedBucketMovedAway, FinalisedBucketMutationsApplied,
-        FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
-        FinalisedStorageRequestRejected, ForestWriteLockTaskData, MoveBucketRequestedForMsp,
-        NewStorageRequest, ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData,
+        BatchProcessStorageRequests, DistributeFileToBsp, FinalisedBucketMovedAway,
+        FinalisedBucketMutationsApplied, FinalisedMspStopStoringBucketInsolventUser,
+        FinalisedMspStoppedStoringBucket, FinalisedStorageRequestRejected,
+        ForestWriteLockTaskData, MoveBucketRequestedForMsp, NewStorageRequest,
+        ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData,
         ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
         StartMovedBucketDownload, VerifyMspBucketForests,
     },
@@ -858,7 +859,7 @@ where
                 let permit_wrapper = std::sync::Arc::new(permit);
 
                 // Emit event to trigger batch processing
-                self.emit(crate::events::BatchProcessStorageRequests {
+                self.emit(BatchProcessStorageRequests {
                     permit: permit_wrapper,
                 });
             }

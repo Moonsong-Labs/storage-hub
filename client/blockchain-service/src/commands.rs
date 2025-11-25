@@ -33,6 +33,7 @@ use shc_forest_manager::traits::ForestStorageHandler;
 
 use crate::{
     capacity_manager::CapacityRequestData,
+    events::NewStorageRequest,
     handler::BlockchainService,
     transaction_manager::wait_for_transaction_status,
     types::{
@@ -188,7 +189,7 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     },
     #[command(success_type = Vec<BucketId<Runtime>>)]
     QueryBucketsForMsp { msp_id: ProviderId<Runtime> },
-    #[command(success_type = Vec<crate::events::NewStorageRequest<Runtime>>)]
+    #[command(success_type = Vec<NewStorageRequest<Runtime>>)]
     QueryPendingStorageRequests,
 }
 
