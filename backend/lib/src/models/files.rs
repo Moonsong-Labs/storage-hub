@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
+use serde_with::{serde_as, DisplayFromStr};
 use tracing::error;
 
 use shc_indexer_db::models::{File as DBFile, FileStorageRequestStep};
@@ -20,6 +21,7 @@ pub enum FileStatus {
     DeletionInProgress,
 }
 
+#[serde_as]
 #[derive(Debug, Serialize)]
 pub struct FileInfo {
     #[serde(rename = "fileKey")]
@@ -29,6 +31,7 @@ pub struct FileInfo {
     #[serde(rename = "bucketId")]
     pub bucket_id: String,
     pub location: String,
+    #[serde_as(as = "DisplayFromStr")]
     pub size: u64,
     #[serde(rename = "isPublic")]
     pub is_public: bool,
