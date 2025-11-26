@@ -5,12 +5,13 @@ use std::path::PathBuf;
 use shc_common::{
     traits::StorageEnableRuntime,
     typed_store::{
-        BufferedWriteSupport, CFDequeAPI, ProvidesDbContext, ProvidesTypedDbAccess,
+        BufferedWriteSupport, CFDequeAPI, CFHashSetAPI, ProvidesDbContext, ProvidesTypedDbAccess,
         ProvidesTypedDbSingleAccess, ScaleEncodedCf, SingleScaleEncodedValueCf, TypedDbContext,
         TypedRocksDB,
     },
     types::BlockNumber,
 };
+use sp_core::H256;
 
 use crate::types::{
     ConfirmStoringRequest, FileDeletionRequest, RespondStorageRequest,
@@ -178,6 +179,26 @@ impl PendingMspRespondStorageRequestRightIndexName {
     pub const NAME: &'static str = "pending_msp_respond_storage_request_right_index";
 }
 
+/// HashSet tracking file keys currently in the pending MSP respond storage request queue.
+///
+/// Used for O(1) deduplication when queueing new requests, preventing the same file key
+/// from being queued multiple times which would cause `MspAlreadyConfirmed` errors.
+#[derive(Default)]
+pub struct PendingMspRespondStorageRequestFileKeysCf;
+
+impl ScaleEncodedCf for PendingMspRespondStorageRequestFileKeysCf {
+    type Key = H256;
+    type Value = ();
+
+    const SCALE_ENCODED_NAME: &'static str = PendingMspRespondStorageRequestFileKeysName::NAME;
+}
+
+/// Non-generic name holder for the `PendingMspRespondStorageRequestFileKeys` column family
+pub struct PendingMspRespondStorageRequestFileKeysName;
+impl PendingMspRespondStorageRequestFileKeysName {
+    pub const NAME: &'static str = "pending_msp_respond_storage_request_file_keys";
+}
+
 /// Pending submit proof requests left side (inclusive) index for the [`PendingStopStoringForInsolventUserRequestCf`] CF.
 #[derive(Default)]
 pub struct PendingStopStoringForInsolventUserRequestLeftIndexCf;
@@ -265,7 +286,7 @@ impl FileDeletionRequestRightIndexName {
     pub const NAME: &'static str = "pending_file_deletion_request_right_index";
 }
 
-const ALL_COLUMN_FAMILIES: [&str; 13] = [
+const ALL_COLUMN_FAMILIES: [&str; 14] = [
     LastProcessedBlockNumberName::NAME,
     PendingConfirmStoringRequestLeftIndexName::NAME,
     PendingConfirmStoringRequestRightIndexName::NAME,
@@ -273,6 +294,7 @@ const ALL_COLUMN_FAMILIES: [&str; 13] = [
     PendingMspRespondStorageRequestLeftIndexName::NAME,
     PendingMspRespondStorageRequestRightIndexName::NAME,
     PendingMspRespondStorageRequestName::NAME,
+    PendingMspRespondStorageRequestFileKeysName::NAME,
     PendingStopStoringForInsolventUserRequestLeftIndexName::NAME,
     PendingStopStoringForInsolventUserRequestRightIndexName::NAME,
     PendingStopStoringForInsolventUserRequestName::NAME,
@@ -365,6 +387,17 @@ impl<'a> BlockchainServiceStateStoreRwContext<'a> {
     ) -> PendingFileDeletionRequestDequeAPI<'a, Runtime> {
         PendingFileDeletionRequestDequeAPI {
             phantom: std::marker::PhantomData,
+            db_context: &self.db_context,
+        }
+    }
+
+    /// Returns the HashSet API for tracking file keys pending in the MSP respond storage request queue.
+    ///
+    /// This is used for O(1) deduplication when queueing new requests.
+    pub fn pending_msp_respond_storage_request_file_keys(
+        &'a self,
+    ) -> PendingMspRespondStorageRequestFileKeysAPI<'a> {
+        PendingMspRespondStorageRequestFileKeysAPI {
             db_context: &self.db_context,
         }
     }
@@ -493,4 +526,25 @@ impl<'a, Runtime: StorageEnableRuntime> CFDequeAPI
     type LeftIndexCF = FileDeletionRequestLeftIndexCf;
     type RightIndexCF = FileDeletionRequestRightIndexCf;
     type DataCF = FileDeletionRequestCf<Runtime>;
+}
+
+/// API for the HashSet tracking file keys pending in the MSP respond storage request queue.
+///
+/// Provides O(1) deduplication to prevent queueing the same file key multiple times.
+pub struct PendingMspRespondStorageRequestFileKeysAPI<'a> {
+    pub(crate) db_context:
+        &'a TypedDbContext<'a, TypedRocksDB, BufferedWriteSupport<'a, TypedRocksDB>>,
+}
+
+impl ProvidesDbContext for PendingMspRespondStorageRequestFileKeysAPI<'_> {
+    fn db_context(&self) -> &TypedDbContext<TypedRocksDB, BufferedWriteSupport<TypedRocksDB>> {
+        self.db_context
+    }
+}
+
+impl ProvidesTypedDbAccess for PendingMspRespondStorageRequestFileKeysAPI<'_> {}
+
+impl CFHashSetAPI for PendingMspRespondStorageRequestFileKeysAPI<'_> {
+    type Value = H256;
+    type SetCF = PendingMspRespondStorageRequestFileKeysCf;
 }

@@ -34,7 +34,7 @@ use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_blockchain_service_db::store::PendingTxStore;
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
-    typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
+    typed_store::{CFDequeAPI, CFHashSetAPI, ProvidesTypedDbSingleAccess},
     types::{AccountId, BlockNumber, OpaqueBlock, ParachainClient, TickNumber},
 };
 use shc_forest_manager::traits::ForestStorageHandler;
@@ -918,13 +918,33 @@ where
                     }
                 }
                 BlockchainServiceCommand::QueueMspRespondStorageRequest { request, callback } => {
+                    let file_key = sp_core::H256::from(request.file_key);
                     let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                    state_store_context
-                        .pending_msp_respond_storage_request_deque()
-                        .push_back(request);
+
+                    // Check if file key is already pending.
+                    // `insert` returns true if the key was not present (i.e., we should queue).
+                    let should_queue = state_store_context
+                        .pending_msp_respond_storage_request_file_keys()
+                        .insert(&file_key);
+
+                    if should_queue {
+                        state_store_context
+                            .pending_msp_respond_storage_request_deque()
+                            .push_back(request);
+                    } else {
+                        debug!(target: LOG_TARGET,
+                            "File key {:?} already pending acceptance, skipping queue",
+                            file_key);
+                    }
+
+                    // Commit before calling methods that need mutable borrow of self.
                     state_store_context.commit();
-                    // We check right away if we can process the request so we don't waste time.
-                    self.msp_assign_forest_root_write_lock();
+
+                    if should_queue {
+                        // We check right away if we can process the request so we don't waste time.
+                        self.msp_assign_forest_root_write_lock();
+                    }
+
                     match callback.send(Ok(())) {
                         Ok(_) => {}
                         Err(e) => {

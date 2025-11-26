@@ -13,7 +13,7 @@ use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use shc_actors_framework::actor::Actor;
 use shc_common::{
     traits::StorageEnableRuntime,
-    typed_store::CFDequeAPI,
+    typed_store::{CFDequeAPI, CFHashSetAPI},
     types::{
         BackupStorageProviderId, BlockHash, BlockNumber, BucketId, ProviderId, StorageEnableEvents,
     },
@@ -372,6 +372,11 @@ where
                     .pending_msp_respond_storage_request_deque()
                     .pop_front()
                 {
+                    // Remove from dedup tracking set so the file key can be re-queued if needed.
+                    let file_key = sp_core::H256::from(request.file_key);
+                    state_store_context
+                        .pending_msp_respond_storage_request_file_keys()
+                        .remove(&file_key);
                     respond_storage_requests.push(request);
                 } else {
                     break;
