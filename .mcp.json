@@ -1,0 +1,14 @@
+{
+    "mcpServers": {
+      "Spark": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "mcp-remote@latest",
+          "https://spark-mcp-tm7jcfc5oa-ew.a.run.app/mcp",
+          "--header",
+          "Authorization: Bearer ${MCP_API_KEY}"
+        ]
+      }
+    }
+}
