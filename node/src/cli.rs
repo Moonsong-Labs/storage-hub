@@ -178,6 +178,12 @@ pub struct ProviderConfigurations {
     #[arg(long, value_name = "BOOLEAN")]
     pub msp_distribute_files: bool,
 
+    /// Postgres database URL for persisting pending extrinsics (Blockchain Service DB).
+    /// If not provided, the service will use the `SH_PENDING_DB_URL` environment variable.
+    /// If neither is set, pending transactions will not be persisted.
+    #[arg(long("pending-db-url"), env = "SH_PENDING_DB_URL")]
+    pub pending_db_url: Option<String>,
+
     // ============== Provider RPC options ==============
     // ============== Remote file upload/download options ==============
     /// Maximum file size in bytes (default: 10GB)
@@ -492,6 +498,12 @@ impl ProviderConfigurations {
         // Set MSP distribution flag if provided on CLI and role is MSP
         if self.msp_distribute_files && provider_type == ProviderType::Msp {
             bs_options.enable_msp_distribute_files = Some(true);
+            bs_changed = true;
+        }
+
+        // If a pending DB URL was provided, enable blockchain service options and pass it through
+        if let Some(url) = self.pending_db_url.clone() {
+            bs_options.pending_db_url = Some(url);
             bs_changed = true;
         }
 

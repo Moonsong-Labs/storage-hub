@@ -5,6 +5,7 @@ import postgres from "postgres";
 import stripAnsi from "strip-ansi";
 import tmp from "tmp";
 import { DOCKER_IMAGE } from ".";
+import * as ShConsts from "./bspNet/consts";
 
 export const printDockerStatus = async (verbose = false) => {
   const docker = new Docker();
@@ -50,7 +51,7 @@ export const verifyContainerFreshness = async () => {
     (container) =>
       container.Image === DOCKER_IMAGE ||
       container.Names.some((name) => name.includes("toxiproxy")) ||
-      container.Names.some((name) => name.includes("storage-hub-sh-backend"))
+      container.Names.some((name) => name.includes(ShConsts.NODE_INFOS.backend.containerName))
   );
 
   if (existingContainers.length > 0) {
@@ -81,6 +82,17 @@ export const createSqlClient = () => {
   });
 };
 
+export const createPendingSqlClient = () => {
+  // Pending transactions DB (launched as sh-pending-postgres with host port 5433)
+  return postgres({
+    host: "localhost",
+    port: 5433,
+    database: "pending_tx",
+    username: "postgres",
+    password: "postgres"
+  });
+};
+
 export const checkSHRunningContainers = async (docker: Docker) => {
   const allContainers = await docker.listContainers({ all: true });
   return allContainers.filter((container) => container.Image === DOCKER_IMAGE);
@@ -100,7 +112,11 @@ export const cleanupEnvironment = async (verbose = false) => {
   );
 
   const postgresContainer = allContainers.find((container) =>
-    container.Names.some((name) => name.includes("storage-hub-sh-postgres-1"))
+    container.Names.some((name) => name.includes(ShConsts.NODE_INFOS.indexerDb.containerName))
+  );
+
+  const pendingPostgresContainer = allContainers.find((container) =>
+    container.Names.some((name) => name.includes(ShConsts.NODE_INFOS.pendingDb.containerName))
   );
 
   const copypartyContainers = allContainers.filter((container) =>
@@ -108,7 +124,7 @@ export const cleanupEnvironment = async (verbose = false) => {
   );
 
   const backendContainer = allContainers.find((container) =>
-    container.Names.some((name) => name.includes("storage-hub-sh-backend"))
+    container.Names.some((name) => name.includes(ShConsts.NODE_INFOS.backend.containerName))
   );
 
   const tmpDir = tmp.dirSync({ prefix: "bsp-logs-", unsafeCleanup: true });
@@ -152,6 +168,13 @@ export const cleanupEnvironment = async (verbose = false) => {
     promises.push(docker.getContainer(postgresContainer.Id).remove({ force: true }));
   } else {
     verbose && console.log("No postgres container found, skipping");
+  }
+
+  if (pendingPostgresContainer) {
+    console.log("Stopping pending postgres container");
+    promises.push(docker.getContainer(pendingPostgresContainer.Id).remove({ force: true }));
+  } else {
+    verbose && console.log("No pending postgres container found, skipping");
   }
 
   if (copypartyContainers.length > 0) {

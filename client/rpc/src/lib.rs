@@ -1,3 +1,7 @@
+use std::{
+    collections::HashSet, fmt::Debug, marker::PhantomData, path::PathBuf, str::FromStr, sync::Arc,
+};
+
 use jsonrpsee::{
     core::{async_trait, RpcResult},
     proc_macros::rpc,
@@ -5,9 +9,6 @@ use jsonrpsee::{
     Extensions,
 };
 use log::{debug, error, info};
-use std::{
-    collections::HashSet, fmt::Debug, marker::PhantomData, path::PathBuf, str::FromStr, sync::Arc,
-};
 use tokio::{
     fs,
     io::AsyncReadExt,

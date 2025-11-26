@@ -165,7 +165,8 @@ export async function describeMspNet<
           toxics: options?.toxics,
           initialised: options?.initialised,
           initialised_big: options?.initialised_big,
-          runtimeType: options?.runtimeType
+          runtimeType: options?.runtimeType,
+          pendingTxDb: options?.pendingTxDb
         });
         launchEventEmitter.emit("networkLaunched", launchResponse);
 
