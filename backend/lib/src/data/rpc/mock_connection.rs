@@ -156,17 +156,23 @@ impl MockConnection {
         let _params = hex::decode(params.trim_start_matches("0x"))
             .expect("runtime API params as encoded hex string");
 
+        // Match against the runtime API method names
+        let current_price_method =
+            runtime_apis::RuntimeApiCalls::GetCurrentPricePerGigaUnitPerTick.method_name();
+        let users_of_provider_method =
+            runtime_apis::RuntimeApiCalls::GetUsersOfPaymentStreamsOfProvider.method_name();
+
         match method.as_str() {
-            runtime_apis::CURRENT_PRICE => {
+            m if m == current_price_method => {
                 let price = format!("0x{}", hex::encode(MOCK_PRICE_PER_GIGA_UNIT.encode()));
                 serde_json::json!(price)
             }
-            runtime_apis::NUM_OF_USERS => {
+            m if m == users_of_provider_method => {
                 // SCALE-encoded DUMMY MSP users list
                 serde_json::json!("0x040b17ca3a1454cd058b231090c6fd635dd348659a")
             }
             api => {
-                error!(api= %hex::encode(api), "no mock registered for requested runtime api");
+                error!(api = %api, "no mock registered for requested runtime api");
                 serde_json::json!(null)
             }
         }
@@ -185,18 +191,19 @@ impl MockConnection {
         let storage_key = hex::decode(storage_key.trim_start_matches("0x"))
             .expect("storage queries' storage key to be encoded as hex string");
 
+        // Get the storage prefix for MSP info queries
+        // This corresponds to state_queries::MspInfoQuery
+        let msp_info_prefix = crate::runtime::MainStorageProvidersStorageMap::final_prefix();
+
         match storage_key {
-            // we just always return the same MSP for this query
-            msp if msp.starts_with(
-                crate::runtime::MainStorageProvidersStorageMap::final_prefix().as_slice(),
-            ) =>
-            {
+            // Match against MSP info storage queries (state_queries::MspInfoQuery)
+            msp if msp.starts_with(msp_info_prefix.as_slice()) => {
                 // this is some sample data returned by the RPC during tests
                 // it should be the SCALE-encoded MainStorageProvider for the solochain runtime
                 serde_json::json!("0x0000002000000000934c0300000000000449012f6970342f3137322e31382e302e332f7463702f33303335302f7032702f313244334b6f6f575355767a38514d35583474664161534c4572415a6a523270756f6a6f313670554c42487971544d474b744e5601000000000000000000000000000000010000000d0000004c31b93792ab99e2553bff747199b7a4951185b24c31b93792ab99e2553bff747199b7a4951185b20d000000")
             }
             key => {
-                error!(key = %hex::encode(key), "no mock registered for requested storage");
+                error!(key = %hex::encode(key), "no mock registered for requested storage query");
                 serde_json::json!(null)
             }
         }

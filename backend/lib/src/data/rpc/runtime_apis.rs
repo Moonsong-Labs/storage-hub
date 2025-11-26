@@ -61,16 +61,27 @@ pub trait RuntimeApiCallTypes {
 
     /// The type of the return value from this API call.
     type ReturnType: Codec;
+
+    /// Returns the runtime API call variant associated with this type.
+    fn runtime_api_call() -> RuntimeApiCalls;
 }
 
 pub struct GetCurrentPricePerGigaUnitPerTick;
 impl RuntimeApiCallTypes for GetCurrentPricePerGigaUnitPerTick {
     type Params = ();
     type ReturnType = CurrentPrice;
+
+    fn runtime_api_call() -> RuntimeApiCalls {
+        RuntimeApiCalls::GetCurrentPricePerGigaUnitPerTick
+    }
 }
 
 pub struct GetUsersOfPaymentStreamsOfProvider;
 impl RuntimeApiCallTypes for GetUsersOfPaymentStreamsOfProvider {
     type Params = ProviderId;
     type ReturnType = ActiveUsersList;
+
+    fn runtime_api_call() -> RuntimeApiCalls {
+        RuntimeApiCalls::GetUsersOfPaymentStreamsOfProvider
+    }
 }

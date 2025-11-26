@@ -134,7 +134,6 @@ impl MspService {
 
     /// Get MSP statistics
     pub async fn get_stats(&self) -> Result<StatsResponse, Error> {
-        // TODO(MOCK): replace with actual values retrieved from the RPC/DB
         debug!(target: "msp_service::get_stats", "Getting MSP stats");
 
         let info = self
@@ -943,7 +942,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_stats() {
-        initialize_logging(LogFormat::Auto);
         let service = MockMspServiceBuilder::new()
             .init_repository_with(|client| {
                 Box::pin(async move {
@@ -990,9 +988,10 @@ mod tests {
             used_bytes <= total_bytes,
             "Used bytes should never be more than total bytes"
         );
-        assert!(
-            used_bytes + available_bytes <= total_bytes,
-            "Available + used bytes should never be more than total bytes"
+        assert_eq!(
+            used_bytes + available_bytes,
+            total_bytes,
+            "Available + used bytes should always equal total bytes"
         );
     }
 
