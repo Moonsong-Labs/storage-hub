@@ -365,6 +365,24 @@ pub struct ProviderConfigurations {
         help_heading = "MSP Database Options"
     )]
     pub msp_database_url: Option<String>,
+
+    /// Host address for MSP internal file transfer HTTP server (default: 127.0.0.1).
+    #[arg(
+        long,
+        value_name = "HOST",
+        help_heading = "MSP Internal File Transfer Server Options",
+        default_value = "127.0.0.1"
+    )]
+    pub msp_file_transfer_host: Option<String>,
+
+    /// Port for MSP internal file transfer HTTP server (default: 7070).
+    #[arg(
+        long,
+        value_name = "PORT",
+        help_heading = "MSP Internal File Transfer Server Options",
+        default_value = "7070"
+    )]
+    pub msp_file_transfer_port: Option<u16>,
 }
 
 impl ProviderConfigurations {
@@ -522,6 +540,8 @@ impl ProviderConfigurations {
             blockchain_service,
             maintenance_mode,
             msp_database_url: self.msp_database_url.clone(),
+            msp_file_transfer_host: self.msp_file_transfer_host.clone(),
+            msp_file_transfer_port: self.msp_file_transfer_port,
         }
     }
 }

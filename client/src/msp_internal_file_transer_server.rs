@@ -37,15 +37,22 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             host: "127.0.0.1".to_string(),
-            port: 8080,
+            port: 7070,
         }
     }
 }
 
 /// Global context for the MSP internal file transfer server
-#[derive(Clone)]
 pub struct Context<FL: FileStorageT> {
     file_storage: Arc<RwLock<FL>>,
+}
+
+impl<FL: FileStorageT> Clone for Context<FL> {
+    fn clone(&self) -> Self {
+        Self {
+            file_storage: Arc::clone(&self.file_storage),
+        }
+    }
 }
 
 impl<FL: FileStorageT> Context<FL> {

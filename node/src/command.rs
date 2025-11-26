@@ -72,6 +72,12 @@ pub struct ProviderOptions {
     /// Provides database access without running the full indexer service.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub msp_database_url: Option<String>,
+    /// Host address for MSP internal file transfer HTTP server.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub msp_file_transfer_host: Option<String>,
+    /// Port for MSP internal file transfer HTTP server.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub msp_file_transfer_port: Option<u16>,
 }
 
 /// Role configuration enum that ensures mutual exclusivity between Provider and Fisherman roles.
