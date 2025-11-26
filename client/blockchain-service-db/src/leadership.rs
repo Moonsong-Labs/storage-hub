@@ -5,6 +5,12 @@ use tokio_postgres_rustls::MakeRustlsConnect;
 
 use crate::{make_rustls_config_from_env, DbSetupError, LOG_TARGET};
 
+/// Public alias for the leadership connection client type.
+///
+/// This keeps the concrete client type encapsulated in this crate while allowing
+/// downstream crates (e.g. `shc-blockchain-service`) to store and pass it around.
+pub type LeadershipClient = Client;
+
 /// Hardcoded advisory lock key for leader election.
 ///
 /// All instances that share the same Postgres DB and keystore will contend on this key.
@@ -15,7 +21,9 @@ pub const LEADERSHIP_LOCK_KEY: i64 = 1;
 ///
 /// This connection is non-pooled and intended to live for the lifetime of the process.
 /// It is suitable for acquiring and holding session-level advisory locks.
-pub async fn open_leadership_connection(database_url: &str) -> Result<Client, DbSetupError> {
+pub async fn open_leadership_connection(
+    database_url: &str,
+) -> Result<LeadershipClient, DbSetupError> {
     let rustls_config = make_rustls_config_from_env();
     let tls = MakeRustlsConnect::new(rustls_config);
 
@@ -47,7 +55,10 @@ pub async fn open_leadership_connection(database_url: &str) -> Result<Client, Db
 /// Try to acquire the leadership advisory lock.
 ///
 /// Returns `Ok(true)` if the lock was obtained, `Ok(false)` if another session already holds it.
-pub async fn try_acquire_leadership(client: &Client, key: i64) -> Result<bool, DbSetupError> {
+pub async fn try_acquire_leadership(
+    client: &LeadershipClient,
+    key: i64,
+) -> Result<bool, DbSetupError> {
     let row = client
         .query_one("SELECT pg_try_advisory_lock($1)", &[&key])
         .await
@@ -63,7 +74,7 @@ pub async fn try_acquire_leadership(client: &Client, key: i64) -> Result<bool, D
 ///
 /// Returns `Ok(true)` if the lock was released, `Ok(false)` if it was not held.
 /// This is optional as locks are automatically released when the connection closes.
-pub async fn release_leadership(client: &Client, key: i64) -> Result<bool, DbSetupError> {
+pub async fn release_leadership(client: &LeadershipClient, key: i64) -> Result<bool, DbSetupError> {
     let row = client
         .query_one("SELECT pg_advisory_unlock($1)", &[&key])
         .await

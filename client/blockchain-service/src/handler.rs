@@ -31,7 +31,7 @@ use pallet_storage_providers_runtime_api::{
     QueryProviderMultiaddressesError, QueryStorageProviderCapacityError, StorageProvidersApi,
 };
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
-use shc_blockchain_service_db::store::PendingTxStore;
+use shc_blockchain_service_db::{leadership::LeadershipClient, store::PendingTxStore};
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
@@ -45,7 +45,9 @@ use crate::{
     events::BlockchainServiceEventBusProvider,
     state::{BlockchainServiceStateStore, LastProcessedBlockNumberCf},
     transaction_manager::{TransactionManager, TransactionManagerConfig},
-    types::{FileDistributionInfo, ManagedProvider, MinimalBlockInfo, NewBlockNotificationKind},
+    types::{
+        FileDistributionInfo, ManagedProvider, MinimalBlockInfo, NewBlockNotificationKind, NodeRole,
+    },
 };
 
 pub(crate) const LOG_TARGET: &str = "blockchain-service";
@@ -123,6 +125,10 @@ where
     )>,
     /// Optional pending tx store (Postgres). When present, tx sends and cleanups are persisted.
     pub(crate) pending_tx_store: Option<PendingTxStore>,
+    /// Current role of this node in the HA group.
+    pub(crate) role: NodeRole,
+    /// Dedicated leadership connection used to hold advisory locks when DB is enabled.
+    pub(crate) leadership_conn: Option<LeadershipClient>,
 }
 
 #[derive(Debug, Clone)]
@@ -237,11 +243,32 @@ where
 
         // Initialise pending transactions DB store if configured
         self.actor.init_pending_tx_store().await;
-        // Re-subscribe watchers for eligible pending transactions persisted in DB
-        // TODO: Only the MSP instance that is the "leader" should re-subscribe. The other ones are only followers.
-        self.actor
-            .resubscribe_pending_transactions_on_startup()
-            .await;
+        // Role-specific initialisation based on the result of init_pending_tx_store.
+        match self.actor.role {
+            NodeRole::Leader => {
+                info!(
+                    target: LOG_TARGET,
+                    "🧑‍✈️ Node role is LEADER; re-subscribing pending transactions from DB"
+                );
+                // Re-subscribe watchers for eligible pending transactions persisted in DB.
+                self.actor
+                    .resubscribe_pending_transactions_on_startup()
+                    .await;
+            }
+            NodeRole::Follower => {
+                info!(
+                    target: LOG_TARGET,
+                    "👂 Node role is FOLLOWER; initialising follower pending-tx view"
+                );
+                self.actor.init_follower_pending_tx_state().await;
+            }
+            NodeRole::Standalone => {
+                info!(
+                    target: LOG_TARGET,
+                    "📦 Node role is STANDALONE; pending transactions will not be persisted or shared across instances"
+                );
+            }
+        }
 
         // Import notification stream to be notified of new blocks.
         // The behaviour of this stream is:
@@ -1367,6 +1394,8 @@ where
                 tx
             },
             pending_tx_store: None,
+            role: NodeRole::Standalone,
+            leadership_conn: None,
         }
     }
 

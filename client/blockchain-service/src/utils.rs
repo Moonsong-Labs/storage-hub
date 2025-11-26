@@ -14,7 +14,11 @@ use sc_client_api::{BlockBackend, BlockImportNotification, HeaderBackend};
 use sc_network::Multiaddr;
 use sc_transaction_pool_api::TransactionStatus;
 use shc_actors_framework::actor::Actor;
-use shc_blockchain_service_db::{setup_db_pool, store::PendingTxStore};
+use shc_blockchain_service_db::{
+    leadership::{open_leadership_connection, try_acquire_leadership, LEADERSHIP_LOCK_KEY},
+    setup_db_pool,
+    store::PendingTxStore,
+};
 use shc_common::{
     blockchain_utils::{
         convert_raw_multiaddresses_to_multiaddr, get_events_at_block,
@@ -50,7 +54,7 @@ use crate::{
     transaction_watchers::spawn_transaction_watcher,
     types::{
         BspHandler, Extrinsic, ManagedProvider, MinimalBlockInfo, MspHandler,
-        NewBlockNotificationKind, SendExtrinsicOptions, SubmitAndWatchError,
+        NewBlockNotificationKind, NodeRole, SendExtrinsicOptions, SubmitAndWatchError,
         SubmittedExtrinsicInfo,
     },
     BlockchainService,
@@ -74,21 +78,88 @@ where
                 .clone()
                 .or_else(|| std::env::var("SH_PENDING_DB_URL").ok());
             if let Some(db_url) = maybe_url {
-                match setup_db_pool(db_url).await {
+                debug!(
+                    target: LOG_TARGET,
+                    "Pending transactions DB URL found, initialising pool and leadership lock"
+                );
+                match setup_db_pool(db_url.clone()).await {
                     Ok(pool) => {
                         self.pending_tx_store = Some(PendingTxStore::new(pool));
                         info!(target: LOG_TARGET, "🗃️ Pending transactions store initialised");
+
+                        // Establish dedicated leadership connection and attempt to acquire advisory lock.
+                        match open_leadership_connection(&db_url).await {
+                            Ok(client) => {
+                                match try_acquire_leadership(&client, LEADERSHIP_LOCK_KEY).await {
+                                    Ok(true) => {
+                                        debug!(
+                                            target: LOG_TARGET,
+                                            "This node acquired the leadership advisory lock; running as LEADER"
+                                        );
+                                        self.role = NodeRole::Leader;
+                                    }
+                                    Ok(false) => {
+                                        info!(
+                                            target: LOG_TARGET,
+                                            "Leadership advisory lock already held by another instance; running as FOLLOWER"
+                                        );
+                                        self.role = NodeRole::Follower;
+                                    }
+                                    Err(e) => {
+                                        warn!(
+                                            target: LOG_TARGET,
+                                            "Failed to acquire leadership advisory lock; falling back to STANDALONE mode: {:?}",
+                                            e
+                                        );
+                                        self.role = NodeRole::Standalone;
+                                    }
+                                }
+                                self.leadership_conn = Some(client);
+                            }
+                            Err(e) => {
+                                warn!(
+                                    target: LOG_TARGET,
+                                    "Failed to open leadership connection; pending-tx coordination disabled: {:?}",
+                                    e
+                                );
+                                self.role = NodeRole::Standalone;
+                            }
+                        }
                     }
                     Err(e) => {
                         // Do not fail startup; just log and continue without DB persistence
                         warn!(target: LOG_TARGET, "Pending transactions DB init failed: {:?}", e);
+                        self.role = NodeRole::Standalone;
                     }
                 }
             } else {
-                warn!(target: LOG_TARGET, "Pending transactions DB URL not found in configuration or environment variable");
-                warn!(target: LOG_TARGET, "Pending transactions will not be persisted");
+                warn!(
+                    target: LOG_TARGET,
+                    "Pending transactions DB URL not found in configuration or environment variable; running in STANDALONE mode"
+                );
+                warn!(
+                    target: LOG_TARGET,
+                    "Pending transactions will not be persisted or shared across instances"
+                );
+                self.role = NodeRole::Standalone;
             }
         }
+    }
+
+    /// Initialise follower-specific pending transaction state from the shared DB.
+    ///
+    /// This function will:
+    /// - Perform a startup snapshot from `pending_transactions` for this node's account.
+    /// - Seed the local `TransactionManager` with existing non-terminal rows.
+    /// - Start LISTEN/NOTIFY-based updates and periodic repair polling.
+    ///
+    /// TODO: Implement the follower DB → TransactionManager bridge as described in
+    /// `leader_follower_design.md` (section 6).
+    pub(crate) async fn init_follower_pending_tx_state(&mut self) {
+        debug!(
+            target: LOG_TARGET,
+            "init_follower_pending_tx_state called, but follower DB → TransactionManager bridge is not implemented yet"
+        );
     }
 
     /// Notify tasks waiting for a block number.
