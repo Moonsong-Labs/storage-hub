@@ -223,6 +223,10 @@ pub struct ProviderConfigurations {
     #[arg(long, value_name = "COUNT", default_value = "512")]
     pub chunks_buffer: Option<u64>,
 
+    /// The number of 1KB (FILE_CHUNK_SIZE) chunks we batch and queue from the db while transferring the file on a save_file_to_disk call.
+    #[arg(long, value_name = "COUNT", default_value = "1024")]
+    pub internal_buffer_size: Option<u64>,
+
     // ============== MSP Charge Fees task options ==============
     /// Enable and configure MSP Charge Fees task.
     #[arg(long)]
@@ -397,6 +401,11 @@ impl ProviderConfigurations {
         if let Some(chunks_buffer) = self.chunks_buffer {
             if chunks_buffer > 0 {
                 rpc_config.remote_file.chunks_buffer = chunks_buffer as usize;
+            }
+        }
+        if let Some(internal_buffer_size) = self.internal_buffer_size {
+            if internal_buffer_size > 0 {
+                rpc_config.remote_file.internal_buffer_size = internal_buffer_size as usize;
             }
         }
 
