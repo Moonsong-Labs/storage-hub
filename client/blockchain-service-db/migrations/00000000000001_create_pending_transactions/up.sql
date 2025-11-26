@@ -35,8 +35,8 @@ BEGIN
       'watched', NEW.watched,
       'state', NEW.state,
       'status_metadata', NEW.status_metadata,
-      'creator_id', NEW.creator_id
-      'created_at', NEW.created_at,
+      'creator_id', NEW.creator_id,
+      'created_at', NEW.created_at
     )::text
   );
   RETURN NEW;
@@ -67,7 +67,7 @@ BEGIN
       'state', NEW.state,
       'status_metadata', NEW.status_metadata,
       'creator_id', NEW.creator_id,
-      'updated_at', NEW.updated_at,
+      'updated_at', NEW.updated_at
     )::text
   );
   RETURN NEW;
