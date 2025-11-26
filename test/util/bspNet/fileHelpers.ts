@@ -212,6 +212,17 @@ export const createBucket = async (
 };
 
 /**
+ * Result of a failed extrinsic check.
+ */
+export interface FailedExtrinsicResult {
+  method: string;
+  error: string;
+  docs: string;
+  /** True if the error is MspAlreadyConfirmed - indicates the file is already accepted */
+  isAlreadyConfirmed?: boolean;
+}
+
+/**
  * Checks for failed extrinsics of specific types and logs error details
  * @param api - API instance
  * @param events - Events from sealed block
@@ -224,8 +235,8 @@ export const logFailedTargetExtrinsics = (
   events: EventRecord[],
   targetMethods: { [key: string]: boolean },
   context = ""
-): { method: string; error: string; docs: string }[] => {
-  const failures: { method: string; error: string; docs: string }[] = [];
+): FailedExtrinsicResult[] => {
+  const failures: FailedExtrinsicResult[] = [];
 
   // Track which extrinsic index corresponds to which method
   const extrinsicMethods: string[] = [];
@@ -260,14 +271,26 @@ export const logFailedTargetExtrinsics = (
             targetMethods.mspAcceptStorageRequest &&
             (decoded.name.includes("Msp") || decoded.name.includes("AlreadyConfirmed"))
           ) {
-            console.log(
-              `${context} MSP accept likely failed at extrinsic ${extIndex}: ${errorString}`
-            );
-            if (errorDocs) console.log(`    Details: ${errorDocs}`);
+            // Check specifically for MspAlreadyConfirmed - this is expected behavior
+            // when the MSP tries to accept a file that was already confirmed
+            const isAlreadyConfirmed = decoded.name === "MspAlreadyConfirmed";
+
+            if (isAlreadyConfirmed) {
+              console.log(
+                `${context} MspAlreadyConfirmed at extrinsic ${extIndex} - file(s) already accepted, MSP will retry`
+              );
+            } else {
+              console.log(
+                `${context} MSP accept likely failed at extrinsic ${extIndex}: ${errorString}`
+              );
+              if (errorDocs) console.log(`    Details: ${errorDocs}`);
+            }
+
             failures.push({
               method: "mspAcceptStorageRequest",
               error: errorString,
-              docs: errorDocs
+              docs: errorDocs,
+              isAlreadyConfirmed
             });
           }
 
@@ -621,6 +644,9 @@ export const batchStorageRequests = async (
         targetMethods.bspConfirmStoring = true;
       }
 
+      // Track if we saw MspAlreadyConfirmed in this attempt
+      let sawAlreadyConfirmedThisAttempt = false;
+
       if (Object.keys(targetMethods).length > 0) {
         const failures = logFailedTargetExtrinsics(
           api,
@@ -630,15 +656,29 @@ export const batchStorageRequests = async (
         );
 
         if (failures.length > 0) {
-          console.log(`  - Found ${failures.length} failed extrinsics for MSP/BSP operations`);
+          // Check if any failures are MspAlreadyConfirmed (expected behavior)
+          const alreadyConfirmedFailures = failures.filter((f) => f.isAlreadyConfirmed);
+          const otherFailures = failures.filter((f) => !f.isAlreadyConfirmed);
+
+          if (alreadyConfirmedFailures.length > 0) {
+            sawAlreadyConfirmedThisAttempt = true;
+            console.log(
+              `  - ${alreadyConfirmedFailures.length} MspAlreadyConfirmed error(s) - expected, MSP will retry with remaining files`
+            );
+          }
+
+          if (otherFailures.length > 0) {
+            console.log(
+              `  - Found ${otherFailures.length} other failed extrinsics for MSP/BSP operations`
+            );
+          }
         }
       }
 
       if (mspFound && expectMspAcceptance) {
-        const acceptEvents = await api.assert.eventMany(
-          "fileSystem",
-          "MspAcceptedStorageRequest",
-          events || []
+        // Filter for MspAcceptedStorageRequest events without asserting (may be empty if batch failed)
+        const acceptEvents = (events || []).filter((e) =>
+          api.events.fileSystem.MspAcceptedStorageRequest.is(e.event)
         );
 
         // Count total MspAcceptedStorageRequest events
@@ -648,6 +688,11 @@ export const batchStorageRequests = async (
         if (acceptEvents.length > 0) {
           console.log(
             `  - Found ${acceptEvents.length} MSP acceptances (${prevTotal} → ${totalAcceptance}/${fileKeys.length})`
+          );
+        } else if (sawAlreadyConfirmedThisAttempt) {
+          // MspAlreadyConfirmed means the batch failed, so no events expected
+          console.log(
+            "  - No MSP acceptance events (batch failed due to MspAlreadyConfirmed, MSP will retry)"
           );
         } else {
           console.log(
