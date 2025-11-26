@@ -592,6 +592,7 @@ pub mod pallet {
             size: StorageDataUnit<T>,
             peer_ids: PeerIds<T>,
             expires_at: TickNumber<T>,
+            msp: Option<(ProviderIdFor<T>, bool)>,
         },
         /// Notifies that a Main Storage Provider (MSP) has accepted a storage request for a specific file key.
         ///

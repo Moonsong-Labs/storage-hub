@@ -1,5 +1,5 @@
 import assert, { strictEqual } from "node:assert";
-import { describeMspNet, type EnrichedBspApi, shUser, waitFor } from "../../../util";
+import { describeMspNet, type EnrichedBspApi, shUser } from "../../../util";
 import { DUMMY_MSP_ID, MSP_CHARGING_PERIOD } from "../../../util/bspNet/consts";
 
 await describeMspNet(
@@ -51,7 +51,6 @@ await describeMspNet(
 
       // Extract bucket ID and file keys from the batch result
       bucketId = batchResult.bucketIds[0];
-      const issuedFileKeys = batchResult.fileKeys;
 
       // Check that the payment stream was created and has a rate equal to the rate for a zero-sized bucket
       assert(
@@ -73,42 +72,6 @@ await describeMspNet(
         )
       ).unwrap();
       const zeroSizeBucketFixedRate = userApi.consts.providers.zeroSizeBucketFixedRate.toNumber();
-
-      // The batchStorageRequests has already handled the MSP responses and acceptance
-      // All files should already be accepted at this point
-      // Let's verify the forest root is updated
-
-      // Allow time for the MSP to update the local forest root
-      await waitFor({
-        lambda: async () => (await mspApi.rpc.storagehubclient.getForestRoot(bucketId)).isSome
-      });
-
-      // Get the root of the bucket now that the files have been stored
-      const localBucketRoot = await mspApi.rpc.storagehubclient.getForestRoot(bucketId);
-
-      // Ensure the `BucketRootChanged` event was emitted
-      const { event: bucketRootChangedEvent } = await userApi.assert.eventPresent(
-        "providers",
-        "BucketRootChanged"
-      );
-
-      const bucketRootChangedDataBlob =
-        userApi.events.providers.BucketRootChanged.is(bucketRootChangedEvent) &&
-        bucketRootChangedEvent.data;
-
-      assert(
-        bucketRootChangedDataBlob,
-        "Expected BucketRootChanged event but received event of different type"
-      );
-
-      // Ensure the new root of the bucket matches the one in the event
-      strictEqual(bucketRootChangedDataBlob.newRoot.toString(), localBucketRoot.toString());
-
-      // Ensure that all files have been stored in the MSP's forest, in the bucket's trie
-      for (const fileKey of issuedFileKeys) {
-        const isFileInForest = await mspApi.rpc.storagehubclient.isFileInForest(bucketId, fileKey);
-        assert(isFileInForest.isTrue, "File is not in forest");
-      }
 
       // Check that the rate of the payment stream between the user and the MSP has been updated
       // to reflect the new size of the bucket

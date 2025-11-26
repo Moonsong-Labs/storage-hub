@@ -1301,6 +1301,7 @@ where
                             size: sr.size,
                             user_peer_ids: sr.user_peer_ids,
                             expires_at: sr.expires_at,
+                            msp: sr.msp,
                         })
                         .collect();
 

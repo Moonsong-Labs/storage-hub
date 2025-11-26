@@ -56,6 +56,9 @@ pub struct NewStorageRequest<Runtime: StorageEnableRuntime> {
     pub user_peer_ids: PeerIds<Runtime>,
     /// Block number at which the storage request will expire if not fulfilled.
     pub expires_at: TickNumber<Runtime>,
+    /// MSP who is requested to store the data, and if it has already confirmed that it is storing it.
+    /// This is optional in the event when a storage request is created solely to replicate data to other BSPs and an MSP is already storing the data.
+    pub msp: Option<(ProviderId<Runtime>, bool)>,
 }
 
 /// MSP stopped storing bucket event.

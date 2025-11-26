@@ -1092,6 +1092,7 @@ where
             size,
             peer_ids: user_peer_ids.unwrap_or_default(),
             expires_at: expiration_tick,
+            msp,
         });
 
         Ok(file_key)

@@ -330,6 +330,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 size,
                 peer_ids,
                 expires_at: _,
+                msp: _,
             } => {
                 let bucket =
                     Bucket::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec()).await?;

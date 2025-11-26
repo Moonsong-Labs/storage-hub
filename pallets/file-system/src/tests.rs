@@ -2276,6 +2276,7 @@ mod request_storage {
                         size: 4,
                         peer_ids,
                         expires_at: next_expiration_tick_storage_request,
+                        msp: Some((msp_id, false)),
                     }
                     .into(),
                 );
@@ -2448,6 +2449,7 @@ mod request_storage {
                         size,
                         peer_ids,
                         expires_at: next_expiration_tick_storage_request,
+                        msp: Some((msp_id, false)),
                     }
                     .into(),
                 );

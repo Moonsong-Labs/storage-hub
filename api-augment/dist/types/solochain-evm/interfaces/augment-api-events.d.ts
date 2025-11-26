@@ -496,7 +496,7 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Notifies that a new file has been requested to be stored.
              **/
-            NewStorageRequest: AugmentedEvent<ApiType, [who: AccountId20, fileKey: H256, bucketId: H256, location: Bytes, fingerprint: H256, size_: u64, peerIds: Vec<Bytes>, expiresAt: u32], {
+            NewStorageRequest: AugmentedEvent<ApiType, [who: AccountId20, fileKey: H256, bucketId: H256, location: Bytes, fingerprint: H256, size_: u64, peerIds: Vec<Bytes>, expiresAt: u32, msp: Option<ITuple<[H256, bool]>>], {
                 who: AccountId20;
                 fileKey: H256;
                 bucketId: H256;
@@ -505,6 +505,7 @@ declare module '@polkadot/api-base/types/events' {
                 size_: u64;
                 peerIds: Vec<Bytes>;
                 expiresAt: u32;
+                msp: Option<ITuple<[H256, bool]>>;
             }>;
             /**
              * Notifies that a file key has been queued for a priority challenge for file deletion.

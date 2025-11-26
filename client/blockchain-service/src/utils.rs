@@ -1765,6 +1765,7 @@ where
                 size,
                 peer_ids,
                 expires_at,
+                msp,
             }) => self.emit(NewStorageRequest {
                 who,
                 file_key: FileKey::from(file_key.as_ref()),
@@ -1774,6 +1775,7 @@ where
                 size,
                 user_peer_ids: peer_ids,
                 expires_at: expires_at,
+                msp,
             }),
             // A provider has been marked as slashable.
             StorageEnableEvents::ProofsDealer(pallet_proofs_dealer::Event::SlashableProvider {
