@@ -49,6 +49,7 @@ trie-db = { workspace = true }
 tokio-postgres = { workspace = true }
 tokio-postgres-rustls = { workspace = true }
 uuid = { version = "1.18", features = ["v7"] }
+serde_with = "3.15.1"
 
 # Workspace dependencies
 sc-network = { workspace = true }
