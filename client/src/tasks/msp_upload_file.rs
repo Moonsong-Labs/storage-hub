@@ -530,11 +530,57 @@ where
             }
         };
 
+        // Collect file keys we want to accept to check if they're still pending
+        let file_keys_to_check: Vec<FileKey> = event
+            .data
+            .respond_storing_requests
+            .iter()
+            .filter_map(|r| {
+                if let MspRespondStorageRequest::Accept = &r.response {
+                    Some(r.file_key.into())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // Query pending storage requests for these specific file keys.
+        // The runtime API already filters to only return requests that are:
+        // 1. Assigned to this MSP
+        // 2. Not yet accepted (msp.1 == false)
+        let pending_file_keys: HashSet<H256> = if !file_keys_to_check.is_empty() {
+            self.storage_hub_handler
+                .blockchain
+                .query_pending_storage_requests(Some(file_keys_to_check))
+                .await
+                .unwrap_or_else(|e| {
+                    warn!(
+                        target: LOG_TARGET,
+                        "Failed to query storage requests: {:?}. Proceeding with all requests.",
+                        e
+                    );
+                    Vec::new()
+                })
+                .into_iter()
+                .map(|r| H256::from_slice(r.file_key.as_ref()))
+                .collect()
+        } else {
+            HashSet::new()
+        };
+
         let mut file_key_responses = HashMap::new();
 
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-
-        for respond in &event.data.respond_storing_requests {
+        // Filter out Accept requests that are already accepted (not in pending_file_keys)
+        for respond in event
+            .data
+            .respond_storing_requests
+            .iter()
+            .filter(|r| match &r.response {
+                MspRespondStorageRequest::Accept => pending_file_keys.contains(&r.file_key),
+                MspRespondStorageRequest::Reject(_) => true,
+            })
+        {
             info!(target: LOG_TARGET, "Processing respond storing request.");
             let bucket_id = match read_file_storage.get_metadata(&respond.file_key) {
                 Ok(Some(metadata)) => H256::from_slice(metadata.bucket_id().as_ref()),
@@ -740,7 +786,7 @@ where
         let pending_requests = self
             .storage_hub_handler
             .blockchain
-            .query_pending_storage_requests()
+            .query_pending_storage_requests(None)
             .await
             .map_err(|e| anyhow!("Failed to query pending storage requests: {:?}", e))?;
 

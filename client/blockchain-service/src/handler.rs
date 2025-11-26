@@ -1255,7 +1255,10 @@ where
                         }
                     }
                 }
-                BlockchainServiceCommand::QueryPendingStorageRequests { callback } => {
+                BlockchainServiceCommand::QueryPendingStorageRequests {
+                    file_keys,
+                    callback,
+                } => {
                     let managed_msp_id = match &self.maybe_managed_provider {
                         Some(ManagedProvider::Msp(msp_handler)) => msp_handler.msp_id.clone(),
                         _ => {
@@ -1272,14 +1275,27 @@ where
 
                     let current_block_hash = self.client.info().best_hash;
 
+                    // Query pending storage requests (not yet accepted by MSP)
                     let storage_requests = match self
                         .client
                         .runtime_api()
                         .pending_storage_requests_by_msp(current_block_hash, managed_msp_id)
                     {
-                        Ok(sr) => sr,
+                        Ok(mut sr) => {
+                            // If specific file keys provided, look them up directly
+                            match file_keys {
+                                Some(keys) => keys
+                                    .into_iter()
+                                    .filter_map(|k| {
+                                        let file_key = sp_core::H256::from_slice(k.as_ref());
+                                        sr.remove(&file_key).map(|metadata| (file_key, metadata))
+                                    })
+                                    .collect(),
+                                None => sr,
+                            }
+                        }
                         Err(_) => {
-                            warn!(target: LOG_TARGET, "Failed to get pending storage request");
+                            warn!(target: LOG_TARGET, "Failed to get pending storage requests");
                             match callback.send(Ok(Vec::new())) {
                                 Ok(_) => {}
                                 Err(e) => {
