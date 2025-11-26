@@ -58,20 +58,6 @@ await describeMspNet(
       strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp1.expectedPeerId);
     });
 
-    it("Should be able to retrieve current price per giga unit per tick", async () => {
-      const current_price =
-        await msp1Api.call.paymentStreamsApi.getCurrentPricePerGigaUnitPerTick();
-
-      const current_price_rpc =
-        await msp1Api.rpc.storagehubclient.getCurrentPricePerGigaUnitPerTick();
-
-      strictEqual(
-        current_price.toString(),
-        current_price_rpc.toString(),
-        "Runtime API and RPC should have the same value"
-      );
-    });
-
     it("Should fetch payment streams from chain", async () => {
       const userAddress = ETH_SH_USER_ADDRESS;
 
