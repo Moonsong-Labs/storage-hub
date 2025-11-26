@@ -20,6 +20,8 @@ use shc_common::types::ParachainClient;
 use shc_file_manager::{in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage};
 use shc_file_transfer_service::{spawn_file_transfer_service, FileTransferService};
 use shc_fisherman_service::{spawn_fisherman_service, FishermanService};
+
+use crate::msp_internal_file_transfer_server;
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_indexer_service::IndexerMode;
 use shc_rpc::{RpcConfig, StorageHubClientRpcConfig};
@@ -332,6 +334,27 @@ where
         config: Option<BspSubmitProofOptions>,
     ) -> &mut Self {
         self.bsp_submit_proof_config = config.map(Into::into);
+        self
+    }
+
+    /// Spawn the MSP internal file transfer HTTP server (MSP only)
+    ///
+    /// This should be called after setting up the storage layer.
+    pub async fn with_msp_internal_file_transfer_server(
+        &mut self,
+        config: msp_internal_file_transfer_server::Config,
+    ) -> &mut Self {
+        let file_storage = self.file_storage.clone().expect(
+            "File Storage not initialized. Use `setup_storage_layer` before calling `with_msp_internal_file_transfer_server`."
+        );
+
+        if let Err(e) = msp_internal_file_transfer_server::spawn_server(config, file_storage).await
+        {
+            warn!(
+                "Failed to spawn MSP internal file transfer server: {}. Continuing without it.",
+                e
+            );
+        }
         self
     }
 
