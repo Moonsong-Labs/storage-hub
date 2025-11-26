@@ -865,7 +865,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        config::{Config, LogFormat},
+        config::Config,
         constants::{
             database::DEFAULT_PAGE_LIMIT,
             mocks::{MOCK_ADDRESS, MOCK_PRICE_PER_GIGA_UNIT},
@@ -878,7 +878,6 @@ mod tests {
             },
             rpc::{AnyRpcConnection, MockConnection, StorageHubRpcClient},
         },
-        log::initialize_logging,
         test_utils::random_bytes_32,
     };
 
