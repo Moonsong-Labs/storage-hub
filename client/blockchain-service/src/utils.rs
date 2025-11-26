@@ -1845,99 +1845,122 @@ where
         &mut self,
         event: StorageEnableEvents<Runtime>,
     ) {
+        // Process the events that are common to all roles.
         match event {
-            // New storage request event coming from pallet-file-system.
-            StorageEnableEvents::FileSystem(pallet_file_system::Event::NewStorageRequest {
-                who,
-                file_key,
-                bucket_id,
-                location,
-                fingerprint,
-                size,
-                peer_ids,
-                expires_at,
-            }) => self.emit(NewStorageRequest {
-                who,
-                file_key: FileKey::from(file_key.as_ref()),
-                bucket_id,
-                location,
-                fingerprint: fingerprint.as_ref().into(),
-                size,
-                user_peer_ids: peer_ids,
-                expires_at: expires_at,
-            }),
-            // A provider has been marked as slashable.
-            StorageEnableEvents::ProofsDealer(pallet_proofs_dealer::Event::SlashableProvider {
-                provider,
-                next_challenge_deadline,
-            }) => self.emit(SlashableProvider {
-                provider,
-                next_challenge_deadline: next_challenge_deadline.saturated_into(),
-            }),
-            // The last chargeable info of a provider has been updated
-            StorageEnableEvents::PaymentStreams(
-                pallet_payment_streams::Event::LastChargeableInfoUpdated {
-                    provider_id,
-                    last_chargeable_tick,
-                    last_chargeable_price_index,
-                },
-            ) => {
-                if let Some(managed_provider_id) = &self.maybe_managed_provider {
-                    // We only emit the event if the Provider ID is the one that this node is managing.
-                    // It's irrelevant if the Provider ID is a MSP or a BSP.
-                    let managed_provider_id = match managed_provider_id {
-                        ManagedProvider::Bsp(bsp_handler) => &bsp_handler.bsp_id,
-                        ManagedProvider::Msp(msp_handler) => &msp_handler.msp_id,
-                    };
-                    if provider_id == *managed_provider_id {
-                        self.emit(LastChargeableInfoUpdated {
+            _ => {
+                trace!(target: LOG_TARGET, "No common block import events to process regarding of the role of the node");
+            }
+        }
+
+        // Process the events that are specific to the role of the node.
+        match self.role {
+            NodeRole::Leader | NodeRole::Standalone => {
+                match event {
+                    // New storage request event coming from pallet-file-system.
+                    StorageEnableEvents::FileSystem(
+                        pallet_file_system::Event::NewStorageRequest {
+                            who,
+                            file_key,
+                            bucket_id,
+                            location,
+                            fingerprint,
+                            size,
+                            peer_ids,
+                            expires_at,
+                        },
+                    ) => self.emit(NewStorageRequest {
+                        who,
+                        file_key: FileKey::from(file_key.as_ref()),
+                        bucket_id,
+                        location,
+                        fingerprint: fingerprint.as_ref().into(),
+                        size,
+                        user_peer_ids: peer_ids,
+                        expires_at: expires_at,
+                    }),
+                    // A provider has been marked as slashable.
+                    StorageEnableEvents::ProofsDealer(
+                        pallet_proofs_dealer::Event::SlashableProvider {
+                            provider,
+                            next_challenge_deadline,
+                        },
+                    ) => self.emit(SlashableProvider {
+                        provider,
+                        next_challenge_deadline: next_challenge_deadline.saturated_into(),
+                    }),
+                    // The last chargeable info of a provider has been updated
+                    StorageEnableEvents::PaymentStreams(
+                        pallet_payment_streams::Event::LastChargeableInfoUpdated {
                             provider_id,
                             last_chargeable_tick,
                             last_chargeable_price_index,
-                        })
+                        },
+                    ) => {
+                        if let Some(managed_provider_id) = &self.maybe_managed_provider {
+                            // We only emit the event if the Provider ID is the one that this node is managing.
+                            // It's irrelevant if the Provider ID is a MSP or a BSP.
+                            let managed_provider_id = match managed_provider_id {
+                                ManagedProvider::Bsp(bsp_handler) => &bsp_handler.bsp_id,
+                                ManagedProvider::Msp(msp_handler) => &msp_handler.msp_id,
+                            };
+                            if provider_id == *managed_provider_id {
+                                self.emit(LastChargeableInfoUpdated {
+                                    provider_id,
+                                    last_chargeable_tick,
+                                    last_chargeable_price_index,
+                                })
+                            }
+                        }
                     }
-                }
-            }
-            // A user has been flagged as without funds in the runtime
-            StorageEnableEvents::PaymentStreams(
-                pallet_payment_streams::Event::UserWithoutFunds { who },
-            ) => {
-                self.emit(UserWithoutFunds { who });
-            }
-            // A file was correctly deleted from a user without funds
-            StorageEnableEvents::FileSystem(
-                pallet_file_system::Event::SpStopStoringInsolventUser {
-                    sp_id,
-                    file_key,
-                    owner,
-                    location,
-                    new_root,
-                },
-            ) => {
-                if let Some(managed_provider_id) = &self.maybe_managed_provider {
-                    // We only emit the event if the Provider ID is the one that this node is managing.
-                    // It's irrelevant if the Provider ID is a MSP or a BSP.
-                    let managed_provider_id = match managed_provider_id {
-                        ManagedProvider::Bsp(bsp_handler) => &bsp_handler.bsp_id,
-                        ManagedProvider::Msp(msp_handler) => &msp_handler.msp_id,
-                    };
-                    if sp_id == *managed_provider_id {
-                        self.emit(SpStopStoringInsolventUser {
+                    // A user has been flagged as without funds in the runtime
+                    StorageEnableEvents::PaymentStreams(
+                        pallet_payment_streams::Event::UserWithoutFunds { who },
+                    ) => {
+                        self.emit(UserWithoutFunds { who });
+                    }
+                    // A file was correctly deleted from a user without funds
+                    StorageEnableEvents::FileSystem(
+                        pallet_file_system::Event::SpStopStoringInsolventUser {
                             sp_id,
-                            file_key: file_key.into(),
+                            file_key,
                             owner,
                             location,
                             new_root,
-                        })
+                        },
+                    ) => {
+                        if let Some(managed_provider_id) = &self.maybe_managed_provider {
+                            // We only emit the event if the Provider ID is the one that this node is managing.
+                            // It's irrelevant if the Provider ID is a MSP or a BSP.
+                            let managed_provider_id = match managed_provider_id {
+                                ManagedProvider::Bsp(bsp_handler) => &bsp_handler.bsp_id,
+                                ManagedProvider::Msp(msp_handler) => &msp_handler.msp_id,
+                            };
+                            if sp_id == *managed_provider_id {
+                                self.emit(SpStopStoringInsolventUser {
+                                    sp_id,
+                                    file_key: file_key.into(),
+                                    owner,
+                                    location,
+                                    new_root,
+                                })
+                            }
+                        }
                     }
+                    _ => {}
                 }
             }
-            _ => {}
+            NodeRole::Follower => {
+                trace!(target: LOG_TARGET, "No block import events to process while in FOLLOWER role");
+            }
         }
     }
 
     pub(crate) fn process_common_finality_events(&self, _event: StorageEnableEvents<Runtime>) {
-        {}
+        match self.role {
+            NodeRole::Leader | NodeRole::Standalone | NodeRole::Follower => {
+                trace!(target: LOG_TARGET, "No finality events to process while in LEADER, STANDALONE or FOLLOWER role");
+            }
+        }
     }
 
     pub(crate) fn process_test_user_events(&self, event: StorageEnableEvents<Runtime>) {

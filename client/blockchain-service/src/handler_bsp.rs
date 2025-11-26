@@ -30,7 +30,7 @@ use crate::{
         ProcessSubmitProofRequestData,
     },
     handler::LOG_TARGET,
-    types::ManagedProvider,
+    types::{ManagedProvider, NodeRole},
     BlockchainService,
 };
 
@@ -83,22 +83,8 @@ where
             }
         };
 
+        // Process the events that are common to all roles.
         match event {
-            StorageEnableEvents::ProofsDealer(pallet_proofs_dealer::Event::NewChallengeSeed {
-                challenges_ticker,
-                seed: _,
-            }) => {
-                // Check if the challenges tick is one that this BSP has to submit a proof for.
-                if self.should_provider_submit_proof(
-                    &block_hash,
-                    managed_bsp_id,
-                    &challenges_ticker,
-                ) {
-                    self.proof_submission_catch_up(&block_hash);
-                } else {
-                    trace!(target: LOG_TARGET, "Challenges tick is not the next one to be submitted for Provider [{:?}]", managed_bsp_id);
-                }
-            }
             StorageEnableEvents::FileSystem(pallet_file_system::Event::MoveBucketRejected {
                 bucket_id,
                 old_msp_id,
@@ -144,6 +130,36 @@ where
             // Ignore all other events.
             _ => {}
         }
+
+        // Process the events that are specific to the role of the node.
+        match self.role {
+            NodeRole::Leader | NodeRole::Standalone => {
+                match event {
+                    StorageEnableEvents::ProofsDealer(
+                        pallet_proofs_dealer::Event::NewChallengeSeed {
+                            challenges_ticker,
+                            seed: _,
+                        },
+                    ) => {
+                        // Check if the challenges tick is one that this BSP has to submit a proof for.
+                        if self.should_provider_submit_proof(
+                            &block_hash,
+                            managed_bsp_id,
+                            &challenges_ticker,
+                        ) {
+                            self.proof_submission_catch_up(&block_hash);
+                        } else {
+                            trace!(target: LOG_TARGET, "Challenges tick is not the next one to be submitted for Provider [{:?}]", managed_bsp_id);
+                        }
+                    }
+                    // Ignore all other events.
+                    _ => {}
+                }
+            }
+            NodeRole::Follower => {
+                trace!(target: LOG_TARGET, "No BSP block import events to process while in FOLLOWER role");
+            }
+        }
     }
 
     /// Runs at the end of every block import for a BSP.
@@ -174,6 +190,7 @@ where
             }
         };
 
+        // Process the events that are common to all roles.
         match event {
             StorageEnableEvents::ProofsDealer(
                 pallet_proofs_dealer::Event::MutationsAppliedForProvider {
@@ -209,6 +226,13 @@ where
             }
             // Ignore all other events.
             _ => {}
+        }
+
+        // Process the events that are specific to the role of the node.
+        match self.role {
+            NodeRole::Leader | NodeRole::Standalone | NodeRole::Follower => {
+                trace!(target: LOG_TARGET, "No BSP finality events to process exclusively while in LEADER, STANDALONE or FOLLOWER role");
+            }
         }
     }
 
