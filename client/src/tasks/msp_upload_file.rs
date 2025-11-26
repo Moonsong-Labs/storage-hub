@@ -234,7 +234,7 @@ where
         let mut files_to_process = Vec::new();
 
         for request in pending_requests {
-            if request.size == Zero::zero() {
+            if request.size.is_zero() {
                 warn!(target: LOG_TARGET, "Skipping storage request with zero file size");
                 continue;
             }
@@ -764,7 +764,7 @@ where
         // Hold the Arc reference to the permit for the lifetime of this handler
         // The permit will be automatically released when this handler completes or fails
         // (when the Arc is dropped, the permit is dropped, releasing the semaphore)
-        let _permit_arc = event.permit;
+        let _permit_guard = event.permit;
 
         info!(
             target: LOG_TARGET,
@@ -950,7 +950,7 @@ where
         &mut self,
         event: NewStorageRequest<Runtime>,
     ) -> anyhow::Result<()> {
-        if event.size == Zero::zero() {
+        if event.size.is_zero() {
             let err_msg = "File size cannot be 0";
             error!(target: LOG_TARGET, err_msg);
             return Err(anyhow!(err_msg));

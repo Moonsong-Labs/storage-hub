@@ -384,7 +384,7 @@ where
             }
 
             // If we have at least 1 respond storing request, send the process event.
-            if respond_storage_requests.len() > 0 {
+            if !respond_storage_requests.is_empty() {
                 next_event_data = Some(
                     ProcessMspRespondStoringRequestData {
                         respond_storing_requests: respond_storage_requests,
@@ -443,44 +443,42 @@ where
                             .ok()
                     });
 
-        match event {
-            StorageEnableEvents::ProofsDealer(pallet_proofs_dealer::Event::MutationsApplied {
-                mutations,
-                old_root,
-                new_root,
+        if let StorageEnableEvents::ProofsDealer(pallet_proofs_dealer::Event::MutationsApplied {
+            mutations,
+            old_root,
+            new_root,
+            event_info,
+        }) = event
+        {
+            let Some(bucket_id) = self.validate_bucket_mutations_for_msp(
+                block_hash,
+                buckets_managed_by_msp,
                 event_info,
-            }) => {
-                let Some(bucket_id) = self.validate_bucket_mutations_for_msp(
-                    block_hash,
-                    buckets_managed_by_msp,
-                    event_info,
-                ) else {
-                    return;
-                };
+            ) else {
+                return;
+            };
 
-                // Apply forest root changes to the Bucket's Forest Storage.
-                // At this point, we only apply the mutation of this file and its metadata to the Forest of this Bucket,
-                // and not to the File Storage.
-                // For file deletions, we will remove the file from the File Storage only after finality is reached.
-                // This gives us the opportunity to put the file back in the Forest if this block is re-orged.
-                let bucket_forest_key = bucket_id.as_ref().to_vec();
-                if let Err(e) = self
-                    .apply_forest_mutations_and_verify_root(
-                        bucket_forest_key,
-                        &mutations,
-                        revert,
-                        old_root,
-                        new_root,
-                    )
-                    .await
-                {
-                    error!(target: LOG_TARGET, "CRITICAL ❗️❗️ Failed to apply mutations and verify root for Bucket [{:?}]. \nError: {:?}", bucket_id, e);
-                    return;
-                };
+            // Apply forest root changes to the Bucket's Forest Storage.
+            // At this point, we only apply the mutation of this file and its metadata to the Forest of this Bucket,
+            // and not to the File Storage.
+            // For file deletions, we will remove the file from the File Storage only after finality is reached.
+            // This gives us the opportunity to put the file back in the Forest if this block is re-orged.
+            let bucket_forest_key = bucket_id.as_ref().to_vec();
+            if let Err(e) = self
+                .apply_forest_mutations_and_verify_root(
+                    bucket_forest_key,
+                    &mutations,
+                    revert,
+                    old_root,
+                    new_root,
+                )
+                .await
+            {
+                error!(target: LOG_TARGET, "CRITICAL ❗️❗️ Failed to apply mutations and verify root for Bucket [{:?}]. \nError: {:?}", bucket_id, e);
+                return;
+            };
 
-                info!(target: LOG_TARGET, "🌳 New local Forest root matches the one in the block for Bucket [{:?}]", bucket_id);
-            }
-            _ => {}
+            info!(target: LOG_TARGET, "🌳 New local Forest root matches the one in the block for Bucket [{:?}]", bucket_id);
         }
     }
 
@@ -821,7 +819,7 @@ where
                 // Wrap permit in Arc to satisfy Clone requirement for events
                 // The permit will be held by the event handler for its lifetime,
                 // automatically releasing when the handler completes or fails
-                let permit_wrapper = std::sync::Arc::new(permit);
+                let permit_wrapper = Arc::new(permit);
 
                 // Emit event to trigger batch processing
                 self.emit(BatchProcessStorageRequests {
