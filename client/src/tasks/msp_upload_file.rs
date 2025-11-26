@@ -239,18 +239,6 @@ where
                 continue;
             }
 
-            // Skip if this MSP has already accepted the storage request
-            if let Some((msp_id, already_accepted)) = request.msp {
-                if msp_id == own_msp_id && already_accepted {
-                    trace!(
-                        target: LOG_TARGET,
-                        "Skipping already accepted storage request for bucket {:?}",
-                        request.bucket_id
-                    );
-                    continue;
-                }
-            }
-
             match self
                 .storage_hub_handler
                 .blockchain
@@ -1012,18 +1000,6 @@ where
         } else {
             warn!(target: LOG_TARGET, "Skipping storage request - MSP ID not found for bucket ID {:?}", event.bucket_id);
             return Ok(());
-        }
-
-        // Check if this MSP has already accepted the storage request
-        if let Some((msp_id, already_accepted)) = event.msp {
-            if msp_id == own_msp_id && already_accepted {
-                debug!(
-                    target: LOG_TARGET,
-                    "Skipping storage request - MSP has already accepted for bucket {:?}",
-                    event.bucket_id
-                );
-                return Ok(());
-            }
         }
 
         // Construct file metadata and derive file key.

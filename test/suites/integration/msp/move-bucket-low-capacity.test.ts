@@ -1,4 +1,4 @@
-import { strictEqual } from "node:assert";
+import assert, { strictEqual } from "node:assert";
 import {
   addMspContainer,
   assertEventPresent,
@@ -9,7 +9,8 @@ import {
   getContainerIp,
   mspThreeKey,
   ShConsts,
-  shUser
+  shUser,
+  sleep
 } from "../../../util";
 
 await describeMspNet(
@@ -156,6 +157,66 @@ await describeMspNet(
       // Extract bucket ID and file keys from the batch result
       bucketId = batchResult.bucketIds[0];
       allBucketFiles.push(...batchResult.fileKeys);
+    });
+
+    it("MSP 1 receives files from user and accepts them", async () => {
+      // The batchStorageRequests helper has already handled:
+      // - Waiting for MSP to store files
+      // - MSP acceptance responses
+      // - Verifying files are in storage
+
+      // Give time for the MSP to update the local forest root.
+      await sleep(1000);
+
+      // Check that the local forest root is updated, and matches the on-chain root.
+      const localBucketRoot = await mspApi.rpc.storagehubclient.getForestRoot(bucketId);
+
+      // Get the on-chain bucket root from the last BucketRootChanged event
+      const { event: bucketRootChangedEvent } = await userApi.assert.eventPresent(
+        "providers",
+        "BucketRootChanged"
+      );
+      const bucketRootChangedDataBlob =
+        userApi.events.providers.BucketRootChanged.is(bucketRootChangedEvent) &&
+        bucketRootChangedEvent.data;
+      if (!bucketRootChangedDataBlob) {
+        throw new Error("Expected BucketRootChanged event but received event of different type");
+      }
+
+      strictEqual(bucketRootChangedDataBlob.newRoot.toString(), localBucketRoot.toString());
+
+      // Verify all files are in the Forest storage of the MSP
+      for (const fileKey of allBucketFiles) {
+        const isFileInForest = await mspApi.rpc.storagehubclient.isFileInForest(bucketId, fileKey);
+        assert(isFileInForest.isTrue, "File is not in forest");
+      }
+
+      // Seal more blocks until the storage request is fulfilled.
+      let hasStorageRequests = true;
+      let iterations = 0;
+      const maxIterations = 60; // Max 60 iterations (30 seconds at 500ms per iteration)
+
+      while (hasStorageRequests && iterations < maxIterations) {
+        hasStorageRequests = false;
+        for (const fileKey of allBucketFiles) {
+          const storageRequest = await userApi.query.fileSystem.storageRequests(fileKey);
+          if (storageRequest && !storageRequest.isEmpty) {
+            hasStorageRequests = true;
+            break;
+          }
+        }
+
+        if (hasStorageRequests) {
+          await sleep(500);
+          const block = await userApi.block.seal();
+          await userApi.rpc.engine.finalizeBlock(block.blockReceipt.blockHash);
+          iterations++;
+        }
+      }
+
+      if (iterations >= maxIterations) {
+        throw new Error(`Storage requests not fulfilled after ${maxIterations} iterations`);
+      }
     });
 
     it("New MSP rejects move request due to low capacity", async () => {
