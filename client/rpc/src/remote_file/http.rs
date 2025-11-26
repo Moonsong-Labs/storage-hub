@@ -271,6 +271,7 @@ mod tests {
             user_agent: "Test-Agent".to_string(),
             chunk_size: 8192,
             chunks_buffer: 512,
+            internal_buffer_size: 1024,
         };
         HttpFileHandler::new(config, url).unwrap()
     }

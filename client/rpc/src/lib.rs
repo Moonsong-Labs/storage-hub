@@ -2,7 +2,6 @@ use std::{
     collections::HashSet, fmt::Debug, marker::PhantomData, path::PathBuf, str::FromStr, sync::Arc,
 };
 
-use futures::StreamExt;
 use jsonrpsee::{
     core::{async_trait, RpcResult},
     proc_macros::rpc,
@@ -10,7 +9,12 @@ use jsonrpsee::{
     Extensions,
 };
 use log::{debug, error, info};
-use tokio::{fs, io::AsyncReadExt, sync::RwLock};
+use tokio::{
+    fs,
+    io::AsyncReadExt,
+    sync::{mpsc, RwLock},
+};
+use tokio_stream::wrappers::ReceiverStream;
 
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
@@ -588,7 +592,7 @@ where
         // Check if the execution is safe.
         check_if_safe(ext)?;
 
-        // Acquire FileStorage read lock.
+        // Acquire FileStorage read lock to validate metadata and completeness.
         let read_file_storage = self.file_storage.read().await;
 
         // Retrieve file metadata from File Storage.
@@ -614,39 +618,77 @@ where
             }));
         }
 
+        // Release the read lock before performing the potentially long-running streaming operation.
+        drop(read_file_storage);
+
         // Create file handler for writing to local or remote destination.
         let remote_file_config = self.config.remote_file.clone();
         let (handler, _url) =
             RemoteFileHandlerFactory::create_from_string(&file_path, remote_file_config)
                 .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;
 
-        // TODO: Optimize memory usage for large file transfers
-        // Current implementation loads all chunks into memory before streaming to remote location.
-        // This can cause memory exhaustion for large files.
+        // Stream file chunks from FileStorage to the destination using a bounded channel.
         //
-        // Proposed solution: Implement true streaming by:
-        // 1. Create a custom Stream implementation that reads chunks on-demand
-        // 2. Then, pass this stream directly to the remote handler
-        // 3. This would allow chunks to be read from source and written to destination
-        //    without buffering the entire file in memory
+        // This avoids loading the entire file into memory:
+        // - A small, bounded channel limits the number of in-flight chunks.
+        // - Chunks are read from storage in small batches under a short-lived read lock.
+        // - Backpressure from the upload side naturally slows down chunk production.
         //
-        // This has the problem of holding onto the file storage read lock, perhaps that's ok?
-        // If it is we would need to shield against slow peers. We already have timeouts but not on the transfer as a whole
-        // We also might need to allow pagination to resume transfer
-        let mut chunks = Vec::new();
-        for chunk_idx in 0..total_chunks {
-            let chunk_id = ChunkId::new(chunk_idx);
-            let chunk = read_file_storage
-                .get_chunk(&file_key, &chunk_id)
-                .map_err(into_rpc_error)?;
-            chunks.push(chunk);
-        }
-        drop(read_file_storage);
+        // The maximum default buffered size will be internal_buffer_size (default 1024) * FILE_CHUNK_SIZE (1Kb) = 1 Mb
+        let queue_buffered_size = self.config.remote_file.internal_buffer_size;
+        let (tx, rx) = mpsc::channel::<Result<bytes::Bytes, std::io::Error>>(queue_buffered_size);
 
-        let chunks = futures::stream::iter(chunks.into_iter().map(Ok::<_, std::io::Error>));
+        let file_storage = Arc::clone(&self.file_storage);
+        let file_key_clone = file_key.clone();
 
-        let reader =
-            tokio_util::io::StreamReader::new(chunks.map(|result| result.map(bytes::Bytes::from)));
+        // We read chunks in batches to amortize the cost of acquiring the read lock.
+        // Note: we don't leave it locked as the download process velocity depends on the client receiving the file.
+        let batch_size = queue_buffered_size as u64;
+
+        // Channel Sender: reads chunks from FileStorage in batches and sends them through the channel.
+        tokio::spawn(async move {
+            let mut current_chunk: u64 = 0;
+
+            while current_chunk < total_chunks {
+                let batch_end =
+                    std::cmp::min(total_chunks, current_chunk.saturating_add(batch_size));
+
+                // Read a batch of chunks under a single read lock.
+                let mut batch = Vec::with_capacity((batch_end - current_chunk) as usize);
+                {
+                    let read_storage = file_storage.read().await;
+                    for idx in current_chunk..batch_end {
+                        let chunk_id = ChunkId::new(idx);
+                        match read_storage.get_chunk(&file_key_clone, &chunk_id) {
+                            Ok(chunk) => batch.push(chunk),
+                            Err(e) => {
+                                // Propagate the error to the consumer and stop producing.
+                                let _ = tx
+                                    .send(Err(std::io::Error::new(
+                                        std::io::ErrorKind::Other,
+                                        format!("Error reading chunk {idx}: {:?}", e),
+                                    )))
+                                    .await;
+                                return;
+                            }
+                        }
+                    }
+                }
+
+                // Send the batch to the consumer, backpressure ensured by the bounded channel.
+                for chunk in batch {
+                    if tx.send(Ok(bytes::Bytes::from(chunk))).await.is_err() {
+                        // Consumer dropped (e.g., RPC cancelled or upload failed); stop producing.
+                        return;
+                    }
+                }
+
+                current_chunk = batch_end;
+            }
+        });
+
+        let stream = ReceiverStream::new(rx);
+        let reader = tokio_util::io::StreamReader::new(stream);
         let boxed_reader = Box::new(reader) as _;
 
         let file_size = file_metadata.file_size();
