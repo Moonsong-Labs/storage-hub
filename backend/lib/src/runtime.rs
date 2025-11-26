@@ -14,6 +14,8 @@ cfg_if::cfg_if! {
 }
 
 pub type AccountId = shc_common::types::AccountId<Runtime>;
+pub type ProviderId = pallet_storage_providers::types::ProviderIdFor<Runtime>;
+pub type Balance = pallet_storage_providers::types::BalanceOf<Runtime>;
 
 pub type MainStorageProvidersStorageMap = pallet_storage_providers::MainStorageProviders<Runtime>;
 pub type MainStorageProvider = pallet_storage_providers::types::MainStorageProvider<Runtime>;

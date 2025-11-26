@@ -138,7 +138,12 @@ impl StorageHubRpcClient {
     pub async fn get_current_price_per_giga_unit_per_tick(&self) -> RpcResult<BigDecimal> {
         debug!(target: "rpc::client::get_current_price_per_giga_unit_per_tick", "RPC call: get_current_price_per_giga_unit_per_tick");
 
-        self.call_runtime_api::<_, runtime_apis::CurrentPrice>(runtime_apis::CURRENT_PRICE, ())
+        let current_price_api_call =
+            runtime_apis::RuntimeApiCalls::GetCurrentPricePerGigaUnitPerTick;
+        self.call_runtime_api::<
+            <runtime_apis::GetCurrentPricePerGigaUnitPerTick as runtime_apis::RuntimeApiCallTypes>::Params,
+            <runtime_apis::GetCurrentPricePerGigaUnitPerTick as runtime_apis::RuntimeApiCallTypes>::ReturnType,
+        >(current_price_api_call.method_name(), ())
             .await
             .map(|price| price.into())
     }
@@ -147,10 +152,12 @@ impl StorageHubRpcClient {
     pub async fn get_number_of_active_users(&self, provider: OnchainMspId) -> RpcResult<usize> {
         debug!(target: "rpc::client::get_number_of_active_users", "Runtime API: get_users_of_payment_streams_of_provider");
 
-        self.call_runtime_api::<_, runtime_apis::NumOfUsers>(
-            runtime_apis::NUM_OF_USERS,
-            provider.as_h256(),
-        )
+        let active_users_api_call =
+            runtime_apis::RuntimeApiCalls::GetUsersOfPaymentStreamsOfProvider;
+        self.call_runtime_api::<
+            <runtime_apis::GetUsersOfPaymentStreamsOfProvider as runtime_apis::RuntimeApiCallTypes>::Params,
+            <runtime_apis::GetUsersOfPaymentStreamsOfProvider as runtime_apis::RuntimeApiCallTypes>::ReturnType,
+        >(active_users_api_call.method_name(), *provider.as_h256())
         .await
         .map(|users| users.len())
     }
