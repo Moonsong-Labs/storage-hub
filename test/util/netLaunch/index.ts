@@ -1057,9 +1057,9 @@ export class NetworkLauncher {
       return await launchedNetwork.execDemoStorageRequest();
     }
 
-    if (launchedNetwork.config.initialised_big) {
+    if (launchedNetwork.config.big_file) {
       const result = await launchedNetwork.execBigFileStorageRequest(
-        launchedNetwork.config.initialised_big
+        launchedNetwork.config.big_file
       );
       launchedNetwork.tempFiles.push(result.tempFilePath);
       return result;
@@ -1087,7 +1087,7 @@ export type NetLaunchConfig = {
    * Generate and upload a large file (in GB) for performance testing.
    * File stored in docker/tmp/ and cleaned up after test.
    */
-  initialised_big?: number;
+  big_file?: number;
 
   /**
    * If true, simulates a noisy network environment with added latency and bandwidth limitations.

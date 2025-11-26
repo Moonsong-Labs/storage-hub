@@ -2,7 +2,7 @@
  * Big File Download Benchmark Test
  *
  * Measures MSP download performance with large files.
- * Uses `initialised_big` to generate/upload a test file automatically.
+ * Uses `big_file` to generate/upload a test file automatically.
  */
 
 import assert from "node:assert";
@@ -12,7 +12,7 @@ import { getFileSize, deleteFileIfExists } from "../../../util/fileGeneration";
 await describeMspNet(
   "MSP Big File Download Benchmark",
   {
-    initialised_big: 0.025,
+    big_file: 0.025,
     networkConfig: [{ noisy: false, rocksdb: true }]
   },
   ({ before, after, it, createMsp1Api, getLaunchResponse }) => {
@@ -33,7 +33,7 @@ await describeMspNet(
           }
         | undefined;
 
-      assert(launchData, "Launch data should be available for initialised_big");
+      assert(launchData, "Launch data should be available for big_file");
 
       fileKey = launchData.fileMetadata.fileKey;
       tempFilePath = launchData.tempFilePath;

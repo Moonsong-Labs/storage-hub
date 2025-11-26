@@ -449,7 +449,7 @@ export type TestOptions = {
    * Generate and upload a large file (in GB) for performance testing.
    * File stored in docker/tmp/ and cleaned up after test.
    */
-  initialised_big?: number;
+  big_file?: number;
   /** Set a custom capacity for the BSP */
   capacity?: bigint;
   /** Set a custom BSP weight */
