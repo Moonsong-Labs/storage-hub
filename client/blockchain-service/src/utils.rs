@@ -565,6 +565,13 @@ where
         call: impl Into<Runtime::Call>,
         options: &SendExtrinsicOptions,
     ) -> Result<SubmittedExtrinsicInfo<Runtime>> {
+        if matches!(self.role, NodeRole::Follower) {
+            error!(target: LOG_TARGET, "This node is a follower and cannot submit transactions. Only leader or standalone nodes may send transactions.");
+            return Err(anyhow!(
+            "This node is a follower and cannot submit transactions. Only leader or standalone nodes may send transactions."
+        ));
+        }
+
         debug!(target: LOG_TARGET, "Sending extrinsic to the runtime");
         debug!(target: LOG_TARGET, "Extrinsic options: {:?}", options);
 
@@ -1091,6 +1098,14 @@ where
     ///
     /// Get the on-chain nonce for the given block hash and cleans up all pending transactions below that nonce.
     pub(crate) async fn cleanup_pending_tx_store(&self, block_hash: Runtime::Hash) {
+        if matches!(self.role, NodeRole::Follower) {
+            error!(
+                target: LOG_TARGET,
+                "This node is a follower and cannot perform DB cleanup. Only leader or standalone nodes may perform DB cleanup"
+            );
+            return;
+        }
+
         let on_chain_nonce = self.account_nonce(&block_hash);
 
         if let Some(store) = &self.pending_tx_store {
@@ -1343,6 +1358,11 @@ where
     /// This is used as a fallback when a nonce gap persists after a timeout
     /// and no other transaction have been submitted to fill the gap.
     async fn send_gap_filling_transaction(&mut self, nonce: u32) -> Result<()> {
+        if matches!(self.role, NodeRole::Follower) {
+            error!(target: LOG_TARGET, "This node is a follower and cannot submit gap-filling transactions. Only leader or standalone nodes may send transactions.");
+            return Ok(());
+        }
+
         info!(
                 target: LOG_TARGET,
                 "Sending gap-filling transaction (system.remark) for nonce {}",
