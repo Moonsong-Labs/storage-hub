@@ -14,7 +14,7 @@ import { pipeline } from "node:stream/promises";
 export async function generateLargeFile(
   sizeInGB: number,
   outputPath: string,
-  fillByte: number = 0x01
+  fillByte = 0x01
 ): Promise<void> {
   const sizeInBytes = Math.floor(sizeInGB * 1024 * 1024 * 1024);
   // Use 1MB chunks for small files, 10MB for larger

@@ -46,7 +46,7 @@ await describeMspNet(
       // Ensure MSP has the file in storage
       const result = await mspApi.rpc.storagehubclient.isFileInFileStorage(fileKey);
       assert(result.isFileFound, "File should be in MSP storage");
-      console.log(`✅ File is in MSP storage`);
+      console.log("✅ File is in MSP storage");
     });
 
     after(async () => {
@@ -58,7 +58,7 @@ await describeMspNet(
       // Download to container path
       const downloadPath = `/storage/test/benchmark-${Date.now()}.bin`;
 
-      console.log(`📥 Starting download...`);
+      console.log("📥 Starting download...");
       const startTime = Date.now();
 
       const result = await mspApi.rpc.storagehubclient.saveFileToDisk(fileKey, downloadPath);
