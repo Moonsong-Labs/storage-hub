@@ -13,7 +13,7 @@ await describeMspNet(
   "MSP Big File Download Benchmark",
   {
     initialised_big: 0.025,
-    networkConfig: [{ noisy: false, rocksdb: true }],
+    networkConfig: [{ noisy: false, rocksdb: true }]
   },
   ({ before, after, it, createMsp1Api, getLaunchResponse }) => {
     let mspApi: EnrichedBspApi;
@@ -26,10 +26,12 @@ await describeMspNet(
       assert(api, "MSP1 API should be available");
       mspApi = api;
 
-      const launchData = await getLaunchResponse() as {
-        fileMetadata: { fileKey: string };
-        tempFilePath: string;
-      } | undefined;
+      const launchData = (await getLaunchResponse()) as
+        | {
+            fileMetadata: { fileKey: string };
+            tempFilePath: string;
+          }
+        | undefined;
 
       assert(launchData, "Launch data should be available for initialised_big");
 
@@ -37,7 +39,9 @@ await describeMspNet(
       tempFilePath = launchData.tempFilePath;
       originalFileSize = await getFileSize(tempFilePath);
 
-      console.log(`📊 File: ${(originalFileSize / 1024 / 1024 / 1024).toFixed(1)}GB | Key: ${fileKey.slice(0, 16)}...`);
+      console.log(
+        `📊 File: ${(originalFileSize / 1024 / 1024 / 1024).toFixed(1)}GB | Key: ${fileKey.slice(0, 16)}...`
+      );
 
       // Ensure MSP has the file in storage
       const result = await mspApi.rpc.storagehubclient.isFileInFileStorage(fileKey);
@@ -66,7 +70,9 @@ await describeMspNet(
       const sizeMB = originalFileSize / (1024 * 1024);
       const throughput = sizeMB / (downloadTime / 1000);
 
-      console.log(`\n📊 Results: ${(downloadTime / 1000).toFixed(1)}s | ${throughput.toFixed(1)} MB/s\n`);
+      console.log(
+        `\n📊 Results: ${(downloadTime / 1000).toFixed(1)}s | ${throughput.toFixed(1)} MB/s\n`
+      );
     });
   }
 );

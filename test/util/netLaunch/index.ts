@@ -809,8 +809,8 @@ export class NetworkLauncher {
     // Generate file in docker/resource/ (mounted as /res in container)
     const timestamp = Date.now();
     const fileName = `benchmark-${fileSizeGB}gb-${timestamp}.bin`;
-    const hostPath = `../docker/resource/${fileName}`;      // Host filesystem path
-    const containerPath = `/res/${fileName}`;            // Container path (for RPC)
+    const hostPath = `../docker/resource/${fileName}`; // Host filesystem path
+    const containerPath = `/res/${fileName}`; // Container path (for RPC)
 
     await generateLargeFile(fileSizeGB, hostPath);
 
@@ -821,7 +821,7 @@ export class NetworkLauncher {
     const bucketName = `benchmark-bucket-${timestamp}`;
 
     const fileMetadata = await api.file.createBucketAndSendNewStorageRequest(
-      containerPath,  // Use container path for RPC
+      containerPath, // Use container path for RPC
       destination,
       bucketName,
       null,

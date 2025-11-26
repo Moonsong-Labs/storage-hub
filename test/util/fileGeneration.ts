@@ -35,9 +35,7 @@ export async function generateLargeFile(
       }
 
       const remaining = sizeInBytes - bytesWritten;
-      const chunk = remaining >= chunkSize
-        ? reusableChunk
-        : reusableChunk.subarray(0, remaining);
+      const chunk = remaining >= chunkSize ? reusableChunk : reusableChunk.subarray(0, remaining);
 
       bytesWritten += chunk.length;
       this.push(chunk);
