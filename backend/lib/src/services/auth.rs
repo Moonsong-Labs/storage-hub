@@ -9,7 +9,7 @@ use tracing::{debug, error};
 
 use crate::{
     config::AuthConfig,
-    constants::auth::{AUTH_NONCE_ENDPOINT, MOCK_ENS},
+    constants::auth::MOCK_ENS,
     data::storage::{BoxedStorage, WithExpiry},
     error::Error,
     models::auth::{JwtClaims, NonceResponse, TokenResponse, UserProfile, VerifyResponse},
@@ -136,19 +136,17 @@ impl AuthService {
         domain: &str,
         nonce: &str,
         chain_id: u64,
+        uri: &str,
     ) -> String {
         debug!(target: "auth_service::construct_auth_message", address = %address, domain = %domain, nonce = %nonce, chain_id = chain_id, "Constructing auth message");
 
-        let scheme = "https";
-
-        let uri = format!("{scheme}://{domain}{AUTH_NONCE_ENDPOINT}");
         let statement = "I authenticate to this MSP Backend with my address";
         let version = 1;
         let issued_at = chrono::Utc::now().to_rfc3339();
 
         // SIWE message format as per EIP-4361
         format!(
-            "{scheme}://{domain} wants you to sign in with your Ethereum account:\n\
+            "{domain} wants you to sign in with your Ethereum account:\n\
             {address}\n\
             \n\
             {statement}\n\
@@ -188,11 +186,14 @@ impl AuthService {
         &self,
         address: &Address,
         chain_id: u64,
+        domain: &str,
+        uri: &str,
     ) -> Result<NonceResponse, Error> {
         debug!(target: "auth_service::challenge", address = %address, chain_id = chain_id, "Generating challenge");
 
         let nonce = Self::generate_random_nonce();
-        let message = Self::construct_auth_message(address, &self.siwe_domain, &nonce, chain_id);
+
+        let message = Self::construct_auth_message(address, domain, &nonce, chain_id, uri);
 
         // Store message paired with address in storage
         // Using message as key and address as value

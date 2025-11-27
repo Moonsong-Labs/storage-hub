@@ -14,7 +14,12 @@ pub async fn nonce(
     debug!(address = %payload.address, chain_id = payload.chain_id, "POST auth nonce");
     let response = services
         .auth
-        .challenge(&payload.address, payload.chain_id)
+        .challenge(
+            &payload.address,
+            payload.chain_id,
+            &payload.domain,
+            &payload.uri,
+        )
         .await?;
     Ok(Json(response))
 }
