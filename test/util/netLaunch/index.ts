@@ -814,9 +814,6 @@ export class NetworkLauncher {
 
     await generateLargeFile(fileSizeGB, hostPath);
 
-    console.log(`📤 Uploading ${fileSizeGB}GB file to MSP...`);
-    const uploadStartTime = Date.now();
-
     const destination = `test/bigfile-${fileSizeGB}gb.bin`;
     const bucketName = `benchmark-bucket-${timestamp}`;
 
