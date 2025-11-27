@@ -69,7 +69,7 @@ pub async fn spawn_server<FL: FileStorageT>(
     let context = Context::new(file_storage);
 
     let app = Router::new()
-        .route("/chunks/:file_key", post(upload_file))
+        .route("/upload/:file_key", post(upload_file))
         .route_layer(DefaultBodyLimit::disable())
         .with_state(context);
 
@@ -116,7 +116,7 @@ async fn upload_file<FL: FileStorageT>(
     debug!(
         target: LOG_TARGET,
         file_key = %file_key,
-        "Received upload request"
+        "Received upload file request"
     );
 
     // Validate file_key is a hex string
@@ -151,8 +151,11 @@ async fn upload_file<FL: FileStorageT>(
             .into_response();
     }
 
+    // Convert file_key_bytes to H256
+    let file_key_hash = sp_core::H256::from_slice(&file_key_bytes);
+
     // Process the streamed chunks
-    match process_chunk_stream(&context, &file_key, body).await {
+    match process_chunk_stream(&context, &file_key_hash, body).await {
         Ok(chunk_count) => {
             debug!(
                 target: LOG_TARGET,
@@ -181,7 +184,7 @@ async fn upload_file<FL: FileStorageT>(
 /// Process a stream of chunks from the backend
 async fn process_chunk_stream<FL: FileStorageT>(
     context: &Context<FL>,
-    file_key: &str,
+    file_key: &sp_core::H256,
     body: Body,
 ) -> anyhow::Result<u64> {
     let mut stream = body.into_data_stream();
@@ -245,12 +248,17 @@ async fn process_chunk_stream<FL: FileStorageT>(
                 "Processing chunk"
             );
 
-            // TODO: Store chunk in file storage
-            // For now, we'll just log it. The actual storage should be:
-            // let file_key_hash = shp_types::Hash::from_slice(&file_key_bytes);
-            // let mut storage = context.file_storage.write().await;
-            // // Get or create file data trie for this file_key
-            // // Then write the chunk: trie.write_chunk(&chunk_id, &chunk_data)?;
+            // Store chunk in file storage
+            let mut storage = context.file_storage.write().await;
+            storage
+                .write_chunk(file_key, &chunk_id, &chunk_data)
+                .map_err(|e| {
+                    anyhow::anyhow!(
+                        "Failed to write chunk {} to storage: {}",
+                        chunk_id.as_u64(),
+                        e
+                    )
+                })?;
 
             // Remove processed chunk from buffer
             buffer.drain(..total_chunk_size);

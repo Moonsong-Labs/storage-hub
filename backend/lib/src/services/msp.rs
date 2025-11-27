@@ -1,21 +1,18 @@
 //! MSP service implementation
 
-use std::{collections::HashSet, sync::Arc};
+use std::sync::Arc;
 
 use alloy_core::{hex::ToHexExt, primitives::Address};
 use axum_extra::extract::multipart::Field;
 use bigdecimal::{BigDecimal, RoundingMode};
-use codec::{Decode, Encode};
+use codec::Decode;
 use serde::{Deserialize, Serialize};
-use shc_common::types::{
-    ChunkId, FileKeyProof, FileMetadata, StorageProofsMerkleTrieLayout,
-    BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE, FILE_CHUNK_SIZE,
-};
+use shc_common::types::{ChunkId, FileMetadata, StorageProofsMerkleTrieLayout, FILE_CHUNK_SIZE};
 use shc_file_manager::{in_memory::InMemoryFileDataTrie, traits::FileDataTrie};
 use shc_rpc::{
     GetFileFromFileStorageResult, GetValuePropositionsResult, RpcProviderId, SaveFileToDisk,
 };
-use sp_core::{Blake2Hasher, H256};
+use sp_core::Blake2Hasher;
 use tracing::{debug, warn};
 
 use shc_indexer_db::{models::Bucket as DBBucket, OnchainMspId};
@@ -604,16 +601,10 @@ impl MspService {
 
         debug!(target: "msp_service::process_and_upload_file", total_chunks = total_chunks, "File chunking completed");
 
-        // // Send the proof with the chunks to the MSP.
-        // self.upload_to_msp(&chunks, &file_key_proof)
-        //     .await
-        //     .map_err(|e| {
-        //         Error::BadRequest(format!(
-        //             "Failed to upload batch {} to MSP: {}",
-        //             batch_number, e
-        //         ))
-        //     })?;
-        // TODO: send chunks in a request
+        // Send all chunks to the MSP internal file transfer server
+        self.upload_file_to_msp(&trie, file_key, total_chunks)
+            .await
+            .map_err(|e| Error::BadRequest(format!("Failed to send chunks to MSP: {}", e)))?;
 
         // If the complete file was uploaded to the MSP successfully, we can return the response.
         let bytes_location = file_metadata.location();
@@ -638,6 +629,76 @@ impl MspService {
 }
 
 impl MspService {
+    /// Send chunks to the MSP internal file transfer server
+    ///
+    /// Streams file chunks in the binary format: [ChunkId: 8 bytes][Length: 4 bytes][Data: variable]
+    async fn upload_file_to_msp(
+        &self,
+        trie: &InMemoryFileDataTrie<StorageProofsMerkleTrieLayout>,
+        file_key: &str,
+        total_chunks: u64,
+    ) -> Result<(), Error> {
+        debug!(
+            target: "msp_service::upload_file",
+            file_key = %file_key,
+            total_chunks = total_chunks,
+            "Sending chunks to MSP internal file transfer server"
+        );
+
+        // Build the URL for the internal file transfer server
+        let url = format!(
+            "{}/upload/{}",
+            self.msp_config.internal_file_transfer_url, file_key
+        );
+
+        // Create a buffer to hold all chunks
+        let mut body_bytes = Vec::new();
+
+        // Read all chunks from the trie and format them
+        for chunk_index in 0..total_chunks {
+            let chunk_id = ChunkId::new(chunk_index);
+            let chunk_data = trie.get_chunk(&chunk_id).map_err(|e| {
+                Error::BadRequest(format!("Failed to read chunk {}: {}", chunk_index, e))
+            })?;
+
+            // Format: [ChunkId: 8 bytes][Length: 4 bytes][Data: variable]
+            body_bytes.extend_from_slice(&chunk_id.as_u64().to_le_bytes());
+            body_bytes.extend_from_slice(&(chunk_data.len() as u32).to_le_bytes());
+            body_bytes.extend_from_slice(&chunk_data);
+        }
+
+        let body = reqwest::Body::from(body_bytes);
+
+        // Send the POST request
+        let client = reqwest::Client::new();
+        let response = client
+            .post(&url)
+            .body(body)
+            .send()
+            .await
+            .map_err(|e| Error::BadRequest(format!("Failed to send request to MSP: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unable to read response".to_string());
+            return Err(Error::BadRequest(format!(
+                "MSP internal file transfer server returned error: {} - {}",
+                status, body
+            )));
+        }
+
+        debug!(
+            target: "msp_service::upload_file",
+            file_key = %file_key,
+            "Successfully sent all chunks to MSP"
+        );
+
+        Ok(())
+    }
+
     /// Verifies that a user can access the given bucket.
     ///
     /// If the bucket is public, this check always passes.
