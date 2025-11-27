@@ -602,7 +602,7 @@ impl MspService {
         debug!(target: "msp_service::process_and_upload_file", total_chunks = total_chunks, "File chunking completed");
 
         // Send all chunks to the MSP internal file transfer server
-        self.upload_file_to_msp(&trie, file_key, total_chunks)
+        self.send_chunks_to_msp(&trie, file_key, total_chunks)
             .await
             .map_err(|e| Error::BadRequest(format!("Failed to send chunks to MSP: {}", e)))?;
 
@@ -631,8 +631,8 @@ impl MspService {
 impl MspService {
     /// Send chunks to the MSP internal file transfer server
     ///
-    /// Streams file chunks in the binary format: [ChunkId: 8 bytes][Length: 4 bytes][Data: variable]
-    async fn upload_file_to_msp(
+    /// Binary format: [Total Chunks: 8 bytes][ChunkId: 8 bytes][Data: FILE_CHUNK_SIZE]...
+    async fn send_chunks_to_msp(
         &self,
         trie: &InMemoryFileDataTrie<StorageProofsMerkleTrieLayout>,
         file_key: &str,
@@ -654,16 +654,20 @@ impl MspService {
         // Create a buffer to hold all chunks
         let mut body_bytes = Vec::new();
 
+        // First, send the total number of chunks (8 bytes)
+        body_bytes.extend_from_slice(&total_chunks.to_le_bytes());
+
         // Read all chunks from the trie and format them
+        // Format: [Total Chunks: 8 bytes][ChunkId: 8 bytes][Data: FILE_CHUNK_SIZE][ChunkId: 8 bytes][Data]...
+        // Note: Chunk size is constant (FILE_CHUNK_SIZE) except possibly the last chunk
         for chunk_index in 0..total_chunks {
             let chunk_id = ChunkId::new(chunk_index);
             let chunk_data = trie.get_chunk(&chunk_id).map_err(|e| {
                 Error::BadRequest(format!("Failed to read chunk {}: {}", chunk_index, e))
             })?;
 
-            // Format: [ChunkId: 8 bytes][Length: 4 bytes][Data: variable]
+            // Send: [ChunkId: 8 bytes][Data: variable]
             body_bytes.extend_from_slice(&chunk_id.as_u64().to_le_bytes());
-            body_bytes.extend_from_slice(&(chunk_data.len() as u32).to_le_bytes());
             body_bytes.extend_from_slice(&chunk_data);
         }
 
