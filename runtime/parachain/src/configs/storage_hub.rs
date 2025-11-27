@@ -59,3 +59,17 @@ impl Into<StorageEnableEvents<crate::Runtime>> for crate::RuntimeEvent {
         }
     }
 }
+
+// Implement transaction hash extraction for parachain runtime.
+// Since the parachain runtime doesn't have EVM support, we return an empty map.
+//
+// TODO: To extract Substrate extrinsic hashes, this method would need access to the
+// actual extrinsics from the block (not just events), which would require changing
+// the trait signature to accept the block or extrinsics as a parameter.
+impl shc_common::traits::TransactionHashProvider for crate::Runtime {
+    fn build_transaction_hash_map(
+        _all_events: &shc_common::types::StorageHubEventsVec<Self>,
+    ) -> std::collections::HashMap<u32, sp_core::H256> {
+        std::collections::HashMap::new()
+    }
+}

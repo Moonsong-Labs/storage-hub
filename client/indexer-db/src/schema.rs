@@ -63,6 +63,7 @@ diesel::table! {
         deletion_signature -> Nullable<Bytea>,
         deletion_requested_at -> Nullable<Timestamp>,
         is_in_bucket -> Bool,
+        tx_hash -> Nullable<Bytea>,
     }
 }
 

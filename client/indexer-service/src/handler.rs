@@ -119,10 +119,28 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
 
         let block_events = get_events_at_block::<Runtime>(&self.client, &block_hash)?;
 
+        // Build a map of extrinsic index to transaction hash for events in a block.
+        let evm_tx_map: std::collections::HashMap<u32, H256> =
+            Runtime::build_transaction_hash_map(&block_events);
+
         conn.transaction::<(), IndexBlockError, _>(move |conn| {
             Box::pin(async move {
-                for ev in block_events {
-                    self.route_event(conn, &ev.event.into(), block_hash).await?;
+                for ev in &block_events {
+                    // Get the EVM transaction hash for the event if it exists
+                    let maybe_evm_tx_hash =
+                        if let frame_system::Phase::ApplyExtrinsic(idx) = ev.phase {
+                            evm_tx_map.get(&idx).copied()
+                        } else {
+                            None
+                        };
+
+                    self.route_event(
+                        conn,
+                        &ev.event.clone().into(),
+                        block_hash,
+                        maybe_evm_tx_hash,
+                    )
+                    .await?;
                 }
 
                 // Update the last indexed finalized block after indexing all events
@@ -145,10 +163,16 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         conn: &mut DbConnection<'a>,
         event: &StorageEnableEvents<Runtime>,
         block_hash: H256,
+        evm_tx_hash: Option<H256>,
     ) -> Result<(), diesel::result::Error> {
         match self.indexer_mode {
-            crate::IndexerMode::Full => self.index_event(conn, event, block_hash).await,
-            crate::IndexerMode::Lite => self.index_event_lite(conn, event, block_hash).await,
+            crate::IndexerMode::Full => {
+                self.index_event(conn, event, block_hash, evm_tx_hash).await
+            }
+            crate::IndexerMode::Lite => {
+                self.index_event_lite(conn, event, block_hash, evm_tx_hash)
+                    .await
+            }
             crate::IndexerMode::Fishing => self.index_event_fishing(conn, event, block_hash).await,
         }
     }
@@ -158,13 +182,15 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         conn: &mut DbConnection<'a>,
         event: &StorageEnableEvents<Runtime>,
         block_hash: H256,
+        evm_tx_hash: Option<H256>,
     ) -> Result<(), diesel::result::Error> {
         match event {
             StorageEnableEvents::BucketNfts(event) => {
                 self.index_bucket_nfts_event(conn, event).await?
             }
             StorageEnableEvents::FileSystem(event) => {
-                self.index_file_system_event(conn, event).await?
+                self.index_file_system_event(conn, event, evm_tx_hash)
+                    .await?
             }
             StorageEnableEvents::PaymentStreams(event) => {
                 self.index_payment_streams_event(conn, event).await?
@@ -212,6 +238,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         &'b self,
         conn: &mut DbConnection<'a>,
         event: &pallet_file_system::Event<Runtime>,
+        evm_tx_hash: Option<H256>,
     ) -> Result<(), diesel::result::Error> {
         match event {
             pallet_file_system::Event::NewBucket {
@@ -342,6 +369,10 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 let size: u64 = (*size).saturated_into();
                 let size: i64 = size.saturated_into();
                 let who = who.as_ref().to_vec();
+
+                // Convert EVM tx hash to bytes if present
+                let tx_hash_bytes = evm_tx_hash.map(|h| h.as_bytes().to_vec());
+
                 File::create(
                     conn,
                     who,
@@ -353,6 +384,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     size,
                     FileStorageRequestStep::Requested,
                     sql_peer_ids,
+                    tx_hash_bytes,
                 )
                 .await?;
             }

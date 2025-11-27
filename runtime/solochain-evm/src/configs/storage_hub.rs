@@ -57,3 +57,33 @@ impl Into<StorageEnableEvents<crate::Runtime>> for crate::RuntimeEvent {
         }
     }
 }
+
+// Implement transaction hash extraction for EVM runtime.
+impl shc_common::traits::TransactionHashProvider for crate::Runtime {
+    fn build_transaction_hash_map(
+        all_events: &shc_common::types::StorageHubEventsVec<Self>,
+    ) -> std::collections::HashMap<u32, sp_core::H256> {
+        let mut tx_map = std::collections::HashMap::new();
+
+        for ev in all_events {
+            if let frame_system::Phase::ApplyExtrinsic(extrinsic_index) = ev.phase {
+                // Convert to StorageEnableEvents
+                let storage_event: StorageEnableEvents<Self> = ev.event.clone().into();
+
+                // Check if it's an `Executed` Ethereum event in the `Other` variant
+                if let StorageEnableEvents::Other(runtime_event) = storage_event {
+                    // If it is, extract the Ethereum transaction hash from it
+                    if let crate::RuntimeEvent::Ethereum(pallet_ethereum::Event::Executed {
+                        transaction_hash,
+                        ..
+                    }) = runtime_event
+                    {
+                        tx_map.insert(extrinsic_index, transaction_hash);
+                    }
+                }
+            }
+        }
+
+        tx_map
+    }
+}
