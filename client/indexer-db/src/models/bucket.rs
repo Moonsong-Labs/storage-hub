@@ -196,39 +196,32 @@ impl Bucket {
         Ok(total_size.unwrap_or_else(|| BigDecimal::from(0)))
     }
 
-    /// Increment file count and update total size
-    pub async fn increment_file_count_and_size<'a>(
+    /// Sync the stored file_count and total_size by calculating from actual files.
+    ///
+    /// This recalculates both values from the files table and updates the stored values,
+    /// ensuring they stay in sync with reality and preventing underflow issues.
+    pub async fn sync_stats<'a>(
         conn: &mut DbConnection<'a>,
         bucket_id: i64,
-        file_size: i64,
     ) -> Result<(), diesel::result::Error> {
-        let size_decimal = BigDecimal::from(file_size);
-        diesel::update(bucket::table)
-            .filter(bucket::id.eq(bucket_id))
-            .set((
-                bucket::total_size.eq(bucket::total_size + size_decimal),
-                bucket::file_count.eq(bucket::file_count + 1),
-            ))
-            .execute(conn)
+        // Count files and sum sizes in one query
+        let (count, total_size): (i64, Option<BigDecimal>) = file::table
+            .filter(file::bucket_id.eq(bucket_id))
+            .select((diesel::dsl::count_star(), sum(file::size)))
+            .first(conn)
             .await?;
-        Ok(())
-    }
 
-    /// Decrement file count and update total size
-    pub async fn decrement_file_count_and_size<'a>(
-        conn: &mut DbConnection<'a>,
-        bucket_id: i64,
-        file_size: i64,
-    ) -> Result<(), diesel::result::Error> {
-        let size_decimal = BigDecimal::from(file_size);
+        let total_size = total_size.unwrap_or_else(|| BigDecimal::from(0));
+
         diesel::update(bucket::table)
             .filter(bucket::id.eq(bucket_id))
             .set((
-                bucket::total_size.eq(bucket::total_size - size_decimal),
-                bucket::file_count.eq(bucket::file_count - 1),
+                bucket::file_count.eq(count),
+                bucket::total_size.eq(total_size),
             ))
             .execute(conn)
             .await?;
+
         Ok(())
     }
 }
