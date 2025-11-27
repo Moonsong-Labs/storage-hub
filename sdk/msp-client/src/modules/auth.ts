@@ -11,9 +11,20 @@ export class AuthModule extends ModuleBase {
    * - Input: EVM `address`, `chainId`.
    * - Output: message to sign.
    */
-  private getNonce(address: string, chainId: number, signal?: AbortSignal): Promise<NonceResponse> {
+  public getNonce(
+    address: string,
+    chainId: number,
+    domain: string,
+    uri: string,
+    signal?: AbortSignal
+  ): Promise<NonceResponse> {
     return this.ctx.http.post<NonceResponse>("/auth/nonce", {
-      body: { address, chainId },
+      body: {
+        address,
+        chainId,
+        domain,
+        uri
+      },
       headers: { "Content-Type": "application/json" },
       ...(signal ? { signal } : {})
     });
@@ -23,7 +34,7 @@ export class AuthModule extends ModuleBase {
    * Verify SIWE signature.
    * - Persists `session` in context on success.
    */
-  private async verify(message: string, signature: string, signal?: AbortSignal): Promise<Session> {
+  public async verify(message: string, signature: string, signal?: AbortSignal): Promise<Session> {
     const session = await this.ctx.http.post<Session>("/auth/verify", {
       body: { message, signature },
       headers: { "Content-Type": "application/json" },
@@ -39,6 +50,8 @@ export class AuthModule extends ModuleBase {
    */
   async SIWE(
     wallet: WalletClient,
+    domain: string,
+    uri: string,
     retry = DEFAULT_SIWE_VERIFY_RETRY_ATTEMPS,
     signal?: AbortSignal
   ): Promise<Session> {
@@ -55,7 +68,7 @@ export class AuthModule extends ModuleBase {
     // Get the checksummed address
     const address = getAddress(resolvedAddress);
     const chainId = await wallet.getChainId();
-    const { message } = await this.getNonce(address, chainId, signal);
+    const { message } = await this.getNonce(address, chainId, domain, uri, signal);
 
     // Sign using the active account resolved above (string or Account object)
     const signature = await wallet.signMessage({ account, message });
