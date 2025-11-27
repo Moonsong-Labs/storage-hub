@@ -100,6 +100,8 @@ mod tests {
         let nonce_request = NonceRequest {
             address,
             chain_id: 1,
+            domain: "localhost".to_string(),
+            uri: "https://localhost/".to_string(),
         };
 
         let response = server.post(AUTH_NONCE_ENDPOINT).json(&nonce_request).await;
@@ -170,7 +172,9 @@ mod tests {
 
         let invalid_json = serde_json::json!({
             "address": "not_an_eth_address",
-            "chainId": 1
+            "chainId": 1,
+            "domain": "localhost",
+            "uri": "https://localhost/"
         });
 
         let response = server.post(AUTH_NONCE_ENDPOINT).json(&invalid_json).await;
@@ -214,6 +218,8 @@ mod tests {
         let nonce_request = NonceRequest {
             address,
             chain_id: 1,
+            domain: "localhost".to_string(),
+            uri: "https://localhost/".to_string(),
         };
 
         let response = server.post("/auth/nonce").json(&nonce_request).await;
@@ -242,6 +248,8 @@ mod tests {
         let nonce_request = NonceRequest {
             address,
             chain_id: 1,
+            domain: "localhost".to_string(),
+            uri: "https://localhost/".to_string(),
         };
 
         let response = server.post("/auth/nonce").json(&nonce_request).await;
@@ -366,6 +374,8 @@ mod tests {
         let nonce_request = NonceRequest {
             address,
             chain_id: 1,
+            domain: "localhost".to_string(),
+            uri: "https://localhost/".to_string(),
         };
 
         let response = server.post("/auth/nonce").json(&nonce_request).await;
@@ -412,6 +422,8 @@ mod tests {
         let nonce_request1 = NonceRequest {
             address: address1,
             chain_id: 1,
+            domain: "localhost".to_string(),
+            uri: "https://localhost/".to_string(),
         };
 
         let response = server.post("/auth/nonce").json(&nonce_request1).await;
@@ -432,6 +444,8 @@ mod tests {
         let nonce_request2 = NonceRequest {
             address: address2,
             chain_id: 1,
+            domain: "localhost".to_string(),
+            uri: "https://localhost/".to_string(),
         };
 
         let response = server.post("/auth/nonce").json(&nonce_request2).await;
