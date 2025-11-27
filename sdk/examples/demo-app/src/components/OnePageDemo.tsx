@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo, useEffect, useId } from 'react';
 import { Settings, Wallet, Database, CheckCircle, AlertCircle, ExternalLink } from 'lucide-react';
 import { createWalletClient, createPublicClient, custom, formatEther, getAddress, type WalletClient, type PublicClient } from 'viem';
-import { StorageHubClient } from '@storagehub-sdk/core';
+import { StorageHubClient, SH_FILE_SYSTEM_PRECOMPILE_ADDRESS } from '@storagehub-sdk/core';
 import { MspClient } from '@storagehub-sdk/msp-client';
 import type { Session } from '@storagehub-sdk/msp-client';
 import { FileManager } from './FileManager';
@@ -19,7 +19,9 @@ export function OnePageDemo() {
     rpcUrl: 'http://127.0.0.1:9888',
     chainId: 181222,
     mspUrl: 'http://127.0.0.1:8080',
-    fsAddress: undefined as `0x${string}` | undefined
+    fsAddress: undefined as `0x${string}` | undefined,
+    siweDomain: 'localhost:3001',
+    siweUri: 'https://localhost:3001'
   });
 
   // Load runtime configuration
@@ -31,7 +33,9 @@ export function OnePageDemo() {
           rpcUrl: appCfg.chain.evmRpcHttpUrl,
           chainId: appCfg.chain.id,
           mspUrl: appCfg.msp.baseUrl,
-          fsAddress: appCfg.chain.filesystemPrecompileAddress
+          fsAddress: appCfg.chain.filesystemPrecompileAddress,
+          siweDomain: appCfg.auth.siweDomain,
+          siweUri: appCfg.auth.siweUri
         });
       } catch (e) {
         // Keep defaults on failure
@@ -50,7 +54,7 @@ export function OnePageDemo() {
   const [walletError, setWalletError] = useState<string | null>(null);
 
   // MSP state
-  const [mspClient, setMspClient] = useState<InstanceType<typeof MspClient> | null>(null);
+  const [mspClient, setMspClient] = useState<MspClient | null>(null);
   const [storageHubClient, setStorageHubClient] = useState<StorageHubClient | null>(null);
   const [isMspConnecting, setIsMspConnecting] = useState(false);
   const [mspError, setMspError] = useState<string | null>(null);
@@ -227,7 +231,9 @@ export function OnePageDemo() {
       console.log('- Address:', walletAddress);
       console.log('- Chain ID:', config.chainId);
 
-      const session = await mspClient.auth.SIWE(walletClient);
+      const domain = config.siweDomain;
+      const uri = config.siweUri;
+      const session = await mspClient.auth.SIWE(walletClient, domain, uri);
       currentSession = Object.freeze(session);
       console.log('✅ Authentication completed successfully');
 
@@ -243,7 +249,7 @@ export function OnePageDemo() {
         rpcUrl: config.rpcUrl,
         chain: storageHubChain,
         walletClient,
-        filesystemContractAddress: config.fsAddress ? (config.fsAddress as `0x${string}`) : undefined
+        filesystemContractAddress: (config.fsAddress as `0x${string}` | undefined) ?? SH_FILE_SYSTEM_PRECOMPILE_ADDRESS
       });
 
       setMspClient(mspClient);

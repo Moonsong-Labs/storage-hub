@@ -353,7 +353,7 @@ export function WalletConnection({
     );
   }
 
-  if (!isMetaMaskAvailable()) {
+  if (!(typeof window !== 'undefined' && typeof window.ethereum !== 'undefined')) {
     return (
       <div className="text-center py-12">
         <Wallet className="w-12 h-12 text-gray-400 mx-auto mb-4" />
