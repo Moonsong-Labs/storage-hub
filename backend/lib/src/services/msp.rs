@@ -5,7 +5,9 @@ use std::sync::Arc;
 use alloy_core::{hex::ToHexExt, primitives::Address};
 use axum_extra::extract::multipart::Field;
 use bigdecimal::{BigDecimal, RoundingMode};
+use bytes::Bytes;
 use codec::Decode;
+use futures::stream;
 use serde::{Deserialize, Serialize};
 use shc_common::types::{ChunkId, FileMetadata, StorageProofsMerkleTrieLayout, FILE_CHUNK_SIZE};
 use shc_file_manager::{in_memory::InMemoryFileDataTrie, traits::FileDataTrie};
@@ -601,8 +603,7 @@ impl MspService {
 
         debug!(target: "msp_service::process_and_upload_file", total_chunks = total_chunks, "File chunking completed");
 
-        // Send all chunks to the MSP internal file transfer server
-        self.send_chunks_to_msp(&trie, file_key, total_chunks)
+        self.send_chunks_to_msp(trie, file_key, total_chunks)
             .await
             .map_err(|e| Error::BadRequest(format!("Failed to send chunks to MSP: {}", e)))?;
 
@@ -634,7 +635,7 @@ impl MspService {
     /// Binary format: [Total Chunks: 8 bytes][ChunkId: 8 bytes][Data: FILE_CHUNK_SIZE]...
     async fn send_chunks_to_msp(
         &self,
-        trie: &InMemoryFileDataTrie<StorageProofsMerkleTrieLayout>,
+        trie: InMemoryFileDataTrie<StorageProofsMerkleTrieLayout>,
         file_key: &str,
         total_chunks: u64,
     ) -> Result<(), Error> {
@@ -651,27 +652,29 @@ impl MspService {
             self.msp_config.internal_file_transfer_url, file_key
         );
 
-        // Create a buffer to hold all chunks
-        let mut body_bytes = Vec::new();
+        // Create the header chunk
+        let header = Bytes::from(total_chunks.to_le_bytes().to_vec());
 
-        // First, send the total number of chunks (8 bytes)
-        body_bytes.extend_from_slice(&total_chunks.to_le_bytes());
-
-        // Read all chunks from the trie and format them
-        // Format: [Total Chunks: 8 bytes][ChunkId: 8 bytes][Data: FILE_CHUNK_SIZE][ChunkId: 8 bytes][Data]...
-        // Note: Chunk size is constant (FILE_CHUNK_SIZE) except possibly the last chunk
-        for chunk_index in 0..total_chunks {
+        let chunks_iter = (0..total_chunks).map(move |chunk_index| {
             let chunk_id = ChunkId::new(chunk_index);
+
+            // Read chunk from trie (only this chunk is in memory)
             let chunk_data = trie.get_chunk(&chunk_id).map_err(|e| {
-                Error::BadRequest(format!("Failed to read chunk {}: {}", chunk_index, e))
+                std::io::Error::other(format!("Failed to read chunk {}: {}", chunk_index, e))
             })?;
 
-            // Send: [ChunkId: 8 bytes][Data: variable]
-            body_bytes.extend_from_slice(&chunk_id.as_u64().to_le_bytes());
-            body_bytes.extend_from_slice(&chunk_data);
-        }
+            // Build the frame: [ChunkId: 8 bytes][Data: variable]
+            let mut frame = Vec::with_capacity(8 + chunk_data.len());
+            frame.extend_from_slice(&chunk_id.as_u64().to_le_bytes());
+            frame.extend_from_slice(&chunk_data);
 
-        let body = reqwest::Body::from(body_bytes);
+            Ok::<_, std::io::Error>(Bytes::from(frame))
+        });
+
+        // Prepend the header and convert to a stream
+        let body_stream = stream::iter(std::iter::once(Ok(header)).chain(chunks_iter));
+
+        let body = reqwest::Body::wrap_stream(body_stream);
 
         // Send the POST request
         let client = reqwest::Client::new();

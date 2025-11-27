@@ -16052,6 +16052,7 @@ dependencies = [
  "axum-test",
  "base64 0.21.7",
  "bigdecimal",
+ "bytes",
  "chrono",
  "diesel",
  "diesel-async",
