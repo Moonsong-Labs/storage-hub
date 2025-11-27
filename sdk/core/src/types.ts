@@ -9,4 +9,10 @@ export interface FileInfo {
   location: string;
   /** File size in bytes (using bigint for blockchain compatibility) */
   size: bigint;
+  /**
+   * EVM transaction hash that created this file (32-byte hex string).
+   * Only present for files created via EVM transactions on EVM-enabled runtimes.
+   * Will be undefined for files created via native Substrate extrinsics.
+   */
+  txHash?: `0x${string}`;
 }

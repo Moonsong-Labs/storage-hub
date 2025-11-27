@@ -38,6 +38,10 @@ pub struct FileInfo {
     #[serde(rename = "uploadedAt")]
     pub uploaded_at: DateTime<Utc>,
     pub status: FileStatus,
+    /// EVM transaction hash that created this file (if created via EVM transaction).
+    /// For files created via native Substrate extrinsics, this will be None.
+    #[serde(rename = "txHash", skip_serializing_if = "Option::is_none")]
+    pub tx_hash: Option<String>,
 }
 
 impl FileInfo {
@@ -66,6 +70,7 @@ impl FileInfo {
             is_public,
             uploaded_at: db.updated_at.and_utc(),
             status: Self::status_from_db(&db),
+            tx_hash: db.tx_hash.as_ref().map(|hash| hex::encode(hash)),
         }
     }
 
