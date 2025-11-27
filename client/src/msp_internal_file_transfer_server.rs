@@ -18,6 +18,8 @@ use axum::{
 };
 use sc_tracing::tracing::{debug, error, info, warn};
 use shc_common::types::{ChunkId, FILE_CHUNK_SIZE};
+use shc_file_manager::traits::FileStorageWriteOutcome;
+use shp_file_metadata::Chunk;
 use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 use tokio_stream::StreamExt;
@@ -196,7 +198,6 @@ async fn process_chunk_stream<FL: FileStorageT>(
     let mut buffer = Vec::new();
     let mut chunks_processed = 0u64;
     let mut total_chunks: Option<u64> = None;
-    let mut stream_ended = false;
 
     // Constants for parsing the binary format
     const TOTAL_CHUNKS_SIZE: usize = 8; // u64
@@ -204,21 +205,9 @@ async fn process_chunk_stream<FL: FileStorageT>(
 
     let chunk_size = CHUNK_ID_SIZE + FILE_CHUNK_SIZE as usize;
 
-    loop {
-        // Read from stream if it hasn't ended
-        if !stream_ended {
-            match stream.next().await {
-                Some(Ok(bytes)) => {
-                    buffer.extend_from_slice(&bytes);
-                }
-                Some(Err(e)) => {
-                    return Err(anyhow::anyhow!("Error reading from stream: {}", e));
-                }
-                None => {
-                    stream_ended = true;
-                }
-            }
-        }
+    while let Some(try_bytes) = stream.next().await {
+        let bytes = try_bytes?;
+        buffer.extend_from_slice(&bytes);
 
         // First, read the total chunks count if we haven't yet
         if total_chunks.is_none() {
@@ -241,87 +230,89 @@ async fn process_chunk_stream<FL: FileStorageT>(
             }
         }
 
-        // Process chunks from the buffer
+        // Process chunks from the buffer (all except last chunk)
         if let Some(total) = total_chunks {
-            while chunks_processed < total {
-                let is_last_chunk = chunks_processed == total - 1;
+            while chunks_processed < total - 1 && buffer.len() >= chunk_size {
+                let (chunk_id, chunk_data) = get_next_chunk(&mut buffer, Some(chunk_size))?;
 
-                // Check if we have enough data to process this chunk
-                if is_last_chunk && !stream_ended {
-                    break;
-                } else if buffer.len() < chunk_size {
-                    break;
-                }
-
-                let chunk_id_bytes: [u8; CHUNK_ID_SIZE] = buffer[0..CHUNK_ID_SIZE]
-                    .try_into()
-                    .map_err(|_| anyhow::anyhow!("Failed to parse chunk ID"))?;
-                let chunk_id_value = u64::from_le_bytes(chunk_id_bytes);
-                let chunk_id = ChunkId::new(chunk_id_value);
-
-                // Extract chunk data
-                let chunk_data = if is_last_chunk {
-                    // Last chunk: take all remaining data
-                    buffer[CHUNK_ID_SIZE..].to_vec()
-                } else {
-                    buffer[CHUNK_ID_SIZE..chunk_size].to_vec()
-                };
-
-                // Store chunk in file storage
-                debug!(
-                    target: LOG_TARGET,
-                    file_key = %file_key,
-                    chunk_id = chunk_id_value,
-                    chunk_size = chunk_data.len(),
-                    is_last = is_last_chunk,
-                    "Processing chunk"
-                );
-
-                let mut storage = context.file_storage.write().await;
-                storage
-                    .write_chunk(file_key, &chunk_id, &chunk_data)
-                    .map_err(|e| {
-                        anyhow::anyhow!(
-                            "Failed to write chunk {} to storage: {}",
-                            chunk_id_value,
-                            e
-                        )
-                    })?;
-
-                // Remove processed chunk from buffer
-                let bytes_to_drain = if is_last_chunk {
-                    buffer.len() // Drain everything for last chunk
-                } else {
-                    CHUNK_ID_SIZE + FILE_CHUNK_SIZE as usize
-                };
-                buffer.drain(..bytes_to_drain);
+                store_chunk(context, file_key, &chunk_id, &chunk_data).await?;
                 chunks_processed += 1;
             }
         }
+    }
 
-        // Exit loop if we've processed all chunks
-        if let Some(total) = total_chunks {
-            if chunks_processed == total {
-                if !buffer.is_empty() {
-                    return Err(anyhow::anyhow!(
-                        "Extra data after all chunks: {} bytes",
-                        buffer.len()
-                    ));
-                }
-                break;
-            } else if stream_ended && chunks_processed < total {
-                return Err(anyhow::anyhow!(
-                    "Stream ended after {} chunks, expected {}",
-                    chunks_processed,
-                    total
-                ));
-            }
-        } else if stream_ended {
+    // After stream ends, process the last chunk if needed
+    if let Some(total) = total_chunks {
+        if chunks_processed < total {
+            // Extract last chunk ID and remaining data
+            let (chunk_id, chunk_data) = get_next_chunk(&mut buffer, None)?;
+
+            store_chunk(context, file_key, &chunk_id, &chunk_data).await?;
+            chunks_processed += 1;
+        }
+
+        if chunks_processed != total {
             return Err(anyhow::anyhow!(
-                "Stream ended before total chunks count received"
+                "Stream ended after {} chunks, expected {}",
+                chunks_processed,
+                total
             ));
         }
+
+        if !buffer.is_empty() {
+            return Err(anyhow::anyhow!(
+                "Extra data after all chunks: {} bytes",
+                buffer.len()
+            ));
+        }
+    } else {
+        return Err(anyhow::anyhow!(
+            "Stream ended before total chunks count received"
+        ));
     }
 
     Ok(chunks_processed)
+}
+
+/// Extract chunk from a buffer and write to storage
+/// If no chunk data size is given it will consume the
+/// whole buffer as its data
+fn get_next_chunk(
+    buffer: &mut Vec<u8>,
+    maybe_chunk_data_size: Option<usize>,
+) -> anyhow::Result<(ChunkId, Vec<u8>)> {
+    const CHUNK_ID_SIZE: usize = 8;
+
+    let chunk_id_bytes: [u8; CHUNK_ID_SIZE] = buffer
+        .drain(..CHUNK_ID_SIZE)
+        .collect::<Vec<_>>()
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("Failed to parse chunk ID"))?;
+    let chunk_id_value = u64::from_le_bytes(chunk_id_bytes);
+    let chunk_id = ChunkId::new(chunk_id_value);
+
+    let chunk_data = match maybe_chunk_data_size {
+        Some(size) => buffer.drain(..size).collect(),
+        None => std::mem::take(buffer),
+    };
+    Ok((chunk_id, chunk_data))
+}
+
+/// Store a chunk to file storage
+async fn store_chunk<FL: FileStorageT>(
+    context: &Context<FL>,
+    file_key: &sp_core::H256,
+    chunk_id: &ChunkId,
+    chunk_data: &Chunk,
+) -> anyhow::Result<FileStorageWriteOutcome> {
+    let mut file_storage = context.file_storage.write().await;
+    file_storage
+        .write_chunk(file_key, chunk_id, chunk_data)
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to write chunk {} to storage: {}",
+                chunk_id.as_u64(),
+                e
+            )
+        })
 }
