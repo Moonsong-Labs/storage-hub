@@ -844,9 +844,6 @@ export class NetworkLauncher {
       await api.wait.bspStored();
     }
 
-    const uploadTime = ((Date.now() - uploadStartTime) / 1000).toFixed(2);
-    console.log(`✅ Upload completed in ${uploadTime}s`);
-
     return { fileMetadata, tempFilePath: hostPath, fileSizeGB };
   }
 

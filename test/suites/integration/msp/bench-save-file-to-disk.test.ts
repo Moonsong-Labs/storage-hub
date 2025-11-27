@@ -39,10 +39,6 @@ await describeMspNet(
       tempFilePath = launchData.tempFilePath;
       originalFileSize = await getFileSize(tempFilePath);
 
-      console.log(
-        `📊 File: ${(originalFileSize / 1024 / 1024 / 1024).toFixed(1)}GB | Key: ${fileKey.slice(0, 16)}...`
-      );
-
       // Ensure MSP has the file in storage
       const result = await mspApi.rpc.storagehubclient.isFileInFileStorage(fileKey);
       assert(result.isFileFound, "File should be in MSP storage");

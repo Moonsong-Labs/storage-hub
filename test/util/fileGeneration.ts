@@ -42,11 +42,7 @@ export async function generateLargeFile(
     }
   });
 
-  const startTime = Date.now();
   await pipeline(dataGenerator, createWriteStream(outputPath));
-  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-
-  console.log(`✅ File generated in ${elapsed}s`);
 }
 
 /**
