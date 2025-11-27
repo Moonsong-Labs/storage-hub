@@ -38,8 +38,6 @@ pub struct AuthService {
     session_duration: Duration,
     /// The duration for the stored nonces
     nonce_duration: Duration,
-    /// The SIWE domain to use when generating messages
-    siwe_domain: String,
 }
 
 impl AuthService {
@@ -87,7 +85,6 @@ impl AuthService {
             validate_signature: true,
             session_duration,
             nonce_duration,
-            siwe_domain: config.siwe_domain.clone(),
         };
 
         #[cfg(feature = "mocks")]
