@@ -30,6 +30,7 @@ serde = { workspace = true }
 suppaftp = { version = "6.0", features = ["async", "rustls"] }
 thiserror = "1.0"
 tokio = { workspace = true }
+tokio-stream = { workspace = true }
 tokio-util = { workspace = true }
 url = "2.5"
 

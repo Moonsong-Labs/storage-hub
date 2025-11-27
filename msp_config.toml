@@ -62,6 +62,8 @@ user_agent = "StorageHub-Client/1.0"
 chunk_size = 8192
 # Number of `chunk_size` chunks to buffer during upload/download. (default: 512)
 chunks_buffer = 512
+# Number of FILE_CHUNK_SIZE chunks to batch and queue internally during download. (default: 1024)
+file_chunks_buffer = 1024
 
 # Optional indexer configuration
 # Presence of this section enables the indexer
