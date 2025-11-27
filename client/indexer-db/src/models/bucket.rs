@@ -198,13 +198,13 @@ impl Bucket {
 
     /// Sync the stored file_count and total_size by calculating from actual files.
     ///
-    /// This recalculates both values from the files table and updates the stored values,
-    /// ensuring they stay in sync with reality and preventing underflow issues.
+    /// This recalculates both values from the files table and updates the stored values.
     pub async fn sync_stats<'a>(
         conn: &mut DbConnection<'a>,
         bucket_id: i64,
     ) -> Result<(), diesel::result::Error> {
         // Count files and sum sizes in one query
+        // Note: SQL sum function returns NULL (None) if there are no files.
         let (count, total_size): (i64, Option<BigDecimal>) = file::table
             .filter(file::bucket_id.eq(bucket_id))
             .select((diesel::dsl::count_star(), sum(file::size)))
