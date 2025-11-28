@@ -17,7 +17,7 @@ use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
     blockchain_utils::get_events_at_block,
     traits::StorageEnableRuntime,
-    types::{BlockNumber, OpaqueBlock, ParachainClient, StorageEnableEvents},
+    types::{BlockNumber, OpaqueBlock, StorageEnableEvents, StorageHubClient},
 };
 use shc_indexer_db::models::FileDeletionType;
 use shp_types::Hash;
@@ -36,7 +36,7 @@ pub(crate) const LOG_TARGET: &str = "fisherman-service";
 /// to the StorageHub protocol to permissionlessly mutate (delete the file key) the merkle forest on chain.
 pub struct FishermanService<Runtime: StorageEnableRuntime> {
     /// Substrate client for blockchain interaction
-    client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+    client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
     /// Event bus provider for emitting fisherman events
     event_bus_provider: FishermanServiceEventBusProvider,
     /// Semaphore to prevent overlapping batch processing cycles (size 1)
@@ -76,7 +76,7 @@ pub enum FileKeyOperation {
 impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
     /// Create a new FishermanService instance
     pub fn new(
-        client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+        client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
         batch_interval_seconds: u64,
         batch_deletion_limit: u64,
     ) -> Self {

@@ -17,10 +17,9 @@ targets = ["x86_64-unknown-linux-gnu"]
 [dependencies]
 # Substrate
 sp-runtime = { workspace = true }
-parachains-common = { workspace = true }
 
 [features]
 default = ["std"]
 runtime-benchmarks = ["sp-runtime/runtime-benchmarks"]
-std = ["sp-runtime/std", "parachains-common/std"]
+std = ["sp-runtime/std"]
 try-runtime = ["sp-runtime/try-runtime"]

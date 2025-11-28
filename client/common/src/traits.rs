@@ -48,7 +48,7 @@ use crate::types::*;
 ///
 /// ## In Function Signatures
 /// ```ignore
-/// fn spawn_blockchain_service<RuntimeApi>(client: Arc<ParachainClient<RuntimeApi>>)
+/// fn spawn_blockchain_service<RuntimeApi>(client: Arc<StorageHubClient<RuntimeApi>>)
 /// where
 ///     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 /// {
@@ -181,7 +181,7 @@ where
 }
 
 pub trait StorageEnableRuntimeApi:
-    ConstructRuntimeApi<Block, TFullClient<Block, Self, ParachainExecutor>>
+    ConstructRuntimeApi<Block, TFullClient<Block, Self, StorageHubExecutor>>
     + Sized
     + Send
     + Sync
@@ -190,7 +190,7 @@ pub trait StorageEnableRuntimeApi:
 }
 
 impl<T> StorageEnableRuntimeApi for T where
-    T: ConstructRuntimeApi<Block, TFullClient<Block, Self, ParachainExecutor>>
+    T: ConstructRuntimeApi<Block, TFullClient<Block, Self, StorageHubExecutor>>
         + Sized
         + Send
         + Sync

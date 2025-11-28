@@ -1,10 +1,12 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use parachains_common::BlockNumber;
 use sp_runtime::{
     generic,
     traits::{BlakeTwo256, Hash as HashT},
 };
+
+/// Block number type used by the runtime.
+pub type BlockNumber = u32;
 
 /// Opaque types. These are used by the CLI to instantiate machinery that don't need to know
 /// the specifics of the runtime. They can then be made to be agnostic over specific formats

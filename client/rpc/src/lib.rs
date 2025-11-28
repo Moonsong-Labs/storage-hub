@@ -28,7 +28,7 @@ use shc_common::{
     traits::StorageEnableRuntime,
     types::{
         BlockHash, ChunkId, FileKey, FileKeyProof, FileMetadata, HashT, KeyProof, KeyProofs,
-        OpaqueBlock, ParachainClient, ProofsDealerProviderId, Proven, RandomnessOutput,
+        OpaqueBlock, ProofsDealerProviderId, Proven, RandomnessOutput, StorageHubClient,
         StorageProof, StorageProofsMerkleTrieLayout, StorageProviderId, BCSV_KEY_TYPE,
     },
 };
@@ -374,7 +374,7 @@ pub struct StorageHubClientRpc<FL, FSH, Runtime, Block>
 where
     Runtime: StorageEnableRuntime,
 {
-    client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+    client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
     file_storage: Arc<RwLock<FL>>,
     forest_storage_handler: FSH,
     keystore: KeystorePtr,
@@ -390,7 +390,7 @@ where
     FSH: ForestStorageHandler<Runtime> + Send + Sync,
 {
     pub fn new(
-        client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+        client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
         storage_hub_client_rpc_config: StorageHubClientRpcConfig<FL, FSH, Runtime>,
     ) -> Self {
         Self {
@@ -1318,7 +1318,7 @@ fn remote_file_error_to_rpc_error(e: remote_file::RemoteFileError) -> JsonRpseeE
 }
 
 async fn generate_key_proof<FL, Runtime>(
-    client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+    client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
     file_storage: Arc<RwLock<FL>>,
     file_key: shp_types::Hash,
     provider_id: ProofsDealerProviderId<Runtime>,
