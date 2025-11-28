@@ -54,8 +54,8 @@ use crate::{
     transaction_watchers::spawn_transaction_watcher,
     types::{
         BspHandler, Extrinsic, ManagedProvider, MinimalBlockInfo, MspHandler,
-        NewBlockNotificationKind, NodeRole, SendExtrinsicOptions, SubmitAndWatchError,
-        SubmittedExtrinsicInfo,
+        MultiInstancesNodeRole, NewBlockNotificationKind, SendExtrinsicOptions,
+        SubmitAndWatchError, SubmittedExtrinsicInfo,
     },
     BlockchainService,
 };
@@ -92,7 +92,7 @@ where
             );
             self.pending_tx_store = None;
             self.leadership_conn = None;
-            self.role = NodeRole::Standalone;
+            self.role = MultiInstancesNodeRole::Standalone;
             return;
         };
 
@@ -108,7 +108,7 @@ where
                 warn!(target: LOG_TARGET, "Pending transactions DB init failed: {:?}", e);
                 self.pending_tx_store = None;
                 self.leadership_conn = None;
-                self.role = NodeRole::Standalone;
+                self.role = MultiInstancesNodeRole::Standalone;
                 return;
             }
         };
@@ -124,7 +124,7 @@ where
                 );
                 self.pending_tx_store = None;
                 self.leadership_conn = None;
-                self.role = NodeRole::Standalone;
+                self.role = MultiInstancesNodeRole::Standalone;
                 return;
             }
         };
@@ -137,7 +137,7 @@ where
                 );
                 self.pending_tx_store = Some(PendingTxStore::new(pool));
                 self.leadership_conn = Some(client);
-                self.role = NodeRole::Leader;
+                self.role = MultiInstancesNodeRole::Leader;
                 info!(target: LOG_TARGET, "🗃️ Pending transactions store initialised");
             }
             Ok(false) => {
@@ -147,7 +147,7 @@ where
                 );
                 self.pending_tx_store = Some(PendingTxStore::new(pool));
                 self.leadership_conn = Some(client);
-                self.role = NodeRole::Follower;
+                self.role = MultiInstancesNodeRole::Follower;
                 info!(target: LOG_TARGET, "🗃️ Pending transactions store initialised");
             }
             Err(e) => {
@@ -159,7 +159,7 @@ where
                 // In STANDALONE mode we explicitly disable the pending-tx DB to keep semantics clear.
                 self.pending_tx_store = None;
                 self.leadership_conn = None;
-                self.role = NodeRole::Standalone;
+                self.role = MultiInstancesNodeRole::Standalone;
             }
         }
     }
@@ -583,7 +583,7 @@ where
         call: impl Into<Runtime::Call>,
         options: &SendExtrinsicOptions,
     ) -> Result<SubmittedExtrinsicInfo<Runtime>> {
-        if matches!(self.role, NodeRole::Follower) {
+        if matches!(self.role, MultiInstancesNodeRole::Follower) {
             error!(target: LOG_TARGET, "This node is a follower and cannot submit transactions. Only leader or standalone nodes may send transactions.");
             return Err(anyhow!(
             "This node is a follower and cannot submit transactions. Only leader or standalone nodes may send transactions."
@@ -1116,7 +1116,7 @@ where
     ///
     /// Get the on-chain nonce for the given block hash and cleans up all pending transactions below that nonce.
     pub(crate) async fn cleanup_pending_tx_store(&self, block_hash: Runtime::Hash) {
-        if matches!(self.role, NodeRole::Follower) {
+        if matches!(self.role, MultiInstancesNodeRole::Follower) {
             error!(
                 target: LOG_TARGET,
                 "This node is a follower and cannot perform DB cleanup. Only leader or standalone nodes may perform DB cleanup"
@@ -1376,7 +1376,7 @@ where
     /// This is used as a fallback when a nonce gap persists after a timeout
     /// and no other transaction have been submitted to fill the gap.
     async fn send_gap_filling_transaction(&mut self, nonce: u32) -> Result<()> {
-        if matches!(self.role, NodeRole::Follower) {
+        if matches!(self.role, MultiInstancesNodeRole::Follower) {
             error!(target: LOG_TARGET, "This node is a follower and cannot submit gap-filling transactions. Only leader or standalone nodes may send transactions.");
             return Ok(());
         }
@@ -1872,7 +1872,7 @@ where
 
         // Process the events that are specific to the role of the node.
         match self.role {
-            NodeRole::Leader | NodeRole::Standalone => {
+            MultiInstancesNodeRole::Leader | MultiInstancesNodeRole::Standalone => {
                 match event {
                     // New storage request event coming from pallet-file-system.
                     StorageEnableEvents::FileSystem(
@@ -1967,7 +1967,7 @@ where
                     _ => {}
                 }
             }
-            NodeRole::Follower => {
+            MultiInstancesNodeRole::Follower => {
                 trace!(target: LOG_TARGET, "No block import events to process while in FOLLOWER role");
             }
         }
@@ -1975,7 +1975,9 @@ where
 
     pub(crate) fn process_common_finality_events(&self, _event: StorageEnableEvents<Runtime>) {
         match self.role {
-            NodeRole::Leader | NodeRole::Standalone | NodeRole::Follower => {
+            MultiInstancesNodeRole::Leader
+            | MultiInstancesNodeRole::Standalone
+            | MultiInstancesNodeRole::Follower => {
                 trace!(target: LOG_TARGET, "No finality events to process while in LEADER, STANDALONE or FOLLOWER role");
             }
         }

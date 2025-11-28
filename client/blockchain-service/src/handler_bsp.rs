@@ -30,7 +30,7 @@ use crate::{
         ProcessSubmitProofRequestData,
     },
     handler::LOG_TARGET,
-    types::{ManagedProvider, NodeRole},
+    types::{ManagedProvider, MultiInstancesNodeRole},
     BlockchainService,
 };
 
@@ -133,7 +133,7 @@ where
 
         // Process the events that are specific to the role of the node.
         match self.role {
-            NodeRole::Leader | NodeRole::Standalone => {
+            MultiInstancesNodeRole::Leader | MultiInstancesNodeRole::Standalone => {
                 match event {
                     StorageEnableEvents::ProofsDealer(
                         pallet_proofs_dealer::Event::NewChallengeSeed {
@@ -156,7 +156,7 @@ where
                     _ => {}
                 }
             }
-            NodeRole::Follower => {
+            MultiInstancesNodeRole::Follower => {
                 trace!(target: LOG_TARGET, "No BSP block import events to process while in FOLLOWER role");
             }
         }
@@ -230,7 +230,7 @@ where
 
         // Process the events that are specific to the role of the node.
         match self.role {
-            NodeRole::Leader | NodeRole::Standalone | NodeRole::Follower => {
+            MultiInstancesNodeRole::Leader | MultiInstancesNodeRole::Standalone | MultiInstancesNodeRole::Follower => {
                 trace!(target: LOG_TARGET, "No BSP finality events to process exclusively while in LEADER, STANDALONE or FOLLOWER role");
             }
         }

@@ -30,7 +30,7 @@ use crate::{
         StartMovedBucketDownload, VerifyMspBucketForests,
     },
     handler::LOG_TARGET,
-    types::{FileDistributionInfo, ManagedProvider, NodeRole},
+    types::{FileDistributionInfo, ManagedProvider, MultiInstancesNodeRole},
     BlockchainService,
 };
 
@@ -92,7 +92,7 @@ where
 
         // Process the events that are common to all roles.
         match self.role {
-            NodeRole::Leader | NodeRole::Standalone => {
+            MultiInstancesNodeRole::Leader | MultiInstancesNodeRole::Standalone => {
                 match event {
                     StorageEnableEvents::FileSystem(
                         pallet_file_system::Event::MoveBucketAccepted {
@@ -159,7 +159,7 @@ where
                     _ => {}
                 }
             }
-            NodeRole::Follower => {
+            MultiInstancesNodeRole::Follower => {
                 trace!(target: LOG_TARGET, "No MSP block import events to process while in FOLLOWER role");
             }
         }
@@ -299,7 +299,7 @@ where
 
         // Process the events that are specific to the role of the node.
         match self.role {
-            NodeRole::Leader | NodeRole::Standalone => {
+            MultiInstancesNodeRole::Leader | MultiInstancesNodeRole::Standalone => {
                 match event {
                     StorageEnableEvents::FileSystem(
                         pallet_file_system::Event::MoveBucketRequested {
@@ -322,7 +322,7 @@ where
                     _ => {}
                 }
             }
-            NodeRole::Follower => {
+            MultiInstancesNodeRole::Follower => {
                 trace!(target: LOG_TARGET, "No MSP finality events to process while in FOLLOWER role");
             }
         }
@@ -638,7 +638,7 @@ where
         debug!(target: LOG_TARGET, "Spawning distribute file to BSPs tasks");
 
         // Followers do not distribute files to BSPs.
-        if self.role == NodeRole::Follower {
+        if self.role == MultiInstancesNodeRole::Follower {
             debug!(target: LOG_TARGET, "Follower node does not distribute files to BSPs. Skipping distribution scan.");
             return;
         }

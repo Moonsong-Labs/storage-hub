@@ -46,7 +46,8 @@ use crate::{
     state::{BlockchainServiceStateStore, LastProcessedBlockNumberCf},
     transaction_manager::{TransactionManager, TransactionManagerConfig},
     types::{
-        FileDistributionInfo, ManagedProvider, MinimalBlockInfo, NewBlockNotificationKind, NodeRole,
+        FileDistributionInfo, ManagedProvider, MinimalBlockInfo, MultiInstancesNodeRole,
+        NewBlockNotificationKind,
     },
 };
 
@@ -126,7 +127,7 @@ where
     /// Optional pending tx store (Postgres). When present, tx sends and cleanups are persisted.
     pub(crate) pending_tx_store: Option<PendingTxStore>,
     /// Current role of this node in the HA group.
-    pub(crate) role: NodeRole,
+    pub(crate) role: MultiInstancesNodeRole,
     /// Dedicated leadership connection used to hold advisory locks when DB is enabled.
     pub(crate) leadership_conn: Option<LeadershipClient>,
 }
@@ -245,7 +246,7 @@ where
         self.actor.init_pending_tx_store().await;
         // Role-specific initialisation based on the result of init_pending_tx_store.
         match self.actor.role {
-            NodeRole::Leader => {
+            MultiInstancesNodeRole::Leader => {
                 info!(
                     target: LOG_TARGET,
                     "🧑‍✈️ Node role is LEADER; re-subscribing pending transactions from DB"
@@ -255,14 +256,14 @@ where
                     .resubscribe_pending_transactions_on_startup()
                     .await;
             }
-            NodeRole::Follower => {
+            MultiInstancesNodeRole::Follower => {
                 info!(
                     target: LOG_TARGET,
                     "👂 Node role is FOLLOWER; initialising follower pending-tx view"
                 );
                 self.actor.init_follower_pending_tx_state().await;
             }
-            NodeRole::Standalone => {
+            MultiInstancesNodeRole::Standalone => {
                 info!(
                     target: LOG_TARGET,
                     "📦 Node role is STANDALONE; pending transactions will not be persisted or shared across instances"
@@ -1394,7 +1395,7 @@ where
                 tx
             },
             pending_tx_store: None,
-            role: NodeRole::Standalone,
+            role: MultiInstancesNodeRole::Standalone,
             leadership_conn: None,
         }
     }
