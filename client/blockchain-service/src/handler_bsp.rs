@@ -230,7 +230,9 @@ where
 
         // Process the events that are specific to the role of the node.
         match self.role {
-            MultiInstancesNodeRole::Leader | MultiInstancesNodeRole::Standalone | MultiInstancesNodeRole::Follower => {
+            MultiInstancesNodeRole::Leader
+            | MultiInstancesNodeRole::Standalone
+            | MultiInstancesNodeRole::Follower => {
                 trace!(target: LOG_TARGET, "No BSP finality events to process exclusively while in LEADER, STANDALONE or FOLLOWER role");
             }
         }
