@@ -330,7 +330,11 @@
           })
         });
 
-        const session = await client.auth.SIWE(wallet);
+        // Provide SIWE domain and uri explicitly (per SDK/backend requirements)
+        const { host, href } = window.location;
+        const domain = host; // e.g., "localhost:3000"
+        const uri = href;    // e.g., "http://localhost:3000/e2e/page/msp.html"
+        const session = await client.auth.SIWE(wallet, domain, uri);
         sessionRef = session;
         // Consider authenticated if session now exists and profile fetch succeeds
         await client.auth.getProfile();
