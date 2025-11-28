@@ -113,7 +113,9 @@ await describeMspNet(
       assert(healthResponse.status === "healthy", "MSP health response should be healthy");
 
       // Set up the authentication with the MSP backend
-      const siweSession = await mspClient.auth.SIWE(walletClient);
+      const siweDomain = "localhost:3000";
+      const siweUri = "http://localhost:3000";
+      const siweSession = await mspClient.auth.SIWE(walletClient, siweDomain, siweUri);
       sessionToken = siweSession.token;
 
       assert(createIndexerApi, "Indexer API not available");
