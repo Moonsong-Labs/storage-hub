@@ -3,9 +3,6 @@
 //! All runtime-dependant types used in the library should be defined here, along with appropriate wrappers if necessary
 
 cfg_if::cfg_if! {
-    // if #[cfg(all(feature = "solochain", ...))] {
-    //     compile_error!("Please select only 1 runtime");
-    // } else
     if #[cfg(feature = "solochain")] {
         use sh_solochain_evm_runtime::Runtime;
     } else {
