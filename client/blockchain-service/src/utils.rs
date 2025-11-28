@@ -14,7 +14,11 @@ use sc_client_api::{BlockBackend, BlockImportNotification, HeaderBackend};
 use sc_network::Multiaddr;
 use sc_transaction_pool_api::TransactionStatus;
 use shc_actors_framework::actor::Actor;
-use shc_blockchain_service_db::{setup_db_pool, store::PendingTxStore};
+use shc_blockchain_service_db::{
+    leadership::{open_leadership_connection, try_acquire_leadership, LEADERSHIP_LOCK_KEY},
+    setup_db_pool,
+    store::PendingTxStore,
+};
 use shc_common::{
     blockchain_utils::{
         convert_raw_multiaddresses_to_multiaddr, get_events_at_block,
@@ -50,8 +54,8 @@ use crate::{
     transaction_watchers::spawn_transaction_watcher,
     types::{
         BspHandler, Extrinsic, ManagedProvider, MinimalBlockInfo, MspHandler,
-        NewBlockNotificationKind, SendExtrinsicOptions, SubmitAndWatchError,
-        SubmittedExtrinsicInfo,
+        MultiInstancesNodeRole, NewBlockNotificationKind, SendExtrinsicOptions,
+        SubmitAndWatchError, SubmittedExtrinsicInfo,
     },
     BlockchainService,
 };
@@ -61,34 +65,119 @@ where
     FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
-    /// Initialise the pending transactions DB store if configured.
+    /// Initialise the pending transactions DB store and Leader/Follower role if configured.
     ///
-    /// If the pending transactions DB store is already initialised, this function does nothing.
-    /// If the pending transactions DB URL is not found in the configuration or environment variable, this function does nothing.
-    /// If the pending transactions DB URL is found, but the DB pool cannot be created, this panics.
+    /// Behaviour:
+    /// - If the pending transactions DB URL is not found in the configuration or environment variable,
+    ///   the node runs in `NodeRole::Standalone` and the pending-tx DB remains disabled.
+    /// - If the DB pool or leadership connection / lock cannot be created, the node falls back to
+    ///   `NodeRole::Standalone` and the pending-tx DB remains disabled.
+    /// - Only `NodeRole::Leader` and `NodeRole::Follower` ever use the pending-tx DB; `NodeRole::Standalone`
+    ///   always means "no DB usage".
     pub(crate) async fn init_pending_tx_store(&mut self) {
-        if self.pending_tx_store.is_none() {
-            let maybe_url = self
-                .config
-                .pending_db_url
-                .clone()
-                .or_else(|| std::env::var("SH_PENDING_DB_URL").ok());
-            if let Some(db_url) = maybe_url {
-                match setup_db_pool(db_url).await {
-                    Ok(pool) => {
-                        self.pending_tx_store = Some(PendingTxStore::new(pool));
-                        info!(target: LOG_TARGET, "🗃️ Pending transactions store initialised");
-                    }
-                    Err(e) => {
-                        // Do not fail startup; just log and continue without DB persistence
-                        warn!(target: LOG_TARGET, "Pending transactions DB init failed: {:?}", e);
-                    }
-                }
-            } else {
-                warn!(target: LOG_TARGET, "Pending transactions DB URL not found in configuration or environment variable");
-                warn!(target: LOG_TARGET, "Pending transactions will not be persisted");
+        let maybe_url = self
+            .config
+            .pending_db_url
+            .clone()
+            .or_else(|| std::env::var("SH_PENDING_DB_URL").ok());
+        let Some(db_url) = maybe_url else {
+            // No URL configured: run in pure standalone mode with DB completely disabled.
+            warn!(
+                target: LOG_TARGET,
+                "Pending transactions DB URL not found in configuration or environment variable; running in STANDALONE mode"
+            );
+            warn!(
+                target: LOG_TARGET,
+                "Pending transactions will not be persisted or shared across instances"
+            );
+            self.pending_tx_store = None;
+            self.leadership_conn = None;
+            self.role = MultiInstancesNodeRole::Standalone;
+            return;
+        };
+
+        debug!(
+            target: LOG_TARGET,
+            "Pending transactions DB URL found, initialising pool and leadership lock"
+        );
+
+        let pool = match setup_db_pool(db_url.clone()).await {
+            Ok(pool) => pool,
+            Err(e) => {
+                // Do not fail startup; just log and continue without DB persistence
+                warn!(target: LOG_TARGET, "Pending transactions DB init failed: {:?}", e);
+                self.pending_tx_store = None;
+                self.leadership_conn = None;
+                self.role = MultiInstancesNodeRole::Standalone;
+                return;
+            }
+        };
+
+        // Establish dedicated leadership connection and attempt to acquire advisory lock.
+        let client = match open_leadership_connection(&db_url).await {
+            Ok(client) => client,
+            Err(e) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "Failed to open leadership connection; pending-tx coordination disabled: {:?}",
+                    e
+                );
+                self.pending_tx_store = None;
+                self.leadership_conn = None;
+                self.role = MultiInstancesNodeRole::Standalone;
+                return;
+            }
+        };
+
+        match try_acquire_leadership(&client, LEADERSHIP_LOCK_KEY).await {
+            Ok(true) => {
+                debug!(
+                    target: LOG_TARGET,
+                    "This node acquired the leadership advisory lock; running as LEADER"
+                );
+                self.pending_tx_store = Some(PendingTxStore::new(pool));
+                self.leadership_conn = Some(client);
+                self.role = MultiInstancesNodeRole::Leader;
+                info!(target: LOG_TARGET, "🗃️ Pending transactions store initialised");
+            }
+            Ok(false) => {
+                info!(
+                    target: LOG_TARGET,
+                    "Leadership advisory lock already held by another instance; running as FOLLOWER"
+                );
+                self.pending_tx_store = Some(PendingTxStore::new(pool));
+                self.leadership_conn = Some(client);
+                self.role = MultiInstancesNodeRole::Follower;
+                info!(target: LOG_TARGET, "🗃️ Pending transactions store initialised");
+            }
+            Err(e) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "Failed to acquire leadership advisory lock; falling back to STANDALONE mode: {:?}",
+                    e
+                );
+                // In STANDALONE mode we explicitly disable the pending-tx DB to keep semantics clear.
+                self.pending_tx_store = None;
+                self.leadership_conn = None;
+                self.role = MultiInstancesNodeRole::Standalone;
             }
         }
+    }
+
+    /// Initialise follower-specific pending transaction state from the shared DB.
+    ///
+    /// This function will:
+    /// - Perform a startup snapshot from `pending_transactions` for this node's account.
+    /// - Seed the local `TransactionManager` with existing non-terminal rows.
+    /// - Start LISTEN/NOTIFY-based updates and periodic repair polling.
+    ///
+    /// TODO: Implement the follower DB → TransactionManager bridge as described in
+    /// `leader_follower_design.md` (section 6).
+    pub(crate) async fn init_follower_pending_tx_state(&mut self) {
+        debug!(
+            target: LOG_TARGET,
+            "init_follower_pending_tx_state called, but follower DB → TransactionManager bridge is not implemented yet"
+        );
     }
 
     /// Notify tasks waiting for a block number.
@@ -494,6 +583,13 @@ where
         call: impl Into<Runtime::Call>,
         options: &SendExtrinsicOptions,
     ) -> Result<SubmittedExtrinsicInfo<Runtime>> {
+        if matches!(self.role, MultiInstancesNodeRole::Follower) {
+            error!(target: LOG_TARGET, "This node is a follower and cannot submit transactions. Only leader or standalone nodes may send transactions.");
+            return Err(anyhow!(
+            "This node is a follower and cannot submit transactions. Only leader or standalone nodes may send transactions."
+        ));
+        }
+
         debug!(target: LOG_TARGET, "Sending extrinsic to the runtime");
         debug!(target: LOG_TARGET, "Extrinsic options: {:?}", options);
 
@@ -1020,6 +1116,14 @@ where
     ///
     /// Get the on-chain nonce for the given block hash and cleans up all pending transactions below that nonce.
     pub(crate) async fn cleanup_pending_tx_store(&self, block_hash: Runtime::Hash) {
+        if matches!(self.role, MultiInstancesNodeRole::Follower) {
+            error!(
+                target: LOG_TARGET,
+                "This node is a follower and cannot perform DB cleanup. Only leader or standalone nodes may perform DB cleanup"
+            );
+            return;
+        }
+
         let on_chain_nonce = self.account_nonce(&block_hash);
 
         if let Some(store) = &self.pending_tx_store {
@@ -1272,6 +1376,11 @@ where
     /// This is used as a fallback when a nonce gap persists after a timeout
     /// and no other transaction have been submitted to fill the gap.
     async fn send_gap_filling_transaction(&mut self, nonce: u32) -> Result<()> {
+        if matches!(self.role, MultiInstancesNodeRole::Follower) {
+            error!(target: LOG_TARGET, "This node is a follower and cannot submit gap-filling transactions. Only leader or standalone nodes may send transactions.");
+            return Ok(());
+        }
+
         info!(
                 target: LOG_TARGET,
                 "Sending gap-filling transaction (system.remark) for nonce {}",
@@ -1750,103 +1859,131 @@ where
         Ok(reverted_mutation)
     }
 
-    pub(crate) fn process_common_block_import_events(
+    /// Processes runtime events emitted on block import that are common to both MSP and BSP nodes.
+    ///
+    /// The events processed here are processed equally for both MSP and BSP nodes.
+    pub(crate) fn process_msp_and_bsp_block_import_events(
         &mut self,
         event: StorageEnableEvents<Runtime>,
     ) {
+        // Process the events that are common to all MultiInstancesNodeRole roles.
         match event {
-            // New storage request event coming from pallet-file-system.
-            StorageEnableEvents::FileSystem(pallet_file_system::Event::NewStorageRequest {
-                who,
-                file_key,
-                bucket_id,
-                location,
-                fingerprint,
-                size,
-                peer_ids,
-                expires_at,
-            }) => self.emit(NewStorageRequest {
-                who,
-                file_key: FileKey::from(file_key.as_ref()),
-                bucket_id,
-                location,
-                fingerprint: fingerprint.as_ref().into(),
-                size,
-                user_peer_ids: peer_ids,
-                expires_at: expires_at,
-            }),
-            // A provider has been marked as slashable.
-            StorageEnableEvents::ProofsDealer(pallet_proofs_dealer::Event::SlashableProvider {
-                provider,
-                next_challenge_deadline,
-            }) => self.emit(SlashableProvider {
-                provider,
-                next_challenge_deadline: next_challenge_deadline.saturated_into(),
-            }),
-            // The last chargeable info of a provider has been updated
-            StorageEnableEvents::PaymentStreams(
-                pallet_payment_streams::Event::LastChargeableInfoUpdated {
-                    provider_id,
-                    last_chargeable_tick,
-                    last_chargeable_price_index,
-                },
-            ) => {
-                if let Some(managed_provider_id) = &self.maybe_managed_provider {
-                    // We only emit the event if the Provider ID is the one that this node is managing.
-                    // It's irrelevant if the Provider ID is a MSP or a BSP.
-                    let managed_provider_id = match managed_provider_id {
-                        ManagedProvider::Bsp(bsp_handler) => &bsp_handler.bsp_id,
-                        ManagedProvider::Msp(msp_handler) => &msp_handler.msp_id,
-                    };
-                    if provider_id == *managed_provider_id {
-                        self.emit(LastChargeableInfoUpdated {
+            _ => {
+                trace!(target: LOG_TARGET, "No common block import events to process regarding of the role of the node");
+            }
+        }
+
+        // Process the events that are specific to the MultiInstancesNodeRole role of the node.
+        match self.role {
+            MultiInstancesNodeRole::Leader | MultiInstancesNodeRole::Standalone => {
+                match event {
+                    // New storage request event coming from pallet-file-system.
+                    StorageEnableEvents::FileSystem(
+                        pallet_file_system::Event::NewStorageRequest {
+                            who,
+                            file_key,
+                            bucket_id,
+                            location,
+                            fingerprint,
+                            size,
+                            peer_ids,
+                            expires_at,
+                        },
+                    ) => self.emit(NewStorageRequest {
+                        who,
+                        file_key: FileKey::from(file_key.as_ref()),
+                        bucket_id,
+                        location,
+                        fingerprint: fingerprint.as_ref().into(),
+                        size,
+                        user_peer_ids: peer_ids,
+                        expires_at: expires_at,
+                    }),
+                    // A provider has been marked as slashable.
+                    StorageEnableEvents::ProofsDealer(
+                        pallet_proofs_dealer::Event::SlashableProvider {
+                            provider,
+                            next_challenge_deadline,
+                        },
+                    ) => self.emit(SlashableProvider {
+                        provider,
+                        next_challenge_deadline: next_challenge_deadline.saturated_into(),
+                    }),
+                    // The last chargeable info of a provider has been updated
+                    StorageEnableEvents::PaymentStreams(
+                        pallet_payment_streams::Event::LastChargeableInfoUpdated {
                             provider_id,
                             last_chargeable_tick,
                             last_chargeable_price_index,
-                        })
+                        },
+                    ) => {
+                        if let Some(managed_provider_id) = &self.maybe_managed_provider {
+                            // We only emit the event if the Provider ID is the one that this node is managing.
+                            // It's irrelevant if the Provider ID is a MSP or a BSP.
+                            let managed_provider_id = match managed_provider_id {
+                                ManagedProvider::Bsp(bsp_handler) => &bsp_handler.bsp_id,
+                                ManagedProvider::Msp(msp_handler) => &msp_handler.msp_id,
+                            };
+                            if provider_id == *managed_provider_id {
+                                self.emit(LastChargeableInfoUpdated {
+                                    provider_id,
+                                    last_chargeable_tick,
+                                    last_chargeable_price_index,
+                                })
+                            }
+                        }
                     }
-                }
-            }
-            // A user has been flagged as without funds in the runtime
-            StorageEnableEvents::PaymentStreams(
-                pallet_payment_streams::Event::UserWithoutFunds { who },
-            ) => {
-                self.emit(UserWithoutFunds { who });
-            }
-            // A file was correctly deleted from a user without funds
-            StorageEnableEvents::FileSystem(
-                pallet_file_system::Event::SpStopStoringInsolventUser {
-                    sp_id,
-                    file_key,
-                    owner,
-                    location,
-                    new_root,
-                },
-            ) => {
-                if let Some(managed_provider_id) = &self.maybe_managed_provider {
-                    // We only emit the event if the Provider ID is the one that this node is managing.
-                    // It's irrelevant if the Provider ID is a MSP or a BSP.
-                    let managed_provider_id = match managed_provider_id {
-                        ManagedProvider::Bsp(bsp_handler) => &bsp_handler.bsp_id,
-                        ManagedProvider::Msp(msp_handler) => &msp_handler.msp_id,
-                    };
-                    if sp_id == *managed_provider_id {
-                        self.emit(SpStopStoringInsolventUser {
+                    // A user has been flagged as without funds in the runtime
+                    StorageEnableEvents::PaymentStreams(
+                        pallet_payment_streams::Event::UserWithoutFunds { who },
+                    ) => {
+                        self.emit(UserWithoutFunds { who });
+                    }
+                    // A file was correctly deleted from a user without funds
+                    StorageEnableEvents::FileSystem(
+                        pallet_file_system::Event::SpStopStoringInsolventUser {
                             sp_id,
-                            file_key: file_key.into(),
+                            file_key,
                             owner,
                             location,
                             new_root,
-                        })
+                        },
+                    ) => {
+                        if let Some(managed_provider_id) = &self.maybe_managed_provider {
+                            // We only emit the event if the Provider ID is the one that this node is managing.
+                            // It's irrelevant if the Provider ID is a MSP or a BSP.
+                            let managed_provider_id = match managed_provider_id {
+                                ManagedProvider::Bsp(bsp_handler) => &bsp_handler.bsp_id,
+                                ManagedProvider::Msp(msp_handler) => &msp_handler.msp_id,
+                            };
+                            if sp_id == *managed_provider_id {
+                                self.emit(SpStopStoringInsolventUser {
+                                    sp_id,
+                                    file_key: file_key.into(),
+                                    owner,
+                                    location,
+                                    new_root,
+                                })
+                            }
+                        }
                     }
+                    _ => {}
                 }
             }
-            _ => {}
+            MultiInstancesNodeRole::Follower => {
+                trace!(target: LOG_TARGET, "No block import events to process while in FOLLOWER role");
+            }
         }
     }
 
     pub(crate) fn process_common_finality_events(&self, _event: StorageEnableEvents<Runtime>) {
-        {}
+        match self.role {
+            MultiInstancesNodeRole::Leader
+            | MultiInstancesNodeRole::Standalone
+            | MultiInstancesNodeRole::Follower => {
+                trace!(target: LOG_TARGET, "No finality events to process while in LEADER, STANDALONE or FOLLOWER role");
+            }
+        }
     }
 
     pub(crate) fn process_test_user_events(&self, event: StorageEnableEvents<Runtime>) {
