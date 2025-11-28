@@ -646,19 +646,16 @@ impl MspService {
             "Sending chunks to MSP internal file transfer server"
         );
 
-        // Build the URL for the internal file transfer server
         let url = format!(
             "{}/upload/{}",
             self.msp_config.internal_file_transfer_url, file_key
         );
 
-        // Create the header chunk
         let header = Bytes::from(total_chunks.to_le_bytes().to_vec());
 
         let chunks_iter = (0..total_chunks).map(move |chunk_index| {
             let chunk_id = ChunkId::new(chunk_index);
 
-            // Read chunk from trie (only this chunk is in memory)
             let chunk_data = trie.get_chunk(&chunk_id).map_err(|e| {
                 std::io::Error::other(format!("Failed to read chunk {}: {}", chunk_index, e))
             })?;
