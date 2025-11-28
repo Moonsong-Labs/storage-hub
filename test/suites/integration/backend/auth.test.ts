@@ -4,6 +4,9 @@ import { describeMspNet, type EnrichedBspApi, sleep } from "../../../util";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import { ETH_SH_USER_ADDRESS, ETH_SH_USER_PRIVATE_KEY } from "../../../util/evmNet/keyring";
 
+const SIWE_DOMAIN = "localhost:8080";
+const SIWE_URI = "http://localhost:8080";
+
 await describeMspNet(
   "Backend bucket endpoints",
   {
@@ -58,7 +61,12 @@ await describeMspNet(
       const nonceResp = await fetch("http://localhost:8080/auth/nonce", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ address: ETH_SH_USER_ADDRESS, chainId: SH_EVM_SOLOCHAIN_CHAIN_ID })
+        body: JSON.stringify({
+          address: ETH_SH_USER_ADDRESS,
+          chainId: SH_EVM_SOLOCHAIN_CHAIN_ID,
+          domain: SIWE_DOMAIN,
+          uri: SIWE_URI
+        })
       });
 
       assert(nonceResp.ok, `Nonce request failed: ${nonceResp.status}`);
@@ -146,7 +154,12 @@ await describeMspNet(
       const nonceResp = await fetch("http://localhost:8080/auth/nonce", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ address: ETH_SH_USER_ADDRESS, chainId: SH_EVM_SOLOCHAIN_CHAIN_ID })
+        body: JSON.stringify({
+          address: ETH_SH_USER_ADDRESS,
+          chainId: SH_EVM_SOLOCHAIN_CHAIN_ID,
+          domain: SIWE_DOMAIN,
+          uri: SIWE_URI
+        })
       });
       assert(nonceResp.ok, "Nonce request should succeed");
       const { message: newMessage } = (await nonceResp.json()) as { message: string };
@@ -188,7 +201,12 @@ await describeMspNet(
       const nonceResp = await fetch("http://localhost:8080/auth/nonce", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ address: "not_an_eth_address", chainId: SH_EVM_SOLOCHAIN_CHAIN_ID })
+        body: JSON.stringify({
+          address: "not_an_eth_address",
+          chainId: SH_EVM_SOLOCHAIN_CHAIN_ID,
+          domain: SIWE_DOMAIN,
+          uri: SIWE_URI
+        })
       });
 
       assert(!nonceResp.ok, "Nonce request should fail with invalid address");
@@ -200,7 +218,12 @@ await describeMspNet(
       const nonceResp = await fetch("http://localhost:8080/auth/nonce", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ address: ETH_SH_USER_ADDRESS, chainId: SH_EVM_SOLOCHAIN_CHAIN_ID })
+        body: JSON.stringify({
+          address: ETH_SH_USER_ADDRESS,
+          chainId: SH_EVM_SOLOCHAIN_CHAIN_ID,
+          domain: SIWE_DOMAIN,
+          uri: SIWE_URI
+        })
       });
       assert(nonceResp.ok, "Nonce request should succeed");
       const { message: validMessage } = (await nonceResp.json()) as { message: string };
@@ -226,7 +249,12 @@ await describeMspNet(
         const nonceResp = await fetch("http://localhost:8080/auth/nonce", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ address: ETH_SH_USER_ADDRESS, chainId: SH_EVM_SOLOCHAIN_CHAIN_ID })
+          body: JSON.stringify({
+            address: ETH_SH_USER_ADDRESS,
+            chainId: SH_EVM_SOLOCHAIN_CHAIN_ID,
+            domain: SIWE_DOMAIN,
+            uri: SIWE_URI
+          })
         });
         assert(nonceResp.ok, "Nonce request should succeed");
         const { message: expirableMessage } = (await nonceResp.json()) as { message: string };

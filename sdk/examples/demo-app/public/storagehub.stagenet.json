@@ -12,6 +12,10 @@
     "timeoutMs": 30000,
     "headers": {}
   },
+  "auth": {
+    "siweDomain": "localhost:3001",
+    "siweUri": "http://localhost:3001"
+  },
   "defaults": {
     "replicationLevel": "Basic",
     "replicas": 0,
