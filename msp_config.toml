@@ -37,6 +37,10 @@ max_tip = 100.0
 extrinsic_retry_timeout = 60
 # When true, the MSP will distribute accepted files to volunteering BSPs
 enable_msp_distribute_files = true
+# Optional: Pending Transactions Postgres DB URL for MSP (used by Blockchain Service)
+# If set, the MSP will persist pending extrinsics to this DB.
+# Example for Docker:
+# pending_db_url = "postgresql://postgres:postgres@storage-hub-sh-pending-postgres-1:5432/pending_tx"
 
 # RPC configuration
 [provider.rpc_config]
@@ -58,8 +62,10 @@ user_agent = "StorageHub-Client/1.0"
 chunk_size = 8192
 # Number of `chunk_size` chunks to buffer during upload/download. (default: 512)
 chunks_buffer = 512
+# Number of FILE_CHUNK_SIZE chunks to batch and queue internally during download. (default: 1024)
+file_chunks_buffer = 1024
 
 # Optional indexer configuration
 # Presence of this section enables the indexer
 [indexer]
-indexer_database_url = "postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+indexer_database_url = "postgresql://postgres:postgres@storage-hub-sh-indexer-postgres-1:5432/storage_hub"

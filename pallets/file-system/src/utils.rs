@@ -146,8 +146,12 @@ where
             }
         };
 
+        // Get the current tick number
+        let current_tick =
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+
         // Get the threshold for the BSP to be able to volunteer for the storage request.
-        // The current eligibility value of this storage request for this BSP has to be greater than
+        // The current eligibility value of this storage request for this BSP has to be greater than or equal to
         // this for the BSP to be able to volunteer.
         let bsp_volunteering_threshold = Self::get_volunteer_threshold_of_bsp(&bsp_id, &file_key);
 
@@ -164,26 +168,52 @@ where
         // Calculate the difference between the BSP's threshold and the current eligibility value.
         let eligibility_diff =
             match bsp_volunteering_threshold.checked_sub(&bsp_current_eligibility_value) {
-                Some(diff) => diff,
-                None => {
-                    // The BSP's threshold is less than the eligibility current value, which means the BSP is already eligible to volunteer.
-                    let current_tick =
-                        <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                Some(diff) if !diff.is_zero() => diff,
+                _ => {
+                    // The BSP's threshold is less than or equal to the current eligibility value,
+                    // which means the BSP is already eligible to volunteer.
                     return Ok(current_tick);
                 }
             };
 
         // If the BSP can't volunteer yet, calculate the number of ticks it has to wait for before it can.
-        let min_ticks_to_wait_to_volunteer =
-            match eligibility_diff.checked_div(&bsp_eligibility_slope) {
-                Some(ticks) => max(ticks, T::ThresholdType::one()),
-                None => {
-                    return Err(QueryFileEarliestVolunteerTickError::ThresholdArithmeticError);
+        // We use ceiling division to ensure the BSP waits long enough for the threshold to be met.
+        // Formula: ceil(a / b) = floor(a / b) + (1 if a % b != 0 else 0)
+        let min_ticks_to_wait_to_volunteer = match eligibility_diff
+            .checked_div(&bsp_eligibility_slope)
+        {
+            Some(quotient) => {
+                // Check if there's a remainder by verifying if quotient * slope == eligibility_diff
+                // If not equal, there's a remainder and we need to round up
+                let has_remainder = match quotient.checked_mul(&bsp_eligibility_slope) {
+                    Some(product) => product != eligibility_diff,
+                    None => {
+                        return Err(QueryFileEarliestVolunteerTickError::ThresholdArithmeticError);
+                    }
+                };
+
+                if !has_remainder {
+                    // Exact division, no rounding needed
+                    max(quotient, T::ThresholdType::one())
+                } else {
+                    // Round up by adding 1 to the quotient
+                    match quotient.checked_add(&T::ThresholdType::one()) {
+                        Some(result) => max(result, T::ThresholdType::one()),
+                        None => {
+                            return Err(
+                                QueryFileEarliestVolunteerTickError::ThresholdArithmeticError,
+                            );
+                        }
+                    }
                 }
-            };
+            }
+            None => {
+                return Err(QueryFileEarliestVolunteerTickError::ThresholdArithmeticError);
+            }
+        };
 
         // Compute the earliest tick number at which the BSP can send the volunteer request.
-        let earliest_volunteer_tick = storage_request_tick.saturating_add(
+        let earliest_volunteer_tick = current_tick.saturating_add(
             T::ThresholdTypeToTickNumber::convert(min_ticks_to_wait_to_volunteer),
         );
 
@@ -1123,7 +1153,12 @@ where
                 // We cleanup the storage request
                 Self::cleanup_storage_request(&file_key, &storage_request_metadata);
 
-                Self::deposit_event(Event::StorageRequestRejected { file_key, reason });
+                Self::deposit_event(Event::StorageRequestRejected {
+                    file_key,
+                    msp_id,
+                    bucket_id: storage_request_metadata.bucket_id,
+                    reason,
+                });
             }
         }
 
@@ -3302,7 +3337,7 @@ mod hooks {
                             ),
                         );
                     }
-                    Some((_msp_id, false)) => {
+                    Some((msp_id, false)) => {
                         // If the MSP did not accept the file in time, treat the storage request as rejected.
                         if !storage_request_metadata.bsps_confirmed.is_zero() {
                             // There are BSPs that have confirmed storing the file, so we need to create an incomplete storage request metadata
@@ -3327,6 +3362,8 @@ mod hooks {
                         // If there are no BSPs the event is just informative.
                         Self::deposit_event(Event::StorageRequestRejected {
                             file_key,
+                            msp_id,
+                            bucket_id: storage_request_metadata.bucket_id,
                             reason: RejectedStorageRequestReason::RequestExpired,
                         });
                     }

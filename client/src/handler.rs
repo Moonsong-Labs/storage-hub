@@ -15,9 +15,10 @@ use shc_blockchain_service::{
         AcceptedBspVolunteer, DistributeFileToBsp, FinalisedBspConfirmStoppedStoring,
         FinalisedBucketMovedAway, FinalisedBucketMutationsApplied,
         FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
-        FinalisedTrieRemoveMutationsAppliedForBsp, LastChargeableInfoUpdated, MoveBucketAccepted,
-        MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MoveBucketRequestedForMsp,
-        MultipleNewChallengeSeeds, NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
+        FinalisedStorageRequestRejected, FinalisedTrieRemoveMutationsAppliedForBsp,
+        LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
+        MoveBucketRequested, MoveBucketRequestedForMsp, MultipleNewChallengeSeeds,
+        NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
         ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
         ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser,
         StartMovedBucketDownload, UserWithoutFunds, VerifyMspBucketForests,
@@ -30,7 +31,7 @@ use shc_file_transfer_service::{
     events::{RemoteDownloadRequest, RemoteUploadRequest, RetryBucketMoveDownload},
     FileTransferService,
 };
-use shc_fisherman_service::{ProcessFileDeletionRequest, ProcessIncompleteStorageRequest};
+use shc_fisherman_service::events::BatchFileDeletions;
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_indexer_db::DbPool;
 
@@ -44,9 +45,7 @@ use crate::{
         bsp_move_bucket::{BspMoveBucketConfig, BspMoveBucketTask},
         bsp_submit_proof::{BspSubmitProofConfig, BspSubmitProofTask},
         bsp_upload_file::{BspUploadFileConfig, BspUploadFileTask},
-        fisherman_process_file_deletion::{
-            FishermanProcessFileDeletionTask, FishermanProcessIncompleteStorageTask,
-        },
+        fisherman_process_batch_deletions::FishermanTask,
         msp_charge_fees::{MspChargeFeesConfig, MspChargeFeesTask},
         msp_delete_bucket::MspDeleteBucketTask,
         msp_delete_file::MspDeleteFileTask,
@@ -319,6 +318,7 @@ where
                 DistributeFileToBsp<Runtime> => MspDistributeFileTask,
                 // MspRemoveFinalisedFilesTask handles events for removing files from file storage after mutations are finalised.
                 FinalisedBucketMutationsApplied<Runtime> => MspDeleteFileTask,
+                FinalisedStorageRequestRejected<Runtime> => MspDeleteFileTask,
                 VerifyMspBucketForests => MspVerifyBucketForestsTask,
             ]
         );
@@ -419,19 +419,18 @@ where
             .as_ref()
             .expect("Fisherman service not set for FishermanRole");
 
-        // Subscribe to ProcessFileDeletionRequest events from the FishermanService
-        // The fisherman monitors and processes file deletion requests
+        // Register FishermanTask to handle BatchFileDeletions events
         subscribe_actor_event_map!(
             service: fisherman,
             spawner: &self.task_spawner,
             context: self.clone(),
             critical: true,
             [
-                ProcessFileDeletionRequest<Runtime> => FishermanProcessFileDeletionTask,
-                ProcessIncompleteStorageRequest => FishermanProcessIncompleteStorageTask,
+                // This task processes batched file deletions (for user deletion requests and incomplete storage requests) after every configured interval (`fisherman_batch_interval_seconds`) of time.
+                BatchFileDeletions => FishermanTask,
             ]
         );
 
-        log::info!("🎣 Fisherman service started");
+        log::info!("🎣 Fisherman batch processing task registered");
     }
 }

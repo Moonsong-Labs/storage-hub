@@ -3,7 +3,7 @@ import { bspTwoKey, describeBspNet, type EnrichedBspApi, ShConsts } from "../../
 
 await describeBspNet(
   "BSPNet: Maintenance Mode Test",
-  ({ before, it, createUserApi, createApi }) => {
+  ({ before, it, createUserApi, createApi, after }) => {
     let userApi: EnrichedBspApi;
     let maintenanceBspApi: EnrichedBspApi;
 
@@ -23,6 +23,11 @@ await describeBspNet(
           )
         ]
       });
+    });
+
+    after(async () => {
+      await maintenanceBspApi?.disconnect();
+      await userApi?.docker.stopContainer("sh-bsp-maintenance");
     });
 
     it("BSP in maintenance mode does not execute actions after block imports", async () => {
@@ -83,10 +88,6 @@ await describeBspNet(
 
       // The specific result doesn't matter - what matters is that the call worked and didn't throw
       strictEqual(result !== undefined, true, "RPC calls should still work in maintenance mode");
-
-      // Disconnect the maintenance BSP
-      await userApi.docker.stopContainer("sh-bsp-maintenance");
-      await maintenanceBspApi.disconnect();
     });
   }
 );

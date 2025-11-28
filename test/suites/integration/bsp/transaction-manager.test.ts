@@ -323,8 +323,8 @@ await describeBspNet(
       );
 
       // Drop the volunteer transaction (creates the gap at nonce n)
-      await bspApi.node.dropTxn(volunteerHash as `0x${string}`);
       await userApi.node.dropTxn(volunteerHash as `0x${string}`);
+      await bspApi.node.dropTxn(volunteerHash as `0x${string}`);
 
       // Verify the Invalid log was emitted
       await bspApi.docker.waitForLog({
@@ -356,34 +356,45 @@ await describeBspNet(
         timeout: 10000
       });
 
-      // Wait for the BSP to retry submitting the volunteer (automatic retry mechanism)
-      await userApi.wait.bspVolunteerInTxPool(1);
-      await bspApi.wait.bspVolunteerInTxPool(1);
+      // The BSP will retry submitting the volunteer up to max_try_count times (default: 3)
+      // We need to drop all retry attempts to exhaust the retry mechanism
+      const maxTryCount = 3; // Default value from BspUploadFileConfig
 
-      // Get the retry volunteer transaction hash
-      const retryVolunteerExtrinsics = await userApi.assert.extrinsicPresent({
-        module: "fileSystem",
-        method: "bspVolunteer",
-        checkTxPool: true,
-        assertLength: 1
-      });
-      const txPoolRetry = await userApi.rpc.author.pendingExtrinsics();
-      const retryVolunteerHash = txPoolRetry[retryVolunteerExtrinsics[0].extIndex].hash.toString();
-      const retryVolunteerNonce =
-        txPoolRetry[retryVolunteerExtrinsics[0].extIndex].nonce.toNumber();
+      for (let retryAttempt = 0; retryAttempt < maxTryCount; retryAttempt++) {
+        // Wait for the BSP to retry submitting the volunteer (automatic retry mechanism)
+        await userApi.wait.bspVolunteerInTxPool(1);
+        await bspApi.wait.bspVolunteerInTxPool(1);
 
-      // Verify the retry uses the same nonce (gap filling)
-      strictEqual(
-        retryVolunteerNonce,
-        volunteerNonce,
-        "Retry volunteer should use the same nonce to fill the gap"
-      );
+        // Get the retry volunteer transaction hash
+        const retryVolunteerExtrinsics = await userApi.assert.extrinsicPresent({
+          module: "fileSystem",
+          method: "bspVolunteer",
+          checkTxPool: true,
+          assertLength: 1
+        });
+        const txPoolRetry = await userApi.rpc.author.pendingExtrinsics();
+        const retryVolunteerHash =
+          txPoolRetry[retryVolunteerExtrinsics[0].extIndex].hash.toString();
+        const retryVolunteerNonce =
+          txPoolRetry[retryVolunteerExtrinsics[0].extIndex].nonce.toNumber();
 
-      // Drop the retry volunteer transaction to exhaust the retry mechanism
-      await bspApi.node.dropTxn(retryVolunteerHash as `0x${string}`);
-      await userApi.node.dropTxn(retryVolunteerHash as `0x${string}`);
+        // Verify the retry uses the same nonce (gap filling)
+        strictEqual(
+          retryVolunteerNonce,
+          volunteerNonce,
+          `Retry volunteer attempt ${retryAttempt + 1} should use the same nonce to fill the gap`
+        );
 
-      // Verify the retry volunteer was dropped
+        // Drop the retry volunteer transaction
+        // Order matters: drop from USER first, then BSP. When USER drops bspVolunteer (nonce n),
+        // it automatically drops submitProof (nonce n+1) since it becomes invalid. If BSP drops
+        // first and retries immediately, it gossips the new bspVolunteer to USER, which replaces
+        // the old one but leaves submitProof valid in USER's pool.
+        await userApi.node.dropTxn(retryVolunteerHash as `0x${string}`);
+        await bspApi.node.dropTxn(retryVolunteerHash as `0x${string}`);
+      }
+
+      // Verify all retry volunteer extrinsics were dropped
       await userApi.assert.extrinsicPresent({
         module: "fileSystem",
         method: "bspVolunteer",

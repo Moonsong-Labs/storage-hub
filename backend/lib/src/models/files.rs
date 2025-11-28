@@ -1,8 +1,10 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
+use serde_with::{serde_as, DisplayFromStr};
 use tracing::error;
 
 use shc_indexer_db::models::{File as DBFile, FileStorageRequestStep};
+use shp_types::Hash;
 
 use crate::models::buckets::FileTree;
 
@@ -19,14 +21,17 @@ pub enum FileStatus {
     DeletionInProgress,
 }
 
+#[serde_as]
 #[derive(Debug, Serialize)]
 pub struct FileInfo {
     #[serde(rename = "fileKey")]
     pub file_key: String,
-    pub fingerprint: String,
+    #[serde(serialize_with = "crate::utils::serde::hex_string")]
+    pub fingerprint: [u8; 32],
     #[serde(rename = "bucketId")]
     pub bucket_id: String,
     pub location: String,
+    #[serde_as(as = "DisplayFromStr")]
     pub size: u64,
     #[serde(rename = "isPublic")]
     pub is_public: bool,
@@ -53,7 +58,7 @@ impl FileInfo {
     pub fn from_db(db: &DBFile, is_public: bool) -> Self {
         Self {
             file_key: hex::encode(&db.file_key),
-            fingerprint: hex::encode(&db.fingerprint),
+            fingerprint: Hash::from_slice(&db.fingerprint).to_fixed_bytes(),
             bucket_id: hex::encode(&db.onchain_bucket_id),
             // TODO: determine if lossy conversion is acceptable here
             location: String::from_utf8_lossy(&db.location).into_owned(),
@@ -62,6 +67,10 @@ impl FileInfo {
             uploaded_at: db.updated_at.and_utc(),
             status: Self::status_from_db(&db),
         }
+    }
+
+    pub fn fingerprint_hexstr(&self) -> String {
+        hex::encode(&self.fingerprint)
     }
 }
 
@@ -77,8 +86,7 @@ pub struct DistributeResponse {
 pub struct FileListResponse {
     #[serde(rename = "bucketId")]
     pub bucket_id: String,
-    // TODO: consider renaming to "tree" and removing the Vec
-    pub files: Vec<FileTree>,
+    pub tree: FileTree,
 }
 
 #[derive(Debug, Serialize)]

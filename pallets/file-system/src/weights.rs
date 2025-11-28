@@ -54,6 +54,10 @@ pub trait WeightInfo {
 	fn process_expired_storage_request_msp_accepted_or_no_msp(n: u32, ) -> Weight;
 	fn process_expired_storage_request_msp_rejected(n: u32, ) -> Weight;
 	fn process_expired_move_bucket_request() -> Weight;
+	fn delete_files_bucket(n: u32, ) -> Weight;
+	fn delete_files_bsp(n: u32, ) -> Weight;
+	fn delete_files_for_incomplete_storage_request_bsp(n: u32, ) -> Weight;
+	fn delete_files_for_incomplete_storage_request_bucket(n: u32, ) -> Weight;
 }
 
 /// Weights for `pallet_file_system` using the Substrate node and recommended hardware.
@@ -912,6 +916,152 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		Weight::from_parts(4_000_000, 0)
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
+	/// Storage: `PaymentStreams::UsersWithoutFunds` (r:1 w:0)
+	/// Proof: `PaymentStreams::UsersWithoutFunds` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::Buckets` (r:1 w:1)
+	/// Proof: `Providers::Buckets` (`max_values`: None, `max_size`: Some(191), added: 2666, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::MainStorageProviders` (r:1 w:1)
+	/// Proof: `Providers::MainStorageProviders` (`max_values`: None, `max_size`: Some(667), added: 3142, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::FixedRatePaymentStreams` (r:1 w:0)
+	/// Proof: `PaymentStreams::FixedRatePaymentStreams` (`max_values`: None, `max_size`: Some(137), added: 2612, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::MainStorageProviderIdsToValuePropositions` (r:1 w:0)
+	/// Proof: `Providers::MainStorageProviderIdsToValuePropositions` (`max_values`: None, `max_size`: Some(1123), added: 3598, mode: `MaxEncodedLen`)
+	/// Storage: `Parameters::Parameters` (r:1 w:0)
+	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
+	/// The range of component `n` is `[1, 10]`.
+	fn delete_files_bucket(n: u32, ) -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `1907`
+		//  Estimated: `4588`
+		// Minimum execution time: 112_000_000 picoseconds.
+		Weight::from_parts(76_542_283, 4588)
+			// Standard Error: 196_293
+			.saturating_add(Weight::from_parts(48_629_824, 0).saturating_mul(n.into()))
+			.saturating_add(T::DbWeight::get().reads(6_u64))
+			.saturating_add(T::DbWeight::get().writes(2_u64))
+	}
+	/// Storage: `PaymentStreams::UsersWithoutFunds` (r:1 w:0)
+	/// Proof: `PaymentStreams::UsersWithoutFunds` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::BackupStorageProviders` (r:1 w:1)
+	/// Proof: `Providers::BackupStorageProviders` (`max_values`: None, `max_size`: Some(683), added: 3158, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::Buckets` (r:1 w:0)
+	/// Proof: `Providers::Buckets` (`max_values`: None, `max_size`: Some(191), added: 2666, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::MainStorageProviders` (r:1 w:0)
+	/// Proof: `Providers::MainStorageProviders` (`max_values`: None, `max_size`: Some(667), added: 3142, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::UsedBspsCapacity` (r:1 w:1)
+	/// Proof: `Providers::UsedBspsCapacity` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::DynamicRatePaymentStreams` (r:1 w:1)
+	/// Proof: `PaymentStreams::DynamicRatePaymentStreams` (`max_values`: None, `max_size`: Some(141), added: 2616, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::InsolventProviders` (r:2 w:0)
+	/// Proof: `Providers::InsolventProviders` (`max_values`: None, `max_size`: Some(49), added: 2524, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::AwaitingTopUpFromProviders` (r:2 w:0)
+	/// Proof: `Providers::AwaitingTopUpFromProviders` (`max_values`: None, `max_size`: Some(57), added: 2532, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::FixedRatePaymentStreams` (r:1 w:0)
+	/// Proof: `PaymentStreams::FixedRatePaymentStreams` (`max_values`: None, `max_size`: Some(137), added: 2612, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::PrivilegedProviders` (r:1 w:0)
+	/// Proof: `PaymentStreams::PrivilegedProviders` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::LastChargeableInfo` (r:1 w:0)
+	/// Proof: `PaymentStreams::LastChargeableInfo` (`max_values`: None, `max_size`: Some(68), added: 2543, mode: `MaxEncodedLen`)
+	/// Storage: `System::Account` (r:3 w:1)
+	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::TotalBspsCapacity` (r:1 w:0)
+	/// Proof: `Providers::TotalBspsCapacity` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
+	/// Storage: `Parameters::Parameters` (r:4 w:0)
+	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Holds` (r:1 w:1)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::RegisteredUsers` (r:1 w:1)
+	/// Proof: `PaymentStreams::RegisteredUsers` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
+	/// The range of component `n` is `[1, 10]`.
+	fn delete_files_bsp(n: u32, ) -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `1685`
+		//  Estimated: `11034`
+		// Minimum execution time: 250_000_000 picoseconds.
+		Weight::from_parts(198_832_162, 11034)
+			// Standard Error: 351_300
+			.saturating_add(Weight::from_parts(77_591_999, 0).saturating_mul(n.into()))
+			.saturating_add(T::DbWeight::get().reads(23_u64))
+			.saturating_add(T::DbWeight::get().writes(6_u64))
+	}
+	/// Storage: `FileSystem::IncompleteStorageRequests` (r:10 w:10)
+	/// Proof: `FileSystem::IncompleteStorageRequests` (`max_values`: None, `max_size`: Some(1916), added: 4391, mode: `MaxEncodedLen`)
+	/// Storage: `Parameters::Parameters` (r:6 w:0)
+	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::Buckets` (r:1 w:0)
+	/// Proof: `Providers::Buckets` (`max_values`: None, `max_size`: Some(191), added: 2666, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::BackupStorageProviders` (r:1 w:1)
+	/// Proof: `Providers::BackupStorageProviders` (`max_values`: None, `max_size`: Some(683), added: 3158, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::MainStorageProviders` (r:1 w:0)
+	/// Proof: `Providers::MainStorageProviders` (`max_values`: None, `max_size`: Some(667), added: 3142, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::UsedBspsCapacity` (r:1 w:1)
+	/// Proof: `Providers::UsedBspsCapacity` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::DynamicRatePaymentStreams` (r:1 w:1)
+	/// Proof: `PaymentStreams::DynamicRatePaymentStreams` (`max_values`: None, `max_size`: Some(141), added: 2616, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::InsolventProviders` (r:2 w:0)
+	/// Proof: `Providers::InsolventProviders` (`max_values`: None, `max_size`: Some(49), added: 2524, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::AwaitingTopUpFromProviders` (r:2 w:0)
+	/// Proof: `Providers::AwaitingTopUpFromProviders` (`max_values`: None, `max_size`: Some(57), added: 2532, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::FixedRatePaymentStreams` (r:1 w:0)
+	/// Proof: `PaymentStreams::FixedRatePaymentStreams` (`max_values`: None, `max_size`: Some(137), added: 2612, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::PrivilegedProviders` (r:1 w:0)
+	/// Proof: `PaymentStreams::PrivilegedProviders` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::LastChargeableInfo` (r:1 w:0)
+	/// Proof: `PaymentStreams::LastChargeableInfo` (`max_values`: None, `max_size`: Some(68), added: 2543, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::UsersWithoutFunds` (r:1 w:0)
+	/// Proof: `PaymentStreams::UsersWithoutFunds` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
+	/// Storage: `System::Account` (r:3 w:1)
+	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::TotalBspsCapacity` (r:1 w:0)
+	/// Proof: `Providers::TotalBspsCapacity` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Holds` (r:1 w:1)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::RegisteredUsers` (r:1 w:1)
+	/// Proof: `PaymentStreams::RegisteredUsers` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
+	/// The range of component `n` is `[1, 10]`.
+	fn delete_files_for_incomplete_storage_request_bsp(n: u32, ) -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `1713 + n * (206 ±0)`
+		//  Estimated: `16056 + n * (4391 ±0)`
+		// Minimum execution time: 245_000_000 picoseconds.
+		Weight::from_parts(220_185_827, 16056)
+			// Standard Error: 243_720
+			.saturating_add(Weight::from_parts(47_677_723, 0).saturating_mul(n.into()))
+			.saturating_add(T::DbWeight::get().reads(25_u64))
+			.saturating_add(T::DbWeight::get().reads((1_u64).saturating_mul(n.into())))
+			.saturating_add(T::DbWeight::get().writes(6_u64))
+			.saturating_add(T::DbWeight::get().writes((1_u64).saturating_mul(n.into())))
+			.saturating_add(Weight::from_parts(0, 4391).saturating_mul(n.into()))
+	}
+	/// Storage: `FileSystem::IncompleteStorageRequests` (r:10 w:10)
+	/// Proof: `FileSystem::IncompleteStorageRequests` (`max_values`: None, `max_size`: Some(1916), added: 4391, mode: `MaxEncodedLen`)
+	/// Storage: `Parameters::Parameters` (r:3 w:0)
+	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::Buckets` (r:1 w:1)
+	/// Proof: `Providers::Buckets` (`max_values`: None, `max_size`: Some(191), added: 2666, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::MainStorageProviders` (r:1 w:1)
+	/// Proof: `Providers::MainStorageProviders` (`max_values`: None, `max_size`: Some(667), added: 3142, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::UsersWithoutFunds` (r:1 w:0)
+	/// Proof: `PaymentStreams::UsersWithoutFunds` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::FixedRatePaymentStreams` (r:1 w:0)
+	/// Proof: `PaymentStreams::FixedRatePaymentStreams` (`max_values`: None, `max_size`: Some(137), added: 2612, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::MainStorageProviderIdsToValuePropositions` (r:1 w:0)
+	/// Proof: `Providers::MainStorageProviderIdsToValuePropositions` (`max_values`: None, `max_size`: Some(1123), added: 3598, mode: `MaxEncodedLen`)
+	/// The range of component `n` is `[1, 10]`.
+	fn delete_files_for_incomplete_storage_request_bucket(n: u32, ) -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `1935 + n * (174 ±0)`
+		//  Estimated: `8523 + n * (4391 ±0)`
+		// Minimum execution time: 97_000_000 picoseconds.
+		Weight::from_parts(80_434_145, 8523)
+			// Standard Error: 61_019
+			.saturating_add(Weight::from_parts(22_567_700, 0).saturating_mul(n.into()))
+			.saturating_add(T::DbWeight::get().reads(8_u64))
+			.saturating_add(T::DbWeight::get().reads((1_u64).saturating_mul(n.into())))
+			.saturating_add(T::DbWeight::get().writes(2_u64))
+			.saturating_add(T::DbWeight::get().writes((1_u64).saturating_mul(n.into())))
+			.saturating_add(Weight::from_parts(0, 4391).saturating_mul(n.into()))
+	}
 }
 
 // For backwards compatibility and tests.
@@ -1768,5 +1918,151 @@ impl WeightInfo for () {
 		// Minimum execution time: 3_000_000 picoseconds.
 		Weight::from_parts(4_000_000, 0)
 			.saturating_add(RocksDbWeight::get().writes(1_u64))
+	}
+	/// Storage: `PaymentStreams::UsersWithoutFunds` (r:1 w:0)
+	/// Proof: `PaymentStreams::UsersWithoutFunds` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::Buckets` (r:1 w:1)
+	/// Proof: `Providers::Buckets` (`max_values`: None, `max_size`: Some(191), added: 2666, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::MainStorageProviders` (r:1 w:1)
+	/// Proof: `Providers::MainStorageProviders` (`max_values`: None, `max_size`: Some(667), added: 3142, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::FixedRatePaymentStreams` (r:1 w:0)
+	/// Proof: `PaymentStreams::FixedRatePaymentStreams` (`max_values`: None, `max_size`: Some(137), added: 2612, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::MainStorageProviderIdsToValuePropositions` (r:1 w:0)
+	/// Proof: `Providers::MainStorageProviderIdsToValuePropositions` (`max_values`: None, `max_size`: Some(1123), added: 3598, mode: `MaxEncodedLen`)
+	/// Storage: `Parameters::Parameters` (r:1 w:0)
+	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
+	/// The range of component `n` is `[1, 10]`.
+	fn delete_files_bucket(n: u32, ) -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `1907`
+		//  Estimated: `4588`
+		// Minimum execution time: 112_000_000 picoseconds.
+		Weight::from_parts(76_542_283, 4588)
+			// Standard Error: 196_293
+			.saturating_add(Weight::from_parts(48_629_824, 0).saturating_mul(n.into()))
+			.saturating_add(RocksDbWeight::get().reads(6_u64))
+			.saturating_add(RocksDbWeight::get().writes(2_u64))
+	}
+	/// Storage: `PaymentStreams::UsersWithoutFunds` (r:1 w:0)
+	/// Proof: `PaymentStreams::UsersWithoutFunds` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::BackupStorageProviders` (r:1 w:1)
+	/// Proof: `Providers::BackupStorageProviders` (`max_values`: None, `max_size`: Some(683), added: 3158, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::Buckets` (r:1 w:0)
+	/// Proof: `Providers::Buckets` (`max_values`: None, `max_size`: Some(191), added: 2666, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::MainStorageProviders` (r:1 w:0)
+	/// Proof: `Providers::MainStorageProviders` (`max_values`: None, `max_size`: Some(667), added: 3142, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::UsedBspsCapacity` (r:1 w:1)
+	/// Proof: `Providers::UsedBspsCapacity` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::DynamicRatePaymentStreams` (r:1 w:1)
+	/// Proof: `PaymentStreams::DynamicRatePaymentStreams` (`max_values`: None, `max_size`: Some(141), added: 2616, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::InsolventProviders` (r:2 w:0)
+	/// Proof: `Providers::InsolventProviders` (`max_values`: None, `max_size`: Some(49), added: 2524, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::AwaitingTopUpFromProviders` (r:2 w:0)
+	/// Proof: `Providers::AwaitingTopUpFromProviders` (`max_values`: None, `max_size`: Some(57), added: 2532, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::FixedRatePaymentStreams` (r:1 w:0)
+	/// Proof: `PaymentStreams::FixedRatePaymentStreams` (`max_values`: None, `max_size`: Some(137), added: 2612, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::PrivilegedProviders` (r:1 w:0)
+	/// Proof: `PaymentStreams::PrivilegedProviders` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::LastChargeableInfo` (r:1 w:0)
+	/// Proof: `PaymentStreams::LastChargeableInfo` (`max_values`: None, `max_size`: Some(68), added: 2543, mode: `MaxEncodedLen`)
+	/// Storage: `System::Account` (r:3 w:1)
+	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::TotalBspsCapacity` (r:1 w:0)
+	/// Proof: `Providers::TotalBspsCapacity` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
+	/// Storage: `Parameters::Parameters` (r:4 w:0)
+	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Holds` (r:1 w:1)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::RegisteredUsers` (r:1 w:1)
+	/// Proof: `PaymentStreams::RegisteredUsers` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
+	/// The range of component `n` is `[1, 10]`.
+	fn delete_files_bsp(n: u32, ) -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `1685`
+		//  Estimated: `11034`
+		// Minimum execution time: 250_000_000 picoseconds.
+		Weight::from_parts(198_832_162, 11034)
+			// Standard Error: 351_300
+			.saturating_add(Weight::from_parts(77_591_999, 0).saturating_mul(n.into()))
+			.saturating_add(RocksDbWeight::get().reads(23_u64))
+			.saturating_add(RocksDbWeight::get().writes(6_u64))
+	}
+	/// Storage: `FileSystem::IncompleteStorageRequests` (r:10 w:10)
+	/// Proof: `FileSystem::IncompleteStorageRequests` (`max_values`: None, `max_size`: Some(1916), added: 4391, mode: `MaxEncodedLen`)
+	/// Storage: `Parameters::Parameters` (r:6 w:0)
+	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::Buckets` (r:1 w:0)
+	/// Proof: `Providers::Buckets` (`max_values`: None, `max_size`: Some(191), added: 2666, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::BackupStorageProviders` (r:1 w:1)
+	/// Proof: `Providers::BackupStorageProviders` (`max_values`: None, `max_size`: Some(683), added: 3158, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::MainStorageProviders` (r:1 w:0)
+	/// Proof: `Providers::MainStorageProviders` (`max_values`: None, `max_size`: Some(667), added: 3142, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::UsedBspsCapacity` (r:1 w:1)
+	/// Proof: `Providers::UsedBspsCapacity` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::DynamicRatePaymentStreams` (r:1 w:1)
+	/// Proof: `PaymentStreams::DynamicRatePaymentStreams` (`max_values`: None, `max_size`: Some(141), added: 2616, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::InsolventProviders` (r:2 w:0)
+	/// Proof: `Providers::InsolventProviders` (`max_values`: None, `max_size`: Some(49), added: 2524, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::AwaitingTopUpFromProviders` (r:2 w:0)
+	/// Proof: `Providers::AwaitingTopUpFromProviders` (`max_values`: None, `max_size`: Some(57), added: 2532, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::FixedRatePaymentStreams` (r:1 w:0)
+	/// Proof: `PaymentStreams::FixedRatePaymentStreams` (`max_values`: None, `max_size`: Some(137), added: 2612, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::PrivilegedProviders` (r:1 w:0)
+	/// Proof: `PaymentStreams::PrivilegedProviders` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::LastChargeableInfo` (r:1 w:0)
+	/// Proof: `PaymentStreams::LastChargeableInfo` (`max_values`: None, `max_size`: Some(68), added: 2543, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::UsersWithoutFunds` (r:1 w:0)
+	/// Proof: `PaymentStreams::UsersWithoutFunds` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
+	/// Storage: `System::Account` (r:3 w:1)
+	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::TotalBspsCapacity` (r:1 w:0)
+	/// Proof: `Providers::TotalBspsCapacity` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Holds` (r:1 w:1)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::RegisteredUsers` (r:1 w:1)
+	/// Proof: `PaymentStreams::RegisteredUsers` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
+	/// The range of component `n` is `[1, 10]`.
+	fn delete_files_for_incomplete_storage_request_bsp(n: u32, ) -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `1713 + n * (206 ±0)`
+		//  Estimated: `16056 + n * (4391 ±0)`
+		// Minimum execution time: 245_000_000 picoseconds.
+		Weight::from_parts(220_185_827, 16056)
+			// Standard Error: 243_720
+			.saturating_add(Weight::from_parts(47_677_723, 0).saturating_mul(n.into()))
+			.saturating_add(RocksDbWeight::get().reads(25_u64))
+			.saturating_add(RocksDbWeight::get().reads((1_u64).saturating_mul(n.into())))
+			.saturating_add(RocksDbWeight::get().writes(6_u64))
+			.saturating_add(RocksDbWeight::get().writes((1_u64).saturating_mul(n.into())))
+			.saturating_add(Weight::from_parts(0, 4391).saturating_mul(n.into()))
+	}
+	/// Storage: `FileSystem::IncompleteStorageRequests` (r:10 w:10)
+	/// Proof: `FileSystem::IncompleteStorageRequests` (`max_values`: None, `max_size`: Some(1916), added: 4391, mode: `MaxEncodedLen`)
+	/// Storage: `Parameters::Parameters` (r:3 w:0)
+	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::Buckets` (r:1 w:1)
+	/// Proof: `Providers::Buckets` (`max_values`: None, `max_size`: Some(191), added: 2666, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::MainStorageProviders` (r:1 w:1)
+	/// Proof: `Providers::MainStorageProviders` (`max_values`: None, `max_size`: Some(667), added: 3142, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::UsersWithoutFunds` (r:1 w:0)
+	/// Proof: `PaymentStreams::UsersWithoutFunds` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::FixedRatePaymentStreams` (r:1 w:0)
+	/// Proof: `PaymentStreams::FixedRatePaymentStreams` (`max_values`: None, `max_size`: Some(137), added: 2612, mode: `MaxEncodedLen`)
+	/// Storage: `Providers::MainStorageProviderIdsToValuePropositions` (r:1 w:0)
+	/// Proof: `Providers::MainStorageProviderIdsToValuePropositions` (`max_values`: None, `max_size`: Some(1123), added: 3598, mode: `MaxEncodedLen`)
+	/// The range of component `n` is `[1, 10]`.
+	fn delete_files_for_incomplete_storage_request_bucket(n: u32, ) -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `1935 + n * (174 ±0)`
+		//  Estimated: `8523 + n * (4391 ±0)`
+		// Minimum execution time: 97_000_000 picoseconds.
+		Weight::from_parts(80_434_145, 8523)
+			// Standard Error: 61_019
+			.saturating_add(Weight::from_parts(22_567_700, 0).saturating_mul(n.into()))
+			.saturating_add(RocksDbWeight::get().reads(8_u64))
+			.saturating_add(RocksDbWeight::get().reads((1_u64).saturating_mul(n.into())))
+			.saturating_add(RocksDbWeight::get().writes(2_u64))
+			.saturating_add(RocksDbWeight::get().writes((1_u64).saturating_mul(n.into())))
+			.saturating_add(Weight::from_parts(0, 4391).saturating_mul(n.into()))
 	}
 }

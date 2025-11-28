@@ -582,6 +582,22 @@ pub enum WatchTransactionError {
     Internal(String),
 }
 
+#[derive(thiserror::Error, Debug, Clone)]
+pub enum SubmitAndWatchError {
+    #[error("Invalid Transaction: transaction is outdated (nonce {nonce})")]
+    InvalidTransactionOutdated { nonce: u32 },
+    #[error("RPC transport error: {message}")]
+    RpcTransport { message: String },
+    #[error("Malformed RPC response: {message}")]
+    MalformedResponse { message: String },
+    #[error("RPC error {code}: {message}")]
+    RpcError {
+        code: i64,
+        message: String,
+        data: Option<String>,
+    },
+}
+
 /// Minimum block information needed to register what is the current best block
 /// and detect reorgs.
 #[derive(Debug, Clone, Encode, Decode, Copy)]

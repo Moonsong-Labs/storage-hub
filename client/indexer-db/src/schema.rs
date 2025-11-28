@@ -40,6 +40,9 @@ diesel::table! {
         created_at -> Timestamp,
         updated_at -> Timestamp,
         merkle_root -> Bytea,
+        value_prop_id -> Varchar,
+        total_size -> Numeric,
+        file_count -> Int8,
     }
 }
 
@@ -59,6 +62,7 @@ diesel::table! {
         updated_at -> Timestamp,
         deletion_signature -> Nullable<Bytea>,
         deletion_requested_at -> Nullable<Timestamp>,
+        is_in_bucket -> Bool,
     }
 }
 

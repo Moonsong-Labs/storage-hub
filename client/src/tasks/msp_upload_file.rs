@@ -7,16 +7,19 @@ use std::{
 
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
-use shc_blockchain_service::types::{MspRespondStorageRequest, RespondStorageRequest};
+use shc_blockchain_service::types::{
+    MspRespondStorageRequest, RespondStorageRequest, RetryStrategy,
+};
 use shc_blockchain_service::{capacity_manager::CapacityRequestData, types::SendExtrinsicOptions};
 use sp_core::H256;
-use sp_runtime::traits::{SaturatedConversion, Zero};
+use sp_runtime::traits::{CheckedAdd, CheckedSub, SaturatedConversion, Zero};
 
 use pallet_file_system::types::RejectedStorageRequest;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::events::ProcessMspRespondStoringRequest;
 use shc_blockchain_service::{
-    commands::BlockchainServiceCommandInterface, events::NewStorageRequest,
+    commands::{BlockchainServiceCommandInterface, BlockchainServiceCommandInterfaceExt},
+    events::NewStorageRequest,
 };
 use shc_common::{
     traits::StorageEnableRuntime,
@@ -38,6 +41,24 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "msp-upload-file-task";
+
+/// Configuration for the MSP upload file task
+#[derive(Debug, Clone)]
+pub struct MspUploadFileConfig {
+    /// Maximum number of times to retry submitting respond storage request extrinsic
+    pub max_try_count: u32,
+    /// Maximum tip amount to use when submitting respond storage request extrinsic
+    pub max_tip: u128,
+}
+
+impl Default for MspUploadFileConfig {
+    fn default() -> Self {
+        Self {
+            max_try_count: 3,
+            max_tip: 500,
+        }
+    }
+}
 
 /// MSP Upload File Task: Handles the whole flow of a file being uploaded to a MSP, from
 /// the MSP's perspective.
@@ -69,6 +90,7 @@ where
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
     file_key_cleanup: Option<H256>,
+    config: MspUploadFileConfig,
 }
 
 impl<NT, Runtime> Clone for MspUploadFileTask<NT, Runtime>
@@ -81,6 +103,7 @@ where
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
             file_key_cleanup: self.file_key_cleanup,
+            config: self.config.clone(),
         }
     }
 }
@@ -95,7 +118,13 @@ where
         Self {
             storage_hub_handler,
             file_key_cleanup: None,
+            config: MspUploadFileConfig::default(),
         }
+    }
+
+    pub fn with_config(mut self, config: MspUploadFileConfig) -> Self {
+        self.config = config;
+        self
     }
 }
 
@@ -341,7 +370,7 @@ where
 
         self.storage_hub_handler
             .blockchain
-            .send_extrinsic(
+            .submit_extrinsic_with_retry(
                 call,
                 SendExtrinsicOptions::new(
                     Duration::from_secs(
@@ -353,21 +382,58 @@ where
                     Some("fileSystem".to_string()),
                     Some("mspRespondStorageRequestsMultipleBuckets".to_string()),
                 ),
+                RetryStrategy::default()
+                    .with_max_retries(self.config.max_try_count)
+                    .with_max_tip(self.config.max_tip.saturated_into()),
+                false,
             )
-            .await?
-            .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
 
-        // Remove the files that were rejected from the File Storage.
+        // Log accepted and rejected files, and remove rejected files from File Storage.
         // Accepted files will be added to the Bucket's Forest Storage by the BlockchainService.
         for storage_request_msp_bucket_response in storage_request_msp_response {
-            let mut fs = self.storage_hub_handler.file_storage.write().await;
+            // Log accepted file keys
+            if let Some(ref accepted) = storage_request_msp_bucket_response.accept {
+                let accepted_file_keys: Vec<_> = accepted
+                    .file_keys_and_proofs
+                    .iter()
+                    .map(|fk| fk.file_key)
+                    .collect();
 
-            for RejectedStorageRequest { file_key, .. } in
-                &storage_request_msp_bucket_response.reject
-            {
-                if let Err(e) = fs.delete_file(&file_key) {
-                    error!(target: LOG_TARGET, "Failed to delete file {:?}: {:?}", file_key, e);
+                if !accepted_file_keys.is_empty() {
+                    info!(
+                        target: LOG_TARGET,
+                        "✅ Accepted {} file(s) for bucket {:?}: {:?}",
+                        accepted_file_keys.len(),
+                        storage_request_msp_bucket_response.bucket_id,
+                        accepted_file_keys
+                    );
+                }
+            }
+
+            // Log and delete rejected file keys
+            if !storage_request_msp_bucket_response.reject.is_empty() {
+                let rejected_file_keys: Vec<_> = storage_request_msp_bucket_response
+                    .reject
+                    .iter()
+                    .map(|r| (r.file_key, &r.reason))
+                    .collect();
+
+                info!(
+                    target: LOG_TARGET,
+                    "❌ Rejected {} file(s) for bucket {:?}: {:?}",
+                    rejected_file_keys.len(),
+                    storage_request_msp_bucket_response.bucket_id,
+                    rejected_file_keys
+                );
+
+                let mut fs = self.storage_hub_handler.file_storage.write().await;
+                for RejectedStorageRequest { file_key, .. } in
+                    &storage_request_msp_bucket_response.reject
+                {
+                    if let Err(e) = fs.delete_file(&file_key) {
+                        error!(target: LOG_TARGET, "Failed to delete file {:?}: {:?}", file_key, e);
+                    }
                 }
             }
         }
@@ -471,6 +537,23 @@ where
         let file_in_forest_storage = read_fs.contains_file_key(&file_key.into())?;
         if !file_in_forest_storage {
             info!(target: LOG_TARGET, "File key {:?} not found in forest storage. Checking available storage capacity.", file_key);
+
+            let max_storage_capacity = self
+                .storage_hub_handler
+                .provider_config
+                .capacity_config
+                .max_capacity();
+
+            let current_capacity = self
+                .storage_hub_handler
+                .blockchain
+                .query_storage_provider_capacity(own_msp_id)
+                .await
+                .map_err(|e| {
+                    error!(target: LOG_TARGET, "Failed to query storage provider capacity: {:?}", e);
+                    anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
+                })?;
+
             let available_capacity = self
                 .storage_hub_handler
                 .blockchain
@@ -485,6 +568,31 @@ where
                     anyhow::anyhow!(err_msg)
                 })?;
 
+            // Calculate currently used storage
+            let used_capacity = current_capacity
+                .checked_sub(&available_capacity)
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Available capacity ({}) exceeds current capacity ({})",
+                        available_capacity,
+                        current_capacity
+                    )
+                })?;
+
+            // Check if accepting this file would exceed our local max storage capacity limit
+            let projected_usage = used_capacity
+                .checked_add(&event.size)
+                .ok_or_else(|| anyhow::anyhow!("Overflow calculating projected storage usage"))?;
+
+            if projected_usage > max_storage_capacity {
+                let err_msg = format!(
+                    "Accepting file would exceed maximum storage capacity limit. Used: {}, Required: {}, Max: {}",
+                    used_capacity, event.size, max_storage_capacity
+                );
+                warn!(target: LOG_TARGET, "{}", err_msg);
+                return Err(anyhow::anyhow!(err_msg));
+            }
+
             // Increase storage capacity if the available capacity is less than the file size.
             if available_capacity < event.size {
                 warn!(
@@ -492,34 +600,6 @@ where
                     "Insufficient storage capacity to volunteer for file key: {:?}",
                     event.file_key
                 );
-
-                // Check that the BSP has not reached the maximum storage capacity.
-                let current_capacity = self
-                    .storage_hub_handler
-                    .blockchain
-                    .query_storage_provider_capacity(own_msp_id)
-                    .await
-                    .map_err(|e| {
-                        error!(
-                            target: LOG_TARGET,
-                            "Failed to query storage provider capacity: {:?}", e
-                        );
-                        anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
-                    })?;
-
-                let max_storage_capacity = self
-                    .storage_hub_handler
-                    .provider_config
-                    .capacity_config
-                    .max_capacity();
-
-                if max_storage_capacity <= current_capacity {
-                    let err_msg = "Reached maximum storage capacity limit. Unable to add more storage capacity.";
-                    error!(
-                        target: LOG_TARGET, "{}", err_msg
-                    );
-                    return Err(anyhow::anyhow!(err_msg));
-                }
 
                 self.storage_hub_handler
                     .blockchain
@@ -836,7 +916,8 @@ where
                     | FileStorageWriteError::FailedToUpdatePartialRoot
                     | FileStorageWriteError::FailedToParsePartialRoot
                     | FileStorageWriteError::FailedToGetStoredChunksCount
-                    | FileStorageWriteError::ChunkCountOverflow => {
+                    | FileStorageWriteError::ChunkCountOverflow
+                    | FileStorageWriteError::FailedToCheckFileCompletion(_) => {
                         self.handle_rejected_storage_request(
                             &file_key,
                             bucket_id,

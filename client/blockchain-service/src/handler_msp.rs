@@ -24,8 +24,8 @@ use crate::{
     events::{
         DistributeFileToBsp, FinalisedBucketMovedAway, FinalisedBucketMutationsApplied,
         FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
-        ForestWriteLockTaskData, MoveBucketRequestedForMsp, NewStorageRequest,
-        ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData,
+        FinalisedStorageRequestRejected, ForestWriteLockTaskData, MoveBucketRequestedForMsp,
+        NewStorageRequest, ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData,
         ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
         StartMovedBucketDownload, VerifyMspBucketForests,
     },
@@ -235,6 +235,23 @@ where
                     }
                 }
             }
+            StorageEnableEvents::FileSystem(
+                pallet_file_system::Event::StorageRequestRejected {
+                    file_key,
+                    msp_id,
+                    bucket_id,
+                    reason: _,
+                },
+            ) => {
+                // Process either InternalError or RequestExpire if this provider is managing the bucket.
+                if managed_msp_id == &msp_id {
+                    self.emit(FinalisedStorageRequestRejected {
+                        file_key: file_key.into(),
+                        provider_id: msp_id.into(),
+                        bucket_id,
+                    })
+                }
+            }
             StorageEnableEvents::ProofsDealer(pallet_proofs_dealer::Event::MutationsApplied {
                 mutations,
                 old_root: _,
@@ -279,9 +296,8 @@ where
     /// Check if there are any pending requests to update the Forest root on the runtime, and process them.
     ///
     /// The priority is given by:
-    /// 1. `FileDeletionRequest` over...
-    /// 2. `RespondStorageRequest` over...
-    /// 3. `StopStoringForInsolventUserRequest`.
+    /// 1. `RespondStorageRequest` over...
+    /// 2. `StopStoringForInsolventUserRequest`.
     ///
     /// This function is called every time a new block is imported and after each request is queued.
     ///
@@ -342,8 +358,8 @@ where
             return;
         }
 
-        // If we have no pending file deletion requests, we can also check for pending respond storing requests.
-        if next_event_data.is_none() {
+        // Check for pending respond storing requests.
+        {
             let max_batch_respond = MAX_BATCH_MSP_RESPOND_STORE_REQUESTS;
 
             // Batch multiple respond storing requests up to the runtime configured maximum.
@@ -583,9 +599,11 @@ where
     ///   the in-memory `files_to_distribute` state to not spawn duplicate tasks or
     ///   re-emit for already-confirmed BSPs.
     pub(crate) fn spawn_distribute_file_to_bsps_tasks(&mut self, block_hash: &Runtime::Hash) {
+        debug!(target: LOG_TARGET, "Spawning distribute file to BSPs tasks");
+
         // Only distribute files to BSPs when explicitly enabled via configuration.
         if !self.config.enable_msp_distribute_files {
-            trace!(target: LOG_TARGET, "MSP file distribution disabled by configuration. Skipping distribution scan.");
+            debug!(target: LOG_TARGET, "MSP file distribution disabled by configuration. Skipping distribution scan.");
             return;
         }
 
@@ -602,7 +620,7 @@ where
         let managed_msp_peer_id = match self.config.peer_id.clone() {
             Some(peer_id) => peer_id,
             None => {
-                trace!(target: LOG_TARGET, "MSP node peer ID is not set, meaning it is not meant to be a distributor. Skipping distribution of files.");
+                debug!(target: LOG_TARGET, "MSP node peer ID is not set, meaning it is not meant to be a distributor. Skipping distribution of files.");
                 return;
             }
         };
@@ -625,7 +643,7 @@ where
         // Also keep only those for which this MSP node is listed as one of
         // the `user_peer_ids` of the storage request, meaning it is meant to
         // be a distributor of the file.
-        let storage_requests_to_distribute =
+        let mut storage_requests_to_distribute =
             pending_storage_requests_for_this_msp
                 .iter()
                 .filter(|(_, storage_request)| {
@@ -665,7 +683,13 @@ where
                     });
 
                     msp_is_distributor
-                });
+                })
+								.peekable();
+
+        if storage_requests_to_distribute.peek().is_none() {
+            debug!(target: LOG_TARGET, "No storage requests to distribute for MSP [{:?}]", managed_msp_id);
+            return;
+        }
 
         // Distribute the files to the BSPs.
         for storage_request in storage_requests_to_distribute {
@@ -697,6 +721,8 @@ where
         block_hash: &Runtime::Hash,
         file_key: &Runtime::Hash,
     ) {
+        debug!(target: LOG_TARGET, "Distributing file [{:?}] to BSPs", file_key);
+
         let managed_msp = match &mut self.maybe_managed_provider {
             Some(ManagedProvider::Msp(msp_handler)) => msp_handler,
             _ => {

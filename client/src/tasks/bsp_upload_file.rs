@@ -1,6 +1,9 @@
 use std::{
     collections::{HashMap, HashSet},
+    future::Future,
+    pin::Pin,
     str::FromStr,
+    sync::Arc,
     time::Duration,
 };
 
@@ -9,20 +12,20 @@ use frame_support::BoundedVec;
 use pallet_file_system_runtime_api::QueryBspConfirmChunksToProveForFileError;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
-use sp_runtime::traits::{Hash, SaturatedConversion, Zero};
+use sp_runtime::traits::{CheckedAdd, CheckedSub, Hash, SaturatedConversion, Zero};
 
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     capacity_manager::CapacityRequestData,
     commands::{BlockchainServiceCommandInterface, BlockchainServiceCommandInterfaceExt},
     events::{NewStorageRequest, ProcessConfirmStoringRequest},
-    types::{ConfirmStoringRequest, RetryStrategy, SendExtrinsicOptions},
+    types::{ConfirmStoringRequest, RetryStrategy, SendExtrinsicOptions, WatchTransactionError},
 };
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
     traits::StorageEnableRuntime,
     types::{
-        FileKey, FileKeyWithProof, FileMetadata, HashT, StorageProofsMerkleTrieLayout,
+        FileKey, FileKeyWithProof, FileMetadata, HashT, ProviderId, StorageProofsMerkleTrieLayout,
         StorageProviderId, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
     },
 };
@@ -76,7 +79,7 @@ pub struct BspUploadFileTask<NT, Runtime>
 where
     NT: ShNodeType<Runtime>,
     NT::FSH: BspForestStorageHandlerT<Runtime>,
-    Runtime: StorageEnableRuntime,
+    Runtime: StorageEnableRuntime + 'static,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
     file_key_cleanup: Option<Runtime::Hash>,
@@ -101,7 +104,7 @@ where
 
 impl<NT, Runtime> BspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType<Runtime>,
+    NT: ShNodeType<Runtime> + 'static,
     NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
@@ -162,6 +165,8 @@ where
         let file_complete = match self.handle_remote_upload_request_event(event.clone()).await {
             Ok(complete) => complete,
             Err(e) => {
+                error!(target: LOG_TARGET, "Failed to handle remote upload request: {:?}", e);
+
                 // Send error response through FileTransferService
                 if let Err(e) = self
                     .storage_hub_handler
@@ -428,8 +433,8 @@ where
 
 impl<NT, Runtime> BspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType<Runtime>,
-    NT::FSH: BspForestStorageHandlerT<Runtime>,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime> + 'static,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_new_storage_request_event(
@@ -446,6 +451,7 @@ where
         let is_allowed = self.is_allowed(&event).await?;
 
         if !is_allowed {
+            warn!(target: LOG_TARGET, "File with file key {:x} is in our exclude list. Skipping volunteer.", event.file_key);
             return Ok(());
         }
 
@@ -501,6 +507,22 @@ where
             }
         };
 
+        let max_storage_capacity = self
+            .storage_hub_handler
+            .provider_config
+            .capacity_config
+            .max_capacity();
+
+        let current_capacity = self
+            .storage_hub_handler
+            .blockchain
+            .query_storage_provider_capacity(own_bsp_id)
+            .await
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "Failed to query storage provider capacity: {:?}", e);
+                anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
+            })?;
+
         let available_capacity = self
             .storage_hub_handler
             .blockchain
@@ -515,6 +537,31 @@ where
                 anyhow::anyhow!(err_msg)
             })?;
 
+        // Calculate currently used storage
+        let used_capacity = current_capacity
+            .checked_sub(&available_capacity)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Available capacity ({}) exceeds current capacity ({})",
+                    available_capacity,
+                    current_capacity
+                )
+            })?;
+
+        // Check if accepting this file would exceed our local max storage capacity limit
+        let projected_usage = used_capacity
+            .checked_add(&event.size)
+            .ok_or_else(|| anyhow::anyhow!("Overflow calculating projected storage usage"))?;
+
+        if projected_usage > max_storage_capacity {
+            let err_msg = format!(
+                "Accepting file would exceed maximum storage capacity limit. Used: {}, Required: {}, Max: {}",
+                used_capacity, event.size, max_storage_capacity
+            );
+            warn!(target: LOG_TARGET, "{}", err_msg);
+            return Err(anyhow::anyhow!(err_msg));
+        }
+
         // Increase storage capacity if the available capacity is less than the file size.
         if available_capacity < event.size {
             warn!(
@@ -522,35 +569,6 @@ where
                 "Insufficient storage capacity to volunteer for file key: {:?}",
                 event.file_key
             );
-
-            // Check that the BSP has not reached the maximum storage capacity.
-            let current_capacity = self
-                .storage_hub_handler
-                .blockchain
-                .query_storage_provider_capacity(own_bsp_id)
-                .await
-                .map_err(|e| {
-                    error!(
-                        target: LOG_TARGET,
-                        "Failed to query storage provider capacity: {:?}", e
-                    );
-                    anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
-                })?;
-
-            let max_storage_capacity = self
-                .storage_hub_handler
-                .provider_config
-                .capacity_config
-                .max_capacity();
-
-            if max_storage_capacity <= current_capacity {
-                let err_msg =
-                    "Reached maximum storage capacity limit. Unable to add more storage capacity.";
-                error!(
-                    target: LOG_TARGET, "{}", err_msg
-                );
-                return Err(anyhow::anyhow!(err_msg));
-            }
 
             self.storage_hub_handler
                 .blockchain
@@ -671,12 +689,36 @@ where
         }
         .into();
 
-        // Send extrinsic and wait for it to be included in the block.
-        let result = self
+        // Clone necessary data for the retry check.
+        let cloned_sh_handler = Arc::new(self.storage_hub_handler.clone());
+        let cloned_own_bsp_id = Arc::new(own_bsp_id.clone());
+        let cloned_file_key: Arc<Runtime::Hash> = Arc::new(file_key.clone().into());
+
+        let should_retry = move |error| {
+            let cloned_sh_handler = Arc::clone(&cloned_sh_handler);
+            let cloned_own_bsp_id = Arc::clone(&cloned_own_bsp_id);
+            let cloned_file_key = Arc::clone(&cloned_file_key);
+
+            // Check:
+            // - If we've already successfully volunteered for the file.
+            // - If the storage request is no longer open to volunteers.
+            // Also waits for the tick to be able to volunteer for the file has actually been reached,
+            // not the tick before the BSP can volunteer for the file. To make sure the chain wasn't
+            // spammed just before the BSP could volunteer for the file.
+            Box::pin(Self::should_retry_volunteer(
+                cloned_sh_handler,
+                cloned_own_bsp_id,
+                cloned_file_key,
+                error,
+            )) as Pin<Box<dyn Future<Output = bool> + Send>>
+        };
+
+        // Try to send the volunteer extrinsic
+        if let Err(e) = self
             .storage_hub_handler
             .blockchain
-            .send_extrinsic(
-                call.clone().into(),
+            .submit_extrinsic_with_retry(
+                call.clone(),
                 SendExtrinsicOptions::new(
                     Duration::from_secs(
                         self.storage_hub_handler
@@ -687,57 +729,43 @@ where
                     Some("fileSystem".to_string()),
                     Some("bspVolunteer".to_string()),
                 ),
+                RetryStrategy::default()
+                    .with_max_retries(self.config.max_try_count)
+                    .with_max_tip(self.config.max_tip.saturated_into())
+                    .with_should_retry(Some(Box::new(should_retry))),
+                false,
             )
-            .await?
-            .watch_for_success(&self.storage_hub_handler.blockchain)
-            .await;
+            .await
+        {
+            error!(target: LOG_TARGET, "Failed to volunteer for file {:x}: {:?}", file_key, e);
+        }
 
-        if let Err(e) = result {
+        // Check if the BSP has been registered as a volunteer for the file.
+        let volunteer_result = self
+            .storage_hub_handler
+            .blockchain
+            .query_bsp_volunteered_for_file(own_bsp_id, file_key.into())
+            .await
+            .map_err(|e| anyhow!("Failed to query BSP volunteered for file: {:?}", e))?;
+
+        // Handle the volunteer result.
+        if volunteer_result {
+            info!(
+                target: LOG_TARGET,
+                "🍾 BSP successfully volunteered for file {:x}",
+                file_key
+            );
+        } else {
             error!(
                 target: LOG_TARGET,
-                "Failed to volunteer for file {:?}: {:?}",
-                file_key,
-                e
+                "BSP not registered as a volunteer for file {:x}",
+                file_key
             );
-
-            // If the initial call errored out, it could mean the chain was spammed so the tick did not advance.
-            // Wait until the actual earliest volunteer tick to occur and retry volunteering.
-            self.storage_hub_handler
-                .blockchain
-                .wait_for_tick(earliest_volunteer_tick)
-                .await?;
-
-            // Send extrinsic and wait for it to be included in the block.
-            let result = self
-                .storage_hub_handler
-                .blockchain
-                .send_extrinsic(
-                    call,
-                    SendExtrinsicOptions::new(
-                        Duration::from_secs(
-                            self.storage_hub_handler
-                                .provider_config
-                                .blockchain_service
-                                .extrinsic_retry_timeout,
-                        ),
-                        Some("fileSystem".to_string()),
-                        Some("bspVolunteer".to_string()),
-                    ),
-                )
-                .await?
-                .watch_for_success(&self.storage_hub_handler.blockchain)
-                .await;
-
-            if let Err(e) = result {
-                error!(
-                    target: LOG_TARGET,
-                    "Failed to volunteer for file {:?} after retry in volunteer tick: {:?}",
-                    file_key,
-                    e
-                );
-
-                self.unvolunteer_file(file_key.into()).await;
-            }
+            self.unvolunteer_file(file_key.into()).await;
+            return Err(anyhow!(
+                "BSP not registered as a volunteer for file {:x}",
+                file_key
+            ));
         }
 
         Ok(())
@@ -750,10 +778,15 @@ where
         &mut self,
         event: RemoteUploadRequest<Runtime>,
     ) -> anyhow::Result<bool> {
+        debug!(target: LOG_TARGET, "Handling remote upload request for file key {:x}", event.file_key);
+
         let file_key = event.file_key.into();
+
+        trace!(target: LOG_TARGET, "Waiting to acquire write lock on file storage for file key {:?}", file_key);
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
 
         // Get the file metadata to verify the fingerprint
+        trace!(target: LOG_TARGET, "Acquired write lock on file storage for file key {:?}", file_key);
         let file_metadata = write_file_storage
             .get_metadata(&file_key)
             .map_err(|e| anyhow!("Failed to get file metadata: {:?}", e))?
@@ -886,7 +919,8 @@ where
                     | FileStorageWriteError::FailedToUpdatePartialRoot
                     | FileStorageWriteError::FailedToParsePartialRoot
                     | FileStorageWriteError::FailedToGetStoredChunksCount
-                    | FileStorageWriteError::ChunkCountOverflow => {
+                    | FileStorageWriteError::ChunkCountOverflow
+                    | FileStorageWriteError::FailedToCheckFileCompletion(_) => {
                         return Err(anyhow::anyhow!(format!(
                             "Internal trie read/write error {:?}:{:?}",
                             event.file_key, chunk.key
@@ -995,6 +1029,85 @@ where
         drop(read_file_storage);
 
         return Ok(true);
+    }
+
+    /// Function to determine if a volunteer request should be retried,
+    /// sending the same request again.
+    ///
+    /// This function will return `true` if and only if the following conditions are met:
+    /// 1. If the storage request is no longer open to volunteers.
+    /// 2. If we've already successfully volunteered for the file.
+    ///
+    /// Also waits for the tick to be able to volunteer for the file has actually been reached,
+    /// not the tick before the BSP can volunteer for the file. To make sure the chain wasn't
+    /// spammed just before the BSP could volunteer for the file.
+    async fn should_retry_volunteer(
+        sh_handler: Arc<StorageHubHandler<NT, Runtime>>,
+        bsp_id: Arc<ProviderId<Runtime>>,
+        file_key: Arc<Runtime::Hash>,
+        _error: WatchTransactionError,
+    ) -> bool {
+        // Wait for the tick to be able to volunteer for the file has actually been reached.
+        let earliest_volunteer_tick = match sh_handler
+            .blockchain
+            .query_file_earliest_volunteer_tick(*bsp_id, *file_key)
+            .await
+        {
+            Ok(tick) => tick,
+            Err(e) => {
+                error!(target: LOG_TARGET, "Failed to query file earliest volunteer block: {:?}", e);
+                return false;
+            }
+        };
+        match sh_handler
+            .blockchain
+            .wait_for_tick(earliest_volunteer_tick)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => {
+                error!(target: LOG_TARGET, "Failed to wait for tick: {:?}", e);
+                return false;
+            }
+        }
+
+        // Check if the storage request is no longer open to volunteers.
+        let can_volunteer = match sh_handler
+            .blockchain
+            .is_storage_request_open_to_volunteers(*file_key)
+            .await
+        {
+            Ok(can_volunteer) => can_volunteer,
+            Err(e) => {
+                error!(target: LOG_TARGET, "Failed to query file can volunteer: {:?}", e);
+                return false;
+            }
+        };
+
+        if !can_volunteer {
+            warn!(target: LOG_TARGET, "Storage request is no longer open to volunteers. Stop retrying.");
+            return false;
+        }
+
+        // Check if we've already successfully volunteered for the file.
+        let volunteered = match sh_handler
+            .blockchain
+            .query_bsp_volunteered_for_file(*bsp_id, *file_key)
+            .await
+        {
+            Ok(volunteered) => volunteered,
+            Err(e) => {
+                error!(target: LOG_TARGET, "Failed to query file volunteered: {:?}", e);
+                return false;
+            }
+        };
+
+        if volunteered {
+            info!(target: LOG_TARGET, "Already successfully volunteered for the file. Stop retrying.");
+            return false;
+        }
+
+        return true;
     }
 
     async fn unvolunteer_file(&self, file_key: Runtime::Hash) {

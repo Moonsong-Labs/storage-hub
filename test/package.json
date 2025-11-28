@@ -26,7 +26,7 @@
     "docker:start": "docker compose -f ../docker/local-parachain-compose.yml  -p sh_dev_node up -d",
     "docker:start:latest": "docker compose -f ../docker/latest-node-compose.yml  -p sh_dev_node up -d",
     "docker:stop": "docker compose -f ../docker/local-parachain-compose.yml  -p sh_dev_node down",
-    "docker:stop:all": "docker rm -vf $(docker ps -a --filter 'ancestor=storage-hub:local' -q) $(docker ps -a --filter 'name=sh-postgres' -q) $(docker ps -a --filter 'name=toxiproxy' -q) $(docker ps -a --filter 'name=sh-backend' -q)",
+    "docker:stop:all": "docker rm -vf $(docker ps -a --filter 'ancestor=storage-hub:local' -q) $(docker ps -a --filter 'name=sh-indexer-postgres' -q) $(docker ps -a --filter 'name=toxiproxy' -q) $(docker ps -a --filter 'name=sh-backend' -q)",
     "docker:stop:latest": "docker compose -f ../docker/latest-node-compose.yml  -p sh_dev_node down",
     "docker:start:bspnet": "pnpm tsx scripts/bspNetBootstrap.ts",
     "docker:start:fullnet": "INDEXER=1 pnpm tsx scripts/fullNetBootstrap.ts",
@@ -64,7 +64,9 @@
     "test:backend": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/integration/backend/**.test.ts",
     "test:backend:only": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test --test-only ./suites/integration/backend/**.test.ts",
     "test:indexer": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/integration/indexer/**.test.ts",
-    "test:indexer:only": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test --test-only ./suites/integration/indexer/**.test.ts"
+    "test:indexer:only": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test --test-only ./suites/integration/indexer/**.test.ts",
+    "test:perf": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/benchmarking/**.test.ts",
+    "test:benchmark": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/benchmarking/**.test.ts"
   },
   "keywords": [],
   "author": "",
@@ -82,7 +84,7 @@
     "@storagehub-sdk/msp-client": "workspace:*",
     "@storagehub-sdk/core": "workspace:*",
     "ethers": "^6.15.0",
-    "viem": "^2.9.20",
+    "viem": "2.38.3",
     "@types/tmp": "^0.2.6",
     "@zombienet/cli": "1.3.133",
     "@zombienet/utils": "0.0.29",

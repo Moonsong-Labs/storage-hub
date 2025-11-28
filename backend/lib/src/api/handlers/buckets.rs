@@ -9,18 +9,24 @@ use serde::Deserialize;
 use tracing::debug;
 
 use crate::{
-    error::Error, models::files::FileListResponse, services::auth::AuthenticatedUser,
-    services::Services,
+    api::handlers::pagination::Pagination,
+    error::Error,
+    models::files::FileListResponse,
+    services::{
+        auth::{AuthenticatedUser, User},
+        Services,
+    },
 };
 
 pub async fn list_buckets(
     State(services): State<Services>,
     AuthenticatedUser { address }: AuthenticatedUser,
+    Pagination { limit, offset }: Pagination,
 ) -> Result<impl IntoResponse, Error> {
     debug!(user = %address, "GET list buckets");
     let response = services
         .msp
-        .list_user_buckets(&address)
+        .list_user_buckets(&address, offset, limit)
         .await?
         .collect::<Vec<_>>();
     Ok(Json(response))
@@ -28,11 +34,15 @@ pub async fn list_buckets(
 
 pub async fn get_bucket(
     State(services): State<Services>,
-    AuthenticatedUser { address }: AuthenticatedUser,
+    user: User,
     Path(bucket_id): Path<String>,
 ) -> Result<impl IntoResponse, Error> {
-    debug!(bucket_id = %bucket_id, user = %address, "GET bucket");
-    let response = services.msp.get_bucket(&bucket_id, &address).await?;
+    debug!(bucket_id = %bucket_id, %user, "GET bucket");
+
+    let response = services
+        .msp
+        .get_bucket(&bucket_id, user.address().ok())
+        .await?;
 
     Ok(Json(response))
 }
@@ -44,25 +54,27 @@ pub struct FilesQuery {
 
 pub async fn get_files(
     State(services): State<Services>,
-    AuthenticatedUser { address }: AuthenticatedUser,
+    user: User,
     Path(bucket_id): Path<String>,
     Query(query): Query<FilesQuery>,
+    Pagination { limit, offset }: Pagination,
 ) -> Result<impl IntoResponse, Error> {
     let path = query.path.as_deref().unwrap_or("/");
     debug!(
         bucket_id = %bucket_id,
         path = %path,
-        user = %address,
+        %user,
         "GET bucket files"
     );
+
     let file_tree = services
         .msp
-        .get_file_tree(&bucket_id, &address, path)
+        .get_file_tree(&bucket_id, user.address().ok(), path, offset, limit)
         .await?;
 
     let response = FileListResponse {
         bucket_id: bucket_id.clone(),
-        files: vec![file_tree],
+        tree: file_tree,
     };
 
     Ok(Json(response))
