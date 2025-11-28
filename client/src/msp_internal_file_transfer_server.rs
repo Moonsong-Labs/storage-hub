@@ -17,8 +17,13 @@ use axum::{
     Router,
 };
 use sc_tracing::tracing::{debug, error, info, warn};
+use shc_actors_framework::actor::ActorHandle;
+use shc_blockchain_service::BlockchainService;
+use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::{ChunkId, FILE_CHUNK_SIZE};
 use shc_file_manager::traits::FileStorageWriteOutcome;
+use shc_file_transfer_service::FileTransferService;
+use shc_forest_manager::traits::ForestStorageHandler;
 use shp_file_metadata::Chunk;
 use tokio::net::TcpListener;
 use tokio::sync::RwLock;
@@ -47,30 +52,64 @@ impl Default for Config {
 }
 
 /// Global context for the MSP internal file transfer server
-pub struct Context<FL: FileStorageT> {
-    file_storage: Arc<RwLock<FL>>,
+pub struct Context<FL, FSH, Runtime>
+where
+    FL: FileStorageT,
+    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
+    Runtime: StorageEnableRuntime,
+{
+    pub file_storage: Arc<RwLock<FL>>,
+    pub blockchain: ActorHandle<BlockchainService<FSH, Runtime>>,
+    pub file_transfer: ActorHandle<FileTransferService<Runtime>>,
 }
 
-impl<FL: FileStorageT> Clone for Context<FL> {
+impl<FL, FSH, Runtime> Clone for Context<FL, FSH, Runtime>
+where
+    FL: FileStorageT,
+    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
+    Runtime: StorageEnableRuntime,
+{
     fn clone(&self) -> Self {
         Self {
             file_storage: Arc::clone(&self.file_storage),
+            blockchain: self.blockchain.clone(),
+            file_transfer: self.file_transfer.clone(),
         }
     }
 }
 
-impl<FL: FileStorageT> Context<FL> {
-    pub fn new(file_storage: Arc<RwLock<FL>>) -> Self {
-        Self { file_storage }
+impl<FL, FSH, Runtime> Context<FL, FSH, Runtime>
+where
+    FL: FileStorageT,
+    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
+    Runtime: StorageEnableRuntime,
+{
+    pub fn new(
+        file_storage: Arc<RwLock<FL>>,
+        blockchain: ActorHandle<BlockchainService<FSH, Runtime>>,
+        file_transfer: ActorHandle<FileTransferService<Runtime>>,
+    ) -> Self {
+        Self {
+            file_storage,
+            blockchain,
+            file_transfer,
+        }
     }
 }
 
 /// Spawn the MSP internal file transfer HTTP server
-pub async fn spawn_server<FL: FileStorageT>(
+pub async fn spawn_server<FL, FSH, Runtime>(
     config: Config,
     file_storage: Arc<RwLock<FL>>,
-) -> anyhow::Result<()> {
-    let context = Context::new(file_storage);
+    blockchain: ActorHandle<BlockchainService<FSH, Runtime>>,
+    file_transfer: ActorHandle<FileTransferService<Runtime>>,
+) -> anyhow::Result<()>
+where
+    FL: FileStorageT,
+    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
+    Runtime: StorageEnableRuntime,
+{
+    let context = Context::new(file_storage, blockchain, file_transfer);
 
     let app = Router::new()
         .route("/upload/:file_key", post(upload_file))
@@ -112,11 +151,16 @@ pub async fn spawn_server<FL: FileStorageT>(
 /// [ChunkId: 8 bytes (u64, little-endian)][Chunk length: 4 bytes (u32, little-endian)][Chunk data: variable]
 ///
 /// This handler processes chunks as they arrive without loading the entire stream into memory.
-async fn upload_file<FL: FileStorageT>(
-    State(context): State<Context<FL>>,
+async fn upload_file<FL, FSH, Runtime>(
+    State(context): State<Context<FL, FSH, Runtime>>,
     Path(file_key): Path<String>,
     body: Body,
-) -> impl IntoResponse {
+) -> impl IntoResponse
+where
+    FL: FileStorageT,
+    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
+    Runtime: StorageEnableRuntime,
+{
     debug!(
         target: LOG_TARGET,
         file_key = %file_key,
@@ -189,11 +233,16 @@ async fn upload_file<FL: FileStorageT>(
 ///
 /// Binary format: [Total Chunks: 8 bytes][ChunkId: 8 bytes][Data: FILE_CHUNK_SIZE]...
 /// Note: All chunks are FILE_CHUNK_SIZE except the last one which may be smaller
-async fn process_chunk_stream<FL: FileStorageT>(
-    context: &Context<FL>,
+async fn process_chunk_stream<FL, FSH, Runtime>(
+    context: &Context<FL, FSH, Runtime>,
     file_key: &sp_core::H256,
     body: Body,
-) -> anyhow::Result<u64> {
+) -> anyhow::Result<u64>
+where
+    FL: FileStorageT,
+    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
+    Runtime: StorageEnableRuntime,
+{
     let mut stream = body.into_data_stream();
     let mut buffer = Vec::new();
     let mut chunks_processed = 0u64;
@@ -299,12 +348,17 @@ fn get_next_chunk(
 }
 
 /// Store a chunk to file storage
-async fn store_chunk<FL: FileStorageT>(
-    context: &Context<FL>,
+async fn store_chunk<FL, FSH, Runtime>(
+    context: &Context<FL, FSH, Runtime>,
     file_key: &sp_core::H256,
     chunk_id: &ChunkId,
     chunk_data: &Chunk,
-) -> anyhow::Result<FileStorageWriteOutcome> {
+) -> anyhow::Result<FileStorageWriteOutcome>
+where
+    FL: FileStorageT,
+    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
+    Runtime: StorageEnableRuntime,
+{
     let mut file_storage = context.file_storage.write().await;
     file_storage
         .write_chunk(file_key, chunk_id, chunk_data)

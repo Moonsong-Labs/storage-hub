@@ -338,7 +338,7 @@ where
                     builder.with_indexer_db_pool(Some(msp_db_pool));
                 }
 
-                // Spawn MSP internal file transfer HTTP server
+                // Configure MSP internal file transfer HTTP server
                 let file_transfer_config = shc_client::msp_internal_file_transfer_server::Config {
                     host: msp_file_transfer_host
                         .clone()
@@ -346,8 +346,7 @@ where
                     port: msp_file_transfer_port.unwrap_or(7070),
                 };
                 builder
-                    .with_msp_internal_file_transfer_server(file_transfer_config)
-                    .await;
+                    .with_msp_internal_file_transfer_server(file_transfer_config);
             }
 
             if let Some(c) = blockchain_service {
@@ -427,6 +426,9 @@ where
             maintenance_mode,
         )
         .await;
+
+    // Spawn the MSP internal file transfer server if configured
+    sh_builder.spawn_msp_file_transfer_server().await;
 
     // Initialize the BSP peer manager
     sh_builder.with_peer_manager(rocks_db_path.clone());
