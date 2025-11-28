@@ -30,6 +30,7 @@ export type ShEntity = {
 export class NetworkLauncher {
   private composeYaml?: any;
   private entities?: ShEntity[];
+  private tempFiles: string[] = [];
 
   constructor(
     private readonly type: NetworkType,
@@ -799,6 +800,50 @@ export class NetworkLauncher {
     return { fileMetadata };
   }
 
+  // Same as execDemoStorageRequest but creating a big file on the fly
+  public async execBigFileStorageRequest(fileSizeGB: number) {
+    const { generateLargeFile } = await import("../fileGeneration");
+
+    await using api = await this.getApi("sh-user");
+
+    // Generate file in docker/resource/ (mounted as /res in container)
+    const timestamp = Date.now();
+    const fileName = `benchmark-${fileSizeGB}gb-${timestamp}.bin`;
+    const hostPath = `../docker/resource/${fileName}`; // Host filesystem path
+    const containerPath = `/res/${fileName}`; // Container path (for RPC)
+
+    await generateLargeFile(fileSizeGB, hostPath);
+
+    const destination = `test/bigfile-${fileSizeGB}gb.bin`;
+    const bucketName = `benchmark-bucket-${timestamp}`;
+
+    const fileMetadata = await api.file.createBucketAndSendNewStorageRequest(
+      containerPath, // Use container path for RPC
+      destination,
+      bucketName,
+      null,
+      DUMMY_MSP_ID,
+      api.accounts.shUser,
+      1
+    );
+
+    if (this.type === "bspnet") {
+      await api.wait.bspVolunteer();
+      await api.wait.bspStored();
+    }
+
+    if (this.type === "fullnet") {
+      // This will advance the block which also contains the BSP volunteer tx.
+      // Hence why we can wait for the BSP to confirm storing.
+      await api.wait.mspResponseInTxPool();
+      await api.wait.bspVolunteerInTxPool();
+      await api.block.seal();
+      await api.wait.bspStored();
+    }
+
+    return { fileMetadata, tempFilePath: hostPath, fileSizeGB };
+  }
+
   public async initExtraBsps() {
     await using api = await this.getApi("sh-user");
 
@@ -1006,6 +1051,14 @@ export class NetworkLauncher {
       return await launchedNetwork.execDemoStorageRequest();
     }
 
+    if (launchedNetwork.config.big_file) {
+      const result = await launchedNetwork.execBigFileStorageRequest(
+        launchedNetwork.config.big_file
+      );
+      launchedNetwork.tempFiles.push(result.tempFilePath);
+      return result;
+    }
+
     // Attempt to debounce and stabilise
     await sleep(1500);
     return undefined;
@@ -1023,6 +1076,12 @@ export type NetLaunchConfig = {
    * Optional parameter to set the network to be initialised with a pre-existing state.
    */
   initialised?: boolean | "multi";
+
+  /**
+   * Generate and upload a large file (in GB) for performance testing.
+   * File stored in docker/tmp/ and cleaned up after test.
+   */
+  big_file?: number;
 
   /**
    * If true, simulates a noisy network environment with added latency and bandwidth limitations.
