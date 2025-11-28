@@ -1,4 +1,4 @@
-use log::{debug, error, info, trace, warn};
+use log::{debug, error, info, trace};
 use std::{str, sync::Arc};
 use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
@@ -22,12 +22,13 @@ use shc_forest_manager::traits::ForestStorageHandler;
 
 use crate::{
     events::{
-        DistributeFileToBsp, FinalisedBucketMovedAway, FinalisedBucketMutationsApplied,
-        FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
-        FinalisedStorageRequestRejected, ForestWriteLockTaskData, MoveBucketRequestedForMsp,
-        NewStorageRequest, ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData,
-        ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
-        StartMovedBucketDownload, VerifyMspBucketForests,
+        BatchProcessStorageRequests, DistributeFileToBsp, FinalisedBucketMovedAway,
+        FinalisedBucketMutationsApplied, FinalisedMspStopStoringBucketInsolventUser,
+        FinalisedMspStoppedStoringBucket, FinalisedStorageRequestRejected, ForestWriteLockTaskData,
+        MoveBucketRequestedForMsp, ProcessMspRespondStoringRequest,
+        ProcessMspRespondStoringRequestData, ProcessStopStoringForInsolventUserRequest,
+        ProcessStopStoringForInsolventUserRequestData, StartMovedBucketDownload,
+        VerifyMspBucketForests,
     },
     handler::LOG_TARGET,
     types::{FileDistributionInfo, ManagedProvider, MultiInstancesNodeRole},
@@ -46,12 +47,14 @@ where
     ///
     /// Steps:
     /// TODO
-    pub(crate) fn msp_initial_sync(&self, block_hash: Runtime::Hash, msp_id: ProviderId<Runtime>) {
+    pub(crate) fn msp_initial_sync(
+        &self,
+        _block_hash: Runtime::Hash,
+        _msp_id: ProviderId<Runtime>,
+    ) {
         // TODO: Catch up to Forest root writes in the Bucket's Forests.
         // Emit event to check that this node has a Forest Storage for each Bucket this MSP manages.
         self.emit(VerifyMspBucketForests {});
-
-        self.emit_pending_storage_requests_for_msp(block_hash, msp_id);
     }
 
     /// Initialises the block processing flow for a MSP.
@@ -386,25 +389,28 @@ where
         }
 
         // At this point we know that the lock is released and we can start processing new requests.
-        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
         let mut next_event_data: Option<ForestWriteLockTaskData<Runtime>> = None;
 
-        if self.maybe_managed_provider.is_none() {
-            // If there's no Provider being managed, there's no point in checking for pending requests.
-            return;
-        }
-
-        // Check for pending respond storing requests.
+        // Check for pending respond storing requests from in-memory queue.
         {
+            let msp_handler = match &mut self.maybe_managed_provider {
+                Some(ManagedProvider::Msp(msp_handler)) => msp_handler,
+                _ => {
+                    // If there's no MSP being managed, there's no point in checking for pending requests.
+                    return;
+                }
+            };
+
             let max_batch_respond = MAX_BATCH_MSP_RESPOND_STORE_REQUESTS;
 
             // Batch multiple respond storing requests up to the runtime configured maximum.
             let mut respond_storage_requests = Vec::new();
             for _ in 0..max_batch_respond {
-                if let Some(request) = state_store_context
-                    .pending_msp_respond_storage_request_deque()
-                    .pop_front()
-                {
+                if let Some(request) = msp_handler.pending_respond_storage_requests.pop_front() {
+                    // Remove from dedup tracking set so the file key can be re-queued if needed.
+                    msp_handler
+                        .pending_respond_storage_request_file_keys
+                        .remove(&request.file_key);
                     respond_storage_requests.push(request);
                 } else {
                     break;
@@ -412,7 +418,7 @@ where
             }
 
             // If we have at least 1 respond storing request, send the process event.
-            if respond_storage_requests.len() > 0 {
+            if !respond_storage_requests.is_empty() {
                 next_event_data = Some(
                     ProcessMspRespondStoringRequestData {
                         respond_storing_requests: respond_storage_requests,
@@ -424,6 +430,7 @@ where
 
         // If we have no pending storage requests to respond to, we can also check for pending stop storing for insolvent user requests.
         if next_event_data.is_none() {
+            let state_store_context = self.persistent_state.open_rw_context_with_overlay();
             if let Some(request) = state_store_context
                 .pending_stop_storing_for_insolvent_user_request_deque::<Runtime>()
                 .pop_front()
@@ -432,10 +439,8 @@ where
                     ProcessStopStoringForInsolventUserRequestData { who: request.user }.into(),
                 );
             }
+            state_store_context.commit();
         }
-
-        // Commit the state store context.
-        state_store_context.commit();
 
         // If there is any event data to process, emit the event.
         if let Some(event_data) = next_event_data {
@@ -471,44 +476,42 @@ where
                             .ok()
                     });
 
-        match event {
-            StorageEnableEvents::ProofsDealer(pallet_proofs_dealer::Event::MutationsApplied {
-                mutations,
-                old_root,
-                new_root,
+        if let StorageEnableEvents::ProofsDealer(pallet_proofs_dealer::Event::MutationsApplied {
+            mutations,
+            old_root,
+            new_root,
+            event_info,
+        }) = event
+        {
+            let Some(bucket_id) = self.validate_bucket_mutations_for_msp(
+                block_hash,
+                buckets_managed_by_msp,
                 event_info,
-            }) => {
-                let Some(bucket_id) = self.validate_bucket_mutations_for_msp(
-                    block_hash,
-                    buckets_managed_by_msp,
-                    event_info,
-                ) else {
-                    return;
-                };
+            ) else {
+                return;
+            };
 
-                // Apply forest root changes to the Bucket's Forest Storage.
-                // At this point, we only apply the mutation of this file and its metadata to the Forest of this Bucket,
-                // and not to the File Storage.
-                // For file deletions, we will remove the file from the File Storage only after finality is reached.
-                // This gives us the opportunity to put the file back in the Forest if this block is re-orged.
-                let bucket_forest_key = bucket_id.as_ref().to_vec();
-                if let Err(e) = self
-                    .apply_forest_mutations_and_verify_root(
-                        bucket_forest_key,
-                        &mutations,
-                        revert,
-                        old_root,
-                        new_root,
-                    )
-                    .await
-                {
-                    error!(target: LOG_TARGET, "CRITICAL ❗️❗️ Failed to apply mutations and verify root for Bucket [{:?}]. \nError: {:?}", bucket_id, e);
-                    return;
-                };
+            // Apply forest root changes to the Bucket's Forest Storage.
+            // At this point, we only apply the mutation of this file and its metadata to the Forest of this Bucket,
+            // and not to the File Storage.
+            // For file deletions, we will remove the file from the File Storage only after finality is reached.
+            // This gives us the opportunity to put the file back in the Forest if this block is re-orged.
+            let bucket_forest_key = bucket_id.as_ref().to_vec();
+            if let Err(e) = self
+                .apply_forest_mutations_and_verify_root(
+                    bucket_forest_key,
+                    &mutations,
+                    revert,
+                    old_root,
+                    new_root,
+                )
+                .await
+            {
+                error!(target: LOG_TARGET, "CRITICAL ❗️❗️ Failed to apply mutations and verify root for Bucket [{:?}]. \nError: {:?}", bucket_id, e);
+                return;
+            };
 
-                info!(target: LOG_TARGET, "🌳 New local Forest root matches the one in the block for Bucket [{:?}]", bucket_id);
-            }
-            _ => {}
+            info!(target: LOG_TARGET, "🌳 New local Forest root matches the one in the block for Bucket [{:?}]", bucket_id);
         }
     }
 
@@ -823,45 +826,53 @@ where
         }
     }
 
-    /// Emits `NewStorageRequest` events for all pending storage requests assigned to an MSP.
-    fn emit_pending_storage_requests_for_msp(
-        &self,
-        block_hash: Runtime::Hash,
-        msp_id: ProviderId<Runtime>,
-    ) {
-        info!(target: LOG_TARGET, "Checking for storage requests for this MSP");
-
-        let storage_requests = match self
-            .client
-            .runtime_api()
-            .pending_storage_requests_by_msp(block_hash, msp_id)
-        {
-            Ok(sr) => sr,
-            Err(_) => {
-                // If querying for pending storage requests fail, do not try to answer them
-                warn!(target: LOG_TARGET, "Failed to get pending storage request");
+    /// Monitor new blocks for batch storage request processing.
+    ///
+    /// Emits a [`BatchProcessStorageRequests`] event on each block if no batch processing is currently running.
+    ///
+    /// The [`batch_processing_semaphore`](`crate::types::MspHandler::batch_processing_semaphore`) permit is passed
+    /// through the [`BatchProcessStorageRequests`] event and automatically released when the event handler completes or fails.
+    /// This semaphore ensures that only a single batch processing cycle is running at a time.
+    pub(crate) fn msp_monitor_block(&mut self) {
+        let managed_msp = match &mut self.maybe_managed_provider {
+            Some(ManagedProvider::Msp(msp_handler)) => msp_handler,
+            _ => {
+                trace!(target: LOG_TARGET, "`msp_monitor_block` called but node is not managing an MSP");
                 return;
             }
         };
 
-        info!(
-            target: LOG_TARGET,
-            "We have {} pending storage requests",
-            storage_requests.len()
-        );
+        // Try to acquire the semaphore permit (non-blocking)
+        // The semaphore prevents running multiple batch processing cycles concurrently
+        match managed_msp
+            .batch_processing_semaphore
+            .clone()
+            .try_acquire_owned()
+        {
+            Ok(permit) => {
+                debug!(
+                    target: LOG_TARGET,
+                    "Emitting BatchProcessStorageRequests event"
+                );
 
-        // Loop over each pending storage request to start a new storage request task for the MSP
-        for (file_key, sr) in storage_requests {
-            self.emit(NewStorageRequest {
-                who: sr.owner,
-                file_key: file_key.into(),
-                bucket_id: sr.bucket_id,
-                location: sr.location,
-                fingerprint: sr.fingerprint.as_ref().into(),
-                size: sr.size,
-                user_peer_ids: sr.user_peer_ids,
-                expires_at: sr.expires_at,
-            })
+                // Wrap permit in Arc to satisfy Clone requirement for events
+                // The permit will be held by the event handler for its lifetime,
+                // automatically releasing when the handler completes or fails
+                let permit_wrapper = Arc::new(permit);
+
+                // Emit event to trigger batch processing
+                self.emit(BatchProcessStorageRequests {
+                    permit: permit_wrapper,
+                });
+            }
+            Err(_) => {
+                // The permit will eventually be released, so we do nothing here and will retry next block.
+                // This is a trace message because it's expected behavior when a batch is still processing.
+                trace!(
+                    target: LOG_TARGET,
+                    "Semaphore permit is held (previous batch still processing), will retry next block"
+                );
+            }
         }
     }
 }

@@ -116,7 +116,7 @@ await describeMspNet(
       });
 
       // Prepare upload form
-      const localSource = "docker/resource/" + TEST_FILE_NAME;
+      const localSource = `docker/resource/${TEST_FILE_NAME}`;
       const fileBuffer = fs.readFileSync(path.join("..", localSource));
       originalFileBuffer = fileBuffer;
       form = new FormData();
