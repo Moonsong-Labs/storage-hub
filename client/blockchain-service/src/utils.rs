@@ -65,82 +65,100 @@ where
     FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
-    /// Initialise the pending transactions DB store if configured.
+    /// Initialise the pending transactions DB store and Leader/Follower role if configured.
     ///
-    /// If the pending transactions DB store is already initialised, this function does nothing.
-    /// If the pending transactions DB URL is not found in the configuration or environment variable, this function does nothing.
-    /// If the pending transactions DB URL is found, but the DB pool cannot be created, this panics.
+    /// Behaviour:
+    /// - If the pending transactions DB URL is not found in the configuration or environment variable,
+    ///   the node runs in `NodeRole::Standalone` and the pending-tx DB remains disabled.
+    /// - If the DB pool or leadership connection / lock cannot be created, the node falls back to
+    ///   `NodeRole::Standalone` and the pending-tx DB remains disabled.
+    /// - Only `NodeRole::Leader` and `NodeRole::Follower` ever use the pending-tx DB; `NodeRole::Standalone`
+    ///   always means "no DB usage".
     pub(crate) async fn init_pending_tx_store(&mut self) {
-        if self.pending_tx_store.is_none() {
-            let maybe_url = self
-                .config
-                .pending_db_url
-                .clone()
-                .or_else(|| std::env::var("SH_PENDING_DB_URL").ok());
-            if let Some(db_url) = maybe_url {
+        let maybe_url = self
+            .config
+            .pending_db_url
+            .clone()
+            .or_else(|| std::env::var("SH_PENDING_DB_URL").ok());
+        let Some(db_url) = maybe_url else {
+            // No URL configured: run in pure standalone mode with DB completely disabled.
+            warn!(
+                target: LOG_TARGET,
+                "Pending transactions DB URL not found in configuration or environment variable; running in STANDALONE mode"
+            );
+            warn!(
+                target: LOG_TARGET,
+                "Pending transactions will not be persisted or shared across instances"
+            );
+            self.pending_tx_store = None;
+            self.leadership_conn = None;
+            self.role = NodeRole::Standalone;
+            return;
+        };
+
+        debug!(
+            target: LOG_TARGET,
+            "Pending transactions DB URL found, initialising pool and leadership lock"
+        );
+
+        let pool = match setup_db_pool(db_url.clone()).await {
+            Ok(pool) => pool,
+            Err(e) => {
+                // Do not fail startup; just log and continue without DB persistence
+                warn!(target: LOG_TARGET, "Pending transactions DB init failed: {:?}", e);
+                self.pending_tx_store = None;
+                self.leadership_conn = None;
+                self.role = NodeRole::Standalone;
+                return;
+            }
+        };
+
+        // Establish dedicated leadership connection and attempt to acquire advisory lock.
+        let client = match open_leadership_connection(&db_url).await {
+            Ok(client) => client,
+            Err(e) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "Failed to open leadership connection; pending-tx coordination disabled: {:?}",
+                    e
+                );
+                self.pending_tx_store = None;
+                self.leadership_conn = None;
+                self.role = NodeRole::Standalone;
+                return;
+            }
+        };
+
+        match try_acquire_leadership(&client, LEADERSHIP_LOCK_KEY).await {
+            Ok(true) => {
                 debug!(
                     target: LOG_TARGET,
-                    "Pending transactions DB URL found, initialising pool and leadership lock"
+                    "This node acquired the leadership advisory lock; running as LEADER"
                 );
-                match setup_db_pool(db_url.clone()).await {
-                    Ok(pool) => {
-                        self.pending_tx_store = Some(PendingTxStore::new(pool));
-                        info!(target: LOG_TARGET, "🗃️ Pending transactions store initialised");
-
-                        // Establish dedicated leadership connection and attempt to acquire advisory lock.
-                        match open_leadership_connection(&db_url).await {
-                            Ok(client) => {
-                                match try_acquire_leadership(&client, LEADERSHIP_LOCK_KEY).await {
-                                    Ok(true) => {
-                                        debug!(
-                                            target: LOG_TARGET,
-                                            "This node acquired the leadership advisory lock; running as LEADER"
-                                        );
-                                        self.role = NodeRole::Leader;
-                                    }
-                                    Ok(false) => {
-                                        info!(
-                                            target: LOG_TARGET,
-                                            "Leadership advisory lock already held by another instance; running as FOLLOWER"
-                                        );
-                                        self.role = NodeRole::Follower;
-                                    }
-                                    Err(e) => {
-                                        warn!(
-                                            target: LOG_TARGET,
-                                            "Failed to acquire leadership advisory lock; falling back to STANDALONE mode: {:?}",
-                                            e
-                                        );
-                                        self.role = NodeRole::Standalone;
-                                    }
-                                }
-                                self.leadership_conn = Some(client);
-                            }
-                            Err(e) => {
-                                warn!(
-                                    target: LOG_TARGET,
-                                    "Failed to open leadership connection; pending-tx coordination disabled: {:?}",
-                                    e
-                                );
-                                self.role = NodeRole::Standalone;
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        // Do not fail startup; just log and continue without DB persistence
-                        warn!(target: LOG_TARGET, "Pending transactions DB init failed: {:?}", e);
-                        self.role = NodeRole::Standalone;
-                    }
-                }
-            } else {
+                self.pending_tx_store = Some(PendingTxStore::new(pool));
+                self.leadership_conn = Some(client);
+                self.role = NodeRole::Leader;
+                info!(target: LOG_TARGET, "🗃️ Pending transactions store initialised");
+            }
+            Ok(false) => {
+                info!(
+                    target: LOG_TARGET,
+                    "Leadership advisory lock already held by another instance; running as FOLLOWER"
+                );
+                self.pending_tx_store = Some(PendingTxStore::new(pool));
+                self.leadership_conn = Some(client);
+                self.role = NodeRole::Follower;
+                info!(target: LOG_TARGET, "🗃️ Pending transactions store initialised");
+            }
+            Err(e) => {
                 warn!(
                     target: LOG_TARGET,
-                    "Pending transactions DB URL not found in configuration or environment variable; running in STANDALONE mode"
+                    "Failed to acquire leadership advisory lock; falling back to STANDALONE mode: {:?}",
+                    e
                 );
-                warn!(
-                    target: LOG_TARGET,
-                    "Pending transactions will not be persisted or shared across instances"
-                );
+                // In STANDALONE mode we explicitly disable the pending-tx DB to keep semantics clear.
+                self.pending_tx_store = None;
+                self.leadership_conn = None;
                 self.role = NodeRole::Standalone;
             }
         }
