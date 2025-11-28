@@ -207,82 +207,93 @@ impl FileDeletionRequestRightIndexName {
     pub const NAME: &'static str = "pending_file_deletion_request_right_index";
 }
 
-/// Pending respond storage requests.
-///
-/// # Deprecated
-/// This column family is deprecated and no longer used.
-/// It is kept for backward compatibility with existing RocksDB databases.
-/// The functionality has been replaced with in-memory queueing in `MspHandler`.
-#[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
-pub struct PendingMspRespondStorageRequestCf<Runtime: StorageEnableRuntime> {
-    pub(crate) phantom: std::marker::PhantomData<Runtime>,
-}
-impl<Runtime: StorageEnableRuntime> ScaleEncodedCf for PendingMspRespondStorageRequestCf<Runtime> {
-    type Key = u64;
-    type Value = crate::types::RespondStorageRequest<Runtime>;
+// Deprecated column families - kept for backward compatibility with existing RocksDB databases.
+// The functionality has been replaced with in-memory queueing in `MspHandler`.
+#[allow(deprecated)]
+mod deprecated_cfs {
+    use super::*;
 
-    const SCALE_ENCODED_NAME: &'static str = PendingMspRespondStorageRequestName::NAME;
-}
+    /// Pending respond storage requests.
+    ///
+    /// # Deprecated
+    /// This column family is deprecated and no longer used.
+    /// It is kept for backward compatibility with existing RocksDB databases.
+    /// The functionality has been replaced with in-memory queueing in `MspHandler`.
+    #[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
+    pub struct PendingMspRespondStorageRequestCf<Runtime: StorageEnableRuntime> {
+        pub(crate) phantom: std::marker::PhantomData<Runtime>,
+    }
+    impl<Runtime: StorageEnableRuntime> ScaleEncodedCf for PendingMspRespondStorageRequestCf<Runtime> {
+        type Key = u64;
+        type Value = crate::types::RespondStorageRequest<Runtime>;
 
-impl<Runtime: StorageEnableRuntime> Default for PendingMspRespondStorageRequestCf<Runtime> {
-    fn default() -> Self {
-        Self {
-            phantom: std::marker::PhantomData,
+        const SCALE_ENCODED_NAME: &'static str = PendingMspRespondStorageRequestName::NAME;
+    }
+
+    impl<Runtime: StorageEnableRuntime> Default for PendingMspRespondStorageRequestCf<Runtime> {
+        fn default() -> Self {
+            Self {
+                phantom: std::marker::PhantomData,
+            }
         }
+    }
+
+    /// Non-generic name holder for the `PendingMspRespondStorageRequest` column family
+    #[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
+    pub struct PendingMspRespondStorageRequestName;
+    impl PendingMspRespondStorageRequestName {
+        pub const NAME: &'static str = "pending_msp_respond_storage_request";
+    }
+
+    /// Pending respond storage requests left side (inclusive) index for the [`PendingMspRespondStorageRequestCf`] CF.
+    ///
+    /// # Deprecated
+    /// This column family is deprecated and no longer used.
+    /// It is kept for backward compatibility with existing RocksDB databases.
+    #[derive(Default)]
+    #[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
+    pub struct PendingMspRespondStorageRequestLeftIndexCf;
+    impl SingleScaleEncodedValueCf for PendingMspRespondStorageRequestLeftIndexCf {
+        type Value = u64;
+
+        const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
+            PendingMspRespondStorageRequestLeftIndexName::NAME;
+    }
+
+    /// Non-generic name holder for the `PendingMspRespondStorageRequestLeftIndex` column family
+    #[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
+    pub struct PendingMspRespondStorageRequestLeftIndexName;
+    impl PendingMspRespondStorageRequestLeftIndexName {
+        pub const NAME: &'static str = "pending_msp_respond_storage_request_left_index";
+    }
+
+    /// Pending respond storage requests right side (exclusive) index for the [`PendingMspRespondStorageRequestCf`] CF.
+    ///
+    /// # Deprecated
+    /// This column family is deprecated and no longer used.
+    /// It is kept for backward compatibility with existing RocksDB databases.
+    #[derive(Default)]
+    #[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
+    pub struct PendingMspRespondStorageRequestRightIndexCf;
+    impl SingleScaleEncodedValueCf for PendingMspRespondStorageRequestRightIndexCf {
+        type Value = u64;
+
+        const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
+            PendingMspRespondStorageRequestRightIndexName::NAME;
+    }
+
+    /// Non-generic name holder for the `PendingMspRespondStorageRequestRightIndex` column family
+    #[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
+    pub struct PendingMspRespondStorageRequestRightIndexName;
+    impl PendingMspRespondStorageRequestRightIndexName {
+        pub const NAME: &'static str = "pending_msp_respond_storage_request_right_index";
     }
 }
 
-/// Non-generic name holder for the `PendingMspRespondStorageRequest` column family
-#[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
-pub struct PendingMspRespondStorageRequestName;
-impl PendingMspRespondStorageRequestName {
-    pub const NAME: &'static str = "pending_msp_respond_storage_request";
-}
+use deprecated_cfs::*;
 
-/// Pending respond storage requests left side (inclusive) index for the [`PendingMspRespondStorageRequestCf`] CF.
-///
-/// # Deprecated
-/// This column family is deprecated and no longer used.
-/// It is kept for backward compatibility with existing RocksDB databases.
-#[derive(Default)]
-#[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
-pub struct PendingMspRespondStorageRequestLeftIndexCf;
-impl SingleScaleEncodedValueCf for PendingMspRespondStorageRequestLeftIndexCf {
-    type Value = u64;
-
-    const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
-        PendingMspRespondStorageRequestLeftIndexName::NAME;
-}
-
-/// Non-generic name holder for the `PendingMspRespondStorageRequestLeftIndex` column family
-#[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
-pub struct PendingMspRespondStorageRequestLeftIndexName;
-impl PendingMspRespondStorageRequestLeftIndexName {
-    pub const NAME: &'static str = "pending_msp_respond_storage_request_left_index";
-}
-
-/// Pending respond storage requests right side (exclusive) index for the [`PendingMspRespondStorageRequestCf`] CF.
-///
-/// # Deprecated
-/// This column family is deprecated and no longer used.
-/// It is kept for backward compatibility with existing RocksDB databases.
-#[derive(Default)]
-#[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
-pub struct PendingMspRespondStorageRequestRightIndexCf;
-impl SingleScaleEncodedValueCf for PendingMspRespondStorageRequestRightIndexCf {
-    type Value = u64;
-
-    const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
-        PendingMspRespondStorageRequestRightIndexName::NAME;
-}
-
-/// Non-generic name holder for the `PendingMspRespondStorageRequestRightIndex` column family
-#[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
-pub struct PendingMspRespondStorageRequestRightIndexName;
-impl PendingMspRespondStorageRequestRightIndexName {
-    pub const NAME: &'static str = "pending_msp_respond_storage_request_right_index";
-}
-
+// Deprecated column families are included for backward compatibility with existing RocksDB databases
+#[allow(deprecated)]
 const ALL_COLUMN_FAMILIES: [&str; 13] = [
     LastProcessedBlockNumberName::NAME,
     PendingConfirmStoringRequestLeftIndexName::NAME,
@@ -295,11 +306,8 @@ const ALL_COLUMN_FAMILIES: [&str; 13] = [
     FileDeletionRequestRightIndexName::NAME,
     FileDeletionRequestName::NAME,
     // Deprecated column families - kept for backward compatibility with existing RocksDB databases
-    #[allow(deprecated)]
     PendingMspRespondStorageRequestLeftIndexName::NAME,
-    #[allow(deprecated)]
     PendingMspRespondStorageRequestRightIndexName::NAME,
-    #[allow(deprecated)]
     PendingMspRespondStorageRequestName::NAME,
 ];
 
