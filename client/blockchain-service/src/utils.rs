@@ -1859,18 +1859,21 @@ where
         Ok(reverted_mutation)
     }
 
-    pub(crate) fn process_common_block_import_events(
+    /// Processes runtime events emitted on block import that are common to both MSP and BSP nodes.
+    ///
+    /// The events processed here are processed equally for both MSP and BSP nodes.
+    pub(crate) fn process_msp_and_bsp_block_import_events(
         &mut self,
         event: StorageEnableEvents<Runtime>,
     ) {
-        // Process the events that are common to all roles.
+        // Process the events that are common to all MultiInstancesNodeRole roles.
         match event {
             _ => {
                 trace!(target: LOG_TARGET, "No common block import events to process regarding of the role of the node");
             }
         }
 
-        // Process the events that are specific to the role of the node.
+        // Process the events that are specific to the MultiInstancesNodeRole role of the node.
         match self.role {
             MultiInstancesNodeRole::Leader | MultiInstancesNodeRole::Standalone => {
                 match event {

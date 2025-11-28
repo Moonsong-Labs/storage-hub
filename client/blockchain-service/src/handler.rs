@@ -1553,7 +1553,7 @@ where
                 for ev in block_events {
                     // Process the events applicable regardless of whether this node is managing a BSP or an MSP.
 
-                    self.process_common_block_import_events(ev.event.clone().into());
+                    self.process_msp_and_bsp_block_import_events(ev.event.clone().into());
 
                     // Process Provider-specific events.
                     match &self.maybe_managed_provider {
