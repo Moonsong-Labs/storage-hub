@@ -15,7 +15,7 @@ use shc_common::{
         convert_raw_multiaddress_to_multiaddr, get_events_at_block, EventsRetrievalError,
     },
     traits::StorageEnableRuntime,
-    types::{ParachainClient, StorageEnableEvents, StorageProviderId},
+    types::{StorageEnableEvents, StorageHubClient, StorageProviderId},
 };
 use shc_indexer_db::{models::*, DbConnection, DbPool, OnchainBspId, OnchainMspId};
 use sp_api::ProvideRuntimeApi;
@@ -34,7 +34,7 @@ pub enum IndexerServiceCommand {}
 
 // The IndexerService actor
 pub struct IndexerService<Runtime: StorageEnableRuntime> {
-    client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+    client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
     db_pool: DbPool,
     indexer_mode: crate::IndexerMode,
 }
@@ -64,7 +64,7 @@ impl<Runtime: StorageEnableRuntime> Actor for IndexerService<Runtime> {
 // Implement methods for IndexerService
 impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
     pub fn new(
-        client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+        client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
         db_pool: DbPool,
         indexer_mode: crate::IndexerMode,
     ) -> Self {

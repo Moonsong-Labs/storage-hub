@@ -27,7 +27,7 @@ use shc_common::{
     traits::{ExtensionOperations, KeyTypeOperations, StorageEnableRuntime},
     types::{
         AccountId, BlockNumber, FileKey, Fingerprint, ForestRoot, MinimalExtension, OpaqueBlock,
-        ParachainClient, ProofsDealerProviderId, StorageEnableEvents, StorageProviderId,
+        ProofsDealerProviderId, StorageEnableEvents, StorageHubClient, StorageProviderId,
         TrieAddMutation, TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
     },
 };
@@ -712,7 +712,7 @@ where
     /// Construct an extrinsic that can be applied to the runtime using a generic signature type.
     pub fn construct_extrinsic(
         &self,
-        client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+        client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
         function: impl Into<Runtime::Call>,
         nonce: u32,
         tip: u128,

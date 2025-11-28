@@ -14,7 +14,7 @@ use sp_core::H256;
 use crate::{
     traits::{KeyTypeOperations, StorageEnableRuntime},
     types::{
-        Multiaddresses, ParachainClient, StorageHubEventsVec, StorageProviderId, BCSV_KEY_TYPE,
+        Multiaddresses, StorageHubClient, StorageHubEventsVec, StorageProviderId, BCSV_KEY_TYPE,
     },
 };
 
@@ -42,7 +42,7 @@ pub enum EventsRetrievalError {
 
 /// Get the events storage element for a given block.
 pub fn get_events_at_block<Runtime: StorageEnableRuntime>(
-    client: &Arc<ParachainClient<Runtime::RuntimeApi>>,
+    client: &Arc<StorageHubClient<Runtime::RuntimeApi>>,
     block_hash: &H256,
 ) -> Result<StorageHubEventsVec<Runtime>, EventsRetrievalError> {
     // Get the events storage.
@@ -108,7 +108,7 @@ pub enum GetProviderIdError {
 /// - `Err(GetProviderIdError::MultipleProviderIds)` if multiple Provider IDs are found
 /// - `Err(GetProviderIdError::RuntimeApiError)` if there's an error calling the runtime API
 pub fn get_provider_id_from_keystore<Runtime>(
-    client: &Arc<ParachainClient<Runtime::RuntimeApi>>,
+    client: &Arc<StorageHubClient<Runtime::RuntimeApi>>,
     keystore: &sp_keystore::KeystorePtr,
     block_hash: &H256,
 ) -> Result<Option<StorageProviderId<Runtime>>, GetProviderIdError>
