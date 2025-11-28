@@ -992,6 +992,36 @@ mod tests {
             total_bytes,
             "Available + used bytes should always equal total bytes"
         );
+
+        // Verify last_capacity_change is a valid number string
+        let last_capacity_change = stats
+            .last_capacity_change
+            .parse::<BigDecimal>()
+            .expect("last_capacity_change to be a valid number");
+        assert!(
+            !last_capacity_change.is_negative(),
+            "Last capacity change should be non-negative"
+        );
+
+        // Verify value_props_amount is a valid number string
+        let value_props_amount = stats
+            .value_props_amount
+            .parse::<BigDecimal>()
+            .expect("value_props_amount to be a valid number");
+        assert!(
+            !value_props_amount.is_negative(),
+            "Value props amount should be non-negative"
+        );
+
+        // Verify buckets_amount is a valid number string
+        let buckets_amount = stats
+            .buckets_amount
+            .parse::<BigDecimal>()
+            .expect("buckets_amount to be a valid number");
+        assert!(
+            !buckets_amount.is_negative(),
+            "Buckets amount should be non-negative"
+        );
     }
 
     #[tokio::test]
