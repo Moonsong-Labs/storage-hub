@@ -861,11 +861,24 @@ impl<Runtime: StorageEnableRuntime> ManagedProvider<Runtime> {
 /// Role of this node in the HA group for a given MSP/BSP.
 ///
 /// - `Leader`: the only node allowed to submit extrinsics and manage nonces.
-/// - `Follower`: mirrors transaction state from Postgres but never submits.
-/// - `Standalone`: pending-tx DB is disabled; node behaves as a single-instance deployment.
+/// - `Follower`: keeps a local copy of Merkle Patricia Forests and file
+///   chunks, but never submits extrinsics.
+/// - `Standalone`: pending-tx DB is disabled; node behaves as a single-instance
+///   deployment and does not persist pending transactions in the DB.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum NodeRole {
+    /// The only node allowed to submit extrinsics and manage nonces.
+    ///
+    /// This role means that the pending transactions DB is used to persist pending transactions
+    /// and this node was the one to acquire the leadership advisory lock.
     Leader,
+    /// Keeps a local copy of Merkle Patricia Forests and file chunks, but never submits extrinsics.
+    ///
+    /// This role means that the pending transactions DB is used to persist pending transactions
+    /// and this node was not the one to acquire the leadership advisory lock. It keeps the Forest
+    /// and file chunks stored to be able to take on the leadership role, should the `Leader` stop working.
     Follower,
+    /// Pending-tx DB is disabled; node behaves as a single-instance deployment and does not persist
+    /// pending transactions in the DB.
     Standalone,
 }
