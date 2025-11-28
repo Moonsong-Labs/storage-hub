@@ -30,7 +30,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
     ) -> Result<(), diesel::result::Error> {
         match event {
             StorageEnableEvents::FileSystem(event) => {
-                self.index_file_system_event_lite(conn, event, evm_tx_hash).await?
+                self.index_file_system_event_lite(conn, event, block_hash, evm_tx_hash)
+                    .await?
             }
             StorageEnableEvents::StorageProviders(event) => {
                 self.index_providers_event_lite(conn, event, block_hash)
@@ -66,6 +67,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         &'b self,
         conn: &mut DbConnection<'a>,
         event: &pallet_file_system::Event<Runtime>,
+        block_hash: Runtime::Hash,
         evm_tx_hash: Option<Runtime::Hash>,
     ) -> Result<(), diesel::result::Error> {
         // In lite mode without MSP filtering, index all events
@@ -110,7 +112,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
 
         if should_index {
             // Delegate to the original method
-            self.index_file_system_event(conn, event, evm_tx_hash).await
+            self.index_file_system_event(conn, event, block_hash, evm_tx_hash)
+                .await
         } else {
             trace!(target: LOG_TARGET, "Filtered out FileSystem event in lite mode");
             Ok(())

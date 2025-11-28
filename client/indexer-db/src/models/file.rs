@@ -98,6 +98,10 @@ pub struct File {
     /// - Set to `true` when an `Add` mutation is applied for this file in the bucket
     /// - Set to `false` when a `Remove` mutation is applied for this file in the bucket
     pub is_in_bucket: bool,
+    /// Block hash where the file was created.
+    ///
+    /// Contains the block hash where the `NewStorageRequest` event was emitted.
+    pub block_hash: Vec<u8>,
     /// Transaction hash that created this file (for EVM-originated storage requests).
     ///
     /// Contains the Ethereum transaction hash from `pallet_ethereum::Event::Executed` if the storage
@@ -127,6 +131,7 @@ impl File {
         size: i64,
         step: FileStorageRequestStep,
         peer_ids: Vec<crate::models::PeerId>,
+        block_hash: Vec<u8>,
         tx_hash: Option<Vec<u8>>,
     ) -> Result<Self, diesel::result::Error> {
         let file = diesel::insert_into(file::table)
@@ -142,6 +147,7 @@ impl File {
                 file::deletion_status.eq(None::<i32>),
                 file::deletion_signature.eq(None::<Vec<u8>>),
                 file::is_in_bucket.eq(false),
+                file::block_hash.eq(block_hash),
                 file::tx_hash.eq(tx_hash),
             ))
             .returning(File::as_select())

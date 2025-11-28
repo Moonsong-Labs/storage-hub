@@ -33,8 +33,7 @@ await describeMspNet(
     indexer: true,
     backend: true,
     fisherman: true,
-    standaloneIndexer: true,
-    only: true
+    standaloneIndexer: true
   },
   ({ before, it, createUserApi, createMsp1Api, createSqlClient, createIndexerApi }) => {
     let userApi: EnrichedBspApi;
@@ -48,6 +47,7 @@ await describeMspNet(
     let bucketId: string;
     let fileManager: FileManager;
     let fileKey: H256;
+    let storageRequestBlockHash: `0x${string}`;
     let storageRequestTxHash: `0x${string}`;
     let fileLocation: string;
     let mspClient: MspClient;
@@ -367,6 +367,9 @@ await describeMspNet(
       const receipt = await publicClient.waitForTransactionReceipt({ hash: storageRequestTxHash });
       assert(receipt.status === "success", "Storage request transaction failed");
 
+      // Store the block hash where the transaction was included
+      storageRequestBlockHash = receipt.blockHash;
+
       // Compute the file key
       const registry = new TypeRegistry();
       const owner = registry.createType("AccountId20", account.address) as AccountId20;
@@ -483,6 +486,13 @@ await describeMspNet(
       const fileInfo = await mspClient.files.getFileInfo(bucketId, fileKey.toHex());
       strictEqual(fileInfo.bucketId, bucketId, "BucketId should match");
       strictEqual(fileInfo.fileKey, fileKey.toHex(), "FileKey should match");
+
+      // Verify that the block hash is correctly stored and returned (always present)
+      strictEqual(
+        fileInfo.blockHash.toLowerCase(),
+        storageRequestBlockHash.toLowerCase(),
+        "File blockHash should match the block hash where the transaction was included"
+      );
 
       // Verify that the EVM transaction hash is correctly stored and returned
       assert(fileInfo.txHash, "File should have a txHash since it was created via EVM transaction");

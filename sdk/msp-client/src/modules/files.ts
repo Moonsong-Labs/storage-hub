@@ -28,6 +28,7 @@ export class FilesModule extends ModuleBase {
       isPublic: boolean;
       uploadedAt: string; // ISO string, not Date object
       status: string;
+      blockHash: string; // Block hash where file was created
       txHash?: string; // Optional EVM transaction hash
     }>(path, {
       ...(headers ? { headers } : {}),
@@ -43,7 +44,8 @@ export class FilesModule extends ModuleBase {
       isPublic: wire.isPublic,
       uploadedAt: new Date(wire.uploadedAt),
       status: wire.status as FileStatus,
-      ...(wire.txHash ? { txHash: ensure0xPrefix(wire.txHash) as `0x${string}` } : {})
+      blockHash: ensure0xPrefix(wire.blockHash),
+      ...(wire.txHash ? { txHash: ensure0xPrefix(wire.txHash) } : {})
     };
   }
 

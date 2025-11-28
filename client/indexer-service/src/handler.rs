@@ -173,7 +173,10 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 self.index_event_lite(conn, event, block_hash, evm_tx_hash)
                     .await
             }
-            crate::IndexerMode::Fishing => self.index_event_fishing(conn, event, block_hash).await,
+            crate::IndexerMode::Fishing => {
+                self.index_event_fishing(conn, event, block_hash, evm_tx_hash)
+                    .await
+            }
         }
     }
 
@@ -189,7 +192,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 self.index_bucket_nfts_event(conn, event).await?
             }
             StorageEnableEvents::FileSystem(event) => {
-                self.index_file_system_event(conn, event, evm_tx_hash)
+                self.index_file_system_event(conn, event, block_hash, evm_tx_hash)
                     .await?
             }
             StorageEnableEvents::PaymentStreams(event) => {
@@ -238,6 +241,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         &'b self,
         conn: &mut DbConnection<'a>,
         event: &pallet_file_system::Event<Runtime>,
+        block_hash: H256,
         evm_tx_hash: Option<H256>,
     ) -> Result<(), diesel::result::Error> {
         match event {
@@ -370,6 +374,9 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 let size: i64 = size.saturated_into();
                 let who = who.as_ref().to_vec();
 
+                // Convert block hash to bytes (always present)
+                let block_hash_bytes = block_hash.as_bytes().to_vec();
+
                 // Convert EVM tx hash to bytes if present
                 let tx_hash_bytes = evm_tx_hash.map(|h| h.as_bytes().to_vec());
 
@@ -384,6 +391,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     size,
                     FileStorageRequestStep::Requested,
                     sql_peer_ids,
+                    block_hash_bytes,
                     tx_hash_bytes,
                 )
                 .await?;
