@@ -194,6 +194,9 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     /// If `file_keys` is None, returns all pending storage requests via runtime API.
     #[command(success_type = Vec<NewStorageRequest<Runtime>>)]
     QueryPendingStorageRequests { file_keys: Option<Vec<FileKey>> },
+    /// Preprocess a storage request by emitting a NewStorageRequest event.
+    /// Called by MspUploadFileTask's BatchProcessStorageRequests handler for each pending request.
+    PreprocessStorageRequest { request: NewStorageRequest<Runtime> },
 }
 
 /// Interface for interacting with the BlockchainService actor.

@@ -13,7 +13,7 @@ use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use shc_actors_framework::actor::Actor;
 use shc_common::{
     traits::StorageEnableRuntime,
-    typed_store::{CFDequeAPI, CFHashSetAPI},
+    typed_store::CFDequeAPI,
     types::{
         BackupStorageProviderId, BlockHash, BlockNumber, BucketId, ProviderId, StorageEnableEvents,
     },
@@ -353,30 +353,28 @@ where
         }
 
         // At this point we know that the lock is released and we can start processing new requests.
-        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
         let mut next_event_data: Option<ForestWriteLockTaskData<Runtime>> = None;
 
-        if self.maybe_managed_provider.is_none() {
-            // If there's no Provider being managed, there's no point in checking for pending requests.
-            return;
-        }
-
-        // Check for pending respond storing requests.
+        // Check for pending respond storing requests from in-memory queue.
         {
+            let msp_handler = match &mut self.maybe_managed_provider {
+                Some(ManagedProvider::Msp(msp_handler)) => msp_handler,
+                _ => {
+                    // If there's no MSP being managed, there's no point in checking for pending requests.
+                    return;
+                }
+            };
+
             let max_batch_respond = MAX_BATCH_MSP_RESPOND_STORE_REQUESTS;
 
             // Batch multiple respond storing requests up to the runtime configured maximum.
             let mut respond_storage_requests = Vec::new();
             for _ in 0..max_batch_respond {
-                if let Some(request) = state_store_context
-                    .pending_msp_respond_storage_request_deque()
-                    .pop_front()
-                {
+                if let Some(request) = msp_handler.pending_respond_storage_requests.pop_front() {
                     // Remove from dedup tracking set so the file key can be re-queued if needed.
-                    let file_key = sp_core::H256::from(request.file_key);
-                    state_store_context
-                        .pending_msp_respond_storage_request_file_keys()
-                        .remove(&file_key);
+                    msp_handler
+                        .pending_respond_storage_request_file_keys
+                        .remove(&request.file_key);
                     respond_storage_requests.push(request);
                 } else {
                     break;
@@ -396,6 +394,7 @@ where
 
         // If we have no pending storage requests to respond to, we can also check for pending stop storing for insolvent user requests.
         if next_event_data.is_none() {
+            let state_store_context = self.persistent_state.open_rw_context_with_overlay();
             if let Some(request) = state_store_context
                 .pending_stop_storing_for_insolvent_user_request_deque::<Runtime>()
                 .pop_front()
@@ -404,10 +403,8 @@ where
                     ProcessStopStoringForInsolventUserRequestData { who: request.user }.into(),
                 );
             }
+            state_store_context.commit();
         }
-
-        // Commit the state store context.
-        state_store_context.commit();
 
         // If there is any event data to process, emit the event.
         if let Some(event_data) = next_event_data {

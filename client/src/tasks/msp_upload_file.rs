@@ -1,9 +1,88 @@
+//! # MSP Upload File Task
+//!
+//! This module handles the complete file upload flow for Main Storage Providers (MSPs).
+//!
+//! ## Concurrent Task Architecture
+//!
+//! The task uses an **actor-based event-driven model** where multiple events can be processed
+//! concurrently. Each event handler is spawned as a separate async task by the actor framework
+//! when subscribed via [`subscribe_actor_event_map!`](crate::handler::subscribe_actor_event_map).
+//!
+//! ### Event Flow
+//!
+//! ```text
+//! ┌──────────────────────────────────────────────────────────────────────────────────┐
+//! │                         BatchProcessStorageRequests                              │
+//! │                          (periodic, from BlockchainService)                      │
+//! │                                      │                                           │
+//! │                     ┌────────────────┼────────────────┐                          │
+//! │                     ▼                ▼                ▼                          │
+//! │            NewStorageRequest  NewStorageRequest  NewStorageRequest               │
+//! │            (per file key)     (per file key)     (per file key)                  │
+//! │                     │                │                │                          │
+//! │          ┌──────────┴────────┐       │       ┌───────┴──────────┐                │
+//! │          ▼                   ▼       ▼       ▼                  ▼                │
+//! │   [File in storage?]    RemoteUploadRequest (chunk uploads from user)            │
+//! │          │                          │                                            │
+//! │          │ yes                      │ file complete                              │
+//! │          ▼                          ▼                                            │
+//! │      on_file_complete ◄─────────────┘                                            │
+//! │          │                                                                       │
+//! │          ▼                                                                       │
+//! │   queue_msp_respond_storage_request (queues Accept)                              │
+//! │          │                                                                       │
+//! │          ▼                                                                       │
+//! │   ProcessMspRespondStoringRequest                                                │
+//! │   (batched extrinsic submission)                                                 │
+//! └──────────────────────────────────────────────────────────────────────────────────┘
+//! ```
+//!
+//! ### Status Tracking with [`FileKeyStatus`]
+//!
+//! Since events are processed concurrently, the same file key could potentially be processed
+//! multiple times (e.g., if [`BatchProcessStorageRequests`] fires while a file is mid-upload).
+//! The [`file_key_statuses`](MspUploadFileTask::file_key_statuses) HashMap prevents this:
+//!
+//! | Status | Meaning | Action in [`BatchProcessStorageRequests`] |
+//! |--------|---------|-------------------------------------------|
+//! | [`FileKeyStatus::Processing`] | File key is in the pipeline | **Skip** |
+//! | [`FileKeyStatus::Accepted`] | Successfully accepted on-chain | **Skip** |
+//! | [`FileKeyStatus::Rejected`] | Rejected on-chain | **Skip** |
+//! | [`FileKeyStatus::Failed`] | Processing failed (proof error) | **Retry** |
+//! | [`FileKeyStatus::Abandoned`] | Exhausted retries (non-proof error) | **Skip** |
+//! | *Not present* | New file key | **Process** |
+//!
+//! **Note:** When an extrinsic submission fails, file keys are marked as `Failed` only for
+//! proof-related errors from [`pallet_proofs_dealer`]: `ForestProofVerificationFailed`,
+//! `KeyProofVerificationFailed`, or `FailedToApplyDelta`. Non-proof errors mark file keys as
+//! `Abandoned` after exhausting retries. Stale entries (not in pending requests) are cleaned up.
+//!
+//! ### Event Handlers
+//!
+//! - [`BatchProcessStorageRequests`]: Periodic trigger from [`BlockchainService`](shc_blockchain_service)
+//!   that queries pending storage requests and emits [`NewStorageRequest`] for each via
+//!   [`PreprocessStorageRequestEvent`](shc_blockchain_service::commands::BlockchainServiceCommand::PreprocessStorageRequestEvent).
+//!
+//! - [`NewStorageRequest`]: Validates capacity, creates file in storage, registers for P2P upload.
+//!   If the file is already complete in file storage, immediately queues an accept response via
+//!   [`queue_msp_respond_storage_request`](shc_blockchain_service::commands::BlockchainServiceCommandInterface::queue_msp_respond_storage_request).
+//!
+//! - [`RemoteUploadRequest`]: Receives and validates file chunks from users. When the file is
+//!   fully received, queues an accept response via
+//!   [`queue_msp_respond_storage_request`](shc_blockchain_service::commands::BlockchainServiceCommandInterface::queue_msp_respond_storage_request).
+//!
+//! - [`ProcessMspRespondStoringRequest`]: Processes queued accept/reject responses and submits
+//!   them in a single batched `msp_respond_storage_requests_multiple_buckets` extrinsic.
+
 use anyhow::anyhow;
+use codec::Decode;
 use std::{
     collections::{HashMap, HashSet},
     str::FromStr,
+    sync::Arc,
     time::Duration,
 };
+use tokio::sync::RwLock;
 
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
@@ -15,6 +94,7 @@ use sp_core::H256;
 use sp_runtime::traits::{CheckedAdd, CheckedSub, SaturatedConversion, Zero};
 
 use pallet_file_system::types::RejectedStorageRequest;
+use pallet_proofs_dealer;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::events::{
     BatchProcessStorageRequests, ProcessMspRespondStoringRequest,
@@ -44,14 +124,6 @@ use crate::{
 
 const LOG_TARGET: &str = "msp-upload-file-task";
 
-/// Information about a storage request that should be rejected.
-#[derive(Debug, Clone)]
-struct RejectionInfo {
-    file_key: H256,
-    bucket_id: H256,
-    reason: RejectedStorageRequestReason,
-}
-
 /// Configuration for the MSP upload file task
 #[derive(Debug, Clone)]
 pub struct MspUploadFileConfig {
@@ -70,28 +142,67 @@ impl Default for MspUploadFileConfig {
     }
 }
 
-/// MSP Upload File Task: Handles the whole flow of a file being uploaded to a MSP, from
-/// the MSP's perspective.
+/// Status of a file key in the MSP upload pipeline.
 ///
-/// The flow is split into three parts, which are represented here as 3 handlers for 3
-/// different events:
-/// - [`NewStorageRequest`] event: The first part of the flow. It is triggered by a user
-///   submitting a storage request to StorageHub. The MSP will check if it has enough
-///   storage capacity to store the file and increase it if necessary (up to a maximum).
-///   If the MSP does not have enough capacity still, it will reject the storage request.
-///   It will register the user and file key in the registry of the File Transfer Service,
-///   which handles incoming p2p upload requests. Finally, it will create a file in the
-///   file storage so that it can write uploaded chunks as soon as possible.
-/// - [`RemoteUploadRequest`] event: The second part of the flow. It is triggered by a
-///   user sending a chunk of the file to the MSP. It checks the proof for the chunk
-///   and if it is valid, stores it, until the whole file is stored. Finally the MSP will
-///   queue a response to accept storing the file.
-/// - [`ProcessMspRespondStoringRequest`] event: The third part of the flow. It is triggered
-///   when there are new storage request(s) to respond to. The batch of storage requests
-///   will be responded to in a single call to the FileSystem pallet `msp_respond_storage_requests_multiple_buckets` extrinsic
-///   which will emit an event that describes the final result of the batch response (i.e. all accepted,
-///   rejected and/or failed file keys). The MSP will then apply the necessary deltas to each one of the bucket's
-///   forest storage to reflect the result.
+/// Used by [`MspUploadFileTask`] to track processing state, prevent duplicate processing,
+/// and enable automatic retries. See [module documentation](self) for the full status
+/// transition flow.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FileKeyStatus {
+    /// File key is currently being processed (in the pipeline).
+    ///
+    /// Set when [`BatchProcessStorageRequests`] emits a [`NewStorageRequest`] for the file key.
+    Processing,
+    /// File key was successfully accepted on-chain.
+    ///
+    /// Set after [`ProcessMspRespondStoringRequest`] successfully submits the extrinsic.
+    Accepted,
+    /// File key was explicitly rejected on-chain (e.g., capacity issues, invalid proof).
+    ///
+    /// Set after [`ProcessMspRespondStoringRequest`] successfully submits a rejection.
+    Rejected,
+    /// File key processing failed at some stage and can be retried.
+    ///
+    /// Set when a handler encounters an error during processing. For extrinsic submission
+    /// errors in [`ProcessMspRespondStoringRequest`], this status is only set for
+    /// proof-related errors from [`pallet_proofs_dealer`]: `ForestProofVerificationFailed`,
+    /// `KeyProofVerificationFailed`, or `FailedToApplyDelta`. Error detection uses type-safe
+    /// decoding of the dispatch error, ensuring compile-time safety.
+    ///
+    /// The next [`BatchProcessStorageRequests`] cycle will automatically retry processing
+    /// file keys with this status.
+    Failed,
+    /// File key processing exhausted all retries with non-proof errors.
+    ///
+    /// Set when extrinsic submission fails after exhausting all retries (timeout, dropped)
+    /// or when the extrinsic is included but fails with a non-proof-related dispatch error.
+    /// Unlike [`Failed`](Self::Failed), file keys with this status will NOT be retried in
+    /// subsequent [`BatchProcessStorageRequests`] cycles.
+    ///
+    /// The file key entry will be cleaned up from the status map when it is no longer
+    /// present in the pending storage requests list.
+    Abandoned,
+}
+
+/// Handles the complete file upload flow for Main Storage Providers (MSPs).
+///
+/// This task processes multiple concurrent events using an actor-based model.
+/// See [module documentation](self) for the full architecture and event flow diagram.
+///
+/// # Event Handlers
+///
+/// | Event | Purpose |
+/// |-------|---------|
+/// | [`BatchProcessStorageRequests`] | Periodic discovery of pending requests |
+/// | [`NewStorageRequest`] | Capacity check, upload registration, or queue if file exists |
+/// | [`RemoteUploadRequest`] | Chunk reception; queues accept when file complete |
+/// | [`ProcessMspRespondStoringRequest`] | Batched on-chain response submission |
+///
+/// # Status Tracking
+///
+/// The [`file_key_statuses`](Self::file_key_statuses) field tracks each file key's
+/// [`FileKeyStatus`] to prevent duplicate processing and enable automatic retries
+/// for failed requests.
 pub struct MspUploadFileTask<NT, Runtime>
 where
     NT: ShNodeType<Runtime>,
@@ -100,6 +211,13 @@ where
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
     config: MspUploadFileConfig,
+    /// Tracks the processing status of each file key to prevent duplicate processing
+    /// and enable retries for failed requests.
+    ///
+    /// Uses `Arc<RwLock<...>>` to share state across all concurrent event handlers.
+    /// Without this, each spawned handler would get its own clone of the HashMap,
+    /// making status updates invisible to other handlers.
+    file_key_statuses: Arc<RwLock<HashMap<H256, FileKeyStatus>>>,
 }
 
 impl<NT, Runtime> Clone for MspUploadFileTask<NT, Runtime>
@@ -112,6 +230,7 @@ where
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
             config: self.config.clone(),
+            file_key_statuses: self.file_key_statuses.clone(),
         }
     }
 }
@@ -126,6 +245,7 @@ where
         Self {
             storage_hub_handler,
             config: MspUploadFileConfig::default(),
+            file_key_statuses: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -158,264 +278,6 @@ where
 
         Ok((metadata, file_key))
     }
-
-    /// Ensures sufficient capacity for a batch of storage requests.
-    ///
-    /// This method pre-calculates the total capacity needed for all requests,
-    /// increases capacity once if needed, and splits requests into processable
-    /// and rejected based on capacity constraints.
-    ///
-    /// Returns a tuple of (processable_requests, rejections).
-    async fn ensure_batch_capacity(
-        &mut self,
-        pending_requests: Vec<NewStorageRequest<Runtime>>,
-    ) -> anyhow::Result<(Vec<NewStorageRequest<Runtime>>, Vec<RejectionInfo>)> {
-        if pending_requests.is_empty() {
-            return Ok((Vec::new(), Vec::new()));
-        }
-
-        let own_provider_id = self
-            .storage_hub_handler
-            .blockchain
-            .query_storage_provider_id(None)
-            .await?;
-
-        let own_msp_id = match own_provider_id {
-            Some(StorageProviderId::MainStorageProvider(id)) => id,
-            Some(StorageProviderId::BackupStorageProvider(_)) => {
-                return Err(anyhow!(
-                    "Current node account is a Backup Storage Provider. Expected a Main Storage Provider ID."
-                ));
-            }
-            None => {
-                return Err(anyhow!("Failed to get own MSP ID."));
-            }
-        };
-
-        let max_storage_capacity = self
-            .storage_hub_handler
-            .provider_config
-            .capacity_config
-            .max_capacity();
-
-        let current_capacity = self
-            .storage_hub_handler
-            .blockchain
-            .query_storage_provider_capacity(own_msp_id)
-            .await
-            .map_err(|e| {
-                error!(target: LOG_TARGET, "Failed to query storage provider capacity: {:?}", e);
-                anyhow!("Failed to query storage provider capacity: {:?}", e)
-            })?;
-
-        let mut available_capacity = self
-            .storage_hub_handler
-            .blockchain
-            .query_available_storage_capacity(own_msp_id)
-            .await
-            .map_err(|e| {
-                error!(target: LOG_TARGET, "Failed to query available storage capacity: {:?}", e);
-                anyhow!("Failed to query available storage capacity: {:?}", e)
-            })?;
-
-        let used_capacity = current_capacity
-            .checked_sub(&available_capacity)
-            .ok_or_else(|| {
-                anyhow!(
-                    "Available capacity ({}) exceeds current capacity ({})",
-                    available_capacity,
-                    current_capacity
-                )
-            })?;
-
-        // Note: We assume files with pending storage requests are not in forest storage,
-        // as storage requests represent new files to be stored.
-        let mut total_capacity_needed = Runtime::StorageDataUnit::zero();
-        let mut files_to_process = Vec::new();
-
-        for request in pending_requests {
-            if request.size.is_zero() {
-                warn!(target: LOG_TARGET, "Skipping storage request with zero file size");
-                continue;
-            }
-
-            match self
-                .storage_hub_handler
-                .blockchain
-                .query_msp_id_of_bucket_id(request.bucket_id)
-                .await
-            {
-                Ok(Some(id)) if id == own_msp_id => {
-                    total_capacity_needed = total_capacity_needed
-                        .checked_add(&request.size)
-                        .ok_or_else(|| anyhow!("Overflow calculating total capacity needed"))?;
-                    files_to_process.push(request);
-                }
-                Ok(Some(_)) => {
-                    trace!(target: LOG_TARGET, "Skipping storage request - not our bucket");
-                }
-                Ok(None) => {
-                    warn!(target: LOG_TARGET, "Skipping storage request - MSP ID not found for bucket");
-                }
-                Err(e) => {
-                    error!(target: LOG_TARGET, "Failed to query MSP ID of bucket: {:?}", e);
-                }
-            }
-        }
-
-        info!(
-            target: LOG_TARGET,
-            "Batch requires capacity: {}, available: {}",
-            total_capacity_needed,
-            available_capacity
-        );
-
-        if total_capacity_needed > available_capacity {
-            // Respect the maximum storage capacity configured locally
-            let max_possible_increase = max_storage_capacity
-                .checked_sub(&current_capacity)
-                .unwrap_or(Runtime::StorageDataUnit::zero());
-
-            let needed_increase = total_capacity_needed
-                .checked_sub(&available_capacity)
-                .unwrap_or(Runtime::StorageDataUnit::zero());
-
-            let capacity_to_add = needed_increase.min(max_possible_increase);
-
-            if capacity_to_add > Runtime::StorageDataUnit::zero() {
-                info!(
-                    target: LOG_TARGET,
-                    "Increasing capacity by {}, needed: {}, max: {}",
-                    capacity_to_add,
-                    needed_increase,
-                    max_possible_increase
-                );
-
-                self.storage_hub_handler
-                    .blockchain
-                    .increase_capacity(CapacityRequestData::new(capacity_to_add))
-                    .await?;
-
-                available_capacity = self
-                    .storage_hub_handler
-                    .blockchain
-                    .query_available_storage_capacity(own_msp_id)
-                    .await
-                    .map_err(|e| {
-                        error!(target: LOG_TARGET, "Failed to query available capacity after increase: {:?}", e);
-                        anyhow!("Failed to query available capacity after increase: {:?}", e)
-                    })?;
-
-                info!(
-                    target: LOG_TARGET,
-                    "Capacity increased to {}, used: {}, max: {}",
-                    available_capacity,
-                    used_capacity,
-                    max_storage_capacity
-                );
-            } else {
-                info!(
-                    target: LOG_TARGET,
-                    "Already at maximum capacity. Current: {}, max: {}",
-                    current_capacity,
-                    max_storage_capacity
-                );
-            }
-        }
-
-        if total_capacity_needed > available_capacity {
-            info!(
-                target: LOG_TARGET,
-                "Trimming batch to fit capacity. Needed: {}, available: {}",
-                total_capacity_needed,
-                available_capacity
-            );
-
-            let (accepted, rejected) = self.trim_batch_to_fit_capacity(
-                files_to_process,
-                available_capacity,
-                used_capacity,
-                max_storage_capacity,
-            )?;
-
-            if accepted.is_empty() {
-                warn!(
-                    target: LOG_TARGET,
-                    "Rejecting all {} files - exceeded capacity",
-                    rejected.len()
-                );
-            } else {
-                info!(
-                    target: LOG_TARGET,
-                    "Processing {} files, rejecting {} due to capacity",
-                    accepted.len(),
-                    rejected.len()
-                );
-            }
-
-            return Ok((accepted, rejected));
-        }
-
-        info!(
-            target: LOG_TARGET,
-            "Processing all {} files - capacity sufficient",
-            files_to_process.len()
-        );
-
-        Ok((files_to_process, Vec::new()))
-    }
-
-    /// Trims a batch of storage requests to fit within available capacity.
-    ///
-    /// This method selects the maximum number of files that can fit within the available
-    /// capacity, trimming files from the end (reverse order/LIFO) when necessary.
-    ///
-    /// Returns a tuple of (accepted_requests, rejection_info).
-    fn trim_batch_to_fit_capacity(
-        &self,
-        requests: Vec<NewStorageRequest<Runtime>>,
-        available_capacity: Runtime::StorageDataUnit,
-        used_capacity: Runtime::StorageDataUnit,
-        max_storage_capacity: Runtime::StorageDataUnit,
-    ) -> anyhow::Result<(Vec<NewStorageRequest<Runtime>>, Vec<RejectionInfo>)> {
-        let max_usable = max_storage_capacity
-            .checked_sub(&used_capacity)
-            .unwrap_or(Runtime::StorageDataUnit::zero());
-
-        let capacity_limit = available_capacity.min(max_usable);
-
-        let mut accepted = Vec::new();
-        let mut rejected = Vec::new();
-        let mut total_size = Runtime::StorageDataUnit::zero();
-
-        for request in requests {
-            match total_size.checked_add(&request.size) {
-                Some(new_total) if new_total <= capacity_limit => {
-                    total_size = new_total;
-                    accepted.push(request);
-                }
-                _ => {
-                    let (_, file_key) = Self::construct_file_metadata_and_key(&request)?;
-                    rejected.push(RejectionInfo {
-                        file_key: H256(file_key.into()),
-                        bucket_id: request.bucket_id,
-                        reason: RejectedStorageRequestReason::ReachedMaximumCapacity,
-                    });
-                }
-            }
-        }
-
-        info!(
-            target: LOG_TARGET,
-            "Accepted {} files (size: {}), rejected {}, limit: {}",
-            accepted.len(),
-            total_size,
-            rejected.len(),
-            capacity_limit
-        );
-
-        Ok((accepted, rejected))
-    }
 }
 
 /// Handles the [`RemoteUploadRequest`] event.
@@ -430,6 +292,8 @@ where
 {
     async fn handle_event(&mut self, event: RemoteUploadRequest<Runtime>) -> anyhow::Result<()> {
         trace!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
+
+        let file_key: H256 = event.file_key.into();
 
         let file_complete = match self.handle_remote_upload_request_event(event.clone()).await {
             Ok(complete) => complete,
@@ -459,9 +323,204 @@ where
 
         // Handle file completion if the entire file is uploaded or is already being stored.
         if file_complete {
-            self.on_file_complete(&event.file_key.into()).await?;
+            if let Err(e) = self.on_file_complete(&file_key).await {
+                // Mark the file key as failed so it can be retried
+                self.file_key_statuses
+                    .write()
+                    .await
+                    .insert(file_key, FileKeyStatus::Failed);
+                return Err(e);
+            }
         }
 
+        Ok(())
+    }
+}
+
+/// Handles the [`BatchProcessStorageRequests`] event.
+///
+/// This event is triggered periodically by the BlockchainService to process pending storage requests
+/// that may have been missed. The handler queries the runtime for pending storage requests and
+/// emits a NewStorageRequest event for each via the PreprocessStorageRequestEvent command.
+impl<NT, Runtime> EventHandler<BatchProcessStorageRequests> for MspUploadFileTask<NT, Runtime>
+where
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
+{
+    async fn handle_event(&mut self, event: BatchProcessStorageRequests) -> anyhow::Result<()> {
+        // Hold the Arc reference to the permit for the lifetime of this handler
+        // The permit will be automatically released when this handler completes or fails
+        // (when the Arc is dropped, the permit is dropped, releasing the semaphore)
+        let _permit_guard = event.permit;
+
+        info!(
+            target: LOG_TARGET,
+            "Processing batch storage requests"
+        );
+
+        let pending_requests = self
+            .storage_hub_handler
+            .blockchain
+            .query_pending_storage_requests(None)
+            .await
+            .map_err(|e| anyhow!("Failed to query pending storage requests: {:?}", e))?;
+
+        info!(
+            target: LOG_TARGET,
+            "Found {} pending storage requests to process",
+            pending_requests.len()
+        );
+
+        // Collect pending file keys for cleanup of stale entries
+        let pending_file_keys: HashSet<H256> = pending_requests
+            .iter()
+            .map(|r| H256::from_slice(r.file_key.as_ref()))
+            .collect();
+
+        // Take a snapshot of current statuses to avoid repeated lock acquisitions in the loop.
+        // This is safe because BatchProcessStorageRequests is serialized by the semaphore.
+        let current_statuses = self.file_key_statuses.read().await.clone();
+
+        // Collect status updates to apply in a single write lock acquisition at the end
+        let mut keys_to_mark_processing = Vec::new();
+        let mut keys_to_mark_failed = Vec::new();
+
+        // For each pending request, check status and call PreprocessStorageRequestEvent command
+        // which will emit a NewStorageRequest event for per-file processing.
+        for request in &pending_requests {
+            let file_key = H256::from_slice(request.file_key.as_ref());
+
+            // Check if this file key should be processed based on its current status
+            match current_statuses.get(&file_key) {
+                Some(FileKeyStatus::Processing) => {
+                    trace!(
+                        target: LOG_TARGET,
+                        "Skipping file key {:?} - already processing",
+                        file_key
+                    );
+                    continue;
+                }
+                Some(FileKeyStatus::Accepted) => {
+                    trace!(
+                        target: LOG_TARGET,
+                        "Skipping file key {:?} - already accepted",
+                        file_key
+                    );
+                    continue;
+                }
+                Some(FileKeyStatus::Rejected) => {
+                    trace!(
+                        target: LOG_TARGET,
+                        "Skipping file key {:?} - already rejected",
+                        file_key
+                    );
+                    continue;
+                }
+                Some(FileKeyStatus::Abandoned) => {
+                    trace!(
+                        target: LOG_TARGET,
+                        "Skipping file key {:?} - abandoned after exhausting retries",
+                        file_key
+                    );
+                    continue;
+                }
+                Some(FileKeyStatus::Failed) => {
+                    info!(
+                        target: LOG_TARGET,
+                        "Retrying failed file key {:?}",
+                        file_key
+                    );
+                }
+                None => {
+                    trace!(
+                        target: LOG_TARGET,
+                        "Processing new file key {:?}",
+                        file_key
+                    );
+                }
+            }
+
+            if let Err(e) = self
+                .storage_hub_handler
+                .blockchain
+                .preprocess_storage_request(request.clone())
+                .await
+            {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to preprocess storage request for file key {:?}: {:?}",
+                    file_key,
+                    e
+                );
+                // Mark as failed so it can be retried on the next batch cycle
+                keys_to_mark_failed.push(file_key);
+            } else {
+                // Mark as processing only on success
+                keys_to_mark_processing.push(file_key);
+            }
+        }
+
+        // Apply all status updates and cleanup in a single write lock acquisition
+        let removed_count = {
+            let mut statuses = self.file_key_statuses.write().await;
+
+            // Apply failed status updates
+            for file_key in keys_to_mark_failed {
+                statuses.insert(file_key, FileKeyStatus::Failed);
+            }
+
+            // Apply processing status updates
+            for file_key in keys_to_mark_processing {
+                statuses.insert(file_key, FileKeyStatus::Processing);
+            }
+
+            // Cleanup: remove stale entries that are no longer in pending requests.
+            // This prevents the hashmap from growing indefinitely with old entries.
+            let before_count = statuses.len();
+            statuses.retain(|file_key, _| pending_file_keys.contains(file_key));
+            before_count - statuses.len()
+        };
+        if removed_count > 0 {
+            info!(
+                target: LOG_TARGET,
+                "Cleaned up {} stale file key entries not in pending requests",
+                removed_count
+            );
+        }
+
+        // Permit is automatically released when handler returns
+        Ok(())
+    }
+}
+
+/// Handles the [`NewStorageRequest`] event.
+///
+/// This event is emitted for each pending storage request. The MSP will check if it has enough
+/// storage capacity to store the file and increase it if necessary (up to a maximum).
+/// If the MSP does not have enough capacity still, it will reject the storage request.
+/// It will register the user and file key in the registry of the File Transfer Service,
+/// which handles incoming p2p upload requests. Finally, it will create a file in the
+/// file storage so that it can write uploaded chunks as soon as possible.
+impl<NT, Runtime> EventHandler<NewStorageRequest<Runtime>> for MspUploadFileTask<NT, Runtime>
+where
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
+{
+    async fn handle_event(&mut self, event: NewStorageRequest<Runtime>) -> anyhow::Result<()> {
+        let bucket_id = H256::from_slice(event.bucket_id.as_ref());
+        let file_key = H256::from_slice(event.file_key.as_ref());
+        let result = self.handle_new_storage_request_event(event).await;
+        if let Err(reason) = result {
+            self.handle_rejected_storage_request(&file_key, bucket_id, reason.clone())
+                .await?;
+
+            return Err(anyhow::anyhow!(
+                "Failed to handle new storage request: {:?}",
+                reason
+            ));
+        }
         Ok(())
     }
 }
@@ -671,7 +730,10 @@ where
             }
             .into();
 
-        self.storage_hub_handler
+        // Submit the extrinsic with events so we can inspect the dispatch error if it fails.
+        // This enables type-safe error checking against pallet_proofs_dealer::Error variants.
+        let extrinsic_result = self
+            .storage_hub_handler
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
@@ -688,13 +750,148 @@ where
                 RetryStrategy::default()
                     .with_max_retries(self.config.max_try_count)
                     .with_max_tip(self.config.max_tip.saturated_into()),
-                false,
+                true, // Request events to enable type-safe error checking
             )
-            .await?;
+            .await;
 
-        // Log accepted and rejected files, and remove rejected files from File Storage.
+        // Handle extrinsic submission result
+        match extrinsic_result {
+            Err(e) => {
+                // Extrinsic submission failed after exhausting all retries (timeout, dropped, etc.)
+                // Mark file keys as Abandoned since retries have been exhausted with non-proof errors.
+                warn!(
+                    target: LOG_TARGET,
+                    "Extrinsic submission failed after exhausting retries, marking file keys as Abandoned: {:?}",
+                    e
+                );
+
+                {
+                    let mut statuses = self.file_key_statuses.write().await;
+                    for storage_request_msp_bucket_response in &storage_request_msp_response {
+                        if let Some(ref accepted) = storage_request_msp_bucket_response.accept {
+                            for fk in &accepted.file_keys_and_proofs {
+                                statuses.insert(fk.file_key, FileKeyStatus::Abandoned);
+                            }
+                        }
+                        for rejected in &storage_request_msp_bucket_response.reject {
+                            statuses.insert(rejected.file_key, FileKeyStatus::Abandoned);
+                        }
+                    }
+                }
+
+                // Release the forest root write lock before returning error
+                let _ = self
+                    .storage_hub_handler
+                    .blockchain
+                    .release_forest_root_write_lock(forest_root_write_tx)
+                    .await;
+
+                return Err(e);
+            }
+            Ok(Some(events)) => {
+                // Extrinsic was included in a block, check if it succeeded or failed by
+                // looking for an ExtrinsicFailed event
+                let dispatch_error = events.iter().find_map(|event_record| {
+                    if let shc_common::types::StorageEnableEvents::System(
+                        frame_system::Event::ExtrinsicFailed { dispatch_error, .. },
+                    ) = event_record.event.clone().into()
+                    {
+                        Some(dispatch_error)
+                    } else {
+                        None
+                    }
+                });
+
+                if let Some(dispatch_error) = dispatch_error {
+                    // Proof errors are transient and can be retried with regenerated proofs (mark as Failed).
+                    // Non-proof errors are permanent failures (mark as Abandoned).
+                    let is_proof_error = if let sp_runtime::DispatchError::Module(module_error) =
+                        &dispatch_error
+                    {
+                        // Decode the error bytes into the proofs-dealer error type.
+                        // This is type-safe: if error variants are renamed, compilation fails.
+                        pallet_proofs_dealer::Error::<Runtime>::decode(&mut &module_error.error[..])
+                            .ok()
+                            .map(|pallet_error| {
+                                matches!(
+                                    pallet_error,
+                                    pallet_proofs_dealer::Error::ForestProofVerificationFailed
+                                        | pallet_proofs_dealer::Error::KeyProofVerificationFailed
+                                        | pallet_proofs_dealer::Error::FailedToApplyDelta
+                                )
+                            })
+                            .unwrap_or(false)
+                    } else {
+                        false
+                    };
+
+                    if is_proof_error {
+                        // Proof-related error: mark file keys as Failed so they can be retried
+                        // with regenerated proofs
+                        warn!(
+                            target: LOG_TARGET,
+                            "Proof-related error detected, marking file keys as Failed for retry: {:?}",
+                            dispatch_error
+                        );
+                        let mut statuses = self.file_key_statuses.write().await;
+                        for storage_request_msp_bucket_response in &storage_request_msp_response {
+                            if let Some(ref accepted) = storage_request_msp_bucket_response.accept {
+                                for fk in &accepted.file_keys_and_proofs {
+                                    statuses.insert(fk.file_key, FileKeyStatus::Failed);
+                                }
+                            }
+                            for rejected in &storage_request_msp_bucket_response.reject {
+                                statuses.insert(rejected.file_key, FileKeyStatus::Failed);
+                            }
+                        }
+                    } else {
+                        // Non-proof error: mark file keys as Abandoned since this is a permanent failure
+                        // that is not guaranteed to be resolved by retrying (e.g., invalid parameters, authorization errors, inconsistent runtime state, etc.).
+                        warn!(
+                            target: LOG_TARGET,
+                            "Non-proof dispatch error, marking file keys as Abandoned: {:?}",
+                            dispatch_error
+                        );
+                        let mut statuses = self.file_key_statuses.write().await;
+                        for storage_request_msp_bucket_response in &storage_request_msp_response {
+                            if let Some(ref accepted) = storage_request_msp_bucket_response.accept {
+                                for fk in &accepted.file_keys_and_proofs {
+                                    statuses.insert(fk.file_key, FileKeyStatus::Abandoned);
+                                }
+                            }
+                            for rejected in &storage_request_msp_bucket_response.reject {
+                                statuses.insert(rejected.file_key, FileKeyStatus::Abandoned);
+                            }
+                        }
+                    }
+
+                    // Release the forest root write lock before returning error
+                    let _ = self
+                        .storage_hub_handler
+                        .blockchain
+                        .release_forest_root_write_lock(forest_root_write_tx)
+                        .await;
+
+                    return Err(anyhow!("Extrinsic failed: {:?}", dispatch_error));
+                }
+                // No ExtrinsicFailed event means success - continue to process results
+            }
+            Ok(None) => {
+                // This shouldn't happen since we requested events with `with_events: true`
+                warn!(
+                    target: LOG_TARGET,
+                    "Expected events but got None - assuming extrinsic succeeded"
+                );
+            }
+        }
+
+        // Collect all accepted and rejected file keys for batch status update
+        let mut all_accepted_keys = Vec::new();
+        let mut all_rejected_keys = Vec::new();
+
+        // Log accepted and rejected files, collect keys for status updates
         // Accepted files will be added to the Bucket's Forest Storage by the BlockchainService.
-        for storage_request_msp_bucket_response in storage_request_msp_response {
+        for storage_request_msp_bucket_response in &storage_request_msp_response {
             // Log accepted file keys
             if let Some(ref accepted) = storage_request_msp_bucket_response.accept {
                 let accepted_file_keys: Vec<_> = accepted
@@ -711,10 +908,11 @@ where
                         storage_request_msp_bucket_response.bucket_id,
                         accepted_file_keys
                     );
+                    all_accepted_keys.extend(accepted_file_keys);
                 }
             }
 
-            // Log and delete rejected file keys
+            // Log rejected file keys
             if !storage_request_msp_bucket_response.reject.is_empty() {
                 let rejected_file_keys: Vec<_> = storage_request_msp_bucket_response
                     .reject
@@ -730,13 +928,32 @@ where
                     rejected_file_keys
                 );
 
-                let mut fs = self.storage_hub_handler.file_storage.write().await;
-                for RejectedStorageRequest { file_key, .. } in
-                    &storage_request_msp_bucket_response.reject
-                {
-                    if let Err(e) = fs.delete_file(&file_key) {
-                        error!(target: LOG_TARGET, "Failed to delete file {:?}: {:?}", file_key, e);
-                    }
+                all_rejected_keys.extend(
+                    storage_request_msp_bucket_response
+                        .reject
+                        .iter()
+                        .map(|r| r.file_key),
+                );
+            }
+        }
+
+        // Apply all status updates in a single write lock acquisition
+        if !all_accepted_keys.is_empty() || !all_rejected_keys.is_empty() {
+            let mut statuses = self.file_key_statuses.write().await;
+            for file_key in &all_accepted_keys {
+                statuses.insert(*file_key, FileKeyStatus::Accepted);
+            }
+            for file_key in &all_rejected_keys {
+                statuses.insert(*file_key, FileKeyStatus::Rejected);
+            }
+        }
+
+        // Delete rejected files from file storage
+        if !all_rejected_keys.is_empty() {
+            let mut fs = self.storage_hub_handler.file_storage.write().await;
+            for file_key in &all_rejected_keys {
+                if let Err(e) = fs.delete_file(file_key) {
+                    error!(target: LOG_TARGET, "Failed to delete file {:?}: {:?}", file_key, e);
                 }
             }
         }
@@ -749,218 +966,31 @@ where
     }
 }
 
-/// Handles the [`BatchProcessStorageRequests`] event.
-///
-/// This event is triggered periodically by the BlockchainService to process pending storage requests
-/// that may have been missed. The handler queries the runtime for pending storage requests and processes
-/// each one using the existing `handle_new_storage_request_event` logic.
-impl<NT, Runtime> EventHandler<BatchProcessStorageRequests> for MspUploadFileTask<NT, Runtime>
-where
-    NT: ShNodeType<Runtime> + 'static,
-    NT::FSH: MspForestStorageHandlerT<Runtime>,
-    Runtime: StorageEnableRuntime,
-{
-    async fn handle_event(&mut self, event: BatchProcessStorageRequests) -> anyhow::Result<()> {
-        // Hold the Arc reference to the permit for the lifetime of this handler
-        // The permit will be automatically released when this handler completes or fails
-        // (when the Arc is dropped, the permit is dropped, releasing the semaphore)
-        let _permit_guard = event.permit;
-
-        info!(
-            target: LOG_TARGET,
-            "Processing batch storage requests"
-        );
-
-        let pending_requests = self
-            .storage_hub_handler
-            .blockchain
-            .query_pending_storage_requests(None)
-            .await
-            .map_err(|e| anyhow!("Failed to query pending storage requests: {:?}", e))?;
-
-        info!(
-            target: LOG_TARGET,
-            "Found {} pending storage requests to process",
-            pending_requests.len()
-        );
-
-        // Phase 1: Ensure capacity for entire batch (single capacity increase)
-        let (processable_requests, rejections) =
-            self.ensure_batch_capacity(pending_requests).await?;
-
-        if !rejections.is_empty() && !processable_requests.is_empty() {
-            info!(
-                target: LOG_TARGET,
-                "Batch: accepting {} files, rejecting {} files",
-                processable_requests.len(),
-                rejections.len()
-            );
-        } else if rejections.is_empty() {
-            info!(
-                target: LOG_TARGET,
-                "Processing batch of {} files",
-                processable_requests.len()
-            );
-        } else {
-            warn!(
-                target: LOG_TARGET,
-                "Rejecting all {} files - insufficient capacity",
-                rejections.len()
-            );
-        }
-
-        // Phase 2: Batch reject requests exceeding capacity (single extrinsic)
-        if !rejections.is_empty() {
-            if let Err(e) = self.batch_reject_storage_requests(rejections).await {
-                error!(
-                    target: LOG_TARGET,
-                    "Failed to batch reject storage requests: {:?}",
-                    e
-                );
-            }
-        }
-
-        // Phase 3: Process valid requests sequentially
-        // Note: Sequential processing is used here because parallel processing would require
-        // cloning or sharing the handler state, which is complex with the current architecture.
-        // The main performance benefit comes from the batch capacity management above.
-        let mut success_count = 0;
-        let mut error_count = 0;
-
-        for request in processable_requests {
-            match self.handle_new_storage_request_event(request).await {
-                Ok(()) => success_count += 1,
-                Err(e) => {
-                    error_count += 1;
-                    error!(
-                        target: LOG_TARGET,
-                        "Failed to process storage request in batch: {:?}",
-                        e
-                    );
-                }
-            }
-        }
-
-        info!(
-            target: LOG_TARGET,
-            "Batch processing complete: {} succeeded, {} failed",
-            success_count,
-            error_count
-        );
-
-        // Permit is automatically released when handler returns
-        Ok(())
-    }
-}
-
 impl<NT, Runtime> MspUploadFileTask<NT, Runtime>
 where
     NT: ShNodeType<Runtime>,
     NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    /// Submits a batch rejection extrinsic for all rejected storage requests.
-    ///
-    /// Groups rejections by bucket ID and submits a single
-    /// `msp_respond_storage_requests_multiple_buckets` extrinsic with all rejections.
-    async fn batch_reject_storage_requests(
-        &self,
-        rejections: Vec<RejectionInfo>,
-    ) -> anyhow::Result<()> {
-        if rejections.is_empty() {
-            return Ok(());
-        }
-
-        info!(
-            target: LOG_TARGET,
-            "Rejecting {} storage requests",
-            rejections.len()
-        );
-
-        let mut rejections_by_bucket: HashMap<H256, Vec<RejectedStorageRequest<Runtime>>> =
-            HashMap::new();
-
-        for rejection in &rejections {
-            rejections_by_bucket
-                .entry(rejection.bucket_id)
-                .or_default()
-                .push(RejectedStorageRequest {
-                    file_key: rejection.file_key,
-                    reason: rejection.reason.clone(),
-                });
-        }
-
-        let storage_request_msp_response: Vec<_> = rejections_by_bucket
-            .into_iter()
-            .map(|(bucket_id, reject)| StorageRequestMspBucketResponse {
-                bucket_id,
-                accept: None,
-                reject,
-            })
-            .collect();
-
-        let call: Runtime::Call =
-            pallet_file_system::Call::<Runtime>::msp_respond_storage_requests_multiple_buckets {
-                storage_request_msp_response,
-            }
-            .into();
-
-        self.storage_hub_handler
-            .blockchain
-            .send_extrinsic(
-                call,
-                SendExtrinsicOptions::new(
-                    Duration::from_secs(
-                        self.storage_hub_handler
-                            .provider_config
-                            .blockchain_service
-                            .extrinsic_retry_timeout,
-                    ),
-                    Some("fileSystem".to_string()),
-                    Some("mspRespondStorageRequestsMultipleBuckets".to_string()),
-                ),
-            )
-            .await?
-            .watch_for_success(&self.storage_hub_handler.blockchain)
-            .await?;
-
-        info!(
-            target: LOG_TARGET,
-            "Rejected {} storage requests successfully",
-            rejections.len()
-        );
-
-        // Clean up file storage for rejected files
-        let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
-        for rejection in rejections {
-            if let Err(e) = write_file_storage.delete_file(&rejection.file_key) {
-                error!(
-                    target: LOG_TARGET,
-                    "Failed to delete file {:?} after rejection: {:?}",
-                    rejection.file_key,
-                    e
-                );
-            }
-        }
-
-        Ok(())
-    }
-
     async fn handle_new_storage_request_event(
         &mut self,
         event: NewStorageRequest<Runtime>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), RejectedStorageRequestReason> {
         if event.size.is_zero() {
             let err_msg = "File size cannot be 0";
             error!(target: LOG_TARGET, err_msg);
-            return Err(anyhow!(err_msg));
+            return Err(RejectedStorageRequestReason::InternalError);
         }
 
         let own_provider_id = self
             .storage_hub_handler
             .blockchain
             .query_storage_provider_id(None)
-            .await?;
+            .await
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "Failed to query storage provider ID: {:?}", e);
+                RejectedStorageRequestReason::InternalError
+            })?;
 
         let own_msp_id = match own_provider_id {
             Some(id) => match id {
@@ -968,13 +998,13 @@ where
                 StorageProviderId::BackupStorageProvider(_) => {
                     let err_msg = "Current node account is a Backup Storage Provider. Expected a Main Storage Provider ID.";
                     error!(target: LOG_TARGET, err_msg);
-                    return Err(anyhow!(err_msg));
+                    return Err(RejectedStorageRequestReason::InternalError);
                 }
             },
             None => {
                 let err_msg = "Failed to get own MSP ID.";
                 error!(target: LOG_TARGET, err_msg);
-                return Err(anyhow!(err_msg));
+                return Err(RejectedStorageRequestReason::InternalError);
             }
         };
 
@@ -984,12 +1014,12 @@ where
             .query_msp_id_of_bucket_id(event.bucket_id)
             .await
             .map_err(|e| {
-                let err_msg = format!(
-                    "Failed to query MSP ID of bucket ID {:?}\n Error: {:?}",
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to query MSP ID of bucket ID {:?}: {:?}",
                     event.bucket_id, e
                 );
-                error!(target: LOG_TARGET, err_msg);
-                anyhow!(err_msg)
+                RejectedStorageRequestReason::InternalError
             })?;
 
         if let Some(msp_id) = msp_id_of_bucket_id {
@@ -1003,7 +1033,10 @@ where
         }
 
         // Construct file metadata and derive file key.
-        let (metadata, file_key) = Self::construct_file_metadata_and_key(&event)?;
+        let (metadata, file_key) = Self::construct_file_metadata_and_key(&event).map_err(|e| {
+            error!(target: LOG_TARGET, "Failed to construct file metadata and key: {:?}", e);
+            RejectedStorageRequestReason::InternalError
+        })?;
 
         let fs = self
             .storage_hub_handler
@@ -1012,13 +1045,101 @@ where
             .await;
         let read_fs = fs.read().await;
 
-        // Check if file is already in forest storage (for informational logging).
-        // Capacity has already been ensured by the batch processing handler.
-        let file_in_forest_storage = read_fs.contains_file_key(&file_key.into())?;
+        // If we do not have the file already in forest storage, we must take into account the
+        // available storage capacity.
+        let file_in_forest_storage = read_fs.contains_file_key(&file_key.into()).map_err(|e| {
+            error!(target: LOG_TARGET, "Failed to check if file key is in forest storage: {:?}", e);
+            RejectedStorageRequestReason::InternalError
+        })?;
         if !file_in_forest_storage {
-            debug!(target: LOG_TARGET, "File key {:?} not found in forest storage.", file_key);
+            info!(target: LOG_TARGET, "File key {:?} not found in forest storage. Checking available storage capacity.", file_key);
+
+            let max_storage_capacity = self
+                .storage_hub_handler
+                .provider_config
+                .capacity_config
+                .max_capacity();
+
+            let current_capacity = self
+                .storage_hub_handler
+                .blockchain
+                .query_storage_provider_capacity(own_msp_id)
+                .await
+                .map_err(|e| {
+                    error!(target: LOG_TARGET, "Failed to query storage provider capacity: {:?}", e);
+                    RejectedStorageRequestReason::InternalError
+                })?;
+
+            let available_capacity = self
+                .storage_hub_handler
+                .blockchain
+                .query_available_storage_capacity(own_msp_id)
+                .await
+                .map_err(|e| {
+                    let err_msg = format!("Failed to query available storage capacity: {:?}", e);
+                    error!(target: LOG_TARGET, "{}", err_msg);
+                    RejectedStorageRequestReason::InternalError
+                })?;
+
+            // Calculate currently used storage
+            let used_capacity = current_capacity
+                .checked_sub(&available_capacity)
+                .ok_or_else(|| RejectedStorageRequestReason::ReachedMaximumCapacity)?;
+
+            // Check if accepting this file would exceed our local max storage capacity limit
+            let projected_usage = used_capacity
+                .checked_add(&event.size)
+                .ok_or_else(|| RejectedStorageRequestReason::ReachedMaximumCapacity)?;
+
+            if projected_usage > max_storage_capacity {
+                let err_msg = format!(
+                    "Accepting file would exceed maximum storage capacity limit. Used: {}, Required: {}, Max: {}",
+                    used_capacity, event.size, max_storage_capacity
+                );
+                warn!(target: LOG_TARGET, "{}", err_msg);
+                return Err(RejectedStorageRequestReason::ReachedMaximumCapacity);
+            }
+
+            // Increase storage capacity if the available capacity is less than the file size.
+            if available_capacity < event.size {
+                warn!(
+                    target: LOG_TARGET,
+                    "Insufficient storage capacity to volunteer for file key: {:?}",
+                    event.file_key
+                );
+
+                self.storage_hub_handler
+                    .blockchain
+                    .increase_capacity(CapacityRequestData::new(event.size))
+                    .await
+                    .map_err(|e| {
+                        let err_msg = format!("Failed to increase storage capacity: {:?}", e);
+                        error!(target: LOG_TARGET, "{}", err_msg);
+                        RejectedStorageRequestReason::InternalError
+                    })?;
+
+                let available_capacity = self
+                    .storage_hub_handler
+                    .blockchain
+                    .query_available_storage_capacity(own_msp_id)
+                    .await
+                    .map_err(|e| {
+                        let err_msg =
+                            format!("Failed to query available storage capacity: {:?}", e);
+                        error!(target: LOG_TARGET, "{}", err_msg);
+                        RejectedStorageRequestReason::InternalError
+                    })?;
+
+                // Reject storage request if the new available capacity is still less than the file size.
+                if available_capacity < event.size {
+                    let err_msg = "Increased storage capacity is still insufficient to volunteer for file. Rejecting storage request.";
+                    warn!(target: LOG_TARGET, "{}", err_msg);
+
+                    return Err(RejectedStorageRequestReason::ReachedMaximumCapacity);
+                }
+            }
         } else {
-            debug!(target: LOG_TARGET, "File key {:?} already in forest storage.", file_key);
+            debug!(target: LOG_TARGET, "File key {:?} found in forest storage.", file_key);
         }
 
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
@@ -1026,7 +1147,11 @@ where
         // Create file in file storage if it is not present so we can write uploaded chunks as soon as possible.
         let file_in_file_storage = write_file_storage
             .get_metadata(&file_key.into())
-            .map_err(|e| anyhow!("Failed to get metadata from file storage: {:?}", e))?
+            .map_err(|e| {
+                let err_msg = format!("Failed to get metadata from file storage: {:?}", e);
+                error!(target: LOG_TARGET, "{}", err_msg);
+                RejectedStorageRequestReason::InternalError
+            })?
             .is_some();
         if !file_in_file_storage {
             debug!(target: LOG_TARGET, "File key {:?} not found in file storage. Inserting file.", file_key);
@@ -1035,7 +1160,11 @@ where
                     metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>(),
                     metadata,
                 )
-                .map_err(|e| anyhow!("Failed to insert file in file storage: {:?}", e))?;
+                .map_err(|e| {
+                    let err_msg = format!("Failed to insert file in file storage: {:?}", e);
+                    error!(target: LOG_TARGET, "{}", err_msg);
+                    RejectedStorageRequestReason::InternalError
+                })?;
         } else {
             debug!(target: LOG_TARGET, "File key {:?} found in file storage.", file_key);
         }
@@ -1061,7 +1190,10 @@ where
 
             if file_complete {
                 info!(target: LOG_TARGET, "File key {:?} is complete in file storage. Proceeding to accept storage request.", file_key);
-                self.on_file_complete(&file_key.into()).await?;
+                self.on_file_complete(&file_key.into()).await.map_err(|e| {
+                    error!(target: LOG_TARGET, "Failed to on file complete: {:?}", e);
+                    RejectedStorageRequestReason::InternalError
+                })?;
 
                 // This finishes the task, as we already have the entire file in file storage and we queued
                 // the accept transaction to the blockchain, so we can finish the task early.
@@ -1082,15 +1214,22 @@ where
             let peer_id = match std::str::from_utf8(&peer_id.as_slice()) {
                 Ok(str_slice) => PeerId::from_str(str_slice).map_err(|e| {
                     error!(target: LOG_TARGET, "Failed to convert peer ID to PeerId: {}", e);
-                    e
+                    RejectedStorageRequestReason::InternalError
                 })?,
-                Err(e) => return Err(anyhow!("Failed to convert peer ID to a string: {}", e)),
+                Err(e) => {
+                    error!(target: LOG_TARGET, "Failed to convert peer ID to a string: {}", e);
+                    return Err(RejectedStorageRequestReason::InternalError);
+                }
             };
             self.storage_hub_handler
                 .file_transfer
                 .register_new_file(peer_id, file_key)
                 .await
-                .map_err(|e| anyhow!("Failed to register new file peer: {:?}", e))?;
+                .map_err(|e| {
+                    let err_msg = format!("Failed to register new file peer: {:?}", e);
+                    error!(target: LOG_TARGET, "{}", err_msg);
+                    RejectedStorageRequestReason::InternalError
+                })?;
         }
 
         Ok(())
@@ -1143,6 +1282,12 @@ where
                 "Fingerprint mismatch for file {:?}. Expected: {:?}, got: {:?}",
                 file_key, expected_fingerprint, event.file_key_proof.file_metadata.fingerprint()
             );
+            self.handle_rejected_storage_request(
+                &file_key,
+                bucket_id,
+                RejectedStorageRequestReason::ReceivedInvalidProof,
+            )
+            .await?;
             return Err(anyhow!("Fingerprint mismatch"));
         }
 
@@ -1378,6 +1523,12 @@ where
 
         // Unregister the file
         self.unregister_file(*file_key).await?;
+
+        // Mark the file key as rejected so it won't be retried
+        self.file_key_statuses
+            .write()
+            .await
+            .insert(*file_key, FileKeyStatus::Rejected);
 
         Ok(())
     }

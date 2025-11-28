@@ -282,9 +282,11 @@ where
         log::info!("Starting MSP tasks");
 
         // MspUploadFileTask is triggered by a BatchProcessStorageRequests event which queries pending storage requests
-        // and processes them (which registers the user's peer address for upcoming RemoteUploadRequest events).
+        // and emits NewStorageRequest events for each via the PreprocessStorageRequestEvent command.
+        // Each NewStorageRequest event triggers per-file capacity management and registers the user's peer address
+        // for upcoming RemoteUploadRequest events.
         // RemoteUploadRequest events happen when the user connects to the MSP and submits chunks of the file,
-        // along with a proof of storage, which is then queued to batch accept many storage requests at once.
+        // along with a proof of storage, which is then queued to accept the storage request.
         // Finally once the ProcessMspRespondStoringRequest event is emitted, the MSP will respond to the user with a confirmation.
 
         // RemoteUploadRequest comes from FileTransferService and requires a separate service parameter
@@ -308,6 +310,7 @@ where
                 FinalisedBucketMovedAway<Runtime> => MspDeleteBucketTask,
                 FinalisedMspStoppedStoringBucket<Runtime> => MspDeleteBucketTask,
                 BatchProcessStorageRequests => MspUploadFileTask,
+                NewStorageRequest<Runtime> => MspUploadFileTask,
                 ProcessMspRespondStoringRequest<Runtime> => MspUploadFileTask,
                 MoveBucketRequestedForMsp<Runtime> => MspRespondMoveBucketTask,
                 StartMovedBucketDownload<Runtime> => MspRespondMoveBucketTask,

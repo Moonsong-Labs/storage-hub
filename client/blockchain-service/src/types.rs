@@ -1,7 +1,7 @@
 use log::{debug, info, warn};
 use std::{
     cmp::{min, Ordering},
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
     future::Future,
     pin::Pin,
     sync::Arc,
@@ -830,6 +830,11 @@ pub struct MspHandler<Runtime: StorageEnableRuntime> {
     pub(crate) files_to_distribute: HashMap<FileKey, FileDistributionInfo<Runtime>>,
     /// Semaphore to prevent overlapping batch processing cycles (size 1)
     pub(crate) batch_processing_semaphore: Arc<tokio::sync::Semaphore>,
+    /// In-memory FIFO queue for pending MSP respond storage requests.
+    pub(crate) pending_respond_storage_requests: VecDeque<RespondStorageRequest<Runtime>>,
+    /// HashSet tracking file keys currently in the pending respond storage request queue.
+    /// Used for O(1) deduplication when queueing new requests.
+    pub(crate) pending_respond_storage_request_file_keys: HashSet<MerkleTrieHash<Runtime>>,
 }
 
 impl<Runtime: StorageEnableRuntime> MspHandler<Runtime> {
@@ -840,6 +845,8 @@ impl<Runtime: StorageEnableRuntime> MspHandler<Runtime> {
             forest_root_snapshots: BTreeMap::new(),
             files_to_distribute: HashMap::new(),
             batch_processing_semaphore: Arc::new(tokio::sync::Semaphore::new(1)),
+            pending_respond_storage_requests: VecDeque::new(),
+            pending_respond_storage_request_file_keys: HashSet::new(),
         }
     }
 }

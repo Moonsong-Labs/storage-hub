@@ -34,7 +34,7 @@ use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_blockchain_service_db::store::PendingTxStore;
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
-    typed_store::{CFDequeAPI, CFHashSetAPI, ProvidesTypedDbSingleAccess},
+    typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
     types::{AccountId, BlockNumber, OpaqueBlock, ParachainClient, TickNumber},
 };
 use shc_forest_manager::traits::ForestStorageHandler;
@@ -918,37 +918,42 @@ where
                     }
                 }
                 BlockchainServiceCommand::QueueMspRespondStorageRequest { request, callback } => {
-                    let file_key = sp_core::H256::from(request.file_key);
-                    let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                    if let Some(ManagedProvider::Msp(msp_handler)) =
+                        &mut self.maybe_managed_provider
+                    {
+                        let file_key = request.file_key;
 
-                    // Check if file key is already pending.
-                    // `insert` returns true if the key was not present (i.e., we should queue).
-                    let should_queue = state_store_context
-                        .pending_msp_respond_storage_request_file_keys()
-                        .insert(&file_key);
+                        // Check if file key is already pending (O(1) deduplication).
+                        // `insert` returns true if the key was not present (i.e., we should queue).
+                        if msp_handler
+                            .pending_respond_storage_request_file_keys
+                            .insert(file_key)
+                        {
+                            msp_handler
+                                .pending_respond_storage_requests
+                                .push_back(request);
 
-                    if should_queue {
-                        state_store_context
-                            .pending_msp_respond_storage_request_deque()
-                            .push_back(request);
+                            // We check right away if we can process the request so we don't waste time.
+                            self.msp_assign_forest_root_write_lock();
+                        } else {
+                            debug!(target: LOG_TARGET,
+                                "File key {:?} already pending acceptance, skipping queue",
+                                file_key);
+                        }
+
+                        match callback.send(Ok(())) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                            }
+                        }
                     } else {
-                        debug!(target: LOG_TARGET,
-                            "File key {:?} already pending acceptance, skipping queue",
-                            file_key);
-                    }
-
-                    // Commit before calling methods that need mutable borrow of self.
-                    state_store_context.commit();
-
-                    if should_queue {
-                        // We check right away if we can process the request so we don't waste time.
-                        self.msp_assign_forest_root_write_lock();
-                    }
-
-                    match callback.send(Ok(())) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                        error!(target: LOG_TARGET, "Received a QueueMspRespondStorageRequest command while not managing an MSP. This should never happen. Please report it to the StorageHub team.");
+                        match callback.send(Err(anyhow!("Received a QueueMspRespondStorageRequest command while not managing an MSP. This should never happen. Please report it to the StorageHub team."))) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                            }
                         }
                     }
                 }
@@ -1344,6 +1349,18 @@ where
                         Ok(_) => {}
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send pending storage requests: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::PreprocessStorageRequest { request, callback } => {
+                    // Emit the NewStorageRequest event for this storage request.
+                    // This is called by MspUploadFileTask's BatchProcessStorageRequests handler
+                    // for each pending storage request to trigger per-file processing.
+                    self.emit(request);
+                    match callback.send(Ok(())) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send preprocess storage request result: {:?}", e);
                         }
                     }
                 }
