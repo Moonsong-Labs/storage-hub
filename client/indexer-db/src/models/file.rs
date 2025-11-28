@@ -156,8 +156,8 @@ impl File {
             .execute(conn)
             .await?;
 
-        // Update bucket total size and file count
-        Bucket::increment_file_count_and_size(conn, bucket_id, size).await?;
+        // Sync the bucket's file count and total size from actual files
+        Bucket::sync_stats(conn, bucket_id).await?;
 
         Ok(file)
     }
@@ -194,10 +194,10 @@ impl File {
     ) -> Result<(), diesel::result::Error> {
         let file_key = file_key.as_ref().to_vec();
 
-        // Get file info before deletion
-        let file_info: Option<(i64, i64)> = file::table
+        // Get bucket_id before deletion so we can sync the count
+        let bucket_id: Option<i64> = file::table
             .filter(file::file_key.eq(&file_key))
-            .select((file::bucket_id, file::size))
+            .select(file::bucket_id)
             .first(conn)
             .await
             .optional()?;
@@ -208,9 +208,9 @@ impl File {
             .execute(conn)
             .await?;
 
-        // Update bucket counts if file was found
-        if let Some((bucket_id, file_size)) = file_info {
-            Bucket::decrement_file_count_and_size(conn, bucket_id, file_size).await?;
+        // Sync the bucket's file count and total size from actual files
+        if let Some(bucket_id) = bucket_id {
+            Bucket::sync_stats(conn, bucket_id).await?;
         }
 
         Ok(())

@@ -502,18 +502,27 @@ impl IndexerOpsMut for MockRepository {
             is_in_bucket: false,
         };
 
-        // Update bucket statistics
+        // Verify bucket exists
         let mut buckets = self.buckets.write().await;
-        if let Some(bucket) = buckets.get_mut(&bucket_id) {
-            bucket.file_count += 1;
-            bucket.total_size += BigDecimal::from(size);
-            bucket.updated_at = now;
-        } else {
+        if !buckets.contains_key(&bucket_id) {
             return Err(RepositoryError::not_found("Bucket"));
         }
-        drop(buckets);
 
         self.files.write().await.insert(id, file.clone());
+
+        // Sync file count and total size by calculating from actual files
+        let files = self.files.read().await;
+        let bucket_files: Vec<_> = files
+            .values()
+            .filter(|f| f.bucket_id == bucket_id)
+            .collect();
+        let count = bucket_files.len() as i64;
+        let total_size: i64 = bucket_files.iter().map(|f| f.size).sum();
+        if let Some(bucket) = buckets.get_mut(&bucket_id) {
+            bucket.file_count = count;
+            bucket.total_size = BigDecimal::from(total_size);
+        }
+
         Ok(file)
     }
 
@@ -522,21 +531,24 @@ impl IndexerOpsMut for MockRepository {
         let file_to_remove = files
             .values()
             .find(|f| f.file_key == file_key.as_bytes())
-            .map(|f| (f.id, f.bucket_id, f.size));
+            .map(|f| (f.id, f.bucket_id));
 
-        if let Some((id, bucket_id, size)) = file_to_remove {
+        if let Some((id, bucket_id)) = file_to_remove {
             files.remove(&id);
+
+            // Sync file count and total size by calculating from actual files
+            let bucket_files: Vec<_> = files
+                .values()
+                .filter(|f| f.bucket_id == bucket_id)
+                .collect();
+            let count = bucket_files.len() as i64;
+            let total_size: i64 = bucket_files.iter().map(|f| f.size).sum();
             drop(files);
 
-            // Update bucket statistics
-            let now = Utc::now().naive_utc();
             let mut buckets = self.buckets.write().await;
             if let Some(bucket) = buckets.get_mut(&bucket_id) {
-                bucket.file_count = bucket.file_count.saturating_sub(1);
-                bucket.total_size -= BigDecimal::from(size);
-                bucket.updated_at = now;
-            } else {
-                return Err(RepositoryError::not_found("Bucket"));
+                bucket.file_count = count;
+                bucket.total_size = BigDecimal::from(total_size);
             }
 
             Ok(())
