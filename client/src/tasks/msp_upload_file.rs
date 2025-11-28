@@ -199,7 +199,7 @@ where
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: RemoteUploadRequest<Runtime>) -> anyhow::Result<()> {
-        trace!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
+        trace!(target: LOG_TARGET, "Received remote upload request for file {:x} and peer {:?}", event.file_key, event.peer);
 
         let file_complete = match self.handle_remote_upload_request_event(event.clone()).await {
             Ok(complete) => complete,
@@ -297,7 +297,7 @@ where
             let bucket_id = match read_file_storage.get_metadata(&respond.file_key) {
                 Ok(Some(metadata)) => H256::from_slice(metadata.bucket_id().as_ref()),
                 Ok(None) => {
-                    error!(target: LOG_TARGET, "File does not exist for key {:?}. Maybe we forgot to unregister before deleting?", respond.file_key);
+                    error!(target: LOG_TARGET, "File does not exist for key {:x}. Maybe we forgot to unregister before deleting?", respond.file_key);
                     continue;
                 }
                 Err(e) => {
@@ -459,7 +459,7 @@ where
                     &storage_request_msp_bucket_response.reject
                 {
                     if let Err(e) = fs.delete_file(&file_key) {
-                        error!(target: LOG_TARGET, "Failed to delete file {:?}: {:?}", file_key, e);
+                        error!(target: LOG_TARGET, "Failed to delete file {:x}: {:?}", file_key, e);
                     }
                 }
             }
@@ -563,7 +563,7 @@ where
         // available storage capacity.
         let file_in_forest_storage = read_fs.contains_file_key(&file_key.into())?;
         if !file_in_forest_storage {
-            info!(target: LOG_TARGET, "File key {:?} not found in forest storage. Checking available storage capacity.", file_key);
+            info!(target: LOG_TARGET, "File key {:x} not found in forest storage. Checking available storage capacity.", file_key);
 
             let max_storage_capacity = self
                 .storage_hub_handler
@@ -624,7 +624,7 @@ where
             if available_capacity < event.size {
                 warn!(
                     target: LOG_TARGET,
-                    "Insufficient storage capacity to volunteer for file key: {:?}",
+                    "Insufficient storage capacity to volunteer for file key: {:x}",
                     event.file_key
                 );
 
@@ -692,7 +692,7 @@ where
                 }
             }
         } else {
-            debug!(target: LOG_TARGET, "File key {:?} found in forest storage.", file_key);
+            debug!(target: LOG_TARGET, "File key {:x} found in forest storage.", file_key);
         }
 
         self.file_key_cleanup = Some(file_key.into());
@@ -705,7 +705,7 @@ where
             .map_err(|e| anyhow!("Failed to get metadata from file storage: {:?}", e))?
             .is_some();
         if !file_in_file_storage {
-            debug!(target: LOG_TARGET, "File key {:?} not found in file storage. Inserting file.", file_key);
+            debug!(target: LOG_TARGET, "File key {:x} not found in file storage. Inserting file.", file_key);
             write_file_storage
                 .insert_file(
                     metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>(),
@@ -713,33 +713,33 @@ where
                 )
                 .map_err(|e| anyhow!("Failed to insert file in file storage: {:?}", e))?;
         } else {
-            debug!(target: LOG_TARGET, "File key {:?} found in file storage.", file_key);
+            debug!(target: LOG_TARGET, "File key {:x} found in file storage.", file_key);
         }
 
         // If the file is in both file storage and forest storage, we can skip the file transfer,
         // and proceed to accepting the storage request directly, provided that we have the entire file in file storage.
         if file_in_file_storage && file_in_forest_storage {
-            info!(target: LOG_TARGET, "File key {:?} found in both file storage and forest storage. No need to receive the file from the user.", file_key);
+            info!(target: LOG_TARGET, "File key {:x} found in both file storage and forest storage. No need to receive the file from the user.", file_key);
 
             // Check if the file is complete in file storage.
             let file_complete = match write_file_storage.is_file_complete(&file_key.into()) {
                 Ok(is_complete) => is_complete,
                 Err(e) => {
-                    warn!(target: LOG_TARGET, "Failed to check if file is complete. The file key {:?} is in a bad state with error: {:?}", file_key, e);
+                    warn!(target: LOG_TARGET, "Failed to check if file is complete. The file key {:x} is in a bad state with error: {:?}", file_key, e);
                     warn!(target: LOG_TARGET, "Assuming the file is not complete.");
                     false
                 }
             };
 
             if file_complete {
-                info!(target: LOG_TARGET, "File key {:?} is complete in file storage. Proceeding to accept storage request.", file_key);
+                info!(target: LOG_TARGET, "File key {:x} is complete in file storage. Proceeding to accept storage request.", file_key);
                 self.on_file_complete(&file_key.into()).await?;
 
                 // This finishes the task, as we already have the entire file in file storage and we queued
                 // the accept transaction to the blockchain, so we can finish the task early.
                 return Ok(());
             } else {
-                debug!(target: LOG_TARGET, "File key {:?} is not complete in file storage. Need to receive the file from the user.", file_key);
+                debug!(target: LOG_TARGET, "File key {:x} is not complete in file storage. Need to receive the file from the user.", file_key);
             }
         };
 
@@ -812,7 +812,7 @@ where
         if event.file_key_proof.file_metadata.fingerprint() != expected_fingerprint {
             error!(
                 target: LOG_TARGET,
-                "Fingerprint mismatch for file {:?}. Expected: {:?}, got: {:?}",
+                "Fingerprint mismatch for file {:x}. Expected: {:x}, got: {:x}",
                 file_key, expected_fingerprint, event.file_key_proof.file_metadata.fingerprint()
             );
             return Err(anyhow!("Fingerprint mismatch"));
@@ -855,7 +855,7 @@ where
             Err(error) => {
                 error!(
                     target: LOG_TARGET,
-                    "Failed to verify proof for file {:?}: {:?}",
+                    "Failed to verify proof for file {:x}: {:?}",
                     file_key, error
                 );
                 self.handle_rejected_storage_request(
@@ -966,7 +966,7 @@ where
                             file_metadata,
                             RejectedStorageRequestReason::InternalError,
                             format!(
-                                "File does not exist for key {:?}. Maybe we forgot to unregister before deleting?",
+                                "File does not exist for key {:x}. Maybe we forgot to unregister before deleting?",
                                 file_key
                             ),
                         ));
@@ -989,7 +989,7 @@ where
                             file_metadata,
                             RejectedStorageRequestReason::InternalError,
                             format!(
-                                "Internal trie read/write error {:?}:{:?}",
+                                "Internal trie read/write error {:x}:{:?}",
                                 file_key, chunk.key
                             ),
                         ));
@@ -1000,7 +1000,7 @@ where
                             file_metadata,
                             RejectedStorageRequestReason::InternalError,
                             format!(
-                                "Invariant broken! This is a bug! Fingerprint and stored file mismatch for key {:?}.",
+                                "Invariant broken! This is a bug! Fingerprint and stored file mismatch for key {:x}.",
                                 file_key
                             ),
                         ));
@@ -1012,7 +1012,7 @@ where
                             file_metadata,
                             RejectedStorageRequestReason::InternalError,
                             format!(
-                                "This is a bug! Failed to construct trie iter for key {:?}.",
+                                "This is a bug! Failed to construct trie iter for key {:x}.",
                                 file_key
                             ),
                         ));
@@ -1028,7 +1028,7 @@ where
                 Ok(is_complete) => file_complete = is_complete,
                 Err(e) => {
                     let err_msg = format!(
-                        "Failed to check if file is complete. The file key {:?} is in a bad state with error: {:?}",
+                        "Failed to check if file is complete. The file key {:x} is in a bad state with error: {:?}",
                         file_key, e
                     );
                     error!(target: LOG_TARGET, "{}", err_msg);
@@ -1090,7 +1090,7 @@ where
     }
 
     async fn unregister_file(&self, file_key: H256) -> anyhow::Result<()> {
-        warn!(target: LOG_TARGET, "Unregistering file {:?}", file_key);
+        warn!(target: LOG_TARGET, "Unregistering file {:x}", file_key);
 
         // Unregister the file from the file transfer service.
         // The error is ignored, as the file might already be unregistered.
