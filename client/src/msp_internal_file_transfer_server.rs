@@ -18,10 +18,13 @@ use axum::{
 };
 use sc_tracing::tracing::{debug, error, info, warn};
 use shc_actors_framework::actor::ActorHandle;
+use shc_blockchain_service::commands::BlockchainServiceCommandInterface;
+use shc_blockchain_service::types::{MspRespondStorageRequest, RespondStorageRequest};
 use shc_blockchain_service::BlockchainService;
 use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::{ChunkId, FILE_CHUNK_SIZE};
 use shc_file_manager::traits::FileStorageWriteOutcome;
+use shc_file_transfer_service::commands::FileTransferServiceCommandInterface;
 use shc_file_transfer_service::FileTransferService;
 use shc_forest_manager::traits::ForestStorageHandler;
 use shp_file_metadata::Chunk;
@@ -204,14 +207,13 @@ where
 
     // Process the streamed chunks
     match process_chunk_stream(&context, &file_key_hash, body).await {
-        Ok(chunk_count) => {
+        Ok(_) => {
             debug!(
                 target: LOG_TARGET,
                 file_key = %file_key,
-                chunks_processed = chunk_count,
                 "Successfully processed chunk stream"
             );
-            (StatusCode::OK, format!("Processed {} chunks", chunk_count)).into_response()
+            (StatusCode::OK, ()).into_response()
         }
         Err(e) => {
             error!(
@@ -237,7 +239,7 @@ async fn process_chunk_stream<FL, FSH, Runtime>(
     context: &Context<FL, FSH, Runtime>,
     file_key: &sp_core::H256,
     body: Body,
-) -> anyhow::Result<u64>
+) -> anyhow::Result<()>
 where
     FL: FileStorageT,
     FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
@@ -246,7 +248,7 @@ where
     let mut stream = body.into_data_stream();
     let mut buffer = Vec::new();
     let mut chunks_processed = 0u64;
-    let mut total_chunks: Option<u64> = None;
+    let mut maybe_total_chunks: Option<u64> = None;
 
     // Constants for parsing the binary format
     const TOTAL_CHUNKS_SIZE: usize = 8; // u64
@@ -259,19 +261,19 @@ where
         buffer.extend_from_slice(&bytes);
 
         // First, read the total chunks count if we haven't yet
-        if total_chunks.is_none() {
+        if maybe_total_chunks.is_none() {
             if buffer.len() >= TOTAL_CHUNKS_SIZE {
                 let total_bytes: [u8; TOTAL_CHUNKS_SIZE] = buffer[0..TOTAL_CHUNKS_SIZE]
                     .try_into()
                     .map_err(|_| anyhow::anyhow!("Failed to parse total chunks count"))?;
-                let total = u64::from_le_bytes(total_bytes);
-                total_chunks = Some(total);
+                let total_chunks = u64::from_le_bytes(total_bytes);
+                maybe_total_chunks = Some(total_chunks);
                 buffer.drain(..TOTAL_CHUNKS_SIZE);
 
                 debug!(
                     target: LOG_TARGET,
                     file_key = %file_key,
-                    total_chunks = total,
+                    total_chunks = total_chunks,
                     "Received total chunks count"
                 );
             } else {
@@ -280,47 +282,41 @@ where
         }
 
         // Process chunks from the buffer (all except last chunk)
-        if let Some(total) = total_chunks {
-            while chunks_processed < total - 1 && buffer.len() >= chunk_size {
+        if let Some(total_chunks) = maybe_total_chunks {
+            while chunks_processed < total_chunks - 1 && buffer.len() >= chunk_size {
                 let (chunk_id, chunk_data) = get_next_chunk(&mut buffer, Some(chunk_size))?;
 
-                store_chunk(context, file_key, &chunk_id, &chunk_data).await?;
+                // For non-last chunks, just verify write succeeded (don't check FileComplete)
+                write_chunk(context, file_key, &chunk_id, &chunk_data).await?;
                 chunks_processed += 1;
             }
         }
     }
 
-    // After stream ends, process the last chunk if needed
-    if let Some(total) = total_chunks {
-        if chunks_processed < total {
-            // Extract last chunk ID and remaining data
-            let (chunk_id, chunk_data) = get_next_chunk(&mut buffer, None)?;
-
-            store_chunk(context, file_key, &chunk_id, &chunk_data).await?;
-            chunks_processed += 1;
-        }
-
-        if chunks_processed != total {
-            return Err(anyhow::anyhow!(
-                "Stream ended after {} chunks, expected {}",
-                chunks_processed,
-                total
-            ));
-        }
-
-        if !buffer.is_empty() {
-            return Err(anyhow::anyhow!(
-                "Extra data after all chunks: {} bytes",
-                buffer.len()
-            ));
-        }
-    } else {
+    // After stream ends, process the last chunk
+    let total_chunks =
+        maybe_total_chunks.ok_or(anyhow::anyhow!("Could not parse file total from stream"))?;
+    if chunks_processed != total_chunks - 1 {
         return Err(anyhow::anyhow!(
-            "Stream ended before total chunks count received"
+            "Wrong processing of chunks. Expected {}, processed {}",
+            total_chunks - 1,
+            chunks_processed
         ));
     }
+    let (chunk_id, chunk_data) = get_next_chunk(&mut buffer, None)?;
+    let write_last_chunk_outcome = write_chunk(context, file_key, &chunk_id, &chunk_data).await?;
 
-    Ok(chunks_processed)
+    if matches!(
+        write_last_chunk_outcome,
+        FileStorageWriteOutcome::FileComplete
+    ) {
+        handle_file_complete(context, file_key).await?;
+    } else {
+        return Err(anyhow::anyhow!(
+            "File incomplete at the end of last chunk write"
+        ));
+    }
+    Ok(())
 }
 
 /// Extract chunk from a buffer and write to storage
@@ -347,8 +343,49 @@ fn get_next_chunk(
     Ok((chunk_id, chunk_data))
 }
 
-/// Store a chunk to file storage
-async fn store_chunk<FL, FSH, Runtime>(
+/// Handle file completion: unregister from file transfer service and queue blockchain transaction
+async fn handle_file_complete<FL, FSH, Runtime>(
+    context: &Context<FL, FSH, Runtime>,
+    file_key: &sp_core::H256,
+) -> anyhow::Result<()>
+where
+    FL: FileStorageT,
+    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
+    Runtime: StorageEnableRuntime,
+{
+    info!(
+        target: LOG_TARGET,
+        file_key = %file_key,
+        "File upload complete"
+    );
+
+    // Unregister the file from the file transfer service
+    if let Err(e) = context
+        .file_transfer
+        .unregister_file((*file_key).into())
+        .await
+    {
+        warn!(
+            target: LOG_TARGET,
+            file_key = %file_key,
+            error = %e,
+            "Failed to unregister file from file transfer service"
+        );
+    }
+
+    // Queue a request to confirm the storing of the file
+    context
+        .blockchain
+        .queue_msp_respond_storage_request(RespondStorageRequest::new(
+            *file_key,
+            MspRespondStorageRequest::Accept,
+        ))
+        .await?;
+    Ok(())
+}
+
+/// Write a chunk to file storage
+async fn write_chunk<FL, FSH, Runtime>(
     context: &Context<FL, FSH, Runtime>,
     file_key: &sp_core::H256,
     chunk_id: &ChunkId,
