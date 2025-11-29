@@ -9,4 +9,15 @@ export interface FileInfo {
   location: string;
   /** File size in bytes (using bigint for blockchain compatibility) */
   size: bigint;
+  /**
+   * Block hash where the file was created (32-byte hex string).
+   * Contains the block hash where the NewStorageRequest event was emitted.
+   */
+  blockHash: `0x${string}`;
+  /**
+   * EVM transaction hash that created this file (32-byte hex string).
+   * Only present for files created via EVM transactions on EVM-enabled runtimes.
+   * Will be undefined for files created via native Substrate extrinsics.
+   */
+  txHash?: `0x${string}`;
 }

@@ -500,6 +500,8 @@ impl IndexerOpsMut for MockRepository {
             created_at: now,
             updated_at: now,
             is_in_bucket: false,
+            block_hash: vec![0u8; 32], // Placeholder block hash for test data
+            tx_hash: None,             // No transaction hash for test data
         };
 
         // Update bucket statistics

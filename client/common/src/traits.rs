@@ -264,8 +264,9 @@ pub trait StorageEnableRuntime:
         + pallet_transaction_payment::Config
         + pallet_balances::Config<Balance: Into<BigDecimal> + Into<NumberOrHex> + MaybeDisplay>
         + pallet_nfts::Config<CollectionId: Send + Sync + Display>
-        + pallet_bucket_nfts::Config
-        + pallet_randomness::Config
+    + pallet_bucket_nfts::Config
+    + pallet_randomness::Config
+    + TransactionHashProvider
         + Copy
         + Debug
         + Send
@@ -496,4 +497,31 @@ pub trait ExtensionOperations<
     /// # Returns
     /// A fully constructed extension ready for use in transaction signing
     fn from_minimal_extension(minimal: MinimalExtension) -> Self;
+}
+
+/// Trait for extracting transaction identifiers from events in a block.
+///
+/// This trait provides a unified interface for obtaining transaction hashes/identifiers,
+/// which can vary depending on the runtime type:
+/// - **EVM-enabled runtimes**: Should return the Ethereum transaction hash from `pallet_ethereum::Event::Executed`
+/// - **Standard Substrate runtimes**: Should return the Substrate extrinsic hash
+///
+/// # Purpose
+///
+/// This allows the indexer to associate any event with its originating transaction
+/// in a runtime-agnostic way, while still providing the most useful identifier for each runtime type.
+pub trait TransactionHashProvider: frame_system::Config {
+    /// Builds a mapping of extrinsic index to transaction hash/identifier.
+    ///
+    /// # Parameters
+    /// - `all_events`: All events from the block being indexed
+    ///
+    /// # Returns
+    /// A HashMap mapping extrinsic indices (u32) to transaction hashes (H256).
+    /// - For EVM runtimes: Maps to Ethereum transaction hashes
+    /// - For Substrate runtimes: Could map to extrinsic hashes (requires additional data)
+    /// - Returns empty map if transaction hash extraction is not supported/needed
+    fn build_transaction_hash_map(
+        all_events: &StorageHubEventsVec<Self>,
+    ) -> std::collections::HashMap<u32, H256>;
 }
