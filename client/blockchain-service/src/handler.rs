@@ -1285,6 +1285,7 @@ where
                 }
                 BlockchainServiceCommand::ReleaseForestRootWriteLock {
                     forest_root_write_tx,
+                    forest_write_lock_guard,
                     callback,
                 } => {
                     if let Some(managed_bsp_or_msp) = &self.maybe_managed_provider {
@@ -1299,6 +1300,12 @@ where
                         if forest_root_write_result.is_ok() {
                             match managed_bsp_or_msp {
                                 ManagedProvider::Msp(_) => {
+                                    // This is a temporary check due to current support for 2 different lock mechnisms
+                                    // TODO: Remove this when the old lock mechanism is removed
+                                    match forest_write_lock_guard {
+                                        Some(guard) => drop(guard),
+                                        None => (),
+                                    }
                                     self.msp_assign_forest_root_write_lock();
                                 }
                                 ManagedProvider::Bsp(_) => {

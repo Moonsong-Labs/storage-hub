@@ -31,6 +31,7 @@ use shc_common::types::{
 };
 use shc_forest_manager::traits::ForestStorageHandler;
 
+use crate::forest_write_lock_manager::ForestWriteLockGuard;
 use crate::{
     capacity_manager::CapacityRequestData,
     handler::BlockchainService,
@@ -163,6 +164,9 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     QueryMspIdOfBucketId { bucket_id: BucketId<Runtime> },
     ReleaseForestRootWriteLock {
         forest_root_write_tx: tokio::sync::oneshot::Sender<()>,
+        // Optional guard to keep the lock alive until this command is processed.
+        // TODO: Replace the forest root write tx with ForestWriteLockGuard entirely
+        forest_write_lock_guard: Option<ForestWriteLockGuard<Runtime>>,
     },
     QueueFileDeletionRequest {
         request: FileDeletionRequest<Runtime>,

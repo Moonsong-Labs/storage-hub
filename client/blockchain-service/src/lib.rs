@@ -1,6 +1,7 @@
 pub mod capacity_manager;
 pub mod commands;
 pub mod events;
+pub mod forest_write_lock_manager;
 pub mod handler;
 pub mod handler_bsp;
 pub mod handler_msp;

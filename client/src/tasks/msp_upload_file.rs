@@ -234,6 +234,12 @@ where
             event.data.respond_storing_requests,
         );
 
+        // TODO: Use only ForestWriteLockManager
+        let forest_root_write_lock_manager = event.forest_write_lock_manager.lock().await;
+        let forest_root_write_lock_guard = forest_root_write_lock_manager
+            .acquire(event.data.clone().into())
+            .await;
+
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
             Some(tx) => tx,
             None => {
@@ -441,7 +447,10 @@ where
         // Release the forest root write "lock" and finish the task.
         self.storage_hub_handler
             .blockchain
-            .release_forest_root_write_lock(forest_root_write_tx)
+            .release_forest_root_write_lock(
+                forest_root_write_tx,
+                Some(forest_root_write_lock_guard),
+            )
             .await
     }
 }
