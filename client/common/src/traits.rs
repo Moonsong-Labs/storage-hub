@@ -264,9 +264,9 @@ pub trait StorageEnableRuntime:
         + pallet_transaction_payment::Config
         + pallet_balances::Config<Balance: Into<BigDecimal> + Into<NumberOrHex> + MaybeDisplay>
         + pallet_nfts::Config<CollectionId: Send + Sync + Display>
-        + pallet_bucket_nfts::Config
-        + pallet_randomness::Config
-        + TransactionHashProvider
+    + pallet_bucket_nfts::Config
+    + pallet_randomness::Config
+    + TransactionHashProvider
         + Copy
         + Debug
         + Send

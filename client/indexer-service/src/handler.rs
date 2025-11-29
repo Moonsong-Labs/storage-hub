@@ -12,7 +12,8 @@ use sc_client_api::{BlockBackend, BlockchainEvents};
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
     blockchain_utils::{
-        convert_raw_multiaddress_to_multiaddr, get_events_at_block, EventsRetrievalError,
+        convert_raw_multiaddress_to_multiaddr, get_ethereum_block_hash, get_events_at_block,
+        EventsRetrievalError,
     },
     traits::StorageEnableRuntime,
     types::{ParachainClient, StorageEnableEvents, StorageProviderId},
@@ -138,6 +139,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                         conn,
                         &ev.event.clone().into(),
                         block_hash,
+                        block_number,
                         maybe_evm_tx_hash,
                     )
                     .await?;
@@ -163,18 +165,20 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         conn: &mut DbConnection<'a>,
         event: &StorageEnableEvents<Runtime>,
         block_hash: H256,
+        block_number: NumberFor<Runtime::Block>,
         evm_tx_hash: Option<H256>,
     ) -> Result<(), diesel::result::Error> {
         match self.indexer_mode {
             crate::IndexerMode::Full => {
-                self.index_event(conn, event, block_hash, evm_tx_hash).await
+                self.index_event(conn, event, block_hash, block_number, evm_tx_hash)
+                    .await
             }
             crate::IndexerMode::Lite => {
-                self.index_event_lite(conn, event, block_hash, evm_tx_hash)
+                self.index_event_lite(conn, event, block_hash, block_number, evm_tx_hash)
                     .await
             }
             crate::IndexerMode::Fishing => {
-                self.index_event_fishing(conn, event, block_hash, evm_tx_hash)
+                self.index_event_fishing(conn, event, block_hash, block_number, evm_tx_hash)
                     .await
             }
         }
@@ -185,6 +189,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         conn: &mut DbConnection<'a>,
         event: &StorageEnableEvents<Runtime>,
         block_hash: H256,
+        block_number: NumberFor<Runtime::Block>,
         evm_tx_hash: Option<H256>,
     ) -> Result<(), diesel::result::Error> {
         match event {
@@ -192,7 +197,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 self.index_bucket_nfts_event(conn, event).await?
             }
             StorageEnableEvents::FileSystem(event) => {
-                self.index_file_system_event(conn, event, block_hash, evm_tx_hash)
+                self.index_file_system_event(conn, event, block_hash, block_number, evm_tx_hash)
                     .await?
             }
             StorageEnableEvents::PaymentStreams(event) => {
@@ -242,6 +247,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         conn: &mut DbConnection<'a>,
         event: &pallet_file_system::Event<Runtime>,
         block_hash: H256,
+        block_number: NumberFor<Runtime::Block>,
         evm_tx_hash: Option<H256>,
     ) -> Result<(), diesel::result::Error> {
         match event {
@@ -374,8 +380,17 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 let size: i64 = size.saturated_into();
                 let who = who.as_ref().to_vec();
 
-                // Convert block hash to bytes (always present)
-                let block_hash_bytes = block_hash.as_bytes().to_vec();
+                // Get the runtime-specific block hash from storage.
+                // For a standard Substrate runtime, the Ethereum block hash won't exist in storage,
+                // so we'll fallback to using the Substrate block hash (blake2_256) which is what we want.
+                // For a EVM-compatible runtime, we'll get the EVM block hash (keccak256) from storage,
+                // which is different from the Substrate block hash.
+                let block_number_u32: u32 = block_number.saturated_into();
+                let runtime_block_hash =
+                    get_ethereum_block_hash(&self.client, &block_hash, block_number_u32)
+                        .unwrap_or(None)
+                        .unwrap_or(block_hash);
+                let block_hash_bytes = runtime_block_hash.as_bytes().to_vec();
 
                 // Convert EVM tx hash to bytes if present
                 let tx_hash_bytes = evm_tx_hash.map(|h| h.as_bytes().to_vec());

@@ -2,9 +2,10 @@
 // It is only compiled for native (std) builds to avoid pulling `shc-common` into the
 // no_std Wasm runtime.
 use shc_common::{
-    traits::{ExtensionOperations, StorageEnableRuntime},
-    types::{MinimalExtension, StorageEnableEvents},
+    traits::{ExtensionOperations, StorageEnableRuntime, TransactionHashProvider},
+    types::{MinimalExtension, StorageEnableEvents, StorageHubEventsVec},
 };
+use sp_core::H256;
 
 // Implement the client-facing runtime trait for the concrete runtime.
 impl StorageEnableRuntime for crate::Runtime {
@@ -59,10 +60,10 @@ impl Into<StorageEnableEvents<crate::Runtime>> for crate::RuntimeEvent {
 }
 
 // Implement transaction hash extraction for EVM runtime.
-impl shc_common::traits::TransactionHashProvider for crate::Runtime {
+impl TransactionHashProvider for crate::Runtime {
     fn build_transaction_hash_map(
-        all_events: &shc_common::types::StorageHubEventsVec<Self>,
-    ) -> std::collections::HashMap<u32, sp_core::H256> {
+        all_events: &StorageHubEventsVec<Self>,
+    ) -> std::collections::HashMap<u32, H256> {
         let mut tx_map = std::collections::HashMap::new();
 
         for ev in all_events {

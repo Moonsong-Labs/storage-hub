@@ -2,9 +2,12 @@
 // It is only compiled for native (std) builds to avoid pulling `shc-common` into the
 // no_std Wasm runtime.
 use shc_common::{
-    traits::{ExtensionOperations, StorageEnableRuntime},
-    types::{MinimalExtension, StorageEnableEvents},
+    traits::{
+         ExtensionOperations, StorageEnableRuntime, TransactionHashProvider,
+    },
+    types::{MinimalExtension, StorageEnableEvents, StorageHubEventsVec},
 };
+use sp_core::H256;
 
 // Implement the client-facing runtime trait for the concrete runtime.
 impl StorageEnableRuntime for crate::Runtime {
@@ -66,10 +69,10 @@ impl Into<StorageEnableEvents<crate::Runtime>> for crate::RuntimeEvent {
 // TODO: To extract Substrate extrinsic hashes, this method would need access to the
 // actual extrinsics from the block (not just events), which would require changing
 // the trait signature to accept the block or extrinsics as a parameter.
-impl shc_common::traits::TransactionHashProvider for crate::Runtime {
+impl TransactionHashProvider for crate::Runtime {
     fn build_transaction_hash_map(
-        _all_events: &shc_common::types::StorageHubEventsVec<Self>,
-    ) -> std::collections::HashMap<u32, sp_core::H256> {
+        _all_events: &StorageHubEventsVec<Self>,
+    ) -> std::collections::HashMap<u32, H256> {
         std::collections::HashMap::new()
     }
 }
