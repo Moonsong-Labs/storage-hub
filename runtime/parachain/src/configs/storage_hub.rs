@@ -2,9 +2,7 @@
 // It is only compiled for native (std) builds to avoid pulling `shc-common` into the
 // no_std Wasm runtime.
 use shc_common::{
-    traits::{
-         ExtensionOperations, StorageEnableRuntime, TransactionHashProvider,
-    },
+    traits::{ExtensionOperations, StorageEnableRuntime, TransactionHashProvider},
     types::{MinimalExtension, StorageEnableEvents, StorageHubEventsVec},
 };
 use sp_core::H256;

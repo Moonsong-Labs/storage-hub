@@ -487,7 +487,7 @@ await describeMspNet(
       strictEqual(fileInfo.bucketId, bucketId, "BucketId should match");
       strictEqual(fileInfo.fileKey, fileKey.toHex(), "FileKey should match");
 
-      // Verify that the block hash is correctly stored and returned (always present)
+      // Verify that the block hash is correctly stored and returned
       strictEqual(
         fileInfo.blockHash.toLowerCase(),
         storageRequestBlockHash.toLowerCase(),

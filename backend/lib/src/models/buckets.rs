@@ -217,7 +217,7 @@ mod tests {
             updated_at: DateTime::from_timestamp(0, 0).unwrap().naive_utc(),
             is_in_bucket: false,
             block_hash: vec![0u8; 32], // Placeholder block hash for test data
-            tx_hash: None, // No transaction hash for test data
+            tx_hash: None,             // No transaction hash for test data
         }
     }
 
