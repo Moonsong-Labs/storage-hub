@@ -13,6 +13,12 @@ export interface AppConfig {
     timeoutMs?: number;
     headers?: Record<string, string>;
   };
+  auth: {
+    /** SIWE domain (must match the site host, e.g., "localhost:3001" or "datahaven.app") */
+    siweDomain: string;
+    /** Public URL of this web app for the SIWE "URI:" field (e.g., "https://localhost:3001") */
+    siweUri: string;
+  };
   defaults?: {
     replicationLevel?: 'Basic' | 'Standard' | 'Premium' | 'Custom';
     replicas?: number;

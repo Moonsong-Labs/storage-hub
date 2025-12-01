@@ -6,6 +6,7 @@ import { u8aToHex } from "@polkadot/util";
 import * as $ from "scale-codec";
 import { bspKey, describeMspNet, type EnrichedBspApi, waitFor } from "../../../util";
 import type { FileInfo, HealthResponse } from "../../../util/backend";
+import { BACKEND_URI } from "../../../util/backend/consts";
 import { fetchJwtToken } from "../../../util/backend/jwt";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import {
@@ -74,7 +75,7 @@ await describeMspNet(
     });
 
     it("Backend health endpoint reports healthy status", async () => {
-      const response = await fetch("http://localhost:8080/health");
+      const response = await fetch(`${BACKEND_URI}/health`);
       strictEqual(response.status, 200, "Health endpoint should return 200 OK");
 
       const healthData: HealthResponse = (await response.json()) as HealthResponse;
@@ -206,7 +207,7 @@ await describeMspNet(
 
         // Send the HTTP request to backend upload endpoint
         const baltatharUploadResponse = await fetch(
-          `http://localhost:8080/buckets/${bucketId}/upload/${fileKey}`,
+          `${BACKEND_URI}/buckets/${bucketId}/upload/${fileKey}`,
           {
             method: "PUT",
             body: form,
@@ -232,14 +233,11 @@ await describeMspNet(
       // Generate a JWT token using the backend's auth endpoints
       userJWT = await fetchJwtToken(ETH_SH_USER_PRIVATE_KEY, SH_EVM_SOLOCHAIN_CHAIN_ID);
 
-      const response = await fetch(
-        `http://localhost:8080/buckets/${bucketId}/info/${fileKey.toHex()}`,
-        {
-          headers: {
-            Authorization: `Bearer ${userJWT}`
-          }
+      const response = await fetch(`${BACKEND_URI}/buckets/${bucketId}/info/${fileKey.toHex()}`, {
+        headers: {
+          Authorization: `Bearer ${userJWT}`
         }
-      );
+      });
 
       strictEqual(response.status, 200, "/bucket/bucket_id/info/fileKey should return OK status");
       const file = (await response.json()) as FileInfo;
@@ -256,16 +254,13 @@ await describeMspNet(
       assert(userJWT, "User authenticated with the backend");
 
       // Send the HTTP request to backend upload endpoint
-      const uploadResponse = await fetch(
-        `http://localhost:8080/buckets/${bucketId}/upload/${fileKey}`,
-        {
-          method: "PUT",
-          body: form,
-          headers: {
-            Authorization: `Bearer ${userJWT}`
-          }
+      const uploadResponse = await fetch(`${BACKEND_URI}/buckets/${bucketId}/upload/${fileKey}`, {
+        method: "PUT",
+        body: form,
+        headers: {
+          Authorization: `Bearer ${userJWT}`
         }
-      );
+      });
 
       // Verify that the backend upload was successful
       strictEqual(uploadResponse.status, 201, "Upload should return CREATED status");
@@ -343,7 +338,7 @@ await describeMspNet(
       assert(originalFileBuffer, "Original file buffer must be available from upload test");
       assert(userJWT, "User authenticated with the backend");
 
-      const response = await fetch(`http://localhost:8080/download/${uploadedFileKeyHex}`, {
+      const response = await fetch(`${BACKEND_URI}/download/${uploadedFileKeyHex}`, {
         headers: {
           Authorization: `Bearer ${userJWT}`
         }
