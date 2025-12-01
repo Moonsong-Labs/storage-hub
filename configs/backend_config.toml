@@ -74,5 +74,3 @@ url = "postgresql://postgres:postgres@localhost:5432/storage_hub"
 # Enable mock mode for testing (requires 'mocks' feature to be enabled at compile time)
 # When true, uses in-memory mock database instead of real PostgreSQL connection
 # mock_mode = false
-
-
