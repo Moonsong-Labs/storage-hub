@@ -19,7 +19,7 @@ export function OnePageDemo() {
     rpcUrl: 'http://127.0.0.1:9888',
     chainId: 181222,
     mspUrl: 'http://127.0.0.1:8080',
-    fsAddress: undefined as `0x${string}` | undefined,
+    fsAddress: SH_FILE_SYSTEM_PRECOMPILE_ADDRESS as `0x${string}` | undefined,
     siweDomain: 'localhost:3001',
     siweUri: 'https://localhost:3001'
   });
@@ -249,7 +249,7 @@ export function OnePageDemo() {
         rpcUrl: config.rpcUrl,
         chain: storageHubChain,
         walletClient,
-        filesystemContractAddress: (config.fsAddress as `0x${string}` | undefined) ?? SH_FILE_SYSTEM_PRECOMPILE_ADDRESS
+        filesystemContractAddress: config.fsAddress ?? SH_FILE_SYSTEM_PRECOMPILE_ADDRESS
       });
 
       setMspClient(mspClient);
