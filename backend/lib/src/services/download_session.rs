@@ -4,8 +4,6 @@ use std::sync::{Arc, RwLock};
 use axum::body::Bytes;
 use tokio::sync::mpsc;
 
-use crate::constants::download::MAX_DOWNLOAD_SESSIONS;
-
 /// Manages active download sessions for streaming files from MSP nodes to clients.
 ///
 /// Each session maps a file key to a channel sender, allowing the internal upload
@@ -13,12 +11,14 @@ use crate::constants::download::MAX_DOWNLOAD_SESSIONS;
 /// download endpoint (which streams them to the client).
 pub struct DownloadSessionManager {
     sessions: Arc<RwLock<HashMap<String, mpsc::Sender<Result<Bytes, std::io::Error>>>>>,
+    max_sessions: usize,
 }
 
 impl DownloadSessionManager {
-    pub fn new() -> Self {
+    pub fn new(max_sessions: usize) -> Self {
         DownloadSessionManager {
             sessions: Arc::new(RwLock::new(HashMap::new())),
+            max_sessions,
         }
     }
 
@@ -34,10 +34,10 @@ impl DownloadSessionManager {
             .write()
             .expect("Download sessions lock poisoned");
 
-        if sessions.len() >= MAX_DOWNLOAD_SESSIONS {
+        if sessions.len() >= self.max_sessions {
             return Err(format!(
                 "Maximum number of {} download sessions reached",
-                MAX_DOWNLOAD_SESSIONS
+                self.max_sessions
             ));
         }
 
