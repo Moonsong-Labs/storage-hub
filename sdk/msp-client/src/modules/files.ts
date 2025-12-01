@@ -1,20 +1,20 @@
+import {
+  ensure0xPrefix,
+  FileMetadata,
+  FileTrie,
+  hexToBytes,
+  initWasm,
+  parseDate
+} from "@storagehub-sdk/core";
 import { ModuleBase } from "../base.js";
 import type {
   DownloadOptions,
   DownloadResult,
-  StorageFileInfo,
   FileStatus,
+  StorageFileInfo,
   UploadOptions,
   UploadReceipt
 } from "../types.js";
-import {
-  FileMetadata,
-  FileTrie,
-  initWasm,
-  ensure0xPrefix,
-  hexToBytes,
-  parseDate
-} from "@storagehub-sdk/core";
 
 export class FilesModule extends ModuleBase {
   /** Get metadata for a file in a bucket by fileKey */
@@ -35,6 +35,8 @@ export class FilesModule extends ModuleBase {
       isPublic: boolean;
       uploadedAt: string; // ISO string, not Date object
       status: string;
+      blockHash: string; // Block hash where file was created
+      txHash?: string; // Optional EVM transaction hash
     }>(path, {
       ...(headers ? { headers } : {}),
       ...(signal ? { signal } : {})
@@ -48,7 +50,9 @@ export class FilesModule extends ModuleBase {
       size: BigInt(wire.size),
       isPublic: wire.isPublic,
       uploadedAt: parseDate(wire.uploadedAt),
-      status: wire.status as FileStatus
+      status: wire.status as FileStatus,
+      blockHash: ensure0xPrefix(wire.blockHash),
+      ...(wire.txHash ? { txHash: ensure0xPrefix(wire.txHash) } : {})
     };
   }
 

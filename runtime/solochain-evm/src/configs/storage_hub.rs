@@ -7,9 +7,10 @@
 use codec::Decode;
 use frame_support::traits::PalletInfoAccess;
 use shc_common::{
-    traits::{ExtensionOperations, StorageEnableRuntime},
-    types::{MinimalExtension, StorageEnableErrors, StorageEnableEvents},
+    traits::{ExtensionOperations, StorageEnableRuntime, TransactionHashProvider},
+    types::{MinimalExtension, StorageEnableErrors, StorageEnableEvents, StorageHubEventsVec},
 };
+use sp_core::H256;
 
 /// Implementation of [`StorageEnableRuntime`] for the solochain-evm runtime.
 impl StorageEnableRuntime for crate::Runtime {
@@ -61,6 +62,36 @@ impl Into<StorageEnableEvents<crate::Runtime>> for crate::RuntimeEvent {
             crate::RuntimeEvent::Randomness(event) => StorageEnableEvents::Randomness(event),
             _ => StorageEnableEvents::Other(self),
         }
+    }
+}
+
+// Implement transaction hash extraction for EVM runtime.
+impl TransactionHashProvider for crate::Runtime {
+    fn build_transaction_hash_map(
+        all_events: &StorageHubEventsVec<Self>,
+    ) -> std::collections::HashMap<u32, H256> {
+        let mut tx_map = std::collections::HashMap::new();
+
+        for ev in all_events {
+            if let frame_system::Phase::ApplyExtrinsic(extrinsic_index) = ev.phase {
+                // Convert to StorageEnableEvents
+                let storage_event: StorageEnableEvents<Self> = ev.event.clone().into();
+
+                // Check if it's an `Executed` Ethereum event in the `Other` variant
+                if let StorageEnableEvents::Other(runtime_event) = storage_event {
+                    // If it is, extract the Ethereum transaction hash from it
+                    if let crate::RuntimeEvent::Ethereum(pallet_ethereum::Event::Executed {
+                        transaction_hash,
+                        ..
+                    }) = runtime_event
+                    {
+                        tx_map.insert(extrinsic_index, transaction_hash);
+                    }
+                }
+            }
+        }
+
+        tx_map
     }
 }
 

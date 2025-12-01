@@ -7,9 +7,10 @@
 use codec::Decode;
 use frame_support::traits::PalletInfoAccess;
 use shc_common::{
-    traits::{ExtensionOperations, StorageEnableRuntime},
-    types::{MinimalExtension, StorageEnableErrors, StorageEnableEvents},
+    traits::{ExtensionOperations, StorageEnableRuntime, TransactionHashProvider},
+    types::{MinimalExtension, StorageEnableErrors, StorageEnableEvents, StorageHubEventsVec},
 };
+use sp_core::H256;
 
 /// Implementation of [`StorageEnableRuntime`] for the parachain runtime.
 impl StorageEnableRuntime for crate::Runtime {
@@ -63,6 +64,20 @@ impl Into<StorageEnableEvents<crate::Runtime>> for crate::RuntimeEvent {
             crate::RuntimeEvent::Randomness(event) => StorageEnableEvents::Randomness(event),
             _ => StorageEnableEvents::Other(self),
         }
+    }
+}
+
+// Implement transaction hash extraction for parachain runtime.
+// Since the parachain runtime doesn't have EVM support, we return an empty map.
+//
+// TODO: To extract Substrate extrinsic hashes, this method would need access to the
+// actual extrinsics from the block (not just events), which would require changing
+// the trait signature to accept the block or extrinsics as a parameter.
+impl TransactionHashProvider for crate::Runtime {
+    fn build_transaction_hash_map(
+        _all_events: &StorageHubEventsVec<Self>,
+    ) -> std::collections::HashMap<u32, H256> {
+        std::collections::HashMap::new()
     }
 }
 
