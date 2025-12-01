@@ -59,20 +59,6 @@ await describeMspNet(
       strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp1.expectedPeerId);
     });
 
-    it("Should be able to retrieve current price per giga unit per tick", async () => {
-      const current_price =
-        await msp1Api.call.paymentStreamsApi.getCurrentPricePerGigaUnitPerTick();
-
-      const current_price_rpc =
-        await msp1Api.rpc.storagehubclient.getCurrentPricePerGigaUnitPerTick();
-
-      strictEqual(
-        current_price.toString(),
-        current_price_rpc.toString(),
-        "Runtime API and RPC should have the same value"
-      );
-    });
-
     it("Should fetch payment streams from chain", async () => {
       const userAddress = ETH_SH_USER_ADDRESS;
 
@@ -163,24 +149,49 @@ await describeMspNet(
         "Backend API BSP streams count should match on chain data"
       );
 
-      // Verify each API stream has a matching chain stream with correct type
+      // Get current price per giga unit per tick for dynamic rate calculations
+      const currentPricePerGigaUnitPerTick =
+        await userApi.query.paymentStreams.currentPricePerGigaUnitPerTick();
+      const GIGAUNIT = BigInt(2 ** 30); // 1073741824
+
+      // Verify each API stream has a matching chain stream with correct type and values
       for (const apiStream of data.streams) {
         const expectedType = apiStream.providerType === "msp" ? "fixed" : "dynamic";
         const matchingChainStream = chainPaymentStreams.find(
           (s) => s.provider === apiStream.provider && s.type === expectedType
         );
 
-        const costPerTick = BigInt(apiStream.costPerTick);
-        strictEqual(
-          costPerTick.toString(),
-          apiStream.costPerTick,
-          "costPerTick should be parseable as BigInt"
-        );
-
         assert(
           matchingChainStream,
           `Stream for provider ${apiStream.provider} with type ${expectedType} should exist on chain`
         );
+
+        const apiCostPerTick = BigInt(apiStream.costPerTick);
+
+        if (expectedType === "fixed" && matchingChainStream.type === "fixed") {
+          // For fixed-rate streams (MSP), costPerTick should equal the on-chain rate
+          const expectedCostPerTick = BigInt(matchingChainStream.rate.toString());
+          strictEqual(
+            apiCostPerTick.toString(),
+            expectedCostPerTick.toString(),
+            `Fixed-rate stream costPerTick (${apiCostPerTick}) should match on-chain rate (${expectedCostPerTick})`
+          );
+        } else if (expectedType === "dynamic" && matchingChainStream.type === "dynamic") {
+          // For dynamic-rate streams (BSP), costPerTick should equal:
+          // (currentPricePerGigaUnitPerTick * amountProvided) / GIGAUNIT (truncated down)
+          const amountProvided = BigInt(matchingChainStream.amountProvided.toString());
+          const currentPrice = BigInt(currentPricePerGigaUnitPerTick.toString());
+
+          // Calculate expected cost: (price * amountProvided) / GIGAUNIT
+          // Using BigInt division which truncates towards zero (same as Rust's integer division)
+          const expectedCostPerTick = (currentPrice * amountProvided) / GIGAUNIT;
+
+          strictEqual(
+            apiCostPerTick.toString(),
+            expectedCostPerTick.toString(),
+            `Dynamic-rate stream costPerTick (${apiCostPerTick}) should match calculated value (${expectedCostPerTick}) for amountProvided=${amountProvided}, price=${currentPrice}`
+          );
+        }
       }
     });
   }

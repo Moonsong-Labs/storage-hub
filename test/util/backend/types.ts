@@ -75,3 +75,15 @@ export interface PaymentStream {
 export interface PaymentStreamsResponse {
   streams: PaymentStream[];
 }
+
+export interface StatsResponse {
+  capacity: {
+    totalBytes: string;
+    usedBytes: string;
+    availableBytes: string;
+  };
+  activeUsers: number;
+  lastCapacityChange: string;
+  valuePropsAmount: string;
+  bucketsAmount: string;
+}
