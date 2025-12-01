@@ -183,8 +183,8 @@ importers:
         specifier: ^6.15.0
         version: 6.15.0
       viem:
-        specifier: 2.37.6
-        version: 2.37.6(typescript@5.5.4)
+        specifier: 2.38.3
+        version: 2.38.3(typescript@5.5.4)
     devDependencies:
       '@polkadot/types':
         specifier: ^16.4.7
