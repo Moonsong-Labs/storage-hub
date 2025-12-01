@@ -21,11 +21,12 @@ use rustls_pemfile::certs as load_pem_certs;
 use rustls_platform_verifier::ConfigVerifierExt;
 use thiserror::Error;
 
+pub mod leadership;
 pub mod models;
 pub mod schema;
 pub mod store;
 
-const LOG_TARGET: &str = "shc-blockchain-service-db";
+pub(crate) const LOG_TARGET: &str = "shc-blockchain-service-db";
 
 pub type DbPool = Pool<AsyncPgConnection>;
 pub type DbConnection<'a> = PooledConnection<'a, AsyncPgConnection>;
@@ -158,7 +159,7 @@ impl ServerCertVerifier for NoCertificateVerification {
     }
 }
 
-fn make_rustls_config_from_env() -> ClientConfig {
+pub(crate) fn make_rustls_config_from_env() -> ClientConfig {
     let insecure = std::env::var_os("SH_DB_TLS_INSECURE").is_some();
     let ca_file = std::env::var_os("SH_DB_TLS_CA_FILE");
     if insecure {
