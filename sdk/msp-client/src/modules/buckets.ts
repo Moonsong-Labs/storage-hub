@@ -1,6 +1,6 @@
 import type { Bucket, FileListResponse, GetFilesOptions, FileTree, FileStatus } from "../types.js";
 import { ModuleBase } from "../base.js";
-import { ensure0xPrefix } from "@storagehub-sdk/core";
+import { ensure0xPrefix, parseDate } from "@storagehub-sdk/core";
 
 // Wire types received from backend JSON responses
 type FileTreeWireFile = {
@@ -33,7 +33,7 @@ function fixFileTree(item: FileTreeWire): FileTree {
       sizeBytes: item.sizeBytes,
       fileKey: ensure0xPrefix(item.fileKey),
       status: item.status,
-      uploadedAt: new Date(item.uploadedAt)
+      uploadedAt: parseDate(item.uploadedAt)
     };
   }
   return {
