@@ -1,12 +1,9 @@
 import assert, { strictEqual } from "node:assert";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { describeMspNet, type EnrichedBspApi, sleep } from "../../../util";
-import { BACKEND_URI } from "../../../util/backend/consts";
+import { BACKEND_DOMAIN, BACKEND_URI } from "../../../util/backend/consts";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import { ETH_SH_USER_ADDRESS, ETH_SH_USER_PRIVATE_KEY } from "../../../util/evmNet/keyring";
-
-const SIWE_DOMAIN = "localhost:8080";
-const SIWE_URI = "http://localhost:8080";
 
 await describeMspNet(
   "Backend bucket endpoints",
@@ -65,8 +62,8 @@ await describeMspNet(
         body: JSON.stringify({
           address: ETH_SH_USER_ADDRESS,
           chainId: SH_EVM_SOLOCHAIN_CHAIN_ID,
-          domain: SIWE_DOMAIN,
-          uri: SIWE_URI
+          domain: BACKEND_DOMAIN,
+          uri: BACKEND_URI
         })
       });
 
@@ -158,8 +155,8 @@ await describeMspNet(
         body: JSON.stringify({
           address: ETH_SH_USER_ADDRESS,
           chainId: SH_EVM_SOLOCHAIN_CHAIN_ID,
-          domain: SIWE_DOMAIN,
-          uri: SIWE_URI
+          domain: BACKEND_DOMAIN,
+          uri: BACKEND_URI
         })
       });
       assert(nonceResp.ok, "Nonce request should succeed");
@@ -205,8 +202,8 @@ await describeMspNet(
         body: JSON.stringify({
           address: "not_an_eth_address",
           chainId: SH_EVM_SOLOCHAIN_CHAIN_ID,
-          domain: SIWE_DOMAIN,
-          uri: SIWE_URI
+          domain: BACKEND_DOMAIN,
+          uri: BACKEND_URI
         })
       });
 
@@ -222,8 +219,8 @@ await describeMspNet(
         body: JSON.stringify({
           address: ETH_SH_USER_ADDRESS,
           chainId: SH_EVM_SOLOCHAIN_CHAIN_ID,
-          domain: SIWE_DOMAIN,
-          uri: SIWE_URI
+          domain: BACKEND_DOMAIN,
+          uri: BACKEND_URI
         })
       });
       assert(nonceResp.ok, "Nonce request should succeed");
@@ -253,8 +250,8 @@ await describeMspNet(
           body: JSON.stringify({
             address: ETH_SH_USER_ADDRESS,
             chainId: SH_EVM_SOLOCHAIN_CHAIN_ID,
-            domain: SIWE_DOMAIN,
-            uri: SIWE_URI
+            domain: BACKEND_DOMAIN,
+            uri: BACKEND_URI
           })
         });
         assert(nonceResp.ok, "Nonce request should succeed");
