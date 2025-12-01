@@ -445,6 +445,11 @@ export type TestOptions = {
    * - "multi": Runs tests with both initialised and non-initialised network configurations
    */
   initialised?: boolean | "multi";
+  /**
+   * Generate and upload a large file (in GB) for performance testing.
+   * File stored in docker/tmp/ and cleaned up after test.
+   */
+  big_file?: number;
   /** Set a custom capacity for the BSP */
   capacity?: bigint;
   /** Set a custom BSP weight */

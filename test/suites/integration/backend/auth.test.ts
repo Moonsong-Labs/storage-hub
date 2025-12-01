@@ -1,6 +1,7 @@
 import assert, { strictEqual } from "node:assert";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { describeMspNet, type EnrichedBspApi, sleep } from "../../../util";
+import { BACKEND_DOMAIN, BACKEND_URI } from "../../../util/backend/consts";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import { ETH_SH_USER_ADDRESS, ETH_SH_USER_PRIVATE_KEY } from "../../../util/evmNet/keyring";
 
@@ -55,10 +56,15 @@ await describeMspNet(
     });
 
     it("Should be able to retrieve a nonce", async () => {
-      const nonceResp = await fetch("http://localhost:8080/auth/nonce", {
+      const nonceResp = await fetch(`${BACKEND_URI}/auth/nonce`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ address: ETH_SH_USER_ADDRESS, chainId: SH_EVM_SOLOCHAIN_CHAIN_ID })
+        body: JSON.stringify({
+          address: ETH_SH_USER_ADDRESS,
+          chainId: SH_EVM_SOLOCHAIN_CHAIN_ID,
+          domain: BACKEND_DOMAIN,
+          uri: BACKEND_URI
+        })
       });
 
       assert(nonceResp.ok, `Nonce request failed: ${nonceResp.status}`);
@@ -75,7 +81,7 @@ await describeMspNet(
       signature = await account.signMessage({ message });
 
       // Verify the signature
-      const verifyResp = await fetch("http://localhost:8080/auth/verify", {
+      const verifyResp = await fetch(`${BACKEND_URI}/auth/verify`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ message, signature })
@@ -92,7 +98,7 @@ await describeMspNet(
       assert(signature, "Should have signature from previous test");
 
       // Try to verify the same message/signature again
-      const verifyResp = await fetch("http://localhost:8080/auth/verify", {
+      const verifyResp = await fetch(`${BACKEND_URI}/auth/verify`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ message, signature })
@@ -108,7 +114,7 @@ await describeMspNet(
       // sleep 2 seconds to ensure timestamp changes
       await sleep(2000);
 
-      const refreshResp = await fetch("http://localhost:8080/auth/refresh", {
+      const refreshResp = await fetch(`${BACKEND_URI}/auth/refresh`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`
@@ -125,7 +131,7 @@ await describeMspNet(
     it("Should be able to retrieve profile", async () => {
       assert(token, "Should have token from previous test");
 
-      const profileResp = await fetch("http://localhost:8080/auth/profile", {
+      const profileResp = await fetch(`${BACKEND_URI}/auth/profile`, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`
@@ -143,10 +149,15 @@ await describeMspNet(
 
     it("Should not be able to sign for another user", async () => {
       // Request nonce for ETH_SH_USER_ADDRESS
-      const nonceResp = await fetch("http://localhost:8080/auth/nonce", {
+      const nonceResp = await fetch(`${BACKEND_URI}/auth/nonce`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ address: ETH_SH_USER_ADDRESS, chainId: SH_EVM_SOLOCHAIN_CHAIN_ID })
+        body: JSON.stringify({
+          address: ETH_SH_USER_ADDRESS,
+          chainId: SH_EVM_SOLOCHAIN_CHAIN_ID,
+          domain: BACKEND_DOMAIN,
+          uri: BACKEND_URI
+        })
       });
       assert(nonceResp.ok, "Nonce request should succeed");
       const { message: newMessage } = (await nonceResp.json()) as { message: string };
@@ -157,7 +168,7 @@ await describeMspNet(
       const wrongSignature = await differentAccount.signMessage({ message: newMessage });
 
       // Try to verify
-      const verifyResp = await fetch("http://localhost:8080/auth/verify", {
+      const verifyResp = await fetch(`${BACKEND_URI}/auth/verify`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ message: newMessage, signature: wrongSignature })
@@ -174,7 +185,7 @@ await describeMspNet(
       const account = privateKeyToAccount(ETH_SH_USER_PRIVATE_KEY);
       const fakeSignature = await account.signMessage({ message: fakeMessage });
 
-      const verifyResp = await fetch("http://localhost:8080/auth/verify", {
+      const verifyResp = await fetch(`${BACKEND_URI}/auth/verify`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ message: fakeMessage, signature: fakeSignature })
@@ -185,10 +196,15 @@ await describeMspNet(
     });
 
     it("Should reject an invalid address", async () => {
-      const nonceResp = await fetch("http://localhost:8080/auth/nonce", {
+      const nonceResp = await fetch(`${BACKEND_URI}/auth/nonce`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ address: "not_an_eth_address", chainId: SH_EVM_SOLOCHAIN_CHAIN_ID })
+        body: JSON.stringify({
+          address: "not_an_eth_address",
+          chainId: SH_EVM_SOLOCHAIN_CHAIN_ID,
+          domain: BACKEND_DOMAIN,
+          uri: BACKEND_URI
+        })
       });
 
       assert(!nonceResp.ok, "Nonce request should fail with invalid address");
@@ -197,10 +213,15 @@ await describeMspNet(
 
     it("Should reject an invalid signature", async () => {
       // Get a valid nonce first
-      const nonceResp = await fetch("http://localhost:8080/auth/nonce", {
+      const nonceResp = await fetch(`${BACKEND_URI}/auth/nonce`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ address: ETH_SH_USER_ADDRESS, chainId: SH_EVM_SOLOCHAIN_CHAIN_ID })
+        body: JSON.stringify({
+          address: ETH_SH_USER_ADDRESS,
+          chainId: SH_EVM_SOLOCHAIN_CHAIN_ID,
+          domain: BACKEND_DOMAIN,
+          uri: BACKEND_URI
+        })
       });
       assert(nonceResp.ok, "Nonce request should succeed");
       const { message: validMessage } = (await nonceResp.json()) as { message: string };
@@ -208,7 +229,7 @@ await describeMspNet(
       // Try to verify with invalid signature format
       const invalidSignature = `0x${"0".repeat(130)}`; // Wrong length for signature
 
-      const verifyResp = await fetch("http://localhost:8080/auth/verify", {
+      const verifyResp = await fetch(`${BACKEND_URI}/auth/verify`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ message: validMessage, signature: invalidSignature })
@@ -223,10 +244,15 @@ await describeMspNet(
       { todo: "when expiry can be configured so we can run these tests in a resonable timeframe" },
       async () => {
         // Get a nonce
-        const nonceResp = await fetch("http://localhost:8080/auth/nonce", {
+        const nonceResp = await fetch(`${BACKEND_URI}/auth/nonce`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ address: ETH_SH_USER_ADDRESS, chainId: SH_EVM_SOLOCHAIN_CHAIN_ID })
+          body: JSON.stringify({
+            address: ETH_SH_USER_ADDRESS,
+            chainId: SH_EVM_SOLOCHAIN_CHAIN_ID,
+            domain: BACKEND_DOMAIN,
+            uri: BACKEND_URI
+          })
         });
         assert(nonceResp.ok, "Nonce request should succeed");
         const { message: expirableMessage } = (await nonceResp.json()) as { message: string };
@@ -240,7 +266,7 @@ await describeMspNet(
         await sleep(NONCE_EXPIRY_TIME + 1000);
 
         // Try to verify after expiry
-        const verifyResp = await fetch("http://localhost:8080/auth/verify", {
+        const verifyResp = await fetch(`${BACKEND_URI}/auth/verify`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ message: expirableMessage, signature: expirableSignature })
