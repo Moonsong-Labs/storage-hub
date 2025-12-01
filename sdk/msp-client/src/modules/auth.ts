@@ -7,9 +7,18 @@ const DEFAULT_SIWE_VERIFY_BACKOFF_MS = 100;
 
 export class AuthModule extends ModuleBase {
   /**
-   * Request nonce for SIWE.
-   * - Input: EVM `address`, `chainId`.
-   * - Output: message to sign.
+   * Request a nonce (challenge message) for Sign-In with Ethereum (SIWE).
+   *
+   * **Advanced use only:** Most users should use the `SIWE()` method instead, which handles the complete authentication flow automatically. This method is exposed only for custom authentication flows.
+   *
+   * **Important:** The challenge message expires after a short time (typically 5 minutes). You must call `verify()` with a valid signature before expiration.
+   *
+   * @param address - The Ethereum address requesting authentication (checksummed format recommended).
+   * @param chainId - The chain ID the user is connected to.
+   * @param domain - The domain (host[:port]) for the SIWE message (e.g., "datahaven.app" or "localhost:3000").
+   * @param uri - The full URI of your application (e.g., "https://datahaven.app" or "http://localhost:3000").
+   * @param signal - Optional AbortSignal for request cancellation.
+   * @returns A promise resolving to the SIWE challenge message to be signed.
    */
   public getNonce(
     address: string,
@@ -31,8 +40,17 @@ export class AuthModule extends ModuleBase {
   }
 
   /**
-   * Verify SIWE signature.
-   * - Persists `session` in context on success.
+   * Verify a Sign-In with Ethereum (SIWE) signature.
+   *
+   * **Advanced use only:** Most users should use the `SIWE()` method instead, which handles the complete authentication flow automatically. This method is exposed only for custom authentication flows.
+   *
+   * **Important:** You must store the returned Session object and provide it via the `sessionProvider` function passed to `MspClient.connect()`.
+   * The session is not automatically persisted - you are responsible for managing session storage and ensuring your `sessionProvider` returns it for subsequent authenticated requests.
+   *
+   * @param message - The SIWE challenge message received from `getNonce()`.
+   * @param signature - The signature of the message signed by the user's wallet.
+   * @param signal - Optional AbortSignal for request cancellation.
+   * @returns A promise resolving to a Session object that you must store and provide via your sessionProvider.
    */
   public async verify(message: string, signature: string, signal?: AbortSignal): Promise<Session> {
     const session = await this.ctx.http.post<Session>("/auth/verify", {
@@ -45,8 +63,27 @@ export class AuthModule extends ModuleBase {
   }
 
   /**
-   * Full SIWE flow using a `WalletClient`.
-   * - Derives address, fetches nonce, signs message, verifies and stores session.
+   * Complete Sign-In with Ethereum (SIWE) authentication flow using a `WalletClient`.
+   *
+   * This is the recommended method for authentication. It handles the complete flow automatically:
+   * derives the wallet address, fetches a nonce, prompts the user to sign the message, verifies the signature,
+   * and returns a session token.
+   *
+   * **Important:** You must store the returned Session object and provide it via the `sessionProvider` function
+   * passed to `MspClient.connect()`. The session is not automatically persisted - you are responsible for managing
+   * session storage and ensuring your `sessionProvider` returns it for subsequent authenticated requests.
+   *
+   * **Note:** This method includes automatic retry logic for verification requests (default: 10 attempts with 100ms backoff).
+   * The retry behavior can be customized via the `retry` parameter.
+   *
+   * @param wallet - The Viem `WalletClient` instance. Must have an active account set (`wallet.account`).
+   *   - Browser wallets (e.g., MetaMask) automatically surface the user-selected address.
+   *   - Viem/local wallets must set `wallet.account` explicitly before calling.
+   * @param domain - The domain (host[:port]) for the SIWE message (e.g., "datahaven.app" or "localhost:3000").
+   * @param uri - The full URI of your application (e.g., "https://datahaven.app" or "http://localhost:3000").
+   * @param retry - Number of retry attempts for verification requests (default: 10).
+   * @param signal - Optional AbortSignal for request cancellation.
+   * @returns A promise resolving to a Session object that you must store and provide via your sessionProvider.
    */
   async SIWE(
     wallet: WalletClient,
