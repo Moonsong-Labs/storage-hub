@@ -375,7 +375,7 @@ where
                     Err(TryRecvError::Empty) => {
                         // If we have a task writing to the runtime, we don't want to start another one.
                         *forest_root_write_lock = Some(rx);
-                        trace!(target: LOG_TARGET, "Waiting for current Forest root write task to finish");
+                        trace!(target: LOG_TARGET, "Waiting for current Forest root write task to finish (lock held)");
                         return;
                     }
                     Ok(_) => {
@@ -385,6 +385,8 @@ where
                         error!(target: LOG_TARGET, "Forest root write task channel closed unexpectedly. Lock is released anyway!");
                     }
                 }
+            } else {
+                trace!(target: LOG_TARGET, "No forest root write lock held, proceeding to check pending requests");
             }
         }
 
@@ -401,12 +403,24 @@ where
                 }
             };
 
+            trace!(
+                target: LOG_TARGET,
+                "Checking pending respond storage requests. Queue size: {}, pending_file_keys: {:?}",
+                msp_handler.pending_respond_storage_requests.len(),
+                msp_handler.pending_respond_storage_request_file_keys
+            );
+
             let max_batch_respond = MAX_BATCH_MSP_RESPOND_STORE_REQUESTS;
 
             // Batch multiple respond storing requests up to the runtime configured maximum.
             let mut respond_storage_requests = Vec::new();
             for _ in 0..max_batch_respond {
                 if let Some(request) = msp_handler.pending_respond_storage_requests.pop_front() {
+                    trace!(
+                        target: LOG_TARGET,
+                        "Popped respond storage request for file key {:?} from queue",
+                        request.file_key
+                    );
                     // Remove from dedup tracking set so the file key can be re-queued if needed.
                     msp_handler
                         .pending_respond_storage_request_file_keys
@@ -419,12 +433,19 @@ where
 
             // If we have at least 1 respond storing request, send the process event.
             if !respond_storage_requests.is_empty() {
+                trace!(
+                    target: LOG_TARGET,
+                    "Preparing to emit ProcessMspRespondStoringRequest with {} requests",
+                    respond_storage_requests.len()
+                );
                 next_event_data = Some(
                     ProcessMspRespondStoringRequestData {
                         respond_storing_requests: respond_storage_requests,
                     }
                     .into(),
                 );
+            } else {
+                trace!(target: LOG_TARGET, "No pending respond storage requests in queue");
             }
         }
 
@@ -444,7 +465,10 @@ where
 
         // If there is any event data to process, emit the event.
         if let Some(event_data) = next_event_data {
+            trace!(target: LOG_TARGET, "Emitting forest write event");
             self.msp_emit_forest_write_event(event_data);
+        } else {
+            trace!(target: LOG_TARGET, "No event data to emit");
         }
     }
 

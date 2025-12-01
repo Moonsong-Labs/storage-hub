@@ -321,3 +321,49 @@ where
     /// Catch-all for events that we do not care in the SH Client.
     Other(<Runtime as frame_system::Config>::RuntimeEvent),
 }
+
+/// Set of pallets and their errors that are relevant to the StorageHub Client.
+///
+/// This enum serves to convert the runtime's dispatch errors into a known set of
+/// storage-related errors that the client cares about. It allows the
+/// client to match on these errors without having to decode error bytes directly.
+///
+/// The enum intentionally includes a catch-all [`Other`](Self::Other) variant so that
+/// unrecognized or out-of-scope errors can be handled without breaking
+/// client logic.
+///
+/// Conversion from [`sp_runtime::ModuleError`] is up to each StorageHub-compatible
+/// runtime to implement.
+#[derive(Debug)]
+pub enum StorageEnableErrors<Runtime>
+where
+    Runtime: frame_system::Config
+        + pallet_storage_providers::Config
+        + pallet_proofs_dealer::Config
+        + pallet_payment_streams::Config
+        + pallet_file_system::Config
+        + pallet_transaction_payment::Config
+        + pallet_balances::Config
+        + pallet_bucket_nfts::Config
+        + pallet_randomness::Config,
+{
+    /// Errors from [`frame_system`].
+    System(frame_system::Error<Runtime>),
+    /// Errors from [`pallet_storage_providers`].
+    StorageProviders(pallet_storage_providers::Error<Runtime>),
+    /// Errors from [`pallet_proofs_dealer`].
+    ProofsDealer(pallet_proofs_dealer::Error<Runtime>),
+    /// Errors from [`pallet_payment_streams`].
+    PaymentStreams(pallet_payment_streams::Error<Runtime>),
+    /// Errors from [`pallet_file_system`].
+    FileSystem(pallet_file_system::Error<Runtime>),
+    /// Errors from [`pallet_balances`].
+    Balances(pallet_balances::Error<Runtime>),
+    /// Errors from [`pallet_bucket_nfts`].
+    BucketNfts(pallet_bucket_nfts::Error<Runtime>),
+    /// Catch-all for errors from pallets we do not need to handle specifically in the SH Client.
+    ///
+    /// Note: [`pallet_randomness`] and `pallet_transaction_payment` are not included as they
+    /// don't define custom pallet errors.
+    Other(sp_runtime::ModuleError),
+}

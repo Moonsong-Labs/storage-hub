@@ -945,11 +945,17 @@ where
                     }
                     }
                 }
-                BlockchainServiceCommand::QueueMspRespondStorageRequest { request, callback } => {
+                BlockchainServiceCommand::QueueMspRespondStorageRequest { request } => {
                     if let Some(ManagedProvider::Msp(msp_handler)) =
                         &mut self.maybe_managed_provider
                     {
                         let file_key = request.file_key;
+
+                        trace!(
+                            target: LOG_TARGET,
+                            "QueueMspRespondStorageRequest received for file key {:?}",
+                            file_key
+                        );
 
                         // Check if file key is already pending (O(1) deduplication).
                         // `insert` returns true if the key was not present (i.e., we should queue).
@@ -961,28 +967,29 @@ where
                                 .pending_respond_storage_requests
                                 .push_back(request);
 
+                            trace!(
+                                target: LOG_TARGET,
+                                "File key {:?} added to pending queue (size: {})",
+                                file_key,
+                                msp_handler.pending_respond_storage_requests.len()
+                            );
+
                             // We check right away if we can process the request so we don't waste time.
                             self.msp_assign_forest_root_write_lock();
                         } else {
-                            debug!(target: LOG_TARGET,
-                                "File key {:?} already pending acceptance, skipping queue",
-                                file_key);
-                        }
-
-                        match callback.send(Ok(())) {
-                            Ok(_) => {}
-                            Err(e) => {
-                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
-                            }
+                            trace!(
+                                target: LOG_TARGET,
+                                "File key {:?} already pending, skipping",
+                                file_key
+                            );
                         }
                     } else {
-                        error!(target: LOG_TARGET, "Received a QueueMspRespondStorageRequest command while not managing an MSP. This should never happen. Please report it to the StorageHub team.");
-                        match callback.send(Err(anyhow!("Received a QueueMspRespondStorageRequest command while not managing an MSP. This should never happen. Please report it to the StorageHub team."))) {
-                            Ok(_) => {}
-                            Err(e) => {
-                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
-                            }
-                        }
+                        // Log the invariant violation but don't fail - this is fire-and-forget
+                        error!(
+                            target: LOG_TARGET,
+                            "QueueMspRespondStorageRequest received while not managing an MSP. \
+                             This is an invariant violation - please report to StorageHub team."
+                        );
                     }
                 }
                 BlockchainServiceCommand::QueueSubmitProofRequest { request, callback } => {
@@ -1380,17 +1387,11 @@ where
                         }
                     }
                 }
-                BlockchainServiceCommand::PreprocessStorageRequest { request, callback } => {
+                BlockchainServiceCommand::PreprocessStorageRequest { request } => {
                     // Emit the NewStorageRequest event for this storage request.
                     // This is called by MspUploadFileTask's BatchProcessStorageRequests handler
                     // for each pending storage request to trigger per-file processing.
                     self.emit(request);
-                    match callback.send(Ok(())) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to send preprocess storage request result: {:?}", e);
-                        }
-                    }
                 }
                 BlockchainServiceCommand::ReleaseForestRootWriteLock {
                     forest_root_write_tx,

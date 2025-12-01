@@ -316,6 +316,18 @@ pub trait StorageEnableRuntime:
     /// Must support construction and provide complete access to all required runtime APIs
     /// including file system, storage providers, proofs dealer, and payment streams functionality.
     type RuntimeApi: StorageEnableRuntimeApi<RuntimeApi: StorageEnableApiCollection<Self>>;
+
+    /// Wrapper type for module errors that enables `Into<StorageEnableErrors>`.
+    ///
+    /// Each runtime defines this as a newtype around [`sp_runtime::ModuleError`].
+    /// This pattern is required because we cannot implement `From/Into` for
+    /// external types due to Rust's orphan rules - neither [`sp_runtime::ModuleError`]
+    /// nor [`StorageEnableErrors`] is local to the runtime crates.
+    ///
+    /// The wrapper enables a symmetric pattern with [`StorageEnableEvents`]:
+    /// - Events: `RuntimeEvent` → `Into<StorageEnableEvents<Runtime>>`
+    /// - Errors: `ModuleError` → `Into<StorageEnableErrors<Runtime>>`
+    type ModuleError: From<sp_runtime::ModuleError> + Into<StorageEnableErrors<Self>>;
 }
 
 /// Trait for abstracting key type operations to support multiple cryptographic schemes.

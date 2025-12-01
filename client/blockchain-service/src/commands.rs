@@ -107,6 +107,7 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     QueueConfirmBspRequest {
         request: ConfirmStoringRequest<Runtime>,
     },
+    #[command(mode = "FireAndForget")]
     QueueMspRespondStorageRequest {
         request: RespondStorageRequest<Runtime>,
     },
@@ -196,6 +197,7 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     QueryPendingStorageRequests { file_keys: Option<Vec<FileKey>> },
     /// Preprocess a storage request by emitting a NewStorageRequest event.
     /// Called by MspUploadFileTask's BatchProcessStorageRequests handler for each pending request.
+    #[command(mode = "FireAndForget")]
     PreprocessStorageRequest { request: NewStorageRequest<Runtime> },
 }
 
