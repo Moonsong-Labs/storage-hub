@@ -69,7 +69,7 @@
 //! The retry mechanism works by **removing** file keys from [`file_key_statuses`] to signal
 //! that they should be re-processed by [`BatchProcessStorageRequests`]:
 //!
-//! - **Proof errors** (`ForestProofVerificationFailed`, `KeyProofVerificationFailed`,
+//! - **Proof errors** (`ForestProofVerificationFailed`,
 //!   `FailedToApplyDelta`): File key is **removed** from statuses. The next
 //!   [`BatchProcessStorageRequests`] cycle will re-insert it with `Processing` status,
 //!   emit [`NewStorageRequest`], and regenerate proofs with the updated forest root.
@@ -198,8 +198,7 @@ pub enum FileKeyStatus {
     /// File keys with this status will be **skipped** in subsequent
     /// [`BatchProcessStorageRequests`] cycles.
     ///
-    /// **Note:** Proof errors (`ForestProofVerificationFailed`, `KeyProofVerificationFailed`,
-    /// `FailedToApplyDelta`) and extrinsic submission failures (timeout after retries)
+    /// **Note:** Proof errors (`ForestProofVerificationFailed`, FailedToApplyDelta`) and extrinsic submission failures (timeout after retries)
     /// do NOT set this status—instead, they **remove** the file key from statuses to
     /// enable automatic retry via [`BatchProcessStorageRequests`].
     ///
@@ -785,7 +784,6 @@ where
                             matches!(
                                 pallet_error,
                                 pallet_proofs_dealer::Error::ForestProofVerificationFailed
-                                    | pallet_proofs_dealer::Error::KeyProofVerificationFailed
                                     | pallet_proofs_dealer::Error::FailedToApplyDelta
                             )
                         } else {
