@@ -38,6 +38,7 @@ await describeMspNet(
     let bspApi: EnrichedBspApi;
     let msp1Api: EnrichedBspApi;
     let indexerApi: EnrichedBspApi;
+    let fishermanApi: EnrichedBspApi;
     let sql: SqlClient;
 
     // Track file keys and bucket IDs for verification
@@ -70,7 +71,7 @@ await describeMspNet(
         createFishermanApi,
         "Fisherman API not available. Ensure `fisherman` is set to `true` in the network configuration."
       );
-      await createFishermanApi();
+      fishermanApi = await createFishermanApi();
 
       // Connect to standalone indexer node
       assert(
@@ -433,6 +434,12 @@ await describeMspNet(
       await userApi.docker.resumeContainer({
         containerName: userApi.shConsts.NODE_INFOS.fisherman.containerName
       });
+
+      // Wait for fisherman to catch up to chain tip after resume
+      await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
+
+      // Ensure indexer has processed all finalized blocks
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
       // Fisherman should only process the 6 files from FINALIZED blocks
       // The 3 manually deleted files from UNFINALIZED blocks should be ignored
@@ -804,6 +811,12 @@ await describeMspNet(
       await userApi.docker.resumeContainer({
         containerName: userApi.shConsts.NODE_INFOS.fisherman.containerName
       });
+
+      // Wait for fisherman to catch up to chain tip after resume
+      await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
+
+      // Ensure indexer has processed all finalized blocks
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
       // Fisherman should only process the 6 files from FINALIZED blocks
       // The 3 manually deleted files from UNFINALIZED blocks should be ignored
