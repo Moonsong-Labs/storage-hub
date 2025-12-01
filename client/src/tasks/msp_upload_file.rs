@@ -340,7 +340,7 @@ where
             .map(|r| H256::from_slice(r.file_key.as_ref()))
             .collect();
 
-        info!(
+        debug!(
             target: LOG_TARGET,
             "Pending file keys from on-chain: {:?}",
             pending_file_keys
@@ -348,7 +348,7 @@ where
 
         let mut statuses = self.file_key_statuses.write().await;
 
-        info!(
+        debug!(
             target: LOG_TARGET,
             "Current file key statuses: {:?}",
             *statuses
@@ -359,7 +359,7 @@ where
         statuses.retain(|file_key, _| pending_file_keys.contains(file_key));
         let removed = before_count - statuses.len();
         if removed > 0 {
-            info!(
+            debug!(
                 target: LOG_TARGET,
                 "Cleaned up {} stale file key entries not in pending requests",
                 removed
@@ -372,7 +372,7 @@ where
 
             // Skip file keys that already have a status
             if let Some(status) = statuses.get(&file_key) {
-                info!(
+                debug!(
                     target: LOG_TARGET,
                     "Skipping file key {:?} - status: {:?}",
                     file_key,
@@ -382,7 +382,7 @@ where
             }
 
             // File key not in statuses: set to Processing and emit NewStorageRequest event
-            info!(target: LOG_TARGET, "Processing new file key {:?}", file_key);
+            debug!(target: LOG_TARGET, "Processing new file key {:?}", file_key);
             statuses.insert(file_key, FileKeyStatus::Processing);
 
             // Emit event (fire-and-forget)
@@ -391,7 +391,7 @@ where
                 .preprocess_storage_request(request.clone())
                 .await;
 
-            info!(
+            debug!(
                 target: LOG_TARGET,
                 "Emitted NewStorageRequest event for file key {:?}",
                 file_key
@@ -505,7 +505,12 @@ where
     ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Processing ProcessMspRespondStoringRequest: {:?}",
+            "Processing ProcessMspRespondStoringRequest",
+        );
+
+        debug!(
+            target: LOG_TARGET,
+            "ProcessMspRespondStoringRequest storing requests: {:?}",
             event.data.respond_storing_requests,
         );
 
@@ -584,7 +589,6 @@ where
             .iter()
             .filter(|r| pending_file_keys.contains(&r.file_key))
         {
-            info!(target: LOG_TARGET, "Processing respond storing request.");
             let bucket_id = match read_file_storage.get_metadata(&respond.file_key) {
                 Ok(Some(metadata)) => H256::from_slice(metadata.bucket_id().as_ref()),
                 Ok(None) => {
@@ -774,24 +778,21 @@ where
                     // Proof errors are transient and can be retried with regenerated proofs (direct requeue).
                     // Non-proof errors are permanent failures (mark as Abandoned).
                     // Convert the dispatch error into StorageEnableErrors for type-safe pattern matching.
-                    let is_proof_error = if let sp_runtime::DispatchError::Module(module_error) =
-                        dispatch_error.clone()
-                    {
-                        let storage_error: StorageEnableErrors<Runtime> =
+                    let error: Option<StorageEnableErrors<Runtime>> = match dispatch_error {
+                        sp_runtime::DispatchError::Module(module_error) => Some(
                             <Runtime as StorageEnableRuntime>::ModuleError::from(module_error)
-                                .into();
-                        if let StorageEnableErrors::ProofsDealer(pallet_error) = storage_error {
-                            matches!(
-                                pallet_error,
-                                pallet_proofs_dealer::Error::ForestProofVerificationFailed
-                                    | pallet_proofs_dealer::Error::FailedToApplyDelta
-                            )
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
+                                .into(),
+                        ),
+                        _ => None,
                     };
+
+                    let is_proof_error = matches!(
+                        error,
+                        Some(StorageEnableErrors::ProofsDealer(
+                            pallet_proofs_dealer::Error::ForestProofVerificationFailed
+                                | pallet_proofs_dealer::Error::FailedToApplyDelta
+                        ))
+                    );
 
                     if is_proof_error {
                         // Proof-related error: remove file keys from statuses to enable automatic retry.
@@ -808,12 +809,12 @@ where
                         for response in &storage_request_msp_response {
                             if let Some(ref accepted) = response.accept {
                                 for fk in &accepted.file_keys_and_proofs {
-                                    info!(target: LOG_TARGET, "Removing file key {:?} status (proof error)", fk.file_key);
+                                    debug!(target: LOG_TARGET, "Removing file key {:?} status (proof error)", fk.file_key);
                                     statuses.remove(&fk.file_key);
                                 }
                             }
                             for rejected in &response.reject {
-                                info!(target: LOG_TARGET, "Removing file key {:?} status (proof error)", rejected.file_key);
+                                debug!(target: LOG_TARGET, "Removing file key {:?} status (proof error)", rejected.file_key);
                                 statuses.remove(&rejected.file_key);
                             }
                         }
@@ -835,7 +836,7 @@ where
                         warn!(
                             target: LOG_TARGET,
                             "Non-proof dispatch error, marking file keys as Abandoned: {:?}",
-                            dispatch_error
+                            error
                         );
                         let mut statuses = self.file_key_statuses.write().await;
                         for response in &storage_request_msp_response {
@@ -1030,7 +1031,7 @@ where
             RejectedStorageRequestReason::InternalError
         })?;
         if !file_in_forest_storage {
-            info!(target: LOG_TARGET, "File key {:?} not found in forest storage. Checking available storage capacity.", file_key);
+            debug!(target: LOG_TARGET, "File key {:?} not found in forest storage. Checking available storage capacity.", file_key);
 
             let max_storage_capacity = self
                 .storage_hub_handler
@@ -1159,7 +1160,7 @@ where
         // If the file is in file storage, we can skip the file transfer,
         // and proceed to accepting the storage request directly, provided that we have the entire file in file storage.
         if file_in_file_storage {
-            info!(target: LOG_TARGET, "File key {:?} found in both file storage. No need to receive the file from the user.", file_key);
+            debug!(target: LOG_TARGET, "File key {:?} found in both file storage. No need to receive the file from the user.", file_key);
 
             if file_in_forest_storage {
                 warn!(target: LOG_TARGET, "File key {:?} found in forest storage when storage request is still open. This is an odd state as the file key should not be in the forest storage until the storage request is accepted.", file_key);
@@ -1183,7 +1184,7 @@ where
             );
 
             if file_complete {
-                info!(target: LOG_TARGET, "File key {:?} is complete in file storage. Proceeding to accept storage request.", file_key);
+                debug!(target: LOG_TARGET, "File key {:?} is complete in file storage. Proceeding to accept storage request.", file_key);
                 self.on_file_complete(&file_key.into()).await;
 
                 // This finishes the task, as we already have the entire file in file storage and we queued
@@ -1529,7 +1530,7 @@ where
     }
 
     async fn on_file_complete(&self, file_key: &H256) {
-        info!(target: LOG_TARGET, "File upload complete (file_key {:x})", file_key);
+        debug!(target: LOG_TARGET, "File upload complete (file_key {:x})", file_key);
 
         // Unregister the file from the file transfer service.
         if let Err(e) = self
