@@ -292,10 +292,6 @@ await describeMspNet(
 
       // Seal block to trigger retry
       await userApi.block.seal();
-      // Wait for MSP to catch up to chain tip
-      await userApi.wait.nodeCatchUpToChainTip(mspApi);
-
-      await userApi.block.seal();
 
       // Phase 10: Wait for MSP retry
       // The MSP client marks the file as FileKeyStatus::Failed on proof error

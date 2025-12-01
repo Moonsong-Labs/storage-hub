@@ -289,6 +289,45 @@ where
         // along with a proof of storage, which is then queued to accept the storage request.
         // Finally once the ProcessMspRespondStoringRequest event is emitted, the MSP will respond to the user with a confirmation.
 
+        // IMPORTANT: Create a SINGLE shared MspUploadFileTask instance for all event subscriptions.
+        // This ensures all handlers share the same `file_key_statuses` HashMap, which is critical
+        // for the retry mechanism to work correctly. Without this, each event subscription would
+        // create its own task instance with a separate HashMap, causing status updates in one
+        // handler to be invisible to others.
+        let msp_upload_task = MspUploadFileTask::new(self.clone());
+
+        // Subscribe MspUploadFileTask to RemoteUploadRequest from FileTransferService (non-critical)
+        subscribe_actor_event!(
+            event: RemoteUploadRequest<Runtime>,
+            task: (msp_upload_task.clone()),
+            service: &self.file_transfer,
+            spawner: &self.task_spawner,
+            critical: false,
+        );
+
+        // Subscribe MspUploadFileTask to BlockchainService events using the shared instance
+        subscribe_actor_event!(
+            event: BatchProcessStorageRequests,
+            task: (msp_upload_task.clone()),
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            critical: true,
+        );
+        subscribe_actor_event!(
+            event: NewStorageRequest<Runtime>,
+            task: (msp_upload_task.clone()),
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            critical: true,
+        );
+        subscribe_actor_event!(
+            event: ProcessMspRespondStoringRequest<Runtime>,
+            task: (msp_upload_task),
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            critical: true,
+        );
+
         // RemoteUploadRequest comes from FileTransferService and requires a separate service parameter
         subscribe_actor_event_map!(
             service: &self.file_transfer,
@@ -296,7 +335,6 @@ where
             context: self.clone(),
             critical: false,
             [
-                RemoteUploadRequest<Runtime> => MspUploadFileTask,
                 RetryBucketMoveDownload => MspRetryBucketMoveTask,
             ]
         );
@@ -309,9 +347,6 @@ where
             [
                 FinalisedBucketMovedAway<Runtime> => MspDeleteBucketTask,
                 FinalisedMspStoppedStoringBucket<Runtime> => MspDeleteBucketTask,
-                BatchProcessStorageRequests => MspUploadFileTask,
-                NewStorageRequest<Runtime> => MspUploadFileTask,
-                ProcessMspRespondStoringRequest<Runtime> => MspUploadFileTask,
                 MoveBucketRequestedForMsp<Runtime> => MspRespondMoveBucketTask,
                 StartMovedBucketDownload<Runtime> => MspRespondMoveBucketTask,
                 // MspStopStoringInsolventUserTask handles events for deleting buckets owned by users that have become insolvent.
