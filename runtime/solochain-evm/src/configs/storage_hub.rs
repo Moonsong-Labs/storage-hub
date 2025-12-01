@@ -11,11 +11,60 @@ use shc_common::{
     types::{MinimalExtension, StorageEnableErrors, StorageEnableEvents},
 };
 
+/// Implementation of [`StorageEnableRuntime`] for the solochain-evm runtime.
+impl StorageEnableRuntime for crate::Runtime {
+    type Address = crate::Address;
+    type Call = crate::RuntimeCall;
+    type Signature = crate::Signature;
+    type Extension = crate::TxExtension;
+    type RuntimeApi = crate::RuntimeApi;
+    type ModuleError = RuntimeModuleError;
+}
+
+// Implement the transaction extension helpers for the concrete runtime's TxExtension.
+impl ExtensionOperations<crate::RuntimeCall, crate::Runtime> for crate::TxExtension {
+    type Hash = shp_types::Hash;
+
+    fn from_minimal_extension(minimal: MinimalExtension) -> Self {
+        (
+            frame_system::CheckNonZeroSender::<crate::Runtime>::new(),
+            frame_system::CheckSpecVersion::<crate::Runtime>::new(),
+            frame_system::CheckTxVersion::<crate::Runtime>::new(),
+            frame_system::CheckGenesis::<crate::Runtime>::new(),
+            frame_system::CheckEra::<crate::Runtime>::from(minimal.era),
+            frame_system::CheckNonce::<crate::Runtime>::from(minimal.nonce),
+            frame_system::CheckWeight::<crate::Runtime>::new(),
+            pallet_transaction_payment::ChargeTransactionPayment::<crate::Runtime>::from(
+                minimal.tip,
+            ),
+            frame_metadata_hash_extension::CheckMetadataHash::new(false),
+        )
+    }
+}
+
+// Map the runtime event into the client-facing storage events enum.
+impl Into<StorageEnableEvents<crate::Runtime>> for crate::RuntimeEvent {
+    fn into(self) -> StorageEnableEvents<crate::Runtime> {
+        match self {
+            crate::RuntimeEvent::System(event) => StorageEnableEvents::System(event),
+            crate::RuntimeEvent::Providers(event) => StorageEnableEvents::StorageProviders(event),
+            crate::RuntimeEvent::ProofsDealer(event) => StorageEnableEvents::ProofsDealer(event),
+            crate::RuntimeEvent::PaymentStreams(event) => {
+                StorageEnableEvents::PaymentStreams(event)
+            }
+            crate::RuntimeEvent::FileSystem(event) => StorageEnableEvents::FileSystem(event),
+            crate::RuntimeEvent::TransactionPayment(event) => {
+                StorageEnableEvents::TransactionPayment(event)
+            }
+            crate::RuntimeEvent::Balances(event) => StorageEnableEvents::Balances(event),
+            crate::RuntimeEvent::BucketNfts(event) => StorageEnableEvents::BucketNfts(event),
+            crate::RuntimeEvent::Randomness(event) => StorageEnableEvents::Randomness(event),
+            _ => StorageEnableEvents::Other(self),
+        }
+    }
+}
+
 /// Wrapper type for converting [`sp_runtime::ModuleError`] into [`StorageEnableErrors`].
-///
-/// This enables the `Into<StorageEnableErrors>` pattern while satisfying Rust's orphan rules
-/// (we cannot implement `From`/`Into` for external types directly). This pattern mirrors
-/// how [`StorageEnableEvents`] conversion works via `Into` on [`crate::RuntimeEvent`].
 pub struct RuntimeModuleError(pub sp_runtime::ModuleError);
 
 impl From<sp_runtime::ModuleError> for RuntimeModuleError {
@@ -74,59 +123,6 @@ impl Into<StorageEnableErrors<crate::Runtime>> for RuntimeModuleError {
                     .unwrap_or_else(|_| StorageEnableErrors::Other(module_error))
             }
             _ => StorageEnableErrors::Other(module_error),
-        }
-    }
-}
-
-/// Implementation of [`StorageEnableRuntime`] for the solochain-evm runtime.
-impl StorageEnableRuntime for crate::Runtime {
-    type Address = crate::Address;
-    type Call = crate::RuntimeCall;
-    type Signature = crate::Signature;
-    type Extension = crate::TxExtension;
-    type RuntimeApi = crate::RuntimeApi;
-    type ModuleError = RuntimeModuleError;
-}
-
-// Implement the transaction extension helpers for the concrete runtime's TxExtension.
-impl ExtensionOperations<crate::RuntimeCall, crate::Runtime> for crate::TxExtension {
-    type Hash = shp_types::Hash;
-
-    fn from_minimal_extension(minimal: MinimalExtension) -> Self {
-        (
-            frame_system::CheckNonZeroSender::<crate::Runtime>::new(),
-            frame_system::CheckSpecVersion::<crate::Runtime>::new(),
-            frame_system::CheckTxVersion::<crate::Runtime>::new(),
-            frame_system::CheckGenesis::<crate::Runtime>::new(),
-            frame_system::CheckEra::<crate::Runtime>::from(minimal.era),
-            frame_system::CheckNonce::<crate::Runtime>::from(minimal.nonce),
-            frame_system::CheckWeight::<crate::Runtime>::new(),
-            pallet_transaction_payment::ChargeTransactionPayment::<crate::Runtime>::from(
-                minimal.tip,
-            ),
-            frame_metadata_hash_extension::CheckMetadataHash::new(false),
-        )
-    }
-}
-
-// Map the runtime event into the client-facing storage events enum.
-impl Into<StorageEnableEvents<crate::Runtime>> for crate::RuntimeEvent {
-    fn into(self) -> StorageEnableEvents<crate::Runtime> {
-        match self {
-            crate::RuntimeEvent::System(event) => StorageEnableEvents::System(event),
-            crate::RuntimeEvent::Providers(event) => StorageEnableEvents::StorageProviders(event),
-            crate::RuntimeEvent::ProofsDealer(event) => StorageEnableEvents::ProofsDealer(event),
-            crate::RuntimeEvent::PaymentStreams(event) => {
-                StorageEnableEvents::PaymentStreams(event)
-            }
-            crate::RuntimeEvent::FileSystem(event) => StorageEnableEvents::FileSystem(event),
-            crate::RuntimeEvent::TransactionPayment(event) => {
-                StorageEnableEvents::TransactionPayment(event)
-            }
-            crate::RuntimeEvent::Balances(event) => StorageEnableEvents::Balances(event),
-            crate::RuntimeEvent::BucketNfts(event) => StorageEnableEvents::BucketNfts(event),
-            crate::RuntimeEvent::Randomness(event) => StorageEnableEvents::Randomness(event),
-            _ => StorageEnableEvents::Other(self),
         }
     }
 }
