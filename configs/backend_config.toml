@@ -1,5 +1,7 @@
-# MSP Backend Configuration Example
-# This file demonstrates all available configuration options for the MSP backend service
+#
+# Example configuration file for the StorageHub MSP Backend service.
+# Copy or adapt this file when running the backend locally or in a deployment.
+#
 
 # Server configuration
 # The host address to bind the HTTP server to
