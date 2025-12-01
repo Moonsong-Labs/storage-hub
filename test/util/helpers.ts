@@ -98,7 +98,7 @@ export const checkSHRunningContainers = async (docker: Docker) => {
   return allContainers.filter((container) => container.Image === DOCKER_IMAGE);
 };
 
-const extractContainerLogs = async (
+const extractAndStoreContainerLogs = async (
   container: Docker.Container,
   containerName: string,
   tmpDirPath: string,
@@ -153,12 +153,12 @@ export const cleanupEnvironment = async (verbose = false) => {
   const tmpDir = tmp.dirSync({ prefix: "bsp-logs-", unsafeCleanup: true });
 
   const logPromises = existingNodes.map((node) =>
-    extractContainerLogs(docker.getContainer(node.Id), node.Names[0], tmpDir.name, verbose)
+    extractAndStoreContainerLogs(docker.getContainer(node.Id), node.Names[0], tmpDir.name, verbose)
   );
 
   if (backendContainer) {
     logPromises.push(
-      extractContainerLogs(
+      extractAndStoreContainerLogs(
         docker.getContainer(backendContainer.Id),
         backendContainer.Names[0],
         tmpDir.name,
