@@ -7,8 +7,7 @@
     "start": "tsx src/index.ts",
     "core": "tsx src/core-demo.ts",
     "msp": "tsx src/msp-demo.ts",
-    "test": "tsx src/sdkTest.ts",
-    "upload": "tsx src/uploadAndPrintFileKey.ts",
+    "test": "tsx src/downloadTest.ts",
     "test:concurrent": "bash scripts/concurrent-sdkTest.sh",
     "build": "tsc -p tsconfig.json"
   },
