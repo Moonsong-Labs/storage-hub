@@ -289,7 +289,7 @@ where
         // along with a proof of storage, which is then queued to accept the storage request.
         // Finally once the ProcessMspRespondStoringRequest event is emitted, the MSP will respond to the user with a confirmation.
 
-        // IMPORTANT: Create a SINGLE shared MspUploadFileTask instance for all event subscriptions.
+        // Create a SINGLE shared MspUploadFileTask instance for all event subscriptions.
         // This ensures all handlers share the same `file_key_statuses` HashMap, which is critical
         // for the retry mechanism to work correctly. Without this, each event subscription would
         // create its own task instance with a separate HashMap, causing status updates in one

@@ -323,10 +323,6 @@ pub trait StorageEnableRuntime:
     /// This pattern is required because we cannot implement `From/Into` for
     /// external types due to Rust's orphan rules - neither [`sp_runtime::ModuleError`]
     /// nor [`StorageEnableErrors`] is local to the runtime crates.
-    ///
-    /// The wrapper enables a symmetric pattern with [`StorageEnableEvents`]:
-    /// - Events: `RuntimeEvent` → `Into<StorageEnableEvents<Runtime>>`
-    /// - Errors: `ModuleError` → `Into<StorageEnableErrors<Runtime>>`
     type ModuleError: From<sp_runtime::ModuleError> + Into<StorageEnableErrors<Self>>;
 }
 
