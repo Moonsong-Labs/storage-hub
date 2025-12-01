@@ -27,7 +27,7 @@ async function authenticateMspClient(
   chainId: number,
 ) {
   const chain = createViemChain(chainId, rpcUrl);
-  const TEST_PK = "0x5fb92d6e98884f76de468fa3f6278f8807c48bebc13595d45af5bdc4da702133";
+  const TEST_PK = "";
   const account = privateKeyToAccount(TEST_PK as `0x${string}`);
   const address = account.address as string;
   const walletClient = createWalletClient({
@@ -57,20 +57,10 @@ async function authenticateMspClient(
 }
 
 async function main() {
-  const baseUrl = 'https://deo-dh-backend.stagenet.datahaven-infra.network';
-  const rpcUrl = 'https://services.datahaven-dev.network/stagenet';
-  const chainId = 1288;
-  const fileKey =
-    'd43e23e8fe8e34ac367744de6cbeec08b6c099bcb46dd515fe65c11a1727e3d1';
-  // const chainId = 181222;
-  // const rpcUrl = `http://127.0.0.1:9888`;
-  // const baseUrl = "http://127.0.0.1:8080"
-  // const fileKey = '0x73d2fb3630d30b775a2e2ae17ca45b172eaaad0fd0cb0ab29d1f383717e523b0'
-  // const baseUrl = ''
-  // const rpcUrl = ''
-  // const chainId = ''
-  // const fileKey = ''
-
+  const chainId = 181222;
+  const rpcUrl = `http://127.0.0.1:9888`;
+  const baseUrl = "http://127.0.0.1:8080"
+  const fileKey = '0x73d2fb3630d30b775a2e2ae17ca45b172eaaad0fd0cb0ab29d1f383717e523b0'
   const { mspClient, address } = await authenticateMspClient(
     baseUrl,
     rpcUrl,
