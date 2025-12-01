@@ -4,6 +4,7 @@ import path from "node:path";
 import type { H256 } from "@polkadot/types/interfaces";
 import * as $ from "scale-codec";
 import { describeMspNet, type EnrichedBspApi, waitFor } from "../../../util";
+import { BACKEND_URI } from "../../../util/backend/consts";
 import { fetchJwtToken } from "../../../util/backend/jwt";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import {
@@ -142,14 +143,11 @@ await describeMspNet(
       userJWT = await fetchJwtToken(ETH_SH_USER_PRIVATE_KEY, SH_EVM_SOLOCHAIN_CHAIN_ID);
 
       // Upload to backend
-      const uploadResponse = await fetch(
-        `http://localhost:8080/buckets/${bucketId}/upload/${fileKey}`,
-        {
-          method: "PUT",
-          body: form,
-          headers: { Authorization: `Bearer ${userJWT}` }
-        }
-      );
+      const uploadResponse = await fetch(`${BACKEND_URI}/buckets/${bucketId}/upload/${fileKey}`, {
+        method: "PUT",
+        body: form,
+        headers: { Authorization: `Bearer ${userJWT}` }
+      });
       strictEqual(uploadResponse.status, 201, "Upload should return CREATED status");
 
       // File stored locally in MSP file storage
@@ -160,12 +158,9 @@ await describeMspNet(
 
       // Verify we can download
       uploadedFileKeyHex = fileKey.toHex();
-      const preRejectDownload = await fetch(
-        `http://localhost:8080/download/${uploadedFileKeyHex}`,
-        {
-          headers: { Authorization: `Bearer ${userJWT}` }
-        }
-      );
+      const preRejectDownload = await fetch(`${BACKEND_URI}/download/${uploadedFileKeyHex}`, {
+        headers: { Authorization: `Bearer ${userJWT}` }
+      });
       strictEqual(preRejectDownload.status, 200, "Download should succeed before rejection");
       const preArrayBuffer = await preRejectDownload.arrayBuffer();
       const downloadedBuffer = Buffer.from(preArrayBuffer);
@@ -220,12 +215,9 @@ await describeMspNet(
       await msp1Api.wait.fileDeletionFromFileStorage(fileKey.toHex());
 
       // Download should now fail (MSP should no longer have the file)
-      const postRejectDownload = await fetch(
-        `http://localhost:8080/download/${uploadedFileKeyHex}`,
-        {
-          headers: { Authorization: `Bearer ${userJWT}` }
-        }
-      );
+      const postRejectDownload = await fetch(`${BACKEND_URI}/download/${uploadedFileKeyHex}`, {
+        headers: { Authorization: `Bearer ${userJWT}` }
+      });
       strictEqual(
         postRejectDownload.status,
         404,
