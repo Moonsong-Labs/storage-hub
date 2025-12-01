@@ -25,6 +25,27 @@ export function removeHexPrefix(hex: string): string {
  * @param hex - The hex string to convert (with or without 0x prefix)
  * @returns Uint8Array representation
  */
+/**
+ * Safely parse a date string, validating that it results in a valid Date object.
+ * @param dateString - The date string to parse (expected to be an ISO timestamp)
+ * @returns A valid Date object
+ * @throws Error if the date string is invalid or results in an Invalid Date
+ */
+export function parseDate(dateString: string): Date {
+  if (typeof dateString !== "string" || dateString.trim() === "") {
+    throw new Error(
+      `Invalid date string: expected non-empty string, got ${JSON.stringify(dateString)}`
+    );
+  }
+
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`Invalid date string: "${dateString}" cannot be parsed as a valid date`);
+  }
+
+  return date;
+}
+
 export function hexToBytes(hex: string): Uint8Array {
   if (!hex) {
     throw new Error("Hex string cannot be empty");

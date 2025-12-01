@@ -1,4 +1,11 @@
-import { ensure0xPrefix, FileMetadata, FileTrie, hexToBytes, initWasm } from "@storagehub-sdk/core";
+import {
+  ensure0xPrefix,
+  FileMetadata,
+  FileTrie,
+  hexToBytes,
+  initWasm,
+  parseDate
+} from "@storagehub-sdk/core";
 import { ModuleBase } from "../base.js";
 import type {
   DownloadOptions,
@@ -42,7 +49,7 @@ export class FilesModule extends ModuleBase {
       location: wire.location,
       size: BigInt(wire.size),
       isPublic: wire.isPublic,
-      uploadedAt: new Date(wire.uploadedAt),
+      uploadedAt: parseDate(wire.uploadedAt),
       status: wire.status as FileStatus,
       blockHash: ensure0xPrefix(wire.blockHash),
       ...(wire.txHash ? { txHash: ensure0xPrefix(wire.txHash) } : {})

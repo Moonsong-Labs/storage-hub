@@ -1,5 +1,6 @@
 import assert from "node:assert";
 import { privateKeyToAccount } from "viem/accounts";
+import { BACKEND_DOMAIN, BACKEND_URI } from "./consts";
 
 // Perform SIWE auth flow using the backend's endpoints to generate a JWT token
 export async function fetchJwtToken(privateKey: `0x${string}`, chainId: number): Promise<string> {
@@ -7,10 +8,15 @@ export async function fetchJwtToken(privateKey: `0x${string}`, chainId: number):
   const account = privateKeyToAccount(privateKey);
 
   // Fetch a nonce from the backend for the given account and chainId
-  const nonceResp = await fetch("http://localhost:8080/auth/nonce", {
+  const nonceResp = await fetch(`${BACKEND_URI}/auth/nonce`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ address: account.address, chainId })
+    body: JSON.stringify({
+      address: account.address,
+      chainId,
+      domain: BACKEND_DOMAIN,
+      uri: BACKEND_URI
+    })
   });
   assert(nonceResp.ok, `Nonce request failed: ${nonceResp.status}`);
   const { message } = (await nonceResp.json()) as { message: string };
@@ -19,7 +25,7 @@ export async function fetchJwtToken(privateKey: `0x${string}`, chainId: number):
   const signature = await account.signMessage({ message });
 
   // Verify the signature and generate the JWT token
-  const verifyResp = await fetch("http://localhost:8080/auth/verify", {
+  const verifyResp = await fetch(`${BACKEND_URI}/auth/verify`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ message, signature })
