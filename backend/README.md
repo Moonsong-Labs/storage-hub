@@ -194,6 +194,18 @@ curl -s "$BACKEND_URL/payment_stream" -H "Authorization: Bearer $TOKEN"
   - `storagehubclient_isFileKeyExpected`: Checks if the MSP client expects a specific file key
   - `storagehubclient_receiveBackendFileChunks`: Uploads file chunks and proofs to the MSP client
 
+## Configuration
+
+Example configuration for the MSP backend service is provided in `configs/backend_config.toml`.
+
+When running the backend binary, you can point to this file (or a copy of it) with:
+
+```bash
+sh-msp-backend --config configs/backend_config.toml
+```
+
+You can also override individual values via CLI flags such as `--host`, `--port`, `--database-url` and `--rpc-url`.
+
 ## Build
 
 Prereqs: Rust toolchain, pnpm (for cross-build script), Docker (for container build).
