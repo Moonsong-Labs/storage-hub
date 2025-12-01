@@ -5,8 +5,10 @@ import type { WalletClient, PublicClient } from 'viem';
 import { Upload, Info, Settings } from 'lucide-react';
 import { MspClient } from '@storagehub-sdk/msp-client';
 import type { Session } from '@storagehub-sdk/msp-client';
-import { StorageHubClient } from '@storagehub-sdk/core';
+import { StorageHubClient, SH_FILE_SYSTEM_PRECOMPILE_ADDRESS } from '@storagehub-sdk/core';
 import { FileManager } from './FileManager';
+import { loadAppConfig } from '../config/load';
+import type { AppConfig } from '../config/types';
 
 interface StorageHubDemoProps {
   walletClient: WalletClient | null;
@@ -16,7 +18,7 @@ interface StorageHubDemoProps {
 
 export function StorageHubDemo({ walletClient, publicClient, walletAddress }: StorageHubDemoProps) {
   const [status, setStatus] = useState<string>('');
-  const [mspClient, setMspClient] = useState<InstanceType<typeof MspClient> | null>(null);
+  const [mspClient, setMspClient] = useState<MspClient | null>(null);
   const [storageHubClient, setStorageHubClient] = useState<StorageHubClient | null>(null);
   const [mspConnecting, setMspConnecting] = useState(false);
   const [activeTab, setActiveTab] = useState<'test' | 'files'>('test');
@@ -55,14 +57,15 @@ export function StorageHubDemo({ walletClient, publicClient, walletAddress }: St
     setStatus('🔄 Connecting to MSP backend...');
 
     try {
+      const appCfg: AppConfig = await loadAppConfig();
       // Prepare session provider for MSP auth token handling
       let currentSession: Readonly<Session> | undefined;
       const sessionProvider = async () => currentSession;
 
       // Connect to MSP backend (using default from configuration)
       const client = await MspClient.connect({
-        baseUrl: 'http://127.0.0.1:8080',
-        timeoutMs: 10000
+        baseUrl: appCfg.msp.baseUrl,
+        timeoutMs: appCfg.msp.timeoutMs ?? 10000
       }, sessionProvider);
 
       // Test connection
@@ -71,20 +74,24 @@ export function StorageHubDemo({ walletClient, publicClient, walletAddress }: St
 
       // Authenticate with SIWE-style flow
       setStatus('🔄 Authenticating with MSP...');
-      const session = await client.auth.SIWE(walletClient);
+      // Use configured SIWE parameters (mandatory)
+      const domain = appCfg.auth.siweDomain;
+      const uri = appCfg.auth.siweUri;
+      const session = await client.auth.SIWE(walletClient, domain, uri);
       currentSession = Object.freeze(session);
       const profile = await client.auth.getProfile();
 
       // Also create StorageHubClient for blockchain operations
       const storageClient = new StorageHubClient({
-        rpcUrl: 'http://127.0.0.1:9888',
+        rpcUrl: appCfg.chain.evmRpcHttpUrl,
         chain: {
-          id: 181222,
-          name: 'StorageHub Solochain EVM',
-          nativeCurrency: { name: 'StorageHub', symbol: 'SH', decimals: 18 },
-          rpcUrls: { default: { http: ['http://127.0.0.1:9888'] } }
+          id: appCfg.chain.id,
+          name: appCfg.chain.name,
+          nativeCurrency: appCfg.chain.nativeCurrency,
+          rpcUrls: { default: { http: [appCfg.chain.evmRpcHttpUrl] } }
         },
-        walletClient
+        walletClient,
+        filesystemContractAddress: (appCfg.chain.filesystemPrecompileAddress as `0x${string}` | undefined) ?? SH_FILE_SYSTEM_PRECOMPILE_ADDRESS
       });
 
       setMspClient(client);
