@@ -115,7 +115,7 @@ where
     let context = Context::new(file_storage, blockchain, file_transfer);
 
     let app = Router::new()
-        .route("/upload/:file_key", post(upload_file))
+        .route("/upload/{file_key}", post(upload_file))
         .route_layer(DefaultBodyLimit::disable())
         .with_state(context);
 
