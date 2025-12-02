@@ -16,7 +16,7 @@ use axum::{
     routing::post,
     Router,
 };
-use sc_tracing::tracing::{debug, error, info, warn};
+use sc_tracing::tracing::{debug, info, warn};
 use shc_actors_framework::actor::ActorHandle;
 use shc_blockchain_service::commands::BlockchainServiceCommandInterface;
 use shc_blockchain_service::types::{MspRespondStorageRequest, RespondStorageRequest};
@@ -164,34 +164,20 @@ where
     FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
-    debug!(
-        target: LOG_TARGET,
-        file_key = %file_key,
-        "Received upload file request"
-    );
-
     // Validate file_key is a hex string
     let key = file_key.trim_start_matches("0x");
     let file_key_bytes = match hex::decode(key) {
         Ok(bytes) => bytes,
         Err(e) => {
-            warn!(
-                target: LOG_TARGET,
-                file_key = %file_key,
-                error = %e,
-                "Invalid file key hex encoding"
-            );
-            return (StatusCode::BAD_REQUEST, "Invalid file key hex encoding").into_response();
+            return (
+                StatusCode::BAD_REQUEST,
+                format!("Invalid file key hex encoding: {e}"),
+            )
+                .into_response();
         }
     };
 
     if file_key_bytes.len() != 32 {
-        warn!(
-            target: LOG_TARGET,
-            file_key = %file_key,
-            length = file_key_bytes.len(),
-            "Invalid file key length"
-        );
         return (
             StatusCode::BAD_REQUEST,
             format!(
@@ -207,27 +193,12 @@ where
 
     // Process the streamed chunks
     match process_chunk_stream(&context, &file_key_hash, body).await {
-        Ok(_) => {
-            debug!(
-                target: LOG_TARGET,
-                file_key = %file_key,
-                "Successfully processed chunk stream"
-            );
-            (StatusCode::OK, ()).into_response()
-        }
-        Err(e) => {
-            error!(
-                target: LOG_TARGET,
-                file_key = %file_key,
-                error = %e,
-                "Error processing chunk stream"
-            );
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Error processing chunks: {}", e),
-            )
-                .into_response()
-        }
+        Ok(_) => (StatusCode::OK, ()).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error processing chunks: {}", e),
+        )
+            .into_response(),
     }
 }
 
