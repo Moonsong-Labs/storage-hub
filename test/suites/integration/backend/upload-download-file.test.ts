@@ -270,12 +270,9 @@ await describeMspNet(
 
 
       // Verify that the backend upload was successful
-      // strictEqual(uploadResponse.status, 201, "Upload should return CREATED status");
-      const responseBody = await uploadResponse.text();
-      console.log(uploadResponse);
-      const uploadResult = JSON.parse(responseBody);
-      console.log(uploadResult);
       strictEqual(uploadResponse.status, 201, "Upload should return CREATED status");
+      const responseBody = await uploadResponse.text();
+      const uploadResult = JSON.parse(responseBody);
       uploadedFileKeyHex = u8aToHex(fileKey);
       strictEqual(
         uploadResult.fileKey,

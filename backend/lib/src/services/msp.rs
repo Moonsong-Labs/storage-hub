@@ -639,13 +639,6 @@ impl MspService {
         file_key: &str,
         total_chunks: u64,
     ) -> Result<(), Error> {
-        debug!(
-            target: "msp_service::upload_file",
-            file_key = %file_key,
-            total_chunks = total_chunks,
-            "Sending chunks to MSP internal file transfer server"
-        );
-
         let url = format!(
             "{}/upload/{}",
             self.msp_config.internal_file_transfer_url, file_key
@@ -693,13 +686,6 @@ impl MspService {
                 status, body
             )));
         }
-
-        debug!(
-            target: "msp_service::upload_file",
-            file_key = %file_key,
-            "Successfully sent all chunks to MSP"
-        );
-
         Ok(())
     }
 
