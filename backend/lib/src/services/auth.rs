@@ -188,6 +188,42 @@ impl AuthService {
         )
     }
 
+    /// Construct a CAIP-122 compliant message for authentication
+    ///
+    /// This follows the CAIP-122 standard for Sign-In with X (SIWX) messages.
+    /// The message uses CAIP-10 format for addresses: `namespace:reference:address`
+    /// where namespace is `eip155` and reference is the chain ID.
+    fn construct_caip122_message(
+        address: &Address,
+        domain: &str,
+        nonce: &str,
+        chain_id: u64,
+        uri: &str,
+    ) -> String {
+        debug!(target: "auth_service::construct_caip122_message", address = %address, domain = %domain, nonce = %nonce, chain_id = chain_id, "Constructing CAIP-122 auth message");
+
+        let statement = "I authenticate to this MSP Backend with my address";
+        let version = 1;
+        let issued_at = chrono::Utc::now().to_rfc3339();
+
+        // Convert address to CAIP-10 format: eip155:chain_id:address
+        let caip10_address = format!("eip155:{}:{}", chain_id, address);
+
+        // CAIP-122 message format
+        format!(
+            "{domain} wants you to sign in with your blockchain account:\n\
+            {caip10_address}\n\
+            \n\
+            {statement}\n\
+            \n\
+            URI: {uri}\n\
+            Version: {version}\n\
+            Nonce: {nonce}\n\
+            Issued At: {issued_at}\n\
+            Chain ID: {chain_id}",
+        )
+    }
+
     /// Generate a JWT for the given address
     ///
     /// The resulting JWT is already base64 encoded and signed by the service
@@ -236,6 +272,44 @@ impl AuthService {
             .map_err(|_| Error::Internal)?;
 
         debug!(address = %address, "Generated auth challenge");
+        Ok(NonceResponse { message })
+    }
+
+    /// Generate a CAIP-122 compliant message for the user to sign
+    ///
+    /// Similar to `challenge()` but uses CAIP-122 message format.
+    ///
+    /// The message will expire after a given time (same as SIWE).
+    pub async fn challenge_caip122(
+        &self,
+        address: &Address,
+        chain_id: u64,
+        domain: &str,
+        uri: &str,
+    ) -> Result<NonceResponse, Error> {
+        debug!(
+            target: "auth_service::challenge_caip122",
+            address = %address,
+            chain_id = chain_id,
+            domain = %domain,
+            "Generating CAIP-122 challenge"
+        );
+
+        let nonce = Self::generate_random_nonce();
+        let message = Self::construct_caip122_message(address, domain, &nonce, chain_id, uri);
+
+        // Store message paired with address in storage
+        // Using message as key and address as value (same mechanism as SIWE)
+        self.storage
+            .store_nonce(
+                message.clone(),
+                address,
+                self.nonce_duration.num_seconds() as _,
+            )
+            .await
+            .map_err(|_| Error::Internal)?;
+
+        debug!(address = %address, domain = %domain, "Generated CAIP-122 auth challenge");
         Ok(NonceResponse { message })
     }
 
