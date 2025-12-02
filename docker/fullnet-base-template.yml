@@ -56,7 +56,8 @@ services:
         "--base-path=/data",
         "--msp-charging-period=12",
         "--msp-distribute-files",
-        "--msp-file-transfer-host=0.0.0.0",
+        "--trusted-file-transfer-server",
+        "--trusted-file-transfer-server-host=0.0.0.0",
       ]
   sh-msp-2:
     image: storage-hub:local
@@ -88,7 +89,8 @@ services:
         "--base-path=/data",
         "--msp-charging-period=12",
         "--msp-distribute-files",
-        "--msp-file-transfer-host=0.0.0.0",
+        "--trusted-file-transfer-server",
+        "--trusted-file-transfer-server-host=0.0.0.0",
       ]
   sh-user:
     image: storage-hub:local
@@ -209,7 +211,7 @@ services:
         "postgresql://postgres:postgres@storage-hub-sh-indexer-postgres-1:5432/storage_hub",
         "--msp-callback-url",
         "http://storage-hub-sh-backend-1:8080",
-        "--msp-internal-file-transfer-url",
+        "--msp-trusted-file-transfer-server-url",
         "http://storage-hub-sh-msp-1:7070",
       ]
     ports:

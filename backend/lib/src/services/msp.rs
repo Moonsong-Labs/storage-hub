@@ -641,7 +641,7 @@ impl MspService {
     ) -> Result<(), Error> {
         let url = format!(
             "{}/upload/{}",
-            self.msp_config.trusted_file_transfer_url, file_key
+            self.msp_config.trusted_file_transfer_server_url, file_key
         );
 
         let header = Bytes::from(total_chunks.to_le_bytes().to_vec());

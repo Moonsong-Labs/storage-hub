@@ -366,23 +366,31 @@ pub struct ProviderConfigurations {
     )]
     pub msp_database_url: Option<String>,
 
-    /// Host address for MSP trusted file transfer HTTP server (default: 127.0.0.1).
+    /// Enable the trusted file transfer HTTP server for receiving files from trusted backends.
+    #[arg(
+        long,
+        value_name = "BOOLEAN",
+        help_heading = "Trusted File Transfer Server Options"
+    )]
+    pub trusted_file_transfer_server: bool,
+
+    /// Host address for trusted file transfer HTTP server (default: 127.0.0.1).
     #[arg(
         long,
         value_name = "HOST",
-        help_heading = "MSP Trusted File Transfer Server Options",
+        help_heading = "Trusted File Transfer Server Options",
         default_value = "127.0.0.1"
     )]
-    pub msp_file_transfer_host: Option<String>,
+    pub trusted_file_transfer_server_host: Option<String>,
 
-    /// Port for MSP trusted file transfer HTTP server (default: 7070).
+    /// Port for trusted file transfer HTTP server (default: 7070).
     #[arg(
         long,
         value_name = "PORT",
-        help_heading = "MSP Trusted File Transfer Server Options",
+        help_heading = "Trusted File Transfer Server Options",
         default_value = "7070"
     )]
-    pub msp_file_transfer_port: Option<u16>,
+    pub trusted_file_transfer_server_port: Option<u16>,
 }
 
 impl ProviderConfigurations {
@@ -540,8 +548,9 @@ impl ProviderConfigurations {
             blockchain_service,
             maintenance_mode,
             msp_database_url: self.msp_database_url.clone(),
-            msp_file_transfer_host: self.msp_file_transfer_host.clone(),
-            msp_file_transfer_port: self.msp_file_transfer_port,
+            trusted_file_transfer_server: self.trusted_file_transfer_server,
+            trusted_file_transfer_server_host: self.trusted_file_transfer_server_host.clone(),
+            trusted_file_transfer_server_port: self.trusted_file_transfer_server_port,
         }
     }
 }

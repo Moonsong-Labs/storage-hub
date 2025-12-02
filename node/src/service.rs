@@ -302,8 +302,9 @@ where
             bsp_submit_proof,
             blockchain_service,
             msp_database_url,
-            msp_file_transfer_host,
-            msp_file_transfer_port,
+            trusted_file_transfer_server,
+            trusted_file_transfer_server_host,
+            trusted_file_transfer_server_port,
             ..
         }) => {
             info!(
@@ -337,16 +338,17 @@ where
                     let msp_db_pool = setup_database_pool(db_url.clone()).await?;
                     builder.with_indexer_db_pool(Some(msp_db_pool));
                 }
+            }
 
-                // Configure trusted file transfer HTTP server
+            // Configure trusted file transfer HTTP server if enabled
+            if *trusted_file_transfer_server {
                 let file_transfer_config = shc_client::trusted_file_transfer_server::Config {
-                    host: msp_file_transfer_host
+                    host: trusted_file_transfer_server_host
                         .clone()
                         .unwrap_or_else(|| "127.0.0.1".to_string()),
-                    port: msp_file_transfer_port.unwrap_or(7070),
+                    port: trusted_file_transfer_server_port.unwrap_or(7070),
                 };
-                builder
-                    .with_trusted_file_transfer_server(file_transfer_config);
+                builder.with_trusted_file_transfer_server(file_transfer_config);
             }
 
             if let Some(c) = blockchain_service {
