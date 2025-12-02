@@ -183,6 +183,7 @@ std = [
     "sh-parachain-runtime/std",
     "sh-solochain-evm-runtime/std",
     "shc-common/std",
+    "shc-common/parachain",
     "shp-constants/std",
     "shp-file-key-verifier/std",
     "shp-file-metadata/std",
