@@ -149,6 +149,33 @@ await describeMspNet(
       );
     });
 
+    it("Should authenticate using SIWX (CAIP-122) flow", async () => {
+      // Create a new client without sessionProvider to test SIWX flow
+      const mspBackendHttpConfig: HttpClientConfig = {
+        baseUrl: "http://127.0.0.1:8080"
+      };
+      const siwxClient = await MspClient.connect(mspBackendHttpConfig);
+
+      // Authenticate using SIWX (CAIP-122) - no domain parameter needed
+      const siwxUri = "http://localhost:3000";
+      const siwxSession = await siwxClient.auth.SIWX(walletClient, siwxUri);
+
+      // Verify we got a session token
+      assert(siwxSession.token, "SIWX should return a session token");
+      assert(siwxSession.user, "SIWX should return user info");
+
+      // Update the client's sessionProvider with the new session
+      siwxClient.setSessionProvider(async () => siwxSession);
+
+      // Verify authentication works by fetching profile
+      const profile = await siwxClient.auth.getProfile();
+      strictEqual(
+        profile.address,
+        getAddress(account.address),
+        "SIWX profile address should match wallet address"
+      );
+    });
+
     it("Should get MSP general info via the SDK's MspClient", async () => {
       const info = await mspClient.info.getInfo();
       // TODO: Backend /info is mocked in msp.rs; assert exact fields to sanity-check wiring.
