@@ -20,6 +20,22 @@ pub async fn nonce(
             &payload.domain,
             &payload.uri,
         )
+pub async fn message(
+    State(services): State<Services>,
+    Json(payload): Json<NonceRequest>,
+) -> Result<impl IntoResponse, Error> {
+    debug!(
+        address = %payload.address,
+        chain_id = payload.chain_id,
+        "POST auth message (CAIP-122)"
+    );
+
+    // Extract domain from URI
+    let domain = services.auth.extract_domain_from_uri(&payload.uri)?;
+
+    let response = services
+        .auth
+        .challenge_caip122(&payload.address, payload.chain_id, &domain, &payload.uri)
         .await?;
     Ok(Json(response))
 }
