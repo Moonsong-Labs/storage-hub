@@ -157,16 +157,6 @@ pub type StorageHubExecutor = WasmExecutor<HostFunctions>;
 pub type StorageHubClient<RuntimeApi> =
     TFullClient<shp_opaque::Block, RuntimeApi, StorageHubExecutor>;
 
-/// Deprecated: Use [`StorageHubExecutor`] instead.
-#[cfg(feature = "parachain")]
-#[deprecated(note = "Use `StorageHubExecutor` instead")]
-pub type ParachainExecutor = StorageHubExecutor;
-
-/// Deprecated: Use [`StorageHubClient`] instead.
-#[cfg(feature = "parachain")]
-#[deprecated(note = "Use `StorageHubClient` instead")]
-pub type ParachainClient<RuntimeApi> = StorageHubClient<RuntimeApi>;
-
 /// The type of key used for [`BlockchainService`]` operations.
 pub const BCSV_KEY_TYPE: KeyTypeId = KeyTypeId(*b"bcsv");
 

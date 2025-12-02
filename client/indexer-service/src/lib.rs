@@ -3,8 +3,7 @@ pub mod handler;
 use std::sync::Arc;
 
 use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
-use shc_common::traits::StorageEnableRuntime;
-use shc_common::types::StorageHubClient;
+use shc_common::{traits::StorageEnableRuntime, types::StorageHubClient};
 use shc_indexer_db::DbPool;
 
 pub use self::handler::IndexerService;
