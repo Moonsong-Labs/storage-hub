@@ -170,7 +170,9 @@ await describeMspNet(
         );
         const intentionPayload = intentionCodec.toU8a();
         const rawSignature = shUser.sign(intentionPayload);
-        const userSignature = userApi.createType("MultiSignature", { Sr25519: rawSignature });
+        const userSignature = userApi.createType("MultiSignature", {
+          Sr25519: rawSignature
+        });
 
         deletionCalls.push(
           userApi.tx.fileSystem.requestDeleteFile(
@@ -205,7 +207,10 @@ await describeMspNet(
       await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
       // Verify deletion signatures are stored in database for the User deletion type
-      await indexerApi.indexer.verifyDeletionSignaturesStored({ sql, fileKeys });
+      await indexerApi.indexer.verifyDeletionSignaturesStored({
+        sql,
+        fileKeys
+      });
     });
 
     it("creates unfinalized user deletion requests and manually deletes files", async () => {
@@ -290,7 +295,9 @@ await describeMspNet(
         );
         const intentionPayload = intentionCodec.toU8a();
         const rawSignature = shUser.sign(intentionPayload);
-        const userSignature = userApi.createType("MultiSignature", { Sr25519: rawSignature });
+        const userSignature = userApi.createType("MultiSignature", {
+          Sr25519: rawSignature
+        });
 
         unfinalizedDeletionCalls.push(
           userApi.tx.fileSystem.requestDeleteFile(
@@ -435,11 +442,11 @@ await describeMspNet(
         containerName: userApi.shConsts.NODE_INFOS.fisherman.containerName
       });
 
-      // Wait for fisherman to catch up to chain tip after resume
-      await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
-
       // Ensure indexer has processed all finalized blocks
       await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
+
+      // Wait for fisherman to catch up to chain tip after resume
+      await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
 
       // Fisherman should only process the 6 files from FINALIZED blocks
       // The 3 manually deleted files from UNFINALIZED blocks should be ignored
@@ -812,11 +819,11 @@ await describeMspNet(
         containerName: userApi.shConsts.NODE_INFOS.fisherman.containerName
       });
 
-      // Wait for fisherman to catch up to chain tip after resume
-      await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
-
       // Ensure indexer has processed all finalized blocks
       await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
+
+      // Wait for fisherman to catch up to chain tip after resume
+      await userApi.wait.nodeCatchUpToChainTip(fishermanApi);
 
       // Fisherman should only process the 6 files from FINALIZED blocks
       // The 3 manually deleted files from UNFINALIZED blocks should be ignored

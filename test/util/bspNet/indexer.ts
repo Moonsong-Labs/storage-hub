@@ -43,18 +43,23 @@ export const waitForIndexing = async (options: WaitForIndexingOptions): Promise<
     await blockProducerApi.block.seal({ finaliseBlock: true });
   }
 
-  const currentBlock = (await blockProducerApi.query.system.number()).toNumber();
+  // Get the finalized block hash and extract the block number from the header
+  // Note: We use the finalized block number (not best block) because the indexer
+  // only processes finalized blocks. Using system.number() would return the best block
+  // which may not be finalized yet, causing the log wait to timeout.
+  const finalisedBlockHash = await blockProducerApi.rpc.chain.getFinalizedHead();
+  const finalisedHeader = await blockProducerApi.rpc.chain.getHeader(finalisedBlockHash);
+  const finalisedBlockNumber = finalisedHeader.number.toNumber();
 
   // Finalize block on indexer node
   // This is necessary because the indexer only processes finalized blocks
-  const finalisedBlockHash = await blockProducerApi.rpc.chain.getFinalizedHead();
   await indexerApi.wait.blockImported(finalisedBlockHash.toString());
   await indexerApi.block.finaliseBlock(finalisedBlockHash.toString());
 
   // Wait for indexer to process this block
   // Use the indexer's container name from its API connection
   await indexerApi.docker.waitForLog({
-    searchString: `Indexing block #${currentBlock}:`,
+    searchString: `Indexing block #${finalisedBlockNumber}:`,
     containerName: indexerApi.shConsts.NODE_INFOS.indexer.containerName,
     timeout: 30000
   });
@@ -63,7 +68,7 @@ export const waitForIndexing = async (options: WaitForIndexingOptions): Promise<
   await waitFor({
     lambda: async () => {
       const lastIndexedBlock = await indexerApi.indexer.getLastIndexedBlock({ sql });
-      return lastIndexedBlock === currentBlock;
+      return lastIndexedBlock === finalisedBlockNumber;
     }
   });
 };
