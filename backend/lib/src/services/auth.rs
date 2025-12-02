@@ -160,14 +160,14 @@ impl AuthService {
     /// This follows the EIP-4361 standard for Sign-In with Ethereum messages.
     /// The message format ensures compatibility with wallet signing interfaces
     /// and provides a standardized authentication flow.
-    fn construct_auth_message(
+    fn construct_siwe_message(
         address: &Address,
         domain: &str,
         nonce: &str,
         chain_id: u64,
         uri: &str,
     ) -> String {
-        debug!(target: "auth_service::construct_auth_message", address = %address, domain = %domain, nonce = %nonce, chain_id = chain_id, "Constructing auth message");
+        debug!(target: "auth_service::construct_siwe_message", address = %address, domain = %domain, nonce = %nonce, chain_id = chain_id, "Constructing SIWE auth message");
 
         let statement = "I authenticate to this MSP Backend with my address";
         let version = 1;
@@ -222,7 +222,7 @@ impl AuthService {
 
         let nonce = Self::generate_random_nonce();
 
-        let message = Self::construct_auth_message(address, domain, &nonce, chain_id, uri);
+        let message = Self::construct_siwe_message(address, domain, &nonce, chain_id, uri);
 
         // Store message paired with address in storage
         // Using message as key and address as value
@@ -415,13 +415,13 @@ mod tests {
     }
 
     #[test]
-    fn construct_auth_message_contains_address() {
+    fn construct_siwe_message_contains_address() {
         let address = MOCK_ADDRESS;
         let domain = "localhost";
         let nonce = "testNonce123";
         let chain_id = 1;
 
-        let message = AuthService::construct_auth_message(
+        let message = AuthService::construct_siwe_message(
             &address,
             domain,
             nonce,
