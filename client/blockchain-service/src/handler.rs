@@ -1657,8 +1657,10 @@ where
         // Transactions with a nonce below the on-chain nonce of this block are finalised.
         // Still, we'll delete up to the last finalised block processed, to leave transactions with
         // a terminal state in the pending DB for a short period of time.
-        self.cleanup_pending_tx_store(self.last_finalised_block_processed.hash)
-            .await;
+        if matches!(self.role, MultiInstancesNodeRole::Leader) {
+            self.cleanup_pending_tx_store(self.last_finalised_block_processed.hash)
+                .await;
+        }
 
         // Update the last finalised block processed.
         self.last_finalised_block_processed = MinimalBlockInfo {

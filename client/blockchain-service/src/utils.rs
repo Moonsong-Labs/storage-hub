@@ -478,19 +478,29 @@ where
     }
 
     /// Get the current account nonce on-chain for a generic signature type.
-    pub(crate) fn account_nonce(&self, block_hash: &Runtime::Hash) -> u32 {
+    pub(crate) fn account_nonce(&self, block_hash: &Runtime::Hash) -> Result<u32> {
         let pub_key = Self::caller_pub_key(self.keystore.clone());
         self.client
             .runtime_api()
             .account_nonce(*block_hash, pub_key.into())
-            .expect("Fetching account nonce works; qed")
+            .map_err(|e| anyhow!("Fetching account nonce failed: {e}"))
     }
 
     /// Checks if the account nonce on-chain is higher than the nonce in the [`BlockchainService`].
     ///
     /// If the nonce is higher, the `nonce_counter` is updated in the [`BlockchainService`].
     pub(crate) fn sync_nonce(&mut self, block_hash: &Runtime::Hash) {
-        let on_chain_nonce = self.account_nonce(block_hash);
+        let on_chain_nonce = match self.account_nonce(block_hash) {
+            Ok(nonce) => nonce,
+            Err(e) => {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to sync nonce for block {}: {e}",
+                    block_hash
+                );
+                return;
+            }
+        };
         if on_chain_nonce > self.nonce_counter {
             debug!(
                 target: LOG_TARGET,
@@ -597,7 +607,10 @@ where
         let block_number = self.client.info().best_number.saturated_into();
 
         // Check if there's a nonce gap we can fill with this transaction
-        let on_chain_nonce = self.account_nonce(&block_hash);
+        let on_chain_nonce = self.account_nonce(&block_hash).map_err(|e| {
+            error!(target: LOG_TARGET, "Failed to get on-chain nonce while sending extrinsic: {e}");
+            e
+        })?;
         let gaps =
             self.transaction_manager
                 .detect_gaps(on_chain_nonce, self.nonce_counter, block_number);
@@ -1104,7 +1117,17 @@ where
         block_number: BlockNumber<Runtime>,
         block_hash: Runtime::Hash,
     ) {
-        let on_chain_nonce = self.account_nonce(&block_hash);
+        let on_chain_nonce = match self.account_nonce(&block_hash) {
+            Ok(nonce) => nonce,
+            Err(e) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "Failed to get on-chain nonce while cleaning up tx manager at block {}. If this is the genesis block or a sufficiently old block, this is expected and can be ignored: {e}",
+                    block_hash
+                );
+                return;
+            }
+        };
         self.transaction_manager
             .cleanup_stale_nonce_gaps(on_chain_nonce);
 
@@ -1116,15 +1139,28 @@ where
     ///
     /// Get the on-chain nonce for the given block hash and cleans up all pending transactions below that nonce.
     pub(crate) async fn cleanup_pending_tx_store(&self, block_hash: Runtime::Hash) {
-        if matches!(self.role, MultiInstancesNodeRole::Follower) {
+        if matches!(
+            self.role,
+            MultiInstancesNodeRole::Follower | MultiInstancesNodeRole::Standalone
+        ) {
             error!(
                 target: LOG_TARGET,
-                "This node is a follower and cannot perform DB cleanup. Only leader or standalone nodes may perform DB cleanup"
+                "This node is a follower or standalone and cannot perform DB cleanup. Only leader nodes may perform DB cleanup"
             );
             return;
         }
 
-        let on_chain_nonce = self.account_nonce(&block_hash);
+        let on_chain_nonce = match self.account_nonce(&block_hash) {
+            Ok(nonce) => nonce,
+            Err(e) => {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to get on-chain nonce while cleaning up pending tx store at block {}. If this is the genesis block or a sufficiently old block, this is expected and can be ignored: {e}",
+                    block_hash
+                );
+                return;
+            }
+        };
 
         if let Some(store) = &self.pending_tx_store {
             let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
@@ -1331,7 +1367,17 @@ where
         block_hash: Runtime::Hash,
     ) {
         // Detect gaps in the nonce sequence
-        let on_chain_nonce = self.account_nonce(&block_hash);
+        let on_chain_nonce = match self.account_nonce(&block_hash) {
+            Ok(nonce) => nonce,
+            Err(e) => {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to get on-chain nonce while handling old nonce gaps at block {}. If this is the genesis block or a sufficiently old block, this is expected and can be ignored: {e}",
+                    block_hash
+                );
+                return;
+            }
+        };
         let gaps =
             self.transaction_manager
                 .detect_gaps(on_chain_nonce, self.nonce_counter, block_number);
