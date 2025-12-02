@@ -144,6 +144,7 @@ use shc_file_transfer_service::{
     commands::FileTransferServiceCommandInterface, events::RemoteUploadRequest,
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
+use shp_file_metadata::{Chunk, ChunkId, Leaf};
 
 use crate::{
     handler::StorageHubHandler,
@@ -166,6 +167,32 @@ impl Default for MspUploadFileConfig {
         Self {
             max_try_count: 3,
             max_tip: 500,
+        }
+    }
+}
+
+/// Information about a storage request rejection that needs to be handled.
+#[derive(Debug)]
+struct RejectionInfo {
+    file_key: H256,
+    bucket_id: H256,
+    reason: RejectedStorageRequestReason,
+    error_message: String,
+}
+
+impl RejectionInfo {
+    /// Creates a new `RejectionInfo` from file metadata and rejection details.
+    fn new(
+        file_key: H256,
+        file_metadata: &FileMetadata,
+        reason: RejectedStorageRequestReason,
+        error_message: String,
+    ) -> Self {
+        Self {
+            file_key,
+            bucket_id: H256::from_slice(file_metadata.bucket_id().as_ref()),
+            reason,
+            error_message,
         }
     }
 }
@@ -445,7 +472,7 @@ where
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: RemoteUploadRequest<Runtime>) -> anyhow::Result<()> {
-        trace!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
+        trace!(target: LOG_TARGET, "Received remote upload request for file {:x} and peer {:?}", event.file_key, event.peer);
 
         let file_key: H256 = event.file_key.into();
 
@@ -592,7 +619,7 @@ where
             let bucket_id = match read_file_storage.get_metadata(&respond.file_key) {
                 Ok(Some(metadata)) => H256::from_slice(metadata.bucket_id().as_ref()),
                 Ok(None) => {
-                    error!(target: LOG_TARGET, "File does not exist for key {:?}. Maybe we forgot to unregister before deleting?", respond.file_key);
+                    error!(target: LOG_TARGET, "File does not exist for key {:x}. Maybe we forgot to unregister before deleting?", respond.file_key);
                     continue;
                 }
                 Err(e) => {
@@ -1031,7 +1058,7 @@ where
             RejectedStorageRequestReason::InternalError
         })?;
         if !file_in_forest_storage {
-            debug!(target: LOG_TARGET, "File key {:?} not found in forest storage. Checking available storage capacity.", file_key);
+            debug!(target: LOG_TARGET, "File key {:x} not found in forest storage. Checking available storage capacity.", file_key);
 
             let max_storage_capacity = self
                 .storage_hub_handler
@@ -1083,7 +1110,7 @@ where
             if available_capacity < event.size {
                 warn!(
                     target: LOG_TARGET,
-                    "Insufficient storage capacity to volunteer for file key: {:?}",
+                    "Insufficient storage capacity to volunteer for file key: {:x}",
                     event.file_key
                 );
 
@@ -1118,7 +1145,7 @@ where
                 }
             }
         } else {
-            debug!(target: LOG_TARGET, "File key {:?} found in forest storage.", file_key);
+            debug!(target: LOG_TARGET, "File key {:x} found in forest storage.", file_key);
         }
 
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
@@ -1142,7 +1169,7 @@ where
         );
 
         if !file_in_file_storage {
-            debug!(target: LOG_TARGET, "File key {:?} not found in file storage. Inserting file.", file_key);
+            debug!(target: LOG_TARGET, "File key {:x} not found in file storage. Inserting file.", file_key);
             write_file_storage
                 .insert_file(
                     metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>(),
@@ -1154,7 +1181,7 @@ where
                     RejectedStorageRequestReason::InternalError
                 })?;
         } else {
-            debug!(target: LOG_TARGET, "File key {:?} found in file storage.", file_key);
+            debug!(target: LOG_TARGET, "File key {:x} found in file storage.", file_key);
         }
 
         // If the file is in file storage, we can skip the file transfer,
@@ -1170,7 +1197,7 @@ where
             let file_complete = match write_file_storage.is_file_complete(&file_key.into()) {
                 Ok(is_complete) => is_complete,
                 Err(e) => {
-                    warn!(target: LOG_TARGET, "Failed to check if file is complete. The file key {:?} is in a bad state with error: {:?}", file_key, e);
+                    warn!(target: LOG_TARGET, "Failed to check if file is complete. The file key {:x} is in a bad state with error: {:?}", file_key, e);
                     warn!(target: LOG_TARGET, "Assuming the file is not complete.");
                     false
                 }
@@ -1184,14 +1211,14 @@ where
             );
 
             if file_complete {
-                debug!(target: LOG_TARGET, "File key {:?} is complete in file storage. Proceeding to accept storage request.", file_key);
+                debug!(target: LOG_TARGET, "File key {:x} is complete in file storage. Proceeding to accept storage request.", file_key);
                 self.on_file_complete(&file_key.into()).await;
 
                 // This finishes the task, as we already have the entire file in file storage and we queued
                 // the accept transaction to the blockchain, so we can finish the task early.
                 return Ok(());
             } else {
-                debug!(target: LOG_TARGET, "File key {:?} is not complete in file storage. Need to receive the file from the user.", file_key);
+                debug!(target: LOG_TARGET, "File key {:x} is not complete in file storage. Need to receive the file from the user.", file_key);
             }
         };
 
@@ -1250,7 +1277,7 @@ where
         if event.file_key_proof.file_metadata.fingerprint() != expected_fingerprint {
             error!(
                 target: LOG_TARGET,
-                "Fingerprint mismatch for file {:?}. Expected: {:?}, got: {:?}",
+                "Fingerprint mismatch for file {:x}. Expected: {:x}, got: {:x}",
                 file_key, expected_fingerprint, event.file_key_proof.file_metadata.fingerprint()
             );
             self.handle_rejected_storage_request(
@@ -1299,7 +1326,7 @@ where
             Err(error) => {
                 error!(
                     target: LOG_TARGET,
-                    "Failed to verify proof for file {:?}: {:?}",
+                    "Failed to verify proof for file {:x}: {:?}",
                     file_key, error
                 );
                 self.handle_rejected_storage_request(
@@ -1312,14 +1339,57 @@ where
             }
         };
 
-        let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
+        // Process chunks within a scoped block to ensure the file storage lock is dropped before handling rejections
+        let result = {
+            let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
+            self.process_chunks_with_lock(
+                &file_key,
+                &file_metadata,
+                proven,
+                &mut write_file_storage,
+            )
+        };
+
+        // Handle the result after the file storage lock is dropped
+        match result {
+            Ok(file_complete) => Ok(file_complete),
+            Err(rejection) => {
+                self.handle_rejected_storage_request(
+                    &rejection.file_key,
+                    rejection.bucket_id,
+                    rejection.reason,
+                )
+                .await?;
+                Err(anyhow::anyhow!(rejection.error_message))
+            }
+        }
+    }
+
+    /// Processes chunks while holding a file storage write lock. Returns Ok(file_complete) on success,
+    /// or Err(RejectionInfo) if the storage request should be rejected.
+    fn process_chunks_with_lock(
+        &self,
+        file_key: &H256,
+        file_metadata: &FileMetadata,
+        proven: Vec<Leaf<ChunkId, Chunk>>,
+        write_file_storage: &mut NT::FL,
+    ) -> Result<bool, RejectionInfo>
+    where
+        NT: ShNodeType<Runtime>,
+        Runtime: StorageEnableRuntime,
+    {
         let mut file_complete = false;
 
         // Process each proven chunk in the batch
         for chunk in proven {
             let chunk_idx = chunk.key.as_u64();
             let expected_chunk_size = file_metadata.chunk_size_at(chunk_idx).map_err(|e| {
-                anyhow!("Failed to get chunk size for chunk {}: {:?}", chunk_idx, e)
+                RejectionInfo::new(
+                    *file_key,
+                    file_metadata,
+                    RejectedStorageRequestReason::InternalError,
+                    format!("Failed to get chunk size for chunk {}: {:?}", chunk_idx, e),
+                )
             })?;
 
             if chunk.data.len() != expected_chunk_size {
@@ -1330,30 +1400,27 @@ where
                     expected_chunk_size,
                     chunk.data.len()
                 );
-                self.handle_rejected_storage_request(
-                    &file_key,
-                    bucket_id,
+                return Err(RejectionInfo::new(
+                    *file_key,
+                    file_metadata,
                     RejectedStorageRequestReason::ReceivedInvalidProof,
-                )
-                .await?;
-                return Err(anyhow!(
-                    "Invalid chunk size for chunk {}: Expected: {}, got: {}",
-                    chunk_idx,
-                    expected_chunk_size,
-                    chunk.data.len()
+                    format!(
+                        "Invalid chunk size for chunk {}: Expected: {}, got: {}",
+                        chunk_idx,
+                        expected_chunk_size,
+                        chunk.data.len()
+                    ),
                 ));
             }
 
-            let write_result = write_file_storage.write_chunk(&file_key, &chunk.key, &chunk.data);
+            let write_result = write_file_storage.write_chunk(file_key, &chunk.key, &chunk.data);
 
             match write_result {
-                Ok(outcome) => match outcome {
-                    FileStorageWriteOutcome::FileComplete => {
-                        file_complete = true;
-                        break; // We can stop processing chunks if the file is complete
-                    }
-                    FileStorageWriteOutcome::FileIncomplete => continue,
-                },
+                Ok(FileStorageWriteOutcome::FileComplete) => {
+                    file_complete = true;
+                    break; // We can stop processing chunks if the file is complete
+                }
+                Ok(FileStorageWriteOutcome::FileIncomplete) => continue,
                 Err(error) => match error {
                     FileStorageWriteError::FileChunkAlreadyExists => {
                         trace!(
@@ -1365,16 +1432,15 @@ where
                         continue;
                     }
                     FileStorageWriteError::FileDoesNotExist => {
-                        self.handle_rejected_storage_request(
-                            &file_key,
-                            bucket_id,
+                        return Err(RejectionInfo::new(
+                            *file_key,
+                            file_metadata,
                             RejectedStorageRequestReason::InternalError,
-                        )
-                        .await?;
-                        return Err(anyhow::anyhow!(format!(
-                            "File does not exist for key {:?}. Maybe we forgot to unregister before deleting?",
-                            file_key
-                        )));
+                            format!(
+                                "File does not exist for key {:x}. Maybe we forgot to unregister before deleting?",
+                                file_key
+                            ),
+                        ));
                     }
                     FileStorageWriteError::FailedToGetFileChunk
                     | FileStorageWriteError::FailedToInsertFileChunk
@@ -1389,41 +1455,38 @@ where
                     | FileStorageWriteError::FailedToGetStoredChunksCount
                     | FileStorageWriteError::ChunkCountOverflow
                     | FileStorageWriteError::FailedToCheckFileCompletion(_) => {
-                        self.handle_rejected_storage_request(
-                            &file_key,
-                            bucket_id,
+                        return Err(RejectionInfo::new(
+                            *file_key,
+                            file_metadata,
                             RejectedStorageRequestReason::InternalError,
-                        )
-                        .await?;
-                        return Err(anyhow::anyhow!(format!(
-                            "Internal trie read/write error {:?}:{:?}",
-                            file_key, chunk.key
-                        )));
+                            format!(
+                                "Internal trie read/write error {:x}:{:?}",
+                                file_key, chunk.key
+                            ),
+                        ));
                     }
                     FileStorageWriteError::FingerprintAndStoredFileMismatch => {
-                        self.handle_rejected_storage_request(
-                            &file_key,
-                            bucket_id,
+                        return Err(RejectionInfo::new(
+                            *file_key,
+                            file_metadata,
                             RejectedStorageRequestReason::InternalError,
-                        )
-                        .await?;
-                        return Err(anyhow::anyhow!(format!(
-                            "Invariant broken! This is a bug! Fingerprint and stored file mismatch for key {:?}.",
-                            file_key
-                        )));
+                            format!(
+                                "Invariant broken! This is a bug! Fingerprint and stored file mismatch for key {:x}.",
+                                file_key
+                            ),
+                        ));
                     }
                     FileStorageWriteError::FailedToConstructTrieIter
                     | FileStorageWriteError::FailedToConstructFileTrie => {
-                        self.handle_rejected_storage_request(
-                            &file_key,
-                            bucket_id,
+                        return Err(RejectionInfo::new(
+                            *file_key,
+                            file_metadata,
                             RejectedStorageRequestReason::InternalError,
-                        )
-                        .await?;
-                        return Err(anyhow::anyhow!(format!(
-                            "This is a bug! Failed to construct trie iter for key {:?}.",
-                            file_key
-                        )));
+                            format!(
+                                "This is a bug! Failed to construct trie iter for key {:x}.",
+                                file_key
+                            ),
+                        ));
                     }
                 },
             }
@@ -1432,21 +1495,20 @@ where
         // If we haven't found the file to be complete during chunk processing,
         // check if it's complete now (in case this was the last batch)
         if !file_complete {
-            match write_file_storage.is_file_complete(&file_key) {
+            match write_file_storage.is_file_complete(file_key) {
                 Ok(is_complete) => file_complete = is_complete,
                 Err(e) => {
-                    self.handle_rejected_storage_request(
-                        &file_key,
-                        bucket_id,
-                        RejectedStorageRequestReason::InternalError,
-                    )
-                    .await?;
                     let err_msg = format!(
-                        "Failed to check if file is complete. The file key {:?} is in a bad state with error: {:?}",
+                        "Failed to check if file is complete. The file key {:x} is in a bad state with error: {:?}",
                         file_key, e
                     );
                     error!(target: LOG_TARGET, "{}", err_msg);
-                    return Err(anyhow::anyhow!(err_msg));
+                    return Err(RejectionInfo::new(
+                        *file_key,
+                        file_metadata,
+                        RejectedStorageRequestReason::InternalError,
+                        err_msg,
+                    ));
                 }
             }
         }
@@ -1510,7 +1572,7 @@ where
     }
 
     async fn unregister_file(&self, file_key: H256) -> anyhow::Result<()> {
-        warn!(target: LOG_TARGET, "Unregistering file {:?}", file_key);
+        warn!(target: LOG_TARGET, "Unregistering file {:x}", file_key);
 
         // Unregister the file from the file transfer service.
         // The error is ignored, as the file might already be unregistered.
