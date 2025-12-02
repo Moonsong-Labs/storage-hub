@@ -1,6 +1,6 @@
-//! MSP Internal File Transfer Server
+//! Trusted File Transfer Server
 //!
-//! HTTP server for MSP to receive streamed file chunks from backend.
+//! HTTP server to receive streamed file chunks from trusted backends.
 //! This server accepts POST requests with streamed chunks in the format:
 //! [Total Chunks: 8 bytes (u64, little-endian)]
 //! [ChunkId: 8 bytes (u64, little-endian)][Chunk data: FILE_CHUNK_SIZE bytes]...
@@ -34,9 +34,9 @@ use tokio_stream::StreamExt;
 
 use crate::types::FileStorageT;
 
-const LOG_TARGET: &str = "msp-internal-file-transfer-server";
+const LOG_TARGET: &str = "trusted-file-transfer-server";
 
-/// Configuration for the MSP internal file transfer HTTP server
+/// Configuration for the trusted file transfer HTTP server
 #[derive(Debug, Clone)]
 pub struct Config {
     /// Host to bind the server to
@@ -54,7 +54,7 @@ impl Default for Config {
     }
 }
 
-/// Global context for the MSP internal file transfer server
+/// Global context for the trusted file transfer server
 pub struct Context<FL, FSH, Runtime>
 where
     FL: FileStorageT,
@@ -100,7 +100,7 @@ where
     }
 }
 
-/// Spawn the MSP internal file transfer HTTP server
+/// Spawn the trusted file transfer HTTP server
 pub async fn spawn_server<FL, FSH, Runtime>(
     config: Config,
     file_storage: Arc<RwLock<FL>>,
@@ -122,7 +122,7 @@ where
     let addr = format!("{}:{}", config.host, config.port);
     let listener = TcpListener::bind(&addr).await.map_err(|e| {
         anyhow::anyhow!(
-            "Failed to bind MSP internal file transfer server to {}: {}",
+            "Failed to bind trusted file transfer server to {}: {}",
             addr,
             e
         )
@@ -132,7 +132,7 @@ where
         target: LOG_TARGET,
         host = %config.host,
         port = config.port,
-        "MSP internal file transfer HTTP server listening"
+        "Trusted file transfer HTTP server listening"
     );
 
     tokio::spawn(async move {
@@ -140,7 +140,7 @@ where
             warn!(
                 target: LOG_TARGET,
                 error = %e,
-                "MSP internal file transfer HTTP server error"
+                "Trusted file transfer HTTP server error"
             );
         }
     });

@@ -54,9 +54,9 @@ struct Args {
     #[arg(long)]
     msp_callback_url: Option<String>,
 
-    /// Override MSP internal file transfer URL
+    /// Override MSP trusted file transfer URL
     #[arg(long)]
-    msp_internal_file_transfer_url: Option<String>,
+    msp_trusted_file_transfer_url: Option<String>,
 }
 
 #[tokio::main]
@@ -79,7 +79,7 @@ async fn main() -> Result<()> {
     debug!(target: "main", database_url = %config.database.url, "Database configuration");
     debug!(target: "main", rpc_url = %config.storage_hub.rpc_url, "RPC configuration");
     debug!(target: "main", msp_callback_url = %config.msp.callback_url, "MSP callback configuration");
-    debug!(target: "main", msp_internal_file_transfer_url = %config.msp.internal_file_transfer_url, "MSP internal file transfer configuration");
+    debug!(target: "main", msp_trusted_file_transfer_url = %config.msp.trusted_file_transfer_url, "MSP trusted file transfer configuration");
 
     let memory_storage = InMemoryStorage::new();
     let storage = Arc::new(BoxedStorageWrapper::new(memory_storage));
@@ -142,8 +142,8 @@ fn load_config() -> Result<Config> {
     if let Some(msp_callback_url) = args.msp_callback_url {
         config.msp.callback_url = msp_callback_url;
     }
-    if let Some(msp_internal_file_transfer_url) = args.msp_internal_file_transfer_url {
-        config.msp.internal_file_transfer_url = msp_internal_file_transfer_url;
+    if let Some(msp_trusted_file_transfer_url) = args.msp_trusted_file_transfer_url {
+        config.msp.trusted_file_transfer_url = msp_trusted_file_transfer_url;
     }
 
     Ok(config)

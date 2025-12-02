@@ -420,7 +420,7 @@ impl MspService {
     /// Returns BadRequest on RPC/parse errors.
     ///
     /// We provide an URL as saveFileToDisk RPC requires it to stream the file.
-    /// We also implemented the internal_upload_by_key handler to handle the upload to the client.
+    /// We also implemented the trusted_upload_by_key handler to handle the upload to the client.
     pub async fn get_file(
         &self,
         session_id: &str,
@@ -630,7 +630,7 @@ impl MspService {
 }
 
 impl MspService {
-    /// Send chunks to the MSP internal file transfer server
+    /// Send chunks to the MSP trusted file transfer server
     ///
     /// Binary format: [Total Chunks: 8 bytes][ChunkId: 8 bytes][Data: FILE_CHUNK_SIZE]...
     async fn send_chunks_to_msp(
@@ -641,7 +641,7 @@ impl MspService {
     ) -> Result<(), Error> {
         let url = format!(
             "{}/upload/{}",
-            self.msp_config.internal_file_transfer_url, file_key
+            self.msp_config.trusted_file_transfer_url, file_key
         );
 
         let header = Bytes::from(total_chunks.to_le_bytes().to_vec());
@@ -682,7 +682,7 @@ impl MspService {
                 .await
                 .unwrap_or_else(|_| "Unable to read response".to_string());
             return Err(Error::BadRequest(format!(
-                "MSP internal file transfer server returned error: {} - {}",
+                "MSP trusted file transfer server returned error: {} - {}",
                 status, body
             )));
         }

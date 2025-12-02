@@ -21,7 +21,7 @@ use shc_file_manager::{in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStora
 use shc_file_transfer_service::{spawn_file_transfer_service, FileTransferService};
 use shc_fisherman_service::{spawn_fisherman_service, FishermanService};
 
-use crate::msp_internal_file_transfer_server;
+use crate::trusted_file_transfer_server;
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_indexer_service::IndexerMode;
 use shc_rpc::{RpcConfig, StorageHubClientRpcConfig};
@@ -73,7 +73,7 @@ where
     bsp_submit_proof_config: Option<BspSubmitProofConfig>,
     blockchain_service_config: Option<BlockchainServiceConfig<Runtime>>,
     peer_manager: Option<Arc<BspPeerManager>>,
-    msp_file_transfer_server_config: Option<msp_internal_file_transfer_server::Config>,
+    trusted_file_transfer_server_config: Option<trusted_file_transfer_server::Config>,
 }
 
 /// Common components to build for any given configuration of [`ShRole`] and [`ShStorageLayer`].
@@ -102,7 +102,7 @@ where
             bsp_submit_proof_config: None,
             blockchain_service_config: None,
             peer_manager: None,
-            msp_file_transfer_server_config: None,
+            trusted_file_transfer_server_config: None,
         }
     }
 
@@ -200,24 +200,24 @@ where
         self
     }
 
-    /// Spawn the MSP internal file transfer server if configured
+    /// Spawn the trusted file transfer server if configured
     ///
     /// This should be called after `with_blockchain` is called.
-    pub async fn spawn_msp_file_transfer_server(&self) {
-        if let Some(config) = self.msp_file_transfer_server_config.clone() {
+    pub async fn spawn_trusted_file_transfer_server(&self) {
+        if let Some(config) = self.trusted_file_transfer_server_config.clone() {
             let file_storage = self.file_storage.clone().expect(
                 "File Storage not initialized. This should not happen as `with_blockchain` should be called after `setup_storage_layer`."
             );
 
             let blockchain = self.blockchain.clone().expect(
-                "Blockchain Service not initialized. `spawn_msp_file_transfer_server` should be called after `with_blockchain`."
+                "Blockchain Service not initialized. `spawn_trusted_file_transfer_server` should be called after `with_blockchain`."
             );
 
             let file_transfer = self.file_transfer.clone().expect(
-                "File Transfer Service not initialized. `spawn_msp_file_transfer_server` should be called after `with_file_transfer`."
+                "File Transfer Service not initialized. `spawn_trusted_file_transfer_server` should be called after `with_file_transfer`."
             );
 
-            if let Err(e) = msp_internal_file_transfer_server::spawn_server(
+            if let Err(e) = trusted_file_transfer_server::spawn_server(
                 config,
                 file_storage,
                 blockchain,
@@ -226,7 +226,7 @@ where
             .await
             {
                 warn!(
-                    "Failed to spawn MSP internal file transfer server: {}. Continuing without it.",
+                    "Failed to spawn trusted file transfer server: {}. Continuing without it.",
                     e
                 );
             }
@@ -372,14 +372,14 @@ where
         self
     }
 
-    /// Configure the MSP internal file transfer HTTP server (MSP only)
+    /// Configure the trusted file transfer HTTP server
     ///
     /// The server will be spawned after the blockchain service is initialized.
-    pub fn with_msp_internal_file_transfer_server(
+    pub fn with_trusted_file_transfer_server(
         &mut self,
-        config: msp_internal_file_transfer_server::Config,
+        config: trusted_file_transfer_server::Config,
     ) -> &mut Self {
-        self.msp_file_transfer_server_config = Some(config);
+        self.trusted_file_transfer_server_config = Some(config);
         self
     }
 

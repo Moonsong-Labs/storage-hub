@@ -19,7 +19,7 @@ pub fn routes(services: Services) -> Router {
         )
         .route_layer(DefaultBodyLimit::disable());
 
-    let internal_file_upload = Router::new()
+    let trusted_file_upload = Router::new()
         .route(
             "/internal/uploads/{session_id}/{file_key}",
             put(handlers::files::internal_upload_by_key),
@@ -51,7 +51,7 @@ pub fn routes(services: Services) -> Router {
             get(handlers::files::get_file_info),
         )
         .merge(file_upload)
-        .merge(internal_file_upload)
+        .merge(trusted_file_upload)
         .route(
             "/download/{file_key}",
             get(handlers::files::download_by_key),
