@@ -25,6 +25,7 @@ It is organized:
 ├── runtime                <---- storage-hub runtime
 ├── support                <---- Traits and implementations used by storage-hub
 ├── test                   <---- Testing module for storage-hub, including Zombienet and TypeScript tests
+├── configs                <---- Example TOML configuration files for providers, fisherman and backend
 ├── .gitignore
 ├── biome.json
 ├── Cargo.lock
@@ -36,6 +37,13 @@ It is organized:
 ├── rust-toolchain
 └── tsconfig.json
 ```
+
+Sample configuration files live under `configs/`:
+
+- `configs/msp_config.toml` – example configuration for an MSP node
+- `configs/bsp_config.toml` – example configuration for a BSP node
+- `configs/fisherman_config.toml` – example configuration for the fisherman service
+- `configs/backend_config.toml` – example configuration for the MSP backend service
 
 ## Component Description
 

@@ -8,8 +8,8 @@
 -- block_hash: Tracks the block hash where the file was created:
 --   - Contains the block hash (32 bytes) where the NewStorageRequest event was emitted
 --   - For existing files, we use a placeholder hash (all zeros) since we don't have historical data
-ALTER TABLE file ADD COLUMN tx_hash BYTEA DEFAULT NULL;
 ALTER TABLE file ADD COLUMN block_hash BYTEA NOT NULL DEFAULT '\x0000000000000000000000000000000000000000000000000000000000000000';
+ALTER TABLE file ADD COLUMN tx_hash BYTEA DEFAULT NULL;
 
 -- Note: Existing files get a placeholder block_hash (all zeros) since we don't have historical data
 -- Only new files created after this migration will have the actual block_hash populated by the indexer

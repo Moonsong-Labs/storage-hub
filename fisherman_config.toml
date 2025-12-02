@@ -1,4 +1,0 @@
-# Fisherman configuration
-[fisherman]
-# Postgres database URL for the fisherman service
-indexer_database_url = "postgresql://postgres:postgres@localhost:5432/fisherman_db"
