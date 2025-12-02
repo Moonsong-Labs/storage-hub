@@ -12,14 +12,15 @@ pub async fn nonce(
     Json(payload): Json<NonceRequest>,
 ) -> Result<impl IntoResponse, Error> {
     debug!(address = %payload.address, chain_id = payload.chain_id, "POST auth nonce");
+    // Extract domain from URI
+    let domain = services.auth.extract_domain_from_uri(&payload.uri)?;
     let response = services
         .auth
-        .challenge(
-            &payload.address,
-            payload.chain_id,
-            &payload.domain,
-            &payload.uri,
-        )
+        .challenge(&payload.address, payload.chain_id, &domain, &payload.uri)
+        .await?;
+    Ok(Json(response))
+}
+
 pub async fn message(
     State(services): State<Services>,
     Json(payload): Json<NonceRequest>,
@@ -116,7 +117,6 @@ mod tests {
         let nonce_request = NonceRequest {
             address,
             chain_id: 1,
-            domain: "localhost".to_string(),
             uri: "https://localhost/".to_string(),
         };
 
@@ -189,7 +189,6 @@ mod tests {
         let invalid_json = serde_json::json!({
             "address": "not_an_eth_address",
             "chainId": 1,
-            "domain": "localhost",
             "uri": "https://localhost/"
         });
 
@@ -234,7 +233,6 @@ mod tests {
         let nonce_request = NonceRequest {
             address,
             chain_id: 1,
-            domain: "localhost".to_string(),
             uri: "https://localhost/".to_string(),
         };
 
@@ -264,7 +262,6 @@ mod tests {
         let nonce_request = NonceRequest {
             address,
             chain_id: 1,
-            domain: "localhost".to_string(),
             uri: "https://localhost/".to_string(),
         };
 
@@ -390,7 +387,6 @@ mod tests {
         let nonce_request = NonceRequest {
             address,
             chain_id: 1,
-            domain: "localhost".to_string(),
             uri: "https://localhost/".to_string(),
         };
 
@@ -438,7 +434,6 @@ mod tests {
         let nonce_request1 = NonceRequest {
             address: address1,
             chain_id: 1,
-            domain: "localhost".to_string(),
             uri: "https://localhost/".to_string(),
         };
 
@@ -460,7 +455,6 @@ mod tests {
         let nonce_request2 = NonceRequest {
             address: address2,
             chain_id: 1,
-            domain: "localhost".to_string(),
             uri: "https://localhost/".to_string(),
         };
 
