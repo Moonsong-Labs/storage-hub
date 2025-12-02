@@ -98,6 +98,29 @@ export const checkSHRunningContainers = async (docker: Docker) => {
   return allContainers.filter((container) => container.Image === DOCKER_IMAGE);
 };
 
+const extractAndStoreContainerLogs = async (
+  container: Docker.Container,
+  containerName: string,
+  tmpDirPath: string,
+  verbose = false
+) => {
+  try {
+    const logs = await container.logs({
+      stdout: true,
+      stderr: true,
+      timestamps: true
+    });
+    verbose && console.log(`Extracting logs for container ${containerName}`);
+    const sanitizedName = containerName.replace("/", "");
+
+    await fs.writeFile(`${tmpDirPath}/${sanitizedName}.log`, stripAnsi(logs.toString()), {
+      encoding: "utf8"
+    });
+  } catch (e) {
+    console.warn(`Failed to extract logs for container ${containerName}:`, e);
+  }
+};
+
 export const cleanupEnvironment = async (verbose = false) => {
   await printDockerStatus();
 
@@ -129,24 +152,20 @@ export const cleanupEnvironment = async (verbose = false) => {
 
   const tmpDir = tmp.dirSync({ prefix: "bsp-logs-", unsafeCleanup: true });
 
-  const logPromises = existingNodes.map(async (node) => {
-    const container = docker.getContainer(node.Id);
-    try {
-      const logs = await container.logs({
-        stdout: true,
-        stderr: true,
-        timestamps: true
-      });
-      verbose && console.log(`Extracting logs for container ${node.Names[0]}`);
-      const containerName = node.Names[0].replace("/", "");
+  const logPromises = existingNodes.map((node) =>
+    extractAndStoreContainerLogs(docker.getContainer(node.Id), node.Names[0], tmpDir.name, verbose)
+  );
 
-      await fs.writeFile(`${tmpDir.name}/${containerName}.log`, stripAnsi(logs.toString()), {
-        encoding: "utf8"
-      });
-    } catch (e) {
-      console.warn(`Failed to extract logs for container ${node.Names[0]}:`, e);
-    }
-  });
+  if (backendContainer) {
+    logPromises.push(
+      extractAndStoreContainerLogs(
+        docker.getContainer(backendContainer.Id),
+        backendContainer.Names[0],
+        tmpDir.name,
+        verbose
+      )
+    );
+  }
 
   await Promise.all(logPromises);
   console.log(`Container logs saved to ${tmpDir.name}`);
