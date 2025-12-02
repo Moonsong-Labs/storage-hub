@@ -34,9 +34,10 @@ pub enum Column {
     ///
     /// Used for storing the chunks of the file.
     Chunks,
-    /// Stores keys of 32 bytes representing the `file_key`.
+    /// DEPRECATED: This column is no longer used. Chunk count is now derived from ChunkBitmap.
+    /// Kept in enum for backward compatibility with existing databases.
     ///
-    /// Used for counting the number of chunks currently stored for the `file_key`.
+    /// Previously: Stored keys of 32 bytes representing the `file_key` for counting chunks.
     ChunkCount,
     /// Stores keys of 64 bytes representing the concatenation of `bucket_id` and `file_key`.
     ///
@@ -54,6 +55,13 @@ pub enum Column {
     /// Used to ensure the underlying trie (Chunks/Roots) is deleted only when the last reference
     /// to this fingerprint is removed.
     FingerprintRefCount,
+    /// Stores keys of 32 bytes representing the `file_key` with values being a byte array
+    /// where each byte (0 or 1) indicates if the corresponding chunk is present in storage.
+    ///
+    /// Used to prevent double-counting chunks during concurrent uploads and to enable
+    /// early-exit optimization for duplicate chunk writes.
+    /// Index N in the array corresponds to chunk N (1 byte per chunk, ~0.1% overhead).
+    ChunkBitmap,
 }
 
 impl Into<u32> for Column {
@@ -550,6 +558,67 @@ where
 
         Ok(new_count)
     }
+
+    /// Check if a chunk is present in file storage for this file key.
+    ///
+    /// Returns `true` if the chunk has already been stored (byte is non-zero in the bitmap),
+    /// `false` otherwise (including if the bitmap doesn't exist yet).
+    fn is_chunk_present(&self, file_key: &[u8], chunk_id: u64) -> Result<bool, FileStorageError> {
+        // Get the bitmap for the file
+        let bitmap = self
+            .storage
+            .read(Column::ChunkBitmap.into(), file_key)
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "Failed to read chunk bitmap: {:?}", e);
+                FileStorageError::FailedToReadStorage
+            })?;
+
+        // If the bitmap doesn't exist, no chunks have been stored yet
+        let bitmap = match bitmap {
+            Some(b) => b,
+            None => return Ok(false),
+        };
+
+        // Check if the chunk_id index exists and is marked (non-zero)
+        let index = chunk_id as usize;
+        Ok(index < bitmap.len() && bitmap[index] != 0)
+    }
+
+    /// Mark a chunk as present in the bitmap for this file key.
+    ///
+    /// This updates the bitmap in the provided transaction.
+    fn mark_chunk_present(
+        &self,
+        file_key: &[u8],
+        chunk_id: u64,
+        transaction: &mut DBTransaction,
+    ) -> Result<(), FileStorageError> {
+        // Get the bitmap for the file
+        let mut bitmap = self
+            .storage
+            .read(Column::ChunkBitmap.into(), file_key)
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "Failed to read chunk bitmap: {:?}", e);
+                FileStorageError::FailedToReadStorage
+            })?
+            .unwrap_or_default();
+
+        let index = chunk_id as usize;
+
+        // Extend the bitmap if necessary to hold this chunk index
+        if index >= bitmap.len() {
+            bitmap.resize(index + 1, 0);
+        }
+
+        // Mark the chunk as present
+        bitmap[index] = 1;
+
+        // Write the updated bitmap back to storage
+        transaction.put(Column::ChunkBitmap.into(), file_key, &bitmap);
+
+        Ok(())
+    }
+
     /// Helper to build the bucket-prefixed file key used for efficient prefix scans.
     ///
     /// This is used, for instance, to delete all files in a bucket efficiently.
@@ -664,30 +733,54 @@ where
 
     /// Returns the number of chunks currently stored for a given file key tracked by [`CHUNK_COUNT_COLUMN`].
     fn stored_chunks_count(&self, file_key: &HasherOutT<T>) -> Result<u64, FileStorageError> {
-        // Read from CHUNK_COUNT_COLUMN using the file key
-        let current_count = self
+        // Count is derived from the bitmap by counting the number of non-zero bytes
+        let bitmap = self
             .storage
-            .read(Column::ChunkCount.into(), file_key.as_ref())
+            .read(Column::ChunkBitmap.into(), file_key.as_ref())
             .map_err(|e| {
                 error!(target: LOG_TARGET, "{:?}", e);
                 FileStorageError::FailedToReadStorage
-            })?
-            .map(|bytes| u64::from_le_bytes(bytes.try_into().unwrap()))
-            .unwrap_or(0);
+            })?;
 
-        Ok(current_count)
+        let count = match bitmap {
+            Some(b) => b.iter().filter(|&&byte| byte != 0).count() as u64,
+            None => 0,
+        };
+
+        Ok(count)
     }
 
     /// Writes a chunk to storage with file key and chunk ID.
     ///
+    /// If the chunk is already present (tracked in [`Column::ChunkBitmap`]), this function returns early
+    /// without performing any trie operations, providing significant performance benefits for concurrent uploads.
+    ///
     /// Returns [`FileStorageWriteOutcome`] indicating if file is complete. This outcome is based on
-    /// the current number of chunks stored (tracked by [`CHUNK_COUNT_COLUMN`]) and the file metadata's [`FileMetadata::chunks_count`].
+    /// the current number of chunks stored (derived from [`Column::ChunkBitmap`]) and the file metadata's [`FileMetadata::chunks_count`].
     fn write_chunk(
         &mut self,
         file_key: &HasherOutT<T>,
         chunk_id: &ChunkId,
         data: &Chunk,
     ) -> Result<FileStorageWriteOutcome, FileStorageWriteError> {
+        // If the chunk is already present in storage, return early
+        if self
+            .is_chunk_present(file_key.as_ref(), chunk_id.as_u64())
+            .map_err(|_| FileStorageWriteError::FailedToGetStoredChunksCount)?
+        {
+            debug!(
+                target: LOG_TARGET,
+                "Chunk {:?} already present for file key {:?}, skipping write",
+                chunk_id,
+                file_key
+            );
+            return match self.is_file_complete(file_key) {
+                Ok(true) => Ok(FileStorageWriteOutcome::FileComplete),
+                Ok(false) => Ok(FileStorageWriteOutcome::FileIncomplete),
+                Err(e) => Err(FileStorageWriteError::FailedToCheckFileCompletion(e)),
+            };
+        }
+
         let metadata = self
             .get_metadata(file_key)
             .map_err(|_| FileStorageWriteError::FailedToParseFileMetadata)?
@@ -705,7 +798,7 @@ where
             }
             Err(FileStorageWriteError::FileChunkAlreadyExists) => {
                 // Chunk already exists in shared trie - no need to update root
-                debug!(target: LOG_TARGET, "Chunk {:?} already exists in shared trie for file key {:?}, incrementing count for progress tracking", chunk_id, file_key);
+                debug!(target: LOG_TARGET, "Chunk {:?} already exists in shared trie for file key {:?}", chunk_id, file_key);
             }
             Err(other) => {
                 error!(target: LOG_TARGET, "Error while writing chunk {:?} of file key {:?}: {:?}", chunk_id, file_key, other);
@@ -722,24 +815,12 @@ where
             new_partial_root.as_ref(),
         );
 
-        let current_count = self.stored_chunks_count(file_key).map_err(|e| {
-            error!(target: LOG_TARGET, "{:?}", e);
-            FileStorageWriteError::FailedToGetStoredChunksCount
-        })?;
-
-        // Increment chunk count.
-        // This should never overflow unless there is a bug or we support file sizes as large as 16 exabytes.
-        // Since this is executed within the context of a write lock in the layer above, we should not have any chunk count syncing issues.
-        let new_count = current_count
-            .checked_add(1)
-            .ok_or(FileStorageWriteError::ChunkCountOverflow)?;
-
-        // Update the chunk count.
-        transaction.put(
-            Column::ChunkCount.into(),
-            file_key.as_ref(),
-            &new_count.to_le_bytes(),
-        );
+        // Mark this chunk as present for this file key
+        self.mark_chunk_present(file_key.as_ref(), chunk_id.as_u64(), &mut transaction)
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "Failed to mark chunk as present: {:?}", e);
+                FileStorageWriteError::FailedToUpdatePartialRoot
+            })?;
 
         self.storage.write(transaction).map_err(|e| {
             error!(target: LOG_TARGET,"{:?}", e);
@@ -759,19 +840,36 @@ where
 
     /// Checks if all chunks are stored for a given file key.
     fn is_file_complete(&self, file_key: &HasherOutT<T>) -> Result<bool, FileStorageError> {
+        // Get the metadata of the file
         let metadata = self
             .get_metadata(file_key)?
             .ok_or(FileStorageError::FileDoesNotExist)?;
 
-        let stored_chunks = self.stored_chunks_count(file_key)?;
-
+        // Get the file data trie that's currently stored
         let file_trie = self.get_file_trie(&metadata)?;
 
-        if metadata.fingerprint() != file_trie.get_root().as_ref() {
-            return Ok(false);
+        // Get the number of stored chunks for the file
+        let stored_chunks = self.stored_chunks_count(file_key)?;
+
+        // Check if the number of stored chunks is equal to the number of chunks in the metadata
+        let are_chunks_complete = metadata.chunks_count() == stored_chunks;
+
+        // Check if the fingerprint of the file is the same as the fingerprint of the file data trie
+        let are_fingerprints_equal = metadata.fingerprint() == file_trie.get_root().as_ref();
+
+        // If these conditions don't match, error out since we have a critical inconsistency
+        // The logic behind this is that:
+        // - If the chunks are complete, then the fingerprint should be the same as the fingerprint of the file data trie
+        // - If the chunks are not complete, then the fingerprint should not be the same as the fingerprint of the file data trie
+        if are_chunks_complete != are_fingerprints_equal {
+            error!(target: LOG_TARGET, "Inconsistency detected for file key {:?}", file_key);
+            error!(target: LOG_TARGET, "Stored chunks: {stored_chunks}. Metadata chunks: {}", metadata.chunks_count());
+            error!(target: LOG_TARGET, "Stored fingerprint: {:?}. Metadata fingerprint: {:x}", file_trie.get_root(), metadata.fingerprint());
+            return Err(FileStorageError::FingerprintAndStoredFileMismatch);
         }
 
-        Ok(metadata.chunks_count() == stored_chunks)
+        // We can safely return the result of the chunks count check since we have already checked the fingerprint
+        Ok(are_chunks_complete)
     }
 
     /// Stores file metadata with an empty root.
@@ -810,12 +908,6 @@ where
                 empty_root.as_ref(),
             );
         }
-        // Initialize chunk count to 0
-        transaction.put(
-            Column::ChunkCount.into(),
-            file_key.as_ref(),
-            &0u64.to_le_bytes(),
-        );
 
         // Also store the bucket-prefixed key to support efficient deletions by bucket prefix.
         let bucket_prefixed_file_key = Self::build_bucket_prefixed_file_key(&metadata, &file_key);
@@ -871,19 +963,35 @@ where
         let mem_db = file_data.as_hash_db();
         let trie = TrieDBBuilder::<T>::new(&mem_db, file_data.get_root()).build();
 
-        let chunk_count = trie
-            .iter()
-            .map_err(|e| {
-                error!(target: LOG_TARGET, "Failed to construct Trie iterator: {}", e);
-                FileStorageError::FailedToConstructTrieIter
-            })?
-            .count();
+        // To build the bitmap, we need to collect all the chunk IDs
+        let mut chunk_ids = Vec::new();
+        for item in trie.iter().map_err(|e| {
+            error!(target: LOG_TARGET, "Failed to construct Trie iterator: {}", e);
+            FileStorageError::FailedToConstructTrieIter
+        })? {
+            let (key, _value) = item.map_err(|e| {
+                error!(target: LOG_TARGET, "Failed to read trie item: {}", e);
+                FileStorageError::FailedToReadStorage
+            })?;
+            let chunk_id = ChunkId::from_trie_key(&key).map_err(|e| {
+                error!(target: LOG_TARGET, "Failed to decode chunk ID from trie key: {:?}", e);
+                FileStorageError::FailedToReadStorage
+            })?;
+            chunk_ids.push(chunk_id.as_u64());
+        }
 
-        transaction.put(
-            Column::ChunkCount.into(),
-            file_key.as_ref(),
-            &chunk_count.to_le_bytes(),
-        );
+        // Create a bitmap with all the received chunk IDs marked as counted
+        if !chunk_ids.is_empty() {
+            let max_id = *chunk_ids.iter().max().unwrap();
+            let bitmap_size = (max_id + 1) as usize;
+            let mut bitmap = vec![0u8; bitmap_size];
+
+            for chunk_id in chunk_ids {
+                bitmap[chunk_id as usize] = 1;
+            }
+
+            transaction.put(Column::ChunkBitmap.into(), file_key.as_ref(), &bitmap);
+        }
 
         let bucket_prefixed_file_key = Self::build_bucket_prefixed_file_key(&metadata, &file_key);
 
@@ -979,7 +1087,7 @@ where
         // Transaction 1: remove per-file metadata and decrement refcount
         let mut txn1 = DBTransaction::new();
         txn1.delete(Column::Metadata.into(), file_key.as_ref());
-        txn1.delete(Column::ChunkCount.into(), file_key.as_ref());
+        txn1.delete(Column::ChunkBitmap.into(), file_key.as_ref());
         let bucket_prefixed_file_key = metadata
             .bucket_id()
             .iter()
@@ -1847,5 +1955,287 @@ mod tests {
 
         // Idempotent: deleting bucket B again does nothing and should not error
         assert!(file_storage.delete_files_with_prefix(&[11u8; 32]).is_ok());
+    }
+
+    #[test]
+    fn chunk_bitmap_prevents_double_counting() {
+        let storage = StorageDb {
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
+            _marker: Default::default(),
+        };
+
+        let mut file_storage =
+            RocksDbFileStorage::<LayoutV1<BlakeTwo256>, InMemory>::new(storage.clone());
+
+        // Create a file with 3 chunks
+        let chunks = vec![
+            Chunk::from([5u8; FILE_CHUNK_SIZE as usize]),
+            Chunk::from([6u8; FILE_CHUNK_SIZE as usize]),
+            Chunk::from([7u8; FILE_CHUNK_SIZE as usize]),
+        ];
+
+        let chunk_ids: Vec<ChunkId> = chunks
+            .iter()
+            .enumerate()
+            .map(|(id, _)| ChunkId::new(id as u64))
+            .collect();
+
+        // Create a file trie to get the expected fingerprint
+        let mut file_trie =
+            RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(storage.clone());
+
+        for (chunk_id, chunk) in chunk_ids.iter().zip(chunks.iter()) {
+            file_trie.write_chunk(chunk_id, chunk).unwrap();
+        }
+
+        let file_metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            [1u8; 32].to_vec(),
+            "location".to_string().into_bytes(),
+            FILE_CHUNK_SIZE * chunks.len() as u64,
+            file_trie.get_root().as_ref().into(),
+        )
+        .unwrap();
+
+        let key = file_metadata.file_key::<BlakeTwo256>();
+
+        // Insert file metadata first
+        file_storage.insert_file(key, file_metadata).unwrap();
+
+        // Write chunk 0 for the first time
+        file_storage
+            .write_chunk(&key, &chunk_ids[0], &chunks[0])
+            .unwrap();
+        assert_eq!(file_storage.stored_chunks_count(&key).unwrap(), 1);
+
+        // Write chunk 0 again (simulating concurrent upload)
+        file_storage
+            .write_chunk(&key, &chunk_ids[0], &chunks[0])
+            .unwrap();
+        // Should still be 1, not 2
+        assert_eq!(file_storage.stored_chunks_count(&key).unwrap(), 1);
+
+        // Write chunk 1
+        file_storage
+            .write_chunk(&key, &chunk_ids[1], &chunks[1])
+            .unwrap();
+        assert_eq!(file_storage.stored_chunks_count(&key).unwrap(), 2);
+
+        // Write chunk 1 again (simulating concurrent upload)
+        file_storage
+            .write_chunk(&key, &chunk_ids[1], &chunks[1])
+            .unwrap();
+        // Should still be 2, not 3
+        assert_eq!(file_storage.stored_chunks_count(&key).unwrap(), 2);
+
+        // Write chunk 2
+        file_storage
+            .write_chunk(&key, &chunk_ids[2], &chunks[2])
+            .unwrap();
+        assert_eq!(file_storage.stored_chunks_count(&key).unwrap(), 3);
+
+        // Verify final state
+        assert!(file_storage.is_file_complete(&key).unwrap());
+    }
+
+    #[test]
+    fn chunk_bitmap_handles_non_sequential_writes() {
+        let storage = StorageDb {
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
+            _marker: Default::default(),
+        };
+
+        let mut file_storage =
+            RocksDbFileStorage::<LayoutV1<BlakeTwo256>, InMemory>::new(storage.clone());
+
+        // Create a file with 5 chunks
+        let chunks = vec![
+            Chunk::from([0u8; FILE_CHUNK_SIZE as usize]),
+            Chunk::from([1u8; FILE_CHUNK_SIZE as usize]),
+            Chunk::from([2u8; FILE_CHUNK_SIZE as usize]),
+            Chunk::from([3u8; FILE_CHUNK_SIZE as usize]),
+            Chunk::from([4u8; FILE_CHUNK_SIZE as usize]),
+        ];
+
+        let chunk_ids: Vec<ChunkId> = chunks
+            .iter()
+            .enumerate()
+            .map(|(id, _)| ChunkId::new(id as u64))
+            .collect();
+
+        // Create a file trie to get the expected fingerprint
+        let mut file_trie =
+            RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(storage.clone());
+        for (chunk_id, chunk) in chunk_ids.iter().zip(chunks.iter()) {
+            file_trie.write_chunk(chunk_id, chunk).unwrap();
+        }
+
+        let file_metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            [1u8; 32].to_vec(),
+            "location".to_string().into_bytes(),
+            FILE_CHUNK_SIZE * chunks.len() as u64,
+            file_trie.get_root().as_ref().into(),
+        )
+        .unwrap();
+
+        let key = file_metadata.file_key::<BlakeTwo256>();
+        file_storage.insert_file(key, file_metadata).unwrap();
+
+        // Write chunks in non-sequential order: 4, 1, 3, 0, 2
+        file_storage
+            .write_chunk(&key, &chunk_ids[4], &chunks[4])
+            .unwrap();
+        assert_eq!(file_storage.stored_chunks_count(&key).unwrap(), 1);
+
+        file_storage
+            .write_chunk(&key, &chunk_ids[1], &chunks[1])
+            .unwrap();
+        assert_eq!(file_storage.stored_chunks_count(&key).unwrap(), 2);
+
+        file_storage
+            .write_chunk(&key, &chunk_ids[3], &chunks[3])
+            .unwrap();
+        assert_eq!(file_storage.stored_chunks_count(&key).unwrap(), 3);
+
+        file_storage
+            .write_chunk(&key, &chunk_ids[0], &chunks[0])
+            .unwrap();
+        assert_eq!(file_storage.stored_chunks_count(&key).unwrap(), 4);
+
+        file_storage
+            .write_chunk(&key, &chunk_ids[2], &chunks[2])
+            .unwrap();
+        assert_eq!(file_storage.stored_chunks_count(&key).unwrap(), 5);
+
+        // Verify all chunks are marked correctly by checking the bitmap via storage
+        let bitmap = file_storage
+            .storage
+            .read(Column::ChunkBitmap.into(), key.as_ref())
+            .unwrap()
+            .unwrap();
+        assert_eq!(bitmap.len(), 5);
+        for i in 0..5 {
+            assert_eq!(bitmap[i], 1, "Chunk {} should be marked as counted", i);
+        }
+    }
+
+    #[test]
+    fn chunk_bitmap_initialized_correctly_in_insert_file_with_data() {
+        let storage = StorageDb {
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
+            _marker: Default::default(),
+        };
+
+        let mut file_storage =
+            RocksDbFileStorage::<LayoutV1<BlakeTwo256>, InMemory>::new(storage.clone());
+
+        let chunks = vec![
+            Chunk::from([5u8; FILE_CHUNK_SIZE as usize]),
+            Chunk::from([6u8; FILE_CHUNK_SIZE as usize]),
+            Chunk::from([7u8; FILE_CHUNK_SIZE as usize]),
+        ];
+
+        let chunk_ids: Vec<ChunkId> = chunks
+            .iter()
+            .enumerate()
+            .map(|(id, _)| ChunkId::new(id as u64))
+            .collect();
+
+        let mut file_trie =
+            RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(storage.clone());
+        for (chunk_id, chunk) in chunk_ids.iter().zip(chunks.iter()) {
+            file_trie.write_chunk(chunk_id, chunk).unwrap();
+        }
+
+        let file_metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            [1u8; 32].to_vec(),
+            "location".to_string().into_bytes(),
+            FILE_CHUNK_SIZE * chunks.len() as u64,
+            file_trie.get_root().as_ref().into(),
+        )
+        .unwrap();
+
+        let key = file_metadata.file_key::<BlakeTwo256>();
+
+        // Insert file with data
+        file_storage
+            .insert_file_with_data(key, file_metadata, file_trie)
+            .unwrap();
+
+        // Verify bitmap is correctly initialized
+        let bitmap = file_storage
+            .storage
+            .read(Column::ChunkBitmap.into(), key.as_ref())
+            .unwrap()
+            .unwrap();
+        assert_eq!(bitmap.len(), 3);
+        assert_eq!(bitmap[0], 1);
+        assert_eq!(bitmap[1], 1);
+        assert_eq!(bitmap[2], 1);
+
+        // Verify stored chunks count matches
+        assert_eq!(file_storage.stored_chunks_count(&key).unwrap(), 3);
+    }
+
+    #[test]
+    fn chunk_bitmap_deleted_with_file() {
+        let storage = StorageDb {
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
+            _marker: Default::default(),
+        };
+
+        let mut file_storage =
+            RocksDbFileStorage::<LayoutV1<BlakeTwo256>, InMemory>::new(storage.clone());
+
+        let chunks = vec![
+            Chunk::from([5u8; FILE_CHUNK_SIZE as usize]),
+            Chunk::from([6u8; FILE_CHUNK_SIZE as usize]),
+        ];
+
+        let chunk_ids: Vec<ChunkId> = chunks
+            .iter()
+            .enumerate()
+            .map(|(id, _)| ChunkId::new(id as u64))
+            .collect();
+
+        let mut file_trie =
+            RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(storage.clone());
+        for (chunk_id, chunk) in chunk_ids.iter().zip(chunks.iter()) {
+            file_trie.write_chunk(chunk_id, chunk).unwrap();
+        }
+
+        let file_metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            [1u8; 32].to_vec(),
+            "location".to_string().into_bytes(),
+            FILE_CHUNK_SIZE * chunks.len() as u64,
+            file_trie.get_root().as_ref().into(),
+        )
+        .unwrap();
+
+        let key = file_metadata.file_key::<BlakeTwo256>();
+
+        file_storage
+            .insert_file_with_data(key, file_metadata, file_trie)
+            .unwrap();
+
+        // Verify bitmap exists
+        assert!(file_storage
+            .storage
+            .read(Column::ChunkBitmap.into(), key.as_ref())
+            .unwrap()
+            .is_some());
+
+        // Delete the file
+        file_storage.delete_file(&key).unwrap();
+
+        // Verify bitmap is deleted
+        assert!(file_storage
+            .storage
+            .read(Column::ChunkBitmap.into(), key.as_ref())
+            .unwrap()
+            .is_none());
     }
 }
