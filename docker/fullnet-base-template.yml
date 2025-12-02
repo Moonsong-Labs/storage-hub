@@ -56,6 +56,7 @@ services:
         "--base-path=/data",
         "--msp-charging-period=12",
         "--msp-distribute-files",
+        "--msp-file-transfer-host=0.0.0.0",
       ]
   sh-msp-2:
     image: storage-hub:local
@@ -87,6 +88,7 @@ services:
         "--base-path=/data",
         "--msp-charging-period=12",
         "--msp-distribute-files",
+        "--msp-file-transfer-host=0.0.0.0",
       ]
   sh-user:
     image: storage-hub:local

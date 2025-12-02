@@ -254,7 +254,7 @@ where
     const TOTAL_CHUNKS_SIZE: usize = 8; // u64
     const CHUNK_ID_SIZE: usize = 8; // u64
 
-    let chunk_size = CHUNK_ID_SIZE + FILE_CHUNK_SIZE as usize;
+    let file_chunk_size = FILE_CHUNK_SIZE as usize;
 
     while let Some(try_bytes) = stream.next().await {
         let bytes = try_bytes?;
@@ -283,8 +283,10 @@ where
 
         // Process chunks from the buffer (all except last chunk)
         if let Some(total_chunks) = maybe_total_chunks {
-            while chunks_processed < total_chunks - 1 && buffer.len() >= chunk_size {
-                let (chunk_id, chunk_data) = get_next_chunk(&mut buffer, Some(chunk_size))?;
+            while chunks_processed < total_chunks - 1
+                && buffer.len() >= CHUNK_ID_SIZE + file_chunk_size
+            {
+                let (chunk_id, chunk_data) = get_next_chunk(&mut buffer, Some(file_chunk_size))?;
 
                 // For non-last chunks, just verify write succeeded (don't check FileComplete)
                 write_chunk(context, file_key, &chunk_id, &chunk_data).await?;
@@ -324,7 +326,7 @@ where
 /// whole buffer as its data
 fn get_next_chunk(
     buffer: &mut Vec<u8>,
-    maybe_chunk_data_size: Option<usize>,
+    maybe_file_chunk_size: Option<usize>,
 ) -> anyhow::Result<(ChunkId, Vec<u8>)> {
     const CHUNK_ID_SIZE: usize = 8;
 
@@ -336,7 +338,7 @@ fn get_next_chunk(
     let chunk_id_value = u64::from_le_bytes(chunk_id_bytes);
     let chunk_id = ChunkId::new(chunk_id_value);
 
-    let chunk_data = match maybe_chunk_data_size {
+    let chunk_data = match maybe_file_chunk_size {
         Some(size) => buffer.drain(..size).collect(),
         None => std::mem::take(buffer),
     };
