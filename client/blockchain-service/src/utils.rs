@@ -1153,7 +1153,7 @@ where
         let on_chain_nonce = match self.account_nonce(&block_hash) {
             Ok(nonce) => nonce,
             Err(e) => {
-                error!(
+                warn!(
                     target: LOG_TARGET,
                     "Failed to get on-chain nonce while cleaning up pending tx store at block {}. If this is the genesis block or a sufficiently old block, this is expected and can be ignored: {e}",
                     block_hash
@@ -1370,7 +1370,7 @@ where
         let on_chain_nonce = match self.account_nonce(&block_hash) {
             Ok(nonce) => nonce,
             Err(e) => {
-                error!(
+                warn!(
                     target: LOG_TARGET,
                     "Failed to get on-chain nonce while handling old nonce gaps at block {}. If this is the genesis block or a sufficiently old block, this is expected and can be ignored: {e}",
                     block_hash
