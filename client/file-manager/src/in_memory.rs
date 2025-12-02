@@ -240,13 +240,11 @@ where
     }
 
     fn is_file_complete(&self, key: &HasherOutT<T>) -> Result<bool, FileStorageError> {
-        // Get the metadata of the file
         let metadata = self
             .metadata
             .get(key)
             .ok_or(FileStorageError::FileDoesNotExist)?;
 
-        // Get the file data trie that's currently stored in memory
         let file_data = self.file_data.get(key).expect(
             format!(
                 "Invariant broken! Metadata for file key {:?} found but no associated trie",
@@ -255,28 +253,11 @@ where
             .as_str(),
         );
 
-        // Get the number of stored chunks for the file
-        let stored_chunks = self.stored_chunks_count(key)?;
-
-        // Check if the number of stored chunks is equal to the number of chunks in the metadata
-        let are_chunks_complete = metadata.chunks_count() == stored_chunks;
-
-        // Check if the fingerprint of the file is the same as the fingerprint of the file data trie
-        let are_fingerprints_equal = metadata.fingerprint() == file_data.get_root().as_ref();
-
-        // If these conditions don't match, error out since we have a critical inconsistency
-        // The logic behind this is that:
-        // - If the chunks are complete, then the fingerprint should be the same as the fingerprint of the file data trie
-        // - If the chunks are not complete, then the fingerprint should not be the same as the fingerprint of the file data trie
-        if are_chunks_complete != are_fingerprints_equal {
-            error!(target: LOG_TARGET, "Inconsistency detected for file key {:?}", key);
-            error!(target: LOG_TARGET, "Stored chunks: {stored_chunks}. Metadata chunks: {}", metadata.chunks_count());
-            error!(target: LOG_TARGET, "Stored fingerprint: {:?}. Metadata fingerprint: {:x}", file_data.get_root(), metadata.fingerprint());
-            return Err(FileStorageError::FingerprintAndStoredFileMismatch);
+        if metadata.fingerprint() != file_data.get_root().as_ref() {
+            return Ok(false);
         }
 
-        // We can safely return the result of the chunks count check since we have already checked the fingerprint
-        Ok(are_chunks_complete)
+        Ok(metadata.chunks_count() == self.stored_chunks_count(key)?)
     }
 
     fn insert_file(
