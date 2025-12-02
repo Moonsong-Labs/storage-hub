@@ -4,6 +4,7 @@ use alloy_core::primitives::{eip191_hash_message, Address, PrimitiveSignature};
 use alloy_signer::utils::public_key_to_address;
 use axum_jwt::jsonwebtoken::{self, DecodingKey, EncodingKey, Header, Validation};
 use chrono::{Duration, Utc};
+use http::Uri;
 use rand::{distributions::Alphanumeric, Rng};
 use tracing::{debug, error};
 
@@ -122,7 +123,38 @@ impl AuthService {
             .collect()
     }
 
-    /// Construct the message that should be signed for authentication
+    /// Extract domain (host[:port]) from a URI string
+    ///
+    /// Returns the hostname and optional port (e.g., "datahaven.app" or "localhost:8080").
+    ///
+    /// # Errors
+    ///
+    /// Returns `Error::BadRequest` if the URI format is invalid or doesn't contain a host.
+    pub fn extract_domain_from_uri(&self, uri: &str) -> Result<String, Error> {
+        debug!(target: "auth_service::extract_domain_from_uri", uri = %uri, "Extracting domain from URI");
+
+        let uri = uri.trim();
+
+        // Prepend scheme if missing because Uri requires it
+        let normalized = if uri.starts_with("http://") || uri.starts_with("https://") {
+            uri.to_string()
+        } else {
+            format!("https://{}", uri)
+        };
+
+        let parsed: Uri = normalized
+            .parse()
+            .map_err(|_| Error::BadRequest("Invalid URI".into()))?;
+
+        let host = parsed
+            .host()
+            .ok_or_else(|| Error::BadRequest("URI must contain a valid host".into()))?;
+
+        let port = parsed.port().map(|p| format!(":{}", p)).unwrap_or_default();
+
+        Ok(format!("{}{}", host, port))
+    }
+
     /// Construct a Sign-In with Ethereum (SIWE) compliant message for authentication
     ///
     /// This follows the EIP-4361 standard for Sign-In with Ethereum messages.
