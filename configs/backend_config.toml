@@ -74,3 +74,13 @@ url = "postgresql://postgres:postgres@localhost:5432/storage_hub"
 # Enable mock mode for testing (requires 'mocks' feature to be enabled at compile time)
 # When true, uses in-memory mock database instead of real PostgreSQL connection
 # mock_mode = false
+
+# File transfer session management
+[file_transfer]
+# Maximum number of concurrent file uploads allowed (default: 100)
+# Prevents concurrent uploads of the same file key
+# Adjust based on your server's capacity and expected load
+max_upload_sessions = 100
+# Maximum number of concurrent file downloads allowed (default: 100)
+# Adjust based on your server's bandwidth and memory capacity
+max_download_sessions = 100

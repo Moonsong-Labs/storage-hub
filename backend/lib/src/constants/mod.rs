@@ -107,6 +107,12 @@ pub mod download {
     pub const QUEUE_BUFFER_SIZE: usize = (MAX_BUFFER_BYTES / FILE_CHUNK_SIZE) as usize;
 }
 
+pub mod upload {
+    /// The maximum number of upload sessions that can be active at any given time.
+    /// This prevents concurrent uploads of the same file_key.
+    pub const MAX_UPLOAD_SESSIONS: usize = 100;
+}
+
 /// Retry and backoff configuration
 pub mod retry {
     /// Stepped backoff delays (in seconds) for retry operations.
