@@ -67,7 +67,7 @@ pub fn get_events_at_block<Runtime: StorageEnableRuntime>(
 /// - `Ok(None)` if the block hash doesn't exist (may have been pruned)
 /// - `Err(...)` if there's an error accessing storage
 pub fn get_ethereum_block_hash<RuntimeApi>(
-    client: &Arc<ParachainClient<RuntimeApi>>,
+    client: &Arc<StorageHubClient<RuntimeApi>>,
     block_hash: &H256,
     block_number: u32,
 ) -> Result<Option<H256>, sp_blockchain::Error> {
