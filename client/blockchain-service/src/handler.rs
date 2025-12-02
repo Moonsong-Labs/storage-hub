@@ -35,7 +35,7 @@ use shc_blockchain_service_db::{leadership::LeadershipClient, store::PendingTxSt
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
-    types::{AccountId, BlockNumber, OpaqueBlock, ParachainClient, TickNumber},
+    types::{AccountId, BlockNumber, OpaqueBlock, StorageHubClient, TickNumber},
 };
 use shc_forest_manager::traits::ForestStorageHandler;
 
@@ -56,7 +56,7 @@ pub(crate) const LOG_TARGET: &str = "blockchain-service";
 /// The BlockchainService actor.
 ///
 /// This actor is responsible for sending extrinsics to the runtime and handling block import notifications.
-/// For such purposes, it uses the [`ParachainClient<RuntimeApi>`] to interact with the runtime, the [`RpcHandlers`] to send
+/// For such purposes, it uses the [`StorageHubClient<RuntimeApi>`] to interact with the runtime, the [`RpcHandlers`] to send
 /// extrinsics, and the [`Keystore`] to sign the extrinsics.
 pub struct BlockchainService<FSH, Runtime>
 where
@@ -68,8 +68,8 @@ where
     /// The event bus provider.
     pub(crate) event_bus_provider: BlockchainServiceEventBusProvider<Runtime>,
     /// The parachain client. Used to interact with the runtime.
-    /// TODO: Consider not using `ParachainClient` here.
-    pub(crate) client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+    /// TODO: Consider not using `StorageHubClient` here.
+    pub(crate) client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
     /// The keystore. Used to sign extrinsics.
     pub(crate) keystore: KeystorePtr,
     /// The RPC handlers. Used to send extrinsics.
@@ -1465,7 +1465,7 @@ where
     /// Create a new [`BlockchainService`].
     pub fn new(
         config: BlockchainServiceConfig<Runtime>,
-        client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+        client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
         keystore: KeystorePtr,
         rpc_handlers: Arc<RpcHandlers>,
         forest_storage_handler: FSH,
@@ -1768,8 +1768,10 @@ where
         // Transactions with a nonce below the on-chain nonce of this block are finalised.
         // Still, we'll delete up to the last finalised block processed, to leave transactions with
         // a terminal state in the pending DB for a short period of time.
-        self.cleanup_pending_tx_store(self.last_finalised_block_processed.hash)
-            .await;
+        if matches!(self.role, MultiInstancesNodeRole::Leader) {
+            self.cleanup_pending_tx_store(self.last_finalised_block_processed.hash)
+                .await;
+        }
 
         // Update the last finalised block processed.
         self.last_finalised_block_processed = MinimalBlockInfo {

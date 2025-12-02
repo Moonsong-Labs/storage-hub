@@ -121,35 +121,41 @@ pub type StorageHubEventsVec<Runtime> = Vec<
     >,
 >;
 
-#[cfg(not(feature = "runtime-benchmarks"))]
+// Parachain host functions - only available when the `parachain` feature is enabled.
+#[cfg(all(feature = "parachain", not(feature = "runtime-benchmarks")))]
 type HostFunctions = cumulus_client_service::ParachainHostFunctions;
 
-#[cfg(feature = "runtime-benchmarks")]
+#[cfg(all(feature = "parachain", feature = "runtime-benchmarks"))]
 type HostFunctions = (
     cumulus_client_service::ParachainHostFunctions,
     frame_benchmarking::benchmarking::HostFunctions,
 );
 
-/// The wasm executor used by the StorageHub client, which has the set of host functions
-/// that are available in a regular Polkadot Parachain.
-///
-/// The fact that we're using a `ParachainExecutor` is only because we're using the
-/// set of host functions that are available in a regular Polkadot Parachain.
-/// If this client would require a different set of host functions, we would need to
-/// use a different executor, with a different set of host functions.
-pub type ParachainExecutor = WasmExecutor<HostFunctions>;
+// Solochain host functions - used when the `parachain` feature is disabled.
+#[cfg(all(not(feature = "parachain"), not(feature = "runtime-benchmarks")))]
+type HostFunctions = sp_io::SubstrateHostFunctions;
 
-/// The full client used by the StorageHub client, which uses the [`ParachainExecutor`]
+#[cfg(all(not(feature = "parachain"), feature = "runtime-benchmarks"))]
+type HostFunctions = (
+    sp_io::SubstrateHostFunctions,
+    frame_benchmarking::benchmarking::HostFunctions,
+);
+
+/// The wasm executor used by the StorageHub client.
+///
+/// When the `parachain` feature is enabled, this executor uses the set of host functions
+/// that are available in a regular Polkadot Parachain (`ParachainHostFunctions`).
+/// When the `parachain` feature is disabled (solochain mode), it uses the standard
+/// Substrate host functions (`SubstrateHostFunctions`).
+pub type StorageHubExecutor = WasmExecutor<HostFunctions>;
+
+/// The full client used by the StorageHub client, which uses the [`StorageHubExecutor`]
 /// as the wasm executor.
 ///
 /// It is abstracted over the set of runtime APIs, defined later by a `Runtime` type that
 /// should implement the [`StorageEnableRuntime`](crate::traits::StorageEnableRuntime) trait.
-///
-/// The name `ParachainClient` is a bit misleading, as it is not necessarily a client for a
-/// parachain. But it is called this way because it uses the `ParachainExecutor` which is
-/// a [WasmExecutor] with the [`HostFunctions`] that are available in a regular Polkadot Parachain.
-pub type ParachainClient<RuntimeApi> =
-    TFullClient<shp_opaque::Block, RuntimeApi, ParachainExecutor>;
+pub type StorageHubClient<RuntimeApi> =
+    TFullClient<shp_opaque::Block, RuntimeApi, StorageHubExecutor>;
 
 /// The type of key used for [`BlockchainService`]` operations.
 pub const BCSV_KEY_TYPE: KeyTypeId = KeyTypeId(*b"bcsv");
