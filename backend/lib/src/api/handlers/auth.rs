@@ -531,4 +531,194 @@ mod tests {
             .await;
         assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
     }
+
+    #[tokio::test]
+    async fn auth_flow_caip122_complete() {
+        let mut cfg = Config::default();
+        cfg.auth.mock_mode = false;
+
+        let services = Services::mocks_with_config(cfg).await;
+        let app = create_app(services.clone());
+        let server = TestServer::new(app).unwrap();
+
+        let (address, signing_key) = eth_wallet();
+
+        // Step 1: Get CAIP-122 message challenge (domain extracted from URI)
+        let message_request = NonceRequest {
+            address,
+            chain_id: 1,
+            uri: "https://datahaven.app".to_string(),
+        };
+
+        let response = server.post("/auth/message").json(&message_request).await;
+
+        assert_eq!(response.status_code(), StatusCode::OK);
+        let message_response: NonceResponse = response.json();
+
+        // Verify CAIP-122 format
+        assert!(message_response.message.contains("blockchain account"));
+        assert!(message_response.message.contains("eip155:1:"));
+        assert!(message_response.message.contains(&address.to_string()));
+        assert!(message_response.message.contains("datahaven.app"));
+        assert!(message_response.message.contains("Chain ID: 1"));
+
+        // Step 2: Sign the message and login
+        let signature = sign_message(&signing_key, &message_response.message);
+        let verify_request = VerifyRequest {
+            message: message_response.message,
+            signature,
+        };
+
+        let response = server.post("/auth/verify").json(&verify_request).await;
+
+        assert_eq!(response.status_code(), StatusCode::OK);
+        let verify_response: VerifyResponse = response.json();
+        assert_eq!(verify_response.user.address, address);
+        assert!(!verify_response.token.is_empty());
+
+        // Decode and verify the JWT
+        let jwt_key = services.auth.jwt_decoding_key();
+        let jwt_validation = services.auth.jwt_validation();
+
+        let decoded = decode::<JwtClaims>(&verify_response.token, jwt_key, jwt_validation)
+            .expect("Failed to decode JWT");
+        assert_eq!(decoded.claims.address, address);
+    }
+
+    #[tokio::test]
+    async fn caip122_message_format_verification() {
+        let app = mock_app().await;
+        let server = TestServer::new(app).unwrap();
+
+        let message_request = NonceRequest {
+            address: MOCK_ADDRESS,
+            chain_id: 55931,
+            uri: "https://datahaven.app".to_string(),
+        };
+
+        let response = server.post("/auth/message").json(&message_request).await;
+        assert_eq!(response.status_code(), StatusCode::OK);
+
+        let message_response: NonceResponse = response.json();
+        let message = message_response.message;
+
+        // Verify CAIP-122 format
+        assert!(
+            message.starts_with("datahaven.app wants you to sign in with your blockchain account:")
+        );
+        assert!(message.contains("eip155:55931:"));
+        assert!(message.contains(&MOCK_ADDRESS.to_string()));
+        assert!(message.contains("Chain ID: 55931"));
+        assert!(message.contains("URI: https://datahaven.app"));
+    }
+
+    #[tokio::test]
+    async fn caip122_domain_extraction_from_uri() {
+        let app = mock_app().await;
+        let server = TestServer::new(app).unwrap();
+
+        // Test with https URI
+        let message_request = NonceRequest {
+            address: MOCK_ADDRESS,
+            chain_id: 1,
+            uri: "https://example.com:8080/path".to_string(),
+        };
+
+        let response = server.post("/auth/message").json(&message_request).await;
+        assert_eq!(response.status_code(), StatusCode::OK);
+        let message_response: NonceResponse = response.json();
+        assert!(message_response.message.contains("example.com:8080"));
+
+        // Test with http URI
+        let message_request = NonceRequest {
+            address: MOCK_ADDRESS,
+            chain_id: 1,
+            uri: "http://localhost:3000".to_string(),
+        };
+
+        let response = server.post("/auth/message").json(&message_request).await;
+        assert_eq!(response.status_code(), StatusCode::OK);
+        let message_response: NonceResponse = response.json();
+        assert!(message_response.message.contains("localhost:3000"));
+
+        // Test with URI without port
+        let message_request = NonceRequest {
+            address: MOCK_ADDRESS,
+            chain_id: 1,
+            uri: "https://datahaven.app".to_string(),
+        };
+
+        let response = server.post("/auth/message").json(&message_request).await;
+        assert_eq!(response.status_code(), StatusCode::OK);
+        let message_response: NonceResponse = response.json();
+        assert!(message_response.message.contains("datahaven.app"));
+    }
+
+    #[tokio::test]
+    async fn caip122_invalid_uri_fails() {
+        let app = mock_app().await;
+        let server = TestServer::new(app).unwrap();
+
+        let message_request = NonceRequest {
+            address: MOCK_ADDRESS,
+            chain_id: 1,
+            uri: "not-a-valid-uri".to_string(),
+        };
+
+        let response = server.post("/auth/message").json(&message_request).await;
+        assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn caip122_and_siwe_coexist() {
+        let app = mock_app().await;
+        let server = TestServer::new(app).unwrap();
+        let (address, signing_key) = eth_wallet();
+
+        // Test CAIP-122 flow
+        let caip122_request = NonceRequest {
+            address,
+            chain_id: 1,
+            uri: "https://datahaven.app".to_string(),
+        };
+
+        let response = server.post("/auth/message").json(&caip122_request).await;
+        assert_eq!(response.status_code(), StatusCode::OK);
+        let caip122_response: NonceResponse = response.json();
+        assert!(caip122_response.message.contains("blockchain account"));
+        assert!(caip122_response.message.contains("eip155:1:"));
+
+        // Test SIWE flow still works (domain extracted from URI)
+        let siwe_request = NonceRequest {
+            address,
+            chain_id: 1,
+            uri: "https://localhost/".to_string(),
+        };
+
+        let response = server.post(AUTH_NONCE_ENDPOINT).json(&siwe_request).await;
+        assert_eq!(response.status_code(), StatusCode::OK);
+        let siwe_response: NonceResponse = response.json();
+        assert!(siwe_response.message.contains("Ethereum account"));
+        assert!(siwe_response.message.contains(&address.to_string()));
+        assert!(!siwe_response.message.contains("eip155:1:"));
+
+        // Both messages should be verifiable with same endpoint
+        let caip122_sig = sign_message(&signing_key, &caip122_response.message);
+        let siwe_sig = sign_message(&signing_key, &siwe_response.message);
+
+        let verify_caip122 = VerifyRequest {
+            message: caip122_response.message,
+            signature: caip122_sig,
+        };
+        let verify_siwe = VerifyRequest {
+            message: siwe_response.message,
+            signature: siwe_sig,
+        };
+
+        let response1 = server.post("/auth/verify").json(&verify_caip122).await;
+        let response2 = server.post("/auth/verify").json(&verify_siwe).await;
+
+        assert_eq!(response1.status_code(), StatusCode::OK);
+        assert_eq!(response2.status_code(), StatusCode::OK);
+    }
 }
