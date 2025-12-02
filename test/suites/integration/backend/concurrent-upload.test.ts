@@ -10,6 +10,7 @@ import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import {
   ETH_SH_USER_ADDRESS,
   ETH_SH_USER_PRIVATE_KEY,
+  ethMspKey,
   ethShUser
 } from "../../../util/evmNet/keyring";
 
@@ -73,13 +74,38 @@ await describeMspNet(
     it("Should successfully create a bucket and prepare for concurrent upload", async () => {
       const bucketName = "concurrent-upload-test-bucket";
 
-      // Create a new bucket with the MSP
-      const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
-        userApi.shConsts.DUMMY_MSP_ID
-      );
-      const valuePropId = valueProps[0].id;
+      // The default value proposition has too small of a max data limit for the bigger file,
+      // so we need to add a new value proposition with a larger limit.
+      const largeBucketLimit = 100n * 1024n * 1024n; // 100 MB
 
-      const newBucketEvent = await userApi.createBucket(bucketName, valuePropId);
+      // Get existing value prop to copy its price and commitment
+      const existingValueProps =
+        await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
+          userApi.shConsts.DUMMY_MSP_ID
+        );
+      const existingValueProp = existingValueProps[0].valueProp;
+
+      // Add the new value proposition to the MSP and get its ID
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.providers.addValueProp(
+            existingValueProp.pricePerGigaUnitOfDataPerBlock,
+            existingValueProp.commitment,
+            largeBucketLimit
+          )
+        ],
+        signer: ethMspKey
+      });
+
+      const valuePropAddedEvent = await userApi.assert.eventPresent("providers", "ValuePropAdded");
+      const valuePropAddedEventDataBlob =
+        userApi.events.providers.ValuePropAdded.is(valuePropAddedEvent.event) &&
+        valuePropAddedEvent.event.data;
+      assert(valuePropAddedEventDataBlob, "Event doesn't match Type");
+      const valuePropId = valuePropAddedEventDataBlob.valuePropId.toString();
+
+      // Create the bucket with the new value proposition ID
+      const newBucketEvent = await userApi.createBucket(bucketName, valuePropId as `0x${string}`);
       const newBucketEventDataBlob =
         userApi.events.fileSystem.NewBucket.is(newBucketEvent) && newBucketEvent.data;
 
