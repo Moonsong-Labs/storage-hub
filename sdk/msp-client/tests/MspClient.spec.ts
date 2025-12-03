@@ -11,7 +11,7 @@ describe("MspClient", () => {
   });
 
   it("should allow updating sessionProvider", async () => {
-    let authHeaders: Record<string, string> | undefined = undefined;
+    let authHeaders: Record<string, string> | undefined;
     const mockFetch = async (url: string | URL, init?: RequestInit) => {
       if (typeof url === "string" && url.includes("/auth/profile")) {
         authHeaders = (init?.headers as Record<string, string>) || undefined;
@@ -36,6 +36,6 @@ describe("MspClient", () => {
 
     await client.auth.getProfile();
     expect(authHeaders).toHaveProperty("Authorization");
-    expect(authHeaders!["Authorization"]).toBe("Bearer test-token");
+    expect(authHeaders?.Authorization).toBe("Bearer test-token");
   });
 });

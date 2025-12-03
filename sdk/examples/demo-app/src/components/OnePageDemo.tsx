@@ -5,7 +5,6 @@ import { Settings, Wallet, Database, CheckCircle, AlertCircle, ExternalLink } fr
 import { createWalletClient, createPublicClient, custom, formatEther, getAddress, type WalletClient, type PublicClient } from 'viem';
 import { StorageHubClient, SH_FILE_SYSTEM_PRECOMPILE_ADDRESS } from '@storagehub-sdk/core';
 import { MspClient } from '@storagehub-sdk/msp-client';
-import type { Session } from '@storagehub-sdk/msp-client';
 import { FileManager } from './FileManager';
 import { loadAppConfig } from '../config/load';
 import type { AppConfig } from '../config/types';
