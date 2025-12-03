@@ -227,9 +227,7 @@ export class AuthModule extends ModuleBase {
         await this.delay(DEFAULT_SIWE_VERIFY_BACKOFF_MS);
       }
     }
-    throw lastError instanceof Error
-      ? lastError
-      : new Error(`${methodName} verification failed`);
+    throw lastError instanceof Error ? lastError : new Error(`${methodName} verification failed`);
   }
 
   private async delay(ms: number): Promise<void> {

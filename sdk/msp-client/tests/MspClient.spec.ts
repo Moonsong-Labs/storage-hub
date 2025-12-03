@@ -15,13 +15,10 @@ describe("MspClient", () => {
     const mockFetch = async (url: string | URL, init?: RequestInit) => {
       if (typeof url === "string" && url.includes("/auth/profile")) {
         authHeaders = (init?.headers as Record<string, string>) || undefined;
-        return new Response(
-          JSON.stringify({ address: "0x123", ens: "user.eth" }),
-          {
-            status: 200,
-            headers: { "Content-Type": "application/json" }
-          }
-        );
+        return new Response(JSON.stringify({ address: "0x123", ens: "user.eth" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        });
       }
       return new Response("Not Found", { status: 404 });
     };
