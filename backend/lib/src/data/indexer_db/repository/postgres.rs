@@ -311,7 +311,8 @@ impl IndexerOpsMut for Repository {
         let mut conn = self.pool.get().await?;
 
         // TODO: also clear related associations, like bsp_file
-        File::delete(&mut conn, file_key.as_bytes()).await?;
+        let file_record = File::get_latest_by_file_key(&mut conn, file_key.as_bytes()).await?;
+        File::delete(&mut conn, file_record.id).await?;
         Ok(())
     }
 
