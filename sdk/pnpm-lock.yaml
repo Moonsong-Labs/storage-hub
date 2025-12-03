@@ -174,14 +174,17 @@ importers:
   examples/node:
     dependencies:
       '@storagehub-sdk/core':
-        specifier: '>=0.0.5'
-        version: 0.0.5
+        specifier: workspace:*
+        version: link:../../core
       '@storagehub-sdk/msp-client':
-        specifier: '>=0.0.5'
-        version: 0.0.5(@storagehub-sdk/core@0.0.5)
+        specifier: workspace:*
+        version: link:../../msp-client
       ethers:
         specifier: ^6.15.0
         version: 6.15.0
+      viem:
+        specifier: 2.38.3
+        version: 2.38.3(typescript@5.5.4)
     devDependencies:
       '@polkadot/types':
         specifier: ^16.4.7

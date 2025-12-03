@@ -132,7 +132,7 @@ where
     NT::FSH: FishermanForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: BatchFileDeletions) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: BatchFileDeletions) -> anyhow::Result<String> {
         // Hold the Arc reference to the permit for the lifetime of this handler
         // The permit will be automatically released when this handler completes or fails
         // (when the Arc is dropped, the permit is dropped, releasing the semaphore)
@@ -209,7 +209,10 @@ where
                 event.deletion_type
             );
             // Permit will be automatically released when handler returns
-            return Ok(());
+            return Ok(format!(
+                "No pending [{:?}] deletions found",
+                event.deletion_type
+            ));
         }
 
         // Await all futures
@@ -254,7 +257,11 @@ where
         // Explicitly drop to release the semaphore permit
         // Next batch deletion cycle will be able to acquire a new permit
         drop(permit_arc);
-        Ok(())
+
+        Ok(format!(
+            "Processed batch file deletions: {} successes, {} failures",
+            successes, failures
+        ))
     }
 }
 
@@ -447,9 +454,16 @@ where
         // Fetch all files and convert to FileMetadata
         let mut all_file_metadatas = Vec::new();
         for key in &all_file_keys {
-            let file = shc_indexer_db::models::File::get_by_file_key(&mut conn, key)
+            let file_records = shc_indexer_db::models::File::get_by_file_key(&mut conn, key)
                 .await
-                .map_err(|e| anyhow!("Failed to get file: {:?}", e))?;
+                .map_err(|e| anyhow!("Failed to get file records: {:?}", e))?;
+
+            // There can be multiple file records for a given file key if there were multiple
+            // storage requests for the same file key. Any of them is good to use to get the file metadata,
+            // so we just pick the first one.
+            let file = file_records
+                .first()
+                .ok_or_else(|| anyhow!("No file records found for file key: {:?}", key))?;
 
             let metadata = file
                 .to_file_metadata(file.onchain_bucket_id.clone())

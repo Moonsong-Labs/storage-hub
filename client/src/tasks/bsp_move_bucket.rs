@@ -84,7 +84,10 @@ where
     NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: MoveBucketRequested<Runtime>) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: MoveBucketRequested<Runtime>,
+    ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
             "MoveBucketRequested: BSP will accept download requests for files in bucket {:?} from MSP {:?}",
@@ -119,7 +122,10 @@ where
                 .map_err(|e| anyhow!("Failed to register new bucket peer: {:?}", e))?;
         }
 
-        Ok(())
+        Ok(format!(
+            "Handled MoveBucketRequested for bucket [{:x}] and MSP [{:x}]",
+            event.bucket_id, event.new_msp_id
+        ))
     }
 }
 
@@ -135,7 +141,7 @@ where
     NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: MoveBucketAccepted<Runtime>) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: MoveBucketAccepted<Runtime>) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
             "MoveBucketAccepted: New MSP {:?} accepted move bucket request for bucket {:?} from old MSP {:?}. Will keep accepting download requests for a window of time.",
@@ -153,7 +159,10 @@ where
             .await
             .map_err(|e| anyhow!("Failed to unregister bucket: {:?}", e))?;
 
-        Ok(())
+        Ok(format!(
+            "Handled MoveBucketAccepted for bucket [{:x}]",
+            event.bucket_id
+        ))
     }
 }
 
@@ -167,7 +176,7 @@ where
     NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: MoveBucketRejected<Runtime>) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: MoveBucketRejected<Runtime>) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
             "MoveBucketRejected: BSP will no longer accept download requests for files in bucket {:?} from MSP {:?}",
@@ -181,7 +190,10 @@ where
             .await
             .map_err(|e| anyhow!("Failed to unregister bucket: {:?}", e))?;
 
-        Ok(())
+        Ok(format!(
+            "Handled MoveBucketRejected for bucket [{:x}]",
+            event.bucket_id
+        ))
     }
 }
 
@@ -195,7 +207,7 @@ where
     NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: MoveBucketExpired<Runtime>) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: MoveBucketExpired<Runtime>) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
             "MoveBucketExpired: BSP will no longer accept download requests for files in bucket {:?}",
@@ -208,6 +220,9 @@ where
             .await
             .map_err(|e| anyhow!("Failed to unregister bucket: {:?}", e))?;
 
-        Ok(())
+        Ok(format!(
+            "Handled MoveBucketExpired for bucket [{:x}]",
+            event.bucket_id
+        ))
     }
 }

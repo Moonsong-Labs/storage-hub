@@ -10,12 +10,14 @@ use crate::constants::{
         DEFAULT_SIWE_DOMAIN,
     },
     database::DEFAULT_DATABASE_URL,
+    download::MAX_DOWNLOAD_SESSIONS,
     rpc::{
         DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_MSP_CALLBACK_URL,
         DEFAULT_MSP_TRUSTED_FILE_TRANSFER_SERVER_URL, DEFAULT_RPC_URL, DEFAULT_TIMEOUT_SECS,
         DEFAULT_UPLOAD_RETRY_ATTEMPTS, DEFAULT_UPLOAD_RETRY_DELAY_SECS,
     },
     server::{DEFAULT_HOST, DEFAULT_PORT},
+    upload::MAX_UPLOAD_SESSIONS,
 };
 
 /// Backend configuration
@@ -33,6 +35,7 @@ pub struct Config {
     pub storage_hub: StorageHubConfig,
     pub msp: MspConfig,
     pub database: DatabaseConfig,
+    pub file_transfer: FileTransferConfig,
 }
 
 /// Log format configuration
@@ -107,6 +110,19 @@ pub struct ApiConfig {
     pub default_page_size: usize,
     /// Maximum allowed page size for paginated responses
     pub max_page_size: usize,
+}
+
+/// File transfer configuration for upload and download session management
+///
+/// Controls the maximum number of concurrent file transfers to prevent resource
+/// exhaustion and potential race conditions in file storage operations.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileTransferConfig {
+    /// Maximum number of concurrent file uploads allowed
+    /// Prevents concurrent uploads of the same file key
+    pub max_upload_sessions: usize,
+    /// Maximum number of concurrent file downloads allowed
+    pub max_download_sessions: usize,
 }
 
 /// Authentication configuration for JWT tokens
@@ -239,6 +255,10 @@ impl Default for Config {
                 url: DEFAULT_DATABASE_URL.to_string(),
                 #[cfg(feature = "mocks")]
                 mock_mode: true,
+            },
+            file_transfer: FileTransferConfig {
+                max_upload_sessions: MAX_UPLOAD_SESSIONS,
+                max_download_sessions: MAX_DOWNLOAD_SESSIONS,
             },
         }
     }

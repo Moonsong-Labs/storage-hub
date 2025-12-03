@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
+use serde_with::{serde_as, DisplayFromStr};
 use tracing::error;
 
 use shc_indexer_db::models::{File as DBFile, FileStorageRequestStep};
@@ -20,6 +21,7 @@ pub enum FileStatus {
     DeletionInProgress,
 }
 
+#[serde_as]
 #[derive(Debug, Serialize)]
 pub struct FileInfo {
     #[serde(rename = "fileKey")]
@@ -29,12 +31,20 @@ pub struct FileInfo {
     #[serde(rename = "bucketId")]
     pub bucket_id: String,
     pub location: String,
+    #[serde_as(as = "DisplayFromStr")]
     pub size: u64,
     #[serde(rename = "isPublic")]
     pub is_public: bool,
     #[serde(rename = "uploadedAt")]
     pub uploaded_at: DateTime<Utc>,
     pub status: FileStatus,
+    /// Block hash where the file was created.
+    #[serde(rename = "blockHash")]
+    pub block_hash: String,
+    /// EVM transaction hash that created this file (if created via EVM transaction).
+    /// For files created via native Substrate extrinsics, this will be None.
+    #[serde(rename = "txHash", skip_serializing_if = "Option::is_none")]
+    pub tx_hash: Option<String>,
 }
 
 impl FileInfo {
@@ -63,6 +73,8 @@ impl FileInfo {
             is_public,
             uploaded_at: db.updated_at.and_utc(),
             status: Self::status_from_db(&db),
+            block_hash: hex::encode(&db.block_hash),
+            tx_hash: db.tx_hash.as_ref().map(|hash| hex::encode(hash)),
         }
     }
 

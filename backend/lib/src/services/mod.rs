@@ -21,10 +21,12 @@ pub mod auth;
 pub mod download_session;
 pub mod health;
 pub mod msp;
+pub mod upload_session;
 
 use download_session::DownloadSessionManager;
 use health::HealthService;
 use msp::MspService;
+use upload_session::UploadSessionManager;
 
 /// Container for all backend services
 #[derive(Clone)]
@@ -37,6 +39,7 @@ pub struct Services {
     pub postgres: Arc<DBClient>,
     pub rpc: Arc<StorageHubRpcClient>,
     pub download_sessions: Arc<DownloadSessionManager>,
+    pub upload_sessions: Arc<UploadSessionManager>,
 }
 
 impl Services {
@@ -61,7 +64,12 @@ impl Services {
                 .expect("MSP must be available when starting the backend's services"),
         );
 
-        let download_sessions = Arc::new(DownloadSessionManager::new());
+        let download_sessions = Arc::new(DownloadSessionManager::new(
+            config.file_transfer.max_download_sessions,
+        ));
+        let upload_sessions = Arc::new(UploadSessionManager::new(
+            config.file_transfer.max_upload_sessions,
+        ));
 
         Self {
             config,
@@ -72,6 +80,7 @@ impl Services {
             postgres,
             rpc,
             download_sessions,
+            upload_sessions,
         }
     }
 }

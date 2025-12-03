@@ -1,26 +1,58 @@
+import {
+  ensure0xPrefix,
+  FileMetadata,
+  FileTrie,
+  hexToBytes,
+  initWasm,
+  parseDate
+} from "@storagehub-sdk/core";
 import { ModuleBase } from "../base.js";
 import type {
   DownloadOptions,
   DownloadResult,
-  FileInfo,
+  FileStatus,
+  StorageFileInfo,
   UploadOptions,
   UploadReceipt
 } from "../types.js";
-import { FileMetadata, FileTrie, initWasm } from "@storagehub-sdk/core";
 
 export class FilesModule extends ModuleBase {
   /** Get metadata for a file in a bucket by fileKey */
-  async getFileInfo(bucketId: string, fileKey: string, signal?: AbortSignal): Promise<FileInfo> {
+  async getFileInfo(
+    bucketId: string,
+    fileKey: string,
+    signal?: AbortSignal
+  ): Promise<StorageFileInfo> {
     const headers = await this.withAuth();
     const path = `/buckets/${encodeURIComponent(bucketId)}/info/${encodeURIComponent(fileKey)}`;
-    type FileInfoWire = Omit<FileInfo, "uploadedAt"> & { uploadedAt: string };
-    const wire = await this.ctx.http.get<FileInfoWire>(path, {
+
+    const wire = await this.ctx.http.get<{
+      fileKey: string;
+      fingerprint: string;
+      bucketId: string;
+      location: string;
+      size: string; // Backend sends as string to avoid precision loss
+      isPublic: boolean;
+      uploadedAt: string; // ISO string, not Date object
+      status: string;
+      blockHash: string; // Block hash where file was created
+      txHash?: string; // Optional EVM transaction hash
+    }>(path, {
       ...(headers ? { headers } : {}),
       ...(signal ? { signal } : {})
     });
+
     return {
-      ...wire,
-      uploadedAt: new Date(wire.uploadedAt)
+      fileKey: ensure0xPrefix(wire.fileKey),
+      fingerprint: ensure0xPrefix(wire.fingerprint),
+      bucketId: ensure0xPrefix(wire.bucketId),
+      location: wire.location,
+      size: BigInt(wire.size),
+      isPublic: wire.isPublic,
+      uploadedAt: parseDate(wire.uploadedAt),
+      status: wire.status as FileStatus,
+      blockHash: ensure0xPrefix(wire.blockHash),
+      ...(wire.txHash ? { txHash: ensure0xPrefix(wire.txHash) } : {})
     };
   }
 
@@ -58,7 +90,7 @@ export class FilesModule extends ModuleBase {
 
     // Compute the file key and ensure it matches the provided file key
     const computedFileKey = await this.computeFileKey(metadata);
-    const expectedFileKeyBytes = this.hexToBytes(fileKey);
+    const expectedFileKeyBytes = hexToBytes(fileKey);
     if (
       computedFileKey.length !== expectedFileKeyBytes.length ||
       !computedFileKey.every((byte, index) => byte === expectedFileKeyBytes[index])
@@ -126,21 +158,9 @@ export class FilesModule extends ModuleBase {
       };
     } catch (error) {
       // Handle HTTP errors by returning them as a DownloadResult with the error status
-      if (
-        error &&
-        typeof error === "object" &&
-        "status" in error &&
-        typeof error.status === "number"
-      ) {
-        // Create an empty stream for error responses
-        const emptyStream = new ReadableStream<Uint8Array>({
-          start(controller) {
-            controller.close();
-          }
-        });
-
+      if (this.isHttpError(error)) {
         return {
-          stream: emptyStream,
+          stream: this.createEmptyStream(),
           status: error.status,
           contentType: null,
           contentRange: null,
@@ -153,6 +173,23 @@ export class FilesModule extends ModuleBase {
   }
 
   // Helpers
+  private isHttpError(error: unknown): error is { status: number } {
+    return (
+      error !== null &&
+      typeof error === "object" &&
+      "status" in error &&
+      typeof error.status === "number"
+    );
+  }
+
+  private createEmptyStream(): ReadableStream<Uint8Array> {
+    return new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.close();
+      }
+    });
+  }
+
   private async coerceToFormPart(
     file: Blob | ArrayBuffer | Uint8Array | ReadableStream<Uint8Array> | unknown
   ): Promise<Blob> {
@@ -218,29 +255,11 @@ export class FilesModule extends ModuleBase {
     fingerprint: Uint8Array,
     size: bigint
   ): Promise<FileMetadata> {
-    const ownerBytes = this.hexToBytes(owner);
-    const bucketIdBytes = this.hexToBytes(bucketId);
+    const ownerBytes = hexToBytes(owner);
+    const bucketIdBytes = hexToBytes(bucketId);
     const locationBytes = new TextEncoder().encode(location);
     await initWasm();
     return new FileMetadata(ownerBytes, bucketIdBytes, locationBytes, size, fingerprint);
-  }
-
-  private hexToBytes(hex: string): Uint8Array {
-    if (!hex) {
-      throw new Error("hex string cannot be empty");
-    }
-
-    const cleanHex = hex.startsWith("0x") ? hex.slice(2) : hex;
-
-    if (cleanHex.length % 2 !== 0) {
-      throw new Error("hex string must have an even number of characters");
-    }
-
-    if (!/^[0-9a-fA-F]*$/.test(cleanHex)) {
-      throw new Error("hex string contains invalid characters");
-    }
-
-    return new Uint8Array(cleanHex.match(/.{2}/g)?.map((byte) => Number.parseInt(byte, 16)) || []);
   }
 
   private async computeFileKey(fileMetadata: FileMetadata): Promise<Uint8Array> {

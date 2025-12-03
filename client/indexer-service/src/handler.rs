@@ -12,10 +12,11 @@ use sc_client_api::{BlockBackend, BlockchainEvents};
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
     blockchain_utils::{
-        convert_raw_multiaddress_to_multiaddr, get_events_at_block, EventsRetrievalError,
+        convert_raw_multiaddress_to_multiaddr, get_ethereum_block_hash, get_events_at_block,
+        EventsRetrievalError,
     },
     traits::StorageEnableRuntime,
-    types::{ParachainClient, StorageEnableEvents, StorageProviderId},
+    types::{StorageEnableEvents, StorageHubClient, StorageProviderId},
 };
 use shc_indexer_db::{models::*, DbConnection, DbPool, OnchainBspId, OnchainMspId};
 use sp_api::ProvideRuntimeApi;
@@ -34,7 +35,7 @@ pub enum IndexerServiceCommand {}
 
 // The IndexerService actor
 pub struct IndexerService<Runtime: StorageEnableRuntime> {
-    client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+    client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
     db_pool: DbPool,
     indexer_mode: crate::IndexerMode,
 }
@@ -64,7 +65,7 @@ impl<Runtime: StorageEnableRuntime> Actor for IndexerService<Runtime> {
 // Implement methods for IndexerService
 impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
     pub fn new(
-        client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+        client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
         db_pool: DbPool,
         indexer_mode: crate::IndexerMode,
     ) -> Self {
@@ -119,10 +120,29 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
 
         let block_events = get_events_at_block::<Runtime>(&self.client, &block_hash)?;
 
+        // Build a map of extrinsic index to transaction hash for events in a block.
+        let evm_tx_map: std::collections::HashMap<u32, H256> =
+            Runtime::build_transaction_hash_map(&block_events);
+
         conn.transaction::<(), IndexBlockError, _>(move |conn| {
             Box::pin(async move {
-                for ev in block_events {
-                    self.route_event(conn, &ev.event.into(), block_hash).await?;
+                for ev in &block_events {
+                    // Get the EVM transaction hash for the event if it exists
+                    let maybe_evm_tx_hash =
+                        if let frame_system::Phase::ApplyExtrinsic(idx) = ev.phase {
+                            evm_tx_map.get(&idx).copied()
+                        } else {
+                            None
+                        };
+
+                    self.route_event(
+                        conn,
+                        &ev.event.clone().into(),
+                        block_hash,
+                        block_number,
+                        maybe_evm_tx_hash,
+                    )
+                    .await?;
                 }
 
                 // Update the last indexed finalized block after indexing all events
@@ -145,11 +165,22 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         conn: &mut DbConnection<'a>,
         event: &StorageEnableEvents<Runtime>,
         block_hash: H256,
+        block_number: NumberFor<Runtime::Block>,
+        evm_tx_hash: Option<H256>,
     ) -> Result<(), diesel::result::Error> {
         match self.indexer_mode {
-            crate::IndexerMode::Full => self.index_event(conn, event, block_hash).await,
-            crate::IndexerMode::Lite => self.index_event_lite(conn, event, block_hash).await,
-            crate::IndexerMode::Fishing => self.index_event_fishing(conn, event, block_hash).await,
+            crate::IndexerMode::Full => {
+                self.index_event(conn, event, block_hash, block_number, evm_tx_hash)
+                    .await
+            }
+            crate::IndexerMode::Lite => {
+                self.index_event_lite(conn, event, block_hash, block_number, evm_tx_hash)
+                    .await
+            }
+            crate::IndexerMode::Fishing => {
+                self.index_event_fishing(conn, event, block_hash, block_number, evm_tx_hash)
+                    .await
+            }
         }
     }
 
@@ -158,13 +189,16 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         conn: &mut DbConnection<'a>,
         event: &StorageEnableEvents<Runtime>,
         block_hash: H256,
+        block_number: NumberFor<Runtime::Block>,
+        evm_tx_hash: Option<H256>,
     ) -> Result<(), diesel::result::Error> {
         match event {
             StorageEnableEvents::BucketNfts(event) => {
                 self.index_bucket_nfts_event(conn, event).await?
             }
             StorageEnableEvents::FileSystem(event) => {
-                self.index_file_system_event(conn, event).await?
+                self.index_file_system_event(conn, event, block_hash, block_number, evm_tx_hash)
+                    .await?
             }
             StorageEnableEvents::PaymentStreams(event) => {
                 self.index_payment_streams_event(conn, event).await?
@@ -212,6 +246,9 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         &'b self,
         conn: &mut DbConnection<'a>,
         event: &pallet_file_system::Event<Runtime>,
+        block_hash: H256,
+        block_number: NumberFor<Runtime::Block>,
+        evm_tx_hash: Option<H256>,
     ) -> Result<(), diesel::result::Error> {
         match event {
             pallet_file_system::Event::NewBucket {
@@ -317,7 +354,12 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
 
                 let bsp = Bsp::get_by_onchain_bsp_id(conn, OnchainBspId::from(*bsp_id)).await?;
                 for (file_key, _file_metadata) in confirmed_file_keys {
-                    let file = File::get_by_file_key(conn, file_key.as_ref().to_vec()).await?;
+                    // There can be multiple file records for a given file key if there were multiple
+                    // storage requests for the same file key. We get the latest one created, which
+                    // has to be the one that was confirmed, given that there can't be two storage
+                    // requests for the same file key at the same time.
+                    let file =
+                        File::get_latest_by_file_key(conn, file_key.as_ref().to_vec()).await?;
                     BspFile::create(conn, bsp.id, file.id).await?;
                 }
             }
@@ -342,6 +384,22 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 let size: u64 = (*size).saturated_into();
                 let size: i64 = size.saturated_into();
                 let who = who.as_ref().to_vec();
+
+                // Get the runtime-specific block hash from storage.
+                // For a standard Substrate runtime, the Ethereum block hash won't exist in storage,
+                // so we'll fallback to using the Substrate block hash (blake2_256) which is what we want.
+                // For a EVM-compatible runtime, we'll get the EVM block hash (keccak256) from storage,
+                // which is different from the Substrate block hash.
+                let block_number_u32: u32 = block_number.saturated_into();
+                let runtime_block_hash =
+                    get_ethereum_block_hash(&self.client, &block_hash, block_number_u32)
+                        .unwrap_or(None)
+                        .unwrap_or(block_hash);
+                let block_hash_bytes = runtime_block_hash.as_bytes().to_vec();
+
+                // Convert EVM tx hash to bytes if present
+                let tx_hash_bytes = evm_tx_hash.map(|h| h.as_bytes().to_vec());
+
                 File::create(
                     conn,
                     who,
@@ -353,6 +411,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     size,
                     FileStorageRequestStep::Requested,
                     sql_peer_ids,
+                    block_hash_bytes,
+                    tx_hash_bytes,
                 )
                 .await?;
             }
@@ -397,7 +457,11 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 file_key,
                 file_metadata: _,
             } => {
-                let file = File::get_by_file_key(conn, file_key.as_ref().to_vec()).await?;
+                // There can be multiple file records for a given file key if there were multiple
+                // storage requests for the same file key. We get the latest one created, which
+                // has to be the one that was accepted, given that there can't be two storage
+                // requests for the same file key at the same time.
+                let file = File::get_latest_by_file_key(conn, file_key.as_ref().to_vec()).await?;
                 let bucket = Bucket::get_by_id(conn, file.bucket_id).await?;
                 if let Some(msp_id) = bucket.msp_id {
                     MspFile::create(conn, msp_id, file.id).await?;
@@ -491,11 +555,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
 
                 // Check if files should be deleted (no more associations)
                 for file_key in file_keys.iter() {
-                    let deleted = File::delete_if_orphaned(conn, file_key.as_ref()).await?;
-
-                    if deleted {
-                        log::trace!("Deleted orphaned file after MSP deletion: {:?}", file_key);
-                    }
+                    File::delete_if_orphaned(conn, file_key.as_ref()).await?;
                 }
 
                 // Update bucket merkle root
@@ -521,11 +581,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
 
                 // Check if files should be deleted (no more associations)
                 for file_key in file_keys.iter() {
-                    let deleted = File::delete_if_orphaned(conn, file_key.as_ref()).await?;
-
-                    if deleted {
-                        log::trace!("Deleted orphaned file after BSP deletion: {:?}", file_key);
-                    }
+                    File::delete_if_orphaned(conn, file_key.as_ref()).await?;
                 }
 
                 // Update BSP merkle root
@@ -540,36 +596,41 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             // and necessitates a fisherman to delete this file.
             pallet_file_system::Event::IncompleteStorageRequest { file_key } => {
                 // Check if file is in bucket or has BSP associations
-                let file_record = File::get_by_file_key(conn, file_key.as_ref().to_vec())
+                // There can be multiple file records for a given file key if there were multiple
+                // storage requests for the same file key. We get the latest one created, which
+                // has to be the incomplete one, given that there can't be two storage
+                // requests for the same file key at the same time.
+                let file_record = File::get_latest_by_file_key(conn, file_key.as_ref().to_vec())
                     .await
                     .ok();
-                let is_in_bucket = file_record
-                    .as_ref()
-                    .map(|f| f.is_in_bucket)
-                    .unwrap_or(false);
-                let has_bsp = File::has_bsp_associations(conn, file_key.as_ref()).await?;
 
-                if is_in_bucket || has_bsp {
-                    // File is still being stored, mark for deletion
-                    File::update_deletion_status(
-                        conn,
-                        file_key.as_ref(),
-                        FileDeletionStatus::InProgress,
-                        None,
-                    )
-                    .await?;
+                // If the file record is not found, it means the file has been deleted already.
+                if let Some(file_record) = file_record {
+                    let is_in_bucket = file_record.is_in_bucket;
+                    let has_bsp = File::has_bsp_associations(conn, file_record.id).await?;
 
-                    log::debug!(
-                        "Incomplete storage request for file {:?} is still being stored (in_bucket: {}, BSP: {}), marked for deletion without signature",
-                        file_key, is_in_bucket, has_bsp
-                    );
-                } else {
-                    // No storage, safe to delete immediately
-                    File::delete(conn, file_key.as_ref().to_vec()).await?;
-                    log::debug!(
-                        "Incomplete storage request for file {:?} is not being stored, deleted immediately",
-                        file_key
-                    );
+                    if is_in_bucket || has_bsp {
+                        // File is still being stored, mark for deletion
+                        File::update_deletion_status(
+                            conn,
+                            file_key.as_ref(),
+                            FileDeletionStatus::InProgress,
+                            None,
+                        )
+                        .await?;
+
+                        log::debug!(
+                        		"Incomplete storage request for file {:?} (id: {:?}) is still being stored (in_bucket: {}, BSP: {}), marked for deletion without signature",
+                        		file_key, file_record.id, is_in_bucket, has_bsp
+                    		);
+                    } else {
+                        // No storage, safe to delete immediately
+                        File::delete(conn, file_record.id).await?;
+                        log::debug!(
+                        		"Incomplete storage request for file key {:?} and id {:?} is not being stored, deleted immediately",
+														file_key, file_record.id
+                    		);
+                    }
                 }
             }
             pallet_file_system::Event::__Ignore(_, _) => {}

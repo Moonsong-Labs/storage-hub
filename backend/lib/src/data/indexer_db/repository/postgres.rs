@@ -138,7 +138,11 @@ impl IndexerOps for Repository {
     async fn get_file_by_file_key(&self, file_key: &Hash) -> RepositoryResult<File> {
         let mut conn = self.pool.get().await?;
 
-        File::get_by_file_key(&mut conn, file_key.as_bytes())
+        // There can be multiple file records for a given file key if there were multiple
+        // storage requests for the same file key. We get the oldest one created, which
+        // would be the original storage request that first created the file.
+        // This is good enough for the purpose of this query.
+        File::get_oldest_by_file_key(&mut conn, file_key.as_bytes())
             .await
             .map_err(Into::into)
     }
@@ -294,7 +298,9 @@ impl IndexerOpsMut for Repository {
             fingerprint.to_vec(),
             size,
             FileStorageRequestStep::Requested,
-            vec![], // No peer_ids for simple test data
+            vec![],        // No peer_ids for simple test data
+            vec![0u8; 32], // Placeholder block hash for test data
+            None,          // No transaction hash for test data
         )
         .await?;
 
@@ -305,7 +311,8 @@ impl IndexerOpsMut for Repository {
         let mut conn = self.pool.get().await?;
 
         // TODO: also clear related associations, like bsp_file
-        File::delete(&mut conn, file_key.as_bytes()).await?;
+        let file_record = File::get_latest_by_file_key(&mut conn, file_key.as_bytes()).await?;
+        File::delete(&mut conn, file_record.id).await?;
         Ok(())
     }
 

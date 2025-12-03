@@ -6,6 +6,7 @@ import type {
   StatsResponse,
   ValueProp
 } from "../types.js";
+import { ensure0xPrefix } from "@storagehub-sdk/core";
 
 export class InfoModule extends ModuleBase {
   getHealth(signal?: AbortSignal): Promise<HealthStatus> {
@@ -15,10 +16,32 @@ export class InfoModule extends ModuleBase {
   }
 
   /** Get general MSP information */
-  getInfo(signal?: AbortSignal): Promise<InfoResponse> {
-    return this.ctx.http.get<InfoResponse>("/info", {
+  async getInfo(signal?: AbortSignal): Promise<InfoResponse> {
+    const wire = await this.ctx.http.get<{
+      client: string;
+      version: string;
+      mspId: string;
+      multiaddresses: string[];
+      ownerAccount: string;
+      paymentAccount: string;
+      status: string;
+      activeSince: number;
+      uptime: string;
+    }>("/info", {
       ...(signal ? { signal } : {})
     });
+
+    return {
+      client: wire.client,
+      version: wire.version,
+      mspId: ensure0xPrefix(wire.mspId),
+      multiaddresses: wire.multiaddresses,
+      ownerAccount: ensure0xPrefix(wire.ownerAccount), // Ensure 0x prefix (backend has it, but TypeScript needs guarantee)
+      paymentAccount: ensure0xPrefix(wire.paymentAccount), // Ensure 0x prefix (backend has it, but TypeScript needs guarantee)
+      status: wire.status,
+      activeSince: wire.activeSince,
+      uptime: wire.uptime
+    };
   }
 
   /** Get MSP statistics */
