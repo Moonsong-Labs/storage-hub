@@ -96,7 +96,7 @@ where
     async fn handle_event(
         &mut self,
         event: FinalisedBucketMutationsApplied<Runtime>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
             "Processing finalised bucket mutations applied for bucket [{:?}]",
@@ -156,7 +156,10 @@ where
             }
         }
 
-        Ok(())
+        Ok(format!(
+            "Handled FinalisedBucketMutationsApplied for bucket [{:x}]",
+            event.bucket_id
+        ))
     }
 }
 
@@ -171,7 +174,7 @@ where
     async fn handle_event(
         &mut self,
         event: FinalisedStorageRequestRejected<Runtime>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
             "Processing finalised storage request expired for file key {:?} in bucket {:?}",
@@ -246,6 +249,9 @@ where
             );
         }
 
-        Ok(())
+        Ok(format!(
+            "Handled FinalisedStorageRequestRejected for file key [{:x}] in bucket [{:x}]",
+            event.file_key, event.bucket_id
+        ))
     }
 }

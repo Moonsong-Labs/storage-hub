@@ -77,15 +77,18 @@ where
     NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: DistributeFileToBsp<Runtime>) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: DistributeFileToBsp<Runtime>,
+    ) -> anyhow::Result<String> {
         let file_key = event.file_key;
         let bsp_id = event.bsp_id;
 
         info!(
-                target: LOG_TARGET,
-                "Distributing file {:x} to BSP {:?}",
-                file_key,
-                bsp_id
+            target: LOG_TARGET,
+            "Distributing file {:x} to BSP {:x}",
+            file_key,
+            bsp_id
         );
 
         // Increment metric for files distributed
@@ -139,7 +142,10 @@ where
             STATUS_SUCCESS
         );
 
-        Ok(())
+        Ok(format!(
+            "DistributeFileToBsp handled successfully for file {:x} and BSP {:x}",
+            file_key, bsp_id
+        ))
     }
 }
 
@@ -185,7 +191,12 @@ where
             .await
             .map_err(|e| anyhow::anyhow!("Failed to send chunks to provider: {:?}", e))?;
 
-        info!(target: LOG_TARGET, "Successfully distributed file {:?} to BSP {:?}", file_key, bsp_id);
+        info!(
+            target: LOG_TARGET,
+            "Successfully distributed file {:x} to BSP {:x}",
+            file_key,
+            bsp_id
+        );
 
         // BSP will be moved from the "distributing" set to the "confirmed" set
         // when the BSP confirms to store the file. This is done by processing

@@ -113,7 +113,7 @@ where
     async fn handle_event(
         &mut self,
         event: MoveBucketRequestedForMsp<Runtime>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
             "MSP: user requested to move bucket {:?} to us",
@@ -140,10 +140,17 @@ where
                 "Failed to handle move bucket request: {:?}",
                 error
             );
-            return self.reject_bucket_move(event.bucket_id).await;
+            self.reject_bucket_move(event.bucket_id).await?;
+            return Ok(format!(
+                "Rejected MoveBucketRequestedForMsp for bucket [{:x}] due to error {:?}",
+                event.bucket_id, error
+            ));
         }
 
-        Ok(())
+        Ok(format!(
+            "Handled MoveBucketRequestedForMsp for bucket [{:x}]",
+            event.bucket_id
+        ))
     }
 }
 
@@ -157,7 +164,7 @@ where
     async fn handle_event(
         &mut self,
         event: StartMovedBucketDownload<Runtime>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
             "StartMovedBucketDownload: Starting download process for bucket {:?}",
@@ -202,7 +209,10 @@ where
                 "No files to download for bucket {:?}", event.bucket_id
             );
             self.pending_bucket_id = None;
-            return Ok(());
+            return Ok(format!(
+                "No files to download for bucket [{:x}]",
+                event.bucket_id
+            ));
         }
 
         // Convert indexer files to FileMetadata
@@ -270,7 +280,10 @@ where
             "Bucket move completed for bucket {:?}", event.bucket_id
         );
 
-        Ok(())
+        Ok(format!(
+            "Handled StartMovedBucketDownload for bucket [{:x}]",
+            event.bucket_id
+        ))
     }
 }
 

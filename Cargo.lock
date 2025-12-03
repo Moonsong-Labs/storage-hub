@@ -17056,7 +17056,6 @@ dependencies = [
 name = "shp-opaque"
 version = "0.1.0"
 dependencies = [
- "parachains-common",
  "sp-runtime 40.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
 ]
 

@@ -129,10 +129,10 @@ where
     async fn handle_event(
         &mut self,
         event: FinalisedBspConfirmStoppedStoring<Runtime>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
-            "Processing finalised BSP confirm stopped storing file key [{:x}] for BSP [{:?}]",
+            "Processing finalised BSP confirm stopped storing file key [{:x}] for BSP [{:x}]",
             event.file_key,
             event.bsp_id
         );
@@ -181,7 +181,10 @@ where
             }
         }
 
-        Ok(())
+        Ok(format!(
+            "Handled FinalisedBspConfirmStoppedStoring for file key [{:x}]",
+            event.file_key
+        ))
     }
 }
 
@@ -208,10 +211,10 @@ where
     async fn handle_event(
         &mut self,
         event: FinalisedTrieRemoveMutationsAppliedForBsp<Runtime>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
-            "Processing finalised mutations applied for provider [{:?}]",
+            "Processing finalised mutations applied for provider [{:x}]",
             event.provider_id
         );
 
@@ -248,6 +251,9 @@ where
             }
         }
 
-        Ok(())
+        Ok(format!(
+            "Handled FinalisedTrieRemoveMutationsAppliedForBsp for provider [{:x}]",
+            event.provider_id
+        ))
     }
 }

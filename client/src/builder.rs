@@ -18,8 +18,7 @@ use shc_blockchain_service::{
     capacity_manager::CapacityConfig, handler::BlockchainServiceConfig, spawn_blockchain_service,
     BlockchainService,
 };
-use shc_common::traits::StorageEnableRuntime;
-use shc_common::types::ParachainClient;
+use shc_common::{traits::StorageEnableRuntime, types::StorageHubClient};
 use shc_file_manager::{in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage};
 use shc_file_transfer_service::{spawn_file_transfer_service, FileTransferService};
 use shc_fisherman_service::{spawn_fisherman_service, FishermanService};
@@ -159,7 +158,7 @@ where
     /// Call [`setup_storage_layer`](StorageHubBuilder::setup_storage_layer) before calling this method.
     pub async fn with_blockchain(
         &mut self,
-        client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+        client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
         keystore: KeystorePtr,
         rpc_handlers: Arc<RpcHandlers>,
         rocksdb_root_path: impl Into<PathBuf>,
@@ -207,7 +206,7 @@ where
     /// and constructs proofs of inclusion for storage providers to remove files.
     pub async fn with_fisherman(
         &mut self,
-        client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+        client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
         fisherman_options: &FishermanOptions,
     ) -> &mut Self {
         let fisherman_service_handle = spawn_fisherman_service::<Runtime>(

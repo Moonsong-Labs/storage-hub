@@ -97,7 +97,7 @@ use sh_solochain_evm_runtime::{
 //╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 // Generic client type over Runtime
 pub(crate) type StorageEnableClient<Runtime> =
-    shc_common::types::ParachainClient<<Runtime as StorageEnableRuntime>::RuntimeApi>;
+    shc_common::types::StorageHubClient<<Runtime as StorageEnableRuntime>::RuntimeApi>;
 pub(crate) type StorageEnableBackend = TFullBackend<Block>;
 pub(crate) type StorageEnableSelectChain = sc_consensus::LongestChain<StorageEnableBackend, Block>;
 pub(crate) type StorageEnablePool<Runtime> =
@@ -696,7 +696,7 @@ pub fn new_partial_parachain(
             extra_pages: h as _,
         });
 
-    let executor = ParachainExecutor::builder()
+    let executor = StorageHubExecutor::builder()
         .with_execution_method(config.executor.wasm_method)
         .with_onchain_heap_alloc_strategy(heap_pages)
         .with_offchain_heap_alloc_strategy(heap_pages)
@@ -2564,7 +2564,7 @@ pub fn new_partial_solochain_evm(
         })
         .transpose()?;
 
-    // Wasm executor (reuse ParachainExecutor host functions)
+    // Wasm executor
     let heap_pages = config
         .executor
         .default_heap_pages
@@ -2572,7 +2572,7 @@ pub fn new_partial_solochain_evm(
             extra_pages: h as _,
         });
 
-    let executor = shc_common::types::ParachainExecutor::builder()
+    let executor = shc_common::types::StorageHubExecutor::builder()
         .with_execution_method(config.executor.wasm_method)
         .with_onchain_heap_alloc_strategy(heap_pages)
         .with_offchain_heap_alloc_strategy(heap_pages)
