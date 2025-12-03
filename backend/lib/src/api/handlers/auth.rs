@@ -659,14 +659,19 @@ mod tests {
         let app = mock_app().await;
         let server = TestServer::new(app).unwrap();
 
+        // Use a URI that will fail parsing even after prepending https://
         let message_request = NonceRequest {
             address: MOCK_ADDRESS,
             chain_id: 1,
-            uri: "not-a-valid-uri".to_string(),
+            uri: "https://exa mple.com".to_string(),
         };
 
         let response = server.post("/auth/message").json(&message_request).await;
-        assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+        let status = response.status_code();
+        let body = response.text();
+        println!("Response status: {:?}", status);
+        println!("Response body: {}", body);
+        assert_eq!(status, StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]
