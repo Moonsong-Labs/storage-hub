@@ -54,7 +54,7 @@ where
     NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, _event: VerifyMspBucketForests) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, _event: VerifyMspBucketForests) -> anyhow::Result<String> {
         // Determine this node's provider id
         let maybe_provider_id = self
             .storage_hub_handler
@@ -65,7 +65,9 @@ where
 
         let Some(storage_provider_id) = maybe_provider_id else {
             trace!(target: LOG_TARGET, "Node is not a storage provider; skipping MSP forest verification");
-            return Ok(());
+            return Ok(
+                "Skipped VerifyMspBucketForests: node is not a storage provider".to_string(),
+            );
         };
 
         // Only proceed if this is an MSP node
@@ -73,7 +75,7 @@ where
             StorageProviderId::MainStorageProvider(msp_id) => msp_id,
             _ => {
                 trace!(target: LOG_TARGET, "Node is not an MSP; skipping MSP forest verification");
-                return Ok(());
+                return Ok("Skipped VerifyMspBucketForests: node is not an MSP".to_string());
             }
         };
 
@@ -90,7 +92,7 @@ where
 
         if buckets.is_empty() {
             trace!(target: LOG_TARGET, "No buckets managed by MSP; nothing to verify");
-            return Ok(());
+            return Ok("Skipped VerifyMspBucketForests: no buckets managed by MSP".to_string());
         }
 
         // Verify each bucket has a local forest storage instance
@@ -120,6 +122,6 @@ where
 
         info!(target: LOG_TARGET, "🌳 Verified local forest storage present for all buckets managed by this MSP");
 
-        Ok(())
+        Ok("Verified local forest storage for all buckets managed by this MSP".to_string())
     }
 }
