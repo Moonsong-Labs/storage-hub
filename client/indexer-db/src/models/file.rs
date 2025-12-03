@@ -175,16 +175,36 @@ impl File {
         Ok(file)
     }
 
+    /// Get all file records for a given file key.
+    ///
+    /// There can be multiple file records for a given file key if there were
+    /// multiple storage requests for the same file key.
     pub async fn get_by_file_key<'a>(
+        conn: &mut DbConnection<'a>,
+        file_key: impl AsRef<[u8]>,
+    ) -> Result<Vec<Self>, diesel::result::Error> {
+        let file_key = file_key.as_ref().to_vec();
+        let file_records = file::table
+            .filter(file::file_key.eq(file_key))
+            .load::<Self>(conn)
+            .await?;
+        Ok(file_records)
+    }
+
+    /// Get the most recently created file record for a given file key.
+    ///
+    /// Returns error if there are no records for the given key.
+    pub async fn get_latest_by_file_key<'a>(
         conn: &mut DbConnection<'a>,
         file_key: impl AsRef<[u8]>,
     ) -> Result<Self, diesel::result::Error> {
         let file_key = file_key.as_ref().to_vec();
-        let file = file::table
+        let file_record: Self = file::table
             .filter(file::file_key.eq(file_key))
-            .first::<Self>(conn)
+            .order(file::created_at.desc())
+            .first(conn)
             .await?;
-        Ok(file)
+        Ok(file_record)
     }
 
     pub async fn update_step<'a>(
