@@ -207,6 +207,22 @@ impl File {
         Ok(file_record)
     }
 
+    /// Get the oldest file record for a given file key.
+    ///
+    /// Returns error if there are no records for the given key.
+    pub async fn get_oldest_by_file_key<'a>(
+        conn: &mut DbConnection<'a>,
+        file_key: impl AsRef<[u8]>,
+    ) -> Result<Self, diesel::result::Error> {
+        let file_key = file_key.as_ref().to_vec();
+        let file_record: Self = file::table
+            .filter(file::file_key.eq(file_key))
+            .order(file::created_at.asc())
+            .first(conn)
+            .await?;
+        Ok(file_record)
+    }
+
     pub async fn update_step<'a>(
         conn: &mut DbConnection<'a>,
         file_key: impl AsRef<[u8]>,
