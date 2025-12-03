@@ -13,6 +13,8 @@ use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
 use crate::{
     handler::StorageHubHandler,
+    inc_counter,
+    metrics::{STATUS_FAILURE, STATUS_SUCCESS},
     types::{MspForestStorageHandlerT, ShNodeType},
 };
 
@@ -100,6 +102,7 @@ where
             "Processing finalised bucket mutations applied for bucket [{:?}]",
             event.bucket_id
         );
+
         debug!(target: LOG_TARGET, "Mutations to apply: {:?}", event.mutations);
 
         for mutation in event.mutations {
@@ -135,7 +138,24 @@ where
                 );
             } else {
                 // If file key is not in Forest, we can now safely remove it from the File Storage.
-                self.remove_file_from_file_storage(&file_key.into()).await?;
+                match self
+                    .remove_file_from_file_storage(&file_key.into())
+                    .await
+                {
+                    Ok(_) => inc_counter!(
+                        self.storage_hub_handler,
+                        msp_files_deleted_total,
+                        STATUS_SUCCESS
+                    ),
+                    Err(e) => {
+                        inc_counter!(
+                            self.storage_hub_handler,
+                            msp_files_deleted_total,
+                            STATUS_FAILURE
+                        );
+                        return Err(e);
+                    }
+                }
             }
         }
 
@@ -203,8 +223,24 @@ where
 
         if is_in_file_storage {
             // If file is present in File Storage and not in Forest, remove it from File Storage.
-            self.remove_file_from_file_storage(&event.file_key.into())
-                .await?;
+            match self
+                .remove_file_from_file_storage(&event.file_key.into())
+                .await
+            {
+                Ok(_) => inc_counter!(
+                    self.storage_hub_handler,
+                    msp_files_deleted_total,
+                    STATUS_SUCCESS
+                ),
+                Err(e) => {
+                    inc_counter!(
+                        self.storage_hub_handler,
+                        msp_files_deleted_total,
+                        STATUS_FAILURE
+                    );
+                    return Err(e);
+                }
+            }
         } else {
             debug!(
                 target: LOG_TARGET,

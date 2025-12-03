@@ -26,6 +26,9 @@ use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
 use crate::{
     handler::StorageHubHandler,
+    inc_counter,
+    metrics::{STATUS_FAILURE, STATUS_PENDING, STATUS_SUCCESS},
+    observe_histogram,
     types::{BspForestStorageHandlerT, ForestStorageKey, ShNodeType},
 };
 
@@ -166,6 +169,13 @@ where
             target: LOG_TARGET,
             "Processing SubmitProofRequest {:?}",
             event.data
+        );
+
+        // Increment metric for proofs submitted
+        inc_counter!(
+            self.storage_hub_handler,
+            bsp_proofs_submitted_total,
+            STATUS_PENDING
         );
 
         if event.data.forest_challenges.is_empty() && event.data.checkpoint_challenges.is_empty() {
@@ -310,7 +320,8 @@ where
         };
 
         // Attempt to submit the extrinsic with retries and tip increase.
-        self.storage_hub_handler
+        let submit_result = self
+            .storage_hub_handler
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
@@ -330,13 +341,30 @@ where
                     .with_should_retry(Some(Box::new(should_retry))),
                 false,
             )
-            .await
-            .map_err(|e| {
-                error!(target: LOG_TARGET, "❌ Failed to submit proof due to: {}", e);
-                anyhow!("Failed to submit proof due to: {}", e)
-            })?;
+            .await;
 
-        trace!(target: LOG_TARGET, "Proof submitted successfully");
+        match &submit_result {
+            Ok(_) => {
+                // Increment metric for successful proof submission
+                inc_counter!(
+                    self.storage_hub_handler,
+                    bsp_proofs_submitted_total,
+                    STATUS_SUCCESS
+                );
+                trace!(target: LOG_TARGET, "Proof submitted successfully");
+            }
+            Err(e) => {
+                // Increment metric for failed proof submission
+                inc_counter!(
+                    self.storage_hub_handler,
+                    bsp_proofs_submitted_total,
+                    STATUS_FAILURE
+                );
+                error!(target: LOG_TARGET, "❌ Failed to submit proof due to: {}", e);
+            }
+        }
+
+        submit_result.map_err(|e| anyhow!("Failed to submit proof due to: {}", e))?;
 
         // Release the forest root write "lock" and finish the task.
         self.storage_hub_handler
@@ -483,6 +511,9 @@ where
         seed: RandomnessOutput<Runtime>,
         provider_id: ProofsDealerProviderId<Runtime>,
     ) -> anyhow::Result<KeyProof<Runtime>> {
+        // Track proof generation timing for metrics.
+        let start_time = std::time::Instant::now();
+
         // Get the metadata for the file.
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
         let metadata = read_file_storage
@@ -516,6 +547,14 @@ where
             .map_err(|e| anyhow!("File is not in storage, or proof does not exist: {:?}", e))?;
         // Release the file storage read lock as soon as possible.
         drop(read_file_storage);
+
+        // Record successful proof generation timing.
+        observe_histogram!(
+            self.storage_hub_handler,
+            bsp_proof_generation_seconds,
+            STATUS_SUCCESS,
+            start_time.elapsed().as_secs_f64()
+        );
 
         // Return the key proof.
         Ok(KeyProof {

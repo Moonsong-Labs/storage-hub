@@ -8,7 +8,10 @@ use shc_indexer_db::DbPool;
 use sp_keystore::KeystorePtr;
 use sp_runtime::traits::SaturatedConversion;
 use std::{path::PathBuf, sync::Arc};
+use substrate_prometheus_endpoint::Registry;
 use tokio::sync::RwLock;
+
+use crate::metrics::MetricsLink;
 
 use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
 use shc_blockchain_service::{
@@ -71,6 +74,7 @@ where
     bsp_submit_proof_config: Option<BspSubmitProofConfig>,
     blockchain_service_config: Option<BlockchainServiceConfig<Runtime>>,
     peer_manager: Option<Arc<BspPeerManager>>,
+    metrics: MetricsLink,
 }
 
 /// Common components to build for any given configuration of [`ShRole`] and [`ShStorageLayer`].
@@ -99,6 +103,7 @@ where
             bsp_submit_proof_config: None,
             blockchain_service_config: None,
             peer_manager: None,
+            metrics: MetricsLink::default(),
         }
     }
 
@@ -381,6 +386,15 @@ where
         self.blockchain_service_config = Some(blockchain_service_config);
         self
     }
+
+    /// Set the Prometheus metrics registry.
+    ///
+    /// If the registry is provided, metrics will be registered and available for tasks.
+    /// If `None`, metrics will be disabled (no-op).
+    pub fn with_metrics(&mut self, registry: Option<&Registry>) -> &mut Self {
+        self.metrics = MetricsLink::new(registry);
+        self
+    }
 }
 
 /// Abstraction trait to build the Storage Layer of a [`ShNodeType`].
@@ -553,6 +567,7 @@ where
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
             None,
+            self.metrics.clone(),
         )
     }
 }
@@ -599,6 +614,7 @@ where
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
             None,
+            self.metrics.clone(),
         )
     }
 }
@@ -646,6 +662,7 @@ where
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
             None,
+            self.metrics.clone(),
         )
     }
 }
@@ -701,6 +718,7 @@ where
             // Not needed by the fisherman service
             self.peer_manager.expect("Peer Manager not set"),
             self.fisherman,
+            self.metrics.clone(),
         )
     }
 }

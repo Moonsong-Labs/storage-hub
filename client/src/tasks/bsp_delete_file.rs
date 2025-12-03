@@ -15,6 +15,8 @@ use sp_core::H256;
 
 use crate::{
     handler::StorageHubHandler,
+    inc_counter,
+    metrics::{STATUS_FAILURE, STATUS_SUCCESS},
     types::{BspForestStorageHandlerT, ForestStorageKey, ShNodeType},
 };
 
@@ -155,8 +157,28 @@ where
             );
         } else {
             // If file key is not in Forest, we can now safely remove it from the File Storage.
-            self.remove_file_from_file_storage(&event.file_key.into())
-                .await?;
+            match self
+                .remove_file_from_file_storage(&event.file_key.into())
+                .await
+            {
+                Ok(_) => {
+                    // Increment metric for successful file deletion
+                    inc_counter!(
+                        self.storage_hub_handler,
+                        bsp_files_deleted_total,
+                        STATUS_SUCCESS
+                    );
+                }
+                Err(e) => {
+                    // Increment metric for failed file deletion
+                    inc_counter!(
+                        self.storage_hub_handler,
+                        bsp_files_deleted_total,
+                        STATUS_FAILURE
+                    );
+                    return Err(e);
+                }
+            }
         }
 
         Ok(())
@@ -192,6 +214,7 @@ where
             "Processing finalised mutations applied for provider [{:?}]",
             event.provider_id
         );
+
         debug!(target: LOG_TARGET, "Mutations to apply: {:?}", event.mutations);
 
         for mutation in event.mutations {

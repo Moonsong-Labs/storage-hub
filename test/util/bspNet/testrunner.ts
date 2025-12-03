@@ -142,6 +142,7 @@ export async function describeMspNet<
     fullNetConfig.fishermanIncompleteSyncMax = options.fishermanIncompleteSyncMax;
     fullNetConfig.fishermanIncompleteSyncPageSize = options.fishermanIncompleteSyncPageSize;
     fullNetConfig.logLevel = options.logLevel;
+    fullNetConfig.prometheus = options.prometheus;
 
     const describeFunc = options?.only ? describe.only : options?.skip ? describe.skip : describe;
 

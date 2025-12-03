@@ -16666,6 +16666,7 @@ dependencies = [
  "sp-runtime 40.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-trie 38.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "substrate-build-script-utils",
+ "substrate-prometheus-endpoint",
  "thiserror 1.0.69",
  "tokio",
 ]

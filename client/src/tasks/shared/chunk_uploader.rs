@@ -12,7 +12,12 @@ use shc_common::{
 };
 use shp_file_metadata::ChunkId;
 
-use crate::{handler::StorageHubHandler, types::ShNodeType};
+use crate::{
+    handler::StorageHubHandler,
+    metrics::{STATUS_FAILURE, STATUS_SUCCESS},
+    observe_histogram,
+    types::ShNodeType,
+};
 use shc_blockchain_service::commands::BlockchainServiceCommandInterface;
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::commands::{
@@ -102,6 +107,9 @@ where
         chunk_count: u64,
     ) -> impl core::future::Future<Output = Result<(), anyhow::Error>> + 'a {
         async move {
+            // Track file transfer timing for metrics.
+            let start_time = std::time::Instant::now();
+
             debug!(target: LOG_TARGET, "Attempting to send chunks of file key {:?} to peer {:?}", file_key, peer_id);
 
             let mut current_batch = Vec::new();
@@ -214,9 +222,23 @@ where
                             Err(RequestFailure::Refused)
                             | Err(RequestFailure::Network(_))
                             | Err(RequestFailure::NotConnected) => {
+                                // Record failed file transfer timing.
+                                observe_histogram!(
+                                    self.as_handler(),
+                                    file_transfer_seconds,
+                                    STATUS_FAILURE,
+                                    start_time.elapsed().as_secs_f64()
+                                );
                                 return Err(anyhow::anyhow!("Failed to send file {:?}", file_key));
                             }
                             Err(e) => {
+                                // Record failed file transfer timing.
+                                observe_histogram!(
+                                    self.as_handler(),
+                                    file_transfer_seconds,
+                                    STATUS_FAILURE,
+                                    start_time.elapsed().as_secs_f64()
+                                );
                                 return Err(anyhow::anyhow!(
                                     "Unexpected error while trying to upload final batch to peer {:?} (Error: {:?})",
                                     peer_id,
@@ -326,9 +348,23 @@ where
                             Err(RequestFailure::Refused)
                             | Err(RequestFailure::Network(_))
                             | Err(RequestFailure::NotConnected) => {
+                                // Record failed file transfer timing.
+                                observe_histogram!(
+                                    self.as_handler(),
+                                    file_transfer_seconds,
+                                    STATUS_FAILURE,
+                                    start_time.elapsed().as_secs_f64()
+                                );
                                 return Err(anyhow::anyhow!("Failed to send file {:?}", file_key));
                             }
                             Err(e) => {
+                                // Record failed file transfer timing.
+                                observe_histogram!(
+                                    self.as_handler(),
+                                    file_transfer_seconds,
+                                    STATUS_FAILURE,
+                                    start_time.elapsed().as_secs_f64()
+                                );
                                 return Err(anyhow::anyhow!(
                                     "Unexpected error while trying to upload final batch to peer {:?} (Error: {:?})",
                                     peer_id,
@@ -339,6 +375,14 @@ where
                     }
                 }
             }
+
+            // Record successful file transfer timing.
+            observe_histogram!(
+                self.as_handler(),
+                file_transfer_seconds,
+                STATUS_SUCCESS,
+                start_time.elapsed().as_secs_f64()
+            );
 
             info!(target: LOG_TARGET, "Successfully sent file fingerprint {:x} to peer {:?}", fingerprint, peer_id);
             Ok(())

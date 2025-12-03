@@ -29,7 +29,11 @@ use shc_file_transfer_service::{
 };
 use shp_file_metadata::{Chunk, ChunkId};
 
-use crate::{bsp_peer_manager::BspPeerManager, download_state_store::DownloadStateStore};
+use crate::{
+    bsp_peer_manager::BspPeerManager,
+    download_state_store::DownloadStateStore,
+    metrics::{MetricsLink, STATUS_FAILURE, STATUS_SUCCESS},
+};
 
 const LOG_TARGET: &str = "file_download_manager";
 
@@ -43,7 +47,8 @@ const BEST_PEERS_TO_SELECT: usize = 2;
 const RANDOM_PEERS_TO_SELECT: usize = 3;
 const MAX_CONCURRENT_BUCKET_DOWNLOADS: usize = 2;
 
-/// Configuration for file download limits and parallelism settings
+/// Configuration for file download limits and parallelism settings.
+#[derive(Clone, Copy)]
 pub struct FileDownloadLimits {
     /// Maximum number of files to download in parallel
     pub max_concurrent_file_downloads: usize,
@@ -74,21 +79,6 @@ impl Default for FileDownloadLimits {
             best_peers_to_select: BEST_PEERS_TO_SELECT,
             random_peers_to_select: RANDOM_PEERS_TO_SELECT,
             max_concurrent_bucket_downloads: MAX_CONCURRENT_BUCKET_DOWNLOADS,
-        }
-    }
-}
-
-impl Clone for FileDownloadLimits {
-    fn clone(&self) -> Self {
-        Self {
-            max_concurrent_file_downloads: self.max_concurrent_file_downloads,
-            max_concurrent_chunks_per_file: self.max_concurrent_chunks_per_file,
-            max_chunks_per_request: self.max_chunks_per_request,
-            chunk_request_peer_retry_attempts: self.chunk_request_peer_retry_attempts,
-            download_retry_attempts: self.download_retry_attempts,
-            best_peers_to_select: self.best_peers_to_select,
-            random_peers_to_select: self.random_peers_to_select,
-            max_concurrent_bucket_downloads: self.max_concurrent_bucket_downloads,
         }
     }
 }
@@ -164,26 +154,42 @@ pub struct FileDownloadManager<Runtime: StorageEnableRuntime> {
     peer_manager: Arc<BspPeerManager>,
     /// Download state store for persistence
     download_state_store: Arc<DownloadStateStore<Runtime>>,
+    /// Prometheus metrics for tracking download throughput
+    metrics: MetricsLink,
 }
 
 impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
-    /// Create a new FileDownloadManager with default limits
+    /// Create a new [`FileDownloadManager`] with default limits.
     ///
     /// # Arguments
     /// * `peer_manager` - The peer manager to use for peer selection and tracking
-    pub fn new(peer_manager: Arc<BspPeerManager>, data_dir: PathBuf) -> Result<Self> {
-        Self::with_limits(FileDownloadLimits::default(), peer_manager, data_dir)
+    /// * `data_dir` - The directory to store download state
+    /// * `metrics` - The Prometheus metrics link for tracking download throughput
+    pub fn new(
+        peer_manager: Arc<BspPeerManager>,
+        data_dir: PathBuf,
+        metrics: MetricsLink,
+    ) -> Result<Self> {
+        Self::with_limits(
+            FileDownloadLimits::default(),
+            peer_manager,
+            data_dir,
+            metrics,
+        )
     }
 
-    /// Create a new FileDownloadManager with specified limits
+    /// Create a new [`FileDownloadManager`] with specified limits.
     ///
     /// # Arguments
     /// * `limits` - The download limits to use
     /// * `peer_manager` - The peer manager to use for peer selection and tracking
+    /// * `data_dir` - The directory to store download state
+    /// * `metrics` - The Prometheus metrics link for tracking download throughput
     pub fn with_limits(
         limits: FileDownloadLimits,
         peer_manager: Arc<BspPeerManager>,
         data_dir: PathBuf,
+        metrics: MetricsLink,
     ) -> Result<Self> {
         // Create a new download state store
         let download_state_store = Arc::new(DownloadStateStore::new(data_dir)?);
@@ -195,6 +201,7 @@ impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
             limits,
             peer_manager,
             download_state_store,
+            metrics,
         })
     }
 
@@ -380,6 +387,17 @@ impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
         self.peer_manager
             .record_success(peer_id, total_bytes as u64, elapsed.as_millis() as u64)
             .await;
+
+        // Record successful download throughput metrics
+        if let Some(m) = self.metrics.as_ref() {
+            m.bytes_downloaded_total
+                .with_label_values(&[STATUS_SUCCESS])
+                .inc_by(total_bytes as u64);
+            m.chunks_downloaded_total
+                .with_label_values(&[STATUS_SUCCESS])
+                .inc_by(processed_chunks as u64);
+        }
+
         Ok(true)
     }
 
@@ -488,6 +506,9 @@ impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
             .acquire()
             .await
             .map_err(|e| anyhow!("Failed to acquire file semaphore: {:?}", e))?;
+
+        // Track file download start time for metrics
+        let download_start = std::time::Instant::now();
 
         let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
         let chunks_count = file_metadata.chunks_count();
@@ -650,12 +671,25 @@ impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
         }
 
         if !errors.is_empty() && !is_complete {
+            // Record failed file download duration in histogram
+            if let Some(m) = self.metrics.as_ref() {
+                m.file_download_seconds
+                    .with_label_values(&[STATUS_FAILURE])
+                    .observe(download_start.elapsed().as_secs_f64());
+            }
             Err(anyhow!(
                 "Failed to download file {:?}: {}",
                 file_key,
                 errors.join(", ")
             ))
         } else {
+            // Record successful file download duration in histogram
+            if let Some(m) = self.metrics.as_ref() {
+                m.file_download_seconds
+                    .with_label_values(&[STATUS_SUCCESS])
+                    .observe(download_start.elapsed().as_secs_f64());
+            }
+
             info!(
                 target: LOG_TARGET,
                 "Successfully downloaded all chunks for file {:?}", file_key
@@ -836,6 +870,7 @@ impl<Runtime: StorageEnableRuntime> Clone for FileDownloadManager<Runtime> {
             bucket_locks: Arc::clone(&self.bucket_locks),
             peer_manager: Arc::clone(&self.peer_manager),
             download_state_store: Arc::clone(&self.download_state_store),
+            metrics: self.metrics.clone(),
         }
     }
 }

@@ -37,6 +37,9 @@ use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
 use crate::{
     handler::StorageHubHandler,
+    inc_counter, inc_counter_by,
+    metrics::{STATUS_FAILURE, STATUS_PENDING, STATUS_SUCCESS},
+    observe_histogram,
     types::{BspForestStorageHandlerT, ForestStorageKey, ShNodeType},
 };
 
@@ -139,6 +142,13 @@ where
             event.fingerprint
         );
 
+        // Increment metric for new storage request
+        inc_counter!(
+            self.storage_hub_handler,
+            bsp_storage_requests_total,
+            STATUS_PENDING
+        );
+
         let result = self.handle_new_storage_request_event(event).await;
         if result.is_err() {
             if let Some(file_key) = &self.file_key_cleanup {
@@ -238,6 +248,14 @@ where
             target: LOG_TARGET,
             "Processing ConfirmStoringRequest: {:?}",
             event.data.confirm_storing_requests,
+        );
+
+        // Increment metric for storage requests being confirmed
+        inc_counter_by!(
+            self.storage_hub_handler,
+            bsp_storage_requests_total,
+            STATUS_SUCCESS,
+            event.data.confirm_storing_requests.len() as u64
         );
 
         // Acquire Forest root write lock. This prevents other Forest-root-writing tasks from starting while we are processing this task.
@@ -438,6 +456,31 @@ where
     Runtime: StorageEnableRuntime,
 {
     async fn handle_new_storage_request_event(
+        &mut self,
+        event: NewStorageRequest<Runtime>,
+    ) -> anyhow::Result<()> {
+        // Track storage request processing timing for metrics.
+        let start_time = std::time::Instant::now();
+
+        // Wrap the main logic to track success/failure
+        let result = self.handle_new_storage_request_inner(event).await;
+
+        // Record histogram with status based on result
+        observe_histogram!(
+            self.storage_hub_handler,
+            storage_request_seconds,
+            if result.is_ok() {
+                STATUS_SUCCESS
+            } else {
+                STATUS_FAILURE
+            },
+            start_time.elapsed().as_secs_f64()
+        );
+
+        result
+    }
+
+    async fn handle_new_storage_request_inner(
         &mut self,
         event: NewStorageRequest<Runtime>,
     ) -> anyhow::Result<()> {
@@ -1028,7 +1071,7 @@ where
 
         drop(read_file_storage);
 
-        return Ok(true);
+        Ok(true)
     }
 
     /// Function to determine if a volunteer request should be retried,
@@ -1107,7 +1150,7 @@ where
             return false;
         }
 
-        return true;
+        true
     }
 
     async fn unvolunteer_file(&self, file_key: Runtime::Hash) {

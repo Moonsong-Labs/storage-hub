@@ -290,6 +290,28 @@ export class NetworkLauncher {
       );
     }
 
+    // Remove Prometheus service if not enabled or not fullnet
+    if (!this.config.prometheus || this.type !== "fullnet") {
+      if (composeYaml.services["sh-prometheus"]) {
+        delete composeYaml.services["sh-prometheus"];
+      }
+    }
+
+    // Add --prometheus-external to nodes when prometheus is enabled
+    if (this.config.prometheus && this.type === "fullnet") {
+      composeYaml.services["sh-bsp"].command.push("--prometheus-external");
+      composeYaml.services["sh-user"].command.push("--prometheus-external");
+      composeYaml.services["sh-msp-1"].command.push("--prometheus-external");
+      composeYaml.services["sh-msp-2"].command.push("--prometheus-external");
+      // Add to fisherman and indexer if they exist
+      if (composeYaml.services["sh-fisherman"]) {
+        composeYaml.services["sh-fisherman"].command.push("--prometheus-external");
+      }
+      if (composeYaml.services["sh-indexer"]) {
+        composeYaml.services["sh-indexer"].command.push("--prometheus-external");
+      }
+    }
+
     const cwd = path.resolve(process.cwd(), "..", "docker");
     const entries = Object.entries(composeYaml.services).map(([key, value]: any) => {
       let remappedValue: any;
@@ -488,6 +510,15 @@ export class NetworkLauncher {
           BSP_IP: bspIp,
           BSP_PEER_ID: bspPeerId
         }
+      });
+    }
+
+    // Start Prometheus if enabled
+    if (this.config.prometheus && this.type === "fullnet") {
+      await compose.upOne("sh-prometheus", {
+        cwd,
+        config: tmpFile,
+        log: verbose
       });
     }
 
@@ -1179,4 +1210,9 @@ export type NetLaunchConfig = {
    * When true, launches a dedicated Postgres container and passes its URL to MSP 1 as a CLI arg.
    */
   pendingTxDb?: boolean;
+
+  /**
+   * If true, runs Prometheus server for metrics collection (fullnet only).
+   */
+  prometheus?: boolean;
 };

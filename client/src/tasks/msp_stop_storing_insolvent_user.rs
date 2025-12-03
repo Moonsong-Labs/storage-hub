@@ -18,6 +18,8 @@ use sp_core::H256;
 
 use crate::{
     handler::StorageHubHandler,
+    inc_counter,
+    metrics::{STATUS_FAILURE, STATUS_SUCCESS},
     types::{ForestStorageKey, MspForestStorageHandlerT, ShNodeType},
 };
 
@@ -184,6 +186,12 @@ where
             }
 
             if failed_stop_storing_buckets > 0 {
+                // Increment metric for failed insolvent user processing
+                inc_counter!(
+                    self.storage_hub_handler,
+                    insolvent_users_processed_total,
+                    STATUS_FAILURE
+                );
                 return Err(anyhow!(
                     "Failed to stop storing {} out of {} buckets for insolvent user {:?}",
                     failed_stop_storing_buckets,
@@ -191,6 +199,12 @@ where
                     insolvent_user
                 ));
             } else {
+                // Increment metric for successful insolvent user processing
+                inc_counter!(
+                    self.storage_hub_handler,
+                    insolvent_users_processed_total,
+                    STATUS_SUCCESS
+                );
                 info!(
                     target: LOG_TARGET,
                     "Successfully completed the task of stop storing all buckets for the insolvent user {:?}",

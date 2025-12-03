@@ -12,6 +12,8 @@ use shc_file_transfer_service::commands::FileTransferServiceCommandInterfaceExt;
 
 use crate::{
     handler::StorageHubHandler,
+    inc_counter,
+    metrics::{STATUS_FAILURE, STATUS_PENDING, STATUS_SUCCESS},
     tasks::shared::chunk_uploader::ChunkUploaderExt,
     types::{MspForestStorageHandlerT, ShNodeType},
 };
@@ -86,6 +88,13 @@ where
                 bsp_id
         );
 
+        // Increment metric for files distributed
+        inc_counter!(
+            self.storage_hub_handler,
+            msp_files_distributed_total,
+            STATUS_PENDING
+        );
+
         // Register that this task is distributing the file to the BSP.
         // This avoids a second instance of this task from being spawned.
         // This can fail if the BSP is already registered as distributing file.
@@ -99,6 +108,13 @@ where
         // for a retry.
         if let Err(e) = self.handle_distribute_file_to_bsp(file_key, bsp_id).await {
             error!(target: LOG_TARGET, "Failed to distribute file to BSP: {:?}", e);
+
+            // Increment metric for failed file distribution
+            inc_counter!(
+                self.storage_hub_handler,
+                msp_files_distributed_total,
+                STATUS_FAILURE
+            );
 
             // Unregister BSP as distributing file.
             // This in itself can fail. If it does, we have no other choice but to
@@ -115,6 +131,13 @@ where
 
             return Err(e);
         }
+
+        // Increment metric for successful file distribution
+        inc_counter!(
+            self.storage_hub_handler,
+            msp_files_distributed_total,
+            STATUS_SUCCESS
+        );
 
         Ok(())
     }

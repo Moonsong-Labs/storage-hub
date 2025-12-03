@@ -20,6 +20,8 @@ use sp_runtime::traits::SaturatedConversion;
 
 use crate::{
     handler::StorageHubHandler,
+    inc_counter,
+    metrics::{STATUS_FAILURE, STATUS_SUCCESS},
     types::{BspForestStorageHandlerT, ForestStorageKey, ShNodeType},
 };
 
@@ -149,9 +151,21 @@ where
 
             match charging_result {
                 Ok(submitted_transaction) => {
+                    // Increment metric for successful fee charge
+                    inc_counter!(
+                        self.storage_hub_handler,
+                        bsp_fees_charged_total,
+                        STATUS_SUCCESS
+                    );
                     info!(target: LOG_TARGET, "Submitted extrinsic to charge users with debt: {}", submitted_transaction.hash);
                 }
                 Err(e) => {
+                    // Increment metric for failed fee charge
+                    inc_counter!(
+                        self.storage_hub_handler,
+                        bsp_fees_charged_total,
+                        STATUS_FAILURE
+                    );
                     error!(target: LOG_TARGET, "Failed to send extrinsic to charge users with debt: {}", e);
                 }
             }
@@ -204,6 +218,13 @@ where
                     StopStoringForInsolventUserRequest::new(insolvent_user),
                 )
                 .await?;
+
+            // Increment metric for successful insolvent user processing
+            inc_counter!(
+                self.storage_hub_handler,
+                insolvent_users_processed_total,
+                STATUS_SUCCESS
+            );
         }
         Ok(())
     }

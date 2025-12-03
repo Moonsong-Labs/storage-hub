@@ -114,6 +114,93 @@ export interface BspNetApi extends ApiPromise {
       onChainNonce: bigint;
     }) => Promise<void>;
   };
+
+  /**
+   * Prometheus operations namespace.
+   * Provides methods for querying and asserting Prometheus metrics.
+   */
+  prometheus: {
+    /**
+     * Query the Prometheus API with a PromQL query.
+     */
+    query: (query: string) => Promise<{
+      status: string;
+      data: {
+        resultType: string;
+        result: Array<{
+          metric: Record<string, string>;
+          value?: [number, string];
+          values?: Array<[number, string]>;
+        }>;
+      };
+    }>;
+    /**
+     * Get the current value of a metric from Prometheus.
+     */
+    getMetricValue: (query: string) => Promise<number>;
+    /**
+     * Get the targets that Prometheus is currently scraping.
+     */
+    getTargets: () => Promise<{
+      status: string;
+      data: {
+        activeTargets: Array<{
+          labels: Record<string, string>;
+          scrapeUrl: string;
+          health: string;
+          lastScrape: string;
+        }>;
+      };
+    }>;
+    /**
+     * Wait for Prometheus to scrape updated metrics.
+     */
+    waitForScrape: () => Promise<void>;
+    /**
+     * Wait for the Prometheus server to become ready.
+     */
+    waitForReady: () => Promise<void>;
+    /**
+     * Assert that a metric has incremented from an initial value.
+     */
+    assertMetricIncremented: (options: {
+      query: string;
+      initialValue: number;
+      message?: string;
+    }) => Promise<void>;
+    /**
+     * Assert that a metric is above a threshold.
+     */
+    assertMetricAbove: (options: {
+      query: string;
+      threshold: number;
+      message?: string;
+    }) => Promise<void>;
+    /**
+     * Assert that a metric equals an expected value.
+     */
+    assertMetricEquals: (options: {
+      query: string;
+      expected: number;
+      message?: string;
+    }) => Promise<void>;
+    /**
+     * All StorageHub metrics definitions.
+     */
+    metrics: Record<
+      string,
+      {
+        name: string;
+        type: "counter" | "gauge" | "histogram";
+        labels: string[];
+        description: string;
+      }
+    >;
+    /**
+     * Default Prometheus URL for tests.
+     */
+    url: string;
+  };
 }
 
 /**
@@ -256,6 +343,11 @@ export type BspNetConfig = {
    * Defaults to 'info' if not specified.
    */
   logLevel?: string;
+
+  /**
+   * If true, runs Prometheus server for metrics collection (fullnet only).
+   */
+  prometheus?: boolean;
 };
 
 /**
@@ -495,6 +587,8 @@ export type TestOptions = {
    * Defaults to 'info' if not specified.
    */
   logLevel?: string;
+  /** If true, runs Prometheus server for metrics collection */
+  prometheus?: boolean;
 };
 
 /**

@@ -73,6 +73,7 @@ sc-network = { workspace = true }
 sc-network-types = { workspace = true }
 sc-service = { workspace = true }
 sc-tracing = { workspace = true }
+substrate-prometheus-endpoint = { workspace = true }
 
 sp-core = { workspace = true, default-features = true }
 sp-keystore = { workspace = true }

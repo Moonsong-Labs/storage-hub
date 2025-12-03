@@ -26,6 +26,8 @@ use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
 use crate::{
     handler::StorageHubHandler,
+    inc_counter,
+    metrics::{STATUS_FAILURE, STATUS_PENDING, STATUS_SUCCESS},
     types::{ForestStorageKey, MspForestStorageHandlerT, ShNodeType},
 };
 
@@ -118,7 +120,20 @@ where
             event.bucket_id,
         );
 
+        // Increment metric for bucket moves
+        inc_counter!(
+            self.storage_hub_handler,
+            msp_bucket_moves_total,
+            STATUS_PENDING
+        );
+
         if let Err(error) = self.handle_move_bucket_request(event.clone()).await {
+            // Increment metric for failed bucket moves
+            inc_counter!(
+                self.storage_hub_handler,
+                msp_bucket_moves_total,
+                STATUS_FAILURE
+            );
             // TODO: Based on the error, we should persist the bucket move request and retry later.
             error!(
                 target: LOG_TARGET,
@@ -147,6 +162,13 @@ where
             target: LOG_TARGET,
             "StartMovedBucketDownload: Starting download process for bucket {:?}",
             event.bucket_id
+        );
+
+        // Increment metric for bucket moves
+        inc_counter!(
+            self.storage_hub_handler,
+            msp_bucket_moves_total,
+            STATUS_SUCCESS
         );
 
         // Important: Add a delay after receiving the on-chain confirmation
