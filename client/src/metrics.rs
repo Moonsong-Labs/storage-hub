@@ -98,6 +98,9 @@ pub struct StorageHubMetrics {
     /// Total bucket moves processed by BSP, labeled by status.
     pub bsp_bucket_moves_total: CounterVec<U64>,
 
+    /// Total download requests handled by BSP, labeled by status.
+    pub bsp_download_requests_total: CounterVec<U64>,
+
     /// BSP proof generation duration in seconds, labeled by status.
     pub bsp_proof_generation_seconds: HistogramVec,
 
@@ -198,6 +201,17 @@ impl StorageHubMetrics {
                     Opts::new(
                         "storagehub_bsp_bucket_moves_total",
                         "Total number of bucket moves processed by BSP",
+                    ),
+                    &["status"],
+                )?,
+                registry,
+            )?,
+
+            bsp_download_requests_total: register(
+                CounterVec::new(
+                    Opts::new(
+                        "storagehub_bsp_download_requests_total",
+                        "Total number of download requests handled by BSP",
                     ),
                     &["status"],
                 )?,

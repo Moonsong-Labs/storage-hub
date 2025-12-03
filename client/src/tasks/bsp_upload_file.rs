@@ -275,6 +275,11 @@ where
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
             Some(tx) => tx,
             None => {
+                inc_counter!(
+                    self.storage_hub_handler,
+                    bsp_storage_requests_total,
+                    STATUS_FAILURE
+                );
                 let err_msg = "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. This is a critical bug. Please report it to the StorageHub team.";
                 error!(target: LOG_TARGET, err_msg);
                 return Err(anyhow!(err_msg));
@@ -290,6 +295,11 @@ where
         let own_bsp_id = match own_provider_id {
             Some(id) => match id {
                 StorageProviderId::MainStorageProvider(_) => {
+                    inc_counter!(
+                        self.storage_hub_handler,
+                        bsp_storage_requests_total,
+                        STATUS_FAILURE
+                    );
                     let err_msg = "Current node account is a Main Storage Provider. Expected a Backup Storage Provider ID.";
                     error!(target: LOG_TARGET, err_msg);
                     return Err(anyhow!(err_msg));
@@ -297,6 +307,11 @@ where
                 StorageProviderId::BackupStorageProvider(id) => id,
             },
             None => {
+                inc_counter!(
+                    self.storage_hub_handler,
+                    bsp_storage_requests_total,
+                    STATUS_FAILURE
+                );
                 error!(target: LOG_TARGET, "Failed to get own BSP ID.");
                 return Err(anyhow!("Failed to get own BSP ID."));
             }
@@ -393,6 +408,11 @@ where
         drop(read_file_storage);
 
         if file_keys_and_proofs.is_empty() {
+            inc_counter!(
+                self.storage_hub_handler,
+                bsp_storage_requests_total,
+                STATUS_FAILURE
+            );
             error!(target: LOG_TARGET, "Failed to generate proofs for ALL the requested files.\n");
             return Err(anyhow!(
                 "Failed to generate proofs for ALL the requested files."
@@ -409,7 +429,14 @@ where
             .forest_storage_handler
             .get(&current_forest_key)
             .await
-            .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+            .ok_or_else(|| {
+                inc_counter!(
+                    self.storage_hub_handler,
+                    bsp_storage_requests_total,
+                    STATUS_FAILURE
+                );
+                anyhow!("Failed to get forest storage.")
+            })?;
 
         // Generate a proof of non-inclusion (executed in closure to drop the read lock on the forest storage).
         let non_inclusion_forest_proof = { fs.read().await.generate_proof(file_keys)? };

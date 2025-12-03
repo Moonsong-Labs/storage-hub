@@ -203,7 +203,14 @@ where
             .forest_storage_handler
             .get(&current_forest_key)
             .await
-            .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+            .ok_or_else(|| {
+                inc_counter!(
+                    self.storage_hub_handler,
+                    insolvent_users_processed_total,
+                    STATUS_FAILURE
+                );
+                anyhow!("Failed to get forest storage.")
+            })?;
 
         let user_files = fs
             .read()
@@ -266,7 +273,14 @@ where
             .forest_storage_handler
             .get(&current_forest_key)
             .await
-            .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+            .ok_or_else(|| {
+                inc_counter!(
+                    self.storage_hub_handler,
+                    insolvent_users_processed_total,
+                    STATUS_FAILURE
+                );
+                anyhow!("Failed to get forest storage.")
+            })?;
 
         let user_files = fs
             .read()
@@ -321,6 +335,11 @@ where
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
             Some(tx) => tx,
             None => {
+                inc_counter!(
+                    self.storage_hub_handler,
+                    insolvent_users_processed_total,
+                    STATUS_FAILURE
+                );
                 error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. This is a critical bug. Please report it to the StorageHub team.");
                 return Err(anyhow!(
                     "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken!"
@@ -337,7 +356,14 @@ where
             .forest_storage_handler
             .get(&current_forest_key)
             .await
-            .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+            .ok_or_else(|| {
+                inc_counter!(
+                    self.storage_hub_handler,
+                    insolvent_users_processed_total,
+                    STATUS_FAILURE
+                );
+                anyhow!("Failed to get forest storage.")
+            })?;
 
         // Get all the files that belong to the insolvent user, delete the first one.
         let user_files = fs

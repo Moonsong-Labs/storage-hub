@@ -5,9 +5,13 @@
  * Prometheus metrics in StorageHub integration tests.
  */
 import assert from "node:assert";
+import { NODE_INFOS } from "./bspNet/consts";
 
 /** Default Prometheus server URL for tests. */
-export const PROMETHEUS_URL = "http://localhost:9099";
+export const PROMETHEUS_URL = `http://localhost:${NODE_INFOS.prometheus.port}`;
+
+/** Default Grafana server URL for tests. */
+export const GRAFANA_URL = `http://localhost:${NODE_INFOS.grafana.port}`;
 
 /**
  * Result from a Prometheus instant query.
@@ -94,6 +98,12 @@ export const ALL_STORAGEHUB_METRICS: Record<string, MetricDefinition> = {
     type: "counter",
     labels: ["status"],
     description: "BSP bucket move events"
+  },
+  bsp_download_requests_total: {
+    name: "storagehub_bsp_download_requests_total",
+    type: "counter",
+    labels: ["status"],
+    description: "BSP download request handling"
   },
 
   // MSP Counters

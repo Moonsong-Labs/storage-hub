@@ -97,15 +97,33 @@ where
     async fn remove_file_from_file_storage(&self, file_key: &H256) -> anyhow::Result<()> {
         // Remove the file from the File Storage.
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
-        write_file_storage.delete_file(file_key).map_err(|e| {
-			error!(target: LOG_TARGET, "Failed to remove file from File Storage after it was removed from the Forest. \\nError: {:?}", e);
-			anyhow!(
-					"Failed to delete file from File Storage after it was removed from the Forest: {:?}",
-					e
-			)
-		})?;
+        let result = write_file_storage.delete_file(file_key).map_err(|e| {
+            error!(target: LOG_TARGET, "Failed to remove file from File Storage after it was removed from the Forest. \nError: {:?}", e);
+            anyhow!(
+                "Failed to delete file from File Storage after it was removed from the Forest: {:?}",
+                e
+            )
+        });
 
-        Ok(())
+        // Record metric based on result.
+        match &result {
+            Ok(_) => {
+                inc_counter!(
+                    self.storage_hub_handler,
+                    bsp_files_deleted_total,
+                    STATUS_SUCCESS
+                );
+            }
+            Err(_) => {
+                inc_counter!(
+                    self.storage_hub_handler,
+                    bsp_files_deleted_total,
+                    STATUS_FAILURE
+                );
+            }
+        }
+
+        result
     }
 }
 
@@ -144,7 +162,14 @@ where
             .forest_storage_handler
             .get(&current_forest_key)
             .await
-            .ok_or_else(|| anyhow!("CRITICAL❗️❗️ Failed to get forest storage."))?;
+            .ok_or_else(|| {
+                inc_counter!(
+                    self.storage_hub_handler,
+                    bsp_files_deleted_total,
+                    STATUS_FAILURE
+                );
+                anyhow!("CRITICAL❗️❗️ Failed to get forest storage.")
+            })?;
         if read_fs
             .read()
             .await
@@ -157,28 +182,9 @@ where
             );
         } else {
             // If file key is not in Forest, we can now safely remove it from the File Storage.
-            match self
-                .remove_file_from_file_storage(&event.file_key.into())
-                .await
-            {
-                Ok(_) => {
-                    // Increment metric for successful file deletion
-                    inc_counter!(
-                        self.storage_hub_handler,
-                        bsp_files_deleted_total,
-                        STATUS_SUCCESS
-                    );
-                }
-                Err(e) => {
-                    // Increment metric for failed file deletion
-                    inc_counter!(
-                        self.storage_hub_handler,
-                        bsp_files_deleted_total,
-                        STATUS_FAILURE
-                    );
-                    return Err(e);
-                }
-            }
+            // Metrics are recorded inside remove_file_from_file_storage.
+            self.remove_file_from_file_storage(&event.file_key.into())
+                .await?;
         }
 
         Ok(format!(
@@ -237,7 +243,14 @@ where
                 .forest_storage_handler
                 .get(&current_forest_key)
                 .await
-                .ok_or_else(|| anyhow!("CRITICAL❗️❗️ Failed to get forest storage."))?;
+                .ok_or_else(|| {
+                    inc_counter!(
+                        self.storage_hub_handler,
+                        bsp_files_deleted_total,
+                        STATUS_FAILURE
+                    );
+                    anyhow!("CRITICAL❗️❗️ Failed to get forest storage.")
+                })?;
             if read_fs.read().await.contains_file_key(&file_key.into())? {
                 warn!(
                     target: LOG_TARGET,

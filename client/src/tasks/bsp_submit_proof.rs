@@ -193,6 +193,11 @@ where
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
             Some(tx) => tx,
             None => {
+                inc_counter!(
+                    self.storage_hub_handler,
+                    bsp_proofs_submitted_total,
+                    STATUS_FAILURE
+                );
                 error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. This is a critical bug. Please report it to the StorageHub team.");
                 return Err(anyhow!(
                     "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken!"
@@ -215,7 +220,14 @@ where
                 .forest_storage_handler
                 .get(&current_forest_key)
                 .await
-                .ok_or_else(|| anyhow!("CRITICAL❗️❗️ Failed to get forest storage."))?;
+                .ok_or_else(|| {
+                    inc_counter!(
+                        self.storage_hub_handler,
+                        bsp_proofs_submitted_total,
+                        STATUS_FAILURE
+                    );
+                    anyhow!("CRITICAL❗️❗️ Failed to get forest storage.")
+                })?;
 
             let p = fs
                 .read()
@@ -301,7 +313,14 @@ where
                 .forest_storage_handler
                 .get(&current_forest_key)
                 .await
-                .ok_or_else(|| anyhow!("CRITICAL❗️❗️ Failed to get forest storage."))?;
+                .ok_or_else(|| {
+                    inc_counter!(
+                        self.storage_hub_handler,
+                        bsp_proofs_submitted_total,
+                        STATUS_FAILURE
+                    );
+                    anyhow!("CRITICAL❗️❗️ Failed to get forest storage.")
+                })?;
             let root = fs.read().await.root();
             root
         };

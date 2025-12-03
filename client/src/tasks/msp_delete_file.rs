@@ -123,6 +123,11 @@ where
                 .get(&bucket_forest_key.into())
                 .await
                 .ok_or_else(|| {
+                    inc_counter!(
+                        self.storage_hub_handler,
+                        msp_files_deleted_total,
+                        STATUS_FAILURE
+                    );
                     anyhow!(
                         "CRITICAL❗️❗️ Failed to get forest storage for bucket [{:?}].",
                         event.bucket_id
@@ -190,6 +195,11 @@ where
             .get(&bucket_forest_key.into())
             .await
             .ok_or_else(|| {
+                inc_counter!(
+                    self.storage_hub_handler,
+                    msp_files_deleted_total,
+                    STATUS_FAILURE
+                );
                 anyhow!(
                     "CRITICAL❗️❗️ Failed to get forest storage for bucket [{:?}].",
                     event.bucket_id
@@ -215,6 +225,11 @@ where
             read_file_storage
                 .get_metadata(&event.file_key.into())
                 .map_err(|e| {
+                    inc_counter!(
+                        self.storage_hub_handler,
+                        msp_files_deleted_total,
+                        STATUS_FAILURE
+                    );
                     error!(target: LOG_TARGET, "Failed to get file metadata from File Storage: {:?}", e);
                     anyhow!("Failed to get file metadata from File Storage: {:?}", e)
                 })?

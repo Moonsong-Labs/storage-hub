@@ -290,10 +290,13 @@ export class NetworkLauncher {
       );
     }
 
-    // Remove Prometheus service if not enabled or not fullnet
+    // Remove Prometheus and Grafana services if not enabled or not fullnet
     if (!this.config.prometheus || this.type !== "fullnet") {
       if (composeYaml.services["sh-prometheus"]) {
         delete composeYaml.services["sh-prometheus"];
+      }
+      if (composeYaml.services["sh-grafana"]) {
+        delete composeYaml.services["sh-grafana"];
       }
     }
 
@@ -513,9 +516,14 @@ export class NetworkLauncher {
       });
     }
 
-    // Start Prometheus if enabled
+    // Start Prometheus and Grafana if enabled
     if (this.config.prometheus && this.type === "fullnet") {
       await compose.upOne("sh-prometheus", {
+        cwd,
+        config: tmpFile,
+        log: verbose
+      });
+      await compose.upOne("sh-grafana", {
         cwd,
         config: tmpFile,
         log: verbose

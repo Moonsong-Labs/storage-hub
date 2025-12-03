@@ -171,13 +171,6 @@ where
             event.bucket_id
         );
 
-        // Increment metric for bucket moves
-        inc_counter!(
-            self.storage_hub_handler,
-            msp_bucket_moves_total,
-            STATUS_SUCCESS
-        );
-
         // Important: Add a delay after receiving the on-chain confirmation
         // This gives the BSPs time to process the chain event and prepare to serve files
         info!(
@@ -190,6 +183,11 @@ where
             if let Some(indexer_db_pool) = self.storage_hub_handler.indexer_db_pool.clone() {
                 indexer_db_pool
             } else {
+                inc_counter!(
+                    self.storage_hub_handler,
+                    msp_bucket_moves_total,
+                    STATUS_FAILURE
+                );
                 return Err(anyhow!(
                     "Indexer is disabled but a StartMovedBucketDownload event was received"
                 ));
@@ -204,6 +202,12 @@ where
         .await?;
 
         if files.is_empty() {
+            // No files to download is a valid success
+            inc_counter!(
+                self.storage_hub_handler,
+                msp_bucket_moves_total,
+                STATUS_SUCCESS
+            );
             info!(
                 target: LOG_TARGET,
                 "No files to download for bucket {:?}", event.bucket_id
@@ -253,18 +257,29 @@ where
 
         match download_result {
             Ok(()) => {
+                inc_counter!(
+                    self.storage_hub_handler,
+                    msp_bucket_moves_total,
+                    STATUS_SUCCESS
+                );
                 info!(
                     target: LOG_TARGET,
                     "Successfully downloaded bucket {:?}", event.bucket_id
                 );
             }
             Err(crate::file_download_manager::BucketDownloadError::AlreadyBeingDownloaded(_)) => {
+                // Don't count as failure - it's already being handled by another task
                 info!(
                     target: LOG_TARGET,
                     "Bucket {:?} is already being downloaded by another task", event.bucket_id
                 );
             }
             Err(crate::file_download_manager::BucketDownloadError::DownloadFailed(e)) => {
+                inc_counter!(
+                    self.storage_hub_handler,
+                    msp_bucket_moves_total,
+                    STATUS_FAILURE
+                );
                 error!(
                     target: LOG_TARGET,
                     "Failed to download bucket {:?}: {:?}", event.bucket_id, e

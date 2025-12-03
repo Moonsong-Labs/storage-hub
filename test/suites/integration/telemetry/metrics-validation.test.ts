@@ -176,6 +176,7 @@ await describeMspNet(
         'storagehub_bsp_fees_charged_total{job="storagehub-bsp"}',
         'storagehub_bsp_files_deleted_total{job="storagehub-bsp"}',
         'storagehub_bsp_bucket_moves_total{job="storagehub-bsp"}',
+        'storagehub_bsp_download_requests_total{job="storagehub-bsp"}',
         'storagehub_bsp_proof_generation_seconds_count{job="storagehub-bsp"}',
         'storagehub_storage_request_seconds_count{job="storagehub-bsp"}',
         'storagehub_file_transfer_seconds_count{job="storagehub-bsp"}'

@@ -294,6 +294,11 @@ where
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
             Some(tx) => tx,
             None => {
+                inc_counter!(
+                    self.storage_hub_handler,
+                    msp_storage_requests_total,
+                    STATUS_FAILURE
+                );
                 let err_msg = "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. This is a critical bug. Please report it to the StorageHub team.";
                 error!(target: LOG_TARGET, err_msg);
                 return Err(anyhow!(err_msg));
@@ -309,11 +314,21 @@ where
         let own_msp_id = match own_provider_id {
             Some(StorageProviderId::MainStorageProvider(id)) => id,
             Some(StorageProviderId::BackupStorageProvider(_)) => {
+                inc_counter!(
+                    self.storage_hub_handler,
+                    msp_storage_requests_total,
+                    STATUS_FAILURE
+                );
                 return Err(anyhow!(
                     "Current node account is a Backup Storage Provider. Expected a Main Storage Provider ID."
                 ));
             }
             None => {
+                inc_counter!(
+                    self.storage_hub_handler,
+                    msp_storage_requests_total,
+                    STATUS_FAILURE
+                );
                 return Err(anyhow!("Failed to get own MSP ID."));
             }
         };
