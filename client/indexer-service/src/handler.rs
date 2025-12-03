@@ -555,11 +555,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
 
                 // Check if files should be deleted (no more associations)
                 for file_key in file_keys.iter() {
-                    let deleted = File::delete_if_orphaned(conn, file_key.as_ref()).await?;
-
-                    if deleted {
-                        log::trace!("Deleted orphaned file after MSP deletion: {:?}", file_key);
-                    }
+                    File::delete_if_orphaned(conn, file_key.as_ref()).await?;
                 }
 
                 // Update bucket merkle root
@@ -585,11 +581,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
 
                 // Check if files should be deleted (no more associations)
                 for file_key in file_keys.iter() {
-                    let deleted = File::delete_if_orphaned(conn, file_key.as_ref()).await?;
-
-                    if deleted {
-                        log::trace!("Deleted orphaned file after BSP deletion: {:?}", file_key);
-                    }
+                    File::delete_if_orphaned(conn, file_key.as_ref()).await?;
                 }
 
                 // Update BSP merkle root
@@ -611,33 +603,34 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 let file_record = File::get_latest_by_file_key(conn, file_key.as_ref().to_vec())
                     .await
                     .ok();
-                let is_in_bucket = file_record
-                    .as_ref()
-                    .map(|f| f.is_in_bucket)
-                    .unwrap_or(false);
-                let has_bsp = File::has_bsp_associations(conn, file_key.as_ref()).await?;
 
-                if is_in_bucket || has_bsp {
-                    // File is still being stored, mark for deletion
-                    File::update_deletion_status(
-                        conn,
-                        file_key.as_ref(),
-                        FileDeletionStatus::InProgress,
-                        None,
-                    )
-                    .await?;
+                // If the file record is not found, it means the file has been deleted already.
+                if let Some(file_record) = file_record {
+                    let is_in_bucket = file_record.is_in_bucket;
+                    let has_bsp = File::has_bsp_associations(conn, file_record.id).await?;
 
-                    log::debug!(
-                        "Incomplete storage request for file {:?} is still being stored (in_bucket: {}, BSP: {}), marked for deletion without signature",
-                        file_key, is_in_bucket, has_bsp
-                    );
-                } else {
-                    // No storage, safe to delete immediately
-                    File::delete(conn, file_key.as_ref().to_vec()).await?;
-                    log::debug!(
-                        "Incomplete storage request for file {:?} is not being stored, deleted immediately",
-                        file_key
-                    );
+                    if is_in_bucket || has_bsp {
+                        // File is still being stored, mark for deletion
+                        File::update_deletion_status(
+                            conn,
+                            file_key.as_ref(),
+                            FileDeletionStatus::InProgress,
+                            None,
+                        )
+                        .await?;
+
+                        log::debug!(
+                        		"Incomplete storage request for file {:?} (id: {:?}) is still being stored (in_bucket: {}, BSP: {}), marked for deletion without signature",
+                        		file_key, file_record.id, is_in_bucket, has_bsp
+                    		);
+                    } else {
+                        // No storage, safe to delete immediately
+                        File::delete(conn, file_record.id).await?;
+                        log::debug!(
+                        		"Incomplete storage request for file key {:?} and id {:?} is not being stored, deleted immediately",
+														file_key, file_record.id
+                    		);
+                    }
                 }
             }
             pallet_file_system::Event::__Ignore(_, _) => {}

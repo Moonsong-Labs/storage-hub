@@ -53,7 +53,7 @@ impl MspFile {
         // Log if we found multiple files with the same key
         if file_ids.len() > 1 {
             log::warn!(
-                "Found {} files with the same file_key: {:?}. This is an inconsistent state. Will proceed to delete all associated file IDs with this key.",
+                "Found {} files with the same file_key: {:?}. This is expected only if there was more than one storage request for the same file key. Will proceed to delete all associated file IDs with this key.",
                 file_ids.len(),
                 file_key
             );
