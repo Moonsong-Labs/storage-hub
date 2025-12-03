@@ -59,7 +59,7 @@ where
     NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: NewStorageRequest<Runtime>) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: NewStorageRequest<Runtime>) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
             "Initiating BSP volunteer mock for file key: {:x}",
@@ -91,6 +91,9 @@ where
             .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
 
-        Ok(())
+        Ok(format!(
+            "Handled NewStorageRequest mock volunteer for file key: {:x}",
+            event.file_key
+        ))
     }
 }

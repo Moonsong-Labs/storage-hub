@@ -132,7 +132,7 @@ where
     NT::FSH: FishermanForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: BatchFileDeletions) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: BatchFileDeletions) -> anyhow::Result<String> {
         // Hold the Arc reference to the permit for the lifetime of this handler
         // The permit will be automatically released when this handler completes or fails
         // (when the Arc is dropped, the permit is dropped, releasing the semaphore)
@@ -209,7 +209,10 @@ where
                 event.deletion_type
             );
             // Permit will be automatically released when handler returns
-            return Ok(());
+            return Ok(format!(
+                "No pending [{:?}] deletions found",
+                event.deletion_type
+            ));
         }
 
         // Await all futures
@@ -254,7 +257,11 @@ where
         // Explicitly drop to release the semaphore permit
         // Next batch deletion cycle will be able to acquire a new permit
         drop(permit_arc);
-        Ok(())
+
+        Ok(format!(
+            "Processed batch file deletions: {} successes, {} failures",
+            successes, failures
+        ))
     }
 }
 

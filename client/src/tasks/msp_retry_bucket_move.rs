@@ -62,7 +62,7 @@ where
     NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, _event: RetryBucketMoveDownload) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, _event: RetryBucketMoveDownload) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
             "Checking for pending bucket downloads to resume"
@@ -77,7 +77,7 @@ where
                 target: LOG_TARGET,
                 "No pending bucket downloads to resume"
             );
-            return Ok(());
+            return Ok("No pending bucket downloads to resume".to_string());
         }
 
         info!(
@@ -94,7 +94,7 @@ where
                     target: LOG_TARGET,
                     "Indexer is disabled but there are pending bucket downloads"
                 );
-                return Ok(());
+                return Ok("Indexer disabled; cannot resume pending bucket downloads".to_string());
             };
 
         // For each pending bucket, try to resume its download
@@ -231,6 +231,6 @@ where
             }
         }
 
-        Ok(())
+        Ok("RetryBucketMoveDownload processing completed".to_string())
     }
 }

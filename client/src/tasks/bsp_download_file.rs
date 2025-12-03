@@ -58,7 +58,10 @@ where
     NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: RemoteDownloadRequest<Runtime>) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: RemoteDownloadRequest<Runtime>,
+    ) -> anyhow::Result<String> {
         trace!(target: LOG_TARGET, "Received remote download request with id {:?} for file {:?}", event.request_id, event.file_key);
 
         let RemoteDownloadRequest {
@@ -104,7 +107,7 @@ where
                 // Send the chunk data and proof back to the requester.
                 self.storage_hub_handler
                     .file_transfer
-                    .download_response(request_id, file_key_proof)
+                    .download_response(request_id.clone(), file_key_proof)
                     .await?;
             }
             Err(error) => {
@@ -113,6 +116,9 @@ where
             }
         }
 
-        Ok(())
+        Ok(format!(
+            "Handled RemoteDownloadRequest [{:?}] for file [{:x}]",
+            request_id, event.file_key
+        ))
     }
 }

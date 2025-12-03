@@ -169,7 +169,7 @@ where
     NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: NewStorageRequest<Runtime>) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: NewStorageRequest<Runtime>) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
             "Registering user peer for file_key {:x}, location 0x{}, fingerprint {:x}",
@@ -178,13 +178,21 @@ where
             event.fingerprint
         );
 
+        let file_key = event.file_key;
         let result = self.handle_new_storage_request_event(event).await;
-        if result.is_err() {
-            if let Some(file_key) = &self.file_key_cleanup {
-                self.unregister_file(*file_key).await?;
+
+        match result {
+            Ok(()) => Ok(format!(
+                "Handled NewStorageRequest for file_key [{:x}]",
+                file_key
+            )),
+            Err(e) => {
+                if let Some(file_key) = &self.file_key_cleanup {
+                    self.unregister_file(*file_key).await?;
+                }
+                Err(e)
             }
         }
-        result
     }
 }
 
@@ -198,7 +206,10 @@ where
     NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: RemoteUploadRequest<Runtime>) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: RemoteUploadRequest<Runtime>,
+    ) -> anyhow::Result<String> {
         trace!(target: LOG_TARGET, "Received remote upload request for file {:x} and peer {:?}", event.file_key, event.peer);
 
         let file_complete = match self.handle_remote_upload_request_event(event.clone()).await {
@@ -232,7 +243,10 @@ where
             self.on_file_complete(&event.file_key.into()).await?;
         }
 
-        Ok(())
+        Ok(format!(
+            "Handled RemoteUploadRequest for file [{:x}] (complete: {})",
+            event.file_key, file_complete
+        ))
     }
 }
 
@@ -254,7 +268,7 @@ where
     async fn handle_event(
         &mut self,
         event: ProcessMspRespondStoringRequest<Runtime>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
             "Processing ProcessMspRespondStoringRequest: {:?}",
@@ -469,7 +483,12 @@ where
         self.storage_hub_handler
             .blockchain
             .release_forest_root_write_lock(forest_root_write_tx)
-            .await
+            .await?;
+
+        Ok(format!(
+            "Processed ProcessMspRespondStoringRequest for MSP [{:x}]",
+            own_msp_id
+        ))
     }
 }
 
