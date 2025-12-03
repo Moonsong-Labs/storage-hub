@@ -225,7 +225,7 @@ export async function getMetricValue(query: string): Promise<number> {
   if (result.status !== "success" || result.data.result.length === 0) {
     return 0;
   }
-  return parseFloat(result.data.result[0].value?.[1] ?? "0");
+  return Number.parseFloat(result.data.result[0].value?.[1] ?? "0");
 }
 
 /**
@@ -303,14 +303,14 @@ export interface AssertMetricIncrementedOptions {
  * });
  * ```
  */
-export async function assertMetricIncremented(options: AssertMetricIncrementedOptions): Promise<void> {
+export async function assertMetricIncremented(
+  options: AssertMetricIncrementedOptions
+): Promise<void> {
   await waitForMetricsScrape();
   const currentValue = await getMetricValue(options.query);
-  const message = options.message ?? `Expected metric ${options.query} to increment from ${options.initialValue}`;
-  assert(
-    currentValue > options.initialValue,
-    `${message} (got ${currentValue})`
-  );
+  const message =
+    options.message ?? `Expected metric ${options.query} to increment from ${options.initialValue}`;
+  assert(currentValue > options.initialValue, `${message} (got ${currentValue})`);
 }
 
 /**
@@ -341,11 +341,9 @@ export interface AssertMetricAboveOptions {
 export async function assertMetricAbove(options: AssertMetricAboveOptions): Promise<void> {
   await waitForMetricsScrape();
   const currentValue = await getMetricValue(options.query);
-  const message = options.message ?? `Expected metric ${options.query} to be above ${options.threshold}`;
-  assert(
-    currentValue > options.threshold,
-    `${message} (got ${currentValue})`
-  );
+  const message =
+    options.message ?? `Expected metric ${options.query} to be above ${options.threshold}`;
+  assert(currentValue > options.threshold, `${message} (got ${currentValue})`);
 }
 
 /**
@@ -376,6 +374,7 @@ export interface AssertMetricEqualsOptions {
 export async function assertMetricEquals(options: AssertMetricEqualsOptions): Promise<void> {
   await waitForMetricsScrape();
   const currentValue = await getMetricValue(options.query);
-  const message = options.message ?? `Expected metric ${options.query} to equal ${options.expected}`;
+  const message =
+    options.message ?? `Expected metric ${options.query} to equal ${options.expected}`;
   assert.strictEqual(currentValue, options.expected, message);
 }

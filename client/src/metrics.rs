@@ -31,54 +31,6 @@ pub const STATUS_FAILURE: &str = "failure";
 /// Metric status label for pending operations.
 pub const STATUS_PENDING: &str = "pending";
 
-/// Increments a counter metric if metrics are enabled.
-///
-/// # Example
-///
-/// ```ignore
-/// inc_counter!(self.storage_hub_handler, bsp_storage_requests_total, STATUS_SUCCESS);
-/// ```
-#[macro_export]
-macro_rules! inc_counter {
-    ($handler:expr, $metric:ident, $label:expr) => {
-        if let Some(m) = $handler.metrics() {
-            m.$metric.with_label_values(&[$label]).inc();
-        }
-    };
-}
-
-/// Increments a counter metric by a specific amount if metrics are enabled.
-///
-/// # Example
-///
-/// ```ignore
-/// inc_counter_by!(self.storage_hub_handler, bsp_storage_requests_total, STATUS_SUCCESS, 5);
-/// ```
-#[macro_export]
-macro_rules! inc_counter_by {
-    ($handler:expr, $metric:ident, $label:expr, $value:expr) => {
-        if let Some(m) = $handler.metrics() {
-            m.$metric.with_label_values(&[$label]).inc_by($value);
-        }
-    };
-}
-
-/// Records an observation to a histogram metric if metrics are enabled.
-///
-/// # Example
-///
-/// ```ignore
-/// observe_histogram!(self.storage_hub_handler, storage_request_seconds, STATUS_SUCCESS, elapsed.as_secs_f64());
-/// ```
-#[macro_export]
-macro_rules! observe_histogram {
-    ($handler:expr, $metric:ident, $label:expr, $value:expr) => {
-        if let Some(m) = $handler.metrics() {
-            m.$metric.with_label_values(&[$label]).observe($value);
-        }
-    };
-}
-
 /// Wrapper for optional metrics, similar to Substrate's `MetricsLink` pattern.
 ///
 /// This wrapper allows metrics to be optional (when Prometheus is disabled) while
@@ -414,4 +366,85 @@ impl StorageHubMetrics {
             )?,
         })
     }
+}
+
+/// Increments a counter metric if metrics are enabled.
+///
+/// # Example
+///
+/// ```ignore
+/// // With handler (calls handler.metrics())
+/// inc_counter!(self.storage_hub_handler, bsp_storage_requests_total, STATUS_SUCCESS);
+///
+/// // With direct metrics reference (Option<&StorageHubMetrics>)
+/// inc_counter!(self.metrics.as_ref() => bytes_downloaded_total, STATUS_SUCCESS);
+/// ```
+#[macro_export]
+macro_rules! inc_counter {
+    // Handler pattern: calls $handler.metrics()
+    ($handler:expr, $metric:ident, $label:expr) => {
+        if let Some(m) = $handler.metrics() {
+            m.$metric.with_label_values(&[$label]).inc();
+        }
+    };
+    // Direct pattern: accepts Option<&StorageHubMetrics> directly
+    ($metrics:expr => $metric:ident, $label:expr) => {
+        if let Some(m) = $metrics {
+            m.$metric.with_label_values(&[$label]).inc();
+        }
+    };
+}
+
+/// Increments a counter metric by a specific amount if metrics are enabled.
+///
+/// # Example
+///
+/// ```ignore
+/// // With handler (calls handler.metrics())
+/// inc_counter_by!(self.storage_hub_handler, bsp_storage_requests_total, STATUS_SUCCESS, 5);
+///
+/// // With direct metrics reference (Option<&StorageHubMetrics>)
+/// inc_counter_by!(self.metrics.as_ref() => bytes_downloaded_total, STATUS_SUCCESS, 1024);
+/// ```
+#[macro_export]
+macro_rules! inc_counter_by {
+    // Handler pattern: calls $handler.metrics()
+    ($handler:expr, $metric:ident, $label:expr, $value:expr) => {
+        if let Some(m) = $handler.metrics() {
+            m.$metric.with_label_values(&[$label]).inc_by($value);
+        }
+    };
+    // Direct pattern: accepts Option<&StorageHubMetrics> directly
+    ($metrics:expr => $metric:ident, $label:expr, $value:expr) => {
+        if let Some(m) = $metrics {
+            m.$metric.with_label_values(&[$label]).inc_by($value);
+        }
+    };
+}
+
+/// Records an observation to a histogram metric if metrics are enabled.
+///
+/// # Example
+///
+/// ```ignore
+/// // With handler (calls handler.metrics())
+/// observe_histogram!(self.storage_hub_handler, storage_request_seconds, STATUS_SUCCESS, elapsed.as_secs_f64());
+///
+/// // With direct metrics reference (Option<&StorageHubMetrics>)
+/// observe_histogram!(self.metrics.as_ref() => file_download_seconds, STATUS_SUCCESS, elapsed.as_secs_f64());
+/// ```
+#[macro_export]
+macro_rules! observe_histogram {
+    // Handler pattern: calls $handler.metrics()
+    ($handler:expr, $metric:ident, $label:expr, $value:expr) => {
+        if let Some(m) = $handler.metrics() {
+            m.$metric.with_label_values(&[$label]).observe($value);
+        }
+    };
+    // Direct pattern: accepts Option<&StorageHubMetrics> directly
+    ($metrics:expr => $metric:ident, $label:expr, $value:expr) => {
+        if let Some(m) = $metrics {
+            m.$metric.with_label_values(&[$label]).observe($value);
+        }
+    };
 }

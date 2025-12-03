@@ -190,6 +190,12 @@ where
 
         let result = self.handle_new_storage_request_event(event).await;
         if result.is_err() {
+            // Increment metric for failed storage request
+            inc_counter!(
+                self.storage_hub_handler,
+                msp_storage_requests_total,
+                STATUS_FAILURE
+            );
             if let Some(file_key) = &self.file_key_cleanup {
                 self.unregister_file(*file_key).await?;
             }
@@ -269,14 +275,6 @@ where
             target: LOG_TARGET,
             "Processing ProcessMspRespondStoringRequest: {:?}",
             event.data.respond_storing_requests,
-        );
-
-        // Increment metric for storage requests being confirmed
-        inc_counter_by!(
-            self.storage_hub_handler,
-            msp_storage_requests_total,
-            STATUS_SUCCESS,
-            event.data.respond_storing_requests.len() as u64
         );
 
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
@@ -407,13 +405,27 @@ where
             });
         }
 
+        // Count total requests being responded to for metrics tracking.
+        let responded_requests_count: u64 = storage_request_msp_response
+            .iter()
+            .map(|r| {
+                let accepts = r
+                    .accept
+                    .as_ref()
+                    .map_or(0, |a| a.file_keys_and_proofs.len());
+                let rejects = r.reject.len();
+                (accepts.saturating_add(rejects)) as u64
+            })
+            .sum();
+
         let call: Runtime::Call =
             pallet_file_system::Call::<Runtime>::msp_respond_storage_requests_multiple_buckets {
                 storage_request_msp_response: storage_request_msp_response.clone(),
             }
             .into();
 
-        self.storage_hub_handler
+        let submit_result = self
+            .storage_hub_handler
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
@@ -432,7 +444,30 @@ where
                     .with_max_tip(self.config.max_tip.saturated_into()),
                 false,
             )
-            .await?;
+            .await;
+
+        match &submit_result {
+            Ok(_) => {
+                // Increment metric for successfully responded storage requests
+                inc_counter_by!(
+                    self.storage_hub_handler,
+                    msp_storage_requests_total,
+                    STATUS_SUCCESS,
+                    responded_requests_count
+                );
+            }
+            Err(_) => {
+                // Increment metric for failed storage request responses
+                inc_counter_by!(
+                    self.storage_hub_handler,
+                    msp_storage_requests_total,
+                    STATUS_FAILURE,
+                    responded_requests_count
+                );
+            }
+        }
+
+        submit_result?;
 
         // Log accepted and rejected files, and remove rejected files from File Storage.
         // Accepted files will be added to the Bucket's Forest Storage by the BlockchainService.

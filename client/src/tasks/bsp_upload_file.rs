@@ -151,6 +151,12 @@ where
 
         let result = self.handle_new_storage_request_event(event).await;
         if result.is_err() {
+            // Increment metric for failed storage request
+            inc_counter!(
+                self.storage_hub_handler,
+                bsp_storage_requests_total,
+                STATUS_FAILURE
+            );
             if let Some(file_key) = &self.file_key_cleanup {
                 self.unvolunteer_file(*file_key).await;
             }
@@ -248,14 +254,6 @@ where
             target: LOG_TARGET,
             "Processing ConfirmStoringRequest: {:?}",
             event.data.confirm_storing_requests,
-        );
-
-        // Increment metric for storage requests being confirmed
-        inc_counter_by!(
-            self.storage_hub_handler,
-            bsp_storage_requests_total,
-            STATUS_SUCCESS,
-            event.data.confirm_storing_requests.len() as u64
         );
 
         // Acquire Forest root write lock. This prevents other Forest-root-writing tasks from starting while we are processing this task.
@@ -399,6 +397,9 @@ where
         // Generate a proof of non-inclusion (executed in closure to drop the read lock on the forest storage).
         let non_inclusion_forest_proof = { fs.read().await.generate_proof(file_keys)? };
 
+        // Save the count for metrics tracking before consuming the vector.
+        let confirmed_requests_count = file_keys_and_proofs.len() as u64;
+
         // Build extrinsic.
         let call: Runtime::Call =
             pallet_file_system::Call::<Runtime>::bsp_confirm_storing {
@@ -412,7 +413,8 @@ where
 
         // Send the confirmation transaction and wait for it to be included in the block and
         // continue only if it is successful.
-        self.storage_hub_handler
+        let submit_result = self
+            .storage_hub_handler
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
@@ -432,14 +434,36 @@ where
                     .retry_only_if_timeout(),
                 true,
             )
-            .await
-            .map_err(|e| {
-                anyhow!(
-                    "Failed to confirm file after {} retries: {:?}",
-                    self.config.max_try_count,
-                    e
-                )
-            })?;
+            .await;
+
+        match &submit_result {
+            Ok(_) => {
+                // Increment metric for successfully confirmed storage requests
+                inc_counter_by!(
+                    self.storage_hub_handler,
+                    bsp_storage_requests_total,
+                    STATUS_SUCCESS,
+                    confirmed_requests_count
+                );
+            }
+            Err(_) => {
+                // Increment metric for failed storage request confirmations
+                inc_counter_by!(
+                    self.storage_hub_handler,
+                    bsp_storage_requests_total,
+                    STATUS_FAILURE,
+                    confirmed_requests_count
+                );
+            }
+        }
+
+        submit_result.map_err(|e| {
+            anyhow!(
+                "Failed to confirm file after {} retries: {:?}",
+                self.config.max_try_count,
+                e
+            )
+        })?;
 
         // Release the forest root write "lock" and finish the task.
         self.storage_hub_handler

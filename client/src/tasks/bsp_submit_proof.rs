@@ -514,6 +514,32 @@ where
         // Track proof generation timing for metrics.
         let start_time = std::time::Instant::now();
 
+        // Execute proof generation and track timing for both success and failure.
+        let result = self
+            .generate_key_proof_inner(file_key, seed, provider_id)
+            .await;
+
+        // Record proof generation timing with appropriate status.
+        observe_histogram!(
+            self.storage_hub_handler,
+            bsp_proof_generation_seconds,
+            if result.is_ok() {
+                STATUS_SUCCESS
+            } else {
+                STATUS_FAILURE
+            },
+            start_time.elapsed().as_secs_f64()
+        );
+
+        result
+    }
+
+    async fn generate_key_proof_inner(
+        &self,
+        file_key: H256,
+        seed: RandomnessOutput<Runtime>,
+        provider_id: ProofsDealerProviderId<Runtime>,
+    ) -> anyhow::Result<KeyProof<Runtime>> {
         // Get the metadata for the file.
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
         let metadata = read_file_storage
@@ -547,14 +573,6 @@ where
             .map_err(|e| anyhow!("File is not in storage, or proof does not exist: {:?}", e))?;
         // Release the file storage read lock as soon as possible.
         drop(read_file_storage);
-
-        // Record successful proof generation timing.
-        observe_histogram!(
-            self.storage_hub_handler,
-            bsp_proof_generation_seconds,
-            STATUS_SUCCESS,
-            start_time.elapsed().as_secs_f64()
-        );
 
         // Return the key proof.
         Ok(KeyProof {

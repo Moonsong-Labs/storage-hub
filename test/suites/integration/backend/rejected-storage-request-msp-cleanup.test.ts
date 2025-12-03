@@ -10,7 +10,7 @@ import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import {
   ETH_SH_USER_ADDRESS,
   ETH_SH_USER_PRIVATE_KEY,
-  ethShUser,
+  ethShUser
 } from "../../../util/evmNet/keyring";
 
 await describeMspNet(
@@ -19,7 +19,7 @@ await describeMspNet(
     initialised: false,
     runtimeType: "solochain",
     indexer: true,
-    backend: true,
+    backend: true
   },
   ({ before, it, createUserApi, createMsp1Api }) => {
     let userApi: EnrichedBspApi;
@@ -51,7 +51,7 @@ await describeMspNet(
       await userApi.docker.waitForLog({
         containerName: userApi.shConsts.NODE_INFOS.indexerDb.containerName,
         searchString: "database system is ready to accept connections",
-        timeout: 10000,
+        timeout: 10000
       });
     });
 
@@ -59,40 +59,28 @@ await describeMspNet(
       await userApi.docker.waitForLog({
         containerName: userApi.shConsts.NODE_INFOS.backend.containerName,
         searchString: "Server listening",
-        timeout: 15000,
+        timeout: 15000
       });
     });
 
     it("Network launches and can be queried", async () => {
       const userNodePeerId = await userApi.rpc.system.localPeerId();
-      strictEqual(
-        userNodePeerId.toString(),
-        userApi.shConsts.NODE_INFOS.user.expectedPeerId
-      );
+      strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
 
       const mspNodePeerId = await msp1Api.rpc.system.localPeerId();
-      strictEqual(
-        mspNodePeerId.toString(),
-        userApi.shConsts.NODE_INFOS.msp1.expectedPeerId
-      );
+      strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp1.expectedPeerId);
     });
 
     it("Create storage request and upload to MSP (no sealing acceptance)", async () => {
       // Create bucket
-      const valueProps =
-        await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
-          userApi.shConsts.DUMMY_MSP_ID
-        );
-      const valuePropId = valueProps[0].id;
-      const newBucketEvent = await userApi.createBucket(
-        "backend-rejection-bucket",
-        valuePropId
+      const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
+        userApi.shConsts.DUMMY_MSP_ID
       );
+      const valuePropId = valueProps[0].id;
+      const newBucketEvent = await userApi.createBucket("backend-rejection-bucket", valuePropId);
       const newBucketEventDataBlob =
-        userApi.events.fileSystem.NewBucket.is(newBucketEvent) &&
-        newBucketEvent.data;
-      if (!newBucketEventDataBlob)
-        throw new Error("NewBucket event data not found");
+        userApi.events.fileSystem.NewBucket.is(newBucketEvent) && newBucketEvent.data;
+      if (!newBucketEventDataBlob) throw new Error("NewBucket event data not found");
       bucketId = newBucketEventDataBlob.bucketId.toString();
 
       // Load file into user's local storage to get metadata and then remove so it doesn't auto-send
@@ -118,17 +106,14 @@ await describeMspNet(
             userApi.shConsts.DUMMY_MSP_ID,
             [userApi.shConsts.NODE_INFOS.msp1.expectedPeerId],
             { Basic: null }
-          ),
+          )
         ],
-        signer: ethShUser,
+        signer: ethShUser
       });
 
       // MSP expects the file
       await waitFor({
-        lambda: async () =>
-          (
-            await msp1Api.rpc.storagehubclient.isFileKeyExpected(fileKey)
-          ).isTrue,
+        lambda: async () => (await msp1Api.rpc.storagehubclient.isFileKeyExpected(fileKey)).isTrue
       });
 
       // Prepare upload form
@@ -147,7 +132,7 @@ await describeMspNet(
       );
       const encoded_file_metadata = FileMetadataCodec.encode(fileMetadata);
       const fileMetadataBlob = new Blob([Buffer.from(encoded_file_metadata)], {
-        type: "application/octet-stream",
+        type: "application/octet-stream"
       });
       form.append("file_metadata", fileMetadataBlob, "file_metadata");
 
@@ -155,25 +140,15 @@ await describeMspNet(
       form.append("file", fileBlob, path.basename(fileLocation));
 
       // Auth token
-      userJWT = await fetchJwtToken(
-        ETH_SH_USER_PRIVATE_KEY,
-        SH_EVM_SOLOCHAIN_CHAIN_ID
-      );
+      userJWT = await fetchJwtToken(ETH_SH_USER_PRIVATE_KEY, SH_EVM_SOLOCHAIN_CHAIN_ID);
 
       // Upload to backend
-      const uploadResponse = await fetch(
-        `${BACKEND_URI}/buckets/${bucketId}/upload/${fileKey}`,
-        {
-          method: "PUT",
-          body: form,
-          headers: { Authorization: `Bearer ${userJWT}` },
-        }
-      );
-      strictEqual(
-        uploadResponse.status,
-        201,
-        "Upload should return CREATED status"
-      );
+      const uploadResponse = await fetch(`${BACKEND_URI}/buckets/${bucketId}/upload/${fileKey}`, {
+        method: "PUT",
+        body: form,
+        headers: { Authorization: `Bearer ${userJWT}` }
+      });
+      strictEqual(uploadResponse.status, 201, "Upload should return CREATED status");
 
       // File stored locally in MSP file storage
       await msp1Api.wait.fileStorageComplete(fileKey);
@@ -183,23 +158,13 @@ await describeMspNet(
 
       // Verify we can download
       uploadedFileKeyHex = fileKey.toHex();
-      const preRejectDownload = await fetch(
-        `${BACKEND_URI}/download/${uploadedFileKeyHex}`,
-        {
-          headers: { Authorization: `Bearer ${userJWT}` },
-        }
-      );
-      strictEqual(
-        preRejectDownload.status,
-        200,
-        "Download should succeed before rejection"
-      );
+      const preRejectDownload = await fetch(`${BACKEND_URI}/download/${uploadedFileKeyHex}`, {
+        headers: { Authorization: `Bearer ${userJWT}` }
+      });
+      strictEqual(preRejectDownload.status, 200, "Download should succeed before rejection");
       const preArrayBuffer = await preRejectDownload.arrayBuffer();
       const downloadedBuffer = Buffer.from(preArrayBuffer);
-      strictEqual(
-        Buffer.from(preArrayBuffer).length,
-        originalFileBuffer.length
-      );
+      strictEqual(Buffer.from(preArrayBuffer).length, originalFileBuffer.length);
       assert(
         downloadedBuffer.equals(originalFileBuffer),
         "Downloaded file contents should match the uploaded file"
@@ -212,14 +177,12 @@ await describeMspNet(
       // Remove MSP response extrinsic from tx pool
       await userApi.node.dropTxn({
         module: "fileSystem",
-        method: "mspRespondStorageRequestsMultipleBuckets",
+        method: "mspRespondStorageRequestsMultipleBuckets"
       });
       await userApi.block.seal();
 
       // Find expiration and advance to it
-      const storageRequest = await userApi.query.fileSystem.storageRequests(
-        fileKey
-      );
+      const storageRequest = await userApi.query.fileSystem.storageRequests(fileKey);
       assert(storageRequest.isSome, "Storage request should exist");
       const expiresAt = storageRequest.unwrap().expiresAt.toNumber();
       const expiredStorageRequestBlock = await userApi.block.skipTo(expiresAt);
@@ -230,19 +193,12 @@ await describeMspNet(
         "StorageRequestRejected",
         expiredStorageRequestBlock.events
       );
-      assert(
-        StorageRequestRejectedEvent,
-        "StorageRequestRejected event not found"
-      );
+      assert(StorageRequestRejectedEvent, "StorageRequestRejected event not found");
 
       const StorageRequestEventData =
-        userApi.events.fileSystem.StorageRequestRejected.is(
-          StorageRequestRejectedEvent.event
-        ) && StorageRequestRejectedEvent.event.data;
-      assert(
-        StorageRequestEventData,
-        "StorageRequestRejectedEvent event data not found"
-      );
+        userApi.events.fileSystem.StorageRequestRejected.is(StorageRequestRejectedEvent.event) &&
+        StorageRequestRejectedEvent.event.data;
+      assert(StorageRequestEventData, "StorageRequestRejectedEvent event data not found");
       strictEqual(
         StorageRequestEventData.fileKey.toString(),
         fileKey.toHex(),
@@ -250,27 +206,18 @@ await describeMspNet(
       );
 
       // Storage Request should not exist anymore
-      const storageRequestAfter =
-        await userApi.query.fileSystem.storageRequests(fileKey);
-      assert(
-        storageRequestAfter.isNone,
-        "Storage request should not exist anymore"
-      );
+      const storageRequestAfter = await userApi.query.fileSystem.storageRequests(fileKey);
+      assert(storageRequestAfter.isNone, "Storage request should not exist anymore");
 
-      await msp1Api.rpc.engine.finalizeBlock(
-        expiredStorageRequestBlock.blockReceipt.blockHash
-      );
+      await msp1Api.rpc.engine.finalizeBlock(expiredStorageRequestBlock.blockReceipt.blockHash);
 
       // Wait until the MSP detects the on-chain deletion and updates its local bucket forest
       await msp1Api.wait.fileDeletionFromFileStorage(fileKey.toHex());
 
       // Download should now fail (MSP should no longer have the file)
-      const postRejectDownload = await fetch(
-        `${BACKEND_URI}/download/${uploadedFileKeyHex}`,
-        {
-          headers: { Authorization: `Bearer ${userJWT}` },
-        }
-      );
+      const postRejectDownload = await fetch(`${BACKEND_URI}/download/${uploadedFileKeyHex}`, {
+        headers: { Authorization: `Bearer ${userJWT}` }
+      });
       strictEqual(
         postRejectDownload.status,
         404,

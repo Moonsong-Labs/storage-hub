@@ -32,7 +32,9 @@ use shp_file_metadata::{Chunk, ChunkId};
 use crate::{
     bsp_peer_manager::BspPeerManager,
     download_state_store::DownloadStateStore,
+    inc_counter_by,
     metrics::{MetricsLink, STATUS_FAILURE, STATUS_SUCCESS},
+    observe_histogram,
 };
 
 const LOG_TARGET: &str = "file_download_manager";
@@ -389,14 +391,16 @@ impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
             .await;
 
         // Record successful download throughput metrics
-        if let Some(m) = self.metrics.as_ref() {
-            m.bytes_downloaded_total
-                .with_label_values(&[STATUS_SUCCESS])
-                .inc_by(total_bytes as u64);
-            m.chunks_downloaded_total
-                .with_label_values(&[STATUS_SUCCESS])
-                .inc_by(processed_chunks as u64);
-        }
+        inc_counter_by!(
+            self.metrics.as_ref() => bytes_downloaded_total,
+            STATUS_SUCCESS,
+            total_bytes as u64
+        );
+        inc_counter_by!(
+            self.metrics.as_ref() => chunks_downloaded_total,
+            STATUS_SUCCESS,
+            processed_chunks as u64
+        );
 
         Ok(true)
     }
@@ -466,6 +470,29 @@ impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
 
                     if attempt == self.limits.download_retry_attempts {
                         self.peer_manager.record_failure(peer_id).await;
+
+                        // Track failed download metrics
+                        let expected_bytes: u64 = chunk_batch
+                            .iter()
+                            .filter_map(|chunk_id| {
+                                file_metadata
+                                    .chunk_size_at(chunk_id.as_u64())
+                                    .ok()
+                                    .map(|size| size as u64)
+                            })
+                            .sum();
+
+                        inc_counter_by!(
+                            self.metrics.as_ref() => bytes_downloaded_total,
+                            STATUS_FAILURE,
+                            expected_bytes
+                        );
+                        inc_counter_by!(
+                            self.metrics.as_ref() => chunks_downloaded_total,
+                            STATUS_FAILURE,
+                            chunk_batch.len() as u64
+                        );
+
                         return Err(anyhow!(
                             "Failed to download after {} attempts: {:?}",
                             attempt + 1,
@@ -672,11 +699,11 @@ impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
 
         if !errors.is_empty() && !is_complete {
             // Record failed file download duration in histogram
-            if let Some(m) = self.metrics.as_ref() {
-                m.file_download_seconds
-                    .with_label_values(&[STATUS_FAILURE])
-                    .observe(download_start.elapsed().as_secs_f64());
-            }
+            observe_histogram!(
+                self.metrics.as_ref() => file_download_seconds,
+                STATUS_FAILURE,
+                download_start.elapsed().as_secs_f64()
+            );
             Err(anyhow!(
                 "Failed to download file {:?}: {}",
                 file_key,
@@ -684,11 +711,11 @@ impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
             ))
         } else {
             // Record successful file download duration in histogram
-            if let Some(m) = self.metrics.as_ref() {
-                m.file_download_seconds
-                    .with_label_values(&[STATUS_SUCCESS])
-                    .observe(download_start.elapsed().as_secs_f64());
-            }
+            observe_histogram!(
+                self.metrics.as_ref() => file_download_seconds,
+                STATUS_SUCCESS,
+                download_start.elapsed().as_secs_f64()
+            );
 
             info!(
                 target: LOG_TARGET,
