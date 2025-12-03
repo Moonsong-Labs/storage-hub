@@ -464,7 +464,10 @@ where
                 reason
             ));
         }
-        Ok(format!("Handled NewStorageRequest for file_key [{:x}]", file_key))
+        Ok(format!(
+            "Handled NewStorageRequest for file_key [{:x}]",
+            file_key
+        ))
     }
 }
 
