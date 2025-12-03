@@ -9,6 +9,7 @@ use bytes::Bytes;
 use codec::Decode;
 use futures::stream;
 use serde::{Deserialize, Serialize};
+use shc_client::trusted_file_transfer::files::encode_chunk;
 use shc_common::types::{ChunkId, FileMetadata, StorageProofsMerkleTrieLayout, FILE_CHUNK_SIZE};
 use shc_file_manager::{in_memory::InMemoryFileDataTrie, traits::FileDataTrie};
 use shc_rpc::{
@@ -631,8 +632,6 @@ impl MspService {
 
 impl MspService {
     /// Send chunks to the MSP trusted file transfer server
-    ///
-    /// Binary format: [Total Chunks: 8 bytes][ChunkId: 8 bytes][Data: FILE_CHUNK_SIZE]...
     async fn send_chunks_to_msp(
         &self,
         trie: InMemoryFileDataTrie<StorageProofsMerkleTrieLayout>,
@@ -651,12 +650,9 @@ impl MspService {
                 std::io::Error::other(format!("Failed to read chunk {}: {}", chunk_index, e))
             })?;
 
-            // Build the frame: [ChunkId: 8 bytes][Data: variable]
-            let mut frame = Vec::with_capacity(8 + chunk_data.len());
-            frame.extend_from_slice(&chunk_id.as_u64().to_le_bytes());
-            frame.extend_from_slice(&chunk_data);
+            let encoded = encode_chunk(chunk_id, &chunk_data);
 
-            Ok::<_, std::io::Error>(Bytes::from(frame))
+            Ok::<_, std::io::Error>(Bytes::from(encoded))
         });
 
         // Prepend the header and convert to a stream

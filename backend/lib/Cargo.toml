@@ -51,6 +51,7 @@ uuid = { version = "1.18", features = ["v7"] }
 codec = { workspace = true }
 sc-network = { workspace = true }
 sc-network-types = { workspace = true }
+shc-client = { workspace = true }
 shc-common = { workspace = true, default-features = true }
 shc-file-manager = { workspace = true }
 shc-indexer-db = { workspace = true, default-features = true }

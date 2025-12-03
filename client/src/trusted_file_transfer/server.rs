@@ -1,10 +1,4 @@
-//! Trusted File Transfer Server
-//!
-//! HTTP server to receive streamed file chunks from trusted backends.
-//! This server accepts POST requests with streamed chunks in the format:
-//! [ChunkId: 8 bytes (u64, little-endian)][Chunk data: FILE_CHUNK_SIZE bytes]...
-//! [ChunkId: 8 bytes (u64, little-endian)][Chunk data: remaining bytes for last chunk]
-//! Note: All chunks are FILE_CHUNK_SIZE except the last one which may be smaller
+//! HTTP server for receiving file chunks from trusted backends
 
 use std::sync::Arc;
 
@@ -22,17 +16,15 @@ use shc_blockchain_service::commands::BlockchainServiceCommandInterface;
 use shc_blockchain_service::types::{MspRespondStorageRequest, RespondStorageRequest};
 use shc_blockchain_service::BlockchainService;
 use shc_common::traits::StorageEnableRuntime;
-use shc_common::types::{ChunkId, FILE_CHUNK_SIZE};
-use shc_file_manager::traits::FileStorageWriteOutcome;
 use shc_file_transfer_service::commands::FileTransferServiceCommandInterface;
 use shc_file_transfer_service::FileTransferService;
 use shc_forest_manager::traits::ForestStorageHandler;
-use shp_file_metadata::Chunk;
 use tokio::net::TcpListener;
 use tokio::sync::RwLock;
-use tokio_stream::StreamExt;
 
 use crate::types::FileStorageT;
+
+use super::files::process_chunk_stream;
 
 const LOG_TARGET: &str = "trusted-file-transfer-server";
 
@@ -192,7 +184,16 @@ where
 
     // Process the streamed chunks
     match process_chunk_stream(&context, &file_key_hash, body).await {
-        Ok(_) => (StatusCode::OK, ()).into_response(),
+        Ok(_) => {
+            if let Err(e) = handle_file_complete(&context, &file_key_hash).await {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Error handling file completion: {}", e),
+                )
+                    .into_response();
+            }
+            (StatusCode::OK, ()).into_response()
+        }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("Error processing chunks: {}", e),
@@ -201,117 +202,6 @@ where
     }
 }
 
-/// Process a stream of chunks from the request body
-async fn process_chunk_stream<FL, FSH, Runtime>(
-    context: &Context<FL, FSH, Runtime>,
-    file_key: &sp_core::H256,
-    request_body: Body,
-) -> anyhow::Result<()>
-where
-    FL: FileStorageT,
-    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
-    Runtime: StorageEnableRuntime,
-{
-    let mut request_stream = request_body.into_data_stream();
-    let mut buffer = Vec::new();
-    let mut last_write_outcome = FileStorageWriteOutcome::FileIncomplete;
-
-    const CHUNK_ID_SIZE: usize = 8; // u64
-    let file_chunk_size = FILE_CHUNK_SIZE as usize;
-
-    // Process request stream, storing chunks as they are received
-    while let Some(try_bytes) = request_stream.next().await {
-        let bytes = try_bytes?;
-        buffer.extend_from_slice(&bytes);
-
-        while buffer.len() >= CHUNK_ID_SIZE + file_chunk_size {
-            let (chunk_id, chunk_data) = get_next_chunk(&mut buffer, true)?;
-            last_write_outcome = write_chunk(context, file_key, &chunk_id, &chunk_data).await?;
-        }
-    }
-
-    // Check if there's remaining data for the last chunk (This is the case when data is
-    // smaller than FILE_CHUNK_SIZE)
-    if !buffer.is_empty() {
-        let (chunk_id, chunk_data) = get_next_chunk(&mut buffer, false)?;
-        last_write_outcome = write_chunk(context, file_key, &chunk_id, &chunk_data).await?;
-    }
-
-    // Verify the file is complete using the last write outcome
-    if matches!(last_write_outcome, FileStorageWriteOutcome::FileComplete) {
-        handle_file_complete(context, file_key).await?;
-    } else {
-        return Err(anyhow::anyhow!(
-            "File incomplete after processing all chunks"
-        ));
-    }
-
-    Ok(())
-}
-
-/// Gets next chunk from buffer. If cap_at_file_chunk_size is set to true,
-/// it will get FILE_CHUNK_SIZE as data size, else it will use the remainder
-/// of the buffer (used for last chunk when data is not a multiple of FILE_CHUNK_SIZE).
-fn get_next_chunk(
-    buffer: &mut Vec<u8>,
-    cap_at_file_chunk_size: bool,
-) -> anyhow::Result<(ChunkId, Vec<u8>)> {
-    const CHUNK_ID_SIZE: usize = 8;
-    let min_data_size: usize = if cap_at_file_chunk_size {
-        FILE_CHUNK_SIZE as usize
-    } else {
-        1
-    };
-    let min_buffer_size = CHUNK_ID_SIZE + min_data_size;
-    if buffer.len() < min_buffer_size {
-        return Err(anyhow::anyhow!(
-            "Not enough bytes to extract chunk from buffer. Required at least {} bytes got {}.",
-            min_buffer_size,
-            buffer.len()
-        ));
-    }
-
-    let chunk_id_bytes: [u8; CHUNK_ID_SIZE] = buffer
-        .drain(..CHUNK_ID_SIZE)
-        .collect::<Vec<_>>()
-        .try_into()
-        .map_err(|_| anyhow::anyhow!("Failed to parse chunk ID"))?;
-    let chunk_id_value = u64::from_le_bytes(chunk_id_bytes);
-    let chunk_id = ChunkId::new(chunk_id_value);
-
-    let chunk_data = if cap_at_file_chunk_size {
-        let size = FILE_CHUNK_SIZE as usize;
-        buffer.drain(..size).collect()
-    } else {
-        std::mem::take(buffer)
-    };
-    Ok((chunk_id, chunk_data))
-}
-
-async fn write_chunk<FL, FSH, Runtime>(
-    context: &Context<FL, FSH, Runtime>,
-    file_key: &sp_core::H256,
-    chunk_id: &ChunkId,
-    chunk_data: &Chunk,
-) -> anyhow::Result<FileStorageWriteOutcome>
-where
-    FL: FileStorageT,
-    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
-    Runtime: StorageEnableRuntime,
-{
-    let mut file_storage = context.file_storage.write().await;
-    file_storage
-        .write_chunk(file_key, chunk_id, chunk_data)
-        .map_err(|e| {
-            anyhow::anyhow!(
-                "Failed to write chunk {} to storage: {}",
-                chunk_id.as_u64(),
-                e
-            )
-        })
-}
-
-/// Handle file completion: unregister from file transfer service and queue blockchain transaction
 async fn handle_file_complete<FL, FSH, Runtime>(
     context: &Context<FL, FSH, Runtime>,
     file_key: &sp_core::H256,
@@ -321,13 +211,6 @@ where
     FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
-    info!(
-        target: LOG_TARGET,
-        file_key = %file_key,
-        "File upload complete"
-    );
-
-    // Unregister the file from the file transfer service
     if let Err(e) = context
         .file_transfer
         .unregister_file((*file_key).into())
@@ -341,7 +224,6 @@ where
         );
     }
 
-    // Queue a request to confirm the storing of the file
     context
         .blockchain
         .queue_msp_respond_storage_request(RespondStorageRequest::new(

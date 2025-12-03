@@ -16074,6 +16074,7 @@ dependencies = [
  "sc-network-types",
  "serde",
  "serde_json",
+ "shc-client",
  "shc-common",
  "shc-file-manager",
  "shc-indexer-db",
