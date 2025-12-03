@@ -1,16 +1,18 @@
 //! HTTP server for receiving file chunks from trusted backends
 
+use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 
 use axum::{
     body::Body,
     extract::{DefaultBodyLimit, Path, State},
     http::StatusCode,
-    response::IntoResponse,
+    response::{IntoResponse, Response},
     routing::post,
     Router,
 };
-use sc_tracing::tracing::{info, warn};
+use futures::FutureExt;
+use sc_tracing::tracing::{error, info, warn};
 use shc_actors_framework::actor::ActorHandle;
 use shc_blockchain_service::commands::BlockchainServiceCommandInterface;
 use shc_blockchain_service::types::{MspRespondStorageRequest, RespondStorageRequest};
@@ -149,7 +151,47 @@ async fn upload_file<FL, FSH, Runtime>(
     State(context): State<Context<FL, FSH, Runtime>>,
     Path(file_key): Path<String>,
     body: Body,
-) -> impl IntoResponse
+) -> Response
+where
+    FL: FileStorageT,
+    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
+    Runtime: StorageEnableRuntime,
+{
+    let result = AssertUnwindSafe(async { upload_file_inner(context, file_key, body).await })
+        .catch_unwind()
+        .await;
+
+    match result {
+        Ok(response) => response,
+        Err(panic_info) => {
+            let panic_msg = if let Some(s) = panic_info.downcast_ref::<String>() {
+                s.clone()
+            } else if let Some(s) = panic_info.downcast_ref::<&str>() {
+                s.to_string()
+            } else {
+                "Unknown panic".to_string()
+            };
+
+            error!(
+                target: LOG_TARGET,
+                panic = %panic_msg,
+                "Panic caught in trusted file transfer handler"
+            );
+
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Internal server error: handler panicked".to_string(),
+            )
+                .into_response()
+        }
+    }
+}
+
+async fn upload_file_inner<FL, FSH, Runtime>(
+    context: Context<FL, FSH, Runtime>,
+    file_key: String,
+    body: Body,
+) -> Response
 where
     FL: FileStorageT,
     FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
