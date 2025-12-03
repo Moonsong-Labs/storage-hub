@@ -11,13 +11,13 @@ use crate::types::FileStorageT;
 
 use super::server::Context;
 
-pub const CHUNK_ID_BYTES: usize = 8; // sizeof(u64)
+pub const CHUNK_ID_SIZE: usize = 8; // sizeof(u64)
 
 const LOG_TARGET: &str = "trusted-file-transfer-files";
 
 /// Encodes a chunk ID and data pair into the wire format.
 pub fn encode_chunk(chunk_id: ChunkId, chunk_data: &[u8]) -> Vec<u8> {
-    let mut encoded = Vec::with_capacity(CHUNK_ID_BYTES + chunk_data.len());
+    let mut encoded = Vec::with_capacity(CHUNK_ID_SIZE + chunk_data.len());
     encoded.extend_from_slice(&chunk_id.as_u64().to_le_bytes());
     encoded.extend_from_slice(chunk_data);
     encoded
@@ -38,15 +38,12 @@ where
     let mut buffer = Vec::new();
     let mut last_write_outcome = FileStorageWriteOutcome::FileIncomplete;
 
-    const CHUNK_ID_SIZE: usize = 8; // u64
-    let file_chunk_size = FILE_CHUNK_SIZE as usize;
-
     // Process request stream, storing chunks as they are received
     while let Some(try_bytes) = request_stream.next().await {
         let bytes = try_bytes?;
         buffer.extend_from_slice(&bytes);
 
-        while buffer.len() >= CHUNK_ID_SIZE + file_chunk_size {
+        while buffer.len() >= CHUNK_ID_SIZE + (FILE_CHUNK_SIZE as usize) {
             let (chunk_id, chunk_data) = get_next_chunk(&mut buffer, true)?;
             last_write_outcome = write_chunk(context, file_key, &chunk_id, &chunk_data).await?;
         }
@@ -81,7 +78,6 @@ fn get_next_chunk(
     buffer: &mut Vec<u8>,
     cap_at_file_chunk_size: bool,
 ) -> anyhow::Result<(ChunkId, Vec<u8>)> {
-    const CHUNK_ID_SIZE: usize = 8;
     let min_data_size: usize = if cap_at_file_chunk_size {
         FILE_CHUNK_SIZE as usize
     } else {
