@@ -560,11 +560,23 @@ where
         let mut write_file_storage = self.file_storage.write().await;
 
         // Remove the files from the file storage.
-        for file_key in file_keys {
+        for file_key in &file_keys {
             write_file_storage
-                .delete_file(&file_key)
+                .delete_file(file_key)
                 .map_err(into_rpc_error)?;
+
+            info!(
+                target: LOG_TARGET,
+                "remove_files_from_file_storage successfully removed file with key=[{:x}] from file storage.",
+                file_key
+            );
         }
+
+        info!(
+            target: LOG_TARGET,
+            "remove_files_from_file_storage finished. Successfully removed {} files from file storage.",
+            file_keys.len()
+        );
 
         Ok(())
     }
@@ -584,6 +596,12 @@ where
         write_file_storage
             .delete_files_with_prefix(&prefix.inner())
             .map_err(into_rpc_error)?;
+
+        info!(
+            target: LOG_TARGET,
+            "remove_files_with_prefix_from_file_storage finished for prefix=[{:x}]. Successfully removed files with prefix from file storage.",
+            prefix
+        );
 
         Ok(())
     }
@@ -703,6 +721,13 @@ where
             .await
             .map_err(|e| remote_file_error_to_rpc_error(e))?;
 
+        info!(
+            target: LOG_TARGET,
+            "save_file_to_disk finished for file_key=[{:x}]. File saved to destination at path={} successfully.",
+            file_key,
+            file_path
+        );
+
         Ok(SaveFileToDisk::Success(file_metadata))
     }
 
@@ -734,6 +759,13 @@ where
             .insert_files_metadata(&metadata_of_files_to_add)
             .map_err(into_rpc_error)?;
 
+        info!(
+            target: LOG_TARGET,
+            "add_files_to_forest_storage finished for forest_key=[{}]. Successfully added {} files.",
+            hex::encode(forest_key),
+            metadata_of_files_to_add.len()
+        );
+
         Ok(AddFilesToForestStorageResult::Success)
     }
 
@@ -761,11 +793,16 @@ where
         let mut write_fs = fs.write().await;
 
         // Remove the file keys from the forest storage.
-        for file_key in file_keys {
-            write_fs
-                .delete_file_key(&file_key)
-                .map_err(into_rpc_error)?;
+        for file_key in &file_keys {
+            write_fs.delete_file_key(file_key).map_err(into_rpc_error)?;
         }
+
+        info!(
+            target: LOG_TARGET,
+            "remove_files_from_forest_storage finished for forest_key=[{}]. Successfully removed {} files.",
+            hex::encode(forest_key),
+            file_keys.len()
+        );
 
         Ok(RemoveFilesFromForestStorageResult::Success)
     }
@@ -779,15 +816,34 @@ where
             None => CURRENT_FOREST_KEY.to_vec().into(),
         };
 
-        // return None if not found
-        let fs = match self.forest_storage_handler.get(&forest_key).await {
-            Some(fs) => fs,
-            None => return Ok(None),
+        // Return None if not found
+        let maybe_root = match self.forest_storage_handler.get(&forest_key).await {
+            Some(fs) => {
+                let read_fs = fs.read().await;
+                Some(read_fs.root())
+            }
+            None => None,
         };
 
-        let read_fs = fs.read().await;
+        match maybe_root {
+            Some(root) => {
+                info!(
+                    target: LOG_TARGET,
+                    "get_forest_root successfully retrieved forest root for forest_key=[{}]. Root: [{:x}]",
+                    hex::encode(forest_key),
+                    root
+                );
+            }
+            None => {
+                info!(
+                    target: LOG_TARGET,
+                    "get_forest_root didn't find a forest root for forest_key=[{}]. Returning None.",
+                    hex::encode(forest_key)
+                );
+            }
+        }
 
-        Ok(Some(read_fs.root()))
+        Ok(maybe_root)
     }
 
     async fn is_file_in_forest(
@@ -809,9 +865,19 @@ where
             })?;
 
         let read_fs = fs.read().await;
-        Ok(read_fs
+        let result = read_fs
             .contains_file_key(&file_key)
-            .map_err(into_rpc_error)?)
+            .map_err(into_rpc_error)?;
+
+        info!(
+            target: LOG_TARGET,
+            "is_file_in_forest finished for forest_key=[{}], file_key=[{:x}]. Result: {}",
+            hex::encode(forest_key),
+            file_key,
+            result
+        );
+
+        Ok(result)
     }
 
     async fn is_file_in_file_storage(
@@ -822,33 +888,38 @@ where
         let read_file_storage = self.file_storage.read().await;
 
         // See if the file metadata is in the File Storage.
-        match read_file_storage
+        let result = match read_file_storage
             .get_metadata(&file_key)
             .map_err(into_rpc_error)?
         {
-            None => Ok(GetFileFromFileStorageResult::FileNotFound),
+            None => GetFileFromFileStorageResult::FileNotFound,
             Some(file_metadata) => {
                 let stored_chunks = read_file_storage
                     .stored_chunks_count(&file_key)
                     .map_err(into_rpc_error)?;
                 let total_chunks = file_metadata.chunks_count();
                 if stored_chunks < total_chunks {
-                    Ok(GetFileFromFileStorageResult::IncompleteFile(
-                        IncompleteFileStatus {
-                            file_metadata,
-                            stored_chunks,
-                            total_chunks,
-                        },
-                    ))
-                } else if stored_chunks > total_chunks {
-                    Ok(GetFileFromFileStorageResult::FileFoundWithInconsistency(
+                    GetFileFromFileStorageResult::IncompleteFile(IncompleteFileStatus {
                         file_metadata,
-                    ))
+                        stored_chunks,
+                        total_chunks,
+                    })
+                } else if stored_chunks > total_chunks {
+                    GetFileFromFileStorageResult::FileFoundWithInconsistency(file_metadata)
                 } else {
-                    Ok(GetFileFromFileStorageResult::FileFound(file_metadata))
+                    GetFileFromFileStorageResult::FileFound(file_metadata)
                 }
             }
-        }
+        };
+
+        info!(
+            target: LOG_TARGET,
+            "is_file_in_file_storage finished for file_key=[{:x}]. Result: {:?}",
+            file_key,
+            result
+        );
+
+        Ok(result)
     }
 
     async fn get_file_metadata(
@@ -870,9 +941,19 @@ where
             })?;
 
         let read_fs = fs.read().await;
-        Ok(read_fs
+        let result = read_fs
             .get_file_metadata(&file_key)
-            .map_err(into_rpc_error)?)
+            .map_err(into_rpc_error)?;
+
+        info!(
+            target: LOG_TARGET,
+            "get_file_metadata finished for forest_key=[{}], file_key=[{:x}]. Result: {:?}",
+            hex::encode(forest_key),
+            file_key,
+            result
+        );
+
+        Ok(result)
     }
 
     async fn is_file_key_expected(&self, file_key: shp_types::Hash) -> RpcResult<bool> {
@@ -881,6 +962,14 @@ where
             .is_file_expected(file_key.into())
             .await
             .map_err(into_rpc_error)?;
+
+        info!(
+            target: LOG_TARGET,
+            "is_file_key_expected finished for file_key=[{:x}]. Result: {}",
+            file_key,
+            expected
+        );
+
         Ok(expected)
     }
 
@@ -907,7 +996,15 @@ where
             .generate_proof(challenged_file_keys)
             .map_err(into_rpc_error)?;
 
-        Ok(forest_proof.encode())
+        let encoded = forest_proof.encode();
+
+        info!(
+            target: LOG_TARGET,
+            "generate_forest_proof finished for forest_key=[{}].",
+            hex::encode(forest_key),
+        );
+
+        Ok(encoded)
     }
 
     async fn generate_proof(
@@ -1036,8 +1133,15 @@ where
             forest_proof: proven_file_keys.proof.into(),
             key_proofs,
         };
+        let encoded = proof.encode();
 
-        Ok(proof.encode())
+        info!(
+            target: LOG_TARGET,
+            "generate_proof finished for provider_id=[{:x}].",
+            provider_id
+        );
+
+        Ok(encoded)
     }
 
     async fn generate_file_key_proof_bsp_confirm(
@@ -1066,7 +1170,16 @@ where
         )
         .await?;
 
-        Ok(key_proof.proof.encode())
+        let encoded = key_proof.proof.encode();
+
+        info!(
+            target: LOG_TARGET,
+            "generate_file_key_proof_bsp_confirm finished for bsp_id=[{:x}], file_key=[{:x}].",
+            bsp_id,
+            file_key
+        );
+
+        Ok(encoded)
     }
 
     async fn generate_file_key_proof_msp_accept(
@@ -1095,7 +1208,16 @@ where
         )
         .await?;
 
-        Ok(key_proof.proof.encode())
+        let encoded = key_proof.proof.encode();
+
+        info!(
+            target: LOG_TARGET,
+            "generate_file_key_proof_msp_accept finished for msp_id=[{:x}], file_key=[{:x}].",
+            msp_id,
+            file_key
+        );
+
+        Ok(encoded)
     }
 
     // TODO: Add support for other signature schemes.
@@ -1124,6 +1246,11 @@ where
             }
         };
 
+        info!(
+            target: LOG_TARGET,
+            "insert_bcsv_keys finished, generated new public key."
+        );
+
         Ok(new_pub_key.to_string())
     }
 
@@ -1133,6 +1260,8 @@ where
 
         let pub_keys = self.keystore.keys(BCSV_KEY_TYPE).map_err(into_rpc_error)?;
         let key_path = PathBuf::from(keystore_path);
+
+        let total_keys = pub_keys.len();
 
         for pub_key in pub_keys {
             let mut key = key_path.clone();
@@ -1145,6 +1274,12 @@ where
                 error!(target: LOG_TARGET, "Failed to remove key: {:?}", e);
             });
         }
+
+        info!(
+            target: LOG_TARGET,
+            "remove_bcsv_keys finished, attempted to remove {} keys.",
+            total_keys
+        );
 
         Ok(())
     }
@@ -1166,6 +1301,13 @@ where
 
         drop(write_file_storage);
 
+        info!(
+            target: LOG_TARGET,
+            "add_to_exclude_list finished for file_key=[{:x}], exclude_type={}",
+            file_key,
+            exclude_type
+        );
+
         Ok(())
     }
 
@@ -1185,6 +1327,13 @@ where
             .map_err(into_rpc_error)?;
 
         drop(write_file_storage);
+
+        info!(
+            target: LOG_TARGET,
+            "remove_from_exclude_list finished for file_key=[{:x}], exclude_type={}",
+            file_key,
+            exclude_type
+        );
 
         Ok(())
     }
@@ -1211,6 +1360,12 @@ where
             .map_err(into_rpc_error)?;
 
         // Return the raw response
+        info!(
+            target: LOG_TARGET,
+            "receive_backend_file_chunks finished for file_key=[{:x}].",
+            file_key
+        );
+
         Ok(raw)
     }
 
@@ -1230,6 +1385,12 @@ where
             Some(StorageProviderId::BackupStorageProvider(id)) => RpcProviderId::Bsp(id.into()),
             Some(StorageProviderId::MainStorageProvider(id)) => RpcProviderId::Msp(id.into()),
         };
+
+        info!(
+            target: LOG_TARGET,
+            "get_provider_id finished with result={:?}",
+            result
+        );
 
         Ok(result)
     }
@@ -1260,8 +1421,20 @@ where
                 .map(|vp| vp.encode())
                 .collect::<Vec<_>>();
 
-            Ok(GetValuePropositionsResult::Success(value_propositions))
+            let result = GetValuePropositionsResult::Success(value_propositions);
+
+            info!(
+                target: LOG_TARGET,
+                "get_value_propositions finished for MSP=[{:x}].",
+                msp_id
+            );
+
+            Ok(result)
         } else {
+            info!(
+                target: LOG_TARGET,
+                "get_value_propositions called on a node that is not an MSP"
+            );
             Ok(GetValuePropositionsResult::NotAnMsp)
         }
     }
@@ -1286,7 +1459,15 @@ where
         // Saturate the obtained price into a `u128`.
         // If the configured `Balance` type of the `payment-streams` pallet is of a greater
         // capacity (such as a u256), this could cause issues, so be wary.
-        Ok(balance.saturated_into())
+        let result: u128 = balance.saturated_into();
+
+        info!(
+            target: LOG_TARGET,
+            "get_current_price_per_giga_unit_per_tick succeeded with result={}",
+            result
+        );
+
+        Ok(result)
     }
 }
 
@@ -1301,6 +1482,7 @@ fn key_file_name(public: &[u8], key_type: KeyTypeId) -> PathBuf {
 
 /// Converts into the expected kind of error for `jsonrpsee`'s `RpcResult<_>`.
 fn into_rpc_error(e: impl Debug) -> JsonRpseeError {
+    error!("into_rpc_error called with error: {:?}", e);
     JsonRpseeError::owned(
         INTERNAL_ERROR_CODE,
         INTERNAL_ERROR_MSG,

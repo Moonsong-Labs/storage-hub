@@ -99,6 +99,12 @@ impl From<Vec<u8>> for NoKey {
     }
 }
 
+impl AsRef<[u8]> for NoKey {
+    fn as_ref(&self) -> &[u8] {
+        &[]
+    }
+}
+
 #[async_trait]
 impl<Runtime> ForestStorageHandler<Runtime>
     for ForestStorageSingle<InMemoryForestStorage<StorageProofsMerkleTrieLayout>, Runtime>
@@ -323,7 +329,7 @@ where
 impl<K, Runtime> ForestStorageHandler<Runtime>
     for ForestStorageCaching<K, InMemoryForestStorage<StorageProofsMerkleTrieLayout>, Runtime>
 where
-    K: Eq + Hash + From<Vec<u8>> + Clone + Debug + Send + Sync + 'static,
+    K: Eq + Hash + From<Vec<u8>> + AsRef<[u8]> + Clone + Debug + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
     type Key = K;
@@ -388,7 +394,7 @@ impl<K, Runtime> ForestStorageHandler<Runtime>
         Runtime,
     >
 where
-    K: Eq + Hash + From<Vec<u8>> + Clone + Debug + Display + Send + Sync + 'static,
+    K: Eq + Hash + From<Vec<u8>> + AsRef<[u8]> + Clone + Debug + Display + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
     type Key = K;
