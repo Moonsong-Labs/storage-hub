@@ -61,7 +61,7 @@ where
 {
     /// Reacts to a new storage request from the runtime, which is triggered by a user sending a file to be stored.
     /// It generates the file metadata and sends it to the BSPs volunteering to store the file.
-    async fn handle_event(&mut self, event: NewStorageRequest<Runtime>) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: NewStorageRequest<Runtime>) -> anyhow::Result<String> {
         let node_pub_key = self
             .storage_hub_handler
             .blockchain
@@ -71,7 +71,7 @@ where
 
         if event.who != node_pub_key.into() {
             // Skip if the storage request was not created by this user node.
-            return Ok(());
+            return Ok("Skipped NewStorageRequest not created by this user node".into());
         }
 
         info!(
@@ -99,7 +99,10 @@ where
                 "Skipping storage request - no MSP ID found for bucket ID {:?}",
                 event.bucket_id
             );
-            return Ok(());
+            return Ok(format!(
+                "Skipped NewStorageRequest - no MSP ID for bucket [{:x}]",
+                event.bucket_id
+            ));
         };
 
         let multiaddress_vec = self
@@ -145,7 +148,13 @@ where
 
         self.storage_hub_handler
             .upload_file_to_peer_ids(peer_ids, &file_metadata)
-            .await
+            .await?;
+
+        Ok(format!(
+            "Handled NewStorageRequest from user [{}] for file key [{:x}]",
+            hex::encode(event.who),
+            file_key
+        ))
     }
 }
 
@@ -158,7 +167,10 @@ where
     /// establishes a connection to each BSPs through the p2p network and sends the file.
     /// At this point we assume that the file is merkleised and already in file storage, and
     /// for this reason the file transfer to the BSP should not fail unless the p2p connection fails.
-    async fn handle_event(&mut self, event: AcceptedBspVolunteer<Runtime>) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: AcceptedBspVolunteer<Runtime>,
+    ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
             "Handling BSP volunteering to store a file from user [{:?}], with location [{:?}]",
@@ -196,6 +208,11 @@ where
 
         self.storage_hub_handler
             .upload_file_to_peer_ids(peer_ids, &file_metadata)
-            .await
+            .await?;
+
+        Ok(format!(
+            "Handled AcceptedBspVolunteer for file key [{:x}]",
+            file_key
+        ))
     }
 }

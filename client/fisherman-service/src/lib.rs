@@ -17,8 +17,7 @@ pub mod handler;
 use std::sync::Arc;
 
 use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
-use shc_common::traits::StorageEnableRuntime;
-use shc_common::types::ParachainClient;
+use shc_common::{traits::StorageEnableRuntime, types::StorageHubClient};
 
 pub use self::commands::{
     FishermanServiceCommand, FishermanServiceCommandInterface, FishermanServiceError,
@@ -32,7 +31,7 @@ pub use events::{BatchFileDeletions, FileDeletionTarget, FishermanServiceEventBu
 /// the StorageHub network for file deletion requests and construct proofs of inclusion to delete file keys from Bucket and BSP forests.
 pub async fn spawn_fisherman_service<Runtime: StorageEnableRuntime>(
     task_spawner: &TaskSpawner,
-    client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+    client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
     batch_interval_seconds: u64,
     batch_deletion_limit: u64,
 ) -> ActorHandle<FishermanService<Runtime>> {

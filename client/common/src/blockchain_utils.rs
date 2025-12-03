@@ -1,20 +1,20 @@
-use frame_support::{StorageHasher, Twox128};
+use frame_support::{StorageHasher, Twox128, Twox64Concat};
 use lazy_static::lazy_static;
 use log::error;
 use sc_network::Multiaddr;
 use std::{str::FromStr, sync::Arc};
 use thiserror::Error;
 
-use codec::Decode;
+use codec::{Decode, Encode};
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use sc_client_api::{backend::StorageProvider, StorageKey};
 use sp_api::ProvideRuntimeApi;
-use sp_core::H256;
+use sp_core::{H256, U256};
 
 use crate::{
     traits::{KeyTypeOperations, StorageEnableRuntime},
     types::{
-        Multiaddresses, ParachainClient, StorageHubEventsVec, StorageProviderId, BCSV_KEY_TYPE,
+        Multiaddresses, StorageHubClient, StorageHubEventsVec, StorageProviderId, BCSV_KEY_TYPE,
     },
 };
 
@@ -42,7 +42,7 @@ pub enum EventsRetrievalError {
 
 /// Get the events storage element for a given block.
 pub fn get_events_at_block<Runtime: StorageEnableRuntime>(
-    client: &Arc<ParachainClient<Runtime::RuntimeApi>>,
+    client: &Arc<StorageHubClient<Runtime::RuntimeApi>>,
     block_hash: &H256,
 ) -> Result<StorageHubEventsVec<Runtime>, EventsRetrievalError> {
     // Get the events storage.
@@ -53,6 +53,42 @@ pub fn get_events_at_block<Runtime: StorageEnableRuntime>(
         .map(|raw_storage| StorageHubEventsVec::<Runtime>::decode(&mut raw_storage.0.as_slice()))
         .transpose()?
         .ok_or(EventsRetrievalError::StorageNotFound)
+}
+
+/// Get the Ethereum block hash from `pallet_ethereum::BlockHash` storage for a given block number.
+///
+/// # Parameters
+/// - `client`: The blockchain client
+/// - `block_hash`: The Substrate block hash to query storage at
+/// - `block_number`: The block number to get the Ethereum block hash for
+///
+/// # Returns
+/// - `Ok(Some(eth_block_hash))` if the Ethereum block hash exists in storage
+/// - `Ok(None)` if the block hash doesn't exist (may have been pruned)
+/// - `Err(...)` if there's an error accessing storage
+pub fn get_ethereum_block_hash<RuntimeApi>(
+    client: &Arc<StorageHubClient<RuntimeApi>>,
+    block_hash: &H256,
+    block_number: u32,
+) -> Result<Option<H256>, sp_blockchain::Error> {
+    // Construct the storage key for pallet_ethereum::BlockHash
+    // StorageMap<_, Twox64Concat, U256, H256, ValueQuery>
+    let pallet_prefix = Twox128::hash(b"Ethereum").to_vec();
+    let storage_prefix = Twox128::hash(b"BlockHash").to_vec();
+
+    // Encode and hash the map key (U256 block number) using Twox64Concat
+    let key = U256::from(block_number);
+    let encoded_key = key.encode();
+    let hashed_key = Twox64Concat::hash(&encoded_key);
+
+    // Construct the complete storage key for the received block number
+    let storage_key: Vec<u8> = [pallet_prefix, storage_prefix, hashed_key.to_vec()].concat();
+
+    // Read the block hash from storage
+    let raw_storage_opt = client.storage(*block_hash, &StorageKey(storage_key))?;
+
+    // Decode and return it if it exists
+    Ok(raw_storage_opt.and_then(|raw_storage| H256::decode(&mut raw_storage.0.as_slice()).ok()))
 }
 
 /// Attempt to convert BoundedVec of BoundedVecs of bytes.
@@ -108,7 +144,7 @@ pub enum GetProviderIdError {
 /// - `Err(GetProviderIdError::MultipleProviderIds)` if multiple Provider IDs are found
 /// - `Err(GetProviderIdError::RuntimeApiError)` if there's an error calling the runtime API
 pub fn get_provider_id_from_keystore<Runtime>(
-    client: &Arc<ParachainClient<Runtime::RuntimeApi>>,
+    client: &Arc<StorageHubClient<Runtime::RuntimeApi>>,
     keystore: &sp_keystore::KeystorePtr,
     block_hash: &H256,
 ) -> Result<Option<StorageProviderId<Runtime>>, GetProviderIdError>

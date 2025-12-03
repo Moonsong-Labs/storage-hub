@@ -19,8 +19,8 @@ import {
   describeMspNet,
   type EnrichedBspApi,
   ShConsts,
-  waitFor,
-  type SqlClient
+  type SqlClient,
+  waitFor
 } from "../../../util";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import { ALITH_PRIVATE_KEY } from "../../../util/evmNet/keyring";
@@ -47,6 +47,8 @@ await describeMspNet(
     let bucketId: string;
     let fileManager: FileManager;
     let fileKey: H256;
+    let storageRequestBlockHash: `0x${string}`;
+    let storageRequestTxHash: `0x${string}`;
     let fileLocation: string;
     let mspClient: MspClient;
 
@@ -371,7 +373,7 @@ await describeMspNet(
       const replicas = 0; // Used only when ReplicationLevel = Custom
 
       // Issue the storage request using the SDK
-      const txHash = await storageHubClient.issueStorageRequest(
+      storageRequestTxHash = await storageHubClient.issueStorageRequest(
         bucketId as `0x${string}`,
         fileLocation,
         fingerprint.toHex() as `0x${string}`,
@@ -391,8 +393,11 @@ await describeMspNet(
       // Seal the block so the tx gets included
       await userApi.block.seal();
 
-      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: storageRequestTxHash });
       assert(receipt.status === "success", "Storage request transaction failed");
+
+      // Store the block hash where the transaction was included
+      storageRequestBlockHash = receipt.blockHash;
 
       // Compute the file key
       const registry = new TypeRegistry();
@@ -510,6 +515,21 @@ await describeMspNet(
       const fileInfo = await mspClient.files.getFileInfo(bucketId, fileKey.toHex());
       strictEqual(fileInfo.bucketId, bucketId, "BucketId should match");
       strictEqual(fileInfo.fileKey, fileKey.toHex(), "FileKey should match");
+
+      // Verify that the block hash is correctly stored and returned
+      strictEqual(
+        fileInfo.blockHash.toLowerCase(),
+        storageRequestBlockHash.toLowerCase(),
+        "File blockHash should match the block hash where the transaction was included"
+      );
+
+      // Verify that the EVM transaction hash is correctly stored and returned
+      assert(fileInfo.txHash, "File should have a txHash since it was created via EVM transaction");
+      strictEqual(
+        fileInfo.txHash.toLowerCase(),
+        storageRequestTxHash.toLowerCase(),
+        "File txHash should match the EVM transaction hash that created it"
+      );
     });
 
     it("Should fetch payment streams using the SDK's MspClient", async () => {

@@ -12,10 +12,11 @@ use sc_client_api::{BlockBackend, BlockchainEvents};
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
     blockchain_utils::{
-        convert_raw_multiaddress_to_multiaddr, get_events_at_block, EventsRetrievalError,
+        convert_raw_multiaddress_to_multiaddr, get_ethereum_block_hash, get_events_at_block,
+        EventsRetrievalError,
     },
     traits::StorageEnableRuntime,
-    types::{ParachainClient, StorageEnableEvents, StorageProviderId},
+    types::{StorageEnableEvents, StorageHubClient, StorageProviderId},
 };
 use shc_indexer_db::{models::*, DbConnection, DbPool, OnchainBspId, OnchainMspId};
 use sp_api::ProvideRuntimeApi;
@@ -34,7 +35,7 @@ pub enum IndexerServiceCommand {}
 
 // The IndexerService actor
 pub struct IndexerService<Runtime: StorageEnableRuntime> {
-    client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+    client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
     db_pool: DbPool,
     indexer_mode: crate::IndexerMode,
 }
@@ -64,7 +65,7 @@ impl<Runtime: StorageEnableRuntime> Actor for IndexerService<Runtime> {
 // Implement methods for IndexerService
 impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
     pub fn new(
-        client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+        client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
         db_pool: DbPool,
         indexer_mode: crate::IndexerMode,
     ) -> Self {
@@ -119,10 +120,29 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
 
         let block_events = get_events_at_block::<Runtime>(&self.client, &block_hash)?;
 
+        // Build a map of extrinsic index to transaction hash for events in a block.
+        let evm_tx_map: std::collections::HashMap<u32, H256> =
+            Runtime::build_transaction_hash_map(&block_events);
+
         conn.transaction::<(), IndexBlockError, _>(move |conn| {
             Box::pin(async move {
-                for ev in block_events {
-                    self.route_event(conn, &ev.event.into(), block_hash).await?;
+                for ev in &block_events {
+                    // Get the EVM transaction hash for the event if it exists
+                    let maybe_evm_tx_hash =
+                        if let frame_system::Phase::ApplyExtrinsic(idx) = ev.phase {
+                            evm_tx_map.get(&idx).copied()
+                        } else {
+                            None
+                        };
+
+                    self.route_event(
+                        conn,
+                        &ev.event.clone().into(),
+                        block_hash,
+                        block_number,
+                        maybe_evm_tx_hash,
+                    )
+                    .await?;
                 }
 
                 // Update the last indexed finalized block after indexing all events
@@ -145,11 +165,22 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         conn: &mut DbConnection<'a>,
         event: &StorageEnableEvents<Runtime>,
         block_hash: H256,
+        block_number: NumberFor<Runtime::Block>,
+        evm_tx_hash: Option<H256>,
     ) -> Result<(), diesel::result::Error> {
         match self.indexer_mode {
-            crate::IndexerMode::Full => self.index_event(conn, event, block_hash).await,
-            crate::IndexerMode::Lite => self.index_event_lite(conn, event, block_hash).await,
-            crate::IndexerMode::Fishing => self.index_event_fishing(conn, event, block_hash).await,
+            crate::IndexerMode::Full => {
+                self.index_event(conn, event, block_hash, block_number, evm_tx_hash)
+                    .await
+            }
+            crate::IndexerMode::Lite => {
+                self.index_event_lite(conn, event, block_hash, block_number, evm_tx_hash)
+                    .await
+            }
+            crate::IndexerMode::Fishing => {
+                self.index_event_fishing(conn, event, block_hash, block_number, evm_tx_hash)
+                    .await
+            }
         }
     }
 
@@ -158,13 +189,16 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         conn: &mut DbConnection<'a>,
         event: &StorageEnableEvents<Runtime>,
         block_hash: H256,
+        block_number: NumberFor<Runtime::Block>,
+        evm_tx_hash: Option<H256>,
     ) -> Result<(), diesel::result::Error> {
         match event {
             StorageEnableEvents::BucketNfts(event) => {
                 self.index_bucket_nfts_event(conn, event).await?
             }
             StorageEnableEvents::FileSystem(event) => {
-                self.index_file_system_event(conn, event).await?
+                self.index_file_system_event(conn, event, block_hash, block_number, evm_tx_hash)
+                    .await?
             }
             StorageEnableEvents::PaymentStreams(event) => {
                 self.index_payment_streams_event(conn, event).await?
@@ -212,6 +246,9 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         &'b self,
         conn: &mut DbConnection<'a>,
         event: &pallet_file_system::Event<Runtime>,
+        block_hash: H256,
+        block_number: NumberFor<Runtime::Block>,
+        evm_tx_hash: Option<H256>,
     ) -> Result<(), diesel::result::Error> {
         match event {
             pallet_file_system::Event::NewBucket {
@@ -342,6 +379,22 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 let size: u64 = (*size).saturated_into();
                 let size: i64 = size.saturated_into();
                 let who = who.as_ref().to_vec();
+
+                // Get the runtime-specific block hash from storage.
+                // For a standard Substrate runtime, the Ethereum block hash won't exist in storage,
+                // so we'll fallback to using the Substrate block hash (blake2_256) which is what we want.
+                // For a EVM-compatible runtime, we'll get the EVM block hash (keccak256) from storage,
+                // which is different from the Substrate block hash.
+                let block_number_u32: u32 = block_number.saturated_into();
+                let runtime_block_hash =
+                    get_ethereum_block_hash(&self.client, &block_hash, block_number_u32)
+                        .unwrap_or(None)
+                        .unwrap_or(block_hash);
+                let block_hash_bytes = runtime_block_hash.as_bytes().to_vec();
+
+                // Convert EVM tx hash to bytes if present
+                let tx_hash_bytes = evm_tx_hash.map(|h| h.as_bytes().to_vec());
+
                 File::create(
                     conn,
                     who,
@@ -353,6 +406,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     size,
                     FileStorageRequestStep::Requested,
                     sql_peer_ids,
+                    block_hash_bytes,
+                    tx_hash_bytes,
                 )
                 .await?;
             }

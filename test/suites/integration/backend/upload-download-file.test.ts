@@ -245,7 +245,7 @@ await describeMspNet(
       strictEqual(file.status, "inProgress", "Should have not been fulfilled yet");
     });
 
-    it("Should successfully upload file via the backend API", async () => {
+    it("Should successfully upload file via the backend API and reject concurrent uploads of the same file key", async () => {
       // Ensure prerequisite data is present
       assert(bucketId, "Bucket should have been created");
       assert(freshBucketRoot, "Bucket should have been created");
@@ -253,14 +253,49 @@ await describeMspNet(
       assert(form, "Upload form should be ready");
       assert(userJWT, "User authenticated with the backend");
 
-      // Send the HTTP request to backend upload endpoint
-      const uploadResponse = await fetch(`${BACKEND_URI}/buckets/${bucketId}/upload/${fileKey}`, {
+      // Send the first HTTP request to backend upload endpoint, while starting a second upload of the same file key.
+      // This is to test that concurrent uploads of the same file key are rejected
+      const firstUploadPromise = fetch(`${BACKEND_URI}/buckets/${bucketId}/upload/${fileKey}`, {
         method: "PUT",
         body: form,
         headers: {
           Authorization: `Bearer ${userJWT}`
         }
       });
+
+      // Immediately try to start a second upload of the same file key
+      // This should be rejected since the first upload is still in progress
+      const secondUploadPromise = fetch(`${BACKEND_URI}/buckets/${bucketId}/upload/${fileKey}`, {
+        method: "PUT",
+        body: form,
+        headers: {
+          Authorization: `Bearer ${userJWT}`
+        }
+      });
+
+      // Wait for both uploads to complete
+      const [firstResponse, secondResponse] = await Promise.all([
+        firstUploadPromise,
+        secondUploadPromise
+      ]);
+
+      // One should succeed with 201, the other should fail with 400
+      const responses = [firstResponse, secondResponse];
+      const successfulResponse = responses.find((r) => r.status === 201);
+      const rejectedResponse = responses.find((r) => r.status === 400);
+
+      assert(successfulResponse, "One upload should succeed");
+      assert(rejectedResponse, "One upload should be rejected");
+
+      // Verify the rejection message
+      const errorBody = await rejectedResponse.text();
+      assert(
+        errorBody.includes("is already being uploaded"),
+        "Error message should indicate concurrent upload"
+      );
+
+      // Now continue with the successful upload verification
+      const uploadResponse = successfulResponse;
 
       // Verify that the backend upload was successful
       strictEqual(uploadResponse.status, 201, "Upload should return CREATED status");
