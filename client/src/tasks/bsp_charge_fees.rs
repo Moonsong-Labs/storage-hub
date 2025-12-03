@@ -210,8 +210,8 @@ where
         }
 
         Ok(format!(
-            "Handled UserWithoutFunds for user {:?}",
-            insolvent_user
+            "Handled UserWithoutFunds for user [{}]",
+            hex::encode(insolvent_user)
         ))
     }
 }
@@ -418,8 +418,8 @@ where
             .await?;
 
         Ok(format!(
-            "Handled ProcessStopStoringForInsolventUserRequest for user {:?}",
-            insolvent_user
+            "Handled ProcessStopStoringForInsolventUserRequest for user [{}]",
+            hex::encode(insolvent_user)
         ))
     }
 }

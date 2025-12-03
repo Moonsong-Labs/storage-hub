@@ -183,7 +183,7 @@ where
 
         match result {
             Ok(()) => Ok(format!(
-                "Handled NewStorageRequest for file_key {:x}",
+                "Handled NewStorageRequest for file_key [{:x}]",
                 file_key
             )),
             Err(e) => {
@@ -244,7 +244,7 @@ where
         }
 
         Ok(format!(
-            "Handled RemoteUploadRequest for file {:x} (complete: {})",
+            "Handled RemoteUploadRequest for file [{:x}] (complete: {})",
             event.file_key, file_complete
         ))
     }
