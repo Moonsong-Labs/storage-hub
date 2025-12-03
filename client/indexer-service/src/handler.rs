@@ -354,7 +354,12 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
 
                 let bsp = Bsp::get_by_onchain_bsp_id(conn, OnchainBspId::from(*bsp_id)).await?;
                 for (file_key, _file_metadata) in confirmed_file_keys {
-                    let file = File::get_by_file_key(conn, file_key.as_ref().to_vec()).await?;
+                    // There can be multiple file records for a given file key if there were multiple
+                    // storage requests for the same file key. We get the latest one created, which
+                    // has to be the one that was confirmed, given that there can't be two storage
+                    // requests for the same file key at the same time.
+                    let file =
+                        File::get_latest_by_file_key(conn, file_key.as_ref().to_vec()).await?;
                     BspFile::create(conn, bsp.id, file.id).await?;
                 }
             }
@@ -452,7 +457,11 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 file_key,
                 file_metadata: _,
             } => {
-                let file = File::get_by_file_key(conn, file_key.as_ref().to_vec()).await?;
+                // There can be multiple file records for a given file key if there were multiple
+                // storage requests for the same file key. We get the latest one created, which
+                // has to be the one that was accepted, given that there can't be two storage
+                // requests for the same file key at the same time.
+                let file = File::get_latest_by_file_key(conn, file_key.as_ref().to_vec()).await?;
                 let bucket = Bucket::get_by_id(conn, file.bucket_id).await?;
                 if let Some(msp_id) = bucket.msp_id {
                     MspFile::create(conn, msp_id, file.id).await?;
@@ -546,11 +555,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
 
                 // Check if files should be deleted (no more associations)
                 for file_key in file_keys.iter() {
-                    let deleted = File::delete_if_orphaned(conn, file_key.as_ref()).await?;
-
-                    if deleted {
-                        log::trace!("Deleted orphaned file after MSP deletion: {:?}", file_key);
-                    }
+                    File::delete_if_orphaned(conn, file_key.as_ref()).await?;
                 }
 
                 // Update bucket merkle root
@@ -576,11 +581,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
 
                 // Check if files should be deleted (no more associations)
                 for file_key in file_keys.iter() {
-                    let deleted = File::delete_if_orphaned(conn, file_key.as_ref()).await?;
-
-                    if deleted {
-                        log::trace!("Deleted orphaned file after BSP deletion: {:?}", file_key);
-                    }
+                    File::delete_if_orphaned(conn, file_key.as_ref()).await?;
                 }
 
                 // Update BSP merkle root
@@ -595,36 +596,41 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             // and necessitates a fisherman to delete this file.
             pallet_file_system::Event::IncompleteStorageRequest { file_key } => {
                 // Check if file is in bucket or has BSP associations
-                let file_record = File::get_by_file_key(conn, file_key.as_ref().to_vec())
+                // There can be multiple file records for a given file key if there were multiple
+                // storage requests for the same file key. We get the latest one created, which
+                // has to be the incomplete one, given that there can't be two storage
+                // requests for the same file key at the same time.
+                let file_record = File::get_latest_by_file_key(conn, file_key.as_ref().to_vec())
                     .await
                     .ok();
-                let is_in_bucket = file_record
-                    .as_ref()
-                    .map(|f| f.is_in_bucket)
-                    .unwrap_or(false);
-                let has_bsp = File::has_bsp_associations(conn, file_key.as_ref()).await?;
 
-                if is_in_bucket || has_bsp {
-                    // File is still being stored, mark for deletion
-                    File::update_deletion_status(
-                        conn,
-                        file_key.as_ref(),
-                        FileDeletionStatus::InProgress,
-                        None,
-                    )
-                    .await?;
+                // If the file record is not found, it means the file has been deleted already.
+                if let Some(file_record) = file_record {
+                    let is_in_bucket = file_record.is_in_bucket;
+                    let has_bsp = File::has_bsp_associations(conn, file_record.id).await?;
 
-                    log::debug!(
-                        "Incomplete storage request for file {:?} is still being stored (in_bucket: {}, BSP: {}), marked for deletion without signature",
-                        file_key, is_in_bucket, has_bsp
-                    );
-                } else {
-                    // No storage, safe to delete immediately
-                    File::delete(conn, file_key.as_ref().to_vec()).await?;
-                    log::debug!(
-                        "Incomplete storage request for file {:?} is not being stored, deleted immediately",
-                        file_key
-                    );
+                    if is_in_bucket || has_bsp {
+                        // File is still being stored, mark for deletion
+                        File::update_deletion_status(
+                            conn,
+                            file_key.as_ref(),
+                            FileDeletionStatus::InProgress,
+                            None,
+                        )
+                        .await?;
+
+                        log::debug!(
+                        		"Incomplete storage request for file {:?} (id: {:?}) is still being stored (in_bucket: {}, BSP: {}), marked for deletion without signature",
+                        		file_key, file_record.id, is_in_bucket, has_bsp
+                    		);
+                    } else {
+                        // No storage, safe to delete immediately
+                        File::delete(conn, file_record.id).await?;
+                        log::debug!(
+                        		"Incomplete storage request for file key {:?} and id {:?} is not being stored, deleted immediately",
+														file_key, file_record.id
+                    		);
+                    }
                 }
             }
             pallet_file_system::Event::__Ignore(_, _) => {}

@@ -337,7 +337,7 @@ where
     NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: BatchProcessStorageRequests) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: BatchProcessStorageRequests) -> anyhow::Result<String> {
         // Hold the Arc reference to the permit for the lifetime of this handler
         // The permit will be automatically released when this handler completes or fails
         // (when the Arc is dropped, the permit is dropped, releasing the semaphore)
@@ -394,6 +394,7 @@ where
         }
 
         // Then, process each pending request: if not in statuses, set to Processing and emit event
+        let mut processed_count = 0;
         for request in &pending_requests {
             let file_key = H256::from_slice(request.file_key.as_ref());
 
@@ -423,10 +424,16 @@ where
                 "Emitted NewStorageRequest event for file key {:?}",
                 file_key
             );
+
+            processed_count += 1;
         }
 
         // Permit is automatically released when handler returns
-        Ok(())
+        Ok(format!(
+            "Processed {} new storage requests out of {} pending",
+            processed_count,
+            pending_requests.len()
+        ))
     }
 }
 
@@ -444,7 +451,7 @@ where
     NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: NewStorageRequest<Runtime>) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: NewStorageRequest<Runtime>) -> anyhow::Result<String> {
         let bucket_id = H256::from_slice(event.bucket_id.as_ref());
         let file_key = H256::from_slice(event.file_key.as_ref());
         let result = self.handle_new_storage_request_event(event).await;
@@ -457,7 +464,7 @@ where
                 reason
             ));
         }
-        Ok(())
+        Ok(format!("Handled NewStorageRequest for file_key [{:x}]", file_key))
     }
 }
 
@@ -471,7 +478,10 @@ where
     NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: RemoteUploadRequest<Runtime>) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: RemoteUploadRequest<Runtime>,
+    ) -> anyhow::Result<String> {
         trace!(target: LOG_TARGET, "Received remote upload request for file {:x} and peer {:?}", event.file_key, event.peer);
 
         let file_key: H256 = event.file_key.into();
@@ -507,7 +517,10 @@ where
             self.on_file_complete(&file_key).await;
         }
 
-        Ok(())
+        Ok(format!(
+            "Handled RemoteUploadRequest for file [{:x}] (complete: {})",
+            event.file_key, file_complete
+        ))
     }
 }
 
@@ -529,7 +542,7 @@ where
     async fn handle_event(
         &mut self,
         event: ProcessMspRespondStoringRequest<Runtime>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
             "Processing ProcessMspRespondStoringRequest",
@@ -966,7 +979,12 @@ where
         self.storage_hub_handler
             .blockchain
             .release_forest_root_write_lock(forest_root_write_tx)
-            .await
+            .await?;
+
+        Ok(format!(
+            "Processed ProcessMspRespondStoringRequest for MSP [{:x}]",
+            own_msp_id
+        ))
     }
 }
 

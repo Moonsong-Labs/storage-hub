@@ -10,7 +10,7 @@ use shc_common::types::{FileMetadata, Fingerprint};
 
 use crate::{
     models::{Bucket, MultiAddress},
-    schema::{bucket, file, file_peer_id, msp_file},
+    schema::{bucket, file, file_peer_id},
     DbConnection,
 };
 
@@ -169,22 +169,55 @@ impl File {
             .execute(conn)
             .await?;
 
-        // Update bucket total size and file count
-        Bucket::increment_file_count_and_size(conn, bucket_id, size).await?;
-
         Ok(file)
     }
 
+    /// Get all file records for a given file key.
+    ///
+    /// There can be multiple file records for a given file key if there were
+    /// multiple storage requests for the same file key.
     pub async fn get_by_file_key<'a>(
+        conn: &mut DbConnection<'a>,
+        file_key: impl AsRef<[u8]>,
+    ) -> Result<Vec<Self>, diesel::result::Error> {
+        let file_key = file_key.as_ref().to_vec();
+        let file_records = file::table
+            .filter(file::file_key.eq(file_key))
+            .load::<Self>(conn)
+            .await?;
+        Ok(file_records)
+    }
+
+    /// Get the most recently created file record for a given file key.
+    ///
+    /// Returns error if there are no records for the given key.
+    pub async fn get_latest_by_file_key<'a>(
         conn: &mut DbConnection<'a>,
         file_key: impl AsRef<[u8]>,
     ) -> Result<Self, diesel::result::Error> {
         let file_key = file_key.as_ref().to_vec();
-        let file = file::table
+        let file_record: Self = file::table
             .filter(file::file_key.eq(file_key))
-            .first::<Self>(conn)
+            .order(file::created_at.desc())
+            .first(conn)
             .await?;
-        Ok(file)
+        Ok(file_record)
+    }
+
+    /// Get the oldest file record for a given file key.
+    ///
+    /// Returns error if there are no records for the given key.
+    pub async fn get_oldest_by_file_key<'a>(
+        conn: &mut DbConnection<'a>,
+        file_key: impl AsRef<[u8]>,
+    ) -> Result<Self, diesel::result::Error> {
+        let file_key = file_key.as_ref().to_vec();
+        let file_record: Self = file::table
+            .filter(file::file_key.eq(file_key))
+            .order(file::created_at.asc())
+            .first(conn)
+            .await?;
+        Ok(file_record)
     }
 
     pub async fn update_step<'a>(
@@ -203,28 +236,13 @@ impl File {
 
     pub async fn delete<'a>(
         conn: &mut DbConnection<'a>,
-        file_key: impl AsRef<[u8]>,
+        file_id: i64,
     ) -> Result<(), diesel::result::Error> {
-        let file_key = file_key.as_ref().to_vec();
-
-        // Get file info before deletion
-        let file_info: Option<(i64, i64)> = file::table
-            .filter(file::file_key.eq(&file_key))
-            .select((file::bucket_id, file::size))
-            .first(conn)
-            .await
-            .optional()?;
-
-        // Delete the file
+        // Delete the file by its ID
         diesel::delete(file::table)
-            .filter(file::file_key.eq(file_key))
+            .filter(file::id.eq(file_id))
             .execute(conn)
             .await?;
-
-        // Update bucket counts if file was found
-        if let Some((bucket_id, file_size)) = file_info {
-            Bucket::decrement_file_count_and_size(conn, bucket_id, file_size).await?;
-        }
 
         Ok(())
     }
@@ -269,99 +287,68 @@ impl File {
         Ok(())
     }
 
-    /// Check if file has any MSP associations
-    pub async fn has_msp_associations<'a>(
-        conn: &mut DbConnection<'a>,
-        file_key: impl AsRef<[u8]>,
-    ) -> Result<bool, diesel::result::Error> {
-        let file_key = file_key.as_ref().to_vec();
-
-        // Get file ID
-        let file_id: Option<i64> = file::table
-            .filter(file::file_key.eq(&file_key))
-            .select(file::id)
-            .first(conn)
-            .await
-            .optional()?;
-
-        if let Some(file_id) = file_id {
-            let count: i64 = msp_file::table
-                .filter(msp_file::file_id.eq(file_id))
-                .count()
-                .get_result(conn)
-                .await?;
-            Ok(count > 0)
-        } else {
-            Ok(false)
-        }
-    }
-
     /// Check if file has any BSP associations
     pub async fn has_bsp_associations<'a>(
         conn: &mut DbConnection<'a>,
-        file_key: impl AsRef<[u8]>,
+        file_id: i64,
     ) -> Result<bool, diesel::result::Error> {
         use crate::schema::bsp_file;
 
-        let file_key = file_key.as_ref().to_vec();
-
-        // Get file ID
-        let file_id: Option<i64> = file::table
-            .filter(file::file_key.eq(&file_key))
-            .select(file::id)
-            .first(conn)
-            .await
-            .optional()?;
-
-        if let Some(file_id) = file_id {
-            let count: i64 = bsp_file::table
-                .filter(bsp_file::file_id.eq(file_id))
-                .count()
-                .get_result(conn)
-                .await?;
-            Ok(count > 0)
-        } else {
-            Ok(false)
-        }
+        let count: i64 = bsp_file::table
+            .filter(bsp_file::file_id.eq(file_id))
+            .count()
+            .get_result(conn)
+            .await?;
+        Ok(count > 0)
     }
 
     /// Delete file only if it has no BSP associations and is not in the bucket forest.
     /// The flag [`is_in_bucket`](File::is_in_bucket) is set to false or true based on the [`MutationsApplied`] event emitted by the proofs dealer pallet for catch all.
+    /// Returns true if all files associated with the file key were deleted, false if any still has associations.
     pub async fn delete_if_orphaned<'a>(
         conn: &mut DbConnection<'a>,
         file_key: impl AsRef<[u8]>,
-    ) -> Result<bool, diesel::result::Error> {
+    ) -> Result<(), diesel::result::Error> {
         let file_key = file_key.as_ref();
 
         // Check if file is still in bucket forest or has BSP associations
-        let file_record: Option<Self> = file::table
+        let file_records: Vec<Self> = file::table
             .filter(file::file_key.eq(file_key))
-            .first(conn)
-            .await
-            .optional()?;
+            .load(conn)
+            .await?;
 
-        let Some(file_record) = file_record else {
-            // File doesn't exist, nothing to delete
-            return Ok(false);
-        };
+        // For each found file record, check if it has any BSP or MSP associations, and delete it if it doesn't
+        let mut deleted_all = true;
+        for file_record in file_records {
+            let has_bsp = Self::has_bsp_associations(conn, file_record.id).await?;
+            let is_in_bucket = file_record.is_in_bucket;
 
-        let has_bsp = Self::has_bsp_associations(conn, file_key).await?;
-        let is_in_bucket = file_record.is_in_bucket;
-
-        if !is_in_bucket && !has_bsp {
-            // File is not in bucket forest and has no BSP associations, safe to delete
-            Self::delete(conn, file_key).await?;
-            log::debug!("Deleted orphaned file key: {:?}", file_key);
-            Ok(true)
-        } else {
-            log::debug!(
-                "File with key {:?} still has storage (in_bucket: {}, BSP: {}), keeping it",
-                file_key,
-                is_in_bucket,
-                has_bsp
-            );
-            Ok(false)
+            if !is_in_bucket && !has_bsp {
+                Self::delete(conn, file_record.id).await?;
+                log::debug!(
+                    "Deleted orphaned file key: {:?} and id: {:?}",
+                    file_record.file_key,
+                    file_record.id
+                );
+            } else {
+                log::debug!(
+                		"File with key {:?} and id {:?} still has storage (in_bucket: {}, BSP: {}), keeping it",
+                		file_record.file_key,
+                		file_record.id,
+                		is_in_bucket,
+                		has_bsp,
+            		);
+                deleted_all = false;
+            }
         }
+
+        log::debug!(
+            "Deleted all files associated with file key: {:?}: {}",
+            file_key,
+            deleted_all
+        );
+
+        Ok(())
     }
 
     pub async fn get_by_bucket_id<'a>(
@@ -649,12 +636,30 @@ impl File {
         let file_key = file_key.as_ref().to_vec();
         let onchain_bucket_id = onchain_bucket_id.as_ref().to_vec();
 
+        // Get the file info
+        let file_info: Option<(i64, i64)> = file::table
+            .filter(file::file_key.eq(&file_key))
+            .filter(file::onchain_bucket_id.eq(&onchain_bucket_id))
+            .select((file::bucket_id, file::size))
+            .first(conn)
+            .await
+            .optional()?;
+
+        // Update the file's bucket membership status
         diesel::update(file::table)
             .filter(file::file_key.eq(&file_key))
             .filter(file::onchain_bucket_id.eq(&onchain_bucket_id))
             .set(file::is_in_bucket.eq(is_in_bucket))
             .execute(conn)
             .await?;
+
+        // Update the bucket stats to reflect the change in bucket membership
+        if let Some((bucket_id, file_size)) = file_info {
+            match is_in_bucket {
+                true => Bucket::increment_file_count_and_size(conn, bucket_id, file_size).await?,
+                false => Bucket::decrement_file_count_and_size(conn, bucket_id, file_size).await?,
+            }
+        }
 
         Ok(())
     }
