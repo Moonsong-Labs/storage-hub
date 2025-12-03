@@ -2,8 +2,8 @@
 //!
 //! HTTP server to receive streamed file chunks from trusted backends.
 //! This server accepts POST requests with streamed chunks in the format:
-//! [Total Chunks: 8 bytes (u64, little-endian)]
 //! [ChunkId: 8 bytes (u64, little-endian)][Chunk data: FILE_CHUNK_SIZE bytes]...
+//! [ChunkId: 8 bytes (u64, little-endian)][Chunk data: remaining bytes for last chunk]
 //! Note: All chunks are FILE_CHUNK_SIZE except the last one which may be smaller
 
 use std::sync::Arc;
@@ -16,7 +16,7 @@ use axum::{
     routing::post,
     Router,
 };
-use sc_tracing::tracing::{debug, info, warn};
+use sc_tracing::tracing::{info, warn};
 use shc_actors_framework::actor::ActorHandle;
 use shc_blockchain_service::commands::BlockchainServiceCommandInterface;
 use shc_blockchain_service::types::{MspRespondStorageRequest, RespondStorageRequest};
@@ -151,9 +151,8 @@ where
 /// HTTP endpoint handler for receiving a file as chunks
 ///
 /// The stream format is:
-/// [ChunkId: 8 bytes (u64, little-endian)][Chunk length: 4 bytes (u32, little-endian)][Chunk data: variable]
-///
-/// This handler processes chunks as they arrive without loading the entire stream into memory.
+/// [ChunkId: 8 bytes (u64, little-endian)][Chunk data: FILE_CHUNK_SIZE bytes]...
+/// [ChunkId: 8 bytes (u64, little-endian)][Chunk data: remaining bytes for last chunk]
 async fn upload_file<FL, FSH, Runtime>(
     State(context): State<Context<FL, FSH, Runtime>>,
     Path(file_key): Path<String>,
@@ -202,104 +201,75 @@ where
     }
 }
 
-/// Process a stream of chunks from the backend
-///
-/// Binary format: [Total Chunks: 8 bytes][ChunkId: 8 bytes][Data: FILE_CHUNK_SIZE]...
-/// Note: All chunks are FILE_CHUNK_SIZE except the last one which may be smaller
+/// Process a stream of chunks from the request body
 async fn process_chunk_stream<FL, FSH, Runtime>(
     context: &Context<FL, FSH, Runtime>,
     file_key: &sp_core::H256,
-    body: Body,
+    request_body: Body,
 ) -> anyhow::Result<()>
 where
     FL: FileStorageT,
     FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
-    let mut stream = body.into_data_stream();
+    let mut request_stream = request_body.into_data_stream();
     let mut buffer = Vec::new();
-    let mut chunks_processed = 0u64;
-    let mut maybe_total_chunks: Option<u64> = None;
+    let mut last_write_outcome = FileStorageWriteOutcome::FileIncomplete;
 
-    // Constants for parsing the binary format
-    const TOTAL_CHUNKS_SIZE: usize = 8; // u64
     const CHUNK_ID_SIZE: usize = 8; // u64
-
     let file_chunk_size = FILE_CHUNK_SIZE as usize;
 
-    while let Some(try_bytes) = stream.next().await {
+    // Process request stream, storing chunks as they are received
+    while let Some(try_bytes) = request_stream.next().await {
         let bytes = try_bytes?;
         buffer.extend_from_slice(&bytes);
 
-        // First, read the total chunks count if we haven't yet
-        if maybe_total_chunks.is_none() {
-            if buffer.len() >= TOTAL_CHUNKS_SIZE {
-                let total_bytes: [u8; TOTAL_CHUNKS_SIZE] = buffer[0..TOTAL_CHUNKS_SIZE]
-                    .try_into()
-                    .map_err(|_| anyhow::anyhow!("Failed to parse total chunks count"))?;
-                let total_chunks = u64::from_le_bytes(total_bytes);
-                maybe_total_chunks = Some(total_chunks);
-                buffer.drain(..TOTAL_CHUNKS_SIZE);
-
-                debug!(
-                    target: LOG_TARGET,
-                    file_key = %file_key,
-                    total_chunks = total_chunks,
-                    "Received total chunks count"
-                );
-            } else {
-                continue;
-            }
-        }
-
-        // Process chunks from the buffer (all except last chunk)
-        if let Some(total_chunks) = maybe_total_chunks {
-            while chunks_processed < total_chunks - 1
-                && buffer.len() >= CHUNK_ID_SIZE + file_chunk_size
-            {
-                let (chunk_id, chunk_data) = get_next_chunk(&mut buffer, Some(file_chunk_size))?;
-
-                // For non-last chunks, just verify write succeeded (don't check FileComplete)
-                write_chunk(context, file_key, &chunk_id, &chunk_data).await?;
-                chunks_processed += 1;
-            }
+        while buffer.len() >= CHUNK_ID_SIZE + file_chunk_size {
+            let (chunk_id, chunk_data) = get_next_chunk(&mut buffer, true)?;
+            last_write_outcome = write_chunk(context, file_key, &chunk_id, &chunk_data).await?;
         }
     }
 
-    // After stream ends, process the last chunk
-    let total_chunks =
-        maybe_total_chunks.ok_or(anyhow::anyhow!("Could not parse file total from stream"))?;
-    if chunks_processed != total_chunks - 1 {
-        return Err(anyhow::anyhow!(
-            "Wrong processing of chunks. Expected {}, processed {}",
-            total_chunks - 1,
-            chunks_processed
-        ));
+    // Check if there's remaining data for the last chunk (This is the case when data is
+    // smaller than FILE_CHUNK_SIZE)
+    if !buffer.is_empty() {
+        let (chunk_id, chunk_data) = get_next_chunk(&mut buffer, false)?;
+        last_write_outcome = write_chunk(context, file_key, &chunk_id, &chunk_data).await?;
     }
-    let (chunk_id, chunk_data) = get_next_chunk(&mut buffer, None)?;
-    let write_last_chunk_outcome = write_chunk(context, file_key, &chunk_id, &chunk_data).await?;
 
-    if matches!(
-        write_last_chunk_outcome,
-        FileStorageWriteOutcome::FileComplete
-    ) {
+    // Verify the file is complete using the last write outcome
+    if matches!(last_write_outcome, FileStorageWriteOutcome::FileComplete) {
         handle_file_complete(context, file_key).await?;
     } else {
         return Err(anyhow::anyhow!(
-            "File incomplete at the end of last chunk write"
+            "File incomplete after processing all chunks"
         ));
     }
+
     Ok(())
 }
 
-/// Extract chunk from a buffer and write to storage
-/// If no chunk data size is given it will consume the
-/// whole buffer as its data
+/// Gets next chunk from buffer. If cap_at_file_chunk_size is set to true,
+/// it will get FILE_CHUNK_SIZE as data size, else it will use the remainder
+/// of the buffer (used for last chunk when data is not a multiple of FILE_CHUNK_SIZE).
 fn get_next_chunk(
     buffer: &mut Vec<u8>,
-    maybe_file_chunk_size: Option<usize>,
+    cap_at_file_chunk_size: bool,
 ) -> anyhow::Result<(ChunkId, Vec<u8>)> {
     const CHUNK_ID_SIZE: usize = 8;
+    let min_data_size: usize = if cap_at_file_chunk_size {
+        FILE_CHUNK_SIZE as usize
+    } else {
+        1
+    };
+    let min_buffer_size = CHUNK_ID_SIZE + min_data_size;
+    if buffer.len() < min_buffer_size {
+        return Err(anyhow::anyhow!(
+            "Not enough bytes to extract chunk from buffer. Required at least {} bytes got {}.",
+            min_buffer_size,
+            buffer.len()
+        ));
+    }
 
     let chunk_id_bytes: [u8; CHUNK_ID_SIZE] = buffer
         .drain(..CHUNK_ID_SIZE)
@@ -309,11 +279,36 @@ fn get_next_chunk(
     let chunk_id_value = u64::from_le_bytes(chunk_id_bytes);
     let chunk_id = ChunkId::new(chunk_id_value);
 
-    let chunk_data = match maybe_file_chunk_size {
-        Some(size) => buffer.drain(..size).collect(),
-        None => std::mem::take(buffer),
+    let chunk_data = if cap_at_file_chunk_size {
+        let size = FILE_CHUNK_SIZE as usize;
+        buffer.drain(..size).collect()
+    } else {
+        std::mem::take(buffer)
     };
     Ok((chunk_id, chunk_data))
+}
+
+async fn write_chunk<FL, FSH, Runtime>(
+    context: &Context<FL, FSH, Runtime>,
+    file_key: &sp_core::H256,
+    chunk_id: &ChunkId,
+    chunk_data: &Chunk,
+) -> anyhow::Result<FileStorageWriteOutcome>
+where
+    FL: FileStorageT,
+    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
+    Runtime: StorageEnableRuntime,
+{
+    let mut file_storage = context.file_storage.write().await;
+    file_storage
+        .write_chunk(file_key, chunk_id, chunk_data)
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to write chunk {} to storage: {}",
+                chunk_id.as_u64(),
+                e
+            )
+        })
 }
 
 /// Handle file completion: unregister from file transfer service and queue blockchain transaction
@@ -355,28 +350,4 @@ where
         ))
         .await?;
     Ok(())
-}
-
-/// Write a chunk to file storage
-async fn write_chunk<FL, FSH, Runtime>(
-    context: &Context<FL, FSH, Runtime>,
-    file_key: &sp_core::H256,
-    chunk_id: &ChunkId,
-    chunk_data: &Chunk,
-) -> anyhow::Result<FileStorageWriteOutcome>
-where
-    FL: FileStorageT,
-    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
-    Runtime: StorageEnableRuntime,
-{
-    let mut file_storage = context.file_storage.write().await;
-    file_storage
-        .write_chunk(file_key, chunk_id, chunk_data)
-        .map_err(|e| {
-            anyhow::anyhow!(
-                "Failed to write chunk {} to storage: {}",
-                chunk_id.as_u64(),
-                e
-            )
-        })
 }

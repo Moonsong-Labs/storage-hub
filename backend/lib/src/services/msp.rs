@@ -644,8 +644,6 @@ impl MspService {
             self.msp_config.trusted_file_transfer_server_url, file_key
         );
 
-        let header = Bytes::from(total_chunks.to_le_bytes().to_vec());
-
         let chunks_iter = (0..total_chunks).map(move |chunk_index| {
             let chunk_id = ChunkId::new(chunk_index);
 
@@ -662,7 +660,7 @@ impl MspService {
         });
 
         // Prepend the header and convert to a stream
-        let body_stream = stream::iter(std::iter::once(Ok(header)).chain(chunks_iter));
+        let body_stream = stream::iter(chunks_iter);
 
         let body = reqwest::Body::wrap_stream(body_stream);
 
