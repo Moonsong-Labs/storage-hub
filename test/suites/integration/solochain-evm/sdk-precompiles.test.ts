@@ -49,9 +49,6 @@ await describeMspNet(
     let fileKey: H256;
     let fileLocation: string;
     let mspClient: MspClient;
-    let sessionToken: string | undefined;
-    const sessionProvider = async () =>
-      sessionToken ? ({ token: sessionToken, user: { address: "" } } as const) : undefined;
 
     before(async () => {
       userApi = await createUserApi();
@@ -99,7 +96,8 @@ await describeMspNet(
       const mspBackendHttpConfig: HttpClientConfig = {
         baseUrl: "http://127.0.0.1:8080"
       };
-      mspClient = await MspClient.connect(mspBackendHttpConfig, sessionProvider);
+      // Create MspClient without session provider initially
+      mspClient = await MspClient.connect(mspBackendHttpConfig);
 
       // Wait for the backend to be ready
       await userApi.docker.waitForLog({
@@ -116,7 +114,9 @@ await describeMspNet(
       const siweDomain = "localhost:3000";
       const siweUri = "http://localhost:3000";
       const siweSession = await mspClient.auth.SIWE(walletClient, siweDomain, siweUri);
-      sessionToken = siweSession.token;
+
+      // Set the session provider after authentication
+      mspClient.setSessionProvider(async () => siweSession);
 
       assert(createIndexerApi, "Indexer API not available");
       indexerApi = await createIndexerApi();
