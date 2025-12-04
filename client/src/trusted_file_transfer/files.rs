@@ -12,8 +12,6 @@ use tokio::sync::RwLock;
 
 pub const CHUNK_ID_SIZE: usize = 8; // sizeof(u64)
 
-const LOG_TARGET: &str = "trusted-file-transfer-files";
-
 /// Encodes a chunk ID and data pair into the wire format.
 pub fn encode_chunk(chunk_id: ChunkId, chunk_data: &[u8]) -> Vec<u8> {
     let mut encoded = Vec::with_capacity(CHUNK_ID_SIZE + chunk_data.len());
