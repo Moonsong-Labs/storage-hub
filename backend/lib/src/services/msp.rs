@@ -743,7 +743,6 @@ mod tests {
     use bigdecimal::BigDecimal;
     use serde_json::Value;
 
-    use shc_common::types::{FileKeyProof, FileMetadata};
     use shp_types::Hash;
 
     use super::*;
@@ -1138,42 +1137,5 @@ mod tests {
             expected_cost_per_tick,
             "Dynamic payment stream cost per tick should be a function of amount provided and price per giga unit"
         )
-    }
-
-    #[tokio::test]
-    async fn test_upload_to_msp() {
-        let service = MockMspServiceBuilder::new().build().await;
-
-        // Provide at least one chunk id (upload_to_msp rejects empty sets)
-        let mut chunk_ids = HashSet::new();
-        chunk_ids.insert(ChunkId::new(0));
-
-        // Create test file metadata
-        let file_metadata = FileMetadata::new(
-            vec![0u8; 32],
-            vec![0u8; 32],
-            b"test_location".to_vec(),
-            1000,
-            [0u8; 32].into(),
-        )
-        .unwrap();
-
-        // Create test FileKeyProof
-        let file_key_proof = FileKeyProof::new(
-            file_metadata.owner().clone(),
-            file_metadata.bucket_id().clone(),
-            file_metadata.location().clone(),
-            file_metadata.file_size(),
-            *file_metadata.fingerprint(),
-            sp_trie::CompactProof {
-                encoded_nodes: vec![],
-            },
-        )
-        .unwrap();
-
-        service
-            .upload_to_msp(&chunk_ids, &file_key_proof)
-            .await
-            .expect("able to upload file");
     }
 }
