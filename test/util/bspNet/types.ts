@@ -347,7 +347,7 @@ export type BspNetConfig = {
   /**
    * If true, runs Prometheus server for metrics collection (fullnet only).
    */
-  prometheus?: boolean;
+  telemetry?: boolean;
 };
 
 /**
@@ -588,7 +588,7 @@ export type TestOptions = {
    */
   logLevel?: string;
   /** If true, runs Prometheus server for metrics collection */
-  prometheus?: boolean;
+  telemetry?: boolean;
 };
 
 /**

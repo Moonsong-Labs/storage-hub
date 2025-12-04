@@ -49,6 +49,7 @@ export async function describeBspNet<
     bspNetConfig.bspStartingWeight = options.bspStartingWeight;
     bspNetConfig.extrinsicRetryTimeout = options.extrinsicRetryTimeout;
     bspNetConfig.logLevel = options.logLevel;
+    bspNetConfig.telemetry = options.telemetry;
 
     const describeFunc = options?.only ? describe.only : options?.skip ? describe.skip : describe;
 
@@ -142,7 +143,7 @@ export async function describeMspNet<
     fullNetConfig.fishermanIncompleteSyncMax = options.fishermanIncompleteSyncMax;
     fullNetConfig.fishermanIncompleteSyncPageSize = options.fishermanIncompleteSyncPageSize;
     fullNetConfig.logLevel = options.logLevel;
-    fullNetConfig.prometheus = options.prometheus;
+    fullNetConfig.telemetry = options.telemetry;
 
     const describeFunc = options?.only ? describe.only : options?.skip ? describe.skip : describe;
 

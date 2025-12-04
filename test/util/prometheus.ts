@@ -105,6 +105,12 @@ export const ALL_STORAGEHUB_METRICS: Record<string, MetricDefinition> = {
     labels: ["status"],
     description: "BSP download request handling"
   },
+  bsp_upload_chunks_received_total: {
+    name: "storagehub_bsp_upload_chunks_received_total",
+    type: "counter",
+    labels: ["status"],
+    description: "BSP chunk upload processing"
+  },
 
   // MSP Counters
   msp_storage_requests_total: {
@@ -143,6 +149,26 @@ export const ALL_STORAGEHUB_METRICS: Record<string, MetricDefinition> = {
     labels: ["status"],
     description: "MSP bucket move events"
   },
+  msp_bucket_move_retries_total: {
+    name: "storagehub_msp_bucket_move_retries_total",
+    type: "counter",
+    labels: ["status"],
+    description: "MSP bucket move retry attempts"
+  },
+  msp_forest_verifications_total: {
+    name: "storagehub_msp_forest_verifications_total",
+    type: "counter",
+    labels: ["status"],
+    description: "MSP forest verification events"
+  },
+
+  // SP Counters
+  sp_slash_submissions_total: {
+    name: "storagehub_sp_slash_submissions_total",
+    type: "counter",
+    labels: ["status"],
+    description: "SP slash extrinsic submissions"
+  },
 
   // Other Counters
   insolvent_users_processed_total: {
@@ -176,6 +202,12 @@ export const ALL_STORAGEHUB_METRICS: Record<string, MetricDefinition> = {
     type: "histogram",
     labels: ["status"],
     description: "File transfer duration"
+  },
+  msp_forest_verification_seconds: {
+    name: "storagehub_msp_forest_verification_seconds",
+    type: "histogram",
+    labels: ["status"],
+    description: "MSP forest verification duration"
   },
 
   // Download Metrics

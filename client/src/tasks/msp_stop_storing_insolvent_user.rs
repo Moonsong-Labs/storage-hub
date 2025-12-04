@@ -259,15 +259,21 @@ where
         let mut file_storage_write = file_storage.write().await;
 
         // Delete all files in the bucket from the file storage.
-        file_storage_write
-            .delete_files_with_prefix(
-                &event
-                    .bucket_id
-                    .as_ref()
-                    .try_into()
-                    .map_err(|_| anyhow!("Invalid bucket id"))?,
-            )
-            .map_err(|e| anyhow!("Failed to delete files with prefix: {:?}", e))?;
+        if let Err(e) = file_storage_write.delete_files_with_prefix(
+            &event
+                .bucket_id
+                .as_ref()
+                .try_into()
+                .map_err(|_| anyhow!("Invalid bucket id"))?,
+        ) {
+            // Increment metric for failed bucket deletion
+            inc_counter!(
+                handler: self.storage_hub_handler,
+                msp_buckets_deleted_total,
+                STATUS_FAILURE
+            );
+            return Err(anyhow!("Failed to delete files with prefix: {:?}", e));
+        }
 
         // Release the write-lock on the file storage.
         drop(file_storage_write);
@@ -277,6 +283,13 @@ where
             .forest_storage_handler
             .remove_forest_storage(&ForestStorageKey::from(event.bucket_id.as_ref().to_vec()))
             .await;
+
+        // Increment metric for successful bucket deletion
+        inc_counter!(
+            handler: self.storage_hub_handler,
+            msp_buckets_deleted_total,
+            STATUS_SUCCESS
+        );
 
         Ok(format!(
             "Handled FinalisedMspStopStoringBucketInsolventUser for bucket [{:x}] and MSP [{:x}]",

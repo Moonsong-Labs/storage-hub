@@ -12,7 +12,7 @@ await describeBspNet(
   {
     initialised: "multi",
     networkConfig: "standard",
-    prometheus: true
+    telemetry: true
   },
   ({ before, after, createUserApi, createBspApi, createApi, it, getLaunchResponse }) => {
     let userApi: EnrichedBspApi;

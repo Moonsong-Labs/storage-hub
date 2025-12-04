@@ -9,6 +9,8 @@ use crate::{
     download_state_store::DownloadStateStore,
     file_download_manager::BucketDownloadError,
     handler::StorageHubHandler,
+    inc_counter,
+    metrics::{STATUS_FAILURE, STATUS_SUCCESS},
     types::{MspForestStorageHandlerT, ShNodeType},
 };
 
@@ -214,17 +216,38 @@ where
                         target: LOG_TARGET,
                         "Successfully resumed bucket download for {:?}", bucket_id
                     );
+
+                    // Increment metric for successful bucket move retry
+                    inc_counter!(
+                        handler: self.storage_hub_handler,
+                        msp_bucket_move_retries_total,
+                        STATUS_SUCCESS
+                    );
                 }
                 Err(BucketDownloadError::AlreadyBeingDownloaded(_)) => {
                     info!(
                         target: LOG_TARGET,
                         "Bucket {:?} is already being downloaded by another task", bucket_id
                     );
+
+                    // Count as success since download is in progress
+                    inc_counter!(
+                        handler: self.storage_hub_handler,
+                        msp_bucket_move_retries_total,
+                        STATUS_SUCCESS
+                    );
                 }
                 Err(BucketDownloadError::DownloadFailed(e)) => {
                     error!(
                         target: LOG_TARGET,
                         "Failed to resume bucket download for {:?}: {:?}", bucket_id, e
+                    );
+
+                    // Increment metric for failed bucket move retry
+                    inc_counter!(
+                        handler: self.storage_hub_handler,
+                        msp_bucket_move_retries_total,
+                        STATUS_FAILURE
                     );
                     // Note: We don't mark as completed here so it can be retried later
                 }

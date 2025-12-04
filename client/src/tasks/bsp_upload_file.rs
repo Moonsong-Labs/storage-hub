@@ -190,9 +190,24 @@ where
         trace!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
 
         let file_complete = match self.handle_remote_upload_request_event(event.clone()).await {
-            Ok(complete) => complete,
+            Ok(complete) => {
+                // Increment metric for successfully received chunk upload
+                inc_counter!(
+                    handler: self.storage_hub_handler,
+                    bsp_upload_chunks_received_total,
+                    STATUS_SUCCESS
+                );
+                complete
+            }
             Err(e) => {
                 error!(target: LOG_TARGET, "Failed to handle remote upload request: {:?}", e);
+
+                // Increment metric for failed chunk upload
+                inc_counter!(
+                    handler: self.storage_hub_handler,
+                    bsp_upload_chunks_received_total,
+                    STATUS_FAILURE
+                );
 
                 // Send error response through FileTransferService
                 if let Err(e) = self

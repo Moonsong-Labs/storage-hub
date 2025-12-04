@@ -4,12 +4,15 @@ use shc_blockchain_service::{
     commands::BlockchainServiceCommandInterface, events::VerifyMspBucketForests,
 };
 use shc_common::{traits::StorageEnableRuntime, types::StorageProviderId};
+use shc_forest_manager::traits::ForestStorageHandler;
 
 use crate::{
     handler::StorageHubHandler,
+    inc_counter,
+    metrics::{STATUS_FAILURE, STATUS_SUCCESS},
+    observe_histogram,
     types::{ForestStorageKey, MspForestStorageHandlerT, ShNodeType},
 };
-use shc_forest_manager::traits::ForestStorageHandler;
 
 const LOG_TARGET: &str = "msp-verify-bucket-forests-task";
 
@@ -95,8 +98,12 @@ where
             return Ok("Skipped VerifyMspBucketForests: no buckets managed by MSP".to_string());
         }
 
+        // Start timing the verification process
+        let start_time = std::time::Instant::now();
+        let mut missing_forests = false;
+
         // Verify each bucket has a local forest storage instance
-        for bucket_id in buckets {
+        for bucket_id in &buckets {
             let key = ForestStorageKey::from(bucket_id.as_ref().to_vec());
             let has_instance = self
                 .storage_hub_handler
@@ -111,6 +118,7 @@ where
                     "CRITICAL❗️❗️ Missing local forest storage for bucket [{:?}] managed by this MSP",
                     bucket_id
                 );
+                missing_forests = true;
             } else {
                 info!(
                     target: LOG_TARGET,
@@ -120,7 +128,40 @@ where
             }
         }
 
-        info!(target: LOG_TARGET, "🌳 Verified local forest storage present for all buckets managed by this MSP");
+        // Record metrics based on verification result
+        let elapsed = start_time.elapsed();
+        if missing_forests {
+            // Increment failure counter and record duration with failure status
+            inc_counter!(
+                handler: self.storage_hub_handler,
+                msp_forest_verifications_total,
+                STATUS_FAILURE
+            );
+            observe_histogram!(
+                handler: self.storage_hub_handler,
+                msp_forest_verification_seconds,
+                STATUS_FAILURE,
+                elapsed.as_secs_f64()
+            );
+            return Err(anyhow::anyhow!(
+                "Missing local forest storage for one or more buckets managed by this MSP"
+            ));
+        }
+
+        // Increment success counter and record duration with success status
+        inc_counter!(
+            handler: self.storage_hub_handler,
+            msp_forest_verifications_total,
+            STATUS_SUCCESS
+        );
+        observe_histogram!(
+            handler: self.storage_hub_handler,
+            msp_forest_verification_seconds,
+            STATUS_SUCCESS,
+            elapsed.as_secs_f64()
+        );
+
+        info!(target: LOG_TARGET, "🌳 Verified local forest storage present for all {} buckets managed by this MSP in {:?}", buckets.len(), elapsed);
 
         Ok("Verified local forest storage for all buckets managed by this MSP".to_string())
     }

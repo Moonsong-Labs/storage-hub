@@ -116,6 +116,9 @@ pub struct StorageHubMetrics {
     /// Total download requests handled by BSP, labeled by status.
     pub bsp_download_requests_total: CounterVec<U64>,
 
+    /// Total chunk uploads received and processed by BSP, labeled by status.
+    pub bsp_upload_chunks_received_total: CounterVec<U64>,
+
     /// BSP proof generation duration in seconds, labeled by status.
     pub bsp_proof_generation_seconds: HistogramVec,
 
@@ -137,6 +140,19 @@ pub struct StorageHubMetrics {
 
     /// Total bucket moves processed by MSP, labeled by status.
     pub msp_bucket_moves_total: CounterVec<U64>,
+
+    /// Total bucket move retry attempts by MSP, labeled by status.
+    pub msp_bucket_move_retries_total: CounterVec<U64>,
+
+    /// Total forest verifications performed by MSP, labeled by status.
+    pub msp_forest_verifications_total: CounterVec<U64>,
+
+    /// MSP forest verification duration in seconds, labeled by status.
+    pub msp_forest_verification_seconds: HistogramVec,
+
+    // === SP Metrics ===
+    /// Total slash extrinsic submissions by any SP, labeled by status.
+    pub sp_slash_submissions_total: CounterVec<U64>,
 
     // === General Metrics ===
     /// Storage request processing duration in seconds, labeled by status.
@@ -233,6 +249,17 @@ impl StorageHubMetrics {
                 registry,
             )?,
 
+            bsp_upload_chunks_received_total: register(
+                CounterVec::new(
+                    Opts::new(
+                        "storagehub_bsp_upload_chunks_received_total",
+                        "Total number of chunk uploads received and processed by BSP",
+                    ),
+                    &["status"],
+                )?,
+                registry,
+            )?,
+
             bsp_proof_generation_seconds: register(
                 HistogramVec::new(
                     HistogramOpts::new(
@@ -306,6 +333,52 @@ impl StorageHubMetrics {
                     Opts::new(
                         "storagehub_msp_bucket_moves_total",
                         "Total number of bucket moves processed by MSP",
+                    ),
+                    &["status"],
+                )?,
+                registry,
+            )?,
+
+            msp_bucket_move_retries_total: register(
+                CounterVec::new(
+                    Opts::new(
+                        "storagehub_msp_bucket_move_retries_total",
+                        "Total number of bucket move retry attempts by MSP",
+                    ),
+                    &["status"],
+                )?,
+                registry,
+            )?,
+
+            msp_forest_verifications_total: register(
+                CounterVec::new(
+                    Opts::new(
+                        "storagehub_msp_forest_verifications_total",
+                        "Total number of forest verifications performed by MSP",
+                    ),
+                    &["status"],
+                )?,
+                registry,
+            )?,
+
+            msp_forest_verification_seconds: register(
+                HistogramVec::new(
+                    HistogramOpts::new(
+                        "storagehub_msp_forest_verification_seconds",
+                        "Time spent verifying forest storage by MSP",
+                    )
+                    .buckets(FAST_OP_BUCKETS.to_vec()),
+                    &["status"],
+                )?,
+                registry,
+            )?,
+
+            // SP metrics
+            sp_slash_submissions_total: register(
+                CounterVec::new(
+                    Opts::new(
+                        "storagehub_sp_slash_submissions_total",
+                        "Total number of slash extrinsic submissions by SP",
                     ),
                     &["status"],
                 )?,
