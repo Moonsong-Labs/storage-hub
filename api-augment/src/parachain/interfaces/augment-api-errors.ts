@@ -291,6 +291,15 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       FailedTypeConversion: AugmentedError<ApiType>;
       /**
+       * File has an active storage request and as such is not eligible for deletion.
+       * The user should use the `revoke_storage_request` extrinsic to revoke it first.
+       **/
+      FileHasActiveStorageRequest: AugmentedError<ApiType>;
+      /**
+       * File has an `IncompleteStorageRequest` associated with it and as such is not eligible for a new storage request
+       **/
+      FileHasIncompleteStorageRequest: AugmentedError<ApiType>;
+      /**
        * File key already pending deletion.
        **/
       FileKeyAlreadyPendingDeletion: AugmentedError<ApiType>;

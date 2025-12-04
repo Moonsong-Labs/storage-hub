@@ -4190,6 +4190,8 @@ declare module "@polkadot/types/lookup" {
     readonly isInvalidSignedOperation: boolean;
     readonly isFileKeyMismatch: boolean;
     readonly isIncompleteStorageRequestNotFound: boolean;
+    readonly isFileHasActiveStorageRequest: boolean;
+    readonly isFileHasIncompleteStorageRequest: boolean;
     readonly type:
       | "StorageRequestAlreadyRegistered"
       | "StorageRequestNotFound"
@@ -4284,7 +4286,9 @@ declare module "@polkadot/types/lookup" {
       | "InvalidProviderID"
       | "InvalidSignedOperation"
       | "FileKeyMismatch"
-      | "IncompleteStorageRequestNotFound";
+      | "IncompleteStorageRequestNotFound"
+      | "FileHasActiveStorageRequest"
+      | "FileHasIncompleteStorageRequest";
   }
 
   /** @name PalletProofsDealerProofSubmissionRecord (361) */
