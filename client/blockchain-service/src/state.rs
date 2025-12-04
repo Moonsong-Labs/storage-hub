@@ -207,7 +207,7 @@ impl FileDeletionRequestRightIndexName {
 }
 
 /// Current column families used by the blockchain service state store.
-/// 
+///
 /// Note: Deprecated column families are NOT listed here. They are automatically
 /// discovered via `DB::list_cf()` when opening the database, and then removed
 /// by the migration system.

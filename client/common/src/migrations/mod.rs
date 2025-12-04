@@ -255,7 +255,10 @@ impl MigrationRunner {
             "Running {} pending migration(s) from version {} to {}",
             pending.len(),
             current_version,
-            pending.last().map(|m| m.version()).unwrap_or(current_version)
+            pending
+                .last()
+                .map(|m| m.version())
+                .unwrap_or(current_version)
         );
 
         let mut applied_version = current_version;
