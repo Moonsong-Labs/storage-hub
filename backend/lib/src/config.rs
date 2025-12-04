@@ -247,7 +247,8 @@ impl Default for Config {
             },
             msp: MspConfig {
                 callback_url: DEFAULT_MSP_CALLBACK_URL.to_string(),
-                trusted_file_transfer_server_url: DEFAULT_MSP_TRUSTED_FILE_TRANSFER_SERVER_URL.to_string(),
+                trusted_file_transfer_server_url: DEFAULT_MSP_TRUSTED_FILE_TRANSFER_SERVER_URL
+                    .to_string(),
                 upload_retry_attempts: DEFAULT_UPLOAD_RETRY_ATTEMPTS,
                 upload_retry_delay_secs: DEFAULT_UPLOAD_RETRY_DELAY_SECS,
             },
