@@ -12926,7 +12926,9 @@ mod delete_file_tests {
                     "Incomplete storage request should exist"
                 );
                 assert!(
-                    IncompleteStorageRequests::<Test>::get(&file_key).unwrap().pending_bucket_removal,
+                    IncompleteStorageRequests::<Test>::get(&file_key)
+                        .unwrap()
+                        .pending_bucket_removal,
                     "Bucket should be in pending removals"
                 );
 
@@ -12948,7 +12950,9 @@ mod delete_file_tests {
                         location,
                         size,
                         fingerprint,
-                    }].try_into().unwrap(),
+                    }]
+                    .try_into()
+                    .unwrap(),
                     None,
                     forest_proof,
                 ));
@@ -13020,7 +13024,10 @@ mod delete_file_tests {
                     "Incomplete storage request should exist"
                 );
                 assert!(
-                    IncompleteStorageRequests::<Test>::get(&file_key).unwrap().pending_bsp_removals.contains(&bsp_id),
+                    IncompleteStorageRequests::<Test>::get(&file_key)
+                        .unwrap()
+                        .pending_bsp_removals
+                        .contains(&bsp_id),
                     "BSP should be in pending removals"
                 );
 
@@ -13042,7 +13049,9 @@ mod delete_file_tests {
                         location,
                         size,
                         fingerprint,
-                    }].try_into().unwrap(),
+                    }]
+                    .try_into()
+                    .unwrap(),
                     Some(bsp_id),
                     forest_proof,
                 ));
@@ -13082,7 +13091,11 @@ mod delete_file_tests {
                 // Issue storage request
                 assert_ok!(FileSystem::issue_storage_request(
                     RuntimeOrigin::signed(alice.clone()),
-                    bucket_id, location.clone(), fingerprint, size, msp_id,
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
                     PeerIds::<Test>::try_from(vec![]).unwrap(),
                     ReplicationTarget::Basic,
                 ));
@@ -13091,11 +13104,16 @@ mod delete_file_tests {
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
                 let file_key_with_proof = FileKeyWithProof {
                     file_key,
-                    proof: CompactProof { encoded_nodes: vec![file_key.as_ref().to_vec()] },
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
                 };
-                let forest_proof_confirm = CompactProof { encoded_nodes: vec![H256::default().as_ref().to_vec()] };
+                let forest_proof_confirm = CompactProof {
+                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                };
                 assert_ok!(FileSystem::bsp_confirm_storing(
-                    bsp_signed, forest_proof_confirm,
+                    bsp_signed,
+                    forest_proof_confirm,
                     BoundedVec::try_from(vec![file_key_with_proof]).unwrap(),
                 ));
 
@@ -13129,7 +13147,9 @@ mod delete_file_tests {
                         location,
                         size,
                         fingerprint,
-                    }].try_into().unwrap(),
+                    }]
+                    .try_into()
+                    .unwrap(),
                     None,
                     forest_proof,
                 ));
@@ -13148,7 +13168,9 @@ mod delete_file_tests {
                 );
                 let incomplete_storage_request = incomplete_storage_request.unwrap();
                 assert!(
-                    incomplete_storage_request.pending_bsp_removals.contains(&bsp_id),
+                    incomplete_storage_request
+                        .pending_bsp_removals
+                        .contains(&bsp_id),
                     "BSP should be in pending removals"
                 );
             });
@@ -13172,7 +13194,11 @@ mod delete_file_tests {
                 // after 1 BSP confirms and MSP accepts
                 assert_ok!(FileSystem::issue_storage_request(
                     RuntimeOrigin::signed(alice.clone()),
-                    bucket_id, location.clone(), fingerprint, size, msp_id,
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
                     PeerIds::<Test>::try_from(vec![]).unwrap(),
                     ReplicationTarget::Custom(2),
                 ));
@@ -13181,11 +13207,16 @@ mod delete_file_tests {
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
                 let file_key_with_proof = FileKeyWithProof {
                     file_key,
-                    proof: CompactProof { encoded_nodes: vec![file_key.as_ref().to_vec()] },
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
                 };
-                let forest_proof_confirm = CompactProof { encoded_nodes: vec![H256::default().as_ref().to_vec()] };
+                let forest_proof_confirm = CompactProof {
+                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                };
                 assert_ok!(FileSystem::bsp_confirm_storing(
-                    bsp_signed, forest_proof_confirm,
+                    bsp_signed,
+                    forest_proof_confirm,
                     BoundedVec::try_from(vec![file_key_with_proof]).unwrap(),
                 ));
 
@@ -13245,7 +13276,9 @@ mod delete_file_tests {
                         location,
                         size,
                         fingerprint,
-                    }].try_into().unwrap(),
+                    }]
+                    .try_into()
+                    .unwrap(),
                     Some(bsp_id),
                     forest_proof,
                 ));
@@ -13318,7 +13351,9 @@ mod delete_file_tests {
                         location,
                         size,
                         fingerprint,
-                    }].try_into().unwrap(),
+                    }]
+                    .try_into()
+                    .unwrap(),
                     None,
                     forest_proof,
                 ));
@@ -13484,7 +13519,9 @@ mod delete_file_tests {
                         location,
                         size,
                         fingerprint,
-                    }].try_into().unwrap(),
+                    }]
+                    .try_into()
+                    .unwrap(),
                     Some(bsp1_id),
                     forest_proof,
                 ));
