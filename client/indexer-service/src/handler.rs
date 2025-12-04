@@ -479,6 +479,13 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 .await?;
             }
             pallet_file_system::Event::StorageRequestRevoked { file_key } => {
+                // Mark storage request as revoked so it's not protected from deletion
+                File::update_step(
+                    conn,
+                    file_key.as_ref().to_vec(),
+                    FileStorageRequestStep::Revoked,
+                )
+                .await?;
                 // Delete file if it has no storage (not in bucket forest and no BSP associations)
                 // This happens when storage request is revoked before any BSPs or MSP confirms or accepted respectively.
                 File::delete_if_orphaned(conn, file_key.as_ref()).await?;
@@ -490,6 +497,13 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 bucket_id: _,
                 reason: _,
             } => {
+                // Mark storage request as rejected so it's not protected from deletion
+                File::update_step(
+                    conn,
+                    file_key.as_ref().to_vec(),
+                    FileStorageRequestStep::Rejected,
+                )
+                .await?;
                 // Delete file if it has no storage (not in bucket forest and no BSP associations)
                 // This happens when a storage request is rejected by the MSP.
                 // It is possible that there might be no BSP associations.

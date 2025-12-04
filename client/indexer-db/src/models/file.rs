@@ -24,6 +24,8 @@ pub enum FileStorageRequestStep {
     Requested = 0,
     Stored = 1,
     Expired = 2,
+    Revoked = 3,
+    Rejected = 4,
 }
 
 impl TryFrom<i32> for FileStorageRequestStep {
@@ -33,6 +35,8 @@ impl TryFrom<i32> for FileStorageRequestStep {
             0 => Ok(Self::Requested),
             1 => Ok(Self::Stored),
             2 => Ok(Self::Expired),
+            3 => Ok(Self::Revoked),
+            4 => Ok(Self::Rejected),
             _ => Err(v),
         }
     }
