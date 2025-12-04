@@ -396,7 +396,9 @@ const addContainer = async (
       PortBindings: {
         "9944/tcp": [{ HostPort: rpcPort.toString() }],
         [`${p2pPort}/tcp`]: [{ HostPort: p2pPort.toString() }],
-        ...(trustedFileTransferPort && { "7070/tcp": [{ HostPort: trustedFileTransferPort.toString() }] })
+        ...(trustedFileTransferPort && {
+          "7070/tcp": [{ HostPort: trustedFileTransferPort.toString() }]
+        })
       },
       Binds: [`${process.cwd()}/../docker/dev-keystores:${keystorePath}:rw`]
     },
@@ -415,8 +417,8 @@ const addContainer = async (
       // Only add database URL for MSP containers when indexer is enabled (MSP-only parameter)
       ...(providerType === "msp" && indexerEnabled
         ? [
-          `--msp-database-url=postgresql://postgres:postgres@${ShConsts.NODE_INFOS.indexerDb.containerName}:5432/storage_hub`
-        ]
+            `--msp-database-url=postgresql://postgres:postgres@${ShConsts.NODE_INFOS.indexerDb.containerName}:5432/storage_hub`
+          ]
         : []),
       bootNodeArg,
       ...(options?.additionalArgs || [])
