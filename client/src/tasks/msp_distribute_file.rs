@@ -93,7 +93,7 @@ where
 
         // Increment metric for files distributed
         inc_counter!(
-            self.storage_hub_handler,
+            handler: self.storage_hub_handler,
             msp_files_distributed_total,
             STATUS_PENDING
         );
@@ -114,7 +114,7 @@ where
 
             // Increment metric for failed file distribution
             inc_counter!(
-                self.storage_hub_handler,
+                handler: self.storage_hub_handler,
                 msp_files_distributed_total,
                 STATUS_FAILURE
             );
@@ -137,7 +137,7 @@ where
 
         // Increment metric for successful file distribution
         inc_counter!(
-            self.storage_hub_handler,
+            handler: self.storage_hub_handler,
             msp_files_distributed_total,
             STATUS_SUCCESS
         );

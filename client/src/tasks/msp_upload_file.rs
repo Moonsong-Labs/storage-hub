@@ -183,7 +183,7 @@ where
 
         // Increment metric for new storage request
         inc_counter!(
-            self.storage_hub_handler,
+            handler: self.storage_hub_handler,
             msp_storage_requests_total,
             STATUS_PENDING
         );
@@ -199,7 +199,7 @@ where
             Err(e) => {
                 // Increment metric for failed storage request
                 inc_counter!(
-                    self.storage_hub_handler,
+                    handler: self.storage_hub_handler,
                     msp_storage_requests_total,
                     STATUS_FAILURE
                 );
@@ -295,7 +295,7 @@ where
             Some(tx) => tx,
             None => {
                 inc_counter!(
-                    self.storage_hub_handler,
+                    handler: self.storage_hub_handler,
                     msp_storage_requests_total,
                     STATUS_FAILURE
                 );
@@ -315,7 +315,7 @@ where
             Some(StorageProviderId::MainStorageProvider(id)) => id,
             Some(StorageProviderId::BackupStorageProvider(_)) => {
                 inc_counter!(
-                    self.storage_hub_handler,
+                    handler: self.storage_hub_handler,
                     msp_storage_requests_total,
                     STATUS_FAILURE
                 );
@@ -325,7 +325,7 @@ where
             }
             None => {
                 inc_counter!(
-                    self.storage_hub_handler,
+                    handler: self.storage_hub_handler,
                     msp_storage_requests_total,
                     STATUS_FAILURE
                 );
@@ -479,7 +479,7 @@ where
             Ok(_) => {
                 // Increment metric for successfully responded storage requests
                 inc_counter_by!(
-                    self.storage_hub_handler,
+                    handler: self.storage_hub_handler,
                     msp_storage_requests_total,
                     STATUS_SUCCESS,
                     responded_requests_count
@@ -488,7 +488,7 @@ where
             Err(_) => {
                 // Increment metric for failed storage request responses
                 inc_counter_by!(
-                    self.storage_hub_handler,
+                    handler: self.storage_hub_handler,
                     msp_storage_requests_total,
                     STATUS_FAILURE,
                     responded_requests_count
@@ -578,7 +578,7 @@ where
 
         // Record histogram with status based on result
         observe_histogram!(
-            self.storage_hub_handler,
+            handler: self.storage_hub_handler,
             storage_request_seconds,
             if result.is_ok() {
                 STATUS_SUCCESS

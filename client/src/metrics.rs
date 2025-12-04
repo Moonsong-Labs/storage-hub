@@ -19,8 +19,23 @@ use substrate_prometheus_endpoint::{
     register, CounterVec, HistogramOpts, HistogramVec, Opts, PrometheusError, Registry, U64,
 };
 
-/// Duration buckets for histograms (in seconds): 10ms to 5min.
-const DURATION_BUCKETS: &[f64] = &[
+pub const LOG_TARGET: &str = "storagehub::metrics";
+
+/// Fast CPU-bound operations (proof generation): 1ms to 30s.
+/// Provides finer granularity for sub-10ms operations.
+const FAST_OP_BUCKETS: &[f64] = &[
+    0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0,
+];
+
+/// Network I/O operations (file transfers/downloads): 100ms to 30min.
+/// Extended range for large file operations that can take several minutes.
+const TRANSFER_BUCKETS: &[f64] = &[
+    0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0, 1800.0,
+];
+
+/// General request processing: 10ms to 5min.
+/// Balanced buckets for typical request-response patterns.
+const REQUEST_BUCKETS: &[f64] = &[
     0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 300.0,
 ];
 
@@ -52,16 +67,16 @@ impl MetricsLink {
         match registry {
             Some(r) => match StorageHubMetrics::register(r) {
                 Ok(metrics) => {
-                    log::info!("StorageHub Prometheus metrics registered successfully");
+                    log::info!(target: LOG_TARGET, "StorageHub Prometheus metrics registered successfully");
                     Self(Arc::new(Some(metrics)))
                 }
                 Err(e) => {
-                    log::warn!("Failed to register StorageHub Prometheus metrics: {}", e);
+                    log::error!(target: LOG_TARGET, "Failed to register StorageHub Prometheus metrics: {}", e);
                     Self(Arc::new(None))
                 }
             },
             None => {
-                log::warn!("No Prometheus registry provided, StorageHub metrics disabled");
+                log::warn!(target: LOG_TARGET, "No Prometheus registry provided, StorageHub metrics disabled");
                 Self(Arc::new(None))
             }
         }
@@ -224,7 +239,7 @@ impl StorageHubMetrics {
                         "storagehub_bsp_proof_generation_seconds",
                         "Time spent generating proofs by BSP",
                     )
-                    .buckets(DURATION_BUCKETS.to_vec()),
+                    .buckets(FAST_OP_BUCKETS.to_vec()),
                     &["status"],
                 )?,
                 registry,
@@ -304,7 +319,7 @@ impl StorageHubMetrics {
                         "storagehub_storage_request_seconds",
                         "Time spent processing storage requests",
                     )
-                    .buckets(DURATION_BUCKETS.to_vec()),
+                    .buckets(REQUEST_BUCKETS.to_vec()),
                     &["status"],
                 )?,
                 registry,
@@ -316,7 +331,7 @@ impl StorageHubMetrics {
                         "storagehub_file_transfer_seconds",
                         "Time spent transferring files",
                     )
-                    .buckets(DURATION_BUCKETS.to_vec()),
+                    .buckets(TRANSFER_BUCKETS.to_vec()),
                     &["status"],
                 )?,
                 registry,
@@ -373,7 +388,7 @@ impl StorageHubMetrics {
                         "storagehub_file_download_seconds",
                         "Time spent downloading files from peers",
                     )
-                    .buckets(DURATION_BUCKETS.to_vec()),
+                    .buckets(TRANSFER_BUCKETS.to_vec()),
                     &["status"],
                 )?,
                 registry,
@@ -388,21 +403,21 @@ impl StorageHubMetrics {
 ///
 /// ```ignore
 /// // With handler (calls handler.metrics())
-/// inc_counter!(self.storage_hub_handler, bsp_storage_requests_total, STATUS_SUCCESS);
+/// inc_counter!(handler: self.storage_hub_handler, bsp_storage_requests_total, STATUS_SUCCESS);
 ///
 /// // With direct metrics reference (Option<&StorageHubMetrics>)
-/// inc_counter!(self.metrics.as_ref() => bytes_downloaded_total, STATUS_SUCCESS);
+/// inc_counter!(metrics: self.metrics.as_ref(), bytes_downloaded_total, STATUS_SUCCESS);
 /// ```
 #[macro_export]
 macro_rules! inc_counter {
     // Handler pattern: calls $handler.metrics()
-    ($handler:expr, $metric:ident, $label:expr) => {
+    (handler: $handler:expr, $metric:ident, $label:expr) => {
         if let Some(m) = $handler.metrics() {
             m.$metric.with_label_values(&[$label]).inc();
         }
     };
     // Direct pattern: accepts Option<&StorageHubMetrics> directly
-    ($metrics:expr => $metric:ident, $label:expr) => {
+    (metrics: $metrics:expr, $metric:ident, $label:expr) => {
         if let Some(m) = $metrics {
             m.$metric.with_label_values(&[$label]).inc();
         }
@@ -415,21 +430,21 @@ macro_rules! inc_counter {
 ///
 /// ```ignore
 /// // With handler (calls handler.metrics())
-/// inc_counter_by!(self.storage_hub_handler, bsp_storage_requests_total, STATUS_SUCCESS, 5);
+/// inc_counter_by!(handler: self.storage_hub_handler, bsp_storage_requests_total, STATUS_SUCCESS, 5);
 ///
 /// // With direct metrics reference (Option<&StorageHubMetrics>)
-/// inc_counter_by!(self.metrics.as_ref() => bytes_downloaded_total, STATUS_SUCCESS, 1024);
+/// inc_counter_by!(metrics: self.metrics.as_ref(), bytes_downloaded_total, STATUS_SUCCESS, 1024);
 /// ```
 #[macro_export]
 macro_rules! inc_counter_by {
     // Handler pattern: calls $handler.metrics()
-    ($handler:expr, $metric:ident, $label:expr, $value:expr) => {
+    (handler: $handler:expr, $metric:ident, $label:expr, $value:expr) => {
         if let Some(m) = $handler.metrics() {
             m.$metric.with_label_values(&[$label]).inc_by($value);
         }
     };
     // Direct pattern: accepts Option<&StorageHubMetrics> directly
-    ($metrics:expr => $metric:ident, $label:expr, $value:expr) => {
+    (metrics: $metrics:expr, $metric:ident, $label:expr, $value:expr) => {
         if let Some(m) = $metrics {
             m.$metric.with_label_values(&[$label]).inc_by($value);
         }
@@ -442,21 +457,21 @@ macro_rules! inc_counter_by {
 ///
 /// ```ignore
 /// // With handler (calls handler.metrics())
-/// observe_histogram!(self.storage_hub_handler, storage_request_seconds, STATUS_SUCCESS, elapsed.as_secs_f64());
+/// observe_histogram!(handler: self.storage_hub_handler, storage_request_seconds, STATUS_SUCCESS, elapsed.as_secs_f64());
 ///
 /// // With direct metrics reference (Option<&StorageHubMetrics>)
-/// observe_histogram!(self.metrics.as_ref() => file_download_seconds, STATUS_SUCCESS, elapsed.as_secs_f64());
+/// observe_histogram!(metrics: self.metrics.as_ref(), file_download_seconds, STATUS_SUCCESS, elapsed.as_secs_f64());
 /// ```
 #[macro_export]
 macro_rules! observe_histogram {
     // Handler pattern: calls $handler.metrics()
-    ($handler:expr, $metric:ident, $label:expr, $value:expr) => {
+    (handler: $handler:expr, $metric:ident, $label:expr, $value:expr) => {
         if let Some(m) = $handler.metrics() {
             m.$metric.with_label_values(&[$label]).observe($value);
         }
     };
     // Direct pattern: accepts Option<&StorageHubMetrics> directly
-    ($metrics:expr => $metric:ident, $label:expr, $value:expr) => {
+    (metrics: $metrics:expr, $metric:ident, $label:expr, $value:expr) => {
         if let Some(m) = $metrics {
             m.$metric.with_label_values(&[$label]).observe($value);
         }

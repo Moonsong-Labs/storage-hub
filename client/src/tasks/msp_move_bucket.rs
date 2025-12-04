@@ -122,7 +122,7 @@ where
 
         // Increment metric for bucket moves
         inc_counter!(
-            self.storage_hub_handler,
+            handler: self.storage_hub_handler,
             msp_bucket_moves_total,
             STATUS_PENDING
         );
@@ -130,7 +130,7 @@ where
         if let Err(error) = self.handle_move_bucket_request(event.clone()).await {
             // Increment metric for failed bucket moves
             inc_counter!(
-                self.storage_hub_handler,
+                handler: self.storage_hub_handler,
                 msp_bucket_moves_total,
                 STATUS_FAILURE
             );
@@ -184,7 +184,7 @@ where
                 indexer_db_pool
             } else {
                 inc_counter!(
-                    self.storage_hub_handler,
+                    handler: self.storage_hub_handler,
                     msp_bucket_moves_total,
                     STATUS_FAILURE
                 );
@@ -204,7 +204,7 @@ where
         if files.is_empty() {
             // No files to download is a valid success
             inc_counter!(
-                self.storage_hub_handler,
+                handler: self.storage_hub_handler,
                 msp_bucket_moves_total,
                 STATUS_SUCCESS
             );
@@ -258,7 +258,7 @@ where
         match download_result {
             Ok(()) => {
                 inc_counter!(
-                    self.storage_hub_handler,
+                    handler: self.storage_hub_handler,
                     msp_bucket_moves_total,
                     STATUS_SUCCESS
                 );
@@ -276,7 +276,7 @@ where
             }
             Err(crate::file_download_manager::BucketDownloadError::DownloadFailed(e)) => {
                 inc_counter!(
-                    self.storage_hub_handler,
+                    handler: self.storage_hub_handler,
                     msp_bucket_moves_total,
                     STATUS_FAILURE
                 );

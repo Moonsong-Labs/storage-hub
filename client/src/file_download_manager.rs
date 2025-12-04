@@ -392,12 +392,14 @@ impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
 
         // Record successful download throughput metrics
         inc_counter_by!(
-            self.metrics.as_ref() => bytes_downloaded_total,
+            metrics: self.metrics.as_ref(),
+            bytes_downloaded_total,
             STATUS_SUCCESS,
             total_bytes as u64
         );
         inc_counter_by!(
-            self.metrics.as_ref() => chunks_downloaded_total,
+            metrics: self.metrics.as_ref(),
+            chunks_downloaded_total,
             STATUS_SUCCESS,
             processed_chunks as u64
         );
@@ -483,12 +485,14 @@ impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
                             .sum();
 
                         inc_counter_by!(
-                            self.metrics.as_ref() => bytes_downloaded_total,
+                            metrics: self.metrics.as_ref(),
+                            bytes_downloaded_total,
                             STATUS_FAILURE,
                             expected_bytes
                         );
                         inc_counter_by!(
-                            self.metrics.as_ref() => chunks_downloaded_total,
+                            metrics: self.metrics.as_ref(),
+                            chunks_downloaded_total,
                             STATUS_FAILURE,
                             chunk_batch.len() as u64
                         );
@@ -700,7 +704,8 @@ impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
         if !errors.is_empty() && !is_complete {
             // Record failed file download duration in histogram
             observe_histogram!(
-                self.metrics.as_ref() => file_download_seconds,
+                metrics: self.metrics.as_ref(),
+                file_download_seconds,
                 STATUS_FAILURE,
                 download_start.elapsed().as_secs_f64()
             );
@@ -712,7 +717,8 @@ impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
         } else {
             // Record successful file download duration in histogram
             observe_histogram!(
-                self.metrics.as_ref() => file_download_seconds,
+                metrics: self.metrics.as_ref(),
+                file_download_seconds,
                 STATUS_SUCCESS,
                 download_start.elapsed().as_secs_f64()
             );

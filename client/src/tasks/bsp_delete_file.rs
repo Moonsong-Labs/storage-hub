@@ -109,14 +109,14 @@ where
         match &result {
             Ok(_) => {
                 inc_counter!(
-                    self.storage_hub_handler,
+                    handler: self.storage_hub_handler,
                     bsp_files_deleted_total,
                     STATUS_SUCCESS
                 );
             }
             Err(_) => {
                 inc_counter!(
-                    self.storage_hub_handler,
+                    handler: self.storage_hub_handler,
                     bsp_files_deleted_total,
                     STATUS_FAILURE
                 );
@@ -164,7 +164,7 @@ where
             .await
             .ok_or_else(|| {
                 inc_counter!(
-                    self.storage_hub_handler,
+                    handler: self.storage_hub_handler,
                     bsp_files_deleted_total,
                     STATUS_FAILURE
                 );
@@ -245,7 +245,7 @@ where
                 .await
                 .ok_or_else(|| {
                     inc_counter!(
-                        self.storage_hub_handler,
+                        handler: self.storage_hub_handler,
                         bsp_files_deleted_total,
                         STATUS_FAILURE
                     );

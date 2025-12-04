@@ -188,7 +188,7 @@ where
             if failed_stop_storing_buckets > 0 {
                 // Increment metric for failed insolvent user processing
                 inc_counter!(
-                    self.storage_hub_handler,
+                    handler: self.storage_hub_handler,
                     insolvent_users_processed_total,
                     STATUS_FAILURE
                 );
@@ -201,7 +201,7 @@ where
             } else {
                 // Increment metric for successful insolvent user processing
                 inc_counter!(
-                    self.storage_hub_handler,
+                    handler: self.storage_hub_handler,
                     insolvent_users_processed_total,
                     STATUS_SUCCESS
                 );

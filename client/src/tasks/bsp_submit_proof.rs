@@ -176,7 +176,7 @@ where
 
         // Increment metric for proofs submitted
         inc_counter!(
-            self.storage_hub_handler,
+            handler: self.storage_hub_handler,
             bsp_proofs_submitted_total,
             STATUS_PENDING
         );
@@ -194,7 +194,7 @@ where
             Some(tx) => tx,
             None => {
                 inc_counter!(
-                    self.storage_hub_handler,
+                    handler: self.storage_hub_handler,
                     bsp_proofs_submitted_total,
                     STATUS_FAILURE
                 );
@@ -222,7 +222,7 @@ where
                 .await
                 .ok_or_else(|| {
                     inc_counter!(
-                        self.storage_hub_handler,
+                        handler: self.storage_hub_handler,
                         bsp_proofs_submitted_total,
                         STATUS_FAILURE
                     );
@@ -315,7 +315,7 @@ where
                 .await
                 .ok_or_else(|| {
                     inc_counter!(
-                        self.storage_hub_handler,
+                        handler: self.storage_hub_handler,
                         bsp_proofs_submitted_total,
                         STATUS_FAILURE
                     );
@@ -371,7 +371,7 @@ where
             Ok(_) => {
                 // Increment metric for successful proof submission
                 inc_counter!(
-                    self.storage_hub_handler,
+                    handler: self.storage_hub_handler,
                     bsp_proofs_submitted_total,
                     STATUS_SUCCESS
                 );
@@ -380,7 +380,7 @@ where
             Err(e) => {
                 // Increment metric for failed proof submission
                 inc_counter!(
-                    self.storage_hub_handler,
+                    handler: self.storage_hub_handler,
                     bsp_proofs_submitted_total,
                     STATUS_FAILURE
                 );
@@ -550,7 +550,7 @@ where
 
         // Record proof generation timing with appropriate status.
         observe_histogram!(
-            self.storage_hub_handler,
+            handler: self.storage_hub_handler,
             bsp_proof_generation_seconds,
             if result.is_ok() {
                 STATUS_SUCCESS

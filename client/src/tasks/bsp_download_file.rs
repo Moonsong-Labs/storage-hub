@@ -73,14 +73,14 @@ where
         match &result {
             Ok(_) => {
                 inc_counter!(
-                    self.storage_hub_handler,
+                    handler: self.storage_hub_handler,
                     bsp_download_requests_total,
                     STATUS_SUCCESS
                 );
             }
             Err(_) => {
                 inc_counter!(
-                    self.storage_hub_handler,
+                    handler: self.storage_hub_handler,
                     bsp_download_requests_total,
                     STATUS_FAILURE
                 );

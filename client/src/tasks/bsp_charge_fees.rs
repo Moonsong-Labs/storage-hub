@@ -153,7 +153,7 @@ where
                 Ok(submitted_transaction) => {
                     // Increment metric for successful fee charge
                     inc_counter!(
-                        self.storage_hub_handler,
+                        handler: self.storage_hub_handler,
                         bsp_fees_charged_total,
                         STATUS_SUCCESS
                     );
@@ -162,7 +162,7 @@ where
                 Err(e) => {
                     // Increment metric for failed fee charge
                     inc_counter!(
-                        self.storage_hub_handler,
+                        handler: self.storage_hub_handler,
                         bsp_fees_charged_total,
                         STATUS_FAILURE
                     );
@@ -205,7 +205,7 @@ where
             .await
             .ok_or_else(|| {
                 inc_counter!(
-                    self.storage_hub_handler,
+                    handler: self.storage_hub_handler,
                     insolvent_users_processed_total,
                     STATUS_FAILURE
                 );
@@ -231,7 +231,7 @@ where
 
             // Increment metric for successful insolvent user processing
             inc_counter!(
-                self.storage_hub_handler,
+                handler: self.storage_hub_handler,
                 insolvent_users_processed_total,
                 STATUS_SUCCESS
             );
@@ -275,7 +275,7 @@ where
             .await
             .ok_or_else(|| {
                 inc_counter!(
-                    self.storage_hub_handler,
+                    handler: self.storage_hub_handler,
                     insolvent_users_processed_total,
                     STATUS_FAILURE
                 );
@@ -336,7 +336,7 @@ where
             Some(tx) => tx,
             None => {
                 inc_counter!(
-                    self.storage_hub_handler,
+                    handler: self.storage_hub_handler,
                     insolvent_users_processed_total,
                     STATUS_FAILURE
                 );
@@ -358,7 +358,7 @@ where
             .await
             .ok_or_else(|| {
                 inc_counter!(
-                    self.storage_hub_handler,
+                    handler: self.storage_hub_handler,
                     insolvent_users_processed_total,
                     STATUS_FAILURE
                 );

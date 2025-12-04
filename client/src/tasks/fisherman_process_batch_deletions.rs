@@ -232,7 +232,7 @@ where
         if failures > 0 {
             // Increment metric for failed batch deletions
             inc_counter!(
-                self.storage_hub_handler,
+                handler: self.storage_hub_handler,
                 fisherman_batch_deletions_total,
                 STATUS_FAILURE
             );
@@ -257,7 +257,7 @@ where
         } else {
             // Increment metric for successful batch deletions
             inc_counter!(
-                self.storage_hub_handler,
+                handler: self.storage_hub_handler,
                 fisherman_batch_deletions_total,
                 STATUS_SUCCESS
             );

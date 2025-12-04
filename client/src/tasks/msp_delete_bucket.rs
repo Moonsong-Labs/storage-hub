@@ -85,7 +85,7 @@ where
         if let Err(e) = self.delete_bucket(&event.bucket_id).await {
             // Increment metric for failed bucket deletion
             inc_counter!(
-                self.storage_hub_handler,
+                handler: self.storage_hub_handler,
                 msp_buckets_deleted_total,
                 STATUS_FAILURE
             );
@@ -100,7 +100,7 @@ where
 
         // Increment metric for successful bucket deletion
         inc_counter!(
-            self.storage_hub_handler,
+            handler: self.storage_hub_handler,
             msp_buckets_deleted_total,
             STATUS_SUCCESS
         );
@@ -133,7 +133,7 @@ where
         if let Err(e) = self.delete_bucket(&event.bucket_id).await {
             // Increment metric for failed bucket deletion
             inc_counter!(
-                self.storage_hub_handler,
+                handler: self.storage_hub_handler,
                 msp_buckets_deleted_total,
                 STATUS_FAILURE
             );
@@ -148,7 +148,7 @@ where
 
         // Increment metric for successful bucket deletion
         inc_counter!(
-            self.storage_hub_handler,
+            handler: self.storage_hub_handler,
             msp_buckets_deleted_total,
             STATUS_SUCCESS
         );

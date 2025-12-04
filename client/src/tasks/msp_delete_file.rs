@@ -124,7 +124,7 @@ where
                 .await
                 .ok_or_else(|| {
                     inc_counter!(
-                        self.storage_hub_handler,
+                        handler: self.storage_hub_handler,
                         msp_files_deleted_total,
                         STATUS_FAILURE
                     );
@@ -145,13 +145,13 @@ where
                 // If file key is not in Forest, we can now safely remove it from the File Storage.
                 match self.remove_file_from_file_storage(&file_key.into()).await {
                     Ok(_) => inc_counter!(
-                        self.storage_hub_handler,
+                        handler: self.storage_hub_handler,
                         msp_files_deleted_total,
                         STATUS_SUCCESS
                     ),
                     Err(e) => {
                         inc_counter!(
-                            self.storage_hub_handler,
+                            handler: self.storage_hub_handler,
                             msp_files_deleted_total,
                             STATUS_FAILURE
                         );
@@ -196,7 +196,7 @@ where
             .await
             .ok_or_else(|| {
                 inc_counter!(
-                    self.storage_hub_handler,
+                    handler: self.storage_hub_handler,
                     msp_files_deleted_total,
                     STATUS_FAILURE
                 );
@@ -226,7 +226,7 @@ where
                 .get_metadata(&event.file_key.into())
                 .map_err(|e| {
                     inc_counter!(
-                        self.storage_hub_handler,
+                        handler: self.storage_hub_handler,
                         msp_files_deleted_total,
                         STATUS_FAILURE
                     );
@@ -243,13 +243,13 @@ where
                 .await
             {
                 Ok(_) => inc_counter!(
-                    self.storage_hub_handler,
+                    handler: self.storage_hub_handler,
                     msp_files_deleted_total,
                     STATUS_SUCCESS
                 ),
                 Err(e) => {
                     inc_counter!(
-                        self.storage_hub_handler,
+                        handler: self.storage_hub_handler,
                         msp_files_deleted_total,
                         STATUS_FAILURE
                     );

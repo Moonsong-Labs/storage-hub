@@ -160,7 +160,7 @@ where
                 Ok(submitted_transaction) => {
                     // Increment metric for successful fee charge
                     inc_counter!(
-                        self.storage_hub_handler,
+                        handler: self.storage_hub_handler,
                         msp_fees_charged_total,
                         STATUS_SUCCESS
                     );
@@ -169,7 +169,7 @@ where
                 Err(e) => {
                     // Increment metric for failed fee charge
                     inc_counter!(
-                        self.storage_hub_handler,
+                        handler: self.storage_hub_handler,
                         msp_fees_charged_total,
                         STATUS_FAILURE
                     );

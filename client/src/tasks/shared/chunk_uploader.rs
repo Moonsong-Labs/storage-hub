@@ -224,7 +224,7 @@ where
                             | Err(RequestFailure::NotConnected) => {
                                 // Record failed file transfer timing.
                                 observe_histogram!(
-                                    self.as_handler(),
+                                    handler: self.as_handler(),
                                     file_transfer_seconds,
                                     STATUS_FAILURE,
                                     start_time.elapsed().as_secs_f64()
@@ -234,7 +234,7 @@ where
                             Err(e) => {
                                 // Record failed file transfer timing.
                                 observe_histogram!(
-                                    self.as_handler(),
+                                    handler: self.as_handler(),
                                     file_transfer_seconds,
                                     STATUS_FAILURE,
                                     start_time.elapsed().as_secs_f64()
@@ -350,7 +350,7 @@ where
                             | Err(RequestFailure::NotConnected) => {
                                 // Record failed file transfer timing.
                                 observe_histogram!(
-                                    self.as_handler(),
+                                    handler: self.as_handler(),
                                     file_transfer_seconds,
                                     STATUS_FAILURE,
                                     start_time.elapsed().as_secs_f64()
@@ -360,7 +360,7 @@ where
                             Err(e) => {
                                 // Record failed file transfer timing.
                                 observe_histogram!(
-                                    self.as_handler(),
+                                    handler: self.as_handler(),
                                     file_transfer_seconds,
                                     STATUS_FAILURE,
                                     start_time.elapsed().as_secs_f64()
@@ -378,7 +378,7 @@ where
 
             // Record successful file transfer timing.
             observe_histogram!(
-                self.as_handler(),
+                handler: self.as_handler(),
                 file_transfer_seconds,
                 STATUS_SUCCESS,
                 start_time.elapsed().as_secs_f64()
