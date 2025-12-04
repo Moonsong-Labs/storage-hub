@@ -72,7 +72,6 @@ const SCHEMA_VERSION_KEY: &[u8] = b"version";
 
 /// Errors that can occur during migration operations.
 #[derive(Debug, Error)]
-#[non_exhaustive]
 pub enum MigrationError {
     #[error("RocksDB error: {0}")]
     RocksDb(#[from] rocksdb::Error),
