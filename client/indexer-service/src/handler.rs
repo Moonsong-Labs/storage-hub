@@ -353,13 +353,56 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 .await?;
 
                 let bsp = Bsp::get_by_onchain_bsp_id(conn, OnchainBspId::from(*bsp_id)).await?;
-                for (file_key, _file_metadata) in confirmed_file_keys {
+                for (file_key, file_metadata) in confirmed_file_keys {
                     // There can be multiple file records for a given file key if there were multiple
                     // storage requests for the same file key. We get the latest one created, which
                     // has to be the one that was confirmed, given that there can't be two storage
                     // requests for the same file key at the same time.
-                    let file =
-                        File::get_latest_by_file_key(conn, file_key.as_ref().to_vec()).await?;
+                    let file = match File::get_latest_by_file_key(conn, file_key.as_ref().to_vec())
+                        .await
+                    {
+                        Ok(file) => file,
+                        Err(diesel::result::Error::NotFound) => {
+                            log::info!(
+                                target: LOG_TARGET,
+                                "File record not found for file_key {:?} during BspConfirmedStoring. \
+                                Recreating from event metadata (recovery).",
+                                file_key
+                            );
+
+                            // Recreate the file record from the metadata in the event
+                            let bucket = Bucket::get_by_onchain_bucket_id(
+                                conn,
+                                file_metadata.bucket_id().to_vec(),
+                            )
+                            .await?;
+
+                            let size: u64 = file_metadata.file_size();
+                            let size: i64 = size.saturated_into();
+
+                            let block_hash_bytes = block_hash.as_bytes().to_vec();
+                            let tx_hash_bytes = evm_tx_hash.map(|h| h.as_bytes().to_vec());
+
+                            // Create file with Requested step since we will change it to Stored when the storage request is fulfilled
+                            File::create(
+                                conn,
+                                file_metadata.owner().clone(),
+                                file_key.as_ref().to_vec(),
+                                bucket.id,
+                                file_metadata.bucket_id().clone(),
+                                file_metadata.location().clone(),
+                                file_metadata.fingerprint().as_ref().to_vec(),
+                                size,
+                                FileStorageRequestStep::Requested,
+                                vec![], // No peer_ids available from confirmation event
+                                block_hash_bytes,
+                                tx_hash_bytes,
+                            )
+                            .await?
+                        }
+                        Err(e) => return Err(e),
+                    };
+
                     BspFile::create(conn, bsp.id, file.id).await?;
                 }
             }
@@ -455,13 +498,57 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             }
             pallet_file_system::Event::MspAcceptedStorageRequest {
                 file_key,
-                file_metadata: _,
+                file_metadata,
             } => {
                 // There can be multiple file records for a given file key if there were multiple
                 // storage requests for the same file key. We get the latest one created, which
                 // has to be the one that was accepted, given that there can't be two storage
                 // requests for the same file key at the same time.
-                let file = File::get_latest_by_file_key(conn, file_key.as_ref().to_vec()).await?;
+                let file = match File::get_latest_by_file_key(conn, file_key.as_ref().to_vec())
+                    .await
+                {
+                    Ok(file) => file,
+                    Err(diesel::result::Error::NotFound) => {
+                        log::info!(
+                            target: LOG_TARGET,
+                            "File record not found for file_key {:?} during MspAcceptedStorageRequest. \
+                            Recreating from event metadata (recovery).",
+                            file_key
+                        );
+
+                        // Recreate the file record from the metadata in the event
+                        let bucket = Bucket::get_by_onchain_bucket_id(
+                            conn,
+                            file_metadata.bucket_id().to_vec(),
+                        )
+                        .await?;
+
+                        let size: u64 = file_metadata.file_size();
+                        let size: i64 = size.saturated_into();
+
+                        let block_hash_bytes = block_hash.as_bytes().to_vec();
+                        let tx_hash_bytes = evm_tx_hash.map(|h| h.as_bytes().to_vec());
+
+                        // Create file with Requested step since we will change it to Stored when the storage request is fulfilled
+                        File::create(
+                            conn,
+                            file_metadata.owner().clone(),
+                            file_key.as_ref().to_vec(),
+                            bucket.id,
+                            file_metadata.bucket_id().clone(),
+                            file_metadata.location().clone(),
+                            file_metadata.fingerprint().as_ref().to_vec(),
+                            size,
+                            FileStorageRequestStep::Requested,
+                            vec![], // No peer_ids available from acceptance event
+                            block_hash_bytes,
+                            tx_hash_bytes,
+                        )
+                        .await?
+                    }
+                    Err(e) => return Err(e),
+                };
+
                 let bucket = Bucket::get_by_id(conn, file.bucket_id).await?;
                 if let Some(msp_id) = bucket.msp_id {
                     MspFile::create(conn, msp_id, file.id).await?;

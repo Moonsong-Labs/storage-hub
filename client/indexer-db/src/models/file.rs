@@ -323,7 +323,13 @@ impl File {
             let has_bsp = Self::has_bsp_associations(conn, file_record.id).await?;
             let is_in_bucket = file_record.is_in_bucket;
 
-            if !is_in_bucket && !has_bsp {
+            // Check if file has an active storage request that's not marked for deletion
+            // This prevents race conditions where deletion events arrive before confirmation events
+            let has_active_storage_request = file_record.step
+                == FileStorageRequestStep::Requested as i32
+                && file_record.deletion_status.is_none();
+
+            if !is_in_bucket && !has_bsp && !has_active_storage_request {
                 Self::delete(conn, file_record.id).await?;
                 log::debug!(
                     "Deleted orphaned file key: {:?} and id: {:?}",
@@ -332,11 +338,12 @@ impl File {
                 );
             } else {
                 log::debug!(
-                		"File with key {:?} and id {:?} still has storage (in_bucket: {}, BSP: {}), keeping it",
+                		"File with key {:?} and id {:?} still has storage (in_bucket: {}, BSP: {}, active_request: {}), keeping it",
                 		file_record.file_key,
                 		file_record.id,
                 		is_in_bucket,
                 		has_bsp,
+                		has_active_storage_request,
             		);
                 deleted_all = false;
             }
