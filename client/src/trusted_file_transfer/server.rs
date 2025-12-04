@@ -225,7 +225,7 @@ where
     let file_key_hash = sp_core::H256::from_slice(&file_key_bytes);
 
     // Process the streamed chunks
-    match process_chunk_stream(&context, &file_key_hash, body).await {
+    match process_chunk_stream(&context.file_storage, &file_key_hash, body).await {
         Ok(_) => {
             if let Err(e) = handle_file_complete(&context, &file_key_hash).await {
                 return (
