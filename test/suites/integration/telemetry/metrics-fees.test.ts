@@ -6,7 +6,7 @@ await describeMspNet(
   {
     initialised: false,
     indexer: true,
-    prometheus: true
+    telemetry: true
   },
   ({ before, createUserApi, createBspApi, createMsp1Api, it }) => {
     let userApi: EnrichedBspApi;

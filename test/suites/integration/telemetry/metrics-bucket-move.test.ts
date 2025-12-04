@@ -17,7 +17,7 @@ await describeMspNet(
   {
     initialised: false,
     indexer: true,
-    prometheus: true
+    telemetry: true
   },
   ({ before, createMsp1Api, createMsp2Api, createBspApi, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
@@ -322,7 +322,9 @@ await describeMspNet(
       // Note: BSP bucket move metrics increment when BSP processes the bucket move notification
       // This may take additional blocks to propagate
       console.log(
-        `BSP bucket moves delta - pending: ${finalBspPending - initialBspPending}, success: ${finalBspSuccess - initialBspSuccess}`
+        `BSP bucket moves delta - pending: ${
+          finalBspPending - initialBspPending
+        }, success: ${finalBspSuccess - initialBspSuccess}`
       );
     });
   }

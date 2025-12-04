@@ -9,7 +9,7 @@ await describeMspNet(
     fisherman: true,
     indexerMode: "fishing",
     standaloneIndexer: true,
-    prometheus: true
+    telemetry: true
   },
   ({
     before,
@@ -146,7 +146,9 @@ await describeMspNet(
 
       for (const m of metricsReport) {
         console.log(
-          `| ${m.name} | ${m.type} | ${m.queryable ? "✓" : "✗"} | ${m.hasData ? "✓" : "✗"} | ${m.value} |`
+          `| ${m.name} | ${m.type} | ${m.queryable ? "✓" : "✗"} | ${
+            m.hasData ? "✓" : "✗"
+          } | ${m.value} |`
         );
       }
 
@@ -238,7 +240,9 @@ await describeMspNet(
         "sum(storagehub_bsp_storage_requests_total) + sum(storagehub_msp_storage_requests_total)"
       );
       console.log(
-        `  Total storage requests (BSP + MSP): ${totalStorageRequests.data.result[0]?.value?.[1] ?? "N/A"}`
+        `  Total storage requests (BSP + MSP): ${
+          totalStorageRequests.data.result[0]?.value?.[1] ?? "N/A"
+        }`
       );
 
       // Average storage request duration

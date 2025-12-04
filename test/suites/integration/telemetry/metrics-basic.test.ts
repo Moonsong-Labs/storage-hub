@@ -6,7 +6,7 @@ await describeMspNet(
   {
     initialised: false,
     indexer: true,
-    prometheus: true
+    telemetry: true
   },
   ({ before, createUserApi, createMsp1Api, createBspApi, it }) => {
     let userApi: EnrichedBspApi;
@@ -195,7 +195,9 @@ await describeMspNet(
       // Only log informational - this metric may be 0 for direct uploads
       if (fileTransferCount > 0) {
         console.log(
-          `  Average file transfer time: ${(fileTransferSum / fileTransferCount).toFixed(3)} seconds`
+          `  Average file transfer time: ${(fileTransferSum / fileTransferCount).toFixed(
+            3
+          )} seconds`
         );
       } else {
         console.log("  (No peer-to-peer file transfers occurred in this test)");

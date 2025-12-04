@@ -15,7 +15,7 @@ await describeMspNet(
     fisherman: true,
     indexerMode: "fishing",
     standaloneIndexer: true,
-    prometheus: true
+    telemetry: true
   },
   ({
     before,
@@ -131,7 +131,9 @@ await describeMspNet(
         );
         const intentionPayload = intentionCodec.toU8a();
         const rawSignature = shUser.sign(intentionPayload);
-        const userSignature = userApi.createType("MultiSignature", { Sr25519: rawSignature });
+        const userSignature = userApi.createType("MultiSignature", {
+          Sr25519: rawSignature
+        });
 
         deletionCalls.push(
           userApi.tx.fileSystem.requestDeleteFile(
