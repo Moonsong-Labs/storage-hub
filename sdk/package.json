@@ -1,40 +1,40 @@
 {
-	"name": "@storagehub-sdk/root",
-	"private": true,
-	"version": "0.3.4",
-	"description": "Workspace root for StorageHub SDK monorepo",
-	"type": "module",
-	"workspaces": [
-		"core",
-		"msp-client",
-		"e2e",
-		"examples/node",
-		"examples/nextjs"
-	],
-	"scripts": {
-		"build": "pnpm run build:core && pnpm run build:msp-client",
-		"build:core": "pnpm --filter ./core run build",
-		"build:msp-client": "pnpm --filter ./msp-client run build",
-		"clean": "node scripts/clean.js",
-		"coverage": "pnpm --filter ./core run coverage && pnpm --filter ./msp-client run coverage",
-		"fmt": "pnpm -r fmt",
-		"fmt:fix": "pnpm -r fmt:fix",
-		"lint": "pnpm -r lint",
-		"lint:fix": "pnpm -r lint:fix",
-		"test": "pnpm run test:core && pnpm run test:msp-client",
-		"test:core": "pnpm --filter ./core run test -- --run",
-		"test:msp-client": "pnpm --filter ./msp-client run test -- --run",
-		"typecheck": "pnpm --filter ./core run typecheck && pnpm --filter ./msp-client run typecheck"
-	},
-	"devDependencies": {
-		"@biomejs/biome": "2.2.4",
-		"@vitest/coverage-v8": "^3.2.4",
-		"esbuild": "^0.25.11",
-		"lint-staged": "^16.2.5",
-		"typescript": "~5.5.4",
-		"vitest": "^3.2.4"
-	},
-	"engines": {
-		"node": ">=22"
-	}
+  "name": "@storagehub-sdk/root",
+  "private": true,
+  "version": "0.3.4",
+  "description": "Workspace root for StorageHub SDK monorepo",
+  "type": "module",
+  "workspaces": [
+    "core",
+    "msp-client",
+    "e2e",
+    "examples/node",
+    "examples/nextjs"
+  ],
+  "scripts": {
+    "build": "pnpm run build:core && pnpm run build:msp-client",
+    "build:core": "pnpm --filter ./core run build",
+    "build:msp-client": "pnpm --filter ./msp-client run build",
+    "clean": "node scripts/clean.js",
+    "coverage": "pnpm --filter ./core run coverage && pnpm --filter ./msp-client run coverage",
+    "fmt": "pnpm -r fmt",
+    "fmt:fix": "pnpm -r fmt:fix",
+    "lint": "pnpm -r lint",
+    "lint:fix": "pnpm -r lint:fix",
+    "test": "pnpm run test:core && pnpm run test:msp-client",
+    "test:core": "pnpm --filter ./core run test -- --run",
+    "test:msp-client": "pnpm --filter ./msp-client run test -- --run",
+    "typecheck": "pnpm --filter ./core run typecheck && pnpm --filter ./msp-client run typecheck"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.2.4",
+    "@vitest/coverage-v8": "^3.2.4",
+    "esbuild": "^0.25.11",
+    "lint-staged": "^16.2.5",
+    "typescript": "~5.5.4",
+    "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">=22"
+  }
 }
