@@ -1,7 +1,6 @@
 //! File encoding/decoding utilities
 
 use axum::body::Body;
-use sc_tracing::tracing::info;
 use shc_common::types::{ChunkId, FILE_CHUNK_SIZE};
 use shc_file_manager::traits::FileStorageWriteOutcome;
 use shp_file_metadata::Chunk;
@@ -136,8 +135,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_chunk_stream_exact_multiple_of_chunk_size() {
+        use shc_file_manager::in_memory::InMemoryFileDataTrie;
+        use shc_file_manager::traits::FileDataTrie;
+
         let chunk_count = 3;
         let file_size = FILE_CHUNK_SIZE * chunk_count;
+
+        let mut temp_trie = InMemoryFileDataTrie::<StorageProofsMerkleTrieLayout>::new();
+        for i in 0..chunk_count {
+            let chunk_id = ChunkId::new(i);
+            let chunk_data = vec![i as u8; FILE_CHUNK_SIZE as usize];
+            temp_trie.write_chunk(&chunk_id, &chunk_data).unwrap();
+        }
+        let expected_fingerprint = temp_trie.get_root().as_ref();
 
         let mut encoded_data = Vec::new();
         for i in 0..chunk_count {
@@ -155,14 +165,14 @@ mod tests {
             [1u8; 32].to_vec(),
             b"test_location".to_vec(),
             file_size,
-            [0u8; 32],
+            expected_fingerprint.into(),
         )
         .unwrap();
 
         file_storage.insert_file(file_key, metadata).unwrap();
         let file_storage = Arc::new(RwLock::new(file_storage));
 
-        let result = process_chunk_stream(&file_storage, &file_key, body)
+        process_chunk_stream(&file_storage, &file_key, body)
             .await
             .unwrap();
 
@@ -177,9 +187,25 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_chunk_stream_not_multiple_of_chunk_size() {
+        use shc_file_manager::in_memory::InMemoryFileDataTrie;
+        use shc_file_manager::traits::FileDataTrie;
+
         let full_chunk_count = 3;
         let partial_chunk_size = 512;
         let file_size = (FILE_CHUNK_SIZE * full_chunk_count) + partial_chunk_size;
+
+        let mut temp_trie = InMemoryFileDataTrie::<StorageProofsMerkleTrieLayout>::new();
+        for i in 0..full_chunk_count {
+            let chunk_id = ChunkId::new(i);
+            let chunk_data = vec![i as u8; FILE_CHUNK_SIZE as usize];
+            temp_trie.write_chunk(&chunk_id, &chunk_data).unwrap();
+        }
+        let last_chunk_id = ChunkId::new(full_chunk_count);
+        let last_chunk_data = vec![99u8; partial_chunk_size as usize];
+        temp_trie
+            .write_chunk(&last_chunk_id, &last_chunk_data)
+            .unwrap();
+        let expected_fingerprint = temp_trie.get_root().as_ref();
 
         let mut encoded_data = Vec::new();
 
@@ -189,8 +215,6 @@ mod tests {
             encoded_data.extend_from_slice(&encode_chunk(chunk_id, &chunk_data));
         }
 
-        let last_chunk_id = ChunkId::new(full_chunk_count);
-        let last_chunk_data = vec![99u8; partial_chunk_size as usize];
         encoded_data.extend_from_slice(&encode_chunk(last_chunk_id, &last_chunk_data));
 
         let body = Body::from(encoded_data);
@@ -202,22 +226,17 @@ mod tests {
             [1u8; 32].to_vec(),
             b"test_location".to_vec(),
             file_size,
-            [0u8; 32],
+            expected_fingerprint.into(),
         )
         .unwrap();
 
         file_storage.insert_file(file_key, metadata).unwrap();
         let file_storage = Arc::new(RwLock::new(file_storage));
 
-        // Process the chunk stream
-        let result = process_chunk_stream(&file_storage, &file_key, body).await;
-        assert!(
-            result.is_ok(),
-            "process_chunk_stream failed: {:?}",
-            result.err()
-        );
+        process_chunk_stream(&file_storage, &file_key, body)
+            .await
+            .unwrap();
 
-        // Verify all full chunks were written
         let storage = file_storage.read().await;
         for i in 0..full_chunk_count {
             let chunk_id = ChunkId::new(i);
@@ -226,7 +245,6 @@ mod tests {
             assert_eq!(chunk.unwrap(), vec![i as u8; FILE_CHUNK_SIZE as usize]);
         }
 
-        // Verify partial chunk was written
         let last_chunk = storage.get_chunk(&file_key, &last_chunk_id);
         assert!(last_chunk.is_ok(), "Partial chunk not found");
         assert_eq!(last_chunk.unwrap(), vec![99u8; partial_chunk_size as usize]);
