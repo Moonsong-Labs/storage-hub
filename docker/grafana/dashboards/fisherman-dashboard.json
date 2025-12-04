@@ -13,7 +13,7 @@
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
       "id": 1,
       "panels": [],
-      "title": "Batch Deletions Overview",
+      "title": "Overview",
       "type": "row"
     },
     {
@@ -24,14 +24,12 @@
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
-            "steps": [
-              { "color": "blue", "value": null }
-            ]
+            "steps": [{ "color": "blue", "value": null }]
           }
         },
         "overrides": []
       },
-      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 1 },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
       "id": 2,
       "options": {
         "colorMode": "value",
@@ -61,19 +59,64 @@
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 50 },
+              { "color": "yellow", "value": 75 },
+              { "color": "green", "value": 90 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+      "id": 3,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(storagehub_fisherman_batch_deletions_total{status=\"success\"}) / sum(storagehub_fisherman_batch_deletions_total) * 100",
+          "legendFormat": "Success Rate",
+          "refId": "A"
+        }
+      ],
+      "title": "Batch Deletion Success Rate",
+      "type": "gauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
           "color": { "mode": "thresholds" },
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null }
-            ]
+            "steps": [{ "color": "green", "value": null }]
           }
         },
         "overrides": []
       },
-      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 1 },
-      "id": 3,
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+      "id": 4,
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -95,7 +138,7 @@
           "refId": "A"
         }
       ],
-      "title": "Successful Batch Deletions",
+      "title": "Successful Deletions",
       "type": "stat"
     },
     {
@@ -106,15 +149,13 @@
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
-            "steps": [
-              { "color": "red", "value": null }
-            ]
+            "steps": [{ "color": "red", "value": null }]
           }
         },
         "overrides": []
       },
-      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 1 },
-      "id": 4,
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+      "id": 5,
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -136,63 +177,16 @@
           "refId": "A"
         }
       ],
-      "title": "Failed Batch Deletions",
+      "title": "Failed Deletions",
       "type": "stat"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 7 },
-      "id": 5,
-      "panels": [],
-      "title": "Success Rate & Trends",
-      "type": "row"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "max": 100,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 50 },
-              { "color": "yellow", "value": 75 },
-              { "color": "green", "value": 90 }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
       "id": 6,
-      "options": {
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "(storagehub_fisherman_batch_deletions_total{status=\"success\"} / sum(storagehub_fisherman_batch_deletions_total)) * 100",
-          "legendFormat": "Success Rate",
-          "refId": "A"
-        }
-      ],
-      "title": "Success Rate",
-      "type": "gauge"
+      "panels": [],
+      "title": "Batch Deletions Over Time",
+      "type": "row"
     },
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
@@ -212,7 +206,90 @@
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
             "insertNulls": false,
             "lineInterpolation": "linear",
-            "lineWidth": 1,
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          },
+          "unit": "reqps"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Success" },
+            "properties": [
+              {
+                "id": "color",
+                "value": { "fixedColor": "green", "mode": "fixed" }
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Failure" },
+            "properties": [
+              {
+                "id": "color",
+                "value": { "fixedColor": "red", "mode": "fixed" }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "rate(storagehub_fisherman_batch_deletions_total{status=\"success\"}[5m])",
+          "legendFormat": "Success",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "rate(storagehub_fisherman_batch_deletions_total{status=\"failure\"}[5m])",
+          "legendFormat": "Failure",
+          "refId": "B"
+        }
+      ],
+      "title": "Batch Deletions Rate Over Time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
             "pointSize": 5,
             "scaleDistribution": { "type": "linear" },
             "showPoints": "auto",
@@ -229,45 +306,60 @@
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "Success Rate" },
-            "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
+            "matcher": { "id": "byName", "options": "Success" },
+            "properties": [
+              {
+                "id": "color",
+                "value": { "fixedColor": "green", "mode": "fixed" }
+              }
+            ]
           },
           {
-            "matcher": { "id": "byName", "options": "Failure Rate" },
-            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+            "matcher": { "id": "byName", "options": "Failure" },
+            "properties": [
+              {
+                "id": "color",
+                "value": { "fixedColor": "red", "mode": "fixed" }
+              }
+            ]
           }
         ]
       },
-      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 8 },
-      "id": 7,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "id": 8,
       "options": {
-        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "single", "sort": "none" }
+        "legend": {
+          "calcs": ["mean", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "mode": "multi", "sort": "desc" }
       },
       "pluginVersion": "10.0.0",
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(storagehub_fisherman_batch_deletions_total{status=\"success\"}[5m])",
-          "legendFormat": "Success Rate",
+          "expr": "increase(storagehub_fisherman_batch_deletions_total{status=\"success\"}[1h])",
+          "legendFormat": "Success",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(storagehub_fisherman_batch_deletions_total{status=\"failure\"}[5m])",
-          "legendFormat": "Failure Rate",
+          "expr": "increase(storagehub_fisherman_batch_deletions_total{status=\"failure\"}[1h])",
+          "legendFormat": "Failure",
           "refId": "B"
         }
       ],
-      "title": "Batch Deletions Over Time",
+      "title": "Batch Deletions (Last Hour Increase)",
       "type": "timeseries"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 },
-      "id": 8,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "id": 9,
       "panels": [],
-      "title": "Distribution",
+      "title": "Distribution Analysis",
       "type": "row"
     },
     {
@@ -275,25 +367,42 @@
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
-          "custom": { "hideFrom": { "legend": false, "tooltip": false, "viz": false } },
+          "custom": {
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false }
+          },
           "mappings": []
         },
         "overrides": [
           {
             "matcher": { "id": "byName", "options": "success" },
-            "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
+            "properties": [
+              {
+                "id": "color",
+                "value": { "fixedColor": "green", "mode": "fixed" }
+              }
+            ]
           },
           {
             "matcher": { "id": "byName", "options": "failure" },
-            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+            "properties": [
+              {
+                "id": "color",
+                "value": { "fixedColor": "red", "mode": "fixed" }
+              }
+            ]
           }
         ]
       },
-      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 17 },
-      "id": 9,
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 15 },
+      "id": 10,
       "options": {
         "displayLabels": ["name", "percent"],
-        "legend": { "displayMode": "list", "placement": "right", "showLegend": true, "values": ["value"] },
+        "legend": {
+          "displayMode": "list",
+          "placement": "right",
+          "showLegend": true,
+          "values": ["value"]
+        },
         "pieType": "pie",
         "reduceOptions": {
           "calcs": ["lastNotNull"],
@@ -350,19 +459,34 @@
         "overrides": [
           {
             "matcher": { "id": "byName", "options": "success" },
-            "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
+            "properties": [
+              {
+                "id": "color",
+                "value": { "fixedColor": "green", "mode": "fixed" }
+              }
+            ]
           },
           {
             "matcher": { "id": "byName", "options": "failure" },
-            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+            "properties": [
+              {
+                "id": "color",
+                "value": { "fixedColor": "red", "mode": "fixed" }
+              }
+            ]
           }
         ]
       },
-      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 17 },
-      "id": 10,
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 15 },
+      "id": 11,
       "options": {
-        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "single", "sort": "none" }
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "mode": "multi", "sort": "desc" }
       },
       "pluginVersion": "10.0.0",
       "targets": [
@@ -373,7 +497,7 @@
           "refId": "A"
         }
       ],
-      "title": "Batch Deletions (Last Hour)",
+      "title": "Batch Deletions Stacked (Last Hour)",
       "type": "timeseries"
     }
   ],
