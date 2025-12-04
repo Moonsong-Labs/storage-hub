@@ -16071,7 +16071,7 @@ dependencies = [
 
 [[package]]
 name = "sh-msp-backend"
-version = "0.1.1"
+version = "0.2.3"
 dependencies = [
  "anyhow",
  "axum",
@@ -16085,7 +16085,7 @@ dependencies = [
 
 [[package]]
 name = "sh-msp-backend-lib"
-version = "0.1.1"
+version = "0.2.3"
 dependencies = [
  "alloy-core",
  "alloy-signer",
