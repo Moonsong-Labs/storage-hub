@@ -340,7 +340,6 @@ where
                 }
             }
 
-            // Configure trusted file transfer HTTP server if enabled
             if *trusted_file_transfer_server {
                 let file_transfer_config = shc_client::trusted_file_transfer::server::Config {
                     host: trusted_file_transfer_server_host

@@ -370,7 +370,7 @@ pub struct ProviderConfigurations {
     )]
     pub msp_database_url: Option<String>,
 
-    /// Enable the trusted file transfer HTTP server for receiving files from trusted backends.
+    /// Enable the trusted file transfer HTTP server
     #[arg(
         long,
         value_name = "BOOLEAN",

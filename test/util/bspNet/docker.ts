@@ -355,7 +355,7 @@ const addContainer = async (
   // Use allContainersCount for p2p port to avoid conflicts between BSPs and MSPs
   const p2pPort = 30350 + allContainersCount;
   const rpcPort = 9888 + allContainersCount * 7;
-  const fileTransferPort = providerType === "msp" ? 7070 + allContainersCount : undefined;
+  const trustedFileTransferPort = providerType === "msp" ? 7070 + allContainersCount : undefined;
   const containerName = options?.name || `storage-hub-sh-${providerType}-${containerCount + 1}`;
 
   // Get bootnode from docker args
@@ -396,7 +396,7 @@ const addContainer = async (
       PortBindings: {
         "9944/tcp": [{ HostPort: rpcPort.toString() }],
         [`${p2pPort}/tcp`]: [{ HostPort: p2pPort.toString() }],
-        ...(fileTransferPort && { "7070/tcp": [{ HostPort: fileTransferPort.toString() }] })
+        ...(trustedFileTransferPort && { "7070/tcp": [{ HostPort: trustedFileTransferPort.toString() }] })
       },
       Binds: [`${process.cwd()}/../docker/dev-keystores:${keystorePath}:rw`]
     },
@@ -415,8 +415,8 @@ const addContainer = async (
       // Only add database URL for MSP containers when indexer is enabled (MSP-only parameter)
       ...(providerType === "msp" && indexerEnabled
         ? [
-            `--msp-database-url=postgresql://postgres:postgres@${ShConsts.NODE_INFOS.indexerDb.containerName}:5432/storage_hub`
-          ]
+          `--msp-database-url=postgresql://postgres:postgres@${ShConsts.NODE_INFOS.indexerDb.containerName}:5432/storage_hub`
+        ]
         : []),
       bootNodeArg,
       ...(options?.additionalArgs || [])
@@ -464,10 +464,10 @@ const addContainer = async (
   await api.disconnect();
 
   console.log(
-    `▶️ ${providerType.toUpperCase()} container started with name: ${containerName}, rpc port: ${rpcPort}, p2p port: ${p2pPort}${fileTransferPort ? `, file transfer port: ${fileTransferPort}` : ""}, peerId: ${peerId}`
+    `▶️ ${providerType.toUpperCase()} container started with name: ${containerName}, rpc port: ${rpcPort}, p2p port: ${p2pPort}${trustedFileTransferPort ? `, file transfer port: ${trustedFileTransferPort}` : ""}, peerId: ${peerId}`
   );
 
-  return { containerName, rpcPort, p2pPort, peerId, fileTransferPort };
+  return { containerName, rpcPort, p2pPort, peerId, trustedFileTransferPort };
 };
 
 // Make this a rusty style OO function with api contexts
