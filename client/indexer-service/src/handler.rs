@@ -363,6 +363,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     {
                         Ok(file) => file,
                         Err(diesel::result::Error::NotFound) => {
+                            // This can happen if the file was completely deleted from the DB (so all BSP and MSP associations were deleted)
+                            // but a storage request was still present on-chain so a BSP confirmed storing it.
                             log::info!(
                                 target: LOG_TARGET,
                                 "File record not found for file_key {:?} during BspConfirmedStoring. \
@@ -523,6 +525,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 {
                     Ok(file) => file,
                     Err(diesel::result::Error::NotFound) => {
+                        // This can happen if the file was completely deleted from the DB (so all BSP and MSP associations were deleted)
+                        // but a storage request was still present on-chain so the MSP accepted it.
                         log::info!(
                             target: LOG_TARGET,
                             "File record not found for file_key {:?} during MspAcceptedStorageRequest. \

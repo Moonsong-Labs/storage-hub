@@ -2902,6 +2902,11 @@ where
             // Check if there's an open storage request for this file key
             if let Some(storage_request) = StorageRequests::<T>::get(&file_key) {
                 // If there is, remove it and issue a `IncompleteStorageRequest` with the confirmed providers
+                // This is to avoid having a situation where:
+                // - The MSP accepted the existing storage request, but it's not fulfilled yet.
+                // - A deletion requests exists for the same file key, so the file is deleted from that MSP's bucket here.
+                // - A BSP confirms the storage request, and it gets fulfilled.
+                // This would result in the file being stored by the BSP, but not by the MSP.
                 Self::add_incomplete_storage_request(
                     *file_key,
                     IncompleteStorageRequestMetadata::from((&storage_request, file_key)),
@@ -3043,6 +3048,11 @@ where
             // Check if there's an open storage request for this file key
             if let Some(storage_request) = StorageRequests::<T>::get(&file_key) {
                 // If there is, remove it and issue a `IncompleteStorageRequest` with the confirmed providers
+                // This is to avoid having a situation where:
+                // - The MSP accepted the existing storage request, but it's not fulfilled yet.
+                // - A deletion requests exists for the same file key, so the file is deleted from that MSP's bucket here.
+                // - A BSP confirms the storage request, and it gets fulfilled.
+                // This would result in the file being stored by the BSP, but not by the MSP.
                 Self::add_incomplete_storage_request(
                     *file_key,
                     IncompleteStorageRequestMetadata::from((&storage_request, file_key)),
