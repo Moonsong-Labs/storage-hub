@@ -1,6 +1,7 @@
 //! File encoding/decoding utilities
 
 use axum::body::Body;
+use shc_common::trusted_file_transfer::{read_chunk_with_id_from_buffer, CHUNK_ID_SIZE};
 use shc_common::types::{ChunkId, FILE_CHUNK_SIZE};
 use shc_file_manager::traits::FileStorageWriteOutcome;
 use shp_file_metadata::Chunk;
@@ -9,16 +10,6 @@ use tokio_stream::StreamExt;
 use crate::types::FileStorageT;
 
 use tokio::sync::RwLock;
-
-pub const CHUNK_ID_SIZE: usize = 8; // sizeof(u64)
-
-/// Encodes a chunk ID and data pair into the wire format.
-pub fn encode_chunk(chunk_id: ChunkId, chunk_data: &[u8]) -> Vec<u8> {
-    let mut encoded = Vec::with_capacity(CHUNK_ID_SIZE + chunk_data.len());
-    encoded.extend_from_slice(&chunk_id.as_u64().to_le_bytes());
-    encoded.extend_from_slice(chunk_data);
-    encoded
-}
 
 /// Get chunks from a request body as a stream and write them to storage
 pub(crate) async fn process_chunk_stream<FL>(
@@ -39,7 +30,7 @@ where
         buffer.extend_from_slice(&bytes);
 
         while buffer.len() >= CHUNK_ID_SIZE + (FILE_CHUNK_SIZE as usize) {
-            let (chunk_id, chunk_data) = get_next_chunk(&mut buffer, true)?;
+            let (chunk_id, chunk_data) = read_chunk_with_id_from_buffer(&mut buffer, true)?;
             last_write_outcome =
                 write_chunk(file_storage, file_key, &chunk_id, &chunk_data).await?;
         }
@@ -48,7 +39,7 @@ where
     // Check if there's remaining data for the last chunk (This is the case when data is
     // smaller than FILE_CHUNK_SIZE)
     if !buffer.is_empty() {
-        let (chunk_id, chunk_data) = get_next_chunk(&mut buffer, false)?;
+        let (chunk_id, chunk_data) = read_chunk_with_id_from_buffer(&mut buffer, false)?;
         last_write_outcome = write_chunk(file_storage, file_key, &chunk_id, &chunk_data).await?;
     }
 
@@ -60,44 +51,6 @@ where
             "File incomplete after processing all chunks"
         ))
     }
-}
-
-/// Gets next chunk from buffer. If cap_at_file_chunk_size is set to true,
-/// it will get FILE_CHUNK_SIZE as data size, else it will use the remainder
-/// of the buffer (used for last chunk when data is not a multiple of FILE_CHUNK_SIZE).
-fn get_next_chunk(
-    buffer: &mut Vec<u8>,
-    cap_at_file_chunk_size: bool,
-) -> anyhow::Result<(ChunkId, Vec<u8>)> {
-    let min_data_size: usize = if cap_at_file_chunk_size {
-        FILE_CHUNK_SIZE as usize
-    } else {
-        1
-    };
-    let min_buffer_size = CHUNK_ID_SIZE + min_data_size;
-    if buffer.len() < min_buffer_size {
-        return Err(anyhow::anyhow!(
-            "Not enough bytes to extract chunk from buffer. Required at least {} bytes got {}.",
-            min_buffer_size,
-            buffer.len()
-        ));
-    }
-
-    let chunk_id_bytes: [u8; CHUNK_ID_SIZE] = buffer
-        .drain(..CHUNK_ID_SIZE)
-        .collect::<Vec<_>>()
-        .try_into()
-        .map_err(|_| anyhow::anyhow!("Failed to parse chunk ID"))?;
-    let chunk_id_value = u64::from_le_bytes(chunk_id_bytes);
-    let chunk_id = ChunkId::new(chunk_id_value);
-
-    let chunk_data = if cap_at_file_chunk_size {
-        let size = FILE_CHUNK_SIZE as usize;
-        buffer.drain(..size).collect()
-    } else {
-        std::mem::take(buffer)
-    };
-    Ok((chunk_id, chunk_data))
 }
 
 async fn write_chunk<FL>(
@@ -124,6 +77,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use shc_common::trusted_file_transfer::encode_chunk_with_id;
     use shc_common::types::{FileMetadata, StorageProofsMerkleTrieLayout};
     use shc_file_manager::in_memory::InMemoryFileStorage;
     use shc_file_manager::traits::FileStorage;
@@ -151,7 +105,7 @@ mod tests {
         for i in 0..chunk_count {
             let chunk_id = ChunkId::new(i);
             let chunk_data = vec![i as u8; FILE_CHUNK_SIZE as usize];
-            encoded_data.extend_from_slice(&encode_chunk(chunk_id, &chunk_data));
+            encoded_data.extend_from_slice(&encode_chunk_with_id(chunk_id, &chunk_data));
         }
 
         let body = Body::from(encoded_data);
@@ -210,10 +164,10 @@ mod tests {
         for i in 0..full_chunk_count {
             let chunk_id = ChunkId::new(i);
             let chunk_data = vec![i as u8; FILE_CHUNK_SIZE as usize];
-            encoded_data.extend_from_slice(&encode_chunk(chunk_id, &chunk_data));
+            encoded_data.extend_from_slice(&encode_chunk_with_id(chunk_id, &chunk_data));
         }
 
-        encoded_data.extend_from_slice(&encode_chunk(last_chunk_id, &last_chunk_data));
+        encoded_data.extend_from_slice(&encode_chunk_with_id(last_chunk_id, &last_chunk_data));
 
         let body = Body::from(encoded_data);
         let mut file_storage = InMemoryFileStorage::<StorageProofsMerkleTrieLayout>::new();

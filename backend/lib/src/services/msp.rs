@@ -9,7 +9,7 @@ use bytes::Bytes;
 use codec::Decode;
 use futures::stream;
 use serde::{Deserialize, Serialize};
-use shc_client::trusted_file_transfer::files::encode_chunk;
+use shc_common::trusted_file_transfer::encode_chunk_with_id;
 use shc_common::types::{ChunkId, FileMetadata, StorageProofsMerkleTrieLayout, FILE_CHUNK_SIZE};
 use shc_file_manager::{in_memory::InMemoryFileDataTrie, traits::FileDataTrie};
 use shc_rpc::{
@@ -650,7 +650,7 @@ impl MspService {
                 std::io::Error::other(format!("Failed to read chunk {}: {}", chunk_index, e))
             })?;
 
-            let encoded = encode_chunk(chunk_id, &chunk_data);
+            let encoded = encode_chunk_with_id(chunk_id, &chunk_data);
 
             Ok::<_, std::io::Error>(Bytes::from(encoded))
         });
