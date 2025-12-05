@@ -387,7 +387,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
 
                             // Check if this file key is already present in the bucket of the MSP
                             // In this scenario, this will always return false, since there's no other file record
-                            // in the DB, but it's still a good practice to check it.
+                            // in the DB, but it's still good practice to check it.
                             let is_in_bucket =
                                 File::is_file_key_in_bucket(conn, file_key.as_ref().to_vec())
                                     .await?;
@@ -454,8 +454,10 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 let tx_hash_bytes = evm_tx_hash.map(|h| h.as_bytes().to_vec());
 
                 // Check if this file key is already present in the bucket of the MSP
-                // This is because the `MutationsApplied` event won't be emitted for this file key when
-                // the MSP accepts it because the MSP is already storing it.
+                // This could happen if there was a previous storage request for this file key that
+                // the MSP accepted, and the new storage request was issued by the user to add redundancy to it.
+                // We do this check because in this scenario,the `MutationsApplied` event won't be emitted for this
+                // file key when the MSP accepts it, as the MSP is already storing it.
                 let is_in_bucket =
                     File::is_file_key_in_bucket(conn, file_key.as_ref().to_vec()).await?;
 
@@ -563,8 +565,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                         let tx_hash_bytes = evm_tx_hash.map(|h| h.as_bytes().to_vec());
 
                         // Check if this file key is already present in the bucket of the MSP
-                        // This is because the `MutationsApplied` event won't be emitted for this file key because
-                        // the MSP was already storing it.
+                        // In this scenario, this will always return false, since there's no other file record
+                        // in the DB, but it's still a good practice to check it.
                         let is_in_bucket =
                             File::is_file_key_in_bucket(conn, file_key.as_ref().to_vec()).await?;
 
