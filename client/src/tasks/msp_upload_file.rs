@@ -1210,8 +1210,9 @@ where
         if file_in_file_storage {
             debug!(target: LOG_TARGET, "File key {:?} found in both file storage. No need to receive the file from the user.", file_key);
 
+            // Do not skip the file key even if it is in forest storage since not responding to the storage request or rejecting it would result in the file key being deleted from the network entirely.
             if file_in_forest_storage {
-                warn!(target: LOG_TARGET, "File key {:?} found in forest storage when storage request is still open. This is an odd state as the file key should not be in the forest storage until the storage request is accepted.", file_key);
+                debug!(target: LOG_TARGET, "File key {:?} found in forest storage when storage request is open. The storage request is most likely opened to increase replication amongst BSPs, but still requires the MSP to accept the request.", file_key);
             }
 
             // Check if the file is complete in file storage.
