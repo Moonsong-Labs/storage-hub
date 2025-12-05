@@ -1,6 +1,4 @@
-//! File encoding/decoding utilities
-
-use crate::types::ChunkId;
+use crate::types::{ChunkId, FILE_CHUNK_SIZE};
 
 pub const CHUNK_ID_SIZE: usize = 8; // sizeof(u64)
 
@@ -19,8 +17,6 @@ pub fn read_chunk_with_id_from_buffer(
     buffer: &mut Vec<u8>,
     cap_at_file_chunk_size: bool,
 ) -> anyhow::Result<(ChunkId, Vec<u8>)> {
-    use crate::types::FILE_CHUNK_SIZE;
-
     let min_data_size: usize = if cap_at_file_chunk_size {
         FILE_CHUNK_SIZE as usize
     } else {
