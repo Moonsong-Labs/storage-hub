@@ -5,4 +5,5 @@ pub mod file_download_manager;
 pub mod forest_storage;
 pub mod handler;
 pub mod tasks;
+pub mod trusted_file_transfer;
 pub mod types;

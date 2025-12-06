@@ -16097,6 +16097,7 @@ dependencies = [
  "axum-test",
  "base64 0.21.7",
  "bigdecimal",
+ "bytes",
  "chrono",
  "diesel",
  "diesel-async",
@@ -16613,6 +16614,8 @@ dependencies = [
  "array-bytes",
  "async-channel 1.9.0",
  "async-trait",
+ "axum",
+ "axum-extra",
  "chrono",
  "frame-benchmarking 39.1.0",
  "frame-benchmarking-cli",
@@ -16668,6 +16671,8 @@ dependencies = [
  "substrate-build-script-utils",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-stream",
+ "tower-http 0.5.2",
 ]
 
 [[package]]
