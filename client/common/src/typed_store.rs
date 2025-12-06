@@ -139,6 +139,8 @@ use std::{
     ops::RangeBounds,
 };
 
+use crate::migrations::{default_db_options, open_db_with_migrations, MigrationError};
+
 /// Defines how types are encoded to and decoded from bytes for storage in RocksDB.
 ///
 /// This trait abstracts the serialization and deserialization process, allowing
@@ -715,9 +717,28 @@ pub struct TypedRocksDB {
 }
 
 impl TypedRocksDB {
-    /// Opens a RocksDB database with default options at the given path.
-    pub fn open_default(path: &str) -> Result<Self, rocksdb::Error> {
-        let db = DB::open_default(path)?;
+    /// Opens a RocksDB database with migration support.
+    ///
+    /// This method:
+    /// 1. Discovers any existing column families in the database (including deprecated ones)
+    /// 2. Opens the database with all existing + current column families
+    /// 3. Runs pending migrations to drop deprecated column families
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path to the database directory
+    /// * `current_column_families` - The column families defined in the current schema
+    ///   (deprecated column families should NOT be included here)
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// const CURRENT_CFS: &[&str] = &["cf1", "cf2", "cf3"];
+    /// let db = TypedRocksDB::open("/path/to/db", CURRENT_CFS)?;
+    /// ```
+    pub fn open(path: &str, current_column_families: &[&str]) -> Result<Self, MigrationError> {
+        let opts = default_db_options();
+        let db = open_db_with_migrations(&opts, path, current_column_families)?;
         Ok(Self { db })
     }
 }

@@ -33,6 +33,7 @@ use shc_forest_manager::traits::ForestStorageHandler;
 
 use crate::{
     capacity_manager::CapacityRequestData,
+    events::NewStorageRequest,
     handler::BlockchainService,
     transaction_manager::wait_for_transaction_status,
     types::{
@@ -106,6 +107,7 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     QueueConfirmBspRequest {
         request: ConfirmStoringRequest<Runtime>,
     },
+    #[command(mode = "FireAndForget")]
     QueueMspRespondStorageRequest {
         request: RespondStorageRequest<Runtime>,
     },
@@ -188,6 +190,15 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     },
     #[command(success_type = Vec<BucketId<Runtime>>)]
     QueryBucketsForMsp { msp_id: ProviderId<Runtime> },
+    /// Query pending storage requests for the MSP.
+    /// If `file_keys` is provided, only query those specific storage requests from storage.
+    /// If `file_keys` is None, returns all pending storage requests via runtime API.
+    #[command(success_type = Vec<NewStorageRequest<Runtime>>)]
+    QueryPendingStorageRequests { file_keys: Option<Vec<FileKey>> },
+    /// Preprocess a storage request by emitting a NewStorageRequest event.
+    /// Called by MspUploadFileTask's BatchProcessStorageRequests handler for each pending request.
+    #[command(mode = "FireAndForget")]
+    PreprocessStorageRequest { request: NewStorageRequest<Runtime> },
 }
 
 /// Interface for interacting with the BlockchainService actor.

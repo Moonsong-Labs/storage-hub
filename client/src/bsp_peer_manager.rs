@@ -10,15 +10,14 @@ use log::*;
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
 use rand::{prelude::SliceRandom, thread_rng};
-use rocksdb::{ColumnFamilyDescriptor, Options, DB};
 use sc_network::PeerId;
 use sp_core::H256;
+use tokio::sync::RwLock;
 
 use shc_common::typed_store::{
     BufferedWriteSupport, ProvidesDbContext, ProvidesTypedDbAccess, ProvidesTypedDbSingleAccess,
     ScaleEncodedCf, SingleScaleEncodedValueCf, TypedCf, TypedDbContext, TypedRocksDB,
 };
-use tokio::sync::RwLock;
 
 // PeerId wrapper that implements Encode/Decode
 #[derive(Clone, Debug, Eq, PartialEq, Encode, Decode, Hash)]
@@ -64,7 +63,12 @@ impl SingleScaleEncodedValueCf for LastUpdateTimeCf {
     const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str = "bsp_peer_last_update";
 }
 
-const ALL_COLUMN_FAMILIES: [&str; 3] =
+/// Current column families used by the BSP peer manager store.
+///
+/// Note: Deprecated column families are NOT listed here. They are automatically
+/// discovered via `DB::list_cf()` when opening the database, and then removed
+/// by the migration system.
+const CURRENT_COLUMN_FAMILIES: [&str; 3] =
     [PeerIdCf::NAME, PeerFileKeyCf::NAME, LastUpdateTimeCf::NAME];
 
 /// Version of BspPeerStats that can be persisted with SCALE codec
@@ -205,22 +209,10 @@ impl BspPeerManagerStore {
         let db_path_str = db_path.to_str().expect("Failed to convert path to string");
         info!("BSP peer manager DB path: {}", db_path_str);
 
-        // Setup RocksDB
-        let mut db_opts = Options::default();
-        db_opts.create_if_missing(true);
-        db_opts.create_missing_column_families(true);
-
-        let column_families: Vec<ColumnFamilyDescriptor> = ALL_COLUMN_FAMILIES
-            .iter()
-            .map(|cf| ColumnFamilyDescriptor::new(cf.to_string(), Options::default()))
-            .collect();
-
-        let db = DB::open_cf_descriptors(&db_opts, db_path_str, column_families)
+        let rocks = TypedRocksDB::open(db_path_str, &CURRENT_COLUMN_FAMILIES)
             .map_err(|e| anyhow!("Failed to open BSP peer manager database: {}", e))?;
 
-        Ok(Self {
-            rocks: TypedRocksDB { db },
-        })
+        Ok(Self { rocks })
     }
 
     /// Starts a read/write interaction with the DB through typed APIs
