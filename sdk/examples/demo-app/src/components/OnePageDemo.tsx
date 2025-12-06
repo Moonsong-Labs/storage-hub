@@ -5,7 +5,6 @@ import { Settings, Wallet, Database, CheckCircle, AlertCircle, ExternalLink } fr
 import { createWalletClient, createPublicClient, custom, formatEther, getAddress, type WalletClient, type PublicClient } from 'viem';
 import { StorageHubClient, SH_FILE_SYSTEM_PRECOMPILE_ADDRESS } from '@storagehub-sdk/core';
 import { MspClient } from '@storagehub-sdk/msp-client';
-import type { Session } from '@storagehub-sdk/msp-client';
 import { FileManager } from './FileManager';
 import { loadAppConfig } from '../config/load';
 import type { AppConfig } from '../config/types';
@@ -58,6 +57,7 @@ export function OnePageDemo() {
   const [storageHubClient, setStorageHubClient] = useState<StorageHubClient | null>(null);
   const [isMspConnecting, setIsMspConnecting] = useState(false);
   const [mspError, setMspError] = useState<string | null>(null);
+  const [authMethod, setAuthMethod] = useState<'SIWE' | 'SIWX' | null>(null);
 
   // Define the StorageHub chain configuration
   const storageHubChain = useMemo(() => ({
@@ -213,20 +213,17 @@ export function OnePageDemo() {
     }
   }, [isMetaMaskAvailable, config.chainId, config.rpcUrl, storageHubChain]);
 
-  // Connect MSP function
-  const connectMsp = useCallback(async () => {
+  // Connect MSP with SIWE
+  const connectMspSIWE = useCallback(async () => {
     if (!walletClient || !walletAddress) return;
 
     setIsMspConnecting(true);
     setMspError(null);
 
     try {
-      // Create session provider and MSP client
-      let currentSession: Readonly<Session> | undefined;
-      const sessionProvider = async () => currentSession;
-      const mspClient = await MspClient.connect({ baseUrl: config.mspUrl }, sessionProvider);
+      // Create MSP client without sessionProvider (optional now)
+      const mspClient = await MspClient.connect({ baseUrl: config.mspUrl });
 
-      // REAL SIWE AUTHENTICATION ONLY
       console.log('🔐 MSP Authentication: Starting SIWE flow...');
       console.log('- Address:', walletAddress);
       console.log('- Chain ID:', config.chainId);
@@ -234,15 +231,14 @@ export function OnePageDemo() {
       const domain = config.siweDomain;
       const uri = config.siweUri;
       const session = await mspClient.auth.SIWE(walletClient, domain, uri);
-      currentSession = Object.freeze(session);
-      console.log('✅ Authentication completed successfully');
+      console.log('✅ SIWE Authentication completed successfully');
+
+      // Update sessionProvider using new method
+      mspClient.setSessionProvider(async () => session);
 
       // Get user profile to verify authentication
       const profile = await mspClient.auth.getProfile();
       console.log('Authenticated user:', profile);
-
-      // Token management is handled internally by the SDK
-      console.log('✅ MSP client authenticated successfully');
 
       // Create StorageHub client
       const storageHubClient = new StorageHubClient({
@@ -254,12 +250,62 @@ export function OnePageDemo() {
 
       setMspClient(mspClient);
       setStorageHubClient(storageHubClient);
+      setAuthMethod('SIWE');
 
-      console.log('✅ MSP connected and authenticated');
+      console.log('✅ MSP connected and authenticated via SIWE');
 
     } catch (error) {
-      console.error('MSP connection failed:', error);
-      setMspError(error instanceof Error ? error.message : 'Failed to connect to MSP');
+      console.error('MSP SIWE connection failed:', error);
+      setMspError(error instanceof Error ? error.message : 'Failed to connect to MSP with SIWE');
+    } finally {
+      setIsMspConnecting(false);
+    }
+  }, [walletClient, walletAddress, config, storageHubChain]);
+
+  // Connect MSP with SIWX (CAIP-122)
+  const connectMspSIWX = useCallback(async () => {
+    if (!walletClient || !walletAddress) return;
+
+    setIsMspConnecting(true);
+    setMspError(null);
+
+    try {
+      // Create MSP client without sessionProvider (optional now)
+      const mspClient = await MspClient.connect({ baseUrl: config.mspUrl });
+
+      console.log('🔐 MSP Authentication: Starting SIWX (CAIP-122) flow...');
+      console.log('- Address:', walletAddress);
+      console.log('- Chain ID:', config.chainId);
+
+      // SIWX only needs URI (domain is extracted automatically)
+      const uri = config.siweUri;
+      const session = await mspClient.auth.SIWX(walletClient, uri);
+      console.log('✅ SIWX Authentication completed successfully');
+
+      // Update sessionProvider using new method
+      mspClient.setSessionProvider(async () => session);
+
+      // Get user profile to verify authentication
+      const profile = await mspClient.auth.getProfile();
+      console.log('Authenticated user:', profile);
+
+      // Create StorageHub client
+      const storageHubClient = new StorageHubClient({
+        rpcUrl: config.rpcUrl,
+        chain: storageHubChain,
+        walletClient,
+        filesystemContractAddress: config.fsAddress ?? SH_FILE_SYSTEM_PRECOMPILE_ADDRESS
+      });
+
+      setMspClient(mspClient);
+      setStorageHubClient(storageHubClient);
+      setAuthMethod('SIWX');
+
+      console.log('✅ MSP connected and authenticated via SIWX');
+
+    } catch (error) {
+      console.error('MSP SIWX connection failed:', error);
+      setMspError(error instanceof Error ? error.message : 'Failed to connect to MSP with SIWX');
     } finally {
       setIsMspConnecting(false);
     }
@@ -279,6 +325,7 @@ export function OnePageDemo() {
         setWalletBalance(null);
         setMspClient(null);
         setStorageHubClient(null);
+        setAuthMethod(null);
       } else if (accountList[0] !== walletAddress) {
         // Account changed, reconnect
         void connectWallet();
@@ -454,16 +501,46 @@ export function OnePageDemo() {
 
             {!mspClient ? (
               <div className="space-y-4">
-                <div className="text-center py-8">
-                  <p className="text-gray-400 mb-4">Connect to MSP backend to access storage features</p>
-                  <button
-                    type="button"
-                    onClick={connectMsp}
-                    disabled={isMspConnecting}
-                    className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {isMspConnecting ? 'Connecting...' : 'Connect to MSP'}
-                  </button>
+                <div className="text-center py-4">
+                  <p className="text-gray-400 mb-4">Choose authentication method to connect to MSP backend</p>
+                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                    <button
+                      type="button"
+                      onClick={connectMspSIWE}
+                      disabled={isMspConnecting}
+                      className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                    >
+                      {isMspConnecting ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          Connecting...
+                        </>
+                      ) : (
+                        <>
+                          <span>Connect with SIWE</span>
+                          <span className="text-xs opacity-75">(Traditional)</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={connectMspSIWX}
+                      disabled={isMspConnecting}
+                      className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                    >
+                      {isMspConnecting ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          Connecting...
+                        </>
+                      ) : (
+                        <>
+                          <span>Connect with SIWX</span>
+                          <span className="text-xs opacity-75">(CAIP-122)</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
 
                 {mspError && (
@@ -477,6 +554,7 @@ export function OnePageDemo() {
               <div className="space-y-3">
                 <div className="flex items-center gap-2 p-3 bg-green-900/20 border border-green-900/50 rounded-md text-green-400">
                   <CheckCircle className="h-4 w-4" />
+                  <span className="text-sm">Connected via {authMethod}</span>
                   <span className="text-sm">MSP connected and authenticated</span>
                 </div>
               </div>

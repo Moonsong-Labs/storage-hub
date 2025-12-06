@@ -4,7 +4,6 @@ import { useState } from 'react';
 import type { WalletClient, PublicClient } from 'viem';
 import { Upload, Info, Settings } from 'lucide-react';
 import { MspClient } from '@storagehub-sdk/msp-client';
-import type { Session } from '@storagehub-sdk/msp-client';
 import { StorageHubClient, SH_FILE_SYSTEM_PRECOMPILE_ADDRESS } from '@storagehub-sdk/core';
 import { FileManager } from './FileManager';
 import { loadAppConfig } from '../config/load';
@@ -22,6 +21,7 @@ export function StorageHubDemo({ walletClient, publicClient, walletAddress }: St
   const [storageHubClient, setStorageHubClient] = useState<StorageHubClient | null>(null);
   const [mspConnecting, setMspConnecting] = useState(false);
   const [activeTab, setActiveTab] = useState<'test' | 'files'>('test');
+  const [authMethod, setAuthMethod] = useState<'SIWE' | 'SIWX' | null>(null);
 
   const testViemConnection = async () => {
     if (!publicClient || !walletClient || !walletAddress) {
@@ -47,41 +47,40 @@ export function StorageHubDemo({ walletClient, publicClient, walletAddress }: St
     }
   };
 
-  const connectToMsp = async () => {
+  const connectToMspSIWE = async () => {
     if (!walletClient || !walletAddress) {
       setStatus('❌ Wallet not connected');
       return;
     }
 
     setMspConnecting(true);
-    setStatus('🔄 Connecting to MSP backend...');
+    setStatus('🔄 Connecting to MSP backend with SIWE...');
 
     try {
       const appCfg: AppConfig = await loadAppConfig();
-      // Prepare session provider for MSP auth token handling
-      let currentSession: Readonly<Session> | undefined;
-      const sessionProvider = async () => currentSession;
 
-      // Connect to MSP backend (using default from configuration)
+      // Connect to MSP backend without sessionProvider (optional now)
       const client = await MspClient.connect({
         baseUrl: appCfg.msp.baseUrl,
         timeoutMs: appCfg.msp.timeoutMs ?? 10000
-      }, sessionProvider);
+      });
 
       // Test connection
       const health = await client.info.getInfo();
       console.log('MSP info:', health);
 
-      // Authenticate with SIWE-style flow
-      setStatus('🔄 Authenticating with MSP...');
-      // Use configured SIWE parameters (mandatory)
+      // Authenticate with SIWE flow
+      setStatus('🔄 Authenticating with SIWE...');
       const domain = appCfg.auth.siweDomain;
       const uri = appCfg.auth.siweUri;
       const session = await client.auth.SIWE(walletClient, domain, uri);
-      currentSession = Object.freeze(session);
+
+      // Update sessionProvider using new method
+      client.setSessionProvider(async () => session);
+
       const profile = await client.auth.getProfile();
 
-      // Also create StorageHubClient for blockchain operations
+      // Create StorageHubClient for blockchain operations
       const storageClient = new StorageHubClient({
         rpcUrl: appCfg.chain.evmRpcHttpUrl,
         chain: {
@@ -96,10 +95,68 @@ export function StorageHubDemo({ walletClient, publicClient, walletAddress }: St
 
       setMspClient(client);
       setStorageHubClient(storageClient);
-      setStatus(`✅ MSP connected and authenticated! User: ${profile.address}`);
+      setAuthMethod('SIWE');
+      setStatus(`✅ MSP connected and authenticated via SIWE! User: ${profile.address}`);
     } catch (error) {
-      console.error('MSP connection failed:', error);
-      setStatus(`❌ MSP connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('MSP SIWE connection failed:', error);
+      setStatus(`❌ MSP SIWE connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setMspConnecting(false);
+    }
+  };
+
+  const connectToMspSIWX = async () => {
+    if (!walletClient || !walletAddress) {
+      setStatus('❌ Wallet not connected');
+      return;
+    }
+
+    setMspConnecting(true);
+    setStatus('🔄 Connecting to MSP backend with SIWX (CAIP-122)...');
+
+    try {
+      const appCfg: AppConfig = await loadAppConfig();
+
+      // Connect to MSP backend without sessionProvider (optional now)
+      const client = await MspClient.connect({
+        baseUrl: appCfg.msp.baseUrl,
+        timeoutMs: appCfg.msp.timeoutMs ?? 10000
+      });
+
+      // Test connection
+      const health = await client.info.getInfo();
+      console.log('MSP info:', health);
+
+      // Authenticate with SIWX (CAIP-122) flow - only needs URI
+      setStatus('🔄 Authenticating with SIWX (CAIP-122)...');
+      const uri = appCfg.auth.siweUri;
+      const session = await client.auth.SIWX(walletClient, uri);
+
+      // Update sessionProvider using new method
+      client.setSessionProvider(async () => session);
+
+      const profile = await client.auth.getProfile();
+
+      // Create StorageHubClient for blockchain operations
+      const storageClient = new StorageHubClient({
+        rpcUrl: appCfg.chain.evmRpcHttpUrl,
+        chain: {
+          id: appCfg.chain.id,
+          name: appCfg.chain.name,
+          nativeCurrency: appCfg.chain.nativeCurrency,
+          rpcUrls: { default: { http: [appCfg.chain.evmRpcHttpUrl] } }
+        },
+        walletClient,
+        filesystemContractAddress: (appCfg.chain.filesystemPrecompileAddress as `0x${string}` | undefined) ?? SH_FILE_SYSTEM_PRECOMPILE_ADDRESS
+      });
+
+      setMspClient(client);
+      setStorageHubClient(storageClient);
+      setAuthMethod('SIWX');
+      setStatus(`✅ MSP connected and authenticated via SIWX! User: ${profile.address}`);
+    } catch (error) {
+      console.error('MSP SIWX connection failed:', error);
+      setStatus(`❌ MSP SIWX connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setMspConnecting(false);
     }
@@ -166,24 +223,53 @@ export function StorageHubDemo({ walletClient, publicClient, walletAddress }: St
               </div>
 
               {/* MSP Connection */}
-              <div className="flex items-center gap-4">
-                <button type="button"
-                  onClick={connectToMsp}
-                  disabled={mspConnecting || !!mspClient}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-                >
-                  {mspConnecting ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin inline mr-2" />
-                      Connecting...
-                    </>
-                  ) : mspClient ? (
-                    '✅ MSP Connected'
-                  ) : (
-                    'Connect to MSP'
-                  )}
-                </button>
-                <span className="text-sm text-gray-500">Connect and authenticate with MSP backend</span>
+              <div className="space-y-3">
+                <div className="text-sm text-gray-600 mb-2">Choose authentication method:</div>
+                <div className="flex flex-wrap gap-3">
+                  <button type="button"
+                    onClick={connectToMspSIWE}
+                    disabled={mspConnecting || !!mspClient}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                  >
+                    {mspConnecting ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Connecting...
+                      </>
+                    ) : mspClient ? (
+                      '✅ MSP Connected'
+                    ) : (
+                      <>
+                        <span>Connect with SIWE</span>
+                        <span className="text-xs opacity-75">(Traditional)</span>
+                      </>
+                    )}
+                  </button>
+                  <button type="button"
+                    onClick={connectToMspSIWX}
+                    disabled={mspConnecting || !!mspClient}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                  >
+                    {mspConnecting ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Connecting...
+                      </>
+                    ) : mspClient ? (
+                      '✅ MSP Connected'
+                    ) : (
+                      <>
+                        <span>Connect with SIWX</span>
+                        <span className="text-xs opacity-75">(CAIP-122)</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                {mspClient && authMethod && (
+                  <div className="text-xs text-gray-500 mt-1">
+                    Connected via {authMethod}
+                  </div>
+                )}
               </div>
             </div>
 

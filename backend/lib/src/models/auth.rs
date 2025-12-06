@@ -6,9 +6,8 @@ pub struct NonceRequest {
     pub address: Address,
     #[serde(rename = "chainId")]
     pub chain_id: u64,
-    /// Domain (host[:port]) to display in the SIWE header line (e.g., "datahaven.app")
-    pub domain: String,
-    /// Full URI to include in the SIWE message as-is (e.g., "https://datahaven.app/testnet")
+    /// Full URI to include in the message (e.g., "https://datahaven.app/testnet")
+    /// Domain will be extracted from this URI automatically
     pub uri: String,
 }
 
