@@ -52,6 +52,8 @@ use std::time::Duration;
 
 use crate::{
     handler::StorageHubHandler,
+    inc_counter,
+    metrics::{STATUS_FAILURE, STATUS_SUCCESS},
     types::{FishermanForestStorageHandlerT, ShNodeType},
 };
 
@@ -228,6 +230,12 @@ where
         let failures = results.iter().filter(|r| r.is_err()).count();
 
         if failures > 0 {
+            // Increment metric for failed batch deletions
+            inc_counter!(
+                handler: self.storage_hub_handler,
+                fisherman_batch_deletions_total,
+                STATUS_FAILURE
+            );
             warn!(
                 target: LOG_TARGET,
                 "🎣 Batch processing complete: {} successes, {} failures",
@@ -247,6 +255,12 @@ where
                 }
             }
         } else {
+            // Increment metric for successful batch deletions
+            inc_counter!(
+                handler: self.storage_hub_handler,
+                fisherman_batch_deletions_total,
+                STATUS_SUCCESS
+            );
             info!(
                 target: LOG_TARGET,
                 "🎣 Batch processing complete: {} successes, 0 failures",

@@ -10,3 +10,4 @@ export * from "./timer";
 export * from "./rpc";
 export * from "./helpers";
 export * from "./backend";
+export * from "./prometheus";

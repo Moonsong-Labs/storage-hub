@@ -5,6 +5,8 @@ use std::{
 use tokio::sync::RwLock;
 
 use shc_actors_derive::{subscribe_actor_event, subscribe_actor_event_map};
+
+use crate::metrics::{MetricsLink, StorageHubMetrics};
 use shc_actors_framework::{
     actor::{ActorHandle, TaskSpawner},
     event_bus::EventHandler,
@@ -115,6 +117,8 @@ where
     pub file_download_manager: Arc<FileDownloadManager<Runtime>>,
     /// The fisherman service handle (only used for FishermanRole)
     pub fisherman: Option<ActorHandle<shc_fisherman_service::FishermanService<Runtime>>>,
+    /// The Prometheus metrics for this client.
+    metrics: MetricsLink,
 }
 
 impl<NT, Runtime> Debug for StorageHubHandler<NT, Runtime>
@@ -146,6 +150,7 @@ where
             peer_manager: self.peer_manager.clone(),
             file_download_manager: self.file_download_manager.clone(),
             fisherman: self.fisherman.clone(),
+            metrics: self.metrics.clone(),
         }
     }
 }
@@ -165,6 +170,7 @@ where
         indexer_db_pool: Option<DbPool>,
         peer_manager: Arc<BspPeerManager>,
         fisherman: Option<ActorHandle<shc_fisherman_service::FishermanService<Runtime>>>,
+        metrics: MetricsLink,
     ) -> Self {
         // Get the data directory path from the peer manager's directory
         // This assumes the peer manager stores data in a similar location to where we want our download state
@@ -172,7 +178,7 @@ where
 
         // Create a FileDownloadManager with the peer manager already initialized
         let file_download_manager = Arc::new(
-            FileDownloadManager::new(Arc::clone(&peer_manager), data_dir)
+            FileDownloadManager::new(Arc::clone(&peer_manager), data_dir, metrics.clone())
                 .expect("Failed to initialize FileDownloadManager"),
         );
 
@@ -187,7 +193,15 @@ where
             peer_manager,
             file_download_manager,
             fisherman,
+            metrics,
         }
+    }
+
+    /// Get a reference to the Prometheus metrics.
+    ///
+    /// Returns `None` if metrics are disabled (no Prometheus registry provided).
+    pub fn metrics(&self) -> Option<&StorageHubMetrics> {
+        self.metrics.as_ref()
     }
 }
 

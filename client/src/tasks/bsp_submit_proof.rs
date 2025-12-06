@@ -26,6 +26,9 @@ use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
 use crate::{
     handler::StorageHubHandler,
+    inc_counter,
+    metrics::{STATUS_FAILURE, STATUS_PENDING, STATUS_SUCCESS},
+    observe_histogram,
     types::{BspForestStorageHandlerT, ForestStorageKey, ShNodeType},
 };
 
@@ -171,6 +174,13 @@ where
             event.data
         );
 
+        // Increment metric for proofs submitted
+        inc_counter!(
+            handler: self.storage_hub_handler,
+            bsp_proofs_submitted_total,
+            STATUS_PENDING
+        );
+
         if event.data.forest_challenges.is_empty() && event.data.checkpoint_challenges.is_empty() {
             warn!(target: LOG_TARGET, "No challenges to respond to. Skipping proof submission.");
             return Ok(
@@ -183,6 +193,11 @@ where
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
             Some(tx) => tx,
             None => {
+                inc_counter!(
+                    handler: self.storage_hub_handler,
+                    bsp_proofs_submitted_total,
+                    STATUS_FAILURE
+                );
                 error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. This is a critical bug. Please report it to the StorageHub team.");
                 return Err(anyhow!(
                     "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken!"
@@ -205,7 +220,14 @@ where
                 .forest_storage_handler
                 .get(&current_forest_key)
                 .await
-                .ok_or_else(|| anyhow!("CRITICAL❗️❗️ Failed to get forest storage."))?;
+                .ok_or_else(|| {
+                    inc_counter!(
+                        handler: self.storage_hub_handler,
+                        bsp_proofs_submitted_total,
+                        STATUS_FAILURE
+                    );
+                    anyhow!("CRITICAL❗️❗️ Failed to get forest storage.")
+                })?;
 
             let p = fs
                 .read()
@@ -291,7 +313,14 @@ where
                 .forest_storage_handler
                 .get(&current_forest_key)
                 .await
-                .ok_or_else(|| anyhow!("CRITICAL❗️❗️ Failed to get forest storage."))?;
+                .ok_or_else(|| {
+                    inc_counter!(
+                        handler: self.storage_hub_handler,
+                        bsp_proofs_submitted_total,
+                        STATUS_FAILURE
+                    );
+                    anyhow!("CRITICAL❗️❗️ Failed to get forest storage.")
+                })?;
             let root = fs.read().await.root();
             root
         };
@@ -315,7 +344,8 @@ where
         };
 
         // Attempt to submit the extrinsic with retries and tip increase.
-        self.storage_hub_handler
+        let submit_result = self
+            .storage_hub_handler
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
@@ -335,13 +365,30 @@ where
                     .with_should_retry(Some(Box::new(should_retry))),
                 false,
             )
-            .await
-            .map_err(|e| {
-                error!(target: LOG_TARGET, "❌ Failed to submit proof due to: {}", e);
-                anyhow!("Failed to submit proof due to: {}", e)
-            })?;
+            .await;
 
-        trace!(target: LOG_TARGET, "Proof submitted successfully");
+        match &submit_result {
+            Ok(_) => {
+                // Increment metric for successful proof submission
+                inc_counter!(
+                    handler: self.storage_hub_handler,
+                    bsp_proofs_submitted_total,
+                    STATUS_SUCCESS
+                );
+                trace!(target: LOG_TARGET, "Proof submitted successfully");
+            }
+            Err(e) => {
+                // Increment metric for failed proof submission
+                inc_counter!(
+                    handler: self.storage_hub_handler,
+                    bsp_proofs_submitted_total,
+                    STATUS_FAILURE
+                );
+                error!(target: LOG_TARGET, "❌ Failed to submit proof due to: {}", e);
+            }
+        }
+
+        submit_result.map_err(|e| anyhow!("Failed to submit proof due to: {}", e))?;
 
         // Release the forest root write "lock" and finish the task.
         self.storage_hub_handler
@@ -488,6 +535,35 @@ where
     }
 
     async fn generate_key_proof(
+        &self,
+        file_key: H256,
+        seed: RandomnessOutput<Runtime>,
+        provider_id: ProofsDealerProviderId<Runtime>,
+    ) -> anyhow::Result<KeyProof<Runtime>> {
+        // Track proof generation timing for metrics.
+        let start_time = std::time::Instant::now();
+
+        // Execute proof generation and track timing for both success and failure.
+        let result = self
+            .generate_key_proof_inner(file_key, seed, provider_id)
+            .await;
+
+        // Record proof generation timing with appropriate status.
+        observe_histogram!(
+            handler: self.storage_hub_handler,
+            bsp_proof_generation_seconds,
+            if result.is_ok() {
+                STATUS_SUCCESS
+            } else {
+                STATUS_FAILURE
+            },
+            start_time.elapsed().as_secs_f64()
+        );
+
+        result
+    }
+
+    async fn generate_key_proof_inner(
         &self,
         file_key: H256,
         seed: RandomnessOutput<Runtime>,

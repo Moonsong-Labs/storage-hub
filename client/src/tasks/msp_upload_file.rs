@@ -38,6 +38,9 @@ use shp_file_metadata::{Chunk, ChunkId, Leaf};
 
 use crate::{
     handler::StorageHubHandler,
+    inc_counter, inc_counter_by,
+    metrics::{STATUS_FAILURE, STATUS_PENDING, STATUS_SUCCESS},
+    observe_histogram,
     types::{ForestStorageKey, MspForestStorageHandlerT, ShNodeType},
 };
 
@@ -178,6 +181,13 @@ where
             event.fingerprint
         );
 
+        // Increment metric for new storage request
+        inc_counter!(
+            handler: self.storage_hub_handler,
+            msp_storage_requests_total,
+            STATUS_PENDING
+        );
+
         let file_key = event.file_key;
         let result = self.handle_new_storage_request_event(event).await;
 
@@ -187,6 +197,12 @@ where
                 file_key
             )),
             Err(e) => {
+                // Increment metric for failed storage request
+                inc_counter!(
+                    handler: self.storage_hub_handler,
+                    msp_storage_requests_total,
+                    STATUS_FAILURE
+                );
                 if let Some(file_key) = &self.file_key_cleanup {
                     self.unregister_file(*file_key).await?;
                 }
@@ -278,6 +294,11 @@ where
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
             Some(tx) => tx,
             None => {
+                inc_counter!(
+                    handler: self.storage_hub_handler,
+                    msp_storage_requests_total,
+                    STATUS_FAILURE
+                );
                 let err_msg = "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. This is a critical bug. Please report it to the StorageHub team.";
                 error!(target: LOG_TARGET, err_msg);
                 return Err(anyhow!(err_msg));
@@ -293,11 +314,21 @@ where
         let own_msp_id = match own_provider_id {
             Some(StorageProviderId::MainStorageProvider(id)) => id,
             Some(StorageProviderId::BackupStorageProvider(_)) => {
+                inc_counter!(
+                    handler: self.storage_hub_handler,
+                    msp_storage_requests_total,
+                    STATUS_FAILURE
+                );
                 return Err(anyhow!(
                     "Current node account is a Backup Storage Provider. Expected a Main Storage Provider ID."
                 ));
             }
             None => {
+                inc_counter!(
+                    handler: self.storage_hub_handler,
+                    msp_storage_requests_total,
+                    STATUS_FAILURE
+                );
                 return Err(anyhow!("Failed to get own MSP ID."));
             }
         };
@@ -403,13 +434,27 @@ where
             });
         }
 
+        // Count total requests being responded to for metrics tracking.
+        let responded_requests_count: u64 = storage_request_msp_response
+            .iter()
+            .map(|r| {
+                let accepts = r
+                    .accept
+                    .as_ref()
+                    .map_or(0, |a| a.file_keys_and_proofs.len());
+                let rejects = r.reject.len();
+                (accepts.saturating_add(rejects)) as u64
+            })
+            .sum();
+
         let call: Runtime::Call =
             pallet_file_system::Call::<Runtime>::msp_respond_storage_requests_multiple_buckets {
                 storage_request_msp_response: storage_request_msp_response.clone(),
             }
             .into();
 
-        self.storage_hub_handler
+        let submit_result = self
+            .storage_hub_handler
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
@@ -428,7 +473,30 @@ where
                     .with_max_tip(self.config.max_tip.saturated_into()),
                 false,
             )
-            .await?;
+            .await;
+
+        match &submit_result {
+            Ok(_) => {
+                // Increment metric for successfully responded storage requests
+                inc_counter_by!(
+                    handler: self.storage_hub_handler,
+                    msp_storage_requests_total,
+                    STATUS_SUCCESS,
+                    responded_requests_count
+                );
+            }
+            Err(_) => {
+                // Increment metric for failed storage request responses
+                inc_counter_by!(
+                    handler: self.storage_hub_handler,
+                    msp_storage_requests_total,
+                    STATUS_FAILURE,
+                    responded_requests_count
+                );
+            }
+        }
+
+        submit_result?;
 
         // Log accepted and rejected files, and remove rejected files from File Storage.
         // Accepted files will be added to the Bucket's Forest Storage by the BlockchainService.
@@ -499,6 +567,31 @@ where
     Runtime: StorageEnableRuntime,
 {
     async fn handle_new_storage_request_event(
+        &mut self,
+        event: NewStorageRequest<Runtime>,
+    ) -> anyhow::Result<()> {
+        // Track storage request processing timing for metrics.
+        let start_time = std::time::Instant::now();
+
+        // Wrap the main logic to track success/failure
+        let result = self.handle_new_storage_request_inner(event).await;
+
+        // Record histogram with status based on result
+        observe_histogram!(
+            handler: self.storage_hub_handler,
+            storage_request_seconds,
+            if result.is_ok() {
+                STATUS_SUCCESS
+            } else {
+                STATUS_FAILURE
+            },
+            start_time.elapsed().as_secs_f64()
+        );
+
+        result
+    }
+
+    async fn handle_new_storage_request_inner(
         &mut self,
         event: NewStorageRequest<Runtime>,
     ) -> anyhow::Result<()> {
@@ -1122,8 +1215,14 @@ where
         // Delete the file from the file storage.
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
 
-        // TODO: Handle error
-        let _ = write_file_storage.delete_file(&file_key);
+        if let Err(e) = write_file_storage.delete_file(&file_key) {
+            warn!(
+                target: LOG_TARGET,
+                "Failed to delete file {:x} from file storage: {:?}",
+                file_key,
+                e
+            );
+        }
 
         Ok(())
     }
