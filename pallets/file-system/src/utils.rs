@@ -2518,6 +2518,9 @@ where
         // Update the payment stream between the user and the BSP.
         // This is done in the request phase (not confirm) to remove any financial incentive
         // for the BSP to delay or skip the confirmation.
+        // This is safe to do as the BSP must have a payment stream with the user and its amount
+        // provided must be equal or greater than the file size, otherwise it would mean the BSP
+        // does not have the file and as such shouldn't be able to provide an inclusion proof.
         let new_amount_provided = <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(&bsp_id, &owner)
             .ok_or(Error::<T>::DynamicRatePaymentStreamNotFound)?
             .saturating_sub(size);

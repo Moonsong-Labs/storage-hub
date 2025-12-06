@@ -8758,6 +8758,15 @@ mod bsp_stop_storing {
                 // Increase the data used by the registered bsp, to simulate that it is indeed storing the file
                 assert_ok!(Providers::increase_capacity_used(&bsp_id, size,));
 
+                // Create payment stream to simulate that BSP confirmed storing the file at a previous time
+                let amount_provided = UnitsProvidedFor::<Test>::from(2 * size);
+                assert_ok!(PaymentStreams::create_dynamic_rate_payment_stream(
+                    frame_system::RawOrigin::Root.into(),
+                    bsp_id,
+                    owner_account_id.clone(),
+                    amount_provided,
+                ));
+
                 // Dispatch BSP stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
                     bsp_signed.clone(),
@@ -8845,6 +8854,15 @@ mod bsp_stop_storing {
 
                 // Increase the data used by the registered bsp, to simulate that it is indeed storing the file
                 assert_ok!(Providers::increase_capacity_used(&bsp_id, size,));
+
+                // Create payment stream to simulate that BSP confirmed storing the file at a previous time
+                let amount_provided = UnitsProvidedFor::<Test>::from(2 * size);
+                assert_ok!(PaymentStreams::create_dynamic_rate_payment_stream(
+                    frame_system::RawOrigin::Root.into(),
+                    bsp_id,
+                    owner_account_id.clone(),
+                    amount_provided,
+                ));
 
 				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
                 let current_tick_plus_storage_request_ttl =
