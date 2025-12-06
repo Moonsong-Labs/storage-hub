@@ -291,20 +291,13 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 let new_msp =
                     Msp::get_by_onchain_msp_id(conn, OnchainMspId::from(*new_msp_id)).await?;
 
-                // Handle MSP-file associations based on whether old_msp exists
+                // Delete any old MSP associations that the files in the bucket had
                 if let Some(old_msp) = old_msp {
-                    // Update existing associations from old to new MSP
-                    MspFile::update_msp_for_bucket(
-                        conn,
-                        bucket_id.as_ref(),
-                        old_msp.id,
-                        new_msp.id,
-                    )
-                    .await?;
-                } else {
-                    // Create new associations for all files in the bucket
-                    MspFile::create_for_bucket(conn, bucket_id.as_ref(), new_msp.id).await?;
+                    MspFile::delete_by_bucket(conn, bucket_id.as_ref(), old_msp.id).await?;
                 }
+
+                // Create new MSP associations for all files in the bucket
+                MspFile::create_for_bucket(conn, bucket_id.as_ref(), new_msp.id).await?;
 
                 // Update bucket's MSP reference
                 Bucket::update_msp(conn, bucket_id.as_ref().to_vec(), new_msp.id).await?;
