@@ -7249,6 +7249,78 @@ mod bsp_stop_storing {
         }
 
         #[test]
+        fn bsp_request_stop_storing_fails_with_incomplete_storage_request() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let fingerprint = H256::zero();
+                let storage_amount: StorageDataUnit<Test> = 100;
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(vec![1]).unwrap();
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
+
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
+
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                )
+                .unwrap();
+
+                // Create an incomplete storage request for this file key
+                IncompleteStorageRequests::<Test>::insert(
+                    file_key,
+                    IncompleteStorageRequestMetadata {
+                        owner: owner_account_id.clone(),
+                        bucket_id,
+                        location: location.clone(),
+                        fingerprint,
+                        file_size: size,
+                        pending_bsp_removals: BoundedVec::try_from(vec![bsp_id]).unwrap(),
+                        pending_bucket_removal: false,
+                    },
+                );
+
+                // Try to request stop storing. This should fail with FileHasIncompleteStorageRequest
+                // Note: The check happens before forest proof verification, so we don't need a valid proof
+                assert_noop!(
+                    FileSystem::bsp_request_stop_storing(
+                        bsp_signed.clone(),
+                        file_key,
+                        bucket_id,
+                        location.clone(),
+                        owner_account_id.clone(),
+                        fingerprint,
+                        size,
+                        false,
+                        CompactProof {
+                            encoded_nodes: vec![file_key.as_ref().to_vec()],
+                        },
+                    ),
+                    Error::<Test>::FileHasIncompleteStorageRequest
+                );
+            });
+        }
+
+        #[test]
         fn bsp_confirm_stop_storing_fails_if_not_enough_time_has_passed_since_request() {
             new_test_ext().execute_with(|| {
                 let owner_account_id = Keyring::Alice.to_account_id();

@@ -2341,6 +2341,13 @@ where
     /// * `can_serve` - Whether the BSP can still serve the file to other BSPs. If true and no storage
     ///   request exists, the BSP is added as a data server for the newly created storage request.
     ///
+    /// ## Restrictions
+    ///
+    /// This function will fail with [`FileHasIncompleteStorageRequest`] if an `IncompleteStorageRequest`
+    /// exists for the file key. This enforces the invariant that a `StorageRequest` and
+    /// `IncompleteStorageRequest` cannot coexist for the same file key (since scenario 3 can create
+    /// a new storage request). The BSP must wait until fisherman nodes clean up the incomplete request.
+    ///
     /// ## Fees
     ///
     /// The BSP is charged a penalty fee ([`BspStopStoringFilePenalty`]) which is transferred to the treasury.
@@ -2413,6 +2420,15 @@ where
         ensure!(
             file_key == computed_file_key,
             Error::<T>::InvalidFileKeyMetadata
+        );
+
+        // Check that an `IncompleteStorageRequest` does not exist for this file key.
+        // This is enforced to maintain the invariant that a `StorageRequest` and `IncompleteStorageRequest`
+        // cannot coexist for the same file key.
+        // The BSP must wait until fisherman nodes clean up the incomplete request.
+        ensure!(
+            !<IncompleteStorageRequests<T>>::contains_key(&file_key),
+            Error::<T>::FileHasIncompleteStorageRequest
         );
 
         // Check that a pending stop storing request for that BSP and file does not exist yet.

@@ -1358,6 +1358,11 @@ pub mod pallet {
         /// The payment stream with the file owner is **updated immediately** in this extrinsic (not in
         /// [`bsp_confirm_stop_storing`]). This removes any financial incentive for the BSP to delay or
         /// skip the confirmation, as they stop getting paid as soon as they announce their intent to stop storing.
+        ///
+        /// ## Restrictions
+        ///
+        /// This extrinsic will fail with [`FileHasIncompleteStorageRequest`] if an `IncompleteStorageRequest`
+        /// exists for the file key. The BSP must wait until fisherman nodes clean up the incomplete request.
         #[pallet::call_index(12)]
         #[pallet::weight(T::WeightInfo::bsp_request_stop_storing())]
         pub fn bsp_request_stop_storing(
