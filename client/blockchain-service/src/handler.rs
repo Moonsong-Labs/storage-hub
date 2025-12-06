@@ -42,7 +42,7 @@ use shc_forest_manager::traits::ForestStorageHandler;
 use crate::{
     capacity_manager::{CapacityRequest, CapacityRequestQueue},
     commands::BlockchainServiceCommand,
-    events::BlockchainServiceEventBusProvider,
+    events::{BlockchainServiceEventBusProvider, NewStorageRequest},
     state::{BlockchainServiceStateStore, LastProcessedBlockNumberCf},
     transaction_manager::{TransactionManager, TransactionManagerConfig},
     types::{
@@ -945,19 +945,51 @@ where
                     }
                     }
                 }
-                BlockchainServiceCommand::QueueMspRespondStorageRequest { request, callback } => {
-                    let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                    state_store_context
-                        .pending_msp_respond_storage_request_deque()
-                        .push_back(request);
-                    state_store_context.commit();
-                    // We check right away if we can process the request so we don't waste time.
-                    self.msp_assign_forest_root_write_lock();
-                    match callback.send(Ok(())) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                BlockchainServiceCommand::QueueMspRespondStorageRequest { request } => {
+                    if let Some(ManagedProvider::Msp(msp_handler)) =
+                        &mut self.maybe_managed_provider
+                    {
+                        let file_key = request.file_key;
+
+                        trace!(
+                            target: LOG_TARGET,
+                            "QueueMspRespondStorageRequest received for file key {:?}",
+                            file_key
+                        );
+
+                        // Check if file key is already pending (O(1) deduplication).
+                        // `insert` returns true if the key was not present (i.e., we should queue).
+                        if msp_handler
+                            .pending_respond_storage_request_file_keys
+                            .insert(file_key)
+                        {
+                            msp_handler
+                                .pending_respond_storage_requests
+                                .push_back(request);
+
+                            trace!(
+                                target: LOG_TARGET,
+                                "File key {:?} added to pending queue (size: {})",
+                                file_key,
+                                msp_handler.pending_respond_storage_requests.len()
+                            );
+
+                            // We check right away if we can process the request so we don't waste time.
+                            self.msp_assign_forest_root_write_lock();
+                        } else {
+                            trace!(
+                                target: LOG_TARGET,
+                                "File key {:?} already pending, skipping",
+                                file_key
+                            );
                         }
+                    } else {
+                        // Log the invariant violation but don't fail - this is fire-and-forget
+                        error!(
+                            target: LOG_TARGET,
+                            "QueueMspRespondStorageRequest received while not managing an MSP. \
+                             This is an invariant violation - please report to StorageHub team."
+                        );
                     }
                 }
                 BlockchainServiceCommand::QueueSubmitProofRequest { request, callback } => {
@@ -1283,6 +1315,84 @@ where
                         }
                     }
                 }
+                BlockchainServiceCommand::QueryPendingStorageRequests {
+                    file_keys,
+                    callback,
+                } => {
+                    let managed_msp_id = match &self.maybe_managed_provider {
+                        Some(ManagedProvider::Msp(msp_handler)) => msp_handler.msp_id.clone(),
+                        _ => {
+                            error!(target: LOG_TARGET, "`QueryPendingStorageRequests` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
+                            match callback.send(Err(anyhow!("Node is not managing an MSP"))) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!(target: LOG_TARGET, "Failed to send error: {:?}", e);
+                                }
+                            }
+                            return;
+                        }
+                    };
+
+                    let current_block_hash = self.client.info().best_hash;
+
+                    // Query pending storage requests (not yet accepted by MSP)
+                    let storage_requests = match self
+                        .client
+                        .runtime_api()
+                        .pending_storage_requests_by_msp(current_block_hash, managed_msp_id)
+                    {
+                        Ok(mut sr) => {
+                            // If specific file keys provided, look them up directly
+                            match file_keys {
+                                Some(keys) => keys
+                                    .into_iter()
+                                    .filter_map(|k| {
+                                        let file_key = sp_core::H256::from_slice(k.as_ref());
+                                        sr.remove(&file_key).map(|metadata| (file_key, metadata))
+                                    })
+                                    .collect(),
+                                None => sr,
+                            }
+                        }
+                        Err(_) => {
+                            warn!(target: LOG_TARGET, "Failed to get pending storage requests");
+                            match callback.send(Ok(Vec::new())) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!(target: LOG_TARGET, "Failed to send empty result: {:?}", e);
+                                }
+                            }
+                            return;
+                        }
+                    };
+
+                    let new_storage_requests: Vec<NewStorageRequest<Runtime>> = storage_requests
+                        .into_iter()
+                        .map(|(file_key, sr)| NewStorageRequest {
+                            who: sr.owner,
+                            file_key: file_key.into(),
+                            bucket_id: sr.bucket_id,
+                            location: sr.location,
+                            fingerprint: sr.fingerprint.as_ref().into(),
+                            size: sr.size,
+                            user_peer_ids: sr.user_peer_ids,
+                            expires_at: sr.expires_at,
+                        })
+                        .collect();
+
+                    match callback.send(Ok(new_storage_requests)) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send pending storage requests: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::PreprocessStorageRequest { request } => {
+                    // Emit the NewStorageRequest event for this storage request.
+                    // This is called by MspUploadFileTask's BatchProcessStorageRequests handler
+                    // for each pending storage request to trigger per-file processing.
+                    self.emit(request);
+                }
                 BlockchainServiceCommand::ReleaseForestRootWriteLock {
                     forest_root_write_tx,
                     callback,
@@ -1592,6 +1702,7 @@ where
                     .await;
             }
             Some(ManagedProvider::Msp(_)) => {
+                self.msp_monitor_block();
                 self.msp_end_block_processing(block_hash, block_number, tree_route)
                     .await;
             }

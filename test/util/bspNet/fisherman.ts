@@ -355,16 +355,23 @@ export const verifyBucketDeletionResults = async (
       userApi.events.fileSystem.BucketFileDeletionsCompleted.is(event)
     );
 
-    // Validate expected count of bucket deletion events
-    strictEqual(
-      bucketDeletionEvents.length,
-      expectedCount,
-      `Should have exactly ${expectedCount} bucket deletion event(s)`
-    );
-
     // If expected count is 0 and we have 0 events, that's correct - return success
     if (expectedCount === 0 && bucketDeletionEvents.length === 0) {
       return { successful: 1, failedWithForestProofError: 0 };
+    }
+
+    // Handle count mismatch - check for forest proof error before throwing
+    if (bucketDeletionEvents.length !== expectedCount) {
+      // If there's a forest proof error, return as retryable failure
+      if (hasForestProofError) {
+        return { successful: 0, failedWithForestProofError: 1 };
+      }
+      // No forest proof error but count mismatch - throw error
+      strictEqual(
+        bucketDeletionEvents.length,
+        expectedCount,
+        `Should have exactly ${expectedCount} bucket deletion event(s)`
+      );
     }
 
     if (bucketDeletionEvents.length > 0) {
@@ -535,7 +542,9 @@ export const waitForFishermanBatchDeletions = async (
         // Extrinsic not found yet, continue to next iteration
         if (attempt === maxAttempts - 1) {
           throw new Error(
-            `Timeout waiting for fisherman to process ${deletionType} deletions after ${maxAttempts * 5} seconds`
+            `Timeout waiting for fisherman to process ${deletionType} deletions after ${
+              maxAttempts * 5
+            } seconds`
           );
         }
       }
