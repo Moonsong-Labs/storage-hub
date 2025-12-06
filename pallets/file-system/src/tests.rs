@@ -7915,7 +7915,7 @@ mod bsp_stop_storing {
         }
 
         #[test]
-        fn bsp_confirm_stop_storing_success_and_deletes_payment_stream_for_last_file() {
+        fn bsp_request_stop_storing_deletes_payment_stream_for_last_file() {
             new_test_ext().execute_with(|| {
                 let owner_account_id = Keyring::Alice.to_account_id();
                 let owner = RuntimeOrigin::signed(owner_account_id.clone());
@@ -8118,41 +8118,12 @@ mod bsp_stop_storing {
                         bsp_id,
                         file_key,
                         owner: owner_account_id.clone(),
-                        location,
+                        location: location.clone(),
                     }
                     .into(),
                 );
 
-                // Advance enough blocks to allow the BSP to confirm the stop storing request.
-                roll_to(
-                    frame_system::Pallet::<Test>::block_number() + MinWaitForStopStoring::get(),
-                );
-
-                // Dispatch BSP confirm stop storing.
-                assert_ok!(FileSystem::bsp_confirm_stop_storing(
-                    bsp_signed.clone(),
-                    file_key,
-                    CompactProof {
-                        encoded_nodes: vec![file_key.as_ref().to_vec()],
-                    },
-                ));
-
-                // Assert that the pending stop storing request was removed.
-                assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_none());
-
-                // Assert that the correct event was deposited.
-                let new_root = Providers::get_root(bsp_id).unwrap();
-
-                System::assert_last_event(
-                    Event::BspConfirmStoppedStoring {
-                        bsp_id,
-                        file_key,
-                        new_root,
-                    }
-                    .into(),
-                );
-
-				// Check that the dynamic-rate payment stream between the user and the provider doesn't exist
+				// Check that the dynamic-rate payment stream between the user and the provider was deleted
                 assert!(<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_info(
 					&bsp_id,
 					&owner_account_id
@@ -8161,7 +8132,7 @@ mod bsp_stop_storing {
         }
 
         #[test]
-        fn bsp_confirm_stop_storing_success_and_updates_payment_streams_amount_provided() {
+        fn bsp_request_stop_storing_updates_payment_streams_amount_provided() {
             new_test_ext().execute_with(|| {
                 let owner_account_id = Keyring::Alice.to_account_id();
                 let owner = RuntimeOrigin::signed(owner_account_id.clone());
@@ -8430,6 +8401,22 @@ mod bsp_stop_storing {
                     .into(),
                 );
 
+				// Check that the amount provided of the dynamic-rate payment stream between the user and the provider was updated
+                assert!(
+					<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_info(
+						&bsp_id,
+						&owner_account_id
+					)
+					.is_some()
+				);
+				let maybe_amount_provided = <Test as crate::Config>::PaymentStreams::get_dynamic_rate_payment_stream_amount_provided(
+					&bsp_id,
+					&owner_account_id
+				);
+				assert!(maybe_amount_provided.is_some());
+				let amount_provided = maybe_amount_provided.unwrap();
+				assert_eq!(amount_provided, size);
+
                 // Advance enough blocks to allow the BSP to confirm the stop storing request.
                 roll_to(
                     frame_system::Pallet::<Test>::block_number() + MinWaitForStopStoring::get(),
@@ -8459,7 +8446,7 @@ mod bsp_stop_storing {
                     .into(),
                 );
 
-				// Check that the amount provided of the dynamic-rate payment stream between the user and the provider was updated
+                // Check that the amount provided of the dynamic-rate payment stream between the user and the provider has not changed
                 assert!(
 					<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_info(
 						&bsp_id,
@@ -8467,13 +8454,13 @@ mod bsp_stop_storing {
 					)
 					.is_some()
 				);
-				let maybe_amount_provided = <Test as crate::Config>::PaymentStreams::get_dynamic_rate_payment_stream_amount_provided(
+				let maybe_amount_provided_after_confirm = <Test as crate::Config>::PaymentStreams::get_dynamic_rate_payment_stream_amount_provided(
 					&bsp_id,
 					&owner_account_id
 				);
-				assert!(maybe_amount_provided.is_some());
-				let amount_provided = maybe_amount_provided.unwrap();
-				assert_eq!(amount_provided, size);
+				assert!(maybe_amount_provided_after_confirm.is_some());
+				let amount_provided_after_confirm = maybe_amount_provided_after_confirm.unwrap();
+				assert_eq!(amount_provided_after_confirm, amount_provided);
             });
         }
 
