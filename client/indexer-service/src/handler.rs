@@ -677,8 +677,14 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 owner: _,
                 bucket_id,
             } => {
+                // In this scenario, there's no need to update the `is_in_bucket` field of the files in the bucket,
+                // since the bucket still exists and is still storing the files (according to its on-chain forest root).
+
+                // Delete the MSP-file associations for all files in the bucket
                 let msp = Msp::get_by_onchain_msp_id(conn, OnchainMspId::from(*msp_id)).await?;
                 MspFile::delete_by_bucket(conn, bucket_id.as_ref(), msp.id).await?;
+
+                // Unset the MSP from the bucket to reflect on-chain state
                 Bucket::unset_msp(conn, bucket_id.as_ref().to_vec()).await?;
             }
             pallet_file_system::Event::BucketDeleted {
@@ -686,13 +692,15 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 bucket_id,
                 maybe_collection_id: _,
             } => {
+                // Delete the bucket from the database. This should not fail as no files should be associated with it,
+                // since to be able to be deleted on-chain the bucket must have been empty.
                 Bucket::delete(conn, bucket_id.as_ref().to_vec()).await?;
             }
             pallet_file_system::Event::FileDeletionRequested {
                 signed_delete_intention,
                 signature,
             } => {
-                // Mark file for deletion with user signature
+                // Mark the file for deletion with the user signed deletion intention.
                 let file_key = &signed_delete_intention.file_key;
                 let signature_bytes = signature.encode();
                 File::update_deletion_status(
@@ -772,7 +780,6 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             // This event covers all scenarios where a storage request was unfulfilled while there were BSPs and/or the MSP who have confirmed to store the file
             // and necessitates a fisherman to delete this file.
             pallet_file_system::Event::IncompleteStorageRequest { file_key } => {
-                // Check if file is in bucket or has BSP associations
                 // There can be multiple file records for a given file key if there were multiple
                 // storage requests for the same file key. We get the latest one created, which
                 // has to be the incomplete one, given that there can't be two storage
@@ -787,19 +794,24 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     let has_bsp = File::has_bsp_associations(conn, file_record.id).await?;
 
                     if is_in_bucket || has_bsp {
-                        // File is still being stored, mark for deletion
-                        File::update_deletion_status(
-                            conn,
-                            file_key.as_ref(),
-                            FileDeletionStatus::InProgress,
-                            None,
-                        )
-                        .await?;
+                        // File is still being stored, check if it has already been marked for deletion
+                        // and if not, mark it for deletion.
+                        // This is because a deletion request (with the user's signed intention) takes precedence,
+                        // and we don't want to clear the user's signature.
+                        if file_record.deletion_status.is_none() {
+                            File::update_deletion_status(
+                                conn,
+                                file_key.as_ref(),
+                                FileDeletionStatus::InProgress,
+                                None,
+                            )
+                            .await?;
 
-                        log::debug!(
+                            log::debug!(
                         		"Incomplete storage request for file {:?} (id: {:?}) is still being stored (in_bucket: {}, BSP: {}), marked for deletion without signature",
                         		file_key, file_record.id, is_in_bucket, has_bsp
                     		);
+                        }
                     } else {
                         // No storage, safe to delete immediately
                         File::delete(conn, file_record.id).await?;
