@@ -545,6 +545,7 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
+        // Bucket lifecycle events
         /// Notifies that a new bucket has been created.
         NewBucket {
             who: T::AccountId,
@@ -562,13 +563,6 @@ pub mod pallet {
             bucket_id: BucketIdFor<T>,
             maybe_collection_id: Option<CollectionIdFor<T>>,
         },
-        /// Notifies that a bucket is being moved to a new MSP.
-        MoveBucketRequested {
-            who: T::AccountId,
-            bucket_id: BucketIdFor<T>,
-            new_msp_id: ProviderIdFor<T>,
-            new_value_prop_id: ValuePropId<T>,
-        },
         /// Notifies that a bucket's privacy has been updated.
         BucketPrivacyUpdated {
             who: T::AccountId,
@@ -582,6 +576,32 @@ pub mod pallet {
             bucket_id: BucketIdFor<T>,
             collection_id: CollectionIdFor<T>,
         },
+
+        // Move bucket events
+        /// Notifies that a bucket is being moved to a new MSP.
+        MoveBucketRequested {
+            who: T::AccountId,
+            bucket_id: BucketIdFor<T>,
+            new_msp_id: ProviderIdFor<T>,
+            new_value_prop_id: ValuePropId<T>,
+        },
+        /// Notifies that a move bucket request has expired.
+        MoveBucketRequestExpired { bucket_id: BucketIdFor<T> },
+        /// Notifies that a bucket has been moved to a new MSP under a new value proposition.
+        MoveBucketAccepted {
+            bucket_id: BucketIdFor<T>,
+            old_msp_id: Option<ProviderIdFor<T>>,
+            new_msp_id: ProviderIdFor<T>,
+            value_prop_id: ValuePropId<T>,
+        },
+        /// Notifies that a bucket move request has been rejected by the MSP.
+        MoveBucketRejected {
+            bucket_id: BucketIdFor<T>,
+            old_msp_id: Option<ProviderIdFor<T>>,
+            new_msp_id: ProviderIdFor<T>,
+        },
+
+        // Storage request lifecycle events
         /// Notifies that a new file has been requested to be stored.
         NewStorageRequest {
             who: T::AccountId,
@@ -606,25 +626,6 @@ pub mod pallet {
             file_key: MerkleHash<T>,
             file_metadata: FileMetadata,
         },
-        /// Notifies that a BSP has been accepted to store a given file.
-        AcceptedBspVolunteer {
-            bsp_id: ProviderIdFor<T>,
-            bucket_id: BucketIdFor<T>,
-            location: FileLocation<T>,
-            fingerprint: Fingerprint<T>,
-            multiaddresses: MultiAddresses<T>,
-            owner: T::AccountId,
-            size: StorageDataUnit<T>,
-        },
-        /// Notifies that a BSP confirmed storing a file(s).
-        BspConfirmedStoring {
-            who: T::AccountId,
-            bsp_id: ProviderIdFor<T>,
-            confirmed_file_keys:
-                BoundedVec<(MerkleHash<T>, FileMetadata), T::MaxBatchConfirmStorageRequests>,
-            skipped_file_keys: BoundedVec<MerkleHash<T>, T::MaxBatchConfirmStorageRequests>,
-            new_root: MerkleHash<T>,
-        },
         /// Notifies that a storage request for a file key has been fulfilled.
         /// This means that the storage request has been accepted by the MSP and the BSP target
         /// has been reached.
@@ -648,6 +649,40 @@ pub mod pallet {
             bucket_id: BucketIdFor<T>,
             reason: RejectedStorageRequestReason,
         },
+        /// Notifies that a storage request was marked as incomplete.
+        ///
+        /// This is important for fisherman nodes to listen and react to, to delete
+        /// the file key from the BSPs and/or Bucket storing that file from their forest.
+        IncompleteStorageRequest { file_key: MerkleHash<T> },
+
+        // BSP volunteer and confirmation events
+        /// Notifies that a BSP has been accepted to store a given file.
+        AcceptedBspVolunteer {
+            bsp_id: ProviderIdFor<T>,
+            bucket_id: BucketIdFor<T>,
+            location: FileLocation<T>,
+            fingerprint: Fingerprint<T>,
+            multiaddresses: MultiAddresses<T>,
+            owner: T::AccountId,
+            size: StorageDataUnit<T>,
+        },
+        /// Notifies that a BSP confirmed storing a file(s).
+        BspConfirmedStoring {
+            who: T::AccountId,
+            bsp_id: ProviderIdFor<T>,
+            confirmed_file_keys:
+                BoundedVec<(MerkleHash<T>, FileMetadata), T::MaxBatchConfirmStorageRequests>,
+            skipped_file_keys: BoundedVec<MerkleHash<T>, T::MaxBatchConfirmStorageRequests>,
+            new_root: MerkleHash<T>,
+        },
+        /// Notifies that a BSP's challenge cycle has been initialised, adding the first file
+        /// key(s) to the BSP's Merkle Patricia Forest.
+        BspChallengeCycleInitialised {
+            who: T::AccountId,
+            bsp_id: ProviderIdFor<T>,
+        },
+
+        // Stop storing events
         BspRequestedToStopStoring {
             bsp_id: ProviderIdFor<T>,
             file_key: MerkleHash<T>,
@@ -660,6 +695,14 @@ pub mod pallet {
             file_key: MerkleHash<T>,
             new_root: MerkleHash<T>,
         },
+        /// Notifies that a MSP has stopped storing a bucket.
+        MspStoppedStoringBucket {
+            msp_id: ProviderIdFor<T>,
+            owner: T::AccountId,
+            bucket_id: BucketIdFor<T>,
+        },
+
+        // Insolvent user events
         /// Notifies that a SP has stopped storing a file because its owner has become insolvent.
         SpStopStoringInsolventUser {
             sp_id: ProviderIdFor<T>,
@@ -674,45 +717,8 @@ pub mod pallet {
             owner: T::AccountId,
             bucket_id: BucketIdFor<T>,
         },
-        /// Notifies that a BSP's challenge cycle has been initialised, adding the first file
-        /// key(s) to the BSP's Merkle Patricia Forest.
-        BspChallengeCycleInitialised {
-            who: T::AccountId,
-            bsp_id: ProviderIdFor<T>,
-        },
-        /// Notifies that a move bucket request has expired.
-        MoveBucketRequestExpired { bucket_id: BucketIdFor<T> },
-        /// Notifies that a bucket has been moved to a new MSP under a new value proposition.
-        MoveBucketAccepted {
-            bucket_id: BucketIdFor<T>,
-            old_msp_id: Option<ProviderIdFor<T>>,
-            new_msp_id: ProviderIdFor<T>,
-            value_prop_id: ValuePropId<T>,
-        },
-        /// Notifies that a bucket move request has been rejected by the MSP.
-        MoveBucketRejected {
-            bucket_id: BucketIdFor<T>,
-            old_msp_id: Option<ProviderIdFor<T>>,
-            new_msp_id: ProviderIdFor<T>,
-        },
-        /// Notifies that a MSP has stopped storing a bucket.
-        MspStoppedStoringBucket {
-            msp_id: ProviderIdFor<T>,
-            owner: T::AccountId,
-            bucket_id: BucketIdFor<T>,
-        },
-        /// Event to notify of incoherencies in used capacity.
-        UsedCapacityShouldBeZero {
-            actual_used_capacity: StorageDataUnit<T>,
-        },
-        /// Event to notify if, in the `on_idle` hook when cleaning up an expired storage request,
-        /// the return of that storage request's deposit to the user failed.
-        FailedToReleaseStorageRequestCreationDeposit {
-            file_key: MerkleHash<T>,
-            owner: T::AccountId,
-            amount_to_return: BalanceOf<T>,
-            error: DispatchError,
-        },
+
+        // File deletion events
         /// Notifies that a file deletion has been requested.
         /// Contains a signed intention that allows any actor to execute the actual deletion.
         FileDeletionRequested {
@@ -736,11 +742,20 @@ pub mod pallet {
             old_root: MerkleHash<T>,
             new_root: MerkleHash<T>,
         },
-        /// Notifies that a storage request was marked as incomplete.
-        ///
-        /// This is important for fisherman nodes to listen and react to, to delete
-        /// the file key from the BSPs and/or Bucket storing that file from their forest.
-        IncompleteStorageRequest { file_key: MerkleHash<T> },
+
+        // System and error events
+        /// Event to notify of incoherencies in used capacity.
+        UsedCapacityShouldBeZero {
+            actual_used_capacity: StorageDataUnit<T>,
+        },
+        /// Event to notify if, in the `on_idle` hook when cleaning up an expired storage request,
+        /// the return of that storage request's deposit to the user failed.
+        FailedToReleaseStorageRequestCreationDeposit {
+            file_key: MerkleHash<T>,
+            owner: T::AccountId,
+            amount_to_return: BalanceOf<T>,
+            error: DispatchError,
+        },
     }
 
     // Errors inform users that something went wrong.

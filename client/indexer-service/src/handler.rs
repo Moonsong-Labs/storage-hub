@@ -251,6 +251,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         evm_tx_hash: Option<H256>,
     ) -> Result<(), diesel::result::Error> {
         match event {
+            // Bucket lifecycle events
             pallet_file_system::Event::NewBucket {
                 who,
                 msp_id,
@@ -277,6 +278,33 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 )
                 .await?;
             }
+            pallet_file_system::Event::BucketDeleted {
+                who: _,
+                bucket_id,
+                maybe_collection_id: _,
+            } => {
+                Bucket::delete(conn, bucket_id.as_ref().to_vec()).await?;
+            }
+            pallet_file_system::Event::BucketPrivacyUpdated {
+                who,
+                bucket_id,
+                collection_id,
+                private,
+            } => {
+                Bucket::update_privacy(
+                    conn,
+                    who.to_string(),
+                    bucket_id.as_ref().to_vec(),
+                    collection_id.map(|id| id.to_string()),
+                    *private,
+                )
+                .await?;
+            }
+            pallet_file_system::Event::NewCollectionAndAssociation { .. } => {}
+
+            // Move bucket events
+            pallet_file_system::Event::MoveBucketRequested { .. } => {}
+            pallet_file_system::Event::MoveBucketRequestExpired { .. } => {}
             pallet_file_system::Event::MoveBucketAccepted {
                 old_msp_id,
                 new_msp_id,
@@ -309,35 +337,230 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 // Update bucket's MSP reference
                 Bucket::update_msp(conn, bucket_id.as_ref().to_vec(), new_msp.id).await?;
             }
-            pallet_file_system::Event::BucketPrivacyUpdated {
+            pallet_file_system::Event::MoveBucketRejected { .. } => {}
+
+            // Storage request lifecycle events
+            pallet_file_system::Event::NewStorageRequest {
                 who,
-                bucket_id,
-                collection_id,
-                private,
-            } => {
-                Bucket::update_privacy(
-                    conn,
-                    who.to_string(),
-                    bucket_id.as_ref().to_vec(),
-                    collection_id.map(|id| id.to_string()),
-                    *private,
-                )
-                .await?;
-            }
-            pallet_file_system::Event::BspConfirmStoppedStoring {
-                bsp_id,
                 file_key,
-                new_root,
+                bucket_id,
+                location,
+                fingerprint,
+                size,
+                peer_ids,
+                expires_at: _,
             } => {
-                Bsp::update_merkle_root(
+                let bucket =
+                    Bucket::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec()).await?;
+
+                let mut sql_peer_ids = Vec::new();
+                for peer_id in peer_ids {
+                    sql_peer_ids.push(PeerId::create(conn, peer_id.to_vec()).await?);
+                }
+
+                let size: u64 = (*size).saturated_into();
+                let size: i64 = size.saturated_into();
+                let who = who.as_ref().to_vec();
+
+                // Get the runtime-specific block hash from storage.
+                // For a standard Substrate runtime, the Ethereum block hash won't exist in storage,
+                // so we'll fallback to using the Substrate block hash (blake2_256) which is what we want.
+                // For a EVM-compatible runtime, we'll get the EVM block hash (keccak256) from storage,
+                // which is different from the Substrate block hash.
+                let block_number_u32: u32 = block_number.saturated_into();
+                let runtime_block_hash =
+                    get_ethereum_block_hash(&self.client, &block_hash, block_number_u32)
+                        .unwrap_or(None)
+                        .unwrap_or(block_hash);
+                let block_hash_bytes = runtime_block_hash.as_bytes().to_vec();
+
+                // Convert EVM tx hash to bytes if present
+                let tx_hash_bytes = evm_tx_hash.map(|h| h.as_bytes().to_vec());
+
+                // Check if this file key is already present in the bucket of the MSP
+                // This could happen if there was a previous storage request for this file key that
+                // the MSP accepted, and the new storage request was issued by the user to add redundancy to it.
+                // We do this check because in this scenario,the `MutationsApplied` event won't be emitted for this
+                // file key when the MSP accepts it, as the MSP is already storing it.
+                let is_in_bucket =
+                    File::is_file_key_in_bucket(conn, file_key.as_ref().to_vec()).await?;
+
+                File::create(
                     conn,
-                    OnchainBspId::from(*bsp_id),
-                    new_root.as_ref().to_vec(),
+                    who,
+                    file_key.as_ref().to_vec(),
+                    bucket.id,
+                    bucket_id.as_ref().to_vec(),
+                    location.to_vec(),
+                    fingerprint.as_ref().to_vec(),
+                    size,
+                    FileStorageRequestStep::Requested,
+                    sql_peer_ids,
+                    block_hash_bytes,
+                    tx_hash_bytes,
+                    is_in_bucket,
                 )
                 .await?;
-                BspFile::delete_for_bsp(conn, file_key.as_ref(), OnchainBspId::from(*bsp_id))
-                    .await?;
             }
+            pallet_file_system::Event::MspAcceptedStorageRequest {
+                file_key,
+                file_metadata,
+            } => {
+                // There can be multiple file records for a given file key if there were multiple
+                // storage requests for the same file key. We get the latest one created, which
+                // has to be the one that was accepted, given that there can't be two storage
+                // requests for the same file key at the same time.
+                let file = match File::get_latest_by_file_key(conn, file_key.as_ref().to_vec())
+                    .await
+                {
+                    Ok(file) => file,
+                    Err(diesel::result::Error::NotFound) => {
+                        // This can happen if the file was completely deleted from the DB (so all BSP and MSP associations were deleted)
+                        // but a storage request was still present on-chain so the MSP accepted it.
+                        log::info!(
+                            target: LOG_TARGET,
+                            "File record not found for file_key {:?} during MspAcceptedStorageRequest. \
+                            Recreating from event metadata (recovery).",
+                            file_key
+                        );
+
+                        // Recreate the file record from the metadata in the event
+                        let bucket = Bucket::get_by_onchain_bucket_id(
+                            conn,
+                            file_metadata.bucket_id().to_vec(),
+                        )
+                        .await?;
+
+                        let size: u64 = file_metadata.file_size();
+                        let size: i64 = size.saturated_into();
+
+                        let block_hash_bytes = block_hash.as_bytes().to_vec();
+                        let tx_hash_bytes = evm_tx_hash.map(|h| h.as_bytes().to_vec());
+
+                        // Check if this file key is already present in the bucket of the MSP
+                        // In this scenario, this will always return false, since there's no other file record
+                        // in the DB, but it's still a good practice to check it.
+                        let is_in_bucket =
+                            File::is_file_key_in_bucket(conn, file_key.as_ref().to_vec()).await?;
+
+                        // Create file with Requested step since we will change it to Stored when the storage request is fulfilled
+                        File::create(
+                            conn,
+                            file_metadata.owner().clone(),
+                            file_key.as_ref().to_vec(),
+                            bucket.id,
+                            file_metadata.bucket_id().clone(),
+                            file_metadata.location().clone(),
+                            file_metadata.fingerprint().as_ref().to_vec(),
+                            size,
+                            FileStorageRequestStep::Requested,
+                            vec![], // No peer_ids available from acceptance event
+                            block_hash_bytes,
+                            tx_hash_bytes,
+                            is_in_bucket,
+                        )
+                        .await?
+                    }
+                    Err(e) => return Err(e),
+                };
+
+                let bucket = Bucket::get_by_id(conn, file.bucket_id).await?;
+                if let Some(msp_id) = bucket.msp_id {
+                    MspFile::create(conn, msp_id, file.id).await?;
+                }
+            }
+            pallet_file_system::Event::StorageRequestFulfilled { file_key } => {
+                File::update_step(
+                    conn,
+                    file_key.as_ref().to_vec(),
+                    FileStorageRequestStep::Stored,
+                )
+                .await?;
+            }
+            pallet_file_system::Event::StorageRequestExpired { file_key } => {
+                File::update_step(
+                    conn,
+                    file_key.as_ref().to_vec(),
+                    FileStorageRequestStep::Expired,
+                )
+                .await?;
+            }
+            pallet_file_system::Event::StorageRequestRevoked { file_key } => {
+                // Mark storage request as revoked so it's not protected from deletion
+                File::update_step(
+                    conn,
+                    file_key.as_ref().to_vec(),
+                    FileStorageRequestStep::Revoked,
+                )
+                .await?;
+                // Delete file if it has no storage (not in bucket forest and no BSP associations)
+                // This happens when storage request is revoked before any BSPs or MSP confirms or accepted respectively.
+                File::delete_if_orphaned(conn, file_key.as_ref()).await?;
+                // If the file has storage, the `IncompleteStorageRequest` event will handle it
+            }
+            pallet_file_system::Event::StorageRequestRejected {
+                file_key,
+                msp_id: _,
+                bucket_id: _,
+                reason: _,
+            } => {
+                // Mark storage request as rejected so it's not protected from deletion
+                File::update_step(
+                    conn,
+                    file_key.as_ref().to_vec(),
+                    FileStorageRequestStep::Rejected,
+                )
+                .await?;
+                // Delete file if it has no storage (not in bucket forest and no BSP associations)
+                // This happens when a storage request is rejected by the MSP.
+                // It is possible that there might be no BSP associations.
+                File::delete_if_orphaned(conn, file_key.as_ref()).await?;
+                // If the file has storage, the `IncompleteStorageRequest` event will handle it
+            }
+            // This event covers all scenarios where a storage request was unfulfilled while there were BSPs and/or the MSP who have confirmed to store the file
+            // and necessitates a fisherman to delete this file.
+            pallet_file_system::Event::IncompleteStorageRequest { file_key } => {
+                // Check if file is in bucket or has BSP associations
+                // There can be multiple file records for a given file key if there were multiple
+                // storage requests for the same file key. We get the latest one created, which
+                // has to be the incomplete one, given that there can't be two storage
+                // requests for the same file key at the same time.
+                let file_record = File::get_latest_by_file_key(conn, file_key.as_ref().to_vec())
+                    .await
+                    .ok();
+
+                // If the file record is not found, it means the file has been deleted already.
+                if let Some(file_record) = file_record {
+                    let is_in_bucket = file_record.is_in_bucket;
+                    let has_bsp = File::has_bsp_associations(conn, file_record.id).await?;
+
+                    if is_in_bucket || has_bsp {
+                        // File is still being stored, mark for deletion
+                        File::update_deletion_status(
+                            conn,
+                            file_key.as_ref(),
+                            FileDeletionStatus::InProgress,
+                            None,
+                        )
+                        .await?;
+
+                        log::debug!(
+                        		"Incomplete storage request for file {:?} (id: {:?}) is still being stored (in_bucket: {}, BSP: {}), marked for deletion without signature",
+                        		file_key, file_record.id, is_in_bucket, has_bsp
+                    		);
+                    } else {
+                        // No storage, safe to delete immediately
+                        File::delete(conn, file_record.id).await?;
+                        log::debug!(
+                            "Incomplete storage request for file key {:?} and id {:?} is not being stored, deleted immediately",
+                            file_key, file_record.id,
+                        );
+                    }
+                }
+            }
+
+            // BSP volunteer and confirmation events
+            pallet_file_system::Event::AcceptedBspVolunteer { .. } => {}
             pallet_file_system::Event::BspConfirmedStoring {
                 who: _,
                 bsp_id,
@@ -416,190 +639,25 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     BspFile::create(conn, bsp.id, file.id).await?;
                 }
             }
-            pallet_file_system::Event::NewStorageRequest {
-                who,
-                file_key,
-                bucket_id,
-                location,
-                fingerprint,
-                size,
-                peer_ids,
-                expires_at: _,
-            } => {
-                let bucket =
-                    Bucket::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec()).await?;
+            pallet_file_system::Event::BspChallengeCycleInitialised { .. } => {}
 
-                let mut sql_peer_ids = Vec::new();
-                for peer_id in peer_ids {
-                    sql_peer_ids.push(PeerId::create(conn, peer_id.to_vec()).await?);
-                }
-
-                let size: u64 = (*size).saturated_into();
-                let size: i64 = size.saturated_into();
-                let who = who.as_ref().to_vec();
-
-                // Get the runtime-specific block hash from storage.
-                // For a standard Substrate runtime, the Ethereum block hash won't exist in storage,
-                // so we'll fallback to using the Substrate block hash (blake2_256) which is what we want.
-                // For a EVM-compatible runtime, we'll get the EVM block hash (keccak256) from storage,
-                // which is different from the Substrate block hash.
-                let block_number_u32: u32 = block_number.saturated_into();
-                let runtime_block_hash =
-                    get_ethereum_block_hash(&self.client, &block_hash, block_number_u32)
-                        .unwrap_or(None)
-                        .unwrap_or(block_hash);
-                let block_hash_bytes = runtime_block_hash.as_bytes().to_vec();
-
-                // Convert EVM tx hash to bytes if present
-                let tx_hash_bytes = evm_tx_hash.map(|h| h.as_bytes().to_vec());
-
-                // Check if this file key is already present in the bucket of the MSP
-                // This could happen if there was a previous storage request for this file key that
-                // the MSP accepted, and the new storage request was issued by the user to add redundancy to it.
-                // We do this check because in this scenario,the `MutationsApplied` event won't be emitted for this
-                // file key when the MSP accepts it, as the MSP is already storing it.
-                let is_in_bucket =
-                    File::is_file_key_in_bucket(conn, file_key.as_ref().to_vec()).await?;
-
-                File::create(
-                    conn,
-                    who,
-                    file_key.as_ref().to_vec(),
-                    bucket.id,
-                    bucket_id.as_ref().to_vec(),
-                    location.to_vec(),
-                    fingerprint.as_ref().to_vec(),
-                    size,
-                    FileStorageRequestStep::Requested,
-                    sql_peer_ids,
-                    block_hash_bytes,
-                    tx_hash_bytes,
-                    is_in_bucket,
-                )
-                .await?;
-            }
-            pallet_file_system::Event::MoveBucketRequested { .. } => {}
-            pallet_file_system::Event::MoveBucketRequestExpired { .. } => {}
-            pallet_file_system::Event::MoveBucketRejected { .. } => {}
-            pallet_file_system::Event::NewCollectionAndAssociation { .. } => {}
-            pallet_file_system::Event::AcceptedBspVolunteer { .. } => {}
-            pallet_file_system::Event::StorageRequestFulfilled { file_key } => {
-                File::update_step(
-                    conn,
-                    file_key.as_ref().to_vec(),
-                    FileStorageRequestStep::Stored,
-                )
-                .await?;
-            }
-            pallet_file_system::Event::StorageRequestExpired { file_key } => {
-                File::update_step(
-                    conn,
-                    file_key.as_ref().to_vec(),
-                    FileStorageRequestStep::Expired,
-                )
-                .await?;
-            }
-            pallet_file_system::Event::StorageRequestRevoked { file_key } => {
-                // Mark storage request as revoked so it's not protected from deletion
-                File::update_step(
-                    conn,
-                    file_key.as_ref().to_vec(),
-                    FileStorageRequestStep::Revoked,
-                )
-                .await?;
-                // Delete file if it has no storage (not in bucket forest and no BSP associations)
-                // This happens when storage request is revoked before any BSPs or MSP confirms or accepted respectively.
-                File::delete_if_orphaned(conn, file_key.as_ref()).await?;
-                // If the file has storage, the `IncompleteStorageRequest` event will handle it
-            }
-            pallet_file_system::Event::StorageRequestRejected {
-                file_key,
-                msp_id: _,
-                bucket_id: _,
-                reason: _,
-            } => {
-                // Mark storage request as rejected so it's not protected from deletion
-                File::update_step(
-                    conn,
-                    file_key.as_ref().to_vec(),
-                    FileStorageRequestStep::Rejected,
-                )
-                .await?;
-                // Delete file if it has no storage (not in bucket forest and no BSP associations)
-                // This happens when a storage request is rejected by the MSP.
-                // It is possible that there might be no BSP associations.
-                File::delete_if_orphaned(conn, file_key.as_ref()).await?;
-                // If the file has storage, the `IncompleteStorageRequest` event will handle it
-            }
-            pallet_file_system::Event::MspAcceptedStorageRequest {
-                file_key,
-                file_metadata,
-            } => {
-                // There can be multiple file records for a given file key if there were multiple
-                // storage requests for the same file key. We get the latest one created, which
-                // has to be the one that was accepted, given that there can't be two storage
-                // requests for the same file key at the same time.
-                let file = match File::get_latest_by_file_key(conn, file_key.as_ref().to_vec())
-                    .await
-                {
-                    Ok(file) => file,
-                    Err(diesel::result::Error::NotFound) => {
-                        // This can happen if the file was completely deleted from the DB (so all BSP and MSP associations were deleted)
-                        // but a storage request was still present on-chain so the MSP accepted it.
-                        log::info!(
-                            target: LOG_TARGET,
-                            "File record not found for file_key {:?} during MspAcceptedStorageRequest. \
-                            Recreating from event metadata (recovery).",
-                            file_key
-                        );
-
-                        // Recreate the file record from the metadata in the event
-                        let bucket = Bucket::get_by_onchain_bucket_id(
-                            conn,
-                            file_metadata.bucket_id().to_vec(),
-                        )
-                        .await?;
-
-                        let size: u64 = file_metadata.file_size();
-                        let size: i64 = size.saturated_into();
-
-                        let block_hash_bytes = block_hash.as_bytes().to_vec();
-                        let tx_hash_bytes = evm_tx_hash.map(|h| h.as_bytes().to_vec());
-
-                        // Check if this file key is already present in the bucket of the MSP
-                        // In this scenario, this will always return false, since there's no other file record
-                        // in the DB, but it's still a good practice to check it.
-                        let is_in_bucket =
-                            File::is_file_key_in_bucket(conn, file_key.as_ref().to_vec()).await?;
-
-                        // Create file with Requested step since we will change it to Stored when the storage request is fulfilled
-                        File::create(
-                            conn,
-                            file_metadata.owner().clone(),
-                            file_key.as_ref().to_vec(),
-                            bucket.id,
-                            file_metadata.bucket_id().clone(),
-                            file_metadata.location().clone(),
-                            file_metadata.fingerprint().as_ref().to_vec(),
-                            size,
-                            FileStorageRequestStep::Requested,
-                            vec![], // No peer_ids available from acceptance event
-                            block_hash_bytes,
-                            tx_hash_bytes,
-                            is_in_bucket,
-                        )
-                        .await?
-                    }
-                    Err(e) => return Err(e),
-                };
-
-                let bucket = Bucket::get_by_id(conn, file.bucket_id).await?;
-                if let Some(msp_id) = bucket.msp_id {
-                    MspFile::create(conn, msp_id, file.id).await?;
-                }
-            }
+            // Stop storing events
             pallet_file_system::Event::BspRequestedToStopStoring { .. } => {}
-            pallet_file_system::Event::MspStopStoringBucketInsolventUser {
+            pallet_file_system::Event::BspConfirmStoppedStoring {
+                bsp_id,
+                file_key,
+                new_root,
+            } => {
+                Bsp::update_merkle_root(
+                    conn,
+                    OnchainBspId::from(*bsp_id),
+                    new_root.as_ref().to_vec(),
+                )
+                .await?;
+                BspFile::delete_for_bsp(conn, file_key.as_ref(), OnchainBspId::from(*bsp_id))
+                    .await?;
+            }
+            pallet_file_system::Event::MspStoppedStoringBucket {
                 msp_id,
                 owner: _,
                 bucket_id,
@@ -608,6 +666,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 MspFile::delete_by_bucket(conn, bucket_id.as_ref(), msp.id).await?;
                 Bucket::unset_msp(conn, bucket_id.as_ref().to_vec()).await?;
             }
+
+            // Insolvent user events
             pallet_file_system::Event::SpStopStoringInsolventUser {
                 sp_id,
                 file_key,
@@ -619,8 +679,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 // MSP will handle insolvent user at the level of buckets (an MSP will delete the full bucket for an insolvent user and it will produce a new kind of event)
                 BspFile::delete_for_bsp(conn, file_key, OnchainBspId::from(*sp_id)).await?;
             }
-            pallet_file_system::Event::BspChallengeCycleInitialised { .. } => {}
-            pallet_file_system::Event::MspStoppedStoringBucket {
+            pallet_file_system::Event::MspStopStoringBucketInsolventUser {
                 msp_id,
                 owner: _,
                 bucket_id,
@@ -629,13 +688,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 MspFile::delete_by_bucket(conn, bucket_id.as_ref(), msp.id).await?;
                 Bucket::unset_msp(conn, bucket_id.as_ref().to_vec()).await?;
             }
-            pallet_file_system::Event::BucketDeleted {
-                who: _,
-                bucket_id,
-                maybe_collection_id: _,
-            } => {
-                Bucket::delete(conn, bucket_id.as_ref().to_vec()).await?;
-            }
+
+            // File deletion events
             pallet_file_system::Event::FileDeletionRequested {
                 signed_delete_intention,
                 signature,
@@ -650,12 +704,6 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     Some(signature_bytes),
                 )
                 .await?;
-            }
-            pallet_file_system::Event::UsedCapacityShouldBeZero { .. } => {
-                // In the future we should monitor for this to detect eventual bugs in the pallets
-            }
-            pallet_file_system::Event::FailedToReleaseStorageRequestCreationDeposit { .. } => {
-                // In the future we should monitor for this to detect eventual bugs in the pallets
             }
             pallet_file_system::Event::BucketFileDeletionsCompleted {
                 user: _,
@@ -712,47 +760,15 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 )
                 .await?;
             }
-            // This event covers all scenarios where a storage request was unfulfilled while there were BSPs and/or the MSP who have confirmed to store the file
-            // and necessitates a fisherman to delete this file.
-            pallet_file_system::Event::IncompleteStorageRequest { file_key } => {
-                // Check if file is in bucket or has BSP associations
-                // There can be multiple file records for a given file key if there were multiple
-                // storage requests for the same file key. We get the latest one created, which
-                // has to be the incomplete one, given that there can't be two storage
-                // requests for the same file key at the same time.
-                let file_record = File::get_latest_by_file_key(conn, file_key.as_ref().to_vec())
-                    .await
-                    .ok();
 
-                // If the file record is not found, it means the file has been deleted already.
-                if let Some(file_record) = file_record {
-                    let is_in_bucket = file_record.is_in_bucket;
-                    let has_bsp = File::has_bsp_associations(conn, file_record.id).await?;
-
-                    if is_in_bucket || has_bsp {
-                        // File is still being stored, mark for deletion
-                        File::update_deletion_status(
-                            conn,
-                            file_key.as_ref(),
-                            FileDeletionStatus::InProgress,
-                            None,
-                        )
-                        .await?;
-
-                        log::debug!(
-                        		"Incomplete storage request for file {:?} (id: {:?}) is still being stored (in_bucket: {}, BSP: {}), marked for deletion without signature",
-                        		file_key, file_record.id, is_in_bucket, has_bsp
-                    		);
-                    } else {
-                        // No storage, safe to delete immediately
-                        File::delete(conn, file_record.id).await?;
-                        log::debug!(
-                            "Incomplete storage request for file key {:?} and id {:?} is not being stored, deleted immediately",
-                            file_key, file_record.id,
-                        );
-                    }
-                }
+            // System and error events
+            pallet_file_system::Event::UsedCapacityShouldBeZero { .. } => {
+                // In the future we should monitor for this to detect eventual bugs in the pallets
             }
+            pallet_file_system::Event::FailedToReleaseStorageRequestCreationDeposit { .. } => {
+                // In the future we should monitor for this to detect eventual bugs in the pallets
+            }
+
             pallet_file_system::Event::__Ignore(_, _) => {}
         }
         Ok(())
