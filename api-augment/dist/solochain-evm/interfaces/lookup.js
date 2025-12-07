@@ -3135,7 +3135,7 @@ export default {
         fingerprint: 'H256',
         size_: 'u64',
         msp: 'Option<(H256,bool)>',
-        mspConfirmedWithInclusionProof: 'bool',
+        mspAcceptedWithInclusionProof: 'bool',
         userPeerIds: 'Vec<Bytes>',
         bspsRequired: 'u32',
         bspsConfirmed: 'u32',

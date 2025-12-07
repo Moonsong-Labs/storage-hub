@@ -4052,7 +4052,7 @@ declare module "@polkadot/types/lookup" {
     readonly fingerprint: H256;
     readonly size_: u64;
     readonly msp: Option<ITuple<[H256, bool]>>;
-    readonly mspConfirmedWithInclusionProof: bool;
+    readonly mspAcceptedWithInclusionProof: bool;
     readonly userPeerIds: Vec<Bytes>;
     readonly bspsRequired: u32;
     readonly bspsConfirmed: u32;

@@ -4498,7 +4498,7 @@ declare const _default: {
         fingerprint: string;
         size_: string;
         msp: string;
-        mspConfirmedWithInclusionProof: string;
+        mspAcceptedWithInclusionProof: string;
         userPeerIds: string;
         bspsRequired: string;
         bspsConfirmed: string;
