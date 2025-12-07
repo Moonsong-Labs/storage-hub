@@ -2911,6 +2911,11 @@ where
                     *file_key,
                     IncompleteStorageRequestMetadata::from((&storage_request, file_key)),
                 );
+                // Since we're deleting from the bucket in this transaction, immediately mark the bucket
+                // as removed from the incomplete storage request we just created. This prevents the
+                // `IncompleteStorageRequest` from being stuck with `pending_bucket_removal = true` and `never
+                // getting cleaned up.
+                Self::remove_provider_from_incomplete_storage_request(*file_key, None);
                 Self::cleanup_storage_request(&file_key, &storage_request);
             }
         }
@@ -3057,6 +3062,11 @@ where
                     *file_key,
                     IncompleteStorageRequestMetadata::from((&storage_request, file_key)),
                 );
+                // Since we're deleting from this BSP in this transaction, immediately mark it
+                // as removed from the incomplete storage request we just created. This prevents the
+                // `IncompleteStorageRequest` from being stuck with this BSP in `pending_bsp_removals`
+                // and never getting cleaned up.
+                Self::remove_provider_from_incomplete_storage_request(*file_key, Some(bsp_id));
                 Self::cleanup_storage_request(&file_key, &storage_request);
             }
         }
