@@ -117,9 +117,12 @@ impl MspFile {
         msp_id: i64,
     ) -> Result<usize, diesel::result::Error> {
         // Get all file IDs for this bucket
+        // Only create MSP-file associations for files that are in the bucket's forest,
+        // as files could have been deleted while the bucket was orphaned from a MSP.
         let file_ids: Vec<i64> = file::table
             .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
             .filter(bucket::onchain_bucket_id.eq(bucket_id))
+            .filter(file::is_in_bucket.eq(true))
             .select(file::id)
             .load(conn)
             .await?;
