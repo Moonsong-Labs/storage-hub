@@ -746,61 +746,100 @@ pub mod pallet {
     // Errors inform users that something went wrong.
     #[pallet::error]
     pub enum Error<T> {
-        /// Storage request already registered for the given file.
-        StorageRequestAlreadyRegistered,
-        /// Storage request not registered for the given file.
-        StorageRequestNotFound,
-        /// Operation not allowed while the storage request exists.
-        StorageRequestExists,
-        /// Replication target cannot be zero.
-        ReplicationTargetCannotBeZero,
-        /// BSPs required for storage request cannot exceed the maximum allowed.
-        ReplicationTargetExceedsMaximum,
+        // Provider identity errors
         /// Account is not a BSP.
         NotABsp,
         /// Account is not a MSP.
         NotAMsp,
         /// Account is not a SP.
         NotASp,
+
+        // Storage request errors
+        /// Storage request already registered for the given file.
+        StorageRequestAlreadyRegistered,
+        /// Storage request not registered for the given file.
+        StorageRequestNotFound,
+        /// Operation not allowed while the storage request exists.
+        StorageRequestExists,
+        /// Not authorized to delete the storage request.
+        StorageRequestNotAuthorized,
+        /// Number of BSPs required for storage request has been reached.
+        StorageRequestBspsRequiredFulfilled,
+        /// Too many storage request responses.
+        TooManyStorageRequestResponses,
+        /// Incomplete storage request not found.
+        IncompleteStorageRequestNotFound,
+
+        // Replication target errors
+        /// Replication target cannot be zero.
+        ReplicationTargetCannotBeZero,
+        /// BSPs required for storage request cannot exceed the maximum allowed.
+        ReplicationTargetExceedsMaximum,
+
+        // BSP operation errors
         /// BSP has not volunteered to store the given file.
         BspNotVolunteered,
         /// BSP has not confirmed storing the given file.
         BspNotConfirmed,
         /// BSP has already confirmed storing the given file.
         BspAlreadyConfirmed,
-        /// Number of BSPs required for storage request has been reached.
-        StorageRequestBspsRequiredFulfilled,
         /// BSP already volunteered to store the given file.
         BspAlreadyVolunteered,
-        /// SP does not have enough storage capacity to store the file.
-        InsufficientAvailableCapacity,
         /// BSP cannot volunteer at this current tick.
         BspNotEligibleToVolunteer,
-        /// Not authorized to delete the storage request.
-        StorageRequestNotAuthorized,
-        /// Error created in 2024. If you see this, you are well beyond the singularity and should
-        /// probably stop using this pallet.
-        MaxTickNumberReached,
-        /// Arithmetic error in threshold calculation.
-        ThresholdArithmeticError,
-        /// Failed to get value when just checked it existed.
-        ImpossibleFailedToGetValue,
+        /// SP does not have enough storage capacity to store the file.
+        InsufficientAvailableCapacity,
+        /// No file keys to confirm storing
+        NoFileKeysToConfirm,
+
+        // MSP operation errors
+        /// Unauthorized operation, signer is not an MSP of the bucket id.
+        MspNotStoringBucket,
+        /// The MSP is trying to confirm to store a file from a storage request is not the one selected to store it.
+        NotSelectedMsp,
+        /// The MSP is trying to confirm to store a file from a storage request that it has already confirmed to store.
+        MspAlreadyConfirmed,
+        /// The MSP is trying to confirm to store a file from a storage request that does not have a MSP assigned.
+        RequestWithoutMsp,
+        /// The MSP is already storing the bucket.
+        MspAlreadyStoringBucket,
+
+        // Bucket errors
         /// Bucket does not exist
         BucketNotFound,
         /// Bucket is not empty.
         BucketNotEmpty,
         /// Operation failed because the account is not the owner of the bucket.
         NotBucketOwner,
+        /// Action not allowed while the bucket is being moved.
+        BucketIsBeingMoved,
+        /// Bucket id and file key pair is invalid.
+        InvalidBucketIdFileKeyPair,
         /// The selected value proposition is not available in the MSP.
         ValuePropositionNotAvailable,
         /// Collection ID was not found.
         CollectionNotFound,
-        /// Failed to verify proof: required to provide a proof of non-inclusion.
-        ExpectedNonInclusionProof,
-        /// Failed to verify proof: required to provide a proof of inclusion.
-        ExpectedInclusionProof,
+
+        // Move bucket errors
+        /// Move bucket request not found in storage.
+        MoveBucketRequestNotFound,
+
+        // File metadata and validation errors
         /// Metadata does not correspond to expected file key.
         InvalidFileKeyMetadata,
+        /// File size cannot be zero.
+        FileSizeCannotBeZero,
+        /// Provider is not storing the file.
+        ProviderNotStoringFile,
+        /// File key computed from metadata doesn't match the provided file key.
+        FileKeyMismatch,
+        /// File has an active storage request and as such is not eligible for deletion.
+        /// The user should use the `revoke_storage_request` extrinsic to revoke it first.
+        FileHasActiveStorageRequest,
+        /// File has an `IncompleteStorageRequest` associated with it and as such is not eligible for a new storage request
+        FileHasIncompleteStorageRequest,
+
+        // File deletion errors
         /// Batch file deletion must contain files from a single bucket only.
         BatchFileDeletionMustContainSingleBucket,
         /// Duplicate file key detected within the same batch deletion request.
@@ -813,81 +852,77 @@ pub mod pallet {
         FailedToPushUserToBspDeletionVector,
         /// Failed to push file key to bounded vector during BSP file deletion
         FailedToPushFileKeyToBspDeletionVector,
-        /// Unauthorized operation, signer is not an MSP of the bucket id.
-        MspNotStoringBucket,
-        /// File size cannot be zero.
-        FileSizeCannotBeZero,
-        /// No global reputation weight set.
-        NoGlobalReputationWeightSet,
-        /// No BSP reputation weight set.
-        NoBspReputationWeightSet,
+
+        // Stop storing request errors
         /// Pending stop storing request not found.
         PendingStopStoringRequestNotFound,
         /// Minimum amount of blocks between the request opening and being able to confirm it not reached.
         MinWaitForStopStoringNotReached,
         /// Pending stop storing request already exists.
         PendingStopStoringRequestAlreadyExists,
-        /// Certain operations (such as issuing new storage requests) are not allowed when interacting with insolvent users.
-        OperationNotAllowedWithInsolventUser,
-        /// A SP tried to stop storing files from a user that was supposedly insolvent, but the user is not insolvent.
-        UserNotInsolvent,
-        /// The MSP is trying to confirm to store a file from a storage request is not the one selected to store it.
-        NotSelectedMsp,
-        /// The MSP is trying to confirm to store a file from a storage request that it has already confirmed to store.
-        MspAlreadyConfirmed,
-        /// The MSP is trying to confirm to store a file from a storage request that does not have a MSP assigned.
-        RequestWithoutMsp,
-        /// The MSP is already storing the bucket.
-        MspAlreadyStoringBucket,
-        /// Move bucket request not found in storage.
-        MoveBucketRequestNotFound,
-        /// Action not allowed while the bucket is being moved.
-        BucketIsBeingMoved,
-        /// The bounded vector that holds file metadata to process it is full but there's still more to process.
-        FileMetadataProcessingQueueFull,
-        /// Too many storage request responses.
-        TooManyStorageRequestResponses,
-        /// Bucket id and file key pair is invalid.
-        InvalidBucketIdFileKeyPair,
+
+        // Proof verification errors
+        /// Failed to verify proof: required to provide a proof of non-inclusion.
+        ExpectedNonInclusionProof,
+        /// Failed to verify proof: required to provide a proof of inclusion.
+        ExpectedInclusionProof,
+
+        // Payment stream errors
         /// Failed to fetch the rate for the payment stream.
         FixedRatePaymentStreamNotFound,
         /// Failed to fetch the dynamic-rate payment stream.
         DynamicRatePaymentStreamNotFound,
+
+        // Solvency errors
+        /// Certain operations (such as issuing new storage requests) are not allowed when interacting with insolvent users.
+        OperationNotAllowedWithInsolventUser,
+        /// A SP tried to stop storing files from a user that was supposedly insolvent, but the user is not insolvent.
+        UserNotInsolvent,
+        /// Operations not allowed for insolvent provider
+        OperationNotAllowedForInsolventProvider,
+
+        // Signature and authorization errors
+        /// Invalid signature provided for file operation
+        InvalidSignature,
+        /// Invalid provider ID provided.
+        InvalidProviderID,
+        /// Invalid signed operation provided.
+        InvalidSignedOperation,
+
+        // Reputation errors
+        /// No global reputation weight set.
+        NoGlobalReputationWeightSet,
+        /// No BSP reputation weight set.
+        NoBspReputationWeightSet,
+
+        // Deposit errors
         /// Cannot hold the required deposit from the user
         CannotHoldDeposit,
+
+        // Threshold and arithmetic errors
+        /// Error created in 2024. If you see this, you are well beyond the singularity and should
+        /// probably stop using this pallet.
+        MaxTickNumberReached,
+        /// Arithmetic error in threshold calculation.
+        ThresholdArithmeticError,
+        /// Root was not updated after applying delta
+        RootNotUpdated,
+
+        // Internal and query failure errors
+        /// Failed to get value when just checked it existed.
+        ImpossibleFailedToGetValue,
         /// Failed to query earliest volunteer tick
         FailedToQueryEarliestFileVolunteerTick,
         /// Failed to get owner account of ID of provider
         FailedToGetOwnerAccount,
         /// Failed to get the payment account of the provider.
         FailedToGetPaymentAccount,
-        /// No file keys to confirm storing
-        NoFileKeysToConfirm,
-        /// Root was not updated after applying delta
-        RootNotUpdated,
-        /// Operations not allowed for insolvent provider
-        OperationNotAllowedForInsolventProvider,
         /// Failed to compute file key
         FailedToComputeFileKey,
         /// Failed to create file metadata
         FailedToCreateFileMetadata,
-        /// Invalid signature provided for file operation
-        InvalidSignature,
-        /// Provider is not storing the file.
-        ProviderNotStoringFile,
-        /// Invalid provider ID provided.
-        InvalidProviderID,
-        /// Invalid signed operation provided.
-        InvalidSignedOperation,
-        /// File key computed from metadata doesn't match the provided file key.
-        FileKeyMismatch,
-        /// Incomplete storage request not found.
-        IncompleteStorageRequestNotFound,
-        /// File has an active storage request and as such is not eligible for deletion.
-        /// The user should use the `revoke_storage_request` extrinsic to revoke it first.
-        FileHasActiveStorageRequest,
-        /// File has an `IncompleteStorageRequest` associated with it and as such is not eligible for a new storage request
-        FileHasIncompleteStorageRequest,
+        /// The bounded vector that holds file metadata to process it is full but there's still more to process.
+        FileMetadataProcessingQueueFull,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
