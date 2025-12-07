@@ -359,8 +359,31 @@ where
                     .await?;
             }
             shc_indexer_db::models::FileDeletionType::Incomplete => {
+                // Validate that files should actually be deleted from this target by checking
+                // incomplete storage request metadata from runtime
+                let validated_file_keys = self
+                    .validate_incomplete_deletions(&remaining_file_keys, &target)
+                    .await?;
+
+                if validated_file_keys.is_empty() {
+                    info!(
+                        target: LOG_TARGET,
+                        "🎣 No files remaining after incomplete deletion validation for target {:?}",
+                        target
+                    );
+                    return Ok(());
+                }
+
+                debug!(
+                    target: LOG_TARGET,
+                    "🎣 Validated {} files out of {} for incomplete deletion from target {:?}",
+                    validated_file_keys.len(),
+                    remaining_file_keys.len(),
+                    target
+                );
+
                 self.submit_incomplete_deletion_extrinsic(
-                    &remaining_file_keys,
+                    &validated_file_keys,
                     provider_id,
                     forest_proof,
                 )
@@ -376,6 +399,89 @@ where
         );
 
         Ok(())
+    }
+
+    /// Validate incomplete deletions by checking the incomplete storage request metadata.
+    ///
+    /// For bucket deletions, only include files where `pending_bucket_removal = true`.
+    /// For BSP deletions, only include files where the BSP is in `pending_bsp_removals`.
+    ///
+    /// This prevents the fisherman from attempting deletions that will fail at the pallet level
+    /// due to incorrect pending removal flags (e.g., when the MSP confirmed with an inclusion proof).
+    ///
+    /// # Arguments
+    /// * `file_keys` - File keys to validate
+    /// * `target` - The deletion target (BSP ID or Bucket ID)
+    ///
+    /// # Returns
+    /// Filtered list of file keys that should actually be deleted from this target
+    async fn validate_incomplete_deletions(
+        &self,
+        file_keys: &[Runtime::Hash],
+        target: &FileDeletionTarget<Runtime>,
+    ) -> anyhow::Result<Vec<Runtime::Hash>> {
+        let fisherman_service = self
+            .storage_hub_handler
+            .fisherman
+            .as_ref()
+            .ok_or_else(|| anyhow!("Fisherman service not available"))?;
+
+        let mut validated_keys = Vec::new();
+
+        // For each file key, check if it should be deleted from the target
+        for file_key in file_keys {
+            // Query the incomplete storage request metadata from the runtime
+            let metadata = match fisherman_service
+                .query_incomplete_storage_request(*file_key)
+                .await
+            {
+                Ok(metadata) => metadata,
+                Err(e) => {
+                    // If the incomplete storage request doesn't exist anymore, skip this file
+                    warn!(
+                        target: LOG_TARGET,
+                        "🎣 Failed to query incomplete storage request metadata for file {:?}: {:?}. Skipping.",
+                        file_key,
+                        e
+                    );
+                    continue;
+                }
+            };
+
+            // Check if this file should be deleted from the target
+            let should_delete = match target {
+                FileDeletionTarget::BspId(bsp_id) => {
+                    // For BSP deletions, check if this BSP is in pending_bsp_removals
+                    let is_pending = metadata.pending_bsp_removals.contains(bsp_id);
+                    if !is_pending {
+                        trace!(
+                            target: LOG_TARGET,
+                            "🎣 BSP {:?} not in pending_bsp_removals for file {:?}, skipping",
+                            bsp_id,
+                            file_key
+                        );
+                    }
+                    is_pending
+                }
+                FileDeletionTarget::BucketId(_) => {
+                    // For bucket deletions, check if pending_bucket_removal is true
+                    if !metadata.pending_bucket_removal {
+                        trace!(
+                            target: LOG_TARGET,
+                            "🎣 pending_bucket_removal is false for file {:?} (MSP likely confirmed with inclusion proof), skipping bucket deletion",
+                            file_key
+                        );
+                    }
+                    metadata.pending_bucket_removal
+                }
+            };
+
+            if should_delete {
+                validated_keys.push(*file_key);
+            }
+        }
+
+        Ok(validated_keys)
     }
 
     /// Generate forest proof for batch of files.

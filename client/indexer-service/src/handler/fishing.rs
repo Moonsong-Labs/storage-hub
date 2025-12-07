@@ -195,6 +195,17 @@ where
                     )
                     .await?
                 }
+                pallet_file_system::Event::IncompleteStorageRequestCleanedUp { file_key } => {
+                    trace!(target: LOG_TARGET, "Indexing incomplete storage request cleaned up event for file key: {:?}", file_key);
+                    self.index_file_system_event(
+                        conn,
+                        fs_event,
+                        block_hash,
+                        block_number,
+                        evm_tx_hash,
+                    )
+                    .await?
+                }
                 pallet_file_system::Event::BucketPrivacyUpdated { .. }
                 | pallet_file_system::Event::MoveBucketRequested { .. }
                 | pallet_file_system::Event::NewCollectionAndAssociation { .. }

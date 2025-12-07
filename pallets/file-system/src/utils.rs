@@ -1077,6 +1077,7 @@ where
             bsps_volunteered: zero,
             expires_at: expiration_tick,
             deposit_paid: deposit,
+            msp_confirmed_with_inclusion_proof: false,
         };
 
         // Hold the required deposit from the user.
@@ -1635,8 +1636,11 @@ where
 
             // Only check the key proof, increase the bucket size and capacity used if the file key is not in the forest proof, and
             // add the file metadata to the `accepted_files_metadata` since all keys in this array will be added to the bucket forest via an apply delta.
+            // Track whether this is an inclusion proof
+            let is_inclusion_proof = proven_keys.contains(&file_key_with_proof.file_key);
+
             // This can happen if the storage request was issued again by the user and the MSP has already stored the file.
-            if !proven_keys.contains(&file_key_with_proof.file_key) {
+            if !is_inclusion_proof {
                 accepted_files_metadata.push((file_metadata.clone(), file_key_with_proof));
 
                 // Check that the key proof is valid.
@@ -1686,6 +1690,9 @@ where
             } else {
                 // Set as confirmed the MSP in the storage request metadata.
                 storage_request_metadata.msp = Some((msp_id, true));
+
+                // Mark whether MSP confirmed with an inclusion proof
+                storage_request_metadata.msp_confirmed_with_inclusion_proof = is_inclusion_proof;
 
                 // Update storage request metadata.
                 <StorageRequests<T>>::set(
@@ -3163,7 +3170,8 @@ where
     }
 
     /// Remove a provider (BSP or bucket) from an incomplete storage request.
-    /// If no more providers are pending removal, the incomplete storage request is deleted.
+    /// If no more providers are pending removal, the incomplete storage request is deleted
+    /// and an `IncompleteStorageRequestCleanedUp` event is emitted.
     ///
     /// # Arguments
     /// * `file_key` - The file key for the incomplete storage request
@@ -3181,18 +3189,33 @@ where
                 if metadata.is_fully_cleaned() {
                     // No more providers pending removal, so remove the incomplete storage request
                     *incomplete_storage_request = None;
+
+                    // Emit the `IncompleteStorageRequestCleanedUp` event
+                    Self::deposit_event(Event::IncompleteStorageRequestCleanedUp { file_key });
                 }
             }
         });
     }
 
     /// Add storage request to [`IncompleteStorageRequests`] storage and emit `IncompleteStorageRequest` event
+    ///
+    /// We check first if there's any provider pending deletion before inserting it, as it could be the case that
+    /// this storage request was not confirmed by any BSP and the MSP already had the file from a previous storage request,
+    /// which means nothing has to be deleted in the runtime and, as such, there's no need to track the incomplete storage request.
+    ///
+    /// If there are no providers to clean, we emit `IncompleteStorageRequestCleanedUp` to notify
+    /// that the incomplete storage request has been fully cleaned up.
     fn add_incomplete_storage_request(
         file_key: MerkleHash<T>,
         metadata: IncompleteStorageRequestMetadata<T>,
     ) {
-        IncompleteStorageRequests::<T>::insert(&file_key, metadata);
-        Self::deposit_event(Event::IncompleteStorageRequest { file_key });
+        if metadata.pending_bucket_removal || !metadata.pending_bsp_removals.is_empty() {
+            IncompleteStorageRequests::<T>::insert(&file_key, metadata);
+            Self::deposit_event(Event::IncompleteStorageRequest { file_key });
+        } else {
+            // No providers to clean, emit cleanup event immediately
+            Self::deposit_event(Event::IncompleteStorageRequestCleanedUp { file_key });
+        }
     }
 }
 

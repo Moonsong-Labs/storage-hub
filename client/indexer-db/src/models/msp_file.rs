@@ -83,6 +83,28 @@ impl MspFile {
         Ok(())
     }
 
+    /// Deletes MSP-file association for a specific file ID and MSP
+    pub async fn delete_by_file_id<'a>(
+        conn: &mut DbConnection<'a>,
+        msp_id: i64,
+        file_id: i64,
+    ) -> Result<(), diesel::result::Error> {
+        let deleted_count = diesel::delete(msp_file::table)
+            .filter(msp_file::file_id.eq(file_id))
+            .filter(msp_file::msp_id.eq(msp_id))
+            .execute(conn)
+            .await?;
+
+        log::debug!(
+            "Deleted {} MSP-file association for file_id: {} and MSP: {}",
+            deleted_count,
+            file_id,
+            msp_id
+        );
+
+        Ok(())
+    }
+
     pub async fn delete_by_bucket<'a>(
         conn: &mut DbConnection<'a>,
         bucket_id: &[u8],
