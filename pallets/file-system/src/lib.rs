@@ -831,8 +831,6 @@ pub mod pallet {
         FileSizeCannotBeZero,
         /// Provider is not storing the file.
         ProviderNotStoringFile,
-        /// File key computed from metadata doesn't match the provided file key.
-        FileKeyMismatch,
         /// File has an active storage request and as such is not eligible for deletion.
         /// The user should use the `revoke_storage_request` extrinsic to revoke it first.
         FileHasActiveStorageRequest,
