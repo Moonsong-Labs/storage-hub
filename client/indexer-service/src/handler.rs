@@ -564,11 +564,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                         let block_hash_bytes = block_hash.as_bytes().to_vec();
                         let tx_hash_bytes = evm_tx_hash.map(|h| h.as_bytes().to_vec());
 
-                        // Check if this file key is already present in the bucket of the MSP
-                        // In this scenario, this will always return false, since there's no other file record
-                        // in the DB, but it's still a good practice to check it.
-                        let is_in_bucket =
-                            File::is_file_key_in_bucket(conn, file_key.as_ref().to_vec()).await?;
+                        // We are processing a MSP confirmation, so the file must be in the bucket's forest.
+                        let is_in_bucket = true;
 
                         // Create file with Requested step since we will change it to Stored when the storage request is fulfilled
                         File::create(
