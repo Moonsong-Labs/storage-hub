@@ -61,7 +61,7 @@ pub struct StorageRequestMetadata<T: Config> {
     /// - `true`: MSP confirmed with inclusion proof → file already existed → `pending_bucket_removal = false` on incomplete
     /// - `false`: MSP confirmed with non-inclusion proof → file was newly added → `pending_bucket_removal = true` on incomplete
     /// - Default is `false` (for new requests or when MSP hasn't confirmed yet)
-    pub msp_confirmed_with_inclusion_proof: bool,
+    pub msp_accepted_with_inclusion_proof: bool,
 
     /// Peer Ids of the user who requested the storage.
     ///
@@ -539,7 +539,7 @@ impl<T: Config> From<(&StorageRequestMetadata<T>, &MerkleHash<T>)>
         // This is because if the MSP confirmed it with an inclusion proof, the file already existed in the bucket from a previous
         // storage request, so we should not mark it for bucket removal.
         let pending_bucket_removal = matches!(storage_request.msp, Some((_, true)))
-            && !storage_request.msp_confirmed_with_inclusion_proof;
+            && !storage_request.msp_accepted_with_inclusion_proof;
 
         let bounded_bsps = BoundedVec::truncate_from(confirmed_bsps);
 

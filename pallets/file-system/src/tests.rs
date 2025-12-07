@@ -2314,7 +2314,7 @@ mod request_storage {
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -2470,7 +2470,7 @@ mod request_storage {
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -2511,7 +2511,7 @@ mod request_storage {
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -2646,7 +2646,7 @@ mod request_storage {
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -4024,7 +4024,7 @@ mod msp_respond_storage_request {
                         bsps_volunteered: 0,
                         expires_at: 100,
 						deposit_paid: 0,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     },
                 );
 
@@ -4100,7 +4100,7 @@ mod msp_respond_storage_request {
                         bsps_volunteered: 0,
                         expires_at: 100,
 						deposit_paid: 0,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     },
                 );
 
@@ -4348,7 +4348,7 @@ mod msp_respond_storage_request {
                         bsps_volunteered: 0,
                         expires_at: 100,
 						deposit_paid: 0,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     },
                 );
 
@@ -4428,7 +4428,7 @@ mod msp_respond_storage_request {
                         bsps_volunteered: 0,
                         expires_at: 100,
 						deposit_paid: 0,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     },
                 );
 
@@ -5963,7 +5963,7 @@ mod bsp_confirm {
 						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 								),
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -6331,7 +6331,7 @@ mod bsp_confirm {
 						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 						),
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -6480,7 +6480,7 @@ mod bsp_confirm {
 						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 						),
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -6903,7 +6903,7 @@ mod bsp_stop_storing {
 						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 						),
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -7056,7 +7056,7 @@ mod bsp_stop_storing {
 						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 						),
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -7212,7 +7212,7 @@ mod bsp_stop_storing {
 						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 						),
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -7385,7 +7385,7 @@ mod bsp_stop_storing {
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -7432,7 +7432,7 @@ mod bsp_stop_storing {
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -7599,7 +7599,7 @@ mod bsp_stop_storing {
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -7652,7 +7652,7 @@ mod bsp_stop_storing {
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -7800,7 +7800,7 @@ mod bsp_stop_storing {
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -7864,7 +7864,7 @@ mod bsp_stop_storing {
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -8080,7 +8080,7 @@ mod bsp_stop_storing {
                         bsps_volunteered: 1,
 						expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -8127,7 +8127,7 @@ mod bsp_stop_storing {
                         bsps_volunteered: 0,
 						expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -8379,7 +8379,7 @@ mod bsp_stop_storing {
                         bsps_volunteered: 1,
 						expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 				assert_eq!(
@@ -8398,7 +8398,7 @@ mod bsp_stop_storing {
                         bsps_volunteered: 1,
 						expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -8437,7 +8437,7 @@ mod bsp_stop_storing {
                         bsps_volunteered: 0,
 						expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -8644,7 +8644,7 @@ mod bsp_stop_storing {
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -8760,7 +8760,7 @@ mod bsp_stop_storing {
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -8868,7 +8868,7 @@ mod bsp_stop_storing {
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -9463,7 +9463,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -9721,7 +9721,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -9910,7 +9910,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -10200,7 +10200,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -10470,7 +10470,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -10721,7 +10721,7 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -10925,7 +10925,7 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
-						msp_confirmed_with_inclusion_proof: false,
+						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -12088,7 +12088,7 @@ mod request_file_deletion {
                     bsps_volunteered: 0,
                     expires_at: current_tick + 100,
                     deposit_paid: 0,
-                    msp_confirmed_with_inclusion_proof: false,
+                    msp_accepted_with_inclusion_proof: false,
                 },
             );
 
@@ -15184,7 +15184,7 @@ mod delete_files_for_incomplete_storage_request_tests {
         }
 
         #[test]
-        fn msp_confirmed_with_inclusion_proof_sets_pending_bucket_removal_to_false() {
+        fn msp_accepted_with_inclusion_proof_sets_pending_bucket_removal_to_false() {
             new_test_ext().execute_with(|| {
                 let owner = Keyring::Alice.to_account_id();
                 let msp = Keyring::Charlie.to_account_id();
@@ -15248,7 +15248,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                         bsps_volunteered: 1,
                         expires_at: current_tick + 100,
                         deposit_paid: 0,
-                        msp_confirmed_with_inclusion_proof: true, // MSP confirmed with inclusion proof
+                        msp_accepted_with_inclusion_proof: true, // MSP confirmed with inclusion proof
                     },
                 );
 
@@ -15365,7 +15365,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                         bsps_volunteered: 1,
                         expires_at: current_tick + 100,
                         deposit_paid: 0,
-                        msp_confirmed_with_inclusion_proof: false, // MSP confirmed with non-inclusion proof
+                        msp_accepted_with_inclusion_proof: false, // MSP confirmed with non-inclusion proof
                     },
                 );
 
@@ -15563,7 +15563,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                         bsps_volunteered: 0,
                         expires_at: current_tick + 100,
                         deposit_paid: 0,
-                        msp_confirmed_with_inclusion_proof: true, // MSP confirmed with inclusion proof
+                        msp_accepted_with_inclusion_proof: true, // MSP confirmed with inclusion proof
                     },
                 );
 

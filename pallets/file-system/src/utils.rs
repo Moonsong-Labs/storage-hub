@@ -1077,7 +1077,7 @@ where
             bsps_volunteered: zero,
             expires_at: expiration_tick,
             deposit_paid: deposit,
-            msp_confirmed_with_inclusion_proof: false,
+            msp_accepted_with_inclusion_proof: false,
         };
 
         // Hold the required deposit from the user.
@@ -1692,7 +1692,7 @@ where
                 storage_request_metadata.msp = Some((msp_id, true));
 
                 // Mark whether MSP confirmed with an inclusion proof
-                storage_request_metadata.msp_confirmed_with_inclusion_proof = is_inclusion_proof;
+                storage_request_metadata.msp_accepted_with_inclusion_proof = is_inclusion_proof;
 
                 // Update storage request metadata.
                 <StorageRequests<T>>::set(
