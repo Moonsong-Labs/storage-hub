@@ -660,11 +660,6 @@ pub mod pallet {
             file_key: MerkleHash<T>,
             new_root: MerkleHash<T>,
         },
-        /// Notifies that a file key has been queued for a priority challenge for file deletion.
-        PriorityChallengeForFileDeletionQueued {
-            issuer: EitherAccountIdOrMspId<T>,
-            file_key: MerkleHash<T>,
-        },
         /// Notifies that a SP has stopped storing a file because its owner has become insolvent.
         SpStopStoringInsolventUser {
             sp_id: ProviderIdFor<T>,
@@ -678,31 +673,6 @@ pub mod pallet {
             msp_id: ProviderIdFor<T>,
             owner: T::AccountId,
             bucket_id: BucketIdFor<T>,
-        },
-        /// Notifies that a priority challenge with a trie remove mutation failed to be queued in the `on_idle` hook.
-        /// This can happen if the priority challenge queue is full, and the failed challenge should be manually
-        /// queued at a later time.
-        FailedToQueuePriorityChallenge {
-            file_key: MerkleHash<T>,
-            error: DispatchError,
-        },
-        /// Notifies that a file will be deleted.
-        FileDeletionRequest {
-            user: T::AccountId,
-            file_key: MerkleHash<T>,
-            file_size: StorageDataUnit<T>,
-            bucket_id: BucketIdFor<T>,
-            msp_id: ProviderIdFor<T>,
-            proof_of_inclusion: bool,
-        },
-        /// Notifies that a proof has been submitted for a pending file deletion request.
-        ProofSubmittedForPendingFileDeletionRequest {
-            user: T::AccountId,
-            file_key: MerkleHash<T>,
-            file_size: StorageDataUnit<T>,
-            bucket_id: BucketIdFor<T>,
-            msp_id: ProviderIdFor<T>,
-            proof_of_inclusion: bool,
         },
         /// Notifies that a BSP's challenge cycle has been initialised, adding the first file
         /// key(s) to the BSP's Merkle Patricia Forest.
@@ -731,20 +701,6 @@ pub mod pallet {
             owner: T::AccountId,
             bucket_id: BucketIdFor<T>,
         },
-        /// Failed to get the MSP owner of the bucket for an expired file deletion request
-        /// This is different from the bucket not having a MSP, which is allowed and won't error
-        FailedToGetMspOfBucket {
-            bucket_id: BucketIdFor<T>,
-            error: DispatchError,
-        },
-        /// Failed to decrease MSP's used capacity for expired file deletion request
-        FailedToDecreaseMspUsedCapacity {
-            user: T::AccountId,
-            msp_id: ProviderIdFor<T>,
-            file_key: MerkleHash<T>,
-            file_size: StorageDataUnit<T>,
-            error: DispatchError,
-        },
         /// Event to notify of incoherencies in used capacity.
         UsedCapacityShouldBeZero {
             actual_used_capacity: StorageDataUnit<T>,
@@ -755,15 +711,6 @@ pub mod pallet {
             file_key: MerkleHash<T>,
             owner: T::AccountId,
             amount_to_return: BalanceOf<T>,
-            error: DispatchError,
-        },
-        /// Event to notify if, in the `on_idle` hook when cleaning up an expired storage request,
-        /// the transfer of a part of that storage request's deposit to one of the volunteered BSPs failed.
-        FailedToTransferDepositFundsToBsp {
-            file_key: MerkleHash<T>,
-            owner: T::AccountId,
-            bsp_id: ProviderIdFor<T>,
-            amount_to_transfer: BalanceOf<T>,
             error: DispatchError,
         },
         /// Notifies that a file deletion has been requested.
@@ -803,16 +750,12 @@ pub mod pallet {
         StorageRequestAlreadyRegistered,
         /// Storage request not registered for the given file.
         StorageRequestNotFound,
-        /// Operation not allowed while the storage request is not being revoked.
-        StorageRequestNotRevoked,
         /// Operation not allowed while the storage request exists.
         StorageRequestExists,
         /// Replication target cannot be zero.
         ReplicationTargetCannotBeZero,
         /// BSPs required for storage request cannot exceed the maximum allowed.
         ReplicationTargetExceedsMaximum,
-        /// Max replication target cannot be smaller than default replication target.
-        MaxReplicationTargetSmallerThanDefault,
         /// Account is not a BSP.
         NotABsp,
         /// Account is not a MSP.
@@ -831,35 +774,17 @@ pub mod pallet {
         BspAlreadyVolunteered,
         /// SP does not have enough storage capacity to store the file.
         InsufficientAvailableCapacity,
-        /// Number of removed BSPs volunteered from storage request prefix did not match the expected number.
-        UnexpectedNumberOfRemovedVolunteeredBsps,
         /// BSP cannot volunteer at this current tick.
         BspNotEligibleToVolunteer,
-        /// No slot available found in ticks to insert storage request expiration time.
-        StorageRequestExpiredNoSlotAvailable,
         /// Not authorized to delete the storage request.
         StorageRequestNotAuthorized,
         /// Error created in 2024. If you see this, you are well beyond the singularity and should
         /// probably stop using this pallet.
         MaxTickNumberReached,
-        /// Failed to encode BSP id as slice.
-        FailedToEncodeBsp,
-        /// Failed to encode fingerprint as slice.
-        FailedToEncodeFingerprint,
-        /// Failed to decode threshold.
-        FailedToDecodeThreshold,
-        /// BSP did not succeed threshold check.
-        AboveThreshold,
         /// Arithmetic error in threshold calculation.
         ThresholdArithmeticError,
-        /// Failed to convert to primitive type.
-        FailedTypeConversion,
-        /// Divided by 0
-        DividedByZero,
         /// Failed to get value when just checked it existed.
         ImpossibleFailedToGetValue,
-        /// Bucket is not private. Call `update_bucket_privacy` to make it private.
-        BucketIsNotPrivate,
         /// Bucket does not exist
         BucketNotFound,
         /// Bucket is not empty.
@@ -870,20 +795,12 @@ pub mod pallet {
         ValuePropositionNotAvailable,
         /// Collection ID was not found.
         CollectionNotFound,
-        /// Root of the provider not found.
-        ProviderRootNotFound,
         /// Failed to verify proof: required to provide a proof of non-inclusion.
         ExpectedNonInclusionProof,
         /// Failed to verify proof: required to provide a proof of inclusion.
         ExpectedInclusionProof,
         /// Metadata does not correspond to expected file key.
         InvalidFileKeyMetadata,
-        /// BSPs assignment threshold cannot be below asymptote.
-        ThresholdBelowAsymptote,
-        /// Unauthorized operation, signer does not own the file.
-        NotFileOwner,
-        /// File key already pending deletion.
-        FileKeyAlreadyPendingDeletion,
         /// Batch file deletion must contain files from a single bucket only.
         BatchFileDeletionMustContainSingleBucket,
         /// Duplicate file key detected within the same batch deletion request.
@@ -896,22 +813,14 @@ pub mod pallet {
         FailedToPushUserToBspDeletionVector,
         /// Failed to push file key to bounded vector during BSP file deletion
         FailedToPushFileKeyToBspDeletionVector,
-        /// Max number of user pending deletion requests reached.
-        MaxUserPendingDeletionRequestsReached,
         /// Unauthorized operation, signer is not an MSP of the bucket id.
         MspNotStoringBucket,
-        /// File key not found in pending deletion requests.
-        FileKeyNotPendingDeletion,
         /// File size cannot be zero.
         FileSizeCannotBeZero,
         /// No global reputation weight set.
         NoGlobalReputationWeightSet,
         /// No BSP reputation weight set.
         NoBspReputationWeightSet,
-        /// Maximum threshold cannot be zero.
-        MaximumThresholdCannotBeZero,
-        /// Tick range to maximum threshold cannot be zero.
-        TickRangeToMaximumThresholdCannotBeZero,
         /// Pending stop storing request not found.
         PendingStopStoringRequestNotFound,
         /// Minimum amount of blocks between the request opening and being able to confirm it not reached.
@@ -934,20 +843,12 @@ pub mod pallet {
         MoveBucketRequestNotFound,
         /// Action not allowed while the bucket is being moved.
         BucketIsBeingMoved,
-        /// BSP is already a data server for the move bucket request.
-        BspAlreadyDataServer,
-        /// Too many registered data servers for the move bucket request.
-        BspDataServersExceeded,
         /// The bounded vector that holds file metadata to process it is full but there's still more to process.
         FileMetadataProcessingQueueFull,
-        /// Too many batch responses to process.
-        TooManyBatchResponses,
         /// Too many storage request responses.
         TooManyStorageRequestResponses,
         /// Bucket id and file key pair is invalid.
         InvalidBucketIdFileKeyPair,
-        /// Key already exists in mapping when it should not.
-        InconsistentStateKeyAlreadyExists,
         /// Failed to fetch the rate for the payment stream.
         FixedRatePaymentStreamNotFound,
         /// Failed to fetch the dynamic-rate payment stream.
@@ -964,20 +865,14 @@ pub mod pallet {
         NoFileKeysToConfirm,
         /// Root was not updated after applying delta
         RootNotUpdated,
-        /// Privacy update results in no change
-        NoPrivacyChange,
         /// Operations not allowed for insolvent provider
         OperationNotAllowedForInsolventProvider,
-        /// Operations not allowed while bucket is not being stored by an MSP
-        OperationNotAllowedWhileBucketIsNotStoredByMsp,
         /// Failed to compute file key
         FailedToComputeFileKey,
         /// Failed to create file metadata
         FailedToCreateFileMetadata,
         /// Invalid signature provided for file operation
         InvalidSignature,
-        /// Forest proof verification failed.
-        ForestProofVerificationFailed,
         /// Provider is not storing the file.
         ProviderNotStoringFile,
         /// Invalid provider ID provided.

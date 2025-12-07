@@ -479,6 +479,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 .await?;
             }
             pallet_file_system::Event::MoveBucketRequested { .. } => {}
+            pallet_file_system::Event::MoveBucketRequestExpired { .. } => {}
+            pallet_file_system::Event::MoveBucketRejected { .. } => {}
             pallet_file_system::Event::NewCollectionAndAssociation { .. } => {}
             pallet_file_system::Event::AcceptedBspVolunteer { .. } => {}
             pallet_file_system::Event::StorageRequestFulfilled { file_key } => {
@@ -597,7 +599,6 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 }
             }
             pallet_file_system::Event::BspRequestedToStopStoring { .. } => {}
-            pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. } => {}
             pallet_file_system::Event::MspStopStoringBucketInsolventUser {
                 msp_id,
                 owner: _,
@@ -618,12 +619,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 // MSP will handle insolvent user at the level of buckets (an MSP will delete the full bucket for an insolvent user and it will produce a new kind of event)
                 BspFile::delete_for_bsp(conn, file_key, OnchainBspId::from(*sp_id)).await?;
             }
-            pallet_file_system::Event::FailedToQueuePriorityChallenge { .. } => {}
-            pallet_file_system::Event::FileDeletionRequest { .. } => {}
-            pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest { .. } => {}
             pallet_file_system::Event::BspChallengeCycleInitialised { .. } => {}
-            pallet_file_system::Event::MoveBucketRequestExpired { .. } => {}
-            pallet_file_system::Event::MoveBucketRejected { .. } => {}
             pallet_file_system::Event::MspStoppedStoringBucket {
                 msp_id,
                 owner: _,
@@ -655,15 +651,10 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 )
                 .await?;
             }
-            pallet_file_system::Event::FailedToGetMspOfBucket { .. } => {}
-            pallet_file_system::Event::FailedToDecreaseMspUsedCapacity { .. } => {}
             pallet_file_system::Event::UsedCapacityShouldBeZero { .. } => {
                 // In the future we should monitor for this to detect eventual bugs in the pallets
             }
             pallet_file_system::Event::FailedToReleaseStorageRequestCreationDeposit { .. } => {
-                // In the future we should monitor for this to detect eventual bugs in the pallets
-            }
-            pallet_file_system::Event::FailedToTransferDepositFundsToBsp { .. } => {
                 // In the future we should monitor for this to detect eventual bugs in the pallets
             }
             pallet_file_system::Event::BucketFileDeletionsCompleted {

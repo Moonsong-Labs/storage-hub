@@ -201,22 +201,13 @@ where
                 | pallet_file_system::Event::AcceptedBspVolunteer { .. }
                 | pallet_file_system::Event::StorageRequestRejected { .. }
                 | pallet_file_system::Event::BspRequestedToStopStoring { .. }
-                | pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. }
-                | pallet_file_system::Event::FailedToQueuePriorityChallenge { .. }
-                | pallet_file_system::Event::FileDeletionRequest { .. }
-                | pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest {
-                    ..
-                }
                 | pallet_file_system::Event::BspChallengeCycleInitialised { .. }
                 | pallet_file_system::Event::MoveBucketRequestExpired { .. }
                 | pallet_file_system::Event::MoveBucketRejected { .. }
-                | pallet_file_system::Event::FailedToGetMspOfBucket { .. }
-                | pallet_file_system::Event::FailedToDecreaseMspUsedCapacity { .. }
                 | pallet_file_system::Event::UsedCapacityShouldBeZero { .. }
                 | pallet_file_system::Event::FailedToReleaseStorageRequestCreationDeposit {
                     ..
                 }
-                | pallet_file_system::Event::FailedToTransferDepositFundsToBsp { .. }
                 | pallet_file_system::Event::__Ignore(_, _) => {
                     trace!(target: LOG_TARGET, "Ignoring non-essential FileSystem event in fishing mode");
                 }
