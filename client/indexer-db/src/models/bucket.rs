@@ -231,4 +231,41 @@ impl Bucket {
             .await?;
         Ok(())
     }
+
+    /// Delete a bucket only if no files reference it.
+    ///
+    /// This is used only for cleaning up buckets that were deleted on-chain (e.g., via
+    /// `MspStopStoringBucketInsolventUser`) but couldn't be immediately deleted from
+    /// the indexer DB because files still referenced them.
+    ///
+    /// Returns `true` if the bucket was deleted, `false` if files still reference it.
+    pub async fn delete_if_orphaned<'a>(
+        conn: &mut DbConnection<'a>,
+        onchain_bucket_id: Vec<u8>,
+    ) -> Result<bool, diesel::result::Error> {
+        // Check if any files still reference this bucket
+        let file_count: i64 = file::table
+            .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
+            .filter(bucket::onchain_bucket_id.eq(&onchain_bucket_id))
+            .count()
+            .get_result(conn)
+            .await?;
+
+        if file_count == 0 {
+            // No files reference this bucket, safe to delete
+            Self::delete(conn, onchain_bucket_id.clone()).await?;
+            log::debug!(
+                "Deleted orphaned bucket with onchain_bucket_id: {:?}",
+                onchain_bucket_id
+            );
+            Ok(true)
+        } else {
+            log::debug!(
+                "Bucket {:?} still has {} file(s) referencing it, keeping it",
+                onchain_bucket_id,
+                file_count
+            );
+            Ok(false)
+        }
+    }
 }

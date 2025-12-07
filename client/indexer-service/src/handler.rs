@@ -601,8 +601,28 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 bucket_id,
             } => {
                 let msp = Msp::get_by_onchain_msp_id(conn, OnchainMspId::from(*msp_id)).await?;
+
+                // Get all files in this bucket before deleting associations
+                let files =
+                    File::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec()).await?;
+
+                // Delete the MSP-file associations for all files in the bucket
                 MspFile::delete_by_bucket(conn, bucket_id.as_ref(), msp.id).await?;
+
+                // Mark all files as no longer in the bucket and clean up orphaned files.
+                for file in files {
+                    File::update_bucket_membership(conn, &file.file_key, bucket_id.as_ref(), false)
+                        .await?;
+                    File::delete_if_orphaned(conn, &file.file_key).await?;
+                }
+
+                // Unset the MSP from the bucket to reflect on-chain state
                 Bucket::unset_msp(conn, bucket_id.as_ref().to_vec()).await?;
+
+                // Try to delete the bucket if no files reference it anymore.
+                // If files still exist (e.g. BSPs are still storing them), the bucket
+                // record is kept and will be cleaned up when the last file is deleted.
+                Bucket::delete_if_orphaned(conn, bucket_id.as_ref().to_vec()).await?;
             }
             pallet_file_system::Event::SpStopStoringInsolventUser {
                 sp_id,
@@ -611,9 +631,40 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 location: _,
                 new_root: _,
             } => {
-                // We are now only deleting for BSP as BSP are associating with files
-                // MSP will handle insolvent user at the level of buckets (an MSP will delete the full bucket for an insolvent user and it will produce a new kind of event)
-                BspFile::delete_for_bsp(conn, file_key, OnchainBspId::from(*sp_id)).await?;
+                // Get the file's bucket's ID before any deletions in case we have to clean up the bucket afterwards
+                let file_record = File::get_latest_by_file_key(conn, file_key.as_ref().to_vec())
+                    .await
+                    .ok();
+                let onchain_bucket_id = file_record.map(|f| f.onchain_bucket_id);
+
+                // This event can be emitted by either a BSP or MSP stopping storage for an insolvent user.
+                // We need to check which type of provider it is and handle accordingly.
+                let bsp_result = Bsp::get_by_onchain_bsp_id(conn, OnchainBspId::from(*sp_id)).await;
+
+                // If it's a BSP, delete the BSP-file association
+                if bsp_result.is_ok() {
+                    BspFile::delete_for_bsp(conn, file_key, OnchainBspId::from(*sp_id)).await?;
+                } else {
+                    // It's an MSP, delete the MSP-file association
+                    MspFile::delete(conn, file_key.as_ref(), OnchainMspId::from(*sp_id)).await?;
+                }
+
+                // Clean up the file if it has no remaining associations
+                File::delete_if_orphaned(conn, file_key.as_ref()).await?;
+
+                // If the file was deleted and belonged to a bucket that was deleted on-chain
+                // try to clean up the bucket as well
+                if let Some(bucket_id) = onchain_bucket_id {
+                    // Only attempt bucket cleanup if the bucket has no MSP, as this means
+                    // the MSP has already deleted the bucket.
+                    if let Ok(bucket) =
+                        Bucket::get_by_onchain_bucket_id(conn, bucket_id.clone()).await
+                    {
+                        if bucket.msp_id.is_none() {
+                            Bucket::delete_if_orphaned(conn, bucket_id).await?;
+                        }
+                    }
+                }
             }
             pallet_file_system::Event::FailedToQueuePriorityChallenge { .. } => {}
             pallet_file_system::Event::FileDeletionRequest { .. } => {}
