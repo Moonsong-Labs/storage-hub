@@ -1718,6 +1718,9 @@ export default {
       },
       IncompleteStorageRequest: {
         fileKey: "H256"
+      },
+      IncompleteStorageRequestCleanedUp: {
+        fileKey: "H256"
       }
     }
   },
@@ -4764,6 +4767,7 @@ export default {
     fingerprint: "H256",
     size_: "u64",
     msp: "Option<(H256,bool)>",
+    mspConfirmedWithInclusionProof: "bool",
     userPeerIds: "Vec<Bytes>",
     bspsRequired: "u32",
     bspsConfirmed: "u32",

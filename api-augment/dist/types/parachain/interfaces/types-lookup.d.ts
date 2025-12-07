@@ -1804,7 +1804,11 @@ declare module '@polkadot/types/lookup' {
         readonly asIncompleteStorageRequest: {
             readonly fileKey: H256;
         } & Struct;
-        readonly type: 'NewBucket' | 'BucketDeleted' | 'MoveBucketRequested' | 'BucketPrivacyUpdated' | 'NewCollectionAndAssociation' | 'NewStorageRequest' | 'MspAcceptedStorageRequest' | 'AcceptedBspVolunteer' | 'BspConfirmedStoring' | 'StorageRequestFulfilled' | 'StorageRequestExpired' | 'StorageRequestRevoked' | 'StorageRequestRejected' | 'BspRequestedToStopStoring' | 'BspConfirmStoppedStoring' | 'PriorityChallengeForFileDeletionQueued' | 'SpStopStoringInsolventUser' | 'MspStopStoringBucketInsolventUser' | 'FailedToQueuePriorityChallenge' | 'FileDeletionRequest' | 'ProofSubmittedForPendingFileDeletionRequest' | 'BspChallengeCycleInitialised' | 'MoveBucketRequestExpired' | 'MoveBucketAccepted' | 'MoveBucketRejected' | 'MspStoppedStoringBucket' | 'FailedToGetMspOfBucket' | 'FailedToDecreaseMspUsedCapacity' | 'UsedCapacityShouldBeZero' | 'FailedToReleaseStorageRequestCreationDeposit' | 'FailedToTransferDepositFundsToBsp' | 'FileDeletionRequested' | 'BucketFileDeletionsCompleted' | 'BspFileDeletionsCompleted' | 'IncompleteStorageRequest';
+        readonly isIncompleteStorageRequestCleanedUp: boolean;
+        readonly asIncompleteStorageRequestCleanedUp: {
+            readonly fileKey: H256;
+        } & Struct;
+        readonly type: 'NewBucket' | 'BucketDeleted' | 'MoveBucketRequested' | 'BucketPrivacyUpdated' | 'NewCollectionAndAssociation' | 'NewStorageRequest' | 'MspAcceptedStorageRequest' | 'AcceptedBspVolunteer' | 'BspConfirmedStoring' | 'StorageRequestFulfilled' | 'StorageRequestExpired' | 'StorageRequestRevoked' | 'StorageRequestRejected' | 'BspRequestedToStopStoring' | 'BspConfirmStoppedStoring' | 'PriorityChallengeForFileDeletionQueued' | 'SpStopStoringInsolventUser' | 'MspStopStoringBucketInsolventUser' | 'FailedToQueuePriorityChallenge' | 'FileDeletionRequest' | 'ProofSubmittedForPendingFileDeletionRequest' | 'BspChallengeCycleInitialised' | 'MoveBucketRequestExpired' | 'MoveBucketAccepted' | 'MoveBucketRejected' | 'MspStoppedStoringBucket' | 'FailedToGetMspOfBucket' | 'FailedToDecreaseMspUsedCapacity' | 'UsedCapacityShouldBeZero' | 'FailedToReleaseStorageRequestCreationDeposit' | 'FailedToTransferDepositFundsToBsp' | 'FileDeletionRequested' | 'BucketFileDeletionsCompleted' | 'BspFileDeletionsCompleted' | 'IncompleteStorageRequest' | 'IncompleteStorageRequestCleanedUp';
     }
     /** @name ShpFileMetadataFileMetadata (153) */
     interface ShpFileMetadataFileMetadata extends Struct {
@@ -4709,6 +4713,7 @@ declare module '@polkadot/types/lookup' {
         readonly fingerprint: H256;
         readonly size_: u64;
         readonly msp: Option<ITuple<[H256, bool]>>;
+        readonly mspConfirmedWithInclusionProof: bool;
         readonly userPeerIds: Vec<Bytes>;
         readonly bspsRequired: u32;
         readonly bspsConfirmed: u32;

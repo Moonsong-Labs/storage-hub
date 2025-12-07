@@ -1310,6 +1310,10 @@ declare module "@polkadot/types/lookup" {
     readonly asIncompleteStorageRequest: {
       readonly fileKey: H256;
     } & Struct;
+    readonly isIncompleteStorageRequestCleanedUp: boolean;
+    readonly asIncompleteStorageRequestCleanedUp: {
+      readonly fileKey: H256;
+    } & Struct;
     readonly type:
       | "NewBucket"
       | "BucketDeleted"
@@ -1345,7 +1349,8 @@ declare module "@polkadot/types/lookup" {
       | "FileDeletionRequested"
       | "BucketFileDeletionsCompleted"
       | "BspFileDeletionsCompleted"
-      | "IncompleteStorageRequest";
+      | "IncompleteStorageRequest"
+      | "IncompleteStorageRequestCleanedUp";
   }
 
   /** @name ShpFileMetadataFileMetadata (109) */
@@ -4047,6 +4052,7 @@ declare module "@polkadot/types/lookup" {
     readonly fingerprint: H256;
     readonly size_: u64;
     readonly msp: Option<ITuple<[H256, bool]>>;
+    readonly mspConfirmedWithInclusionProof: bool;
     readonly userPeerIds: Vec<Bytes>;
     readonly bspsRequired: u32;
     readonly bspsConfirmed: u32;

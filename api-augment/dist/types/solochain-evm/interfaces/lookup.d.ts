@@ -985,6 +985,9 @@ declare const _default: {
             IncompleteStorageRequest: {
                 fileKey: string;
             };
+            IncompleteStorageRequestCleanedUp: {
+                fileKey: string;
+            };
         };
     };
     /**
@@ -3129,6 +3132,7 @@ declare const _default: {
         fingerprint: string;
         size_: string;
         msp: string;
+        mspConfirmedWithInclusionProof: string;
         userPeerIds: string;
         bspsRequired: string;
         bspsConfirmed: string;
