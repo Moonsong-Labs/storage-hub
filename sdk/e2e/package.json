@@ -1,7 +1,7 @@
 {
-  "name": "storagehub-e2e-dappwright",
+  "name": "storagehub-e2e-synpress",
   "version": "1.0.0",
-  "description": "StorageHub SDK E2E tests using dAppwright for MetaMask automation",
+  "description": "StorageHub SDK E2E tests using Synpress for MetaMask automation",
   "type": "module",
   "scripts": {
     "test:metamask": "playwright test --project metamask",
@@ -10,7 +10,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.56.1",
-    "@tenkeylabs/dappwright": "^2.11.3",
+    "@synthetixio/synpress": "^4.0.0",
     "playwright": "^1.56.1"
   },
   "engines": {

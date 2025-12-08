@@ -1,59 +1,22 @@
-import { type BrowserContext, type Page, test as baseTest, expect } from "@playwright/test";
-import dappwright, { type Dappwright, MetaMaskWallet } from "@tenkeylabs/dappwright";
+import { testWithSynpress } from "@synthetixio/synpress";
+import { MetaMask, metaMaskFixtures } from "@synthetixio/synpress/playwright";
+import { expect } from "@playwright/test";
+import basicSetup from "../../wallet-setup/basic.setup";
 
 // Fingerprint taken from StorageHub node E2E tests
 // See: test/util/bspNet/consts.ts → TEST_ARTEFACTS["res/adolphus.jpg"].fingerprint
 const EXPECTED_FINGERPRINT_HEX =
   "0x34eb5f637e05fc18f857ccb013250076534192189894d174ee3aa6d3525f6970";
 
-let sharedBrowserContext: BrowserContext;
+const test = testWithSynpress(metaMaskFixtures(basicSetup));
 
-export const test = baseTest.extend<{
-  context: BrowserContext;
-  wallet: Dappwright;
-  page: Page;
-}>({
-  // biome-ignore lint/correctness/noEmptyPattern: Playwright fixtures API requires this signature
-  context: async ({}, use) => {
-    if (!sharedBrowserContext) {
-      console.log("🚀 Launching browser with MetaMask...");
-      const { browserContext } = await dappwright.launch("", {
-        wallet: "metamask",
-        version: MetaMaskWallet.recommendedVersion,
-        headless: false
-      });
+test("MetaMask + SDK", async ({ context, page, metamaskPage, extensionId }) => {
+  const metamask = new MetaMask(context, metamaskPage, basicSetup.walletPassword, extensionId);
 
-      const wallet = await dappwright.getWallet("metamask", browserContext);
-      console.log("✅ MetaMask wallet obtained");
-
-      // Setup wallet with seed phrase
-      await wallet.setup({
-        seed: "test test test test test test test test test test test junk",
-        password: "password123"
-      });
-      console.log("✅ Wallet setup with seed phrase");
-
-      // Cache context
-      sharedBrowserContext = browserContext;
-    }
-
-    await use(sharedBrowserContext);
-  },
-
-  page: async ({ context }, use) => {
-    const page = await context.newPage();
-    await page.goto("http://localhost:3000/e2e/page/index.html", { waitUntil: "domcontentloaded" });
-    await use(page);
-  },
-
-  wallet: async ({ context }, use) => {
-    const metamask = await dappwright.getWallet("metamask", context);
-    await use(metamask);
-  }
-});
-
-test("MetaMask + SDK", async ({ page, wallet, context: _context }) => {
   console.log("🎯 Starting test...");
+
+  // Navigate to test page
+  await page.goto("http://localhost:3000/e2e/page/index.html", { waitUntil: "domcontentloaded" });
 
   // Ensure provider is injected
   await page.waitForLoadState();
@@ -63,7 +26,7 @@ test("MetaMask + SDK", async ({ page, wallet, context: _context }) => {
   // Click Connect on the basic dApp and approve in MetaMask
   await page.waitForSelector("#connect", { timeout: 60000 });
   await page.click("#connect");
-  await wallet.approve();
+  await metamask.connectToDapp();
   console.log("✅ Connection approved");
 
   // Trigger signing via the dApp's SDK handler by clicking the button
@@ -71,7 +34,7 @@ test("MetaMask + SDK", async ({ page, wallet, context: _context }) => {
   await page.click("#sign");
 
   // Approve signature in MetaMask
-  await wallet.sign();
+  await metamask.confirmSignature();
 
   // Wait until the dApp exposes the signature and log it
   const signature = await page.waitForFunction(() => (window as any).__lastSignature, {
@@ -85,7 +48,7 @@ test("MetaMask + SDK", async ({ page, wallet, context: _context }) => {
   await page.click("#sign-tx");
 
   // Reject the transaction in MetaMask (simplified flow)
-  await wallet.reject();
+  await metamask.rejectTransaction();
   console.log("ℹ️ Transaction rejected (expected without funds)");
 
   // --- File fingerprint computation ---
