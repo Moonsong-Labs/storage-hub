@@ -865,7 +865,8 @@ where
         );
 
         // Check if there are any open storage requests for the bucket.
-        // Do not allow any storage requests and move bucket requests to coexist for the same bucket.
+        // Do not allow a bucket to be deleted if there are any open storage requests for it.
+        // Storage requests must be revoked or fulfilled before a bucket can be deleted.
         ensure!(
             !<BucketsWithStorageRequests<T>>::iter_prefix(bucket_id)
                 .next()
