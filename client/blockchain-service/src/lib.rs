@@ -22,6 +22,7 @@ use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 use shc_common::types::StorageHubClient;
 
 pub use self::handler::BlockchainService;
+pub use self::types::FileKeyStatus;
 
 pub async fn spawn_blockchain_service<FSH, Runtime>(
     task_spawner: &TaskSpawner,

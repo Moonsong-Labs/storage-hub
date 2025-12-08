@@ -4,7 +4,6 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
     future::Future,
     pin::Pin,
-    sync::Arc,
     time::Duration,
 };
 
@@ -800,6 +799,54 @@ impl<Runtime: StorageEnableRuntime> BspHandler<Runtime> {
         }
     }
 }
+/// Status of a file key in the MSP upload pipeline.
+///
+/// Used to track processing state, prevent duplicate processing, and enable automatic retries.
+///
+/// ## Status Transitions
+///
+/// | Status | Meaning | Next Block Behavior |
+/// |--------|---------|---------------------|
+/// | `Processing` | File key is in the pipeline | **Skip** (already being handled) |
+/// | `Accepted` | Successfully accepted on-chain | **Skip** (completed) |
+/// | `Rejected` | Rejected on-chain | **Skip** (completed) |
+/// | `Abandoned` | Failed with non-proof dispatch error | **Skip** (permanent failure) |
+/// | *Not present* | New or retryable file key | **Process** (emit event) |
+///
+/// ## Retry Mechanism
+///
+/// File keys are **removed** from statuses to signal they should be re-processed:
+/// - **Proof errors**: Removed to retry with regenerated proofs
+/// - **Extrinsic submission failures**: Removed to retry (may be transient)
+/// - **Non-proof dispatch errors**: Marked as `Abandoned` (permanent failure)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FileKeyStatus {
+    /// File key is currently being processed (in the pipeline).
+    ///
+    /// Set when the blockchain service emits a
+    /// [`NewStorageRequest`](crate::events::NewStorageRequest) event for the file key.
+    #[default]
+    Processing,
+    /// File key was successfully accepted on-chain.
+    ///
+    /// Set after `ProcessMspRespondStoringRequest` successfully submits the extrinsic.
+    Accepted,
+    /// File key was explicitly rejected on-chain (e.g., capacity issues, invalid proof).
+    ///
+    /// Set after `ProcessMspRespondStoringRequest` successfully submits a rejection.
+    Rejected,
+    /// File key failed with a non-proof-related dispatch error (permanent failure).
+    ///
+    /// Set when the extrinsic is included in a block but fails with a dispatch error
+    /// that is NOT proof-related (e.g., authorization failures, invalid parameters,
+    /// inconsistent runtime state). These are permanent failures not resolved by retrying.
+    ///
+    /// **Note:** Proof errors and extrinsic submission failures (timeout after retries)
+    /// do NOT set this status—instead, they **remove** the file key from statuses to
+    /// enable automatic retry on the next block.
+    Abandoned,
+}
+
 /// A struct that holds the information to handle an MSP.
 ///
 /// This struct implements all the needed logic to manage MSP specific functionality.
@@ -828,8 +875,12 @@ pub struct MspHandler<Runtime: StorageEnableRuntime> {
     /// This is used to keep track of the BSPs for which there are tasks currently distributing the file,
     /// and the BSPs for which the file has been confirmed to be stored.
     pub(crate) files_to_distribute: HashMap<FileKey, FileDistributionInfo<Runtime>>,
-    /// Semaphore to prevent overlapping batch processing cycles (size 1)
-    pub(crate) batch_processing_semaphore: Arc<tokio::sync::Semaphore>,
+    /// Tracks the processing status of each file key in the upload pipeline.
+    ///
+    /// Used to prevent duplicate processing and enable retries for failed requests.
+    /// The blockchain service checks this before emitting [`NewStorageRequest`] events,
+    /// and tasks update it via commands as they process requests.
+    pub(crate) file_key_statuses: HashMap<FileKey, FileKeyStatus>,
     /// In-memory FIFO queue for pending MSP respond storage requests.
     pub(crate) pending_respond_storage_requests: VecDeque<RespondStorageRequest<Runtime>>,
     /// HashSet tracking file keys currently in the pending respond storage request queue.
@@ -844,7 +895,7 @@ impl<Runtime: StorageEnableRuntime> MspHandler<Runtime> {
             forest_root_write_lock: None,
             forest_root_snapshots: BTreeMap::new(),
             files_to_distribute: HashMap::new(),
-            batch_processing_semaphore: Arc::new(tokio::sync::Semaphore::new(1)),
+            file_key_statuses: HashMap::new(),
             pending_respond_storage_requests: VecDeque::new(),
             pending_respond_storage_request_file_keys: HashSet::new(),
         }

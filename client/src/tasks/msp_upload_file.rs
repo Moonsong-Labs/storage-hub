@@ -12,9 +12,10 @@
 //!
 //! ```text
 //! ┌──────────────────────────────────────────────────────────────────────────────────┐
-//! │                         BatchProcessStorageRequests                              │
-//! │              (periodic, processes file keys NOT in file_key_statuses)            │
+//! │                          BlockchainService                                       │
+//! │     (manages file_key_statuses in MspHandler, emits only new requests)           │
 //! │                                      │                                           │
+//! │                 Filter: only emit if file key NOT in statuses                    │
 //! │                     ┌────────────────┼────────────────┐                          │
 //! │                     ▼                ▼                ▼                          │
 //! │            NewStorageRequest  NewStorageRequest  NewStorageRequest               │
@@ -35,64 +36,59 @@
 //! │   ProcessMspRespondStoringRequest                                                │
 //! │   (batched extrinsic submission)                                                 │
 //! │          │                                                                       │
-//! │          ├─── Success ──────────────► Accepted / Rejected                        │
+//! │          ├─── Success ──────────► set_file_key_status(Accepted/Rejected)         │
 //! │          │                                                                       │
-//! │          ├─── Proof Error ──────────► Remove from statuses ─┐                    │
-//! │          │    (transient, retryable)                        │                    │
-//! │          │                                                  │                    │
-//! │          ├─── Extrinsic Failure ────► Remove from statuses ─┤                    │
-//! │          │    (timeout after retries)                       │                    │
-//! │          │                                                  ▼                    │
-//! │          │                                   BatchProcessStorageRequests         │
-//! │          │                                   (will re-process on next cycle)     │
+//! │          ├─── Proof Error ──────► remove_file_key_status ─┐                      │
+//! │          │    (transient, retryable)                      │                      │
+//! │          │                                                │                      │
+//! │          ├─── Extrinsic Failure ──► remove_file_key_status┤                      │
+//! │          │    (timeout after retries)                     │                      │
+//! │          │                                                ▼                      │
+//! │          │                               BlockchainService                       │
+//! │          │                               (will re-emit on next block)            │
 //! │          │                                                                       │
-//! │          └─── Non-proof Error ──────► Abandoned (permanent skip)                 │
+//! │          └─── Non-proof Error ──► set_file_key_status(Abandoned)                 │
 //! └──────────────────────────────────────────────────────────────────────────────────┘
 //! ```
 //!
 //! ### Status Tracking with [`FileKeyStatus`]
 //!
-//! Since events are processed concurrently, the same file key could potentially be processed
-//! multiple times (e.g., if [`BatchProcessStorageRequests`] fires while a file is mid-upload).
-//! The [`file_key_statuses`](MspUploadFileTask::file_key_statuses) HashMap prevents this:
+//! File key status tracking is centralized in the [`BlockchainService`](shc_blockchain_service)'s
+//! `MspHandler`. This prevents duplicate processing and enables automatic retries.
 //!
-//! | Status | Meaning | Action in [`BatchProcessStorageRequests`] |
-//! |--------|---------|-------------------------------------------|
-//! | [`FileKeyStatus::Processing`] | File key is in the pipeline | **Skip** |
-//! | [`FileKeyStatus::Accepted`] | Successfully accepted on-chain | **Skip** |
-//! | [`FileKeyStatus::Rejected`] | Rejected on-chain | **Skip** |
-//! | [`FileKeyStatus::Abandoned`] | Failed with non-proof dispatch error | **Skip** |
-//! | *Not present* | New or retryable file key | **Process** (insert as `Processing`) |
+//! The blockchain service filters pending storage requests before emitting events:
+//!
+//! | Status | Meaning | Action in BlockchainService |
+//! |--------|---------|------------------------------|
+//! | [`FileKeyStatus::Processing`] | File key is in the pipeline | **Skip** (don't emit) |
+//! | [`FileKeyStatus::Accepted`] | Successfully accepted on-chain | **Skip** (don't emit) |
+//! | [`FileKeyStatus::Rejected`] | Rejected on-chain | **Skip** (don't emit) |
+//! | [`FileKeyStatus::Abandoned`] | Failed with non-proof dispatch error | **Skip** (don't emit) |
+//! | *Not present* | New or retryable file key | **Emit** (set status to `Processing`) |
 //!
 //! ### Retry Mechanism
 //!
-//! The retry mechanism works by **removing** file keys from [`file_key_statuses`] to signal
-//! that they should be re-processed by [`BatchProcessStorageRequests`]:
+//! The retry mechanism works by **removing** file keys from statuses to signal that they
+//! should be re-processed on the next block. Tasks use the `remove_file_key_status` command:
 //!
 //! - **Proof errors** (`ForestProofVerificationFailed`,
-//!   `FailedToApplyDelta`): File key is **removed** from statuses. The next
-//!   [`BatchProcessStorageRequests`] cycle will re-insert it with `Processing` status,
-//!   emit [`NewStorageRequest`], and regenerate proofs with the updated forest root.
+//!   `FailedToApplyDelta`): File key is **removed** from statuses via command. The next
+//!   block's processing will re-emit a [`NewStorageRequest`] event with `Processing` status.
 //!
 //! - **Extrinsic submission failures** (timeout after exhausting retries): File key is
-//!   **removed** from statuses. This allows retry on the next batch cycle since the
+//!   **removed** from statuses via command. This allows retry on the next block since the
 //!   failure may be transient (network issues, collator congestion).
 //!
 //! - **Non-proof dispatch errors** (authorization failures, invalid parameters, etc.):
-//!   File key is marked as [`FileKeyStatus::Abandoned`]. These are permanent failures
-//!   not resolved by retrying, so the file key will be skipped in subsequent cycles.
-//!
-//! Stale entries (file keys no longer in pending requests) are cleaned up during
-//! [`BatchProcessStorageRequests`] processing.
+//!   File key is marked as [`FileKeyStatus::Abandoned`] via `set_file_key_status` command.
+//!   These are permanent failures not resolved by retrying, so the file key will be skipped.
 //!
 //! ### Event Handlers
 //!
-//! - [`BatchProcessStorageRequests`]: Periodic trigger from [`BlockchainService`](shc_blockchain_service)
-//!   that queries pending storage requests and emits [`NewStorageRequest`] for each via
-//!   [`PreprocessStorageRequestEvent`](shc_blockchain_service::commands::BlockchainServiceCommand::PreprocessStorageRequestEvent).
-//!
-//! - [`NewStorageRequest`]: Validates capacity, creates file in storage, registers for P2P upload.
-//!   If the file is already complete in file storage, immediately queues an accept response via
+//! - [`NewStorageRequest`]: Emitted by the [`BlockchainService`](shc_blockchain_service) only for
+//!   file keys that don't have a status yet. The handler validates capacity, creates the file
+//!   in storage, and registers for P2P upload. If the file is already complete in file storage,
+//!   immediately queues an accept response via
 //!   [`queue_msp_respond_storage_request`](shc_blockchain_service::commands::BlockchainServiceCommandInterface::queue_msp_respond_storage_request).
 //!
 //! - [`RemoteUploadRequest`]: Receives and validates file chunks from users. When the file is
@@ -101,20 +97,19 @@
 //!
 //! - [`ProcessMspRespondStoringRequest`]: Processes queued accept/reject responses and submits
 //!   them in a single batched `msp_respond_storage_requests_multiple_buckets` extrinsic.
+//!   Updates file key statuses via commands based on the result.
 
 use anyhow::anyhow;
 use std::{
     collections::{HashMap, HashSet},
     str::FromStr,
-    sync::Arc,
     time::Duration,
 };
-use tokio::sync::RwLock;
 
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
 use shc_blockchain_service::types::{
-    MspRespondStorageRequest, RespondStorageRequest, RetryStrategy,
+    FileKeyStatus, MspRespondStorageRequest, RespondStorageRequest, RetryStrategy,
 };
 use shc_blockchain_service::{capacity_manager::CapacityRequestData, types::SendExtrinsicOptions};
 use sp_core::H256;
@@ -123,12 +118,9 @@ use sp_runtime::traits::{CheckedAdd, CheckedSub, SaturatedConversion, Zero};
 use pallet_file_system::types::RejectedStorageRequest;
 use pallet_proofs_dealer;
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::events::{
-    BatchProcessStorageRequests, ProcessMspRespondStoringRequest,
-};
 use shc_blockchain_service::{
     commands::{BlockchainServiceCommandInterface, BlockchainServiceCommandInterfaceExt},
-    events::NewStorageRequest,
+    events::{NewStorageRequest, ProcessMspRespondStoringRequest},
 };
 use shc_common::{
     traits::StorageEnableRuntime,
@@ -197,43 +189,6 @@ impl RejectionInfo {
     }
 }
 
-/// Status of a file key in the MSP upload pipeline.
-///
-/// Used by [`MspUploadFileTask`] to track processing state, prevent duplicate processing,
-/// and enable automatic retries. See [module documentation](self) for the full status
-/// transition flow.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum FileKeyStatus {
-    /// File key is currently being processed (in the pipeline).
-    ///
-    /// Set when [`BatchProcessStorageRequests`] emits a [`NewStorageRequest`] for the file key.
-    Processing,
-    /// File key was successfully accepted on-chain.
-    ///
-    /// Set after [`ProcessMspRespondStoringRequest`] successfully submits the extrinsic.
-    Accepted,
-    /// File key was explicitly rejected on-chain (e.g., capacity issues, invalid proof).
-    ///
-    /// Set after [`ProcessMspRespondStoringRequest`] successfully submits a rejection.
-    Rejected,
-    /// File key failed with a non-proof-related dispatch error (permanent failure).
-    ///
-    /// Set when the extrinsic is included in a block but fails with a dispatch error
-    /// that is NOT proof-related (e.g., authorization failures, invalid parameters,
-    /// inconsistent runtime state). These are permanent failures not resolved by retrying.
-    ///
-    /// File keys with this status will be **skipped** in subsequent
-    /// [`BatchProcessStorageRequests`] cycles.
-    ///
-    /// **Note:** Proof errors (`ForestProofVerificationFailed`, FailedToApplyDelta`) and extrinsic submission failures (timeout after retries)
-    /// do NOT set this status—instead, they **remove** the file key from statuses to
-    /// enable automatic retry via [`BatchProcessStorageRequests`].
-    ///
-    /// Stale `Abandoned` entries are cleaned up when the file key is no longer present
-    /// in the pending storage requests list.
-    Abandoned,
-}
-
 /// Handles the complete file upload flow for Main Storage Providers (MSPs).
 ///
 /// This task processes multiple concurrent events using an actor-based model.
@@ -243,16 +198,15 @@ pub enum FileKeyStatus {
 ///
 /// | Event | Purpose |
 /// |-------|---------|
-/// | [`BatchProcessStorageRequests`] | Periodic discovery of pending requests |
-/// | [`NewStorageRequest`] | Capacity check, upload registration, or queue if file exists |
+/// | [`NewStorageRequest`] | Emitted by BlockchainService; checks status, handles capacity/upload |
 /// | [`RemoteUploadRequest`] | Chunk reception; queues accept when file complete |
 /// | [`ProcessMspRespondStoringRequest`] | Batched on-chain response submission |
 ///
 /// # Status Tracking
 ///
-/// The [`file_key_statuses`](Self::file_key_statuses) field tracks each file key's
-/// [`FileKeyStatus`] to prevent duplicate processing and enable automatic retries
-/// for failed requests.
+/// File key status tracking is managed centrally by the
+/// [`BlockchainService`](shc_blockchain_service::BlockchainService)'s `MspHandler`.
+/// Tasks update statuses via commands (e.g., `set_file_key_status`, `remove_file_key_status`).
 pub struct MspUploadFileTask<NT, Runtime>
 where
     NT: ShNodeType<Runtime>,
@@ -261,9 +215,6 @@ where
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
     config: MspUploadFileConfig,
-    /// Tracks the processing status of each file key to prevent duplicate processing
-    /// and enable retries for failed requests.
-    file_key_statuses: Arc<RwLock<HashMap<H256, FileKeyStatus>>>,
 }
 
 impl<NT, Runtime> Clone for MspUploadFileTask<NT, Runtime>
@@ -276,7 +227,6 @@ where
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
             config: self.config.clone(),
-            file_key_statuses: self.file_key_statuses.clone(),
         }
     }
 }
@@ -291,7 +241,6 @@ where
         Self {
             storage_hub_handler,
             config: MspUploadFileConfig::default(),
-            file_key_statuses: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -326,125 +275,17 @@ where
     }
 }
 
-/// Handles the [`BatchProcessStorageRequests`] event.
-///
-/// This event is triggered periodically by the BlockchainService to process pending storage requests
-/// that may have been missed. The handler queries the runtime for pending storage requests and
-/// emits a NewStorageRequest event for each via the PreprocessStorageRequestEvent command.
-impl<NT, Runtime> EventHandler<BatchProcessStorageRequests> for MspUploadFileTask<NT, Runtime>
-where
-    NT: ShNodeType<Runtime> + 'static,
-    NT::FSH: MspForestStorageHandlerT<Runtime>,
-    Runtime: StorageEnableRuntime,
-{
-    async fn handle_event(&mut self, event: BatchProcessStorageRequests) -> anyhow::Result<String> {
-        // Hold the Arc reference to the permit for the lifetime of this handler
-        // The permit will be automatically released when this handler completes or fails
-        // (when the Arc is dropped, the permit is dropped, releasing the semaphore)
-        let _permit_guard = event.permit;
-
-        info!(
-            target: LOG_TARGET,
-            "Processing batch storage requests"
-        );
-
-        let pending_requests = self
-            .storage_hub_handler
-            .blockchain
-            .query_pending_storage_requests(None)
-            .await
-            .map_err(|e| anyhow!("Failed to query pending storage requests: {:?}", e))?;
-
-        info!(
-            target: LOG_TARGET,
-            "Found {} pending storage requests to process",
-            pending_requests.len()
-        );
-
-        // Collect pending file keys for cleanup of stale entries
-        let pending_file_keys: HashSet<H256> = pending_requests
-            .iter()
-            .map(|r| H256::from_slice(r.file_key.as_ref()))
-            .collect();
-
-        debug!(
-            target: LOG_TARGET,
-            "Pending file keys from on-chain: {:?}",
-            pending_file_keys
-        );
-
-        let mut statuses = self.file_key_statuses.write().await;
-
-        debug!(
-            target: LOG_TARGET,
-            "Current file key statuses: {:?}",
-            *statuses
-        );
-
-        // First, cleanup stale entries (file keys no longer in pending requests)
-        let before_count = statuses.len();
-        statuses.retain(|file_key, _| pending_file_keys.contains(file_key));
-        let removed = before_count - statuses.len();
-        if removed > 0 {
-            debug!(
-                target: LOG_TARGET,
-                "Cleaned up {} stale file key entries not in pending requests",
-                removed
-            );
-        }
-
-        // Then, process each pending request: if not in statuses, set to Processing and emit event
-        let mut processed_count = 0;
-        for request in &pending_requests {
-            let file_key = H256::from_slice(request.file_key.as_ref());
-
-            // Skip file keys that already have a status
-            if let Some(status) = statuses.get(&file_key) {
-                debug!(
-                    target: LOG_TARGET,
-                    "Skipping file key {:?} - status: {:?}",
-                    file_key,
-                    status
-                );
-                continue;
-            }
-
-            // File key not in statuses: set to Processing and emit NewStorageRequest event
-            debug!(target: LOG_TARGET, "Processing new file key {:?}", file_key);
-            statuses.insert(file_key, FileKeyStatus::Processing);
-
-            // Emit event (fire-and-forget)
-            self.storage_hub_handler
-                .blockchain
-                .preprocess_storage_request(request.clone())
-                .await;
-
-            debug!(
-                target: LOG_TARGET,
-                "Emitted NewStorageRequest event for file key {:?}",
-                file_key
-            );
-
-            processed_count += 1;
-        }
-
-        // Permit is automatically released when handler returns
-        Ok(format!(
-            "Processed {} new storage requests out of {} pending",
-            processed_count,
-            pending_requests.len()
-        ))
-    }
-}
-
 /// Handles the [`NewStorageRequest`] event.
 ///
-/// This event is emitted for each pending storage request. The MSP will check if it has enough
-/// storage capacity to store the file and increase it if necessary (up to a maximum).
-/// If the MSP does not have enough capacity still, it will reject the storage request.
-/// It will register the user and file key in the registry of the File Transfer Service,
-/// which handles incoming p2p upload requests. Finally, it will create a file in the
-/// file storage so that it can write uploaded chunks as soon as possible.
+/// This event is emitted by the blockchain service for each pending storage request.
+/// The blockchain service filters out file keys that already have a status (Processing,
+/// Accepted, Rejected, or Abandoned), so this handler only receives new file keys.
+///
+/// The MSP will check if it has enough storage capacity to store the file and increase it
+/// if necessary (up to a maximum). If the MSP does not have enough capacity still, it will
+/// reject the storage request. It will register the user and file key in the registry of
+/// the File Transfer Service, which handles incoming p2p upload requests. Finally, it will
+/// create a file in the file storage so that it can write uploaded chunks as soon as possible.
 impl<NT, Runtime> EventHandler<NewStorageRequest<Runtime>> for MspUploadFileTask<NT, Runtime>
 where
     NT: ShNodeType<Runtime> + 'static,
@@ -454,6 +295,12 @@ where
     async fn handle_event(&mut self, event: NewStorageRequest<Runtime>) -> anyhow::Result<String> {
         let bucket_id = H256::from_slice(event.bucket_id.as_ref());
         let file_key = H256::from_slice(event.file_key.as_ref());
+
+        // Status tracking is handled by the blockchain service's MspHandler.
+        // This event is only emitted for file keys that don't have a status yet,
+        // so we can proceed directly with processing.
+        debug!(target: LOG_TARGET, "Processing NewStorageRequest for file key {:?}", file_key);
+
         let result = self.handle_new_storage_request_event(event).await;
         if let Err(reason) = result {
             self.handle_rejected_storage_request(&file_key, bucket_id, reason.clone())
@@ -761,36 +608,39 @@ where
         match extrinsic_result {
             Err(e) => {
                 // Extrinsic submission failed after exhausting all retries (timeout, dropped, etc.)
-                // Remove file keys from statuses to enable automatic retry via BatchProcessStorageRequests.
+                // Remove file keys from statuses to enable automatic retry on the next block.
                 // This is appropriate because submission failures may be transient (network issues,
-                // collator congestion) and retrying with fresh proofs on the next cycle may succeed.
+                // collator congestion) and retrying with fresh proofs on the next block may succeed.
                 warn!(
                     target: LOG_TARGET,
                     "Extrinsic submission failed after exhausting retries, removing file keys from statuses for retry: {:?}",
                     e
                 );
 
-                {
-                    let mut statuses = self.file_key_statuses.write().await;
-                    for response in &storage_request_msp_response {
-                        if let Some(ref accepted) = response.accept {
-                            for fk in &accepted.file_keys_and_proofs {
-                                trace!(
-                                    target: LOG_TARGET,
-                                    "Removing file key {:?} status (extrinsic submission exhausted retries)",
-                                    fk.file_key
-                                );
-                                statuses.remove(&fk.file_key);
-                            }
-                        }
-                        for rejected in &response.reject {
+                for response in &storage_request_msp_response {
+                    if let Some(ref accepted) = response.accept {
+                        for fk in &accepted.file_keys_and_proofs {
                             trace!(
                                 target: LOG_TARGET,
                                 "Removing file key {:?} status (extrinsic submission exhausted retries)",
-                                rejected.file_key
+                                fk.file_key
                             );
-                            statuses.remove(&rejected.file_key);
+                            self.storage_hub_handler
+                                .blockchain
+                                .remove_file_key_status(fk.file_key.into())
+                                .await;
                         }
+                    }
+                    for rejected in &response.reject {
+                        trace!(
+                            target: LOG_TARGET,
+                            "Removing file key {:?} status (extrinsic submission exhausted retries)",
+                            rejected.file_key
+                        );
+                        self.storage_hub_handler
+                            .blockchain
+                            .remove_file_key_status(rejected.file_key.into())
+                            .await;
                     }
                 }
 
@@ -839,7 +689,7 @@ where
 
                     if is_proof_error {
                         // Proof-related error: remove file keys from statuses to enable automatic retry.
-                        // The next BatchProcessStorageRequests cycle will re-insert them with Processing
+                        // The next block's NewStorageRequest events will re-insert them with Processing
                         // status and regenerate proofs with the updated forest root.
                         warn!(
                             target: LOG_TARGET,
@@ -847,18 +697,23 @@ where
                             dispatch_error
                         );
 
-                        // Remove file keys from statuses to trigger retry via BatchProcessStorageRequests
-                        let mut statuses = self.file_key_statuses.write().await;
+                        // Remove file keys from statuses to trigger retry on the next block
                         for response in &storage_request_msp_response {
                             if let Some(ref accepted) = response.accept {
                                 for fk in &accepted.file_keys_and_proofs {
                                     debug!(target: LOG_TARGET, "Removing file key {:?} status (proof error)", fk.file_key);
-                                    statuses.remove(&fk.file_key);
+                                    self.storage_hub_handler
+                                        .blockchain
+                                        .remove_file_key_status(fk.file_key.into())
+                                        .await;
                                 }
                             }
                             for rejected in &response.reject {
                                 debug!(target: LOG_TARGET, "Removing file key {:?} status (proof error)", rejected.file_key);
-                                statuses.remove(&rejected.file_key);
+                                self.storage_hub_handler
+                                    .blockchain
+                                    .remove_file_key_status(rejected.file_key.into())
+                                    .await;
                             }
                         }
 
@@ -881,7 +736,6 @@ where
                             "Non-proof dispatch error, marking file keys as Abandoned: {:?}",
                             error
                         );
-                        let mut statuses = self.file_key_statuses.write().await;
                         for response in &storage_request_msp_response {
                             if let Some(ref accepted) = response.accept {
                                 for fk in &accepted.file_keys_and_proofs {
@@ -890,7 +744,13 @@ where
                                         "Marking file key {:?} as Abandoned (non-proof error)",
                                         fk.file_key
                                     );
-                                    statuses.insert(fk.file_key, FileKeyStatus::Abandoned);
+                                    self.storage_hub_handler
+                                        .blockchain
+                                        .set_file_key_status(
+                                            fk.file_key.into(),
+                                            FileKeyStatus::Abandoned,
+                                        )
+                                        .await;
                                 }
                             }
                             for rejected in &response.reject {
@@ -899,7 +759,13 @@ where
                                     "Marking file key {:?} as Abandoned (non-proof error)",
                                     rejected.file_key
                                 );
-                                statuses.insert(rejected.file_key, FileKeyStatus::Abandoned);
+                                self.storage_hub_handler
+                                    .blockchain
+                                    .set_file_key_status(
+                                        rejected.file_key.into(),
+                                        FileKeyStatus::Abandoned,
+                                    )
+                                    .await;
                             }
                         }
                     }
@@ -927,7 +793,6 @@ where
         // Process all responses in a single pass: log, update statuses, and delete rejected files.
         // Accepted files will be added to the Bucket's Forest Storage by the BlockchainService.
         if !storage_request_msp_response.is_empty() {
-            let mut statuses = self.file_key_statuses.write().await;
             let mut write_fs = self.storage_hub_handler.file_storage.write().await;
 
             for response in &storage_request_msp_response {
@@ -947,7 +812,10 @@ where
                                 "Marking file key {:?} as Accepted",
                                 fk.file_key
                             );
-                            statuses.insert(fk.file_key, FileKeyStatus::Accepted);
+                            self.storage_hub_handler
+                                .blockchain
+                                .set_file_key_status(fk.file_key.into(), FileKeyStatus::Accepted)
+                                .await;
                         }
                     }
                 }
@@ -968,9 +836,12 @@ where
                             rejected.file_key,
                             rejected.reason
                         );
-                        statuses.insert(rejected.file_key, FileKeyStatus::Rejected);
+                        self.storage_hub_handler
+                            .blockchain
+                            .set_file_key_status(rejected.file_key.into(), FileKeyStatus::Rejected)
+                            .await;
 
-                        if let Err(e) = write_fs.delete_file(&rejected.file_key) {
+                        if let Err(e) = write_fs.delete_file(&rejected.file_key.into()) {
                             error!(target: LOG_TARGET, "Failed to delete file {:?}: {:?}", rejected.file_key, e);
                         }
                     }
@@ -1582,13 +1453,13 @@ where
         // Mark the file key as rejected so it won't be retried
         debug!(
             target: LOG_TARGET,
-            "Marking file key {:?} as Rejected (queue_msp_respond_storage_request_reject)",
+            "Marking file key {:?} as Rejected (handle_rejected_storage_request)",
             file_key
         );
-        self.file_key_statuses
-            .write()
-            .await
-            .insert(*file_key, FileKeyStatus::Rejected);
+        self.storage_hub_handler
+            .blockchain
+            .set_file_key_status((*file_key).into(), FileKeyStatus::Rejected)
+            .await;
 
         Ok(())
     }

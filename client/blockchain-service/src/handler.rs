@@ -1387,11 +1387,44 @@ where
                         }
                     }
                 }
-                BlockchainServiceCommand::PreprocessStorageRequest { request } => {
-                    // Emit the NewStorageRequest event for this storage request.
-                    // This is called by MspUploadFileTask's BatchProcessStorageRequests handler
-                    // for each pending storage request to trigger per-file processing.
-                    self.emit(request);
+                BlockchainServiceCommand::SetFileKeyStatus { file_key, status } => {
+                    if let Some(ManagedProvider::Msp(msp_handler)) =
+                        &mut self.maybe_managed_provider
+                    {
+                        trace!(
+                            target: LOG_TARGET,
+                            "Setting file key {:?} status to {:?}",
+                            file_key,
+                            status
+                        );
+                        msp_handler.file_key_statuses.insert(file_key, status);
+                    } else {
+                        // Fire-and-forget command, just log the invariant violation
+                        error!(
+                            target: LOG_TARGET,
+                            "SetFileKeyStatus received while not managing an MSP. \
+                             This is an invariant violation - please report to StorageHub team."
+                        );
+                    }
+                }
+                BlockchainServiceCommand::RemoveFileKeyStatus { file_key } => {
+                    if let Some(ManagedProvider::Msp(msp_handler)) =
+                        &mut self.maybe_managed_provider
+                    {
+                        trace!(
+                            target: LOG_TARGET,
+                            "Removing file key {:?} from statuses (enabling retry)",
+                            file_key
+                        );
+                        msp_handler.file_key_statuses.remove(&file_key);
+                    } else {
+                        // Fire-and-forget command, just log the invariant violation
+                        error!(
+                            target: LOG_TARGET,
+                            "RemoveFileKeyStatus received while not managing an MSP. \
+                             This is an invariant violation - please report to StorageHub team."
+                        );
+                    }
                 }
                 BlockchainServiceCommand::ReleaseForestRootWriteLock {
                     forest_root_write_tx,

@@ -37,8 +37,8 @@ use crate::{
     handler::BlockchainService,
     transaction_manager::wait_for_transaction_status,
     types::{
-        ConfirmStoringRequest, Extrinsic, ExtrinsicResult, FileDeletionRequest, MinimalBlockInfo,
-        RespondStorageRequest, RetryStrategy, SendExtrinsicOptions, StatusToWait,
+        ConfirmStoringRequest, Extrinsic, ExtrinsicResult, FileDeletionRequest, FileKeyStatus,
+        MinimalBlockInfo, RespondStorageRequest, RetryStrategy, SendExtrinsicOptions, StatusToWait,
         StopStoringForInsolventUserRequest, SubmitProofRequest, SubmittedExtrinsicInfo,
         WatchTransactionError,
     },
@@ -195,10 +195,24 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     /// If `file_keys` is None, returns all pending storage requests via runtime API.
     #[command(success_type = Vec<NewStorageRequest<Runtime>>)]
     QueryPendingStorageRequests { file_keys: Option<Vec<FileKey>> },
-    /// Preprocess a storage request by emitting a NewStorageRequest event.
-    /// Called by MspUploadFileTask's BatchProcessStorageRequests handler for each pending request.
+    /// Set the status of a file key in the MSP upload pipeline.
+    ///
+    /// Used by tasks to update the status of a file key after processing:
+    /// - `Accepted` - File was successfully accepted on-chain
+    /// - `Rejected` - File was explicitly rejected
+    /// - `Abandoned` - File failed with a permanent error
     #[command(mode = "FireAndForget")]
-    PreprocessStorageRequest { request: NewStorageRequest<Runtime> },
+    SetFileKeyStatus {
+        file_key: FileKey,
+        status: FileKeyStatus,
+    },
+    /// Remove a file key from the status tracking.
+    ///
+    /// Used by tasks to enable retry on the next block cycle:
+    /// - After proof errors (to retry with regenerated proofs)
+    /// - After extrinsic submission failures (may be transient)
+    #[command(mode = "FireAndForget")]
+    RemoveFileKeyStatus { file_key: FileKey },
 }
 
 /// Interface for interacting with the BlockchainService actor.
