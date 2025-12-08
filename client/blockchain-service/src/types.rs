@@ -823,8 +823,10 @@ impl<Runtime: StorageEnableRuntime> BspHandler<Runtime> {
 pub enum FileKeyStatus {
     /// File key is currently being processed (in the pipeline).
     ///
-    /// Set when the blockchain service emits a
+    /// Set **only** by the blockchain service when emitting a
     /// [`NewStorageRequest`](crate::events::NewStorageRequest) event for the file key.
+    ///
+    /// Tasks cannot set this status directly—use [`TerminalFileKeyStatus`] instead.
     #[default]
     Processing,
     /// File key was successfully accepted on-chain.
@@ -845,6 +847,33 @@ pub enum FileKeyStatus {
     /// do NOT set this status—instead, they **remove** the file key from statuses to
     /// enable automatic retry on the next block.
     Abandoned,
+}
+
+/// Terminal status for a file key, settable by tasks via [`SetFileKeyStatus`](crate::commands::BlockchainServiceCommand::SetFileKeyStatus).
+///
+/// This is a subset of [`FileKeyStatus`] that excludes `Processing`, which is only
+/// set by the blockchain service when emitting [`NewStorageRequest`](crate::events::NewStorageRequest) events.
+///
+/// This type-safe restriction ensures tasks can only transition file keys to terminal
+/// states, preventing accidental re-processing of already-handled requests.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TerminalFileKeyStatus {
+    /// File key was successfully accepted on-chain.
+    Accepted,
+    /// File key was explicitly rejected on-chain.
+    Rejected,
+    /// File key failed with a permanent error (non-proof dispatch error).
+    Abandoned,
+}
+
+impl From<TerminalFileKeyStatus> for FileKeyStatus {
+    fn from(status: TerminalFileKeyStatus) -> Self {
+        match status {
+            TerminalFileKeyStatus::Accepted => FileKeyStatus::Accepted,
+            TerminalFileKeyStatus::Rejected => FileKeyStatus::Rejected,
+            TerminalFileKeyStatus::Abandoned => FileKeyStatus::Abandoned,
+        }
+    }
 }
 
 /// A struct that holds the information to handle an MSP.

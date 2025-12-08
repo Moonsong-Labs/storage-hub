@@ -80,7 +80,7 @@
 //!   failure may be transient (network issues, collator congestion).
 //!
 //! - **Non-proof dispatch errors** (authorization failures, invalid parameters, etc.):
-//!   File key is marked as [`FileKeyStatus::Abandoned`] via `set_file_key_status` command.
+//!   File key is marked as `Abandoned` via [`TerminalFileKeyStatus`] command.
 //!   These are permanent failures not resolved by retrying, so the file key will be skipped.
 //!
 //! ### Event Handlers
@@ -109,7 +109,7 @@ use std::{
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
 use shc_blockchain_service::types::{
-    FileKeyStatus, MspRespondStorageRequest, RespondStorageRequest, RetryStrategy,
+    MspRespondStorageRequest, RespondStorageRequest, RetryStrategy, TerminalFileKeyStatus,
 };
 use shc_blockchain_service::{capacity_manager::CapacityRequestData, types::SendExtrinsicOptions};
 use sp_core::H256;
@@ -748,7 +748,7 @@ where
                                         .blockchain
                                         .set_file_key_status(
                                             fk.file_key.into(),
-                                            FileKeyStatus::Abandoned,
+                                            TerminalFileKeyStatus::Abandoned,
                                         )
                                         .await;
                                 }
@@ -763,7 +763,7 @@ where
                                     .blockchain
                                     .set_file_key_status(
                                         rejected.file_key.into(),
-                                        FileKeyStatus::Abandoned,
+                                        TerminalFileKeyStatus::Abandoned,
                                     )
                                     .await;
                             }
@@ -814,7 +814,10 @@ where
                             );
                             self.storage_hub_handler
                                 .blockchain
-                                .set_file_key_status(fk.file_key.into(), FileKeyStatus::Accepted)
+                                .set_file_key_status(
+                                    fk.file_key.into(),
+                                    TerminalFileKeyStatus::Accepted,
+                                )
                                 .await;
                         }
                     }
@@ -838,7 +841,10 @@ where
                         );
                         self.storage_hub_handler
                             .blockchain
-                            .set_file_key_status(rejected.file_key.into(), FileKeyStatus::Rejected)
+                            .set_file_key_status(
+                                rejected.file_key.into(),
+                                TerminalFileKeyStatus::Rejected,
+                            )
                             .await;
 
                         if let Err(e) = write_fs.delete_file(&rejected.file_key.into()) {
@@ -1458,7 +1464,7 @@ where
         );
         self.storage_hub_handler
             .blockchain
-            .set_file_key_status((*file_key).into(), FileKeyStatus::Rejected)
+            .set_file_key_status((*file_key).into(), TerminalFileKeyStatus::Rejected)
             .await;
 
         Ok(())

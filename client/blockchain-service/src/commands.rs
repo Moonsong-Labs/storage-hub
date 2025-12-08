@@ -37,10 +37,10 @@ use crate::{
     handler::BlockchainService,
     transaction_manager::wait_for_transaction_status,
     types::{
-        ConfirmStoringRequest, Extrinsic, ExtrinsicResult, FileDeletionRequest, FileKeyStatus,
-        MinimalBlockInfo, RespondStorageRequest, RetryStrategy, SendExtrinsicOptions, StatusToWait,
+        ConfirmStoringRequest, Extrinsic, ExtrinsicResult, FileDeletionRequest, MinimalBlockInfo,
+        RespondStorageRequest, RetryStrategy, SendExtrinsicOptions, StatusToWait,
         StopStoringForInsolventUserRequest, SubmitProofRequest, SubmittedExtrinsicInfo,
-        WatchTransactionError,
+        TerminalFileKeyStatus, WatchTransactionError,
     },
 };
 
@@ -195,16 +195,17 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     /// If `file_keys` is None, returns all pending storage requests via runtime API.
     #[command(success_type = Vec<NewStorageRequest<Runtime>>)]
     QueryPendingStorageRequests { file_keys: Option<Vec<FileKey>> },
-    /// Set the status of a file key in the MSP upload pipeline.
+    /// Set the terminal status of a file key in the MSP upload pipeline.
     ///
-    /// Used by tasks to update the status of a file key after processing:
-    /// - `Accepted` - File was successfully accepted on-chain
-    /// - `Rejected` - File was explicitly rejected
-    /// - `Abandoned` - File failed with a permanent error
+    /// Used by tasks to update the status of a file key after processing.
+    /// Only terminal statuses are allowed—`Processing` is set exclusively by the
+    /// blockchain service when emitting [`NewStorageRequest`] events.
+    ///
+    /// See [`TerminalFileKeyStatus`] for available statuses.
     #[command(mode = "FireAndForget")]
     SetFileKeyStatus {
         file_key: FileKey,
-        status: FileKeyStatus,
+        status: TerminalFileKeyStatus,
     },
     /// Remove a file key from the status tracking.
     ///

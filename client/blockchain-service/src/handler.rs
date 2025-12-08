@@ -1397,7 +1397,9 @@ where
                             file_key,
                             status
                         );
-                        msp_handler.file_key_statuses.insert(file_key, status);
+                        msp_handler
+                            .file_key_statuses
+                            .insert(file_key, status.into());
                     } else {
                         // Fire-and-forget command, just log the invariant violation
                         error!(
