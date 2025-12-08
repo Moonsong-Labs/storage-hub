@@ -591,7 +591,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     Err(e) => return Err(e),
                 };
 
-                let bucket = Bucket::get_by_id(conn, file.bucket_id).await?;
+                let bucket =
+                    Bucket::get_by_onchain_bucket_id(conn, file.onchain_bucket_id.clone()).await?;
                 if let Some(msp_id) = bucket.msp_id {
                     MspFile::create(conn, msp_id, file.id).await?;
                 }
