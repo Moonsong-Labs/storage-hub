@@ -385,6 +385,13 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                             let block_hash_bytes = block_hash.as_bytes().to_vec();
                             let tx_hash_bytes = evm_tx_hash.map(|h| h.as_bytes().to_vec());
 
+                            // Check if this file key is already present in the bucket of the MSP
+                            // In this scenario, this will always return false, since there's no other file record
+                            // in the DB, but it's still good practice to check it.
+                            let is_in_bucket =
+                                File::is_file_key_in_bucket(conn, file_key.as_ref().to_vec())
+                                    .await?;
+
                             // Create file with Requested step since we will change it to Stored when the storage request is fulfilled
                             File::create(
                                 conn,
@@ -399,6 +406,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                                 vec![], // No peer_ids available from confirmation event
                                 block_hash_bytes,
                                 tx_hash_bytes,
+                                is_in_bucket,
                             )
                             .await?
                         }
@@ -445,6 +453,14 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 // Convert EVM tx hash to bytes if present
                 let tx_hash_bytes = evm_tx_hash.map(|h| h.as_bytes().to_vec());
 
+                // Check if this file key is already present in the bucket of the MSP
+                // This could happen if there was a previous storage request for this file key that
+                // the MSP accepted, and the new storage request was issued by the user to add redundancy to it.
+                // We do this check because in this scenario,the `MutationsApplied` event won't be emitted for this
+                // file key when the MSP accepts it, as the MSP is already storing it.
+                let is_in_bucket =
+                    File::is_file_key_in_bucket(conn, file_key.as_ref().to_vec()).await?;
+
                 File::create(
                     conn,
                     who,
@@ -458,6 +474,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     sql_peer_ids,
                     block_hash_bytes,
                     tx_hash_bytes,
+                    is_in_bucket,
                 )
                 .await?;
             }
@@ -547,6 +564,12 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                         let block_hash_bytes = block_hash.as_bytes().to_vec();
                         let tx_hash_bytes = evm_tx_hash.map(|h| h.as_bytes().to_vec());
 
+                        // Check if this file key is already present in the bucket of the MSP
+                        // In this scenario, this will always return false, since there's no other file record
+                        // in the DB, but it's still a good practice to check it.
+                        let is_in_bucket =
+                            File::is_file_key_in_bucket(conn, file_key.as_ref().to_vec()).await?;
+
                         // Create file with Requested step since we will change it to Stored when the storage request is fulfilled
                         File::create(
                             conn,
@@ -561,6 +584,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                             vec![], // No peer_ids available from acceptance event
                             block_hash_bytes,
                             tx_hash_bytes,
+                            is_in_bucket,
                         )
                         .await?
                     }
@@ -732,9 +756,9 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                         // No storage, safe to delete immediately
                         File::delete(conn, file_record.id).await?;
                         log::debug!(
-                        		"Incomplete storage request for file key {:?} and id {:?} is not being stored, deleted immediately",
-														file_key, file_record.id
-                    		);
+                            "Incomplete storage request for file key {:?} and id {:?} is not being stored, deleted immediately",
+                            file_key, file_record.id,
+                        );
                     }
                 }
             }
