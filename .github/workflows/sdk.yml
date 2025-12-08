@@ -171,10 +171,10 @@ jobs:
           key: synpress-cache-${{ hashFiles('sdk/e2e/wallet-setup/*.ts') }}
           restore-keys: |
             synpress-cache-
-      - name: Run Synpress wallet setup (sdk/e2e)
+      - name: Build Synpress cache (sdk/e2e)
         working-directory: sdk/e2e
-        run: xvfb-run -a pnpm exec synpress wallet-setup
-      - name: Run Synpress tests (headless via xvfb) (sdk/e2e)
+        run: xvfb-run -a pnpm exec synpress
+      - name: Run E2E tests (headful via xvfb) (sdk/e2e)
         working-directory: sdk/e2e
         run: xvfb-run -a pnpm exec playwright test --project metamask
       - name: Upload Playwright report
