@@ -173,7 +173,7 @@ jobs:
             synpress-cache-
       - name: Build Synpress cache (sdk/e2e)
         working-directory: sdk/e2e
-        run: xvfb-run -a pnpm exec synpress
+        run: xvfb-run -a pnpm exec synpress wallet-setup
       - name: Run E2E tests (headful via xvfb) (sdk/e2e)
         working-directory: sdk/e2e
         run: xvfb-run -a pnpm exec playwright test --project metamask
