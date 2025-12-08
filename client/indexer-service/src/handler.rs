@@ -784,13 +784,13 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     }
                 };
 
-                let bucket = Bucket::get_by_id(conn, file.bucket_id).await.map_err(|e| {
-                    IndexBlockError::EventIndexingDatabaseError {
+                let bucket = Bucket::get_by_onchain_bucket_id(conn, file.onchain_bucket_id.clone())
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
                         database_error: e,
                         block_number: block_number.saturated_into(),
                         event_name: "MspAcceptedStorageRequest (get bucket)".to_string(),
-                    }
-                })?;
+                    })?;
                 if let Some(msp_id) = bucket.msp_id {
                     MspFile::create(conn, msp_id, file.id).await.map_err(|e| {
                         IndexBlockError::EventIndexingDatabaseError {

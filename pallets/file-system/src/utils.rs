@@ -864,6 +864,16 @@ where
             Error::<T>::BucketNotEmpty
         );
 
+        // Check if there are any open storage requests for the bucket.
+        // Do not allow a bucket to be deleted if there are any open storage requests for it.
+        // Storage requests must be revoked or fulfilled before a bucket can be deleted.
+        ensure!(
+            !<BucketsWithStorageRequests<T>>::iter_prefix(bucket_id)
+                .next()
+                .is_some(),
+            Error::<T>::StorageRequestExists
+        );
+
         // Retrieve the collection ID associated with the bucket, if any.
         let maybe_collection_id: Option<CollectionIdFor<T>> =
             <T::Providers as ReadBucketsInterface>::get_read_access_group_id_of_bucket(&bucket_id)?;
