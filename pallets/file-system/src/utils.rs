@@ -864,6 +864,12 @@ where
             Error::<T>::BucketNotEmpty
         );
 
+        // Check that the bucket is not being moved.
+        ensure!(
+            !<PendingMoveBucketRequests<T>>::contains_key(&bucket_id),
+            Error::<T>::BucketIsBeingMoved
+        );
+
         // Retrieve the collection ID associated with the bucket, if any.
         let maybe_collection_id: Option<CollectionIdFor<T>> =
             <T::Providers as ReadBucketsInterface>::get_read_access_group_id_of_bucket(&bucket_id)?;
@@ -2868,6 +2874,12 @@ where
         // All files must be in the same bucket - validate and get bucket_id
         let bucket_id = file_deletions[0].3;
 
+        // Check that the bucket is not being moved.
+        ensure!(
+            !<PendingMoveBucketRequests<T>>::contains_key(&bucket_id),
+            Error::<T>::BucketIsBeingMoved
+        );
+
         // Single pass collection: gather file keys, mutations, total size, and validate bucket consistency
         let mut file_keys = BoundedVec::<MerkleHash<T>, T::MaxFileDeletionsPerExtrinsic>::default();
         let mut mutations = Vec::with_capacity(file_deletions.len());
@@ -3014,11 +3026,19 @@ where
         let mut owner_sizes: BTreeMap<T::AccountId, StorageDataUnit<T>> = BTreeMap::new();
         let mut seen_keys = BTreeSet::new();
 
-        for (owner, file_key, size, _) in file_deletions {
+        for (owner, file_key, size, bucket_id) in file_deletions {
             // Detect duplicate file keys in the batch
             ensure!(
                 seen_keys.insert(*file_key),
                 Error::<T>::DuplicateFileKeyInBatchFileDeletion
+            );
+
+            // Ensure the bucket of the file being deleted is not in a bucket that's being moved.
+            // This is so that while the bucket is moved, we don't delete files from the BSPs that
+            // are still storing those files, and the new MSP can get them to accept the bucket moved.
+            ensure!(
+                !<PendingMoveBucketRequests<T>>::contains_key(bucket_id),
+                Error::<T>::BucketIsBeingMoved
             );
 
             expect_or_err!(
