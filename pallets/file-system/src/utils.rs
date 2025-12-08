@@ -864,6 +864,15 @@ where
             Error::<T>::BucketNotEmpty
         );
 
+        // Check if there are any open storage requests for the bucket.
+        // Do not allow any storage requests and move bucket requests to coexist for the same bucket.
+        ensure!(
+            !<BucketsWithStorageRequests<T>>::iter_prefix(bucket_id)
+                .next()
+                .is_some(),
+            Error::<T>::StorageRequestExists
+        );
+
         // Retrieve the collection ID associated with the bucket, if any.
         let maybe_collection_id: Option<CollectionIdFor<T>> =
             <T::Providers as ReadBucketsInterface>::get_read_access_group_id_of_bucket(&bucket_id)?;
