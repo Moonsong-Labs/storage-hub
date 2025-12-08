@@ -163,12 +163,20 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Install Playwright Chromium with system deps (sdk/e2e)
         working-directory: sdk/e2e
-        run: |
-          pnpm exec playwright install --with-deps chromium
-      - name: Run Playwright tests (headless via xvfb) (sdk/e2e)
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Cache Synpress wallet setup
+        uses: actions/cache@v4
+        with:
+          path: sdk/e2e/.cache-synpress
+          key: synpress-cache-${{ hashFiles('sdk/e2e/wallet-setup/*.ts') }}
+          restore-keys: |
+            synpress-cache-
+      - name: Run Synpress wallet setup (sdk/e2e)
         working-directory: sdk/e2e
-        run: |
-          xvfb-run -a pnpm exec playwright test --project metamask
+        run: xvfb-run -a pnpm exec synpress wallet-setup
+      - name: Run Synpress tests (headless via xvfb) (sdk/e2e)
+        working-directory: sdk/e2e
+        run: xvfb-run -a pnpm exec playwright test --project metamask
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v4
