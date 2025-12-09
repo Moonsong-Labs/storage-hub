@@ -16,15 +16,16 @@
 //!
 //! 1. Receive [`BatchFileDeletions`] event with deletion type (User or Incomplete)
 //! 2. Query pending deletions from indexer database, grouped by target (BSP/Bucket)
-//! 3. Spawn [`FishermanTask::batch_delete_files_for_target`] futures for each target group
-//! 4. Each target batch:
+//! 3. For incomplete deletions: Validate files by checking runtime metadata to filter out stale entries
+//! 4. Spawn [`FishermanTask::batch_delete_files_for_target`] futures for each target group
+//! 5. Each target batch:
 //!    - Reconstructs ephemeral forest state from indexer data at last finalized block
 //!    - Applies catch-up changes from finalized block to current best block
 //!    - Filters file keys to only those that exist in the forest after catch-up
 //!    - Generates forest proof for valid file keys
 //!    - Submits appropriate extrinsic for the deletion type
-//! 5. Await all target processing futures
-//! 6. Release global lock via fisherman service
+//! 6. Await all target processing futures
+//! 7. Release global lock via fisherman service
 
 use anyhow::anyhow;
 use codec::Decode;
@@ -287,6 +288,8 @@ where
     /// exist in the forest after catch-up, and submits the appropriate extrinsic based on
     /// the deletion type.
     ///
+    /// Note: For incomplete deletions, validation has already been performed in `get_pending_deletions`.
+    ///
     /// # Arguments
     /// * `target` - The deletion target (BSP ID or Bucket ID)
     /// * `files` - Vector of files to delete for this target
@@ -359,31 +362,8 @@ where
                     .await?;
             }
             shc_indexer_db::models::FileDeletionType::Incomplete => {
-                // Validate that files should actually be deleted from this target by checking
-                // incomplete storage request metadata from runtime
-                let validated_file_keys = self
-                    .validate_incomplete_deletions(&remaining_file_keys, &target)
-                    .await?;
-
-                if validated_file_keys.is_empty() {
-                    info!(
-                        target: LOG_TARGET,
-                        "🎣 No files remaining after incomplete deletion validation for target {:?}",
-                        target
-                    );
-                    return Ok(());
-                }
-
-                debug!(
-                    target: LOG_TARGET,
-                    "🎣 Validated {} files out of {} for incomplete deletion from target {:?}",
-                    validated_file_keys.len(),
-                    remaining_file_keys.len(),
-                    target
-                );
-
                 self.submit_incomplete_deletion_extrinsic(
-                    &validated_file_keys,
+                    &remaining_file_keys,
                     provider_id,
                     forest_proof,
                 )
@@ -905,6 +885,9 @@ where
     /// Queries the indexer database for files marked with `deletion_status = InProgress`,
     /// filtered by the specified deletion type.
     ///
+    /// For incomplete deletions, this also validates each file against runtime metadata to filter
+    /// out stale entries (e.g. if another fisherman node already deleted the file from a provider).
+    ///
     /// # Parameters
     /// * `deletion_type` - Type of deletion to query ([`FileDeletionType::User`] or [`FileDeletionType::Incomplete`])
     /// * `bucket_id` - Optional filter to only return files from a specific bucket
@@ -994,7 +977,47 @@ where
         };
 
         // Execute both pipelines concurrently
-        let (bucket_deletions, bsp_deletions) = tokio::try_join!(bucket_task, bsp_task)?;
+        let (mut bucket_deletions, mut bsp_deletions) = tokio::try_join!(bucket_task, bsp_task)?;
+
+        // For incomplete deletions, validate and filter out stale entries immediately
+        // This avoids building forest proofs for files that will be filtered out anyway
+        if deletion_type == shc_indexer_db::models::FileDeletionType::Incomplete {
+            trace!(
+                target: LOG_TARGET,
+                "🎣 Validating incomplete deletions before processing"
+            );
+
+            // Validate bucket deletions
+            for (bucket_id, files) in bucket_deletions.iter_mut() {
+                let file_keys: Vec<_> = files.iter().map(|f| f.file_key).collect();
+                let validated_keys = self
+                    .validate_incomplete_deletions(
+                        &file_keys,
+                        &FileDeletionTarget::BucketId(*bucket_id),
+                    )
+                    .await?;
+
+                // Filter to keep only validated files
+                files.retain(|f| validated_keys.contains(&f.file_key));
+            }
+
+            // Remove empty bucket groups
+            bucket_deletions.retain(|_, files| !files.is_empty());
+
+            // Validate BSP deletions
+            for (bsp_id, files) in bsp_deletions.iter_mut() {
+                let file_keys: Vec<_> = files.iter().map(|f| f.file_key).collect();
+                let validated_keys = self
+                    .validate_incomplete_deletions(&file_keys, &FileDeletionTarget::BspId(*bsp_id))
+                    .await?;
+
+                // Filter to keep only validated files
+                files.retain(|f| validated_keys.contains(&f.file_key));
+            }
+
+            // Remove empty BSP groups
+            bsp_deletions.retain(|_, files| !files.is_empty());
+        }
 
         debug!(
             target: LOG_TARGET,
