@@ -110,12 +110,11 @@ impl MspFile {
         bucket_id: &[u8],
         msp_id: i64,
     ) -> Result<(), diesel::result::Error> {
-        use crate::schema::{bucket, file};
+        use crate::schema::file;
 
-        // Get all file IDs for this bucket
+        // Get all file IDs that match the onchain bucket ID, regardless of the DB bucket ID
         let file_ids: Vec<i64> = file::table
-            .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
-            .filter(bucket::onchain_bucket_id.eq(bucket_id))
+            .filter(file::onchain_bucket_id.eq(bucket_id))
             .select(file::id)
             .load(conn)
             .await?;

@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use bigdecimal::BigDecimal;
 use codec::Encode;
 use diesel_async::AsyncConnection;
@@ -167,7 +168,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         block_hash: H256,
         block_number: NumberFor<Runtime::Block>,
         evm_tx_hash: Option<H256>,
-    ) -> Result<(), diesel::result::Error> {
+    ) -> Result<(), IndexBlockError> {
         match self.indexer_mode {
             crate::IndexerMode::Full => {
                 self.index_event(conn, event, block_hash, block_number, evm_tx_hash)
@@ -191,7 +192,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         block_hash: H256,
         block_number: NumberFor<Runtime::Block>,
         evm_tx_hash: Option<H256>,
-    ) -> Result<(), diesel::result::Error> {
+    ) -> Result<(), IndexBlockError> {
         match event {
             StorageEnableEvents::BucketNfts(event) => {
                 self.index_bucket_nfts_event(conn, event).await?
@@ -201,17 +202,20 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     .await?
             }
             StorageEnableEvents::PaymentStreams(event) => {
-                self.index_payment_streams_event(conn, event).await?
+                self.index_payment_streams_event(conn, event, block_number)
+                    .await?
             }
             StorageEnableEvents::ProofsDealer(event) => {
-                self.index_proofs_dealer_event(conn, event, block_hash)
+                self.index_proofs_dealer_event(conn, event, block_hash, block_number)
                     .await?
             }
             StorageEnableEvents::StorageProviders(event) => {
-                self.index_providers_event(conn, event, block_hash).await?
+                self.index_providers_event(conn, event, block_hash, block_number)
+                    .await?
             }
             StorageEnableEvents::Randomness(event) => {
-                self.index_randomness_event(conn, event).await?
+                self.index_randomness_event(conn, event, block_number)
+                    .await?
             }
             // TODO: We have to index the events from the CrRandomness pallet when we integrate it to the runtime,
             // since they contain the information about the commit-reveal deadlines for Providers.
@@ -232,7 +236,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         &'b self,
         _conn: &mut DbConnection<'a>,
         event: &pallet_bucket_nfts::Event<Runtime>,
-    ) -> Result<(), diesel::result::Error> {
+    ) -> Result<(), IndexBlockError> {
         match event {
             pallet_bucket_nfts::Event::AccessShared { .. } => {}
             pallet_bucket_nfts::Event::ItemReadAccessUpdated { .. } => {}
@@ -249,7 +253,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         block_hash: H256,
         block_number: NumberFor<Runtime::Block>,
         evm_tx_hash: Option<H256>,
-    ) -> Result<(), diesel::result::Error> {
+    ) -> Result<(), IndexBlockError> {
         match event {
             pallet_file_system::Event::NewBucket {
                 who,
@@ -261,8 +265,15 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 value_prop_id,
                 root,
             } => {
-                let msp =
-                    Some(Msp::get_by_onchain_msp_id(conn, OnchainMspId::from(*msp_id)).await?);
+                let msp = Some(
+                    Msp::get_by_onchain_msp_id(conn, OnchainMspId::from(*msp_id))
+                        .await
+                        .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name: "NewBucket (get MSP)".to_string(),
+                        })?,
+                );
 
                 Bucket::create(
                     conn,
@@ -275,7 +286,12 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     root.as_ref().to_vec(),
                     format!("{:#?}", value_prop_id), // using .to_string() leads to truncation
                 )
-                .await?;
+                .await
+                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                    database_error: e,
+                    block_number: block_number.saturated_into(),
+                    event_name: "NewBucket (create bucket)".to_string(),
+                })?;
             }
             pallet_file_system::Event::MoveBucketAccepted {
                 old_msp_id,
@@ -284,12 +300,25 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 value_prop_id: _,
             } => {
                 let old_msp = if let Some(id) = old_msp_id {
-                    Some(Msp::get_by_onchain_msp_id(conn, OnchainMspId::from(*id)).await?)
+                    Some(
+                        Msp::get_by_onchain_msp_id(conn, OnchainMspId::from(*id))
+                            .await
+                            .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                                database_error: e,
+                                block_number: block_number.saturated_into(),
+                                event_name: "MoveBucketAccepted (old MSP)".to_string(),
+                            })?,
+                    )
                 } else {
                     None
                 };
-                let new_msp =
-                    Msp::get_by_onchain_msp_id(conn, OnchainMspId::from(*new_msp_id)).await?;
+                let new_msp = Msp::get_by_onchain_msp_id(conn, OnchainMspId::from(*new_msp_id))
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "MoveBucketAccepted (new MSP)".to_string(),
+                    })?;
 
                 // Handle MSP-file associations based on whether old_msp exists
                 if let Some(old_msp) = old_msp {
@@ -300,14 +329,35 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                         old_msp.id,
                         new_msp.id,
                     )
-                    .await?;
+                    .await
+                    .map_err(|e| {
+                        IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name: "MoveBucketAccepted (update MSP-file associations)"
+                                .to_string(),
+                        }
+                    })?;
                 } else {
                     // Create new associations for all files in the bucket
-                    MspFile::create_for_bucket(conn, bucket_id.as_ref(), new_msp.id).await?;
+                    MspFile::create_for_bucket(conn, bucket_id.as_ref(), new_msp.id)
+                        .await
+                        .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name: "MoveBucketAccepted (create MSP-file associations)"
+                                .to_string(),
+                        })?;
                 }
 
                 // Update bucket's MSP reference
-                Bucket::update_msp(conn, bucket_id.as_ref().to_vec(), new_msp.id).await?;
+                Bucket::update_msp(conn, bucket_id.as_ref().to_vec(), new_msp.id)
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "MoveBucketAccepted (update bucket MSP reference)".to_string(),
+                    })?;
             }
             pallet_file_system::Event::BucketPrivacyUpdated {
                 who,
@@ -322,7 +372,12 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     collection_id.map(|id| id.to_string()),
                     *private,
                 )
-                .await?;
+                .await
+                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                    database_error: e,
+                    block_number: block_number.saturated_into(),
+                    event_name: "BucketPrivacyUpdated".to_string(),
+                })?;
             }
             pallet_file_system::Event::BspConfirmStoppedStoring {
                 bsp_id,
@@ -334,9 +389,20 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     OnchainBspId::from(*bsp_id),
                     new_root.as_ref().to_vec(),
                 )
-                .await?;
+                .await
+                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                    database_error: e,
+                    block_number: block_number.saturated_into(),
+                    event_name: "BspConfirmStoppedStoring (update BSP merkle root)".to_string(),
+                })?;
                 BspFile::delete_for_bsp(conn, file_key.as_ref(), OnchainBspId::from(*bsp_id))
-                    .await?;
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "BspConfirmStoppedStoring (delete BSP-file associations)"
+                            .to_string(),
+                    })?;
             }
             pallet_file_system::Event::BspConfirmedStoring {
                 who: _,
@@ -350,9 +416,20 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     OnchainBspId::from(*bsp_id),
                     new_root.as_ref().to_vec(),
                 )
-                .await?;
+                .await
+                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                    database_error: e,
+                    block_number: block_number.saturated_into(),
+                    event_name: "BspConfirmedStoring (update BSP merkle root)".to_string(),
+                })?;
 
-                let bsp = Bsp::get_by_onchain_bsp_id(conn, OnchainBspId::from(*bsp_id)).await?;
+                let bsp = Bsp::get_by_onchain_bsp_id(conn, OnchainBspId::from(*bsp_id))
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "BspConfirmedStoring (get BSP)".to_string(),
+                    })?;
                 for (file_key, file_metadata) in confirmed_file_keys {
                     // There can be multiple file records for a given file key if there were multiple
                     // storage requests for the same file key. We get the latest one created, which
@@ -377,7 +454,14 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                                 conn,
                                 file_metadata.bucket_id().to_vec(),
                             )
-                            .await?;
+                            .await
+                            .map_err(|e| {
+                                IndexBlockError::EventIndexingDatabaseError {
+                                    database_error: e,
+                                    block_number: block_number.saturated_into(),
+                                    event_name: "BspConfirmedStoring (get bucket)".to_string(),
+                                }
+                            })?;
 
                             let size: u64 = file_metadata.file_size();
                             let size: i64 = size.saturated_into();
@@ -390,7 +474,14 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                             // in the DB, but it's still good practice to check it.
                             let is_in_bucket =
                                 File::is_file_key_in_bucket(conn, file_key.as_ref().to_vec())
-                                    .await?;
+                                    .await
+                                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                                        database_error: e,
+                                        block_number: block_number.saturated_into(),
+                                        event_name:
+                                            "BspConfirmedStoring (check if file key is in bucket)"
+                                                .to_string(),
+                                    })?;
 
                             // Create file with Requested step since we will change it to Stored when the storage request is fulfilled
                             File::create(
@@ -408,12 +499,32 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                                 tx_hash_bytes,
                                 is_in_bucket,
                             )
-                            .await?
+                            .await
+                            .map_err(|e| {
+                                IndexBlockError::EventIndexingDatabaseError {
+                                    database_error: e,
+                                    block_number: block_number.saturated_into(),
+                                    event_name: "BspConfirmedStoring (create file)".to_string(),
+                                }
+                            })?
                         }
-                        Err(e) => return Err(e),
+                        Err(e) => {
+                            return Err(IndexBlockError::EventIndexingDatabaseError {
+                                database_error: e,
+                                block_number: block_number.saturated_into(),
+                                event_name: "BspConfirmedStoring (get file)".to_string(),
+                            })
+                        }
                     };
 
-                    BspFile::create(conn, bsp.id, file.id).await?;
+                    BspFile::create(conn, bsp.id, file.id).await.map_err(|e| {
+                        IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name: "BspConfirmedStoring (create BSP-file association)"
+                                .to_string(),
+                        }
+                    })?;
                 }
             }
             pallet_file_system::Event::NewStorageRequest {
@@ -426,12 +537,23 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 peer_ids,
                 expires_at: _,
             } => {
-                let bucket =
-                    Bucket::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec()).await?;
+                let bucket = Bucket::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec())
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "NewStorageRequest (get bucket)".to_string(),
+                    })?;
 
                 let mut sql_peer_ids = Vec::new();
                 for peer_id in peer_ids {
-                    sql_peer_ids.push(PeerId::create(conn, peer_id.to_vec()).await?);
+                    sql_peer_ids.push(PeerId::create(conn, peer_id.to_vec()).await.map_err(
+                        |e| IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name: "NewStorageRequest (create peer ID)".to_string(),
+                        },
+                    )?);
                 }
 
                 let size: u64 = (*size).saturated_into();
@@ -458,8 +580,14 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 // the MSP accepted, and the new storage request was issued by the user to add redundancy to it.
                 // We do this check because in this scenario,the `MutationsApplied` event won't be emitted for this
                 // file key when the MSP accepts it, as the MSP is already storing it.
-                let is_in_bucket =
-                    File::is_file_key_in_bucket(conn, file_key.as_ref().to_vec()).await?;
+                let is_in_bucket = File::is_file_key_in_bucket(conn, file_key.as_ref().to_vec())
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "NewStorageRequest (check if file key is in bucket)"
+                            .to_string(),
+                    })?;
 
                 File::create(
                     conn,
@@ -476,7 +604,12 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     tx_hash_bytes,
                     is_in_bucket,
                 )
-                .await?;
+                .await
+                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                    database_error: e,
+                    block_number: block_number.saturated_into(),
+                    event_name: "NewStorageRequest (create file step)".to_string(),
+                })?;
             }
             pallet_file_system::Event::MoveBucketRequested { .. } => {}
             pallet_file_system::Event::NewCollectionAndAssociation { .. } => {}
@@ -487,7 +620,12 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     file_key.as_ref().to_vec(),
                     FileStorageRequestStep::Stored,
                 )
-                .await?;
+                .await
+                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                    database_error: e,
+                    block_number: block_number.saturated_into(),
+                    event_name: "StorageRequestFulfilled (update file step)".to_string(),
+                })?;
             }
             pallet_file_system::Event::StorageRequestExpired { file_key } => {
                 File::update_step(
@@ -495,7 +633,12 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     file_key.as_ref().to_vec(),
                     FileStorageRequestStep::Expired,
                 )
-                .await?;
+                .await
+                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                    database_error: e,
+                    block_number: block_number.saturated_into(),
+                    event_name: "StorageRequestExpired (update file step)".to_string(),
+                })?;
             }
             pallet_file_system::Event::StorageRequestRevoked { file_key } => {
                 // Mark storage request as revoked so it's not protected from deletion
@@ -504,10 +647,21 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     file_key.as_ref().to_vec(),
                     FileStorageRequestStep::Revoked,
                 )
-                .await?;
+                .await
+                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                    database_error: e,
+                    block_number: block_number.saturated_into(),
+                    event_name: "StorageRequestRevoked (update file step)".to_string(),
+                })?;
                 // Delete file if it has no storage (not in bucket forest and no BSP associations)
                 // This happens when storage request is revoked before any BSPs or MSP confirms or accepted respectively.
-                File::delete_if_orphaned(conn, file_key.as_ref()).await?;
+                File::delete_if_orphaned(conn, file_key.as_ref())
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "StorageRequestRevoked (delete file if orphaned)".to_string(),
+                    })?;
                 // If the file has storage, the `IncompleteStorageRequest` event will handle it
             }
             pallet_file_system::Event::StorageRequestRejected {
@@ -522,11 +676,22 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     file_key.as_ref().to_vec(),
                     FileStorageRequestStep::Rejected,
                 )
-                .await?;
+                .await
+                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                    database_error: e,
+                    block_number: block_number.saturated_into(),
+                    event_name: "StorageRequestRejected (update file step)".to_string(),
+                })?;
                 // Delete file if it has no storage (not in bucket forest and no BSP associations)
                 // This happens when a storage request is rejected by the MSP.
                 // It is possible that there might be no BSP associations.
-                File::delete_if_orphaned(conn, file_key.as_ref()).await?;
+                File::delete_if_orphaned(conn, file_key.as_ref())
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "StorageRequestRejected (delete file if orphaned)".to_string(),
+                    })?;
                 // If the file has storage, the `IncompleteStorageRequest` event will handle it
             }
             pallet_file_system::Event::MspAcceptedStorageRequest {
@@ -556,7 +721,14 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                             conn,
                             file_metadata.bucket_id().to_vec(),
                         )
-                        .await?;
+                        .await
+                        .map_err(|e| {
+                            IndexBlockError::EventIndexingDatabaseError {
+                                database_error: e,
+                                block_number: block_number.saturated_into(),
+                                event_name: "MspAcceptedStorageRequest (get bucket)".to_string(),
+                            }
+                        })?;
 
                         let size: u64 = file_metadata.file_size();
                         let size: i64 = size.saturated_into();
@@ -568,7 +740,15 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                         // In this scenario, this will always return false, since there's no other file record
                         // in the DB, but it's still a good practice to check it.
                         let is_in_bucket =
-                            File::is_file_key_in_bucket(conn, file_key.as_ref().to_vec()).await?;
+                            File::is_file_key_in_bucket(conn, file_key.as_ref().to_vec())
+                                .await
+                                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                                    database_error: e,
+                                    block_number: block_number.saturated_into(),
+                                    event_name:
+                                        "MspAcceptedStorageRequest (check if file key is in bucket)"
+                                            .to_string(),
+                                })?;
 
                         // Create file with Requested step since we will change it to Stored when the storage request is fulfilled
                         File::create(
@@ -586,14 +766,40 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                             tx_hash_bytes,
                             is_in_bucket,
                         )
-                        .await?
+                        .await
+                        .map_err(|e| {
+                            IndexBlockError::EventIndexingDatabaseError {
+                                database_error: e,
+                                block_number: block_number.saturated_into(),
+                                event_name: "MspAcceptedStorageRequest (create file)".to_string(),
+                            }
+                        })?
                     }
-                    Err(e) => return Err(e),
+                    Err(e) => {
+                        return Err(IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name: "MspAcceptedStorageRequest (get file)".to_string(),
+                        })
+                    }
                 };
 
-                let bucket = Bucket::get_by_id(conn, file.bucket_id).await?;
+                let bucket = Bucket::get_by_onchain_bucket_id(conn, file.onchain_bucket_id.clone())
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "MspAcceptedStorageRequest (get bucket)".to_string(),
+                    })?;
                 if let Some(msp_id) = bucket.msp_id {
-                    MspFile::create(conn, msp_id, file.id).await?;
+                    MspFile::create(conn, msp_id, file.id).await.map_err(|e| {
+                        IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name: "MspAcceptedStorageRequest (create MSP-file association)"
+                                .to_string(),
+                        }
+                    })?;
                 }
             }
             pallet_file_system::Event::BspRequestedToStopStoring { .. } => {}
@@ -603,9 +809,31 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 owner: _,
                 bucket_id,
             } => {
-                let msp = Msp::get_by_onchain_msp_id(conn, OnchainMspId::from(*msp_id)).await?;
-                MspFile::delete_by_bucket(conn, bucket_id.as_ref(), msp.id).await?;
-                Bucket::unset_msp(conn, bucket_id.as_ref().to_vec()).await?;
+                let msp = Msp::get_by_onchain_msp_id(conn, OnchainMspId::from(*msp_id))
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "MspStopStoringBucketInsolventUser (get MSP)".to_string(),
+                    })?;
+                MspFile::delete_by_bucket(conn, bucket_id.as_ref(), msp.id)
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name:
+                            "MspStopStoringBucketInsolventUser (delete MSP-file associations)"
+                                .to_string(),
+                    })?;
+                Bucket::unset_msp(conn, bucket_id.as_ref().to_vec())
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name:
+                            "MspStopStoringBucketInsolventUser (unset bucket MSP reference)"
+                                .to_string(),
+                    })?;
             }
             pallet_file_system::Event::SpStopStoringInsolventUser {
                 sp_id,
@@ -616,7 +844,14 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             } => {
                 // We are now only deleting for BSP as BSP are associating with files
                 // MSP will handle insolvent user at the level of buckets (an MSP will delete the full bucket for an insolvent user and it will produce a new kind of event)
-                BspFile::delete_for_bsp(conn, file_key, OnchainBspId::from(*sp_id)).await?;
+                BspFile::delete_for_bsp(conn, file_key, OnchainBspId::from(*sp_id))
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "SpStopStoringInsolventUser (delete BSP-file associations)"
+                            .to_string(),
+                    })?;
             }
             pallet_file_system::Event::FailedToQueuePriorityChallenge { .. } => {}
             pallet_file_system::Event::FileDeletionRequest { .. } => {}
@@ -629,16 +864,42 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 owner: _,
                 bucket_id,
             } => {
-                let msp = Msp::get_by_onchain_msp_id(conn, OnchainMspId::from(*msp_id)).await?;
-                MspFile::delete_by_bucket(conn, bucket_id.as_ref(), msp.id).await?;
-                Bucket::unset_msp(conn, bucket_id.as_ref().to_vec()).await?;
+                let msp = Msp::get_by_onchain_msp_id(conn, OnchainMspId::from(*msp_id))
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "MspStoppedStoringBucket (get MSP)".to_string(),
+                    })?;
+                MspFile::delete_by_bucket(conn, bucket_id.as_ref(), msp.id)
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "MspStoppedStoringBucket (delete MSP-file associations)"
+                            .to_string(),
+                    })?;
+                Bucket::unset_msp(conn, bucket_id.as_ref().to_vec())
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "MspStoppedStoringBucket (unset bucket MSP reference)"
+                            .to_string(),
+                    })?;
             }
             pallet_file_system::Event::BucketDeleted {
                 who: _,
                 bucket_id,
                 maybe_collection_id: _,
             } => {
-                Bucket::delete(conn, bucket_id.as_ref().to_vec()).await?;
+                Bucket::delete(conn, bucket_id.as_ref().to_vec())
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "BucketDeleted (delete bucket)".to_string(),
+                    })?;
             }
             pallet_file_system::Event::FileDeletionRequested {
                 signed_delete_intention,
@@ -653,7 +914,12 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     FileDeletionStatus::InProgress,
                     Some(signature_bytes),
                 )
-                .await?;
+                .await
+                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                    database_error: e,
+                    block_number: block_number.saturated_into(),
+                    event_name: "FileDeletionRequested (update file deletion status)".to_string(),
+                })?;
             }
             pallet_file_system::Event::FailedToGetMspOfBucket { .. } => {}
             pallet_file_system::Event::FailedToDecreaseMspUsedCapacity { .. } => {}
@@ -678,13 +944,27 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 if let Some(msp_id) = maybe_msp_id {
                     for file_key in file_keys.iter() {
                         MspFile::delete(conn, file_key.as_ref(), OnchainMspId::from(*msp_id))
-                            .await?;
+                            .await
+                            .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                                database_error: e,
+                                block_number: block_number.saturated_into(),
+                                event_name:
+                                    "BucketFileDeletionsCompleted (delete MSP-file associations)"
+                                        .to_string(),
+                            })?;
                     }
                 }
 
                 // Check if files should be deleted (no more associations)
                 for file_key in file_keys.iter() {
-                    File::delete_if_orphaned(conn, file_key.as_ref()).await?;
+                    File::delete_if_orphaned(conn, file_key.as_ref())
+                        .await
+                        .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name: "BucketFileDeletionsCompleted (delete file if orphaned)"
+                                .to_string(),
+                        })?;
                 }
 
                 // Update bucket merkle root
@@ -693,7 +973,13 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     bucket_id.as_ref().to_vec(),
                     new_root.as_ref().to_vec(),
                 )
-                .await?;
+                .await
+                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                    database_error: e,
+                    block_number: block_number.saturated_into(),
+                    event_name: "BucketFileDeletionsCompleted (update bucket merkle root)"
+                        .to_string(),
+                })?;
             }
             pallet_file_system::Event::BspFileDeletionsCompleted {
                 users: _,
@@ -705,12 +991,25 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 // Delete BSP-file associations for all files in the batch
                 for file_key in file_keys.iter() {
                     BspFile::delete_for_bsp(conn, file_key.as_ref(), OnchainBspId::from(*bsp_id))
-                        .await?;
+                        .await
+                        .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name: "BspFileDeletionsCompleted (delete BSP-file associations)"
+                                .to_string(),
+                        })?;
                 }
 
                 // Check if files should be deleted (no more associations)
                 for file_key in file_keys.iter() {
-                    File::delete_if_orphaned(conn, file_key.as_ref()).await?;
+                    File::delete_if_orphaned(conn, file_key.as_ref())
+                        .await
+                        .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name: "BspFileDeletionsCompleted (delete file if orphaned)"
+                                .to_string(),
+                        })?;
                 }
 
                 // Update BSP merkle root
@@ -719,7 +1018,12 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     OnchainBspId::from(*bsp_id),
                     new_root.as_ref().to_vec(),
                 )
-                .await?;
+                .await
+                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                    database_error: e,
+                    block_number: block_number.saturated_into(),
+                    event_name: "BspFileDeletionsCompleted (update BSP merkle root)".to_string(),
+                })?;
             }
             // This event covers all scenarios where a storage request was unfulfilled while there were BSPs and/or the MSP who have confirmed to store the file
             // and necessitates a fisherman to delete this file.
@@ -736,7 +1040,15 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 // If the file record is not found, it means the file has been deleted already.
                 if let Some(file_record) = file_record {
                     let is_in_bucket = file_record.is_in_bucket;
-                    let has_bsp = File::has_bsp_associations(conn, file_record.id).await?;
+                    let has_bsp = File::has_bsp_associations(conn, file_record.id)
+                        .await
+                        .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name:
+                                "IncompleteStorageRequest (check if file has BSP associations)"
+                                    .to_string(),
+                        })?;
 
                     if is_in_bucket || has_bsp {
                         // File is still being stored, mark for deletion
@@ -746,7 +1058,16 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                             FileDeletionStatus::InProgress,
                             None,
                         )
-                        .await?;
+                        .await
+                        .map_err(|e| {
+                            IndexBlockError::EventIndexingDatabaseError {
+                                database_error: e,
+                                block_number: block_number.saturated_into(),
+                                event_name:
+                                    "IncompleteStorageRequest (update file deletion status)"
+                                        .to_string(),
+                            }
+                        })?;
 
                         log::debug!(
                         		"Incomplete storage request for file {:?} (id: {:?}) is still being stored (in_bucket: {}, BSP: {}), marked for deletion without signature",
@@ -754,7 +1075,13 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     		);
                     } else {
                         // No storage, safe to delete immediately
-                        File::delete(conn, file_record.id).await?;
+                        File::delete(conn, file_record.id).await.map_err(|e| {
+                            IndexBlockError::EventIndexingDatabaseError {
+                                database_error: e,
+                                block_number: block_number.saturated_into(),
+                                event_name: "IncompleteStorageRequest (delete file)".to_string(),
+                            }
+                        })?;
                         log::debug!(
                             "Incomplete storage request for file key {:?} and id {:?} is not being stored, deleted immediately",
                             file_key, file_record.id,
@@ -806,7 +1133,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         &'b self,
         conn: &mut DbConnection<'a>,
         event: &pallet_payment_streams::Event<Runtime>,
-    ) -> Result<(), diesel::result::Error> {
+        block_number: NumberFor<Runtime::Block>,
+    ) -> Result<(), IndexBlockError> {
         match event {
             pallet_payment_streams::Event::DynamicRatePaymentStreamCreated {
                 provider_id,
@@ -821,7 +1149,14 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     provider_id,
                     (*amount_provided).into().into(),
                 )
-                .await?;
+                .await
+                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                    database_error: e,
+                    block_number: block_number.saturated_into(),
+                    event_name:
+                        "DynamicRatePaymentStreamCreated (create dynamic rate payment stream)"
+                            .to_string(),
+                })?;
             }
             pallet_payment_streams::Event::DynamicRatePaymentStreamUpdated {
                 provider_id,
@@ -831,14 +1166,29 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 // Using .to_string() leads to truncated provider_id
                 let provider_id = format!("{:#?}", provider_id);
 
-                let ps = PaymentStream::get(conn, user_account.to_string(), provider_id).await?;
+                let ps = PaymentStream::get(conn, user_account.to_string(), provider_id)
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name:
+                            "DynamicRatePaymentStreamUpdated (get dynamic rate payment stream)"
+                                .to_string(),
+                    })?;
 
                 PaymentStream::update_dynamic_rate(
                     conn,
                     ps.id,
                     (*new_amount_provided).into().into(),
                 )
-                .await?;
+                .await
+                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                    database_error: e,
+                    block_number: block_number.saturated_into(),
+                    event_name:
+                        "DynamicRatePaymentStreamUpdated (update dynamic rate payment stream)"
+                            .to_string(),
+                })?;
             }
             pallet_payment_streams::Event::DynamicRatePaymentStreamDeleted { .. } => {}
             pallet_payment_streams::Event::FixedRatePaymentStreamCreated {
@@ -855,7 +1205,13 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     provider_id,
                     (*rate).into(),
                 )
-                .await?;
+                .await
+                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                    database_error: e,
+                    block_number: block_number.saturated_into(),
+                    event_name: "FixedRatePaymentStreamCreated (create fixed rate payment stream)"
+                        .to_string(),
+                })?;
             }
             pallet_payment_streams::Event::FixedRatePaymentStreamUpdated {
                 provider_id,
@@ -865,8 +1221,23 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 // Using .to_string() leads to truncated provider_id
                 let provider_id = format!("{:#?}", provider_id);
 
-                let ps = PaymentStream::get(conn, user_account.to_string(), provider_id).await?;
-                PaymentStream::update_fixed_rate(conn, ps.id, (*new_rate).into()).await?;
+                let ps = PaymentStream::get(conn, user_account.to_string(), provider_id)
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "FixedRatePaymentStreamUpdated (get fixed rate payment stream)"
+                            .to_string(),
+                    })?;
+                PaymentStream::update_fixed_rate(conn, ps.id, (*new_rate).into())
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name:
+                            "FixedRatePaymentStreamUpdated (update fixed rate payment stream)"
+                                .to_string(),
+                    })?;
             }
             pallet_payment_streams::Event::FixedRatePaymentStreamDeleted { .. } => {}
             pallet_payment_streams::Event::PaymentStreamCharged {
@@ -880,7 +1251,13 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 let provider_id = format!("{:#?}", provider_id);
 
                 // We want to handle this and update the payment stream total amount
-                let ps = PaymentStream::get(conn, user_account.to_string(), provider_id).await?;
+                let ps = PaymentStream::get(conn, user_account.to_string(), provider_id)
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "PaymentStreamCharged (get payment stream)".to_string(),
+                    })?;
                 let amount: BigDecimal = (*amount).into();
                 let new_total_amount = ps.total_amount_paid + amount;
                 let last_tick_charged: u64 = (*last_tick_charged).saturated_into();
@@ -892,7 +1269,13 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     last_tick_charged.saturated_into(),
                     charged_at_tick.saturated_into(),
                 )
-                .await?;
+                .await
+                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                    database_error: e,
+                    block_number: block_number.saturated_into(),
+                    event_name: "PaymentStreamCharged (update payment stream total amount)"
+                        .to_string(),
+                })?;
             }
             pallet_payment_streams::Event::UsersCharged { .. } => {}
             pallet_payment_streams::Event::LastChargeableInfoUpdated { .. } => {}
@@ -911,7 +1294,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         conn: &mut DbConnection<'a>,
         event: &pallet_proofs_dealer::Event<Runtime>,
         block_hash: H256,
-    ) -> Result<(), diesel::result::Error> {
+        block_number: NumberFor<Runtime::Block>,
+    ) -> Result<(), IndexBlockError> {
         match event {
             pallet_proofs_dealer::Event::MutationsAppliedForProvider { .. } => {}
             pallet_proofs_dealer::Event::MutationsApplied {
@@ -972,7 +1356,16 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                         &onchain_bucket_id,
                         is_in_bucket,
                     )
-                    .await?;
+                    .await
+                    .map_err(|e| {
+                        IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name:
+                                "MutationsAppliedForProvider (update file bucket membership)"
+                                    .to_string(),
+                        }
+                    })?;
                 }
             }
             pallet_proofs_dealer::Event::NewChallenge { .. } => {}
@@ -988,7 +1381,12 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     OnchainBspId::from(*provider),
                     last_tick_proven.saturated_into(),
                 )
-                .await?;
+                .await
+                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                    database_error: e,
+                    block_number: block_number.saturated_into(),
+                    event_name: "ProofAccepted (update BSP last tick proven)".to_string(),
+                })?;
             }
             pallet_proofs_dealer::Event::NewChallengeSeed { .. } => {}
             pallet_proofs_dealer::Event::NewCheckpointChallenge { .. } => {}
@@ -1006,7 +1404,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         conn: &mut DbConnection<'a>,
         event: &pallet_storage_providers::Event<Runtime>,
         block_hash: H256,
-    ) -> Result<(), diesel::result::Error> {
+        block_number: NumberFor<Runtime::Block>,
+    ) -> Result<(), IndexBlockError> {
         match event {
             pallet_storage_providers::Event::BspRequestSignUpSuccess { .. } => {}
             pallet_storage_providers::Event::BspSignUpSuccess {
@@ -1020,15 +1419,31 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     .client
                     .runtime_api()
                     .get_bsp_stake(block_hash, bsp_id)
-                    .expect("to have a stake")
-                    .unwrap_or(Default::default())
+                    .map_err(|e| IndexBlockError::EventIndexingRuntimeApiError {
+                        anyhow_error: anyhow!("Runtime API error: {:?}", e),
+                        block_number: block_number.saturated_into(),
+                        event_name: "BspRequestSignUpSuccess (get BSP stake)".to_string(),
+                    })?
+                    .map_err(|e| IndexBlockError::EventIndexingRuntimeApiError {
+                        anyhow_error: anyhow!("get_bsp_stake runtime API error: {:?}", e),
+                        block_number: block_number.saturated_into(),
+                        event_name: "BspRequestSignUpSuccess (get BSP stake)".to_string(),
+                    })?
                     .into();
 
                 let mut sql_multiaddresses = Vec::new();
                 for multiaddress in multiaddresses {
                     if let Some(multiaddr) = convert_raw_multiaddress_to_multiaddr(multiaddress) {
-                        sql_multiaddresses
-                            .push(MultiAddress::create(conn, multiaddr.to_vec()).await?);
+                        sql_multiaddresses.push(
+                            MultiAddress::create(conn, multiaddr.to_vec())
+                                .await
+                                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                                    database_error: e,
+                                    block_number: block_number.saturated_into(),
+                                    event_name: "BspRequestSignUpSuccess (create multiaddress)"
+                                        .to_string(),
+                                })?,
+                        );
                     } else {
                         error!(target: LOG_TARGET, "Failed to parse multiaddr");
                     }
@@ -1043,13 +1458,24 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     OnchainBspId::new(*bsp_id),
                     stake,
                 )
-                .await?;
+                .await
+                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                    database_error: e,
+                    block_number: block_number.saturated_into(),
+                    event_name: "BspRequestSignUpSuccess (create BSP)".to_string(),
+                })?;
             }
             pallet_storage_providers::Event::BspSignOffSuccess {
                 who,
                 bsp_id: _bsp_id,
             } => {
-                Bsp::delete_by_account(conn, who.to_string()).await?;
+                Bsp::delete_by_account(conn, who.to_string())
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "BspSignOffSuccess (delete BSP)".to_string(),
+                    })?;
             }
             pallet_storage_providers::Event::CapacityChanged {
                 who,
@@ -1059,21 +1485,47 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 next_block_when_change_allowed: _next_block_when_change_allowed,
             } => match provider_id {
                 StorageProviderId::BackupStorageProvider(bsp_id) => {
-                    Bsp::update_capacity(conn, who.to_string(), (*new_capacity).into()).await?;
+                    Bsp::update_capacity(conn, who.to_string(), (*new_capacity).into())
+                        .await
+                        .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name: "CapacityChanged (update BSP capacity)".to_string(),
+                        })?;
 
                     // update also the stake
                     let stake = self
                         .client
                         .runtime_api()
                         .get_bsp_stake(block_hash, bsp_id)
-                        .expect("to have a stake")
-                        .unwrap_or(Default::default())
+                        .map_err(|e| IndexBlockError::EventIndexingRuntimeApiError {
+                            anyhow_error: anyhow!("get_bsp_stake runtime API error: {:?}", e),
+                            block_number: block_number.saturated_into(),
+                            event_name: "CapacityChanged (get BSP stake)".to_string(),
+                        })?
+                        .map_err(|e| IndexBlockError::EventIndexingRuntimeApiError {
+                            anyhow_error: anyhow!("get_bsp_stake runtime API error: {:?}", e),
+                            block_number: block_number.saturated_into(),
+                            event_name: "CapacityChanged (get BSP stake)".to_string(),
+                        })?
                         .into();
 
-                    Bsp::update_stake(conn, OnchainBspId::from(*bsp_id), stake).await?;
+                    Bsp::update_stake(conn, OnchainBspId::from(*bsp_id), stake)
+                        .await
+                        .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name: "CapacityChanged (update BSP stake)".to_string(),
+                        })?;
                 }
                 StorageProviderId::MainStorageProvider(_) => {
-                    Bsp::update_capacity(conn, who.to_string(), (*new_capacity).into()).await?;
+                    Bsp::update_capacity(conn, who.to_string(), (*new_capacity).into())
+                        .await
+                        .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name: "CapacityChanged (update BSP capacity)".to_string(),
+                        })?;
                 }
             },
             pallet_storage_providers::Event::SignUpRequestCanceled { .. } => {}
@@ -1088,8 +1540,16 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 let mut sql_multiaddresses = Vec::new();
                 for multiaddress in multiaddresses {
                     if let Some(multiaddr) = convert_raw_multiaddress_to_multiaddr(multiaddress) {
-                        sql_multiaddresses
-                            .push(MultiAddress::create(conn, multiaddr.to_vec()).await?);
+                        sql_multiaddresses.push(
+                            MultiAddress::create(conn, multiaddr.to_vec())
+                                .await
+                                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                                    database_error: e,
+                                    block_number: block_number.saturated_into(),
+                                    event_name: "MspRequestSignUpSuccess (create multiaddress)"
+                                        .to_string(),
+                                })?,
+                        );
                     } else {
                         error!(target: LOG_TARGET, "Failed to parse multiaddr");
                     }
@@ -1106,13 +1566,24 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     sql_multiaddresses,
                     OnchainMspId::new(*msp_id),
                 )
-                .await?;
+                .await
+                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                    database_error: e,
+                    block_number: block_number.saturated_into(),
+                    event_name: "MspRequestSignUpSuccess (create MSP)".to_string(),
+                })?;
             }
             pallet_storage_providers::Event::MspSignOffSuccess {
                 who,
                 msp_id: _msp_id,
             } => {
-                Msp::delete_by_account(conn, who.to_string()).await?;
+                Msp::delete_by_account(conn, who.to_string())
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "MspSignOffSuccess (delete MSP)".to_string(),
+                    })?;
             }
             pallet_storage_providers::Event::BucketRootChanged {
                 bucket_id,
@@ -1124,7 +1595,12 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     bucket_id.as_ref().to_vec(),
                     new_root.as_ref().to_vec(),
                 )
-                .await?;
+                .await
+                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                    database_error: e,
+                    block_number: block_number.saturated_into(),
+                    event_name: "BucketRootChanged (update bucket merkle root)".to_string(),
+                })?;
             }
             pallet_storage_providers::Event::Slashed { .. } => {}
             pallet_storage_providers::Event::AwaitingTopUp {
@@ -1135,11 +1611,25 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     .client
                     .runtime_api()
                     .get_bsp_stake(block_hash, provider_id)
-                    .expect("to have a stake")
-                    .unwrap_or(Default::default())
+                    .map_err(|e| IndexBlockError::EventIndexingRuntimeApiError {
+                        anyhow_error: anyhow!("get_bsp_stake runtime API error: {:?}", e),
+                        block_number: block_number.saturated_into(),
+                        event_name: "AwaitingTopUp (get BSP stake)".to_string(),
+                    })?
+                    .map_err(|e| IndexBlockError::EventIndexingRuntimeApiError {
+                        anyhow_error: anyhow!("get_bsp_stake runtime API error: {:?}", e),
+                        block_number: block_number.saturated_into(),
+                        event_name: "AwaitingTopUp (get BSP stake)".to_string(),
+                    })?
                     .into();
 
-                Bsp::update_stake(conn, OnchainBspId::from(*provider_id), stake).await?;
+                Bsp::update_stake(conn, OnchainBspId::from(*provider_id), stake)
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "AwaitingTopUp (update BSP stake)".to_string(),
+                    })?;
             }
             pallet_storage_providers::Event::TopUpFulfilled { .. } => {}
             pallet_storage_providers::Event::ValuePropAdded { .. } => {}
@@ -1151,10 +1641,22 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 // TODO: Should we index this? Since this buckets are all going to have moves requested
             }
             pallet_storage_providers::Event::MspDeleted { provider_id } => {
-                Msp::delete(conn, OnchainMspId::from(*provider_id)).await?;
+                Msp::delete(conn, OnchainMspId::from(*provider_id))
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "MspDeleted (delete MSP)".to_string(),
+                    })?;
             }
             pallet_storage_providers::Event::BspDeleted { provider_id } => {
-                Bsp::delete(conn, OnchainBspId::from(*provider_id)).await?;
+                Bsp::delete(conn, OnchainBspId::from(*provider_id))
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "BspDeleted (delete BSP)".to_string(),
+                    })?;
             }
             pallet_storage_providers::Event::FailedToGetOwnerAccountOfInsolventProvider {
                 ..
@@ -1179,7 +1681,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         &'b self,
         _conn: &mut DbConnection<'a>,
         event: &pallet_randomness::Event<Runtime>,
-    ) -> Result<(), diesel::result::Error> {
+        _block_number: NumberFor<Runtime::Block>,
+    ) -> Result<(), IndexBlockError> {
         match event {
             pallet_randomness::Event::NewOneEpochAgoRandomnessAvailable { .. } => {}
             pallet_randomness::Event::__Ignore(_, _) => {}
@@ -1247,6 +1750,20 @@ impl<Runtime: StorageEnableRuntime> ActorEventLoop<IndexerService<Runtime>>
 pub enum IndexBlockError {
     #[error("Database error: {0}")]
     DatabaseError(#[from] diesel::result::Error),
+    #[error("Error indexing event [{event_name}] at block [{block_number}]. Database error: {database_error}")]
+    EventIndexingDatabaseError {
+        #[source]
+        database_error: diesel::result::Error,
+        block_number: u64,
+        event_name: String,
+    },
+    #[error("Error indexing event [{event_name}] at block [{block_number}]. Runtime API error: {anyhow_error}")]
+    EventIndexingRuntimeApiError {
+        #[source]
+        anyhow_error: anyhow::Error,
+        block_number: u64,
+        event_name: String,
+    },
     #[error("Failed to retrieve or decode events: {0}")]
     EventsRetrievalError(#[from] EventsRetrievalError),
 }
