@@ -2760,7 +2760,26 @@ where
                     &sp_id,
                 )?;
             }
-        };
+        } else {
+            // If the provider is an MSP (so this was a bucket file deletion), check if the bucket doesn't have
+            // any more files and clean it up.
+            // A bucket is empty if its root is the default root.
+            if new_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root()
+            {
+                // Check the bucket size, to log an error if it's not zero. We can later monitor for those
+                // to detect inconsistencies.
+                let bucket_size =
+                    <T::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id)?;
+                if bucket_size != StorageDataUnit::<T>::zero() {
+                    Self::deposit_event(Event::UsedCapacityShouldBeZero {
+                        actual_used_capacity: bucket_size,
+                    });
+                }
+
+                // Delete the bucket.
+                <T::Providers as MutateBucketsInterface>::delete_bucket(bucket_id)?;
+            }
+        }
 
         Ok((sp_id, new_root))
     }
@@ -2906,9 +2925,6 @@ where
             mutations.push((*file_key, TrieRemoveMutation::default().into()));
             total_size = total_size.saturating_add(*size);
 
-            // Remove bucket from incomplete storage request if it exists
-            Self::remove_provider_from_incomplete_storage_request(*file_key, None);
-
             // Check if there's an open storage request for this file key
             if let Some(storage_request) = StorageRequests::<T>::get(&file_key) {
                 // If there is, remove it and issue a `IncompleteStorageRequest` with the confirmed providers
@@ -2921,13 +2937,11 @@ where
                     *file_key,
                     IncompleteStorageRequestMetadata::from((&storage_request, file_key)),
                 );
-                // Since we're deleting from the bucket in this transaction, immediately mark the bucket
-                // as removed from the incomplete storage request we just created. This prevents the
-                // `IncompleteStorageRequest` from being stuck with `pending_bucket_removal = true` and never
-                // getting cleaned up.
-                Self::remove_provider_from_incomplete_storage_request(*file_key, None);
                 Self::cleanup_storage_request(&file_key, &storage_request);
             }
+
+            // Remove bucket from incomplete storage request if it exists
+            Self::remove_provider_from_incomplete_storage_request(*file_key, None);
         }
 
         // Drop seen_keys to free memory - no longer needed after validation
@@ -3057,9 +3071,6 @@ where
                 .and_modify(|s| *s = s.saturating_add(*size))
                 .or_insert(*size);
 
-            // Remove BSP from incomplete storage request if it exists
-            Self::remove_provider_from_incomplete_storage_request(*file_key, Some(bsp_id));
-
             // Check if there's an open storage request for this file key
             if let Some(storage_request) = StorageRequests::<T>::get(&file_key) {
                 // If there is, remove it and issue a `IncompleteStorageRequest` with the confirmed providers
@@ -3072,13 +3083,11 @@ where
                     *file_key,
                     IncompleteStorageRequestMetadata::from((&storage_request, file_key)),
                 );
-                // Since we're deleting from this BSP in this transaction, immediately mark it
-                // as removed from the incomplete storage request we just created. This prevents the
-                // `IncompleteStorageRequest` from being stuck with this BSP in `pending_bsp_removals`
-                // and never getting cleaned up.
-                Self::remove_provider_from_incomplete_storage_request(*file_key, Some(bsp_id));
                 Self::cleanup_storage_request(&file_key, &storage_request);
             }
+
+            // Remove BSP from incomplete storage request if it exists
+            Self::remove_provider_from_incomplete_storage_request(*file_key, Some(bsp_id));
         }
 
         // Drop seen_keys to free memory - no longer needed after validation
