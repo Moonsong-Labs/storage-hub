@@ -134,14 +134,6 @@ impl Bucket {
         Ok(())
     }
 
-    pub async fn get_by_id<'a>(
-        conn: &mut DbConnection<'a>,
-        id: i64,
-    ) -> Result<Self, diesel::result::Error> {
-        let bucket = bucket::table.filter(bucket::id.eq(id)).first(conn).await?;
-        Ok(bucket)
-    }
-
     pub async fn get_by_onchain_bucket_id<'a>(
         conn: &mut DbConnection<'a>,
         onchain_bucket_id: Vec<u8>,
