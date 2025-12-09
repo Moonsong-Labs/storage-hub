@@ -1,5 +1,5 @@
 import assert, { strictEqual } from "node:assert";
-import { bspKey, describeBspNet, type EnrichedBspApi, shUser, waitFor } from "../../../util";
+import { bspKey, describeBspNet, type EnrichedBspApi, waitFor } from "../../../util";
 
 await describeBspNet(
   "BSPNet: Stop storing file and other BSPs taking the relay",
@@ -45,17 +45,27 @@ await describeBspNet(
       const { fileKey, location, fingerprint, fileSize, bucketId } =
         await userApi.file.createBucketAndSendNewStorageRequest(source, destination, bucketName);
 
-      // Wait for the two BSP to volunteer
-      await userApi.wait.bspVolunteer(2);
+      // Wait for the two BSP to volunteer and the MSP to accept the storage request
+      await userApi.wait.bspVolunteerInTxPool(2);
+      await userApi.wait.mspResponseInTxPool(1);
+
+      // Seal the block with the MSP acceptance and BSP volunteer
+      await userApi.block.seal();
+
+      // Wait for the BSPs to confirm storing
       await userApi.wait.bspStored({ expectedExts: 2 });
 
-      // Revoke the storage request otherwise the new storage request event is not being triggered
-      await userApi.block.seal({
-        calls: [userApi.tx.fileSystem.revokeStorageRequest(fileKey)],
-        signer: shUser
-      });
+      // Let the storage request expire
+      // This keeps the file stored by BSPs but removes the active storage request
+      const storageRequest = await userApi.query.fileSystem.storageRequests(fileKey);
+      const expiresAt = storageRequest.unwrap().expiresAt.toNumber();
 
-      await userApi.assert.eventPresent("fileSystem", "StorageRequestRevoked");
+      // Seal blocks until the expiration tick
+      while ((await userApi.call.proofsDealerApi.getCurrentTick()).toNumber() < expiresAt) {
+        await userApi.block.seal();
+      }
+
+      await userApi.assert.eventPresent("fileSystem", "StorageRequestExpired");
 
       // Unpause BSP Three
       await userApi.docker.resumeContainer({
@@ -120,28 +130,15 @@ await describeBspNet(
         .asRuntimeConfig.asMinWaitForStopStoring.toNumber();
       const cooldown = currentBlockNumber + minWaitForStopStoring;
 
-      // New storage request does not get fulfilled and therefore gets cleaned up and we enqueue a checkpoint challenge remove mutation
-      // Which then the bsp responds to and has the file key get removed from the forest
-      // Once we send the bspConfirmStopStoring the extrinsic fails because the runtime forest does not match the local
+      // Waint until the BSP is allowed to confirm the stop storing
       await userApi.block.skipTo(cooldown);
 
-      // TODO: commented out since this extrinsic will inevitably fail. The reason being is that the revoke storage request executed above
-      // TODO: created a checkpoint challenge remove mutation which the bsp responded to and removed the file key from the forest before executing this extrinsic
-      // TODO: we should remove this entirely and implement a task or rpc to handle automatic stop storing
-      // await userApi.block.seal({
-      //   calls: [
-      //     userApi.tx.fileSystem.bspConfirmStopStoring(
-      //       fileKey,
-      //       inclusionForestProof
-      //     )
-      //   ],
-      //   signer: bspKey
-      // });
+      await userApi.block.seal({
+        calls: [userApi.tx.fileSystem.bspConfirmStopStoring(fileKey, inclusionForestProof)],
+        signer: bspKey
+      });
 
-      // await userApi.assert.eventPresent(
-      //   "fileSystem",
-      //   "BspConfirmStoppedStoring"
-      // );
+      await userApi.assert.eventPresent("fileSystem", "BspConfirmStoppedStoring");
     });
   }
 );

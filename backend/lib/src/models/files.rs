@@ -17,6 +17,10 @@ pub enum FileStatus {
     Ready,
     /// Indicates that the file's storage request has not been fulfilled completely but is still with the MSP
     Expired,
+    /// Indicates that the user explicitly revoked the storage request
+    Revoked,
+    /// Indicates that the MSP rejected the storage request
+    Rejected,
     /// Indicates that the file's has been marked for deletion and will be removed from the MSP soon
     DeletionInProgress,
 }
@@ -38,6 +42,13 @@ pub struct FileInfo {
     #[serde(rename = "uploadedAt")]
     pub uploaded_at: DateTime<Utc>,
     pub status: FileStatus,
+    /// Block hash where the file was created.
+    #[serde(rename = "blockHash")]
+    pub block_hash: String,
+    /// EVM transaction hash that created this file (if created via EVM transaction).
+    /// For files created via native Substrate extrinsics, this will be None.
+    #[serde(rename = "txHash", skip_serializing_if = "Option::is_none")]
+    pub tx_hash: Option<String>,
 }
 
 impl FileInfo {
@@ -48,6 +59,8 @@ impl FileInfo {
                 Ok(FileStorageRequestStep::Requested) => FileStatus::InProgress,
                 Ok(FileStorageRequestStep::Stored) => FileStatus::Ready,
                 Ok(FileStorageRequestStep::Expired) => FileStatus::Expired,
+                Ok(FileStorageRequestStep::Revoked) => FileStatus::Revoked,
+                Ok(FileStorageRequestStep::Rejected) => FileStatus::Rejected,
                 Err(step) => {
                     error!(step, "Unsupported File's StorageRequest step");
                     unreachable!("unknown storage request step #{step} present in Indexer DB")
@@ -66,6 +79,8 @@ impl FileInfo {
             is_public,
             uploaded_at: db.updated_at.and_utc(),
             status: Self::status_from_db(&db),
+            block_hash: hex::encode(&db.block_hash),
+            tx_hash: db.tx_hash.as_ref().map(|hash| hex::encode(hash)),
         }
     }
 

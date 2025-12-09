@@ -8,6 +8,9 @@ use anyhow::Result;
 use log::trace;
 use shc_common::{traits::StorageEnableRuntime, types::StorageEnableEvents};
 use shc_indexer_db::DbConnection;
+use sp_runtime::traits::NumberFor;
+
+use crate::handler::IndexBlockError;
 
 use super::IndexerService;
 
@@ -26,29 +29,38 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         conn: &mut DbConnection<'a>,
         event: &StorageEnableEvents<Runtime>,
         block_hash: Runtime::Hash,
-    ) -> Result<(), diesel::result::Error> {
+        block_number: NumberFor<Runtime::Block>,
+        evm_tx_hash: Option<Runtime::Hash>,
+    ) -> Result<(), IndexBlockError> {
         match event {
             StorageEnableEvents::FileSystem(event) => {
-                self.index_file_system_event_lite(conn, event).await?
+                self.index_file_system_event_lite(
+                    conn,
+                    event,
+                    block_hash,
+                    block_number,
+                    evm_tx_hash,
+                )
+                .await?
             }
             StorageEnableEvents::StorageProviders(event) => {
-                self.index_providers_event_lite(conn, event, block_hash)
+                self.index_providers_event_lite(conn, event, block_hash, block_number)
                     .await?
             }
             StorageEnableEvents::BucketNfts(event) => {
-                self.index_bucket_nfts_event_lite(conn, event, block_hash)
+                self.index_bucket_nfts_event_lite(conn, event, block_hash, block_number)
                     .await?
             }
             StorageEnableEvents::PaymentStreams(event) => {
-                self.index_payment_streams_event_lite(conn, event, block_hash)
+                self.index_payment_streams_event_lite(conn, event, block_hash, block_number)
                     .await?
             }
             StorageEnableEvents::ProofsDealer(event) => {
-                self.index_proofs_dealer_event_lite(conn, event, block_hash)
+                self.index_proofs_dealer_event_lite(conn, event, block_hash, block_number)
                     .await?
             }
             StorageEnableEvents::Randomness(event) => {
-                self.index_randomness_event_lite(conn, event, block_hash)
+                self.index_randomness_event_lite(conn, event, block_hash, block_number)
                     .await?
             }
             // System pallets - explicitly list all to ensure compilation errors on new events
@@ -65,7 +77,10 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         &'b self,
         conn: &mut DbConnection<'a>,
         event: &pallet_file_system::Event<Runtime>,
-    ) -> Result<(), diesel::result::Error> {
+        block_hash: Runtime::Hash,
+        block_number: NumberFor<Runtime::Block>,
+        evm_tx_hash: Option<Runtime::Hash>,
+    ) -> Result<(), IndexBlockError> {
         // In lite mode without MSP filtering, index all events
         let should_index = match event {
             pallet_file_system::Event::NewBucket { .. } => true,
@@ -108,7 +123,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
 
         if should_index {
             // Delegate to the original method
-            self.index_file_system_event(conn, event).await
+            self.index_file_system_event(conn, event, block_hash, block_number, evm_tx_hash)
+                .await
         } else {
             trace!(target: LOG_TARGET, "Filtered out FileSystem event in lite mode");
             Ok(())
@@ -120,7 +136,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         conn: &mut DbConnection<'a>,
         event: &pallet_storage_providers::Event<Runtime>,
         block_hash: Runtime::Hash,
-    ) -> Result<(), diesel::result::Error> {
+        block_number: NumberFor<Runtime::Block>,
+    ) -> Result<(), IndexBlockError> {
         // In lite mode without MSP filtering, index all provider events
         let should_index = match event {
             // All events return true for now - ready for future filtering logic
@@ -155,7 +172,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
 
         if should_index {
             // Delegate to the original method
-            self.index_providers_event(conn, event, block_hash).await
+            self.index_providers_event(conn, event, block_hash, block_number)
+                .await
         } else {
             trace!(target: LOG_TARGET, "Filtered out Providers event in lite mode");
             Ok(())
@@ -167,7 +185,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         conn: &mut DbConnection<'a>,
         event: &pallet_bucket_nfts::Event<Runtime>,
         _block_hash: Runtime::Hash,
-    ) -> Result<(), diesel::result::Error> {
+        _block_number: NumberFor<Runtime::Block>,
+    ) -> Result<(), IndexBlockError> {
         let should_index = match event {
             // All events return true for now - ready for future filtering logic
             pallet_bucket_nfts::Event::AccessShared { .. }
@@ -188,7 +207,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         conn: &mut DbConnection<'a>,
         event: &pallet_payment_streams::Event<Runtime>,
         _block_hash: Runtime::Hash,
-    ) -> Result<(), diesel::result::Error> {
+        block_number: NumberFor<Runtime::Block>,
+    ) -> Result<(), IndexBlockError> {
         let should_index = match event {
             // All events return true for now - ready for future filtering logic
             pallet_payment_streams::Event::FixedRatePaymentStreamCreated { .. }
@@ -209,7 +229,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         };
 
         if should_index {
-            self.index_payment_streams_event(conn, event).await?;
+            self.index_payment_streams_event(conn, event, block_number)
+                .await?;
         }
 
         Ok(())
@@ -220,7 +241,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         conn: &mut DbConnection<'a>,
         event: &pallet_proofs_dealer::Event<Runtime>,
         block_hash: Runtime::Hash,
-    ) -> Result<(), diesel::result::Error> {
+        block_number: NumberFor<Runtime::Block>,
+    ) -> Result<(), IndexBlockError> {
         let should_index = match event {
             // All events return true for now - ready for future filtering logic
             pallet_proofs_dealer::Event::NewChallenge { .. }
@@ -238,7 +260,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         };
 
         if should_index {
-            self.index_proofs_dealer_event(conn, event, block_hash)
+            self.index_proofs_dealer_event(conn, event, block_hash, block_number)
                 .await?;
         }
 
@@ -250,7 +272,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         conn: &mut DbConnection<'a>,
         event: &pallet_randomness::Event<Runtime>,
         _block_hash: Runtime::Hash,
-    ) -> Result<(), diesel::result::Error> {
+        block_number: NumberFor<Runtime::Block>,
+    ) -> Result<(), IndexBlockError> {
         let should_index = match event {
             // All events return true for now - ready for future filtering logic
             pallet_randomness::Event::NewOneEpochAgoRandomnessAvailable { .. }
@@ -258,7 +281,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         };
 
         if should_index {
-            self.index_randomness_event(conn, event).await?;
+            self.index_randomness_event(conn, event, block_number)
+                .await?;
         }
 
         Ok(())

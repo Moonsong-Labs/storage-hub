@@ -1,5 +1,5 @@
 use anyhow::Result;
-use sc_tracing::tracing::{error, warn};
+use sc_tracing::tracing::{error, info, warn};
 use std::sync::Arc;
 use tokio::sync::{broadcast, Semaphore};
 
@@ -47,7 +47,15 @@ pub trait ProvidesEventBus<T: EventBusMessage> {
 }
 
 pub trait EventHandler<E: EventBusMessage>: Clone + Send + 'static {
-    fn handle_event(&mut self, event: E) -> impl std::future::Future<Output = Result<()>> + Send;
+    /// Handle a single event.
+    ///
+    /// On success, returns a human-readable message that will be logged centrally by the
+    /// event bus listener. This encourages each handler to provide a meaningful success
+    /// description.
+    fn handle_event(
+        &mut self,
+        event: E,
+    ) -> impl std::future::Future<Output = Result<String>> + Send;
 
     fn subscribe_to_provider<EP: ProvidesEventBus<E>>(
         self,
@@ -112,7 +120,9 @@ impl<T: EventBusMessage, E: EventHandler<T> + Send + 'static> EventBusListener<T
                         .expect("To acquire the permit");
                     self.spawner.spawn(async move {
                         match cloned_event_handler.handle_event(event).await {
-                            Ok(_) => {}
+                            Ok(msg) => {
+                                info!("Task completed successfully: {}", msg);
+                            }
                             Err(error) => {
                                 warn!("Task ended with error: {:?}", error);
                             }

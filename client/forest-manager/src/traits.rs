@@ -48,7 +48,7 @@ pub trait ForestStorage<T: TrieLayout, Runtime: StorageEnableRuntime>: 'static {
 #[async_trait]
 pub trait ForestStorageHandler<Runtime: StorageEnableRuntime> {
     /// The key type used to identify forest storage instances.
-    type Key: From<Vec<u8>> + Debug + Send + Sync;
+    type Key: From<Vec<u8>> + AsRef<[u8]> + Debug + Send + Sync;
     /// Type representing the forest storage instance.
     type FS: ForestStorage<StorageProofsMerkleTrieLayout, Runtime> + Send + Sync;
 

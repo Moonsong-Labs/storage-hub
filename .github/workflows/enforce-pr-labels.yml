@@ -39,14 +39,48 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_LABELS: ${{ toJson(github.event.pull_request.labels) }}
         run: |
-          echo "Pull Request Labels: $PR_LABELS"
-          echo "Pull Request Body: $PR_BODY"
-
           # Check if "breaking" label is set
           if echo "$PR_LABELS" | grep -q '"breaking"'; then
             echo "Label 'breaking' is present. Checking description..."
             if echo "$PR_BODY" | grep -qi "## ⚠️ Breaking Changes ⚠️"; then
-              echo "✅ Description contains the required phrase."
+              echo "✅ Description contains the required '## ⚠️ Breaking Changes ⚠️' heading."
+
+              echo "Extracting 'Breaking Changes' section for structural validation..."
+              BREAKING_SECTION="$(
+                printf '%s\n' "$PR_BODY" | awk '
+                  BEGIN { flag=0 }
+                  /^##[[:space:]]*⚠️[[:space:]]*Breaking[[:space:]]*Changes[[:space:]]*⚠️/ { flag=1; next }
+                  /^##[[:space:]]+/ && flag==1 { flag=0 }
+                  flag==1 { print }
+                '
+              )"
+
+              if [ -z "$BREAKING_SECTION" ]; then
+                echo "❌ Could not extract content under the '## ⚠️ Breaking Changes ⚠️' heading."
+                echo "   Please ensure there is content under this heading describing the breaking change."
+                exit 1
+              fi
+
+              echo "Validating required structure inside 'Breaking Changes' section..."
+
+              # Require the three key bullets in the example template:
+              # - **Short description**
+              # - **Who is affected**
+              # - **Suggested code changes**
+              REQUIRED_ITEMS=("Short description" "Who is affected" "Suggested code changes")
+
+              for item in "${REQUIRED_ITEMS[@]}"; do
+                if ! printf '%s\n' "$BREAKING_SECTION" | grep -qiE "^[[:space:]]*-[[:space:]]+\*\*$item\*\*"; then
+                  echo "❌ 'Breaking Changes' section must contain a bullet heading '**$item**'."
+                  echo "   Please follow the template:"
+                  echo "   - **Short description**"
+                  echo "   - **Who is affected**"
+                  echo "   - **Suggested code changes**"
+                  exit 1
+                fi
+              done
+
+              echo "✅ 'Breaking Changes' section has the required structure."
             else
               echo "❌ Description does not contain the required phrase '## ⚠️ Breaking Changes ⚠️'."
               exit 1

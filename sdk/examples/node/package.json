@@ -7,12 +7,15 @@
     "start": "tsx src/index.ts",
     "core": "tsx src/core-demo.ts",
     "msp": "tsx src/msp-demo.ts",
+    "test": "tsx src/downloadTest.ts",
+    "test:concurrent": "bash scripts/concurrent-sdkTest.sh",
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@storagehub-sdk/core": ">=0.0.5",
-    "@storagehub-sdk/msp-client": ">=0.0.5",
-    "ethers": "^6.15.0"
+    "@storagehub-sdk/core": "workspace:*",
+    "@storagehub-sdk/msp-client": "workspace:*",
+    "ethers": "^6.15.0",
+    "viem": "2.38.3"
   },
   "devDependencies": {
     "typescript": "~5.5.4",
