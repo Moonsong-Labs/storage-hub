@@ -1,9 +1,10 @@
 use bigdecimal::BigDecimal;
 use chrono::NaiveDateTime;
-use diesel::{dsl::sum, prelude::*};
+use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
 use crate::{
+    models::File,
     schema::{bucket, file},
     DbConnection,
 };
@@ -181,21 +182,6 @@ impl Bucket {
         Ok(buckets)
     }
 
-    /// Calculate the total size of all files in a bucket
-    pub async fn calculate_size<'a>(
-        conn: &mut DbConnection<'a>,
-        bucket_id: i64,
-    ) -> Result<BigDecimal, diesel::result::Error> {
-        let total_size: Option<BigDecimal> = file::table
-            .filter(file::bucket_id.eq(bucket_id))
-            .select(sum(file::size))
-            .first(conn)
-            .await?;
-
-        // Return BigDecimal directly, defaulting to zero if None
-        Ok(total_size.unwrap_or_else(|| BigDecimal::from(0)))
-    }
-
     /// Sync the stored file_count and total_size by calculating from actual files.
     ///
     /// This recalculates both values from the files table and updates the stored values.
@@ -204,9 +190,7 @@ impl Bucket {
         conn: &mut DbConnection<'a>,
         bucket_id: i64,
     ) -> Result<(), diesel::result::Error> {
-        use crate::models::File;
-
-        // Get unique files by file_key 
+        // Get unique files by file_key
         let unique_files: Vec<File> = file::table
             .filter(file::bucket_id.eq(bucket_id))
             .distinct_on(file::file_key)
@@ -215,7 +199,10 @@ impl Bucket {
             .await?;
 
         let count = unique_files.len() as i64;
-        let total_size: BigDecimal = unique_files.iter().map(|f| BigDecimal::from(f.size)).sum();
+        let total_size: BigDecimal = unique_files
+            .iter()
+            .map(|file| BigDecimal::from(file.size))
+            .sum();
 
         diesel::update(bucket::table)
             .filter(bucket::id.eq(bucket_id))
