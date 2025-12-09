@@ -24,6 +24,10 @@ export const test = baseTest.extend<{
       console.log("🚀 Launching browser with MetaMask...");
       const { browserContext } = await dappwright.launch("", {
         wallet: "metamask",
+        // TODO: Switch back to MetaMaskWallet.recommendedVersion once dappwright fixes GitHub API pagination.
+        // See: https://github.com/TenKeyLabs/dappwright/issues/507
+        // dappwright's recommendedVersion (12.23.0) is no longer on page 1 of GitHub releases API,
+        // causing "Version not found" errors. Using 12.23.1 which is still within the pagination window.
         version: "12.23.1",
         headless: false,
       });
