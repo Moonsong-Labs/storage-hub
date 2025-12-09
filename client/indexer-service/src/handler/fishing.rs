@@ -11,6 +11,8 @@ use shc_common::{traits::StorageEnableRuntime, types::StorageEnableEvents};
 use shc_indexer_db::DbConnection;
 use sp_runtime::traits::NumberFor;
 
+use crate::handler::IndexBlockError;
+
 use super::IndexerService;
 
 use pallet_file_system;
@@ -30,7 +32,7 @@ where
         block_hash: Runtime::Hash,
         block_number: NumberFor<Runtime::Block>,
         evm_tx_hash: Option<Runtime::Hash>,
-    ) -> Result<(), diesel::result::Error> {
+    ) -> Result<(), IndexBlockError> {
         match event {
             StorageEnableEvents::FileSystem(fs_event) => match fs_event {
                 // Bucket lifecycle events
@@ -262,14 +264,14 @@ where
                 | pallet_storage_providers::Event::BspSignOffSuccess { .. }
                 | pallet_storage_providers::Event::BspDeleted { .. } => {
                     trace!(target: LOG_TARGET, "Indexing BSP provider event");
-                    self.index_providers_event(conn, provider_event, block_hash)
+                    self.index_providers_event(conn, provider_event, block_hash, block_number)
                         .await?
                 }
                 pallet_storage_providers::Event::MspSignUpSuccess { .. }
                 | pallet_storage_providers::Event::MspSignOffSuccess { .. }
                 | pallet_storage_providers::Event::MspDeleted { .. } => {
                     trace!(target: LOG_TARGET, "Indexing MSP provider event");
-                    self.index_providers_event(conn, provider_event, block_hash)
+                    self.index_providers_event(conn, provider_event, block_hash, block_number)
                         .await?
                 }
                 pallet_storage_providers::Event::BspRequestSignUpSuccess { .. }
@@ -303,8 +305,13 @@ where
             StorageEnableEvents::ProofsDealer(proofs_dealer_event) => match proofs_dealer_event {
                 pallet_proofs_dealer::Event::MutationsApplied { .. } => {
                     trace!(target: LOG_TARGET, "Indexing MutationsApplied event");
-                    self.index_proofs_dealer_event(conn, proofs_dealer_event, block_hash)
-                        .await?
+                    self.index_proofs_dealer_event(
+                        conn,
+                        proofs_dealer_event,
+                        block_hash,
+                        block_number,
+                    )
+                    .await?
                 }
                 pallet_proofs_dealer::Event::MutationsAppliedForProvider { .. }
                 | pallet_proofs_dealer::Event::NewChallenge { .. }
