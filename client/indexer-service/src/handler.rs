@@ -631,7 +631,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 location: _,
                 new_root: _,
             } => {
-                // Get the file's bucket's ID before any deletions in case we have to clean up the bucket afterwards
+                // Get the file's bucket ID before any deletions in case we have to clean up the bucket afterwards
                 let file_record = File::get_latest_by_file_key(conn, file_key.as_ref().to_vec())
                     .await
                     .ok();

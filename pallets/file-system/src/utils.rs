@@ -2913,7 +2913,7 @@ where
                 );
                 // Since we're deleting from the bucket in this transaction, immediately mark the bucket
                 // as removed from the incomplete storage request we just created. This prevents the
-                // `IncompleteStorageRequest` from being stuck with `pending_bucket_removal = true` and `never
+                // `IncompleteStorageRequest` from being stuck with `pending_bucket_removal = true` and never
                 // getting cleaned up.
                 Self::remove_provider_from_incomplete_storage_request(*file_key, None);
                 Self::cleanup_storage_request(&file_key, &storage_request);
