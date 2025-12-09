@@ -1105,14 +1105,33 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
 
                 if let Some(file_record) = file_record {
                     // Get the bucket to find the MSP
-                    let bucket = Bucket::get_by_id(conn, file_record.bucket_id).await?;
+                    let bucket = Bucket::get_by_onchain_bucket_id(
+                        conn,
+                        file_record.onchain_bucket_id.clone(),
+                    )
+                    .await
+                    .map_err(|e| {
+                        IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name: "IncompleteStorageRequestCleanedUp (get bucket)"
+                                .to_string(),
+                        }
+                    })?;
 
                     // Delete the MSP-file association if this file is associated with an MSP
                     // We have to do this as this association might have not been cleared before if
                     // the MSP accepted the storage request with an inclusion proof, because in that scenario
                     // the fisherman does not delete the file from the bucket.
                     if let Some(msp_id) = bucket.msp_id {
-                        MspFile::delete_by_file_id(conn, msp_id, file_record.id).await?;
+                        MspFile::delete_by_file_id(conn, msp_id, file_record.id).await.map_err(|e| {
+                            IndexBlockError::EventIndexingDatabaseError {
+                                database_error: e,
+                                block_number: block_number.saturated_into(),
+                                event_name: "IncompleteStorageRequestCleanedUp (delete MSP-file association)"
+                                    .to_string(),
+                            }
+                        })?;
                         log::debug!(
                             "Deleted MSP-file association for incomplete storage request file {:?} (id: {:?})",
                             file_key,
@@ -1121,7 +1140,13 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     }
 
                     // Try to delete the file record if it has no BSP or MSP associations, which at this point it shouldn't
-                    File::delete_record_if_no_associations(conn, file_record.id).await?;
+                    File::delete_record_if_no_associations(conn, file_record.id).await.
+                    map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "IncompleteStorageRequestCleanedUp (delete file record if no associations)"
+                            .to_string(),
+                    })?;
                 }
             }
             pallet_file_system::Event::__Ignore(_, _) => {}
