@@ -199,19 +199,23 @@ impl Bucket {
     /// Sync the stored file_count and total_size by calculating from actual files.
     ///
     /// This recalculates both values from the files table and updates the stored values.
+    /// Only counts unique files (by file_key) since the same file can appear multiple times.
     pub async fn sync_stats<'a>(
         conn: &mut DbConnection<'a>,
         bucket_id: i64,
     ) -> Result<(), diesel::result::Error> {
-        // Count files and sum sizes in one query
-        // Note: SQL sum function returns NULL (None) if there are no files.
-        let (count, total_size): (i64, Option<BigDecimal>) = file::table
+        use crate::models::File;
+
+        // Get unique files by file_key 
+        let unique_files: Vec<File> = file::table
             .filter(file::bucket_id.eq(bucket_id))
-            .select((diesel::dsl::count_star(), sum(file::size)))
-            .first(conn)
+            .distinct_on(file::file_key)
+            .select(File::as_select())
+            .load(conn)
             .await?;
 
-        let total_size = total_size.unwrap_or_else(|| BigDecimal::from(0));
+        let count = unique_files.len() as i64;
+        let total_size: BigDecimal = unique_files.iter().map(|f| BigDecimal::from(f.size)).sum();
 
         diesel::update(bucket::table)
             .filter(bucket::id.eq(bucket_id))

@@ -510,14 +510,17 @@ impl IndexerOpsMut for MockRepository {
 
         self.files.write().await.insert(id, file.clone());
 
-        // Sync file count and total size by calculating from actual files
+        // Sync file count and total size by calculating from actual files (distinct by file_key)
         let files = self.files.read().await;
-        let bucket_files: Vec<_> = files
-            .values()
-            .filter(|f| f.bucket_id == bucket_id)
-            .collect();
-        let count = bucket_files.len() as i64;
-        let total_size: i64 = bucket_files.iter().map(|f| f.size).sum();
+        let mut seen_file_keys = std::collections::HashSet::new();
+        let mut count = 0i64;
+        let mut total_size = 0i64;
+        for f in files.values().filter(|f| f.bucket_id == bucket_id) {
+            if seen_file_keys.insert(f.file_key.clone()) {
+                count += 1;
+                total_size += f.size;
+            }
+        }
         if let Some(bucket) = buckets.get_mut(&bucket_id) {
             bucket.file_count = count;
             bucket.total_size = BigDecimal::from(total_size);
@@ -536,13 +539,16 @@ impl IndexerOpsMut for MockRepository {
         if let Some((id, bucket_id)) = file_to_remove {
             files.remove(&id);
 
-            // Sync file count and total size by calculating from actual files
-            let bucket_files: Vec<_> = files
-                .values()
-                .filter(|f| f.bucket_id == bucket_id)
-                .collect();
-            let count = bucket_files.len() as i64;
-            let total_size: i64 = bucket_files.iter().map(|f| f.size).sum();
+            // Sync file count and total size by calculating from actual files (distinct by file_key)
+            let mut seen_file_keys = std::collections::HashSet::new();
+            let mut count = 0i64;
+            let mut total_size = 0i64;
+            for f in files.values().filter(|f| f.bucket_id == bucket_id) {
+                if seen_file_keys.insert(f.file_key.clone()) {
+                    count += 1;
+                    total_size += f.size;
+                }
+            }
             drop(files);
 
             let mut buckets = self.buckets.write().await;
