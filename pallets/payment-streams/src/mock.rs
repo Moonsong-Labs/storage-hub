@@ -19,7 +19,7 @@ use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
 use sp_runtime::{
     testing::TestSignature,
-    traits::{BlakeTwo256, BlockNumberProvider, ConvertBack, IdentityLookup},
+    traits::{BlakeTwo256, ConvertBack, IdentityLookup},
     BuildStorage, DispatchError, Perbill, SaturatedConversion,
 };
 use sp_runtime::{traits::Convert, BoundedBTreeSet};
@@ -169,19 +169,6 @@ impl shp_traits::FileMetadataInterface for MockFileMetadataManager {
 
     fn owner(metadata: &Self::Metadata) -> &Vec<u8> {
         metadata.owner()
-    }
-}
-
-/// Mock implementation of the relay chain data provider, which should return the relay chain block
-/// that the previous parachain block was anchored to.
-pub struct MockRelaychainDataProvider;
-impl BlockNumberProvider for MockRelaychainDataProvider {
-    type BlockNumber = u32;
-    fn current_block_number() -> Self::BlockNumber {
-        frame_system::Pallet::<Test>::block_number()
-            .saturating_sub(1)
-            .try_into()
-            .unwrap()
     }
 }
 
