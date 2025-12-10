@@ -53,7 +53,7 @@ where
         Ok(())
     } else {
         Err(anyhow::anyhow!(
-            "File incomplete after processing all chunks"
+            "File incomplete after processing all data streamed"
         ))
     }
 }
