@@ -27,21 +27,21 @@ pub struct StatsResponse {
     #[serde(rename = "activeUsers")]
     pub active_users: u64,
     #[serde(rename = "lastCapacityChange")]
-    pub last_capacity_change: u64,
+    pub last_capacity_change: String,
     #[serde(rename = "valuePropsAmount")]
-    pub value_props_amount: u64,
+    pub value_props_amount: String,
     #[serde(rename = "bucketsAmount")]
-    pub buckets_amount: u64,
+    pub buckets_amount: String,
 }
 
 #[derive(Debug, Serialize)]
 pub struct Capacity {
     #[serde(rename = "totalBytes")]
-    pub total_bytes: u64,
+    pub total_bytes: String,
     #[serde(rename = "availableBytes")]
-    pub available_bytes: u64,
+    pub available_bytes: String,
     #[serde(rename = "usedBytes")]
-    pub used_bytes: u64,
+    pub used_bytes: String,
 }
 
 // TODO: We should update this to somehow use the types configured in the runtime.
