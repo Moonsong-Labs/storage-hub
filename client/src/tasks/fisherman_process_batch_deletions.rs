@@ -841,18 +841,18 @@ where
             // Convert bucket_id from Runtime type to DB type
             let bucket_id_bytes = bucket_id.as_ref().map(|id| id.as_ref() as &[u8]);
 
-            // Query bucket files from DB
+            // Query bucket files from DB with deduplication
             // Only get files that are in the bucket's forest
-            let bucket_files =
-                shc_indexer_db::models::File::get_files_pending_deletion_grouped_by_bucket(
-                    &mut bucket_conn,
-                    deletion_type,
-                    bucket_id_bytes,
-                    Some(true),
-                    limit,
-                    offset,
-                )
-                .await?;
+            // Use deduplicated version to avoid duplicate file keys in batch deletion
+            let bucket_files = shc_indexer_db::models::File::get_files_pending_deletion_grouped_by_bucket_deduplicated(
+                &mut bucket_conn,
+                deletion_type,
+                bucket_id_bytes,
+                Some(true),
+                limit,
+                offset,
+            )
+            .await?;
 
             drop(bucket_conn);
 
@@ -870,16 +870,16 @@ where
             // Convert bsp_id from Runtime type to DB type
             let bsp_id_db = bsp_id.map(shc_indexer_db::OnchainBspId::new);
 
-            // Query BSP files from DB
-            let bsp_files =
-                shc_indexer_db::models::BspFile::get_files_pending_deletion_grouped_by_bsp(
-                    &mut bsp_conn,
-                    deletion_type,
-                    bsp_id_db,
-                    limit,
-                    offset,
-                )
-                .await?;
+            // Query BSP files from DB with deduplication
+            // Use deduplicated version to avoid duplicate file keys in batch deletion
+            let bsp_files = shc_indexer_db::models::BspFile::get_files_pending_deletion_grouped_by_bsp_deduplicated(
+                &mut bsp_conn,
+                deletion_type,
+                bsp_id_db,
+                limit,
+                offset,
+            )
+            .await?;
 
             drop(bsp_conn);
 
