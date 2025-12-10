@@ -41,7 +41,8 @@ where
     }
 
     // Check if there's remaining data for the last chunk (This is the case when data is
-    // smaller than FILE_CHUNK_SIZE)
+    // Now that we have read all the "full" chunks, and there is no more data being streamed,
+    // we know that whatever is left in the buffer is the last chunk, which may not be a multiple of FILE_CHUNK_SIZE.
     if !buffer.is_empty() {
         let (chunk_id, chunk_data) = read_chunk_with_id_from_buffer(&mut buffer, false)?;
         last_write_outcome = write_chunk(file_storage, file_key, &chunk_id, &chunk_data).await?;
