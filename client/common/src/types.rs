@@ -331,8 +331,7 @@ where
 /// Set of pallets and their errors that are relevant to the StorageHub Client.
 ///
 /// This enum serves to convert the runtime's dispatch errors into a known set of
-/// storage-related errors that the client cares about. It allows the
-/// client to match on these errors without having to decode error bytes directly.
+/// storage-related errors that the client cares about.
 ///
 /// The enum intentionally includes a catch-all [`Other`](Self::Other) variant so that
 /// unrecognized or out-of-scope errors can be handled without breaking
