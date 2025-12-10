@@ -811,7 +811,13 @@ impl<Runtime: StorageEnableRuntime> BspHandler<Runtime> {
 /// | `Accepted` | Successfully accepted on-chain | **Skip** (completed) |
 /// | `Rejected` | Rejected on-chain | **Skip** (completed) |
 /// | `Abandoned` | Failed with non-proof dispatch error | **Skip** (permanent failure) |
-/// | *Not present* | New or retryable file key | **Process** (emit event) |
+/// | Status        | Meaning                             | Next Block Behavior              |
+/// | ------------- | ----------------------------------- | -------------------------------- |
+/// | `Processing`  | File key is in the pipeline         | **Skip** (already being handled) |
+/// | `Accepted`    | Successfully accepted on-chain      | **Skip** (completed)             |
+/// | `Rejected`    | Rejected on-chain                   | **Skip** (completed)             |
+/// | `Abandoned`   | Failed with non-proof dispatch error| **Skip** (permanent failure)     |
+/// | *Not present* | New or retryable file key           | **Process** (emit event)         |
 ///
 /// ## Retry Mechanism
 ///
