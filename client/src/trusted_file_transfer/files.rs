@@ -1,8 +1,10 @@
 //! File encoding/decoding utilities
 
 use axum::body::Body;
-use shc_common::trusted_file_transfer::{read_chunk_with_id_from_buffer, CHUNK_ID_SIZE};
-use shc_common::types::{ChunkId, FILE_CHUNK_SIZE};
+use shc_common::{
+    trusted_file_transfer::{read_chunk_with_id_from_buffer, CHUNK_ID_SIZE},
+    types::{ChunkId, FILE_CHUNK_SIZE},
+};
 use shc_file_manager::traits::FileStorageWriteOutcome;
 use shp_file_metadata::Chunk;
 use tokio_stream::StreamExt;

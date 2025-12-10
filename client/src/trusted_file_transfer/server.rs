@@ -14,19 +14,19 @@ use axum::{
 use futures::FutureExt;
 use sc_tracing::tracing::{error, info, warn};
 use shc_actors_framework::actor::ActorHandle;
-use shc_blockchain_service::commands::BlockchainServiceCommandInterface;
-use shc_blockchain_service::types::{MspRespondStorageRequest, RespondStorageRequest};
-use shc_blockchain_service::BlockchainService;
+use shc_blockchain_service::{
+    commands::BlockchainServiceCommandInterface,
+    types::{MspRespondStorageRequest, RespondStorageRequest},
+    BlockchainService,
+};
 use shc_common::traits::StorageEnableRuntime;
-use shc_file_transfer_service::commands::FileTransferServiceCommandInterface;
-use shc_file_transfer_service::FileTransferService;
+use shc_file_transfer_service::{
+    commands::FileTransferServiceCommandInterface, FileTransferService,
+};
 use shc_forest_manager::traits::ForestStorageHandler;
-use tokio::net::TcpListener;
-use tokio::sync::RwLock;
+use tokio::{net::TcpListener, sync::RwLock};
 
-use crate::types::FileStorageT;
-
-use super::files::process_chunk_stream;
+use crate::{trusted_file_transfer::files::process_chunk_stream, types::FileStorageT};
 
 const LOG_TARGET: &str = "trusted-file-transfer-server";
 

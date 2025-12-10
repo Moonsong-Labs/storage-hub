@@ -20,7 +20,6 @@ use shc_file_manager::{in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStora
 use shc_file_transfer_service::{spawn_file_transfer_service, FileTransferService};
 use shc_fisherman_service::{spawn_fisherman_service, FishermanService};
 
-use crate::trusted_file_transfer;
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_indexer_service::IndexerMode;
 use shc_rpc::{RpcConfig, StorageHubClientRpcConfig};
@@ -34,6 +33,7 @@ use crate::tasks::{
 use super::{
     bsp_peer_manager::BspPeerManager,
     handler::{ProviderConfig, StorageHubHandler},
+    trusted_file_transfer,
     types::{
         BspForestStorageHandlerT, BspProvider, FishermanForestStorageHandlerT, FishermanRole,
         InMemoryStorageLayer, MspForestStorageHandlerT, MspProvider, NoStorageLayer,
