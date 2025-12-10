@@ -347,4 +347,73 @@ impl BspFile {
 
         Ok(grouped)
     }
+
+    /// Get files pending deletion grouped by BSP with deduplication.
+    ///
+    /// Same as [`get_files_pending_deletion_grouped_by_bsp`] but deduplicates files by their
+    /// `file_key`, keeping only the most recently created file record for each unique key.
+    ///
+    /// This is essential for batch deletion extrinsics which can only process each file key once.
+    /// When multiple storage requests exist for the same file key, submitting duplicates in a
+    /// single extrinsic will cause it to fail.
+    ///
+    /// # Arguments
+    /// * `deletion_type` - Filter for user deletions (with signature) or incomplete deletions (without signature)
+    /// * `bsp_id` - Optional filter by specific BSP's onchain ID (returns only that BSP's files)
+    /// * `limit` - Maximum number of files to return across all BSPs (default: 1000)
+    /// * `offset` - Number of files to skip for pagination (default: 0)
+    ///
+    /// # Returns
+    /// HashMap mapping BSP IDs ([`OnchainBspId`]) to vectors of deduplicated files pending deletion for that BSP.
+    pub async fn get_files_pending_deletion_grouped_by_bsp_deduplicated<'a>(
+        conn: &mut DbConnection<'a>,
+        deletion_type: FileDeletionType,
+        bsp_id: Option<OnchainBspId>,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<HashMap<OnchainBspId, Vec<File>>, diesel::result::Error> {
+        let files_map = Self::get_files_pending_deletion_grouped_by_bsp(
+            conn,
+            deletion_type,
+            bsp_id,
+            limit,
+            offset,
+        )
+        .await?;
+
+        // Deduplicate files by file_key within each BSP
+        // Keep the most recently created record for each unique file_key
+        let mut deduplicated: HashMap<OnchainBspId, Vec<File>> = HashMap::new();
+
+        for (bsp_id, files) in files_map {
+            // Use HashMap to deduplicate by file_key
+            let mut unique_files: HashMap<Vec<u8>, File> = HashMap::new();
+            for file in files {
+                let file_key = file.file_key.clone();
+                unique_files
+                    .entry(file_key)
+                    .and_modify(|existing| {
+                        // Keep the more recently created file
+                        if file.created_at > existing.created_at {
+                            *existing = file.clone();
+                        }
+                    })
+                    .or_insert(file);
+            }
+
+            // Convert back to Vec and add to result
+            let mut files_vec: Vec<File> = unique_files.into_values().collect();
+
+            // Sort by deletion_requested_at and file_key for consistent ordering
+            files_vec.sort_by(|a, b| {
+                a.deletion_requested_at
+                    .cmp(&b.deletion_requested_at)
+                    .then_with(|| a.file_key.cmp(&b.file_key))
+            });
+
+            deduplicated.insert(bsp_id, files_vec);
+        }
+
+        Ok(deduplicated)
+    }
 }
