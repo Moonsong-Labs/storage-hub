@@ -5,6 +5,8 @@ use jsonrpsee::core::traits::ToRpcParams;
 use serde::de::DeserializeOwned;
 
 mod methods;
+mod runtime_apis;
+mod state_queries;
 
 pub mod client;
 pub mod connection;
