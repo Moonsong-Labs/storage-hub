@@ -19,7 +19,7 @@ impl StorageEnableRuntime for crate::Runtime {
     type Signature = crate::Signature;
     type Extension = crate::SignedExtra;
     type RuntimeApi = crate::apis::RuntimeApi;
-    type ModuleError = RuntimeModuleError;
+    type RuntimeError = crate::RuntimeError;
 }
 
 // Implement the transaction extension helpers for the concrete runtime's SignedExtra.
@@ -81,18 +81,40 @@ impl TransactionHashProvider for crate::Runtime {
     }
 }
 
-/// Wrapper type for converting [`sp_runtime::ModuleError`] into [`StorageEnableErrors`].
-pub struct RuntimeModuleError(pub sp_runtime::ModuleError);
-
-impl From<sp_runtime::ModuleError> for RuntimeModuleError {
-    fn from(err: sp_runtime::ModuleError) -> Self {
-        Self(err)
+// Map the runtime error into the client-facing storage errors enum.
+// This follows the same pattern as StorageEnableEvents - simple variant matching
+// on already-decoded error types, with no pallet index comparison or byte decoding.
+impl Into<StorageEnableErrors<crate::Runtime>> for crate::RuntimeError {
+    fn into(self) -> StorageEnableErrors<crate::Runtime> {
+        match self {
+            crate::RuntimeError::System(error) => StorageEnableErrors::System(error),
+            crate::RuntimeError::Providers(error) => StorageEnableErrors::StorageProviders(error),
+            crate::RuntimeError::ProofsDealer(error) => StorageEnableErrors::ProofsDealer(error),
+            crate::RuntimeError::PaymentStreams(error) => {
+                StorageEnableErrors::PaymentStreams(error)
+            }
+            crate::RuntimeError::FileSystem(error) => StorageEnableErrors::FileSystem(error),
+            crate::RuntimeError::Balances(error) => StorageEnableErrors::Balances(error),
+            crate::RuntimeError::BucketNfts(error) => StorageEnableErrors::BucketNfts(error),
+            other => StorageEnableErrors::Other(format!("{:?}", other)),
+        }
     }
 }
 
-impl Into<StorageEnableErrors<crate::Runtime>> for RuntimeModuleError {
-    fn into(self) -> StorageEnableErrors<crate::Runtime> {
-        let module_error = self.0;
+/// Decode a [`sp_runtime::ModuleError`] into the runtime's [`RuntimeError`](crate::RuntimeError).
+///
+/// This uses compile-time pallet indices to determine which pallet the error originated from,
+/// then decodes the error bytes into the appropriate error variant.
+///
+/// # Note
+///
+/// This uses compile-time pallet indices. For version-aware decoding (processing blocks
+/// from different runtime versions), metadata-based decoding should be implemented in
+/// the client layer in the future.
+impl TryFrom<sp_runtime::ModuleError> for crate::RuntimeError {
+    type Error = sp_runtime::ModuleError;
+
+    fn try_from(module_error: sp_runtime::ModuleError) -> Result<Self, Self::Error> {
         let system_index = frame_system::Pallet::<crate::Runtime>::index() as u8;
         let providers_index = pallet_storage_providers::Pallet::<crate::Runtime>::index() as u8;
         let proofs_dealer_index = pallet_proofs_dealer::Pallet::<crate::Runtime>::index() as u8;
@@ -104,42 +126,42 @@ impl Into<StorageEnableErrors<crate::Runtime>> for RuntimeModuleError {
         match module_error.index {
             i if i == system_index => {
                 frame_system::Error::<crate::Runtime>::decode(&mut &module_error.error[..])
-                    .map(StorageEnableErrors::System)
-                    .unwrap_or_else(|_| StorageEnableErrors::Other(module_error))
+                    .map(crate::RuntimeError::System)
+                    .map_err(|_| module_error)
             }
             i if i == providers_index => pallet_storage_providers::Error::<crate::Runtime>::decode(
                 &mut &module_error.error[..],
             )
-            .map(StorageEnableErrors::StorageProviders)
-            .unwrap_or_else(|_| StorageEnableErrors::Other(module_error)),
+            .map(crate::RuntimeError::Providers)
+            .map_err(|_| module_error),
             i if i == proofs_dealer_index => {
                 pallet_proofs_dealer::Error::<crate::Runtime>::decode(&mut &module_error.error[..])
-                    .map(StorageEnableErrors::ProofsDealer)
-                    .unwrap_or_else(|_| StorageEnableErrors::Other(module_error))
+                    .map(crate::RuntimeError::ProofsDealer)
+                    .map_err(|_| module_error)
             }
             i if i == payment_streams_index => {
                 pallet_payment_streams::Error::<crate::Runtime>::decode(
                     &mut &module_error.error[..],
                 )
-                .map(StorageEnableErrors::PaymentStreams)
-                .unwrap_or_else(|_| StorageEnableErrors::Other(module_error))
+                .map(crate::RuntimeError::PaymentStreams)
+                .map_err(|_| module_error)
             }
             i if i == file_system_index => {
                 pallet_file_system::Error::<crate::Runtime>::decode(&mut &module_error.error[..])
-                    .map(StorageEnableErrors::FileSystem)
-                    .unwrap_or_else(|_| StorageEnableErrors::Other(module_error))
+                    .map(crate::RuntimeError::FileSystem)
+                    .map_err(|_| module_error)
             }
             i if i == balances_index => {
                 pallet_balances::Error::<crate::Runtime>::decode(&mut &module_error.error[..])
-                    .map(StorageEnableErrors::Balances)
-                    .unwrap_or_else(|_| StorageEnableErrors::Other(module_error))
+                    .map(crate::RuntimeError::Balances)
+                    .map_err(|_| module_error)
             }
             i if i == bucket_nfts_index => {
                 pallet_bucket_nfts::Error::<crate::Runtime>::decode(&mut &module_error.error[..])
-                    .map(StorageEnableErrors::BucketNfts)
-                    .unwrap_or_else(|_| StorageEnableErrors::Other(module_error))
+                    .map(crate::RuntimeError::BucketNfts)
+                    .map_err(|_| module_error)
             }
-            _ => StorageEnableErrors::Other(module_error),
+            _ => Err(module_error),
         }
     }
 }

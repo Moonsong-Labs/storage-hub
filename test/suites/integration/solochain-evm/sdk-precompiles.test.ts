@@ -342,8 +342,10 @@ await describeMspNet(
       const peerIds = [
         userApi.shConsts.NODE_INFOS.msp1.expectedPeerId // MSP peer ID
       ];
-      const replicationLevel = ReplicationLevel.Basic;
-      const replicas = 0; // Used only when ReplicationLevel = Custom
+      // Use Custom replication with 1 replica so the storage request gets fulfilled quickly
+      // This allows us to test file deletion without having an active storage request
+      const replicationLevel = ReplicationLevel.Custom;
+      const replicas = 1;
 
       // Issue the storage request using the SDK
       storageRequestTxHash = await storageHubClient.issueStorageRequest(
@@ -476,6 +478,16 @@ await describeMspNet(
 
       // Ensure the file is now stored in the MSP's file storage
       await msp1Api.wait.fileStorageComplete(hexFileKey);
+
+      // Wait for at least 1 BSP to confirm so the storage request gets fulfilled
+      await userApi.wait.bspStored({ expectedExts: 1 });
+
+      // Verify the storage request has been fulfilled and removed
+      const storageRequestAfterConfirm = await userApi.query.fileSystem.storageRequests(fileKey);
+      assert(
+        storageRequestAfterConfirm.isNone,
+        "Storage request should be fulfilled and removed after BSP confirms"
+      );
 
       await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 

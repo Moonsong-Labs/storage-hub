@@ -988,6 +988,11 @@ pub mod pallet {
         FileKeyMismatch,
         /// Incomplete storage request not found.
         IncompleteStorageRequestNotFound,
+        /// File has an active storage request and as such is not eligible for deletion.
+        /// The user should use the `revoke_storage_request` extrinsic to revoke it first.
+        FileHasActiveStorageRequest,
+        /// File has an `IncompleteStorageRequest` associated with it and as such is not eligible for a new storage request
+        FileHasIncompleteStorageRequest,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately

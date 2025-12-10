@@ -1,5 +1,5 @@
-use log::{debug, error, info, trace};
-use std::{str, sync::Arc};
+use log::{debug, error, info, trace, warn};
+use std::{collections::HashSet, str, sync::Arc};
 use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
 use sc_client_api::HeaderBackend;
@@ -15,23 +15,23 @@ use shc_common::{
     traits::StorageEnableRuntime,
     typed_store::CFDequeAPI,
     types::{
-        BackupStorageProviderId, BlockHash, BlockNumber, BucketId, ProviderId, StorageEnableEvents,
+        BackupStorageProviderId, BlockHash, BlockNumber, BucketId, FileKey, MainStorageProviderId,
+        ProviderId, StorageEnableEvents,
     },
 };
 use shc_forest_manager::traits::ForestStorageHandler;
 
 use crate::{
     events::{
-        BatchProcessStorageRequests, DistributeFileToBsp, FinalisedBucketMovedAway,
-        FinalisedBucketMutationsApplied, FinalisedMspStopStoringBucketInsolventUser,
-        FinalisedMspStoppedStoringBucket, FinalisedStorageRequestRejected, ForestWriteLockTaskData,
-        MoveBucketRequestedForMsp, ProcessMspRespondStoringRequest,
-        ProcessMspRespondStoringRequestData, ProcessStopStoringForInsolventUserRequest,
-        ProcessStopStoringForInsolventUserRequestData, StartMovedBucketDownload,
-        VerifyMspBucketForests,
+        DistributeFileToBsp, FinalisedBucketMovedAway, FinalisedBucketMutationsApplied,
+        FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
+        FinalisedStorageRequestRejected, ForestWriteLockTaskData, MoveBucketRequestedForMsp,
+        NewStorageRequest, ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData,
+        ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
+        StartMovedBucketDownload, VerifyMspBucketForests,
     },
     handler::LOG_TARGET,
-    types::{FileDistributionInfo, ManagedProvider, MultiInstancesNodeRole},
+    types::{FileDistributionInfo, FileKeyStatus, ManagedProvider, MultiInstancesNodeRole},
     BlockchainService,
 };
 
@@ -171,8 +171,9 @@ where
     /// Runs at the end of every block import for a MSP.
     ///
     /// Steps:
-    /// 1. Check for BSPs who volunteered for files this MSP has to distribute, and spawn task
-    /// to distribute them.
+    /// 1. Monitor for new pending storage requests and emit events for processing.
+    /// 2. Check for BSPs who volunteered for files this MSP has to distribute, and spawn task
+    ///    to distribute them.
     pub(crate) async fn msp_end_block_processing<Block>(
         &mut self,
         block_hash: &Runtime::Hash,
@@ -181,17 +182,29 @@ where
     ) where
         Block: BlockT<Hash = Runtime::Hash>,
     {
-        self.spawn_distribute_file_to_bsps_tasks(block_hash);
+        let managed_msp_id = match &self.maybe_managed_provider {
+            Some(ManagedProvider::Msp(msp_handler)) => msp_handler.msp_id.clone(),
+            _ => {
+                trace!(target: LOG_TARGET, "`msp_end_block_processing` called but node is not managing an MSP");
+                return;
+            }
+        };
+
+        // Monitor for new pending storage requests
+        self.handle_pending_storage_requests(managed_msp_id.clone());
+
+        // Distribute files to BSPs
+        self.spawn_distribute_file_to_bsps_tasks(block_hash, managed_msp_id);
     }
 
     /// Processes finality events that are only relevant for an MSP.
     pub(crate) fn msp_process_finality_events(
-        &self,
+        &mut self,
         block_hash: &Runtime::Hash,
         event: StorageEnableEvents<Runtime>,
     ) {
         let managed_msp_id = match &self.maybe_managed_provider {
-            Some(ManagedProvider::Msp(msp_handler)) => &msp_handler.msp_id,
+            Some(ManagedProvider::Msp(msp_handler)) => msp_handler.msp_id.clone(),
             _ => {
                 error!(target: LOG_TARGET, "`msp_process_finality_events` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
                 return;
@@ -207,7 +220,7 @@ where
                     bucket_id,
                 },
             ) => {
-                if msp_id == *managed_msp_id {
+                if msp_id == managed_msp_id {
                     self.emit(FinalisedMspStoppedStoringBucket {
                         msp_id,
                         owner,
@@ -222,7 +235,7 @@ where
                     bucket_id,
                 },
             ) => {
-                if msp_id == *managed_msp_id {
+                if msp_id == managed_msp_id {
                     self.emit(FinalisedMspStopStoringBucketInsolventUser { msp_id, bucket_id })
                 }
             }
@@ -237,13 +250,32 @@ where
                 // Note: we do this in finality to ensure we don't lose data in case
                 // of a reorg.
                 if let Some(old_msp_id) = old_msp_id {
-                    if managed_msp_id == &old_msp_id {
+                    if managed_msp_id == old_msp_id {
                         self.emit(FinalisedBucketMovedAway {
                             bucket_id,
                             old_msp_id,
                             new_msp_id,
                         });
                     }
+                }
+            }
+            StorageEnableEvents::FileSystem(
+                pallet_file_system::Event::MspAcceptedStorageRequest {
+                    file_key,
+                    file_metadata: _,
+                },
+            ) => {
+                // Finalize accepted storage request: transition from Submitted to Accepted
+                let file_key: FileKey = file_key.into();
+                if let Some(ManagedProvider::Msp(msp_handler)) = &mut self.maybe_managed_provider {
+                    debug!(
+                        target: LOG_TARGET,
+                        "✅ Finalized file key {:?} as Accepted",
+                        file_key
+                    );
+                    msp_handler
+                        .file_key_statuses
+                        .insert(file_key, FileKeyStatus::Accepted);
                 }
             }
             StorageEnableEvents::FileSystem(
@@ -255,7 +287,22 @@ where
                 },
             ) => {
                 // Process either InternalError or RequestExpire if this provider is managing the bucket.
-                if managed_msp_id == &msp_id {
+                if msp_id == managed_msp_id {
+                    // Finalize rejected storage request: transition from Submitted to Rejected
+                    let file_key_h256: FileKey = file_key.into();
+                    if let Some(ManagedProvider::Msp(msp_handler)) =
+                        &mut self.maybe_managed_provider
+                    {
+                        debug!(
+                            target: LOG_TARGET,
+                            "❌ Finalized file key {:?} as Rejected",
+                            file_key_h256
+                        );
+                        msp_handler
+                            .file_key_statuses
+                            .insert(file_key_h256, FileKeyStatus::Rejected);
+                    }
+
                     self.emit(FinalisedStorageRequestRejected {
                         file_key: file_key.into(),
                         provider_id: msp_id.into(),
@@ -274,7 +321,7 @@ where
                 let buckets_managed_by_msp =
             self.client
                     .runtime_api()
-                    .query_buckets_for_msp(*block_hash, managed_msp_id)
+                    .query_buckets_for_msp(*block_hash, &managed_msp_id)
                     .inspect_err(|e| error!(target: LOG_TARGET, "Runtime API call failed while querying buckets for MSP [{:?}]: {:?}", managed_msp_id, e))
                     .ok()
                     .and_then(|api_result| {
@@ -313,7 +360,7 @@ where
                         },
                     ) => {
                         // As an MSP, this node is interested in the event only if this node is the new MSP.
-                        if managed_msp_id == &new_msp_id {
+                        if managed_msp_id == new_msp_id {
                             self.emit(MoveBucketRequestedForMsp {
                                 bucket_id,
                                 value_prop_id: new_value_prop_id,
@@ -393,16 +440,16 @@ where
         // At this point we know that the lock is released and we can start processing new requests.
         let mut next_event_data: Option<ForestWriteLockTaskData<Runtime>> = None;
 
+        let msp_handler = match &mut self.maybe_managed_provider {
+            Some(ManagedProvider::Msp(msp_handler)) => msp_handler,
+            _ => {
+                // If there's no MSP being managed, there's no point in checking for pending requests.
+                return;
+            }
+        };
+
         // Check for pending respond storing requests from in-memory queue.
         {
-            let msp_handler = match &mut self.maybe_managed_provider {
-                Some(ManagedProvider::Msp(msp_handler)) => msp_handler,
-                _ => {
-                    // If there's no MSP being managed, there's no point in checking for pending requests.
-                    return;
-                }
-            };
-
             trace!(
                 target: LOG_TARGET,
                 "Checking pending respond storage requests. Queue size: {}, pending_file_keys: {:?}",
@@ -653,15 +700,20 @@ where
     /// and for each eligible file delegates to [`distribute_file_to_bsps`] which emits
     /// a `DistributeFileToBsp` event per volunteering BSP (avoiding duplicates).
     ///
+    /// Parameters:
     /// - `block_hash`: Block hash used to perform consistent runtime API queries.
+    /// - `msp_id`: The MSP ID of the provider this node is managing.
     ///
     /// Behaviour:
-    /// - No-ops with an error log if the node is not managing an MSP.
     /// - Logs and returns early if runtime API calls fail.
     /// - Safe to call repeatedly; per-file deduplication is enforced downstream using
     ///   the in-memory `files_to_distribute` state to not spawn duplicate tasks or
     ///   re-emit for already-confirmed BSPs.
-    pub(crate) fn spawn_distribute_file_to_bsps_tasks(&mut self, block_hash: &Runtime::Hash) {
+    pub(crate) fn spawn_distribute_file_to_bsps_tasks(
+        &mut self,
+        block_hash: &Runtime::Hash,
+        msp_id: MainStorageProviderId<Runtime>,
+    ) {
         debug!(target: LOG_TARGET, "Spawning distribute file to BSPs tasks");
 
         // Followers do not distribute files to BSPs.
@@ -675,14 +727,6 @@ where
             debug!(target: LOG_TARGET, "MSP file distribution disabled by configuration. Skipping distribution scan.");
             return;
         }
-
-        let managed_msp_id = match &self.maybe_managed_provider {
-            Some(ManagedProvider::Msp(msp_handler)) => msp_handler.msp_id.clone(),
-            _ => {
-                error!(target: LOG_TARGET, "`spawn_distribute_file_to_bsps_tasks` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
-                return;
-            }
-        };
 
         // Exit early if the MSP node peer ID is not set, meaning it is not meant to be a distributor.
         // Clone to avoid holding an immutable borrow of `self` across the loop below where we need `&mut self`.
@@ -698,11 +742,11 @@ where
         let pending_storage_requests_for_this_msp = match self
             .client
             .runtime_api()
-            .storage_requests_by_msp(*block_hash, managed_msp_id)
+            .storage_requests_by_msp(*block_hash, msp_id)
         {
             Ok(pending_storage_requests) => pending_storage_requests,
             Err(e) => {
-                error!(target: LOG_TARGET, "Failed to execute runtime API call to get pending storage requests for MSP [{:?}]: {:?}", managed_msp_id, e);
+                error!(target: LOG_TARGET, "Failed to execute runtime API call to get pending storage requests for MSP [{:?}]: {:?}", msp_id, e);
                 return;
             }
         };
@@ -756,7 +800,7 @@ where
 								.peekable();
 
         if storage_requests_to_distribute.peek().is_none() {
-            debug!(target: LOG_TARGET, "No storage requests to distribute for MSP [{:?}]", managed_msp_id);
+            debug!(target: LOG_TARGET, "No storage requests to distribute for MSP [{:?}]", msp_id);
             return;
         }
 
@@ -850,53 +894,166 @@ where
         }
     }
 
-    /// Monitor new blocks for batch storage request processing.
+    /// Process pending storage requests for the given MSP.
     ///
-    /// Emits a [`BatchProcessStorageRequests`] event on each block if no batch processing is currently running.
+    /// Queries pending storage requests and emits a [`NewStorageRequest`] event for file keys
+    /// that are not already being processed. This mirrors the pattern used by
+    /// [`distribute_file_to_bsps`] with [`files_to_distribute`].
     ///
-    /// The [`batch_processing_semaphore`](`crate::types::MspHandler::batch_processing_semaphore`) permit is passed
-    /// through the [`BatchProcessStorageRequests`] event and automatically released when the event handler completes or fails.
-    /// This semaphore ensures that only a single batch processing cycle is running at a time.
-    pub(crate) fn msp_monitor_block(&mut self) {
-        let managed_msp = match &mut self.maybe_managed_provider {
-            Some(ManagedProvider::Msp(msp_handler)) => msp_handler,
-            _ => {
-                trace!(target: LOG_TARGET, "`msp_monitor_block` called but node is not managing an MSP");
+    /// ## Status Tracking
+    ///
+    /// The status tracking prevents duplicate processing:
+    /// - File keys with any status (`Processing`, `Submitted`, `Accepted`, `Rejected`, `Abandoned`) are skipped
+    /// - New file keys are marked as `Processing` when emitting the event
+    /// - Tasks update statuses via commands as they process requests
+    /// - The blockchain service transitions `Submitted` → `Accepted`/`Rejected` on finality events
+    ///
+    /// ## Reorg Detection
+    ///
+    /// This function detects reorgs by checking for `Submitted` file keys that still appear in
+    /// pending storage requests. A file key in `Submitted` status means its accept/reject tx was
+    /// included in a block. If that file key is still pending, the block was reorged out.
+    /// In this case, the file key is removed from statuses to enable automatic retry.
+    ///
+    /// ## Cleanup
+    ///
+    /// Stale entries (file keys no longer in pending requests) are removed regardless of status.
+    /// If a file key is not pending, its storage request lifecycle is complete.
+    fn handle_pending_storage_requests(&mut self, msp_id: MainStorageProviderId<Runtime>) {
+        let current_block_hash = self.client.info().best_hash;
+
+        // Query pending storage requests (not yet accepted by MSP)
+        let storage_requests = match self
+            .client
+            .runtime_api()
+            .pending_storage_requests_by_msp(current_block_hash, msp_id)
+        {
+            Ok(sr) => sr,
+            Err(e) => {
+                warn!(target: LOG_TARGET, "Failed to get pending storage requests: {:?}", e);
                 return;
             }
         };
 
-        // Try to acquire the semaphore permit (non-blocking)
-        // The semaphore prevents running multiple batch processing cycles concurrently
-        match managed_msp
-            .batch_processing_semaphore
-            .clone()
-            .try_acquire_owned()
-        {
-            Ok(permit) => {
+        // Filter and collect requests to emit, setting status to Processing for new ones.
+        // Also clean up stale entries from file_key_statuses.
+        let requests_to_emit: Vec<_> = {
+            let msp_handler = match &mut self.maybe_managed_provider {
+                Some(ManagedProvider::Msp(msp_handler)) => msp_handler,
+                _ => return,
+            };
+
+            // Collect the set of pending file keys for cleanup check
+            let pending_file_keys: HashSet<FileKey> = storage_requests
+                .iter()
+                .map(|(file_key, _)| (*file_key).into())
+                .collect();
+
+            // Reorg detection: Find Submitted file keys that are still in pending requests.
+            // If a file key is Submitted but still pending, the accept/reject tx was reorged out.
+            // Remove from statuses to enable automatic retry on this block.
+            let reorged_keys: Vec<_> = msp_handler
+                .file_key_statuses
+                .iter()
+                .filter_map(|(file_key, status)| {
+                    if matches!(status, FileKeyStatus::Submitted)
+                        && pending_file_keys.contains(file_key)
+                    {
+                        Some(*file_key)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            if !reorged_keys.is_empty() {
+                warn!(
+                    target: LOG_TARGET,
+                    "🔄 Detected {} file key(s) with Submitted status still pending (reorged out), enabling retry",
+                    reorged_keys.len()
+                );
+                for file_key in reorged_keys {
+                    debug!(
+                        target: LOG_TARGET,
+                        "Removing file key {:?} from statuses (reorged out, will retry)",
+                        file_key
+                    );
+                    msp_handler.file_key_statuses.remove(&file_key);
+                }
+            }
+
+            // Clean up stale entries: remove file keys that are no longer in pending requests.
+            // If a file key is not pending, its storage request lifecycle is complete and we
+            // don't need to track it anymore, regardless of its current status.
+            let stale_keys: Vec<_> = msp_handler
+                .file_key_statuses
+                .keys()
+                .filter(|file_key| !pending_file_keys.contains(*file_key))
+                .copied()
+                .collect();
+
+            if !stale_keys.is_empty() {
                 debug!(
                     target: LOG_TARGET,
-                    "Emitting BatchProcessStorageRequests event"
+                    "Cleaning up {} stale file key statuses (no longer in pending requests)",
+                    stale_keys.len()
                 );
-
-                // Wrap permit in Arc to satisfy Clone requirement for events
-                // The permit will be held by the event handler for its lifetime,
-                // automatically releasing when the handler completes or fails
-                let permit_wrapper = Arc::new(permit);
-
-                // Emit event to trigger batch processing
-                self.emit(BatchProcessStorageRequests {
-                    permit: permit_wrapper,
-                });
+                for file_key in stale_keys {
+                    trace!(target: LOG_TARGET, "Removing stale file key {:?} from statuses", file_key);
+                    msp_handler.file_key_statuses.remove(&file_key);
+                }
             }
-            Err(_) => {
-                // The permit will eventually be released, so we do nothing here and will retry next block.
-                // This is a trace message because it's expected behavior when a batch is still processing.
-                trace!(
-                    target: LOG_TARGET,
-                    "Semaphore permit is held (previous batch still processing), will retry next block"
-                );
-            }
+
+            storage_requests
+                .into_iter()
+                .filter_map(|(file_key, sr)| {
+                    let file_key_h256 = file_key.into();
+
+                    // Skip file keys that already have a status
+                    if let Some(status) = msp_handler.file_key_statuses.get(&file_key_h256) {
+                        trace!(
+                            target: LOG_TARGET,
+                            "Skipping file key {:?} - status: {:?}",
+                            file_key_h256,
+                            status
+                        );
+                        return None;
+                    }
+
+                    // Mark as Processing before emitting
+                    debug!(target: LOG_TARGET, "Processing new file key {:?}", file_key_h256);
+                    msp_handler
+                        .file_key_statuses
+                        .insert(file_key_h256, FileKeyStatus::Processing);
+
+                    Some(NewStorageRequest {
+                        who: sr.owner,
+                        file_key: file_key_h256,
+                        bucket_id: sr.bucket_id,
+                        location: sr.location,
+                        fingerprint: sr.fingerprint.as_ref().into(),
+                        size: sr.size,
+                        user_peer_ids: sr.user_peer_ids,
+                        expires_at: sr.expires_at,
+                    })
+                })
+                .collect()
+        };
+
+        if requests_to_emit.is_empty() {
+            trace!(target: LOG_TARGET, "No new storage requests to process (all already have status)");
+            return;
+        }
+
+        debug!(
+            target: LOG_TARGET,
+            "Emitting {} NewStorageRequest events (filtered from pending requests)",
+            requests_to_emit.len()
+        );
+
+        // Emit events for filtered requests
+        for request in requests_to_emit {
+            self.emit(request);
         }
     }
 }

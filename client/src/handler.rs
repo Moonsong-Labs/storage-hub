@@ -12,13 +12,13 @@ use shc_actors_framework::{
 use shc_blockchain_service::{
     capacity_manager::CapacityConfig,
     events::{
-        AcceptedBspVolunteer, BatchProcessStorageRequests, DistributeFileToBsp,
-        FinalisedBspConfirmStoppedStoring, FinalisedBucketMovedAway,
-        FinalisedBucketMutationsApplied, FinalisedMspStopStoringBucketInsolventUser,
-        FinalisedMspStoppedStoringBucket, FinalisedStorageRequestRejected,
-        FinalisedTrieRemoveMutationsAppliedForBsp, LastChargeableInfoUpdated, MoveBucketAccepted,
-        MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MoveBucketRequestedForMsp,
-        MultipleNewChallengeSeeds, NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
+        AcceptedBspVolunteer, DistributeFileToBsp, FinalisedBspConfirmStoppedStoring,
+        FinalisedBucketMovedAway, FinalisedBucketMutationsApplied,
+        FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
+        FinalisedStorageRequestRejected, FinalisedTrieRemoveMutationsAppliedForBsp,
+        LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
+        MoveBucketRequested, MoveBucketRequestedForMsp, MultipleNewChallengeSeeds,
+        NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
         ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
         ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser,
         StartMovedBucketDownload, UserWithoutFunds, VerifyMspBucketForests,
@@ -281,70 +281,35 @@ where
     fn start_msp_tasks(&self) {
         log::info!("Starting MSP tasks");
 
-        // MspUploadFileTask is triggered by a BatchProcessStorageRequests event which queries pending storage requests
-        // and emits NewStorageRequest events for each via the PreprocessStorageRequestEvent command.
-        // Each NewStorageRequest event triggers per-file capacity management and registers the user's peer address
-        // for upcoming RemoteUploadRequest events.
-        // RemoteUploadRequest events happen when the user connects to the MSP and submits chunks of the file,
-        // along with a proof of storage, which is then queued to accept the storage request.
-        // Finally once the ProcessMspRespondStoringRequest event is emitted, the MSP will respond to the user with a confirmation.
+        // MspUploadFileTask handles the file upload flow for MSPs:
+        // - NewStorageRequest events are emitted by the blockchain service for each pending storage request.
+        //   The blockchain service filters by file_key_statuses (in MspHandler) to skip already-processing
+        //   requests, then the handler triggers per-file capacity management and registers the user's peer
+        //   address for upcoming RemoteUploadRequest events.
+        // - RemoteUploadRequest events happen when the user connects to the MSP and submits chunks of the file,
+        //   along with a proof of storage, which is then queued to accept the storage request.
+        // - ProcessMspRespondStoringRequest is emitted when the MSP should respond with a confirmation.
 
-        // Create a SINGLE shared MspUploadFileTask instance for all event subscriptions.
-        // This ensures all handlers share the same `file_key_statuses` HashMap, which is critical
-        // for the retry mechanism to work correctly. Without this, each event subscription would
-        // create its own task instance with a separate HashMap, causing status updates in one
-        // handler to be invisible to others.
-        let msp_upload_task = MspUploadFileTask::new(self.clone());
-
-        // Subscribe MspUploadFileTask to RemoteUploadRequest from FileTransferService (non-critical)
-        subscribe_actor_event!(
-            event: RemoteUploadRequest<Runtime>,
-            task: (msp_upload_task.clone()),
-            service: &self.file_transfer,
-            spawner: &self.task_spawner,
-            critical: false,
-        );
-
-        // Subscribe MspUploadFileTask to BlockchainService events using the shared instance
-        subscribe_actor_event!(
-            event: BatchProcessStorageRequests,
-            task: (msp_upload_task.clone()),
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            critical: true,
-        );
-        subscribe_actor_event!(
-            event: NewStorageRequest<Runtime>,
-            task: (msp_upload_task.clone()),
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            critical: true,
-        );
-        subscribe_actor_event!(
-            event: ProcessMspRespondStoringRequest<Runtime>,
-            task: (msp_upload_task),
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            critical: true,
-        );
-
-        // RemoteUploadRequest comes from FileTransferService and requires a separate service parameter
+        // Subscribe to FileTransferService events
         subscribe_actor_event_map!(
             service: &self.file_transfer,
             spawner: &self.task_spawner,
             context: self.clone(),
             critical: false,
             [
+                RemoteUploadRequest<Runtime> => MspUploadFileTask,
                 RetryBucketMoveDownload => MspRetryBucketMoveTask,
             ]
         );
-
+        // Subscribe to BlockchainService events
         subscribe_actor_event_map!(
             service: &self.blockchain,
             spawner: &self.task_spawner,
             context: self.clone(),
             critical: true,
             [
+                NewStorageRequest<Runtime> => MspUploadFileTask,
+                ProcessMspRespondStoringRequest<Runtime> => MspUploadFileTask,
                 FinalisedBucketMovedAway<Runtime> => MspDeleteBucketTask,
                 FinalisedMspStoppedStoringBucket<Runtime> => MspDeleteBucketTask,
                 MoveBucketRequestedForMsp<Runtime> => MspRespondMoveBucketTask,

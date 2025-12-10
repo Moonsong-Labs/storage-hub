@@ -1,6 +1,10 @@
 use anyhow::anyhow;
 use futures::prelude::*;
-use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashSet},
+    path::PathBuf,
+    sync::Arc,
+};
 
 use sc_client_api::{
     BlockImportNotification, BlockchainEvents, FinalityNotification, HeaderBackend,
@@ -977,7 +981,7 @@ where
                             // We check right away if we can process the request so we don't waste time.
                             self.msp_assign_forest_root_write_lock();
                         } else {
-                            trace!(
+                            warn!(
                                 target: LOG_TARGET,
                                 "File key {:?} already pending, skipping",
                                 file_key
@@ -1342,17 +1346,15 @@ where
                         .pending_storage_requests_by_msp(current_block_hash, managed_msp_id)
                     {
                         Ok(mut sr) => {
-                            // If specific file keys provided, look them up directly
-                            match file_keys {
-                                Some(keys) => keys
+                            // If specific file keys provided, filter to only those keys
+                            if let Some(keys) = file_keys {
+                                let key_set: HashSet<_> = keys
                                     .into_iter()
-                                    .filter_map(|k| {
-                                        let file_key = sp_core::H256::from_slice(k.as_ref());
-                                        sr.remove(&file_key).map(|metadata| (file_key, metadata))
-                                    })
-                                    .collect(),
-                                None => sr,
+                                    .map(|k| sp_core::H256::from_slice(k.as_ref()))
+                                    .collect();
+                                sr.retain(|file_key, _| key_set.contains(file_key));
                             }
+                            sr
                         }
                         Err(_) => {
                             warn!(target: LOG_TARGET, "Failed to get pending storage requests");
@@ -1387,11 +1389,46 @@ where
                         }
                     }
                 }
-                BlockchainServiceCommand::PreprocessStorageRequest { request } => {
-                    // Emit the NewStorageRequest event for this storage request.
-                    // This is called by MspUploadFileTask's BatchProcessStorageRequests handler
-                    // for each pending storage request to trigger per-file processing.
-                    self.emit(request);
+                BlockchainServiceCommand::SetFileKeyStatus { file_key, status } => {
+                    if let Some(ManagedProvider::Msp(msp_handler)) =
+                        &mut self.maybe_managed_provider
+                    {
+                        trace!(
+                            target: LOG_TARGET,
+                            "Setting file key {:?} status to {:?}",
+                            file_key,
+                            status
+                        );
+                        msp_handler
+                            .file_key_statuses
+                            .insert(file_key, status.into());
+                    } else {
+                        // Fire-and-forget command, just log the invariant violation
+                        error!(
+                            target: LOG_TARGET,
+                            "SetFileKeyStatus received while not managing an MSP. \
+                             This is an invariant violation - please report to StorageHub team."
+                        );
+                    }
+                }
+                BlockchainServiceCommand::RemoveFileKeyStatus { file_key } => {
+                    if let Some(ManagedProvider::Msp(msp_handler)) =
+                        &mut self.maybe_managed_provider
+                    {
+                        trace!(
+                            target: LOG_TARGET,
+                            "Removing file key {:?} from statuses (enabling retry)",
+                            file_key
+                        );
+                        msp_handler.file_key_statuses.remove(&file_key);
+                    } else {
+                        // Fire-and-forget command, just log the invariant violation
+                        error!(
+                            target: LOG_TARGET,
+                            "RemoveFileKeyStatus received while not managing an MSP. \
+                             This is an invariant violation - please report to StorageHub team."
+                        );
+                    }
                 }
                 BlockchainServiceCommand::ReleaseForestRootWriteLock {
                     forest_root_write_tx,
@@ -1702,7 +1739,6 @@ where
                     .await;
             }
             Some(ManagedProvider::Msp(_)) => {
-                self.msp_monitor_block();
                 self.msp_end_block_processing(block_hash, block_number, tree_route)
                     .await;
             }

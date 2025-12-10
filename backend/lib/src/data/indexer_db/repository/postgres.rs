@@ -301,6 +301,7 @@ impl IndexerOpsMut for Repository {
             vec![],        // No peer_ids for simple test data
             vec![0u8; 32], // Placeholder block hash for test data
             None,          // No transaction hash for test data
+            false,         // Default to not in bucket for test data
         )
         .await?;
 

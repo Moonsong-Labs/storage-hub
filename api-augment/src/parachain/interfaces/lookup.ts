@@ -4913,7 +4913,9 @@ export default {
       "InvalidProviderID",
       "InvalidSignedOperation",
       "FileKeyMismatch",
-      "IncompleteStorageRequestNotFound"
+      "IncompleteStorageRequestNotFound",
+      "FileHasActiveStorageRequest",
+      "FileHasIncompleteStorageRequest"
     ]
   },
   /**

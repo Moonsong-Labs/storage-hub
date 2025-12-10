@@ -304,7 +304,7 @@ pub trait ReadableRocks {
         &self,
         cf: &impl AsColumnFamilyRef,
         key: impl AsRef<[u8]>,
-    ) -> Option<DBPinnableSlice>;
+    ) -> Option<DBPinnableSlice<'_>>;
 
     /// Gets an iterator over the column family.
     fn iterator_cf<'a>(
@@ -752,7 +752,7 @@ impl ReadableRocks for TypedRocksDB {
         &self,
         cf: &impl AsColumnFamilyRef,
         key: impl AsRef<[u8]>,
-    ) -> Option<DBPinnableSlice> {
+    ) -> Option<DBPinnableSlice<'_>> {
         self.db.get_pinned_cf(cf, key).expect("DB get by key")
     }
 
@@ -827,7 +827,7 @@ impl DbOverlay {
     }
 
     // Return a Ref<DbCfOverlay> instead of &DbCfOverlay
-    pub fn cf(&self, cf: &str) -> Ref<DbCfOverlay> {
+    pub fn cf(&self, cf: &str) -> Ref<'_, DbCfOverlay> {
         if !self.cfs.borrow().contains_key(cf) {
             self.cfs
                 .borrow_mut()
@@ -907,7 +907,9 @@ impl<'a, CF: SingleScaleEncodedValueCf> SingleValueScopedAccess<'a, CF> {
 /// This trait is implemented by types that can provide access to a `TypedDbContext`,
 /// which is required for interacting with the database.
 pub trait ProvidesDbContext {
-    fn db_context(&self) -> &TypedDbContext<TypedRocksDB, BufferedWriteSupport<TypedRocksDB>>;
+    fn db_context(
+        &self,
+    ) -> &TypedDbContext<'_, TypedRocksDB, BufferedWriteSupport<'_, TypedRocksDB>>;
 }
 
 /// A trait which provides access to single value CFs.
@@ -1677,7 +1679,9 @@ mod tests {
     }
 
     impl<'db> ProvidesDbContext for TestRangeMap<'db> {
-        fn db_context(&self) -> &TypedDbContext<TypedRocksDB, BufferedWriteSupport<TypedRocksDB>> {
+        fn db_context(
+            &self,
+        ) -> &TypedDbContext<'_, TypedRocksDB, BufferedWriteSupport<'_, TypedRocksDB>> {
             &self.db_context
         }
     }

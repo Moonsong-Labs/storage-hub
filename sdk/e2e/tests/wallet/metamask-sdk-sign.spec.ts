@@ -1,5 +1,10 @@
-import { type BrowserContext, type Page, test as baseTest, expect } from "@playwright/test";
-import dappwright, { type Dappwright, MetaMaskWallet } from "@tenkeylabs/dappwright";
+import {
+  type BrowserContext,
+  type Page,
+  test as baseTest,
+  expect,
+} from "@playwright/test";
+import dappwright, { type Dappwright } from "@tenkeylabs/dappwright";
 
 // Fingerprint taken from StorageHub node E2E tests
 // See: test/util/bspNet/consts.ts → TEST_ARTEFACTS["res/adolphus.jpg"].fingerprint
@@ -19,8 +24,12 @@ export const test = baseTest.extend<{
       console.log("🚀 Launching browser with MetaMask...");
       const { browserContext } = await dappwright.launch("", {
         wallet: "metamask",
-        version: MetaMaskWallet.recommendedVersion,
-        headless: false
+        // TODO: Switch back to MetaMaskWallet.recommendedVersion once dappwright fixes GitHub API pagination.
+        // See: https://github.com/TenKeyLabs/dappwright/issues/507
+        // dappwright's recommendedVersion (12.23.0) is no longer on page 1 of GitHub releases API,
+        // causing "Version not found" errors. Using 12.23.1 which is still within the pagination window.
+        version: "12.23.1",
+        headless: false,
       });
 
       const wallet = await dappwright.getWallet("metamask", browserContext);
@@ -29,7 +38,7 @@ export const test = baseTest.extend<{
       // Setup wallet with seed phrase
       await wallet.setup({
         seed: "test test test test test test test test test test test junk",
-        password: "password123"
+        password: "password123",
       });
       console.log("✅ Wallet setup with seed phrase");
 
@@ -42,14 +51,16 @@ export const test = baseTest.extend<{
 
   page: async ({ context }, use) => {
     const page = await context.newPage();
-    await page.goto("http://localhost:3000/e2e/page/index.html", { waitUntil: "domcontentloaded" });
+    await page.goto("http://localhost:3000/e2e/page/index.html", {
+      waitUntil: "domcontentloaded",
+    });
     await use(page);
   },
 
   wallet: async ({ context }, use) => {
     const metamask = await dappwright.getWallet("metamask", context);
     await use(metamask);
-  }
+  },
 });
 
 test("MetaMask + SDK", async ({ page, wallet, context: _context }) => {
@@ -57,7 +68,9 @@ test("MetaMask + SDK", async ({ page, wallet, context: _context }) => {
 
   // Ensure provider is injected
   await page.waitForLoadState();
-  await page.waitForFunction(() => (window as any).ethereum !== undefined, { timeout: 15000 });
+  await page.waitForFunction(() => (window as any).ethereum !== undefined, {
+    timeout: 15000,
+  });
   console.log("✅ Provider injected");
 
   // Click Connect on the basic dApp and approve in MetaMask
@@ -74,9 +87,12 @@ test("MetaMask + SDK", async ({ page, wallet, context: _context }) => {
   await wallet.sign();
 
   // Wait until the dApp exposes the signature and log it
-  const signature = await page.waitForFunction(() => (window as any).__lastSignature, {
-    timeout: 15000
-  });
+  const signature = await page.waitForFunction(
+    () => (window as any).__lastSignature,
+    {
+      timeout: 15000,
+    }
+  );
   const value = await signature.jsonValue();
   console.log(`✅ Message signed: ${value}`);
 
@@ -92,9 +108,12 @@ test("MetaMask + SDK", async ({ page, wallet, context: _context }) => {
   await page.waitForSelector("#fingerprint-btn", { timeout: 60000 });
   await page.click("#fingerprint-btn");
   // Wait for the fingerprint result
-  const fpHandle = await page.waitForFunction(() => (window as any).__lastFingerprint, {
-    timeout: 15000
-  });
+  const fpHandle = await page.waitForFunction(
+    () => (window as any).__lastFingerprint,
+    {
+      timeout: 15000,
+    }
+  );
   const fp = await fpHandle.jsonValue();
   console.log(`✅ Fingerprint computed: ${fp}`);
   expect(fp).toBe(EXPECTED_FINGERPRINT_HEX);

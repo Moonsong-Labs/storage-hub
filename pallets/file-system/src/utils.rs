@@ -864,6 +864,16 @@ where
             Error::<T>::BucketNotEmpty
         );
 
+        // Check if there are any open storage requests for the bucket.
+        // Do not allow a bucket to be deleted if there are any open storage requests for it.
+        // Storage requests must be revoked or fulfilled before a bucket can be deleted.
+        ensure!(
+            !<BucketsWithStorageRequests<T>>::iter_prefix(bucket_id)
+                .next()
+                .is_some(),
+            Error::<T>::StorageRequestExists
+        );
+
         // Retrieve the collection ID associated with the bucket, if any.
         let maybe_collection_id: Option<CollectionIdFor<T>> =
             <T::Providers as ReadBucketsInterface>::get_read_access_group_id_of_bucket(&bucket_id)?;
@@ -1044,6 +1054,13 @@ where
         ensure!(
             !<StorageRequests<T>>::contains_key(&file_key),
             Error::<T>::StorageRequestAlreadyRegistered
+        );
+
+        // Check that an `IncompleteStorageRequest` does not exist for this file key.
+        // If it has, the user must wait until the fisherman nodes delete the file from the BSPs and/or Bucket.
+        ensure!(
+            !<IncompleteStorageRequests<T>>::contains_key(&file_key),
+            Error::<T>::FileHasIncompleteStorageRequest
         );
 
         // Enqueue an expiration item for the storage request to clean it up if it expires without being fulfilled or cancelled.
@@ -1321,6 +1338,20 @@ where
             Error::<T>::InvalidSignedOperation
         );
 
+        // Check that the file does not have an active storage request.
+        // If it has, the user should use the `revoke_storage_request` extrinsic to revoke it first.
+        ensure!(
+            !<StorageRequests<T>>::contains_key(&signed_intention.file_key),
+            Error::<T>::FileHasActiveStorageRequest
+        );
+
+        // Check that the file does not have an `IncompleteStorageRequest` associated with it.
+        // If it has, the user must wait until the fisherman nodes delete the file from the BSPs and/or Bucket.
+        ensure!(
+            !<IncompleteStorageRequests<T>>::contains_key(&signed_intention.file_key),
+            Error::<T>::FileHasIncompleteStorageRequest
+        );
+
         // Encode the intention for signature verification
         let signed_intention_encoded = signed_intention.encode();
         // Adapt the bytes to verify depending on the runtime configuration
@@ -1451,7 +1482,6 @@ where
 
         // Collect validated file deletion data
         let mut validated_deletions = Vec::new();
-        let mut incomplete_metadatas = Vec::new();
 
         // Process each file key
         for file_key in file_keys.iter() {
@@ -1491,31 +1521,14 @@ where
                 incomplete_storage_request_metadata.file_size,
                 incomplete_storage_request_metadata.bucket_id,
             ));
-
-            incomplete_metadatas.push((*file_key, incomplete_storage_request_metadata));
         }
 
         // Delete all files from the provider's forest
+        // The deletion functions will automatically handle the cleanup of incomplete storage requests
         if let Some(bsp_id) = bsp_id {
             Self::delete_files_from_bsp(validated_deletions.as_slice(), bsp_id, forest_proof)?;
         } else {
             Self::delete_files_from_bucket(validated_deletions.as_slice(), forest_proof)?;
-        }
-
-        // Update incomplete storage request metadata for each file
-        for (file_key, mut metadata) in incomplete_metadatas {
-            if let Some(bsp_id) = bsp_id {
-                metadata.pending_bsp_removals.retain(|&id| id != bsp_id);
-            } else {
-                metadata.pending_bucket_removal = false;
-            }
-
-            // Check if all providers have removed their files
-            if metadata.pending_bsp_removals.is_empty() && !metadata.pending_bucket_removal {
-                IncompleteStorageRequests::<T>::remove(&file_key);
-            } else {
-                Self::add_incomplete_storage_request(file_key, metadata);
-            }
         }
 
         Ok(())
@@ -2747,7 +2760,26 @@ where
                     &sp_id,
                 )?;
             }
-        };
+        } else {
+            // If the provider is an MSP (so this was a bucket file deletion), check if the bucket doesn't have
+            // any more files and clean it up.
+            // A bucket is empty if its root is the default root.
+            if new_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root()
+            {
+                // Check the bucket size, to log an error if it's not zero. We can later monitor for those
+                // to detect inconsistencies.
+                let bucket_size =
+                    <T::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id)?;
+                if bucket_size != StorageDataUnit::<T>::zero() {
+                    Self::deposit_event(Event::UsedCapacityShouldBeZero {
+                        actual_used_capacity: bucket_size,
+                    });
+                }
+
+                // Delete the bucket.
+                <T::Providers as MutateBucketsInterface>::delete_bucket(bucket_id)?;
+            }
+        }
 
         Ok((sp_id, new_root))
     }
@@ -2892,6 +2924,24 @@ where
             );
             mutations.push((*file_key, TrieRemoveMutation::default().into()));
             total_size = total_size.saturating_add(*size);
+
+            // Check if there's an open storage request for this file key
+            if let Some(storage_request) = StorageRequests::<T>::get(&file_key) {
+                // If there is, remove it and issue a `IncompleteStorageRequest` with the confirmed providers
+                // This is to avoid having a situation where:
+                // - The MSP accepted the existing storage request, but it's not fulfilled yet.
+                // - A deletion requests exists for the same file key, so the file is deleted from that MSP's bucket here.
+                // - A BSP confirms the storage request, and it gets fulfilled.
+                // This would result in the file being stored by the BSP, but not by the MSP.
+                Self::add_incomplete_storage_request(
+                    *file_key,
+                    IncompleteStorageRequestMetadata::from((&storage_request, file_key)),
+                );
+                Self::cleanup_storage_request(&file_key, &storage_request);
+            }
+
+            // Remove bucket from incomplete storage request if it exists
+            Self::remove_provider_from_incomplete_storage_request(*file_key, None);
         }
 
         // Drop seen_keys to free memory - no longer needed after validation
@@ -3020,6 +3070,24 @@ where
                 .entry(owner.clone())
                 .and_modify(|s| *s = s.saturating_add(*size))
                 .or_insert(*size);
+
+            // Check if there's an open storage request for this file key
+            if let Some(storage_request) = StorageRequests::<T>::get(&file_key) {
+                // If there is, remove it and issue a `IncompleteStorageRequest` with the confirmed providers
+                // This is to avoid having a situation where:
+                // - The MSP accepted the existing storage request, but it's not fulfilled yet.
+                // - A deletion requests exists for the same file key, so the file is deleted from that MSP's bucket here.
+                // - A BSP confirms the storage request, and it gets fulfilled.
+                // This would result in the file being stored by the BSP, but not by the MSP.
+                Self::add_incomplete_storage_request(
+                    *file_key,
+                    IncompleteStorageRequestMetadata::from((&storage_request, file_key)),
+                );
+                Self::cleanup_storage_request(&file_key, &storage_request);
+            }
+
+            // Remove BSP from incomplete storage request if it exists
+            Self::remove_provider_from_incomplete_storage_request(*file_key, Some(bsp_id));
         }
 
         // Drop seen_keys to free memory - no longer needed after validation
@@ -3121,6 +3189,30 @@ where
         }
 
         Ok(())
+    }
+
+    /// Remove a provider (BSP or bucket) from an incomplete storage request.
+    /// If no more providers are pending removal, the incomplete storage request is deleted.
+    ///
+    /// # Arguments
+    /// * `file_key` - The file key for the incomplete storage request
+    /// * `provider_id` - `Some(bsp_id)` to remove a BSP, or `None` to remove the bucket
+    fn remove_provider_from_incomplete_storage_request(
+        file_key: MerkleHash<T>,
+        provider_id: Option<ProviderIdFor<T>>,
+    ) {
+        IncompleteStorageRequests::<T>::mutate(file_key, |incomplete_storage_request| {
+            if let Some(ref mut metadata) = incomplete_storage_request {
+                // Remove the provider from the pending removals
+                metadata.remove_provider(provider_id);
+
+                // Check if we have removed the file from all pending providers
+                if metadata.is_fully_cleaned() {
+                    // No more providers pending removal, so remove the incomplete storage request
+                    *incomplete_storage_request = None;
+                }
+            }
+        });
     }
 
     /// Add storage request to [`IncompleteStorageRequests`] storage and emit `IncompleteStorageRequest` event

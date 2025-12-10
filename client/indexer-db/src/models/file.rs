@@ -10,7 +10,7 @@ use shc_common::types::{FileMetadata, Fingerprint};
 
 use crate::{
     models::{Bucket, MultiAddress},
-    schema::{bucket, file, file_peer_id},
+    schema::{bucket, file, file_peer_id, msp_file},
     DbConnection,
 };
 
@@ -24,6 +24,8 @@ pub enum FileStorageRequestStep {
     Requested = 0,
     Stored = 1,
     Expired = 2,
+    Revoked = 3,
+    Rejected = 4,
 }
 
 impl TryFrom<i32> for FileStorageRequestStep {
@@ -33,6 +35,8 @@ impl TryFrom<i32> for FileStorageRequestStep {
             0 => Ok(Self::Requested),
             1 => Ok(Self::Stored),
             2 => Ok(Self::Expired),
+            3 => Ok(Self::Revoked),
+            4 => Ok(Self::Rejected),
             _ => Err(v),
         }
     }
@@ -133,6 +137,7 @@ impl File {
         peer_ids: Vec<crate::models::PeerId>,
         block_hash: Vec<u8>,
         tx_hash: Option<Vec<u8>>,
+        is_in_bucket: bool,
     ) -> Result<Self, diesel::result::Error> {
         let file = diesel::insert_into(file::table)
             .values((
@@ -146,7 +151,7 @@ impl File {
                 file::step.eq(step as i32),
                 file::deletion_status.eq(None::<i32>),
                 file::deletion_signature.eq(None::<Vec<u8>>),
-                file::is_in_bucket.eq(false),
+                file::is_in_bucket.eq(is_in_bucket),
                 file::block_hash.eq(block_hash),
                 file::tx_hash.eq(tx_hash),
             ))
@@ -218,6 +223,26 @@ impl File {
             .first(conn)
             .await?;
         Ok(file_record)
+    }
+
+    /// Check if any file record with the given file key is currently in the bucket forest.
+    ///
+    /// This is useful when creating new file records for repeated storage requests
+    /// to inherit the bucket membership status from previous requests, since for example if the
+    /// MSP was already storing the file key, the `MutationsApplied` event won't be emitted for it
+    /// so if we default `is_in_bucket` to false it would be incorrectly marked as not in the bucket.
+    pub async fn is_file_key_in_bucket<'a>(
+        conn: &mut DbConnection<'a>,
+        file_key: impl AsRef<[u8]>,
+    ) -> Result<bool, diesel::result::Error> {
+        let file_key = file_key.as_ref().to_vec();
+        let count: i64 = file::table
+            .filter(file::file_key.eq(file_key))
+            .filter(file::is_in_bucket.eq(true))
+            .count()
+            .get_result(conn)
+            .await?;
+        Ok(count > 0)
     }
 
     pub async fn update_step<'a>(
@@ -302,6 +327,22 @@ impl File {
         Ok(count > 0)
     }
 
+    /// Check if a file has any MSP associations
+    ///
+    /// TODO: This check is not used for now, but should be used in the future to prevent the
+    /// indexer from trying to delete a file that still has associations and getting stuck.
+    pub async fn has_msp_associations<'a>(
+        conn: &mut DbConnection<'a>,
+        file_id: i64,
+    ) -> Result<bool, diesel::result::Error> {
+        let count: i64 = msp_file::table
+            .filter(msp_file::file_id.eq(file_id))
+            .count()
+            .get_result(conn)
+            .await?;
+        Ok(count > 0)
+    }
+
     /// Delete file only if it has no BSP associations and is not in the bucket forest.
     /// The flag [`is_in_bucket`](File::is_in_bucket) is set to false or true based on the [`MutationsApplied`] event emitted by the proofs dealer pallet for catch all.
     /// Returns true if all files associated with the file key were deleted, false if any still has associations.
@@ -323,7 +364,13 @@ impl File {
             let has_bsp = Self::has_bsp_associations(conn, file_record.id).await?;
             let is_in_bucket = file_record.is_in_bucket;
 
-            if !is_in_bucket && !has_bsp {
+            // Check if file has an active storage request that's not marked for deletion
+            // This prevents race conditions where deletion events arrive before confirmation events
+            let has_active_storage_request = file_record.step
+                == FileStorageRequestStep::Requested as i32
+                && file_record.deletion_status.is_none();
+
+            if !is_in_bucket && !has_bsp && !has_active_storage_request {
                 Self::delete(conn, file_record.id).await?;
                 log::debug!(
                     "Deleted orphaned file key: {:?} and id: {:?}",
@@ -332,11 +379,12 @@ impl File {
                 );
             } else {
                 log::debug!(
-                		"File with key {:?} and id {:?} still has storage (in_bucket: {}, BSP: {}), keeping it",
+                		"File with key {:?} and id {:?} still has storage (in_bucket: {}, BSP: {}, active_request: {}), keeping it",
                 		file_record.file_key,
                 		file_record.id,
                 		is_in_bucket,
                 		has_bsp,
+                		has_active_storage_request,
             		);
                 deleted_all = false;
             }
@@ -625,8 +673,10 @@ impl File {
     /// Update the bucket membership status for a file.
     ///
     /// Updates `is_in_bucket` based on mutations applied to the bucket's forest.
-    /// The file is identified by both `file_key` and `onchain_bucket_id` to ensure
-    /// we're updating the correct file-bucket relationship.
+    /// The file is identified by both `file_key` and `onchain_bucket_id`.
+    ///
+    /// This updates all file records with the same file key (for cases where there were
+    /// multiple storage requests for the same file).
     pub async fn update_bucket_membership<'a>(
         conn: &mut DbConnection<'a>,
         file_key: impl AsRef<[u8]>,
@@ -636,7 +686,8 @@ impl File {
         let file_key = file_key.as_ref().to_vec();
         let onchain_bucket_id = onchain_bucket_id.as_ref().to_vec();
 
-        // Get the file info
+        // Get the file info (bucket ID and size) from one of the file records since
+        // all records should have the same values
         let file_info: Option<(i64, i64)> = file::table
             .filter(file::file_key.eq(&file_key))
             .filter(file::onchain_bucket_id.eq(&onchain_bucket_id))
@@ -645,7 +696,7 @@ impl File {
             .await
             .optional()?;
 
-        // Update the file's bucket membership status
+        // Update all file records with this file key to have the new bucket membership status
         diesel::update(file::table)
             .filter(file::file_key.eq(&file_key))
             .filter(file::onchain_bucket_id.eq(&onchain_bucket_id))
