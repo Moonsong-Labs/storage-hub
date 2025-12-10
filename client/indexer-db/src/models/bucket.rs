@@ -180,11 +180,11 @@ impl Bucket {
     /// Only counts unique files (by file_key) since the same file can appear multiple times.
     pub async fn sync_stats<'a>(
         conn: &mut DbConnection<'a>,
-        bucket_id: i64,
+        onchain_bucket_id: Vec<u8>,
     ) -> Result<(), diesel::result::Error> {
         // Get unique files by file_key that are currently in the bucket
         let unique_files: Vec<File> = file::table
-            .filter(file::bucket_id.eq(bucket_id))
+            .filter(file::onchain_bucket_id.eq(onchain_bucket_id.clone()))
             .filter(file::is_in_bucket.eq(true))
             .distinct_on(file::file_key)
             .select(File::as_select())
@@ -198,7 +198,7 @@ impl Bucket {
             .sum();
 
         diesel::update(bucket::table)
-            .filter(bucket::id.eq(bucket_id))
+            .filter(bucket::onchain_bucket_id.eq(onchain_bucket_id))
             .set((
                 bucket::file_count.eq(count),
                 bucket::total_size.eq(total_size),

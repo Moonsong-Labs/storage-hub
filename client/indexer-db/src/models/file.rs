@@ -686,16 +686,6 @@ impl File {
         let file_key = file_key.as_ref().to_vec();
         let onchain_bucket_id = onchain_bucket_id.as_ref().to_vec();
 
-        // Get the file info (bucket ID and size) from one of the file records since
-        // all records should have the same values
-        let bucket_id: Option<i64> = file::table
-            .filter(file::file_key.eq(&file_key))
-            .filter(file::onchain_bucket_id.eq(&onchain_bucket_id))
-            .select(file::bucket_id)
-            .first(conn)
-            .await
-            .optional()?;
-
         // Update all file records with this file key to have the new bucket membership status
         diesel::update(file::table)
             .filter(file::file_key.eq(&file_key))
@@ -705,9 +695,7 @@ impl File {
             .await?;
 
         // Update the bucket stats to reflect the change in bucket membership
-        if let Some(bucket_id) = bucket_id {
-            Bucket::sync_stats(conn, bucket_id).await?
-        }
+        Bucket::sync_stats(conn, onchain_bucket_id).await?;
 
         Ok(())
     }
