@@ -688,11 +688,13 @@ where
                     // Proof errors are transient and can be retried with regenerated proofs (direct requeue).
                     // Non-proof errors are permanent failures (mark as Abandoned).
                     // Convert the dispatch error into StorageEnableErrors for type-safe pattern matching.
+                    // Uses TryFrom to decode ModuleError into RuntimeError, then Into to convert to StorageEnableErrors.
                     let error: Option<StorageEnableErrors<Runtime>> = match dispatch_error {
-                        sp_runtime::DispatchError::Module(module_error) => Some(
-                            <Runtime as StorageEnableRuntime>::ModuleError::from(module_error)
-                                .into(),
-                        ),
+                        sp_runtime::DispatchError::Module(module_error) => {
+                            <Runtime as StorageEnableRuntime>::RuntimeError::try_from(module_error)
+                                .ok()
+                                .map(Into::into)
+                        }
                         _ => None,
                     };
 
