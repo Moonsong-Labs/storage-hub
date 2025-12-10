@@ -224,10 +224,7 @@ where
             )
             .await
             {
-                warn!(
-                    "Failed to spawn trusted file transfer server: {}. Continuing without it.",
-                    e
-                );
+                panic!("Failed to spawn trusted file transfer server: {}", e);
             }
         }
     }

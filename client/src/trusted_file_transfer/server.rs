@@ -131,7 +131,7 @@ where
 
     tokio::spawn(async move {
         if let Err(e) = axum::serve(listener, app).await {
-            warn!(
+            error!(
                 target: LOG_TARGET,
                 error = %e,
                 "Trusted file transfer HTTP server error"
