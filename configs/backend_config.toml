@@ -59,6 +59,9 @@ verify_tls = true
 # URL for node to communicate with the backend (e.g for uploading a file)
 # e.g: if running an msp in a container: http://host.docker.internal:8080
 callback_url = "http://localhost:8080"
+# URL for the MSP trusted file transfer server
+# This is the endpoint where file uploads will be sent
+trusted_file_transfer_server_url = "http://localhost:7070"
 # Number of retry attempts for file upload operations (default: 3)
 # Increase for unreliable network conditions
 upload_retry_attempts = 3
