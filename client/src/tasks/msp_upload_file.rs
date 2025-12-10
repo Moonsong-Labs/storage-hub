@@ -58,13 +58,13 @@
 //!
 //! The blockchain service filters pending storage requests before emitting events:
 //!
-//! | Status | Meaning | Action in BlockchainService |
-//! |--------|---------|------------------------------|
-//! | [`FileKeyStatus::Processing`] | File key is in the pipeline | **Skip** (don't emit) |
-//! | [`FileKeyStatus::Accepted`] | Successfully accepted on-chain | **Skip** (don't emit) |
-//! | [`FileKeyStatus::Rejected`] | Rejected on-chain | **Skip** (don't emit) |
-//! | [`FileKeyStatus::Abandoned`] | Failed with non-proof dispatch error | **Skip** (don't emit) |
-//! | *Not present* | New or retryable file key | **Emit** (set status to `Processing`) |
+//! | Status                        | Meaning                             | Action in BlockchainService            |  
+//! | ----------------------------- | ----------------------------------- | -------------------------------------- |  
+//! | [`FileKeyStatus::Processing`] | File key is in the pipeline         | **Skip** (don't emit)                  |  
+//! | [`FileKeyStatus::Accepted`]   | Successfully accepted on-chain      | **Skip** (don't emit)                  |  
+//! | [`FileKeyStatus::Rejected`]   | Rejected on-chain                   | **Skip** (don't emit)                  |  
+//! | [`FileKeyStatus::Abandoned`]  | Failed with non-proof dispatch error| **Skip** (don't emit)                  |  
+//! | *Not present*                 | New or retryable file key           | **Emit** (set status to `Processing`)  |  
 //!
 //! ### Retry Mechanism
 //!
@@ -196,11 +196,11 @@ impl RejectionInfo {
 ///
 /// # Event Handlers
 ///
-/// | Event | Purpose |
-/// |-------|---------|
-/// | [`NewStorageRequest`] | Emitted by BlockchainService; checks status, handles capacity/upload |
-/// | [`RemoteUploadRequest`] | Chunk reception; queues accept when file complete |
-/// | [`ProcessMspRespondStoringRequest`] | Batched on-chain response submission |
+/// | Event                               | Purpose                                                              |
+/// | ----------------------------------- | -------------------------------------------------------------------- |
+/// | [`NewStorageRequest`]               | Emitted by BlockchainService; checks status, handles capacity/upload |
+/// | [`RemoteUploadRequest`]             | Chunk reception; queues accept when file complete                    |
+/// | [`ProcessMspRespondStoringRequest`] | Batched on-chain response submission                                 |
 ///
 /// # Status Tracking
 ///
