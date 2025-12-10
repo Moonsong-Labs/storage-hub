@@ -182,9 +182,10 @@ impl Bucket {
         conn: &mut DbConnection<'a>,
         bucket_id: i64,
     ) -> Result<(), diesel::result::Error> {
-        // Get unique files by file_key
+        // Get unique files by file_key that are currently in the bucket
         let unique_files: Vec<File> = file::table
             .filter(file::bucket_id.eq(bucket_id))
+            .filter(file::is_in_bucket.eq(true))
             .distinct_on(file::file_key)
             .select(File::as_select())
             .load(conn)

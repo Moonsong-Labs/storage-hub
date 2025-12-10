@@ -512,12 +512,16 @@ impl IndexerOpsMut for MockRepository {
 
         self.files.write().await.insert(id, file.clone());
 
-        // Sync file count and total size by calculating from actual files (distinct by file_key)
+        // Sync file count and total size by calculating from actual files
+        // (distinct by file_key, only those with is_in_bucket = true)
         let files = self.files.read().await;
         let mut seen_file_keys = std::collections::HashSet::new();
         let mut count = 0i64;
         let mut total_size = 0i64;
-        for f in files.values().filter(|f| f.bucket_id == bucket_id) {
+        for f in files
+            .values()
+            .filter(|f| f.bucket_id == bucket_id && f.is_in_bucket)
+        {
             if seen_file_keys.insert(f.file_key.clone()) {
                 count += 1;
                 total_size += f.size;
@@ -541,11 +545,15 @@ impl IndexerOpsMut for MockRepository {
         if let Some((id, bucket_id)) = file_to_remove {
             files.remove(&id);
 
-            // Sync file count and total size by calculating from actual files (distinct by file_key)
+            // Sync file count and total size by calculating from actual files
+            // (distinct by file_key, only those with is_in_bucket = true)
             let mut seen_file_keys = std::collections::HashSet::new();
             let mut count = 0i64;
             let mut total_size = 0i64;
-            for f in files.values().filter(|f| f.bucket_id == bucket_id) {
+            for f in files
+                .values()
+                .filter(|f| f.bucket_id == bucket_id && f.is_in_bucket)
+            {
                 if seen_file_keys.insert(f.file_key.clone()) {
                     count += 1;
                     total_size += f.size;
