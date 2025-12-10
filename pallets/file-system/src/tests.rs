@@ -15348,28 +15348,12 @@ mod delete_files_for_incomplete_storage_request_tests {
 
                 // Manually update storage request to simulate MSP confirming with non-inclusion proof
                 // (file was newly added to bucket)
-                let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
-                StorageRequests::<Test>::insert(
-                    file_key,
-                    StorageRequestMetadata {
-                        requested_at: current_tick,
-                        owner: owner.clone(),
-                        bucket_id,
-                        location: location.clone(),
-                        fingerprint,
-                        size,
-                        msp: Some((msp_id, true)), // MSP confirmed
-                        user_peer_ids: PeerIds::<Test>::try_from(vec![]).unwrap(),
-                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
-                        bsps_confirmed: 1,
-                        bsps_volunteered: 1,
-                        expires_at: current_tick + 100,
-                        deposit_paid: 0,
-                        msp_accepted_with_inclusion_proof: false, // MSP confirmed with non-inclusion proof
-                    },
-                );
+								let mut storage_request_metadata = StorageRequests::<Test>::get(&file_key).unwrap();
+								storage_request_metadata.msp = Some((msp_id, true));
+								storage_request_metadata.msp_accepted_with_inclusion_proof = false;
+								StorageRequests::<Test>::insert(file_key, storage_request_metadata);
 
-                // Delete file from bucket (simulating bucket deletion before storage request is fulfilled)
+                // Delete the file from the BSP
                 // This should create an incomplete storage request
                 let (signed_delete_intention, signature) =
                     create_file_deletion_signature(&Keyring::Alice, file_key);
@@ -15390,7 +15374,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                     }]
                     .try_into()
                     .unwrap(),
-                    None,
+                    Some(bsp_id),
                     forest_proof_delete,
                 ));
 
@@ -15409,10 +15393,12 @@ mod delete_files_for_incomplete_storage_request_tests {
                     true,
                     "pending_bucket_removal should be true when MSP confirmed with non-inclusion proof"
                 );
+
+								// And `pending_bsp_removals` should be empty as we deleted the file from the BSP
                 assert_eq!(
                     incomplete_storage_request.pending_bsp_removals,
-                    vec![bsp_id],
-                    "BSP should still be in pending removals"
+                    vec![],
+                    "BSP should be removed from pending removals"
                 );
             });
         }
