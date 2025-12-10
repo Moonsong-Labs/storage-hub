@@ -171,8 +171,9 @@ where
     /// Runs at the end of every block import for a MSP.
     ///
     /// Steps:
-    /// 1. Check for BSPs who volunteered for files this MSP has to distribute, and spawn task
-    /// to distribute them.
+    /// 1. Monitor for new pending storage requests and emit events for processing.
+    /// 2. Check for BSPs who volunteered for files this MSP has to distribute, and spawn task
+    ///    to distribute them.
     pub(crate) async fn msp_end_block_processing<Block>(
         &mut self,
         block_hash: &Runtime::Hash,
@@ -181,7 +182,19 @@ where
     ) where
         Block: BlockT<Hash = Runtime::Hash>,
     {
-        self.spawn_distribute_file_to_bsps_tasks(block_hash);
+        let managed_msp_id = match &self.maybe_managed_provider {
+            Some(ManagedProvider::Msp(msp_handler)) => msp_handler.msp_id.clone(),
+            _ => {
+                trace!(target: LOG_TARGET, "`msp_end_block_processing` called but node is not managing an MSP");
+                return;
+            }
+        };
+
+        // Monitor for new pending storage requests
+        self.handle_pending_storage_requests(managed_msp_id.clone());
+
+        // Distribute files to BSPs
+        self.spawn_distribute_file_to_bsps_tasks(block_hash, managed_msp_id);
     }
 
     /// Processes finality events that are only relevant for an MSP.
@@ -393,16 +406,16 @@ where
         // At this point we know that the lock is released and we can start processing new requests.
         let mut next_event_data: Option<ForestWriteLockTaskData<Runtime>> = None;
 
+        let msp_handler = match &mut self.maybe_managed_provider {
+            Some(ManagedProvider::Msp(msp_handler)) => msp_handler,
+            _ => {
+                // If there's no MSP being managed, there's no point in checking for pending requests.
+                return;
+            }
+        };
+
         // Check for pending respond storing requests from in-memory queue.
         {
-            let msp_handler = match &mut self.maybe_managed_provider {
-                Some(ManagedProvider::Msp(msp_handler)) => msp_handler,
-                _ => {
-                    // If there's no MSP being managed, there's no point in checking for pending requests.
-                    return;
-                }
-            };
-
             trace!(
                 target: LOG_TARGET,
                 "Checking pending respond storage requests. Queue size: {}, pending_file_keys: {:?}",
@@ -653,15 +666,20 @@ where
     /// and for each eligible file delegates to [`distribute_file_to_bsps`] which emits
     /// a `DistributeFileToBsp` event per volunteering BSP (avoiding duplicates).
     ///
+    /// Parameters:
     /// - `block_hash`: Block hash used to perform consistent runtime API queries.
+    /// - `msp_id`: The MSP ID of the provider this node is managing.
     ///
     /// Behaviour:
-    /// - No-ops with an error log if the node is not managing an MSP.
     /// - Logs and returns early if runtime API calls fail.
     /// - Safe to call repeatedly; per-file deduplication is enforced downstream using
     ///   the in-memory `files_to_distribute` state to not spawn duplicate tasks or
     ///   re-emit for already-confirmed BSPs.
-    pub(crate) fn spawn_distribute_file_to_bsps_tasks(&mut self, block_hash: &Runtime::Hash) {
+    pub(crate) fn spawn_distribute_file_to_bsps_tasks(
+        &mut self,
+        block_hash: &Runtime::Hash,
+        msp_id: MainStorageProviderId<Runtime>,
+    ) {
         debug!(target: LOG_TARGET, "Spawning distribute file to BSPs tasks");
 
         // Followers do not distribute files to BSPs.
@@ -675,14 +693,6 @@ where
             debug!(target: LOG_TARGET, "MSP file distribution disabled by configuration. Skipping distribution scan.");
             return;
         }
-
-        let managed_msp_id = match &self.maybe_managed_provider {
-            Some(ManagedProvider::Msp(msp_handler)) => msp_handler.msp_id.clone(),
-            _ => {
-                error!(target: LOG_TARGET, "`spawn_distribute_file_to_bsps_tasks` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
-                return;
-            }
-        };
 
         // Exit early if the MSP node peer ID is not set, meaning it is not meant to be a distributor.
         // Clone to avoid holding an immutable borrow of `self` across the loop below where we need `&mut self`.
@@ -698,11 +708,11 @@ where
         let pending_storage_requests_for_this_msp = match self
             .client
             .runtime_api()
-            .storage_requests_by_msp(*block_hash, managed_msp_id)
+            .storage_requests_by_msp(*block_hash, msp_id)
         {
             Ok(pending_storage_requests) => pending_storage_requests,
             Err(e) => {
-                error!(target: LOG_TARGET, "Failed to execute runtime API call to get pending storage requests for MSP [{:?}]: {:?}", managed_msp_id, e);
+                error!(target: LOG_TARGET, "Failed to execute runtime API call to get pending storage requests for MSP [{:?}]: {:?}", msp_id, e);
                 return;
             }
         };
@@ -756,7 +766,7 @@ where
 								.peekable();
 
         if storage_requests_to_distribute.peek().is_none() {
-            debug!(target: LOG_TARGET, "No storage requests to distribute for MSP [{:?}]", managed_msp_id);
+            debug!(target: LOG_TARGET, "No storage requests to distribute for MSP [{:?}]", msp_id);
             return;
         }
 
@@ -848,21 +858,6 @@ where
                 bsp_id,
             });
         }
-    }
-
-    /// Monitor new blocks for storage request processing.
-    ///
-    /// Delegates to [`handle_pending_storage_requests`] if this node is managing an MSP.
-    pub(crate) fn msp_monitor_block(&mut self) {
-        let managed_msp_id = match &self.maybe_managed_provider {
-            Some(ManagedProvider::Msp(msp_handler)) => msp_handler.msp_id.clone(),
-            _ => {
-                trace!(target: LOG_TARGET, "`msp_monitor_block` called but node is not managing an MSP");
-                return;
-            }
-        };
-
-        self.handle_pending_storage_requests(managed_msp_id);
     }
 
     /// Process pending storage requests for the given MSP.
