@@ -320,35 +320,26 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                         event_name: "MoveBucketAccepted (new MSP)".to_string(),
                     })?;
 
-                // Handle MSP-file associations based on whether old_msp exists
+                // Delete any old MSP associations that the files in the bucket had
                 if let Some(old_msp) = old_msp {
-                    // Update existing associations from old to new MSP
-                    MspFile::update_msp_for_bucket(
-                        conn,
-                        bucket_id.as_ref(),
-                        old_msp.id,
-                        new_msp.id,
-                    )
-                    .await
-                    .map_err(|e| {
-                        IndexBlockError::EventIndexingDatabaseError {
-                            database_error: e,
-                            block_number: block_number.saturated_into(),
-                            event_name: "MoveBucketAccepted (update MSP-file associations)"
-                                .to_string(),
-                        }
-                    })?;
-                } else {
-                    // Create new associations for all files in the bucket
-                    MspFile::create_for_bucket(conn, bucket_id.as_ref(), new_msp.id)
+                    MspFile::delete_by_bucket(conn, bucket_id.as_ref(), old_msp.id)
                         .await
                         .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
                             database_error: e,
                             block_number: block_number.saturated_into(),
-                            event_name: "MoveBucketAccepted (create MSP-file associations)"
+                            event_name: "MoveBucketAccepted (delete old MSP-file associations)"
                                 .to_string(),
                         })?;
                 }
+
+                // Create new MSP associations for all files in the bucket
+                MspFile::create_for_bucket(conn, bucket_id.as_ref(), new_msp.id)
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "MoveBucketAccepted (create MSP-file associations)".to_string(),
+                    })?;
 
                 // Update bucket's MSP reference
                 Bucket::update_msp(conn, bucket_id.as_ref().to_vec(), new_msp.id)
