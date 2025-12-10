@@ -36,7 +36,8 @@
 //! │   ProcessMspRespondStoringRequest                                                │
 //! │   (batched extrinsic submission)                                                 │
 //! │          │                                                                       │
-//! │          ├─── Success ──────────► set_file_key_status(Accepted/Rejected)         │
+//! │          ├─── InBlock ──────────► set_file_key_status(Submitted)                 │
+//! │          │                        (awaiting finalization)                        │
 //! │          │                                                                       │
 //! │          ├─── Proof Error ──────► remove_file_key_status ─┐                      │
 //! │          │    (transient, retryable)                      │                      │
@@ -48,6 +49,16 @@
 //! │          │                               (will re-emit on next block)            │
 //! │          │                                                                       │
 //! │          └─── Non-proof Error ──► set_file_key_status(Abandoned)                 │
+//! │                                                                                  │
+//! │  ───────────────────────── Finality Events ─────────────────────────             │
+//! │                                                                                  │
+//! │   MspAcceptedStorageRequest (finalized) ──► Submitted → Accepted                 │
+//! │   StorageRequestRejected (finalized) ────► Submitted → Rejected                  │
+//! │                                                                                  │
+//! │  ───────────────────────── Reorg Detection ─────────────────────────             │
+//! │                                                                                  │
+//! │   Submitted file key still in pending requests ──► remove_file_key_status        │
+//! │   (enables automatic retry on next block)                                        │
 //! └──────────────────────────────────────────────────────────────────────────────────┘
 //! ```
 //!
@@ -58,13 +69,14 @@
 //!
 //! The blockchain service filters pending storage requests before emitting events:
 //!
-//! | Status                        | Meaning                             | Action in BlockchainService            |  
-//! | ----------------------------- | ----------------------------------- | -------------------------------------- |  
-//! | [`FileKeyStatus::Processing`] | File key is in the pipeline         | **Skip** (don't emit)                  |  
-//! | [`FileKeyStatus::Accepted`]   | Successfully accepted on-chain      | **Skip** (don't emit)                  |  
-//! | [`FileKeyStatus::Rejected`]   | Rejected on-chain                   | **Skip** (don't emit)                  |  
-//! | [`FileKeyStatus::Abandoned`]  | Failed with non-proof dispatch error| **Skip** (don't emit)                  |  
-//! | *Not present*                 | New or retryable file key           | **Emit** (set status to `Processing`)  |  
+//! | Status                        | Meaning                                    | Action in BlockchainService                          |  
+//! | ----------------------------- | ------------------------------------------ | -----------------------------------------------------|  
+//! | [`FileKeyStatus::Processing`] | File key is in the pipeline                | **Skip** (don't emit)                                |  
+//! | [`FileKeyStatus::Submitted`]  | Tx included in block, awaiting finality    | **Skip** (don't emit) OR **Retry** if reorg detected |  
+//! | [`FileKeyStatus::Accepted`]   | Finalized as accepted on-chain             | **Skip** (don't emit)                                |  
+//! | [`FileKeyStatus::Rejected`]   | Finalized as rejected on-chain             | **Skip** (don't emit)                                |  
+//! | [`FileKeyStatus::Abandoned`]  | Failed with non-proof dispatch error       | **Skip** (don't emit)                                |  
+//! | *Not present*                 | New or retryable file key                  | **Emit** (set status to `Processing`)                |  
 //!
 //! ### Retry Mechanism
 //!
@@ -80,8 +92,12 @@
 //!   failure may be transient (network issues, collator congestion).
 //!
 //! - **Non-proof dispatch errors** (authorization failures, invalid parameters, etc.):
-//!   File key is marked as `Abandoned` via [`TerminalFileKeyStatus`] command.
+//!   File key is marked as `Abandoned` via [`FileKeyStatusUpdate`] command.
 //!   These are permanent failures not resolved by retrying, so the file key will be skipped.
+//!
+//! - **Reorgs** (block containing accept/reject tx is reorged out): The blockchain service
+//!   detects `Submitted` file keys that still appear in pending storage requests and removes
+//!   them from statuses. This enables automatic retry on the next block.
 //!
 //! ### Event Handlers
 //!
@@ -97,7 +113,8 @@
 //!
 //! - [`ProcessMspRespondStoringRequest`]: Processes queued accept/reject responses and submits
 //!   them in a single batched `msp_respond_storage_requests_multiple_buckets` extrinsic.
-//!   Updates file key statuses via commands based on the result.
+//!   On success (InBlock), marks file keys as `Submitted`. The blockchain service then
+//!   monitors finality events to transition to `Accepted` or `Rejected`.
 
 use anyhow::anyhow;
 use std::{
@@ -109,7 +126,7 @@ use std::{
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
 use shc_blockchain_service::types::{
-    MspRespondStorageRequest, RespondStorageRequest, RetryStrategy, TerminalFileKeyStatus,
+    FileKeyStatusUpdate, MspRespondStorageRequest, RespondStorageRequest, RetryStrategy,
 };
 use shc_blockchain_service::{capacity_manager::CapacityRequestData, types::SendExtrinsicOptions};
 use sp_core::H256;
@@ -748,7 +765,7 @@ where
                                         .blockchain
                                         .set_file_key_status(
                                             fk.file_key.into(),
-                                            TerminalFileKeyStatus::Abandoned,
+                                            FileKeyStatusUpdate::Abandoned,
                                         )
                                         .await;
                                 }
@@ -763,7 +780,7 @@ where
                                     .blockchain
                                     .set_file_key_status(
                                         rejected.file_key.into(),
-                                        TerminalFileKeyStatus::Abandoned,
+                                        FileKeyStatusUpdate::Abandoned,
                                     )
                                     .await;
                             }
@@ -801,7 +818,7 @@ where
                     if !accepted.file_keys_and_proofs.is_empty() {
                         info!(
                             target: LOG_TARGET,
-                            "✅ Accepted {} file(s) for bucket {:?}",
+                            "📤 Submitted accept for {} file(s) in bucket {:?} (awaiting finalization)",
                             accepted.file_keys_and_proofs.len(),
                             response.bucket_id,
                         );
@@ -809,14 +826,14 @@ where
                         for fk in &accepted.file_keys_and_proofs {
                             trace!(
                                 target: LOG_TARGET,
-                                "Marking file key {:?} as Accepted",
+                                "Marking file key {:?} as Submitted (awaiting finalization)",
                                 fk.file_key
                             );
                             self.storage_hub_handler
                                 .blockchain
                                 .set_file_key_status(
                                     fk.file_key.into(),
-                                    TerminalFileKeyStatus::Accepted,
+                                    FileKeyStatusUpdate::Submitted,
                                 )
                                 .await;
                         }
@@ -827,7 +844,7 @@ where
                 if !response.reject.is_empty() {
                     info!(
                         target: LOG_TARGET,
-                        "❌ Rejected {} file(s) for bucket {:?}",
+                        "📤 Submitted reject for {} file(s) in bucket {:?} (awaiting finalization)",
                         response.reject.len(),
                         response.bucket_id,
                     );
@@ -835,7 +852,7 @@ where
                     for rejected in &response.reject {
                         trace!(
                             target: LOG_TARGET,
-                            "Marking file key {:?} as Rejected (reason: {:?})",
+                            "Marking file key {:?} as Submitted (rejection awaiting finalization, reason: {:?})",
                             rejected.file_key,
                             rejected.reason
                         );
@@ -843,7 +860,7 @@ where
                             .blockchain
                             .set_file_key_status(
                                 rejected.file_key.into(),
-                                TerminalFileKeyStatus::Rejected,
+                                FileKeyStatusUpdate::Submitted,
                             )
                             .await;
 
@@ -1464,7 +1481,7 @@ where
         );
         self.storage_hub_handler
             .blockchain
-            .set_file_key_status((*file_key).into(), TerminalFileKeyStatus::Rejected)
+            .set_file_key_status((*file_key).into(), FileKeyStatusUpdate::Rejected)
             .await;
 
         Ok(())

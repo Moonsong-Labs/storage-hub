@@ -805,26 +805,22 @@ impl<Runtime: StorageEnableRuntime> BspHandler<Runtime> {
 ///
 /// ## Status Transitions
 ///
-/// | Status | Meaning | Next Block Behavior |
-/// |--------|---------|---------------------|
-/// | `Processing` | File key is in the pipeline | **Skip** (already being handled) |
-/// | `Accepted` | Successfully accepted on-chain | **Skip** (completed) |
-/// | `Rejected` | Rejected on-chain | **Skip** (completed) |
-/// | `Abandoned` | Failed with non-proof dispatch error | **Skip** (permanent failure) |
-/// | Status        | Meaning                             | Next Block Behavior              |
-/// | ------------- | ----------------------------------- | -------------------------------- |
-/// | `Processing`  | File key is in the pipeline         | **Skip** (already being handled) |
-/// | `Accepted`    | Successfully accepted on-chain      | **Skip** (completed)             |
-/// | `Rejected`    | Rejected on-chain                   | **Skip** (completed)             |
-/// | `Abandoned`   | Failed with non-proof dispatch error| **Skip** (permanent failure)     |
-/// | *Not present* | New or retryable file key           | **Process** (emit event)         |
+/// | Status        | Meaning                                    | Next Block Behavior                           |
+/// | ------------- | ------------------------------------------ | ----------------------------------------------|
+/// | `Processing`  | File key is in the pipeline                | **Skip** (already being handled)              |
+/// | `Submitted`   | Tx included in block, awaiting finality    | **Skip** OR **Retry** if reorg detected       |
+/// | `Accepted`    | Finalized as accepted on-chain             | **Skip** (completed)                          |
+/// | `Rejected`    | Finalized as rejected on-chain             | **Skip** (completed)                          |
+/// | `Abandoned`   | Failed with non-proof dispatch error       | **Skip** (permanent failure)                  |
+/// | *Not present* | New or retryable file key                  | **Process** (emit event, set to `Processing`) |
 ///
 /// ## Retry Mechanism
 ///
 /// File keys are **removed** from statuses to signal they should be re-processed:
 /// - **Proof errors**: Removed to retry with regenerated proofs
 /// - **Extrinsic submission failures**: Removed to retry (may be transient)
-/// - **Non-proof dispatch errors**: Marked as `Abandoned` (permanent failure)
+/// - **Reorgs**: `Submitted` file keys still in pending requests are removed (block was reorged out)
+/// - **Non-proof dispatch errors**: Marked as `Abandoned` (permanent failure, no retry)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FileKeyStatus {
     /// File key is currently being processed (in the pipeline).
@@ -832,16 +828,26 @@ pub enum FileKeyStatus {
     /// Set **only** by the blockchain service when emitting a
     /// [`NewStorageRequest`](crate::events::NewStorageRequest) event for the file key.
     ///
-    /// Tasks cannot set this status directly—use [`TerminalFileKeyStatus`] instead.
+    /// Tasks cannot set this status directly—use [`FileKeyStatusUpdate`] instead.
     #[default]
     Processing,
-    /// File key was successfully accepted on-chain.
+    /// File key's accept/reject transaction was included in a block, awaiting finalization.
     ///
-    /// Set after `ProcessMspRespondStoringRequest` successfully submits the extrinsic.
+    /// Set by tasks after the extrinsic reaches `InBlock` status. The blockchain service
+    /// monitors for reorgs: if a `Submitted` file key still appears in pending storage
+    /// requests, it means the block was reorged out and the file key will be removed
+    /// to enable automatic retry.
+    ///
+    /// Transitions to `Accepted` or `Rejected` when the corresponding finality event
+    /// (`MspAcceptedStorageRequest` or `StorageRequestRejected`) is received.
+    Submitted,
+    /// File key was successfully accepted on-chain (finalized).
+    ///
+    /// Set when `MspAcceptedStorageRequest` finality event is received.
     Accepted,
-    /// File key was explicitly rejected on-chain (e.g., capacity issues, invalid proof).
+    /// File key was explicitly rejected on-chain (finalized).
     ///
-    /// Set after `ProcessMspRespondStoringRequest` successfully submits a rejection.
+    /// Set when `StorageRequestRejected` finality event is received.
     Rejected,
     /// File key failed with a non-proof-related dispatch error (permanent failure).
     ///
@@ -855,29 +861,36 @@ pub enum FileKeyStatus {
     Abandoned,
 }
 
-/// Terminal status for a file key, settable by tasks via [`SetFileKeyStatus`](crate::commands::BlockchainServiceCommand::SetFileKeyStatus).
+/// Task-settable status for a file key, used via [`SetFileKeyStatus`](crate::commands::BlockchainServiceCommand::SetFileKeyStatus).
 ///
 /// This is a subset of [`FileKeyStatus`] that excludes `Processing`, which is only
 /// set by the blockchain service when emitting [`NewStorageRequest`](crate::events::NewStorageRequest) events.
 ///
-/// This type-safe restriction ensures tasks can only transition file keys to terminal
+/// This type-safe restriction ensures tasks can only transition file keys to appropriate
 /// states, preventing accidental re-processing of already-handled requests.
+///
+/// Note: `Submitted` is included here even though it's not truly "terminal" because
+/// tasks need to set it after extrinsic inclusion. The blockchain service handles
+/// the transition from `Submitted` to `Accepted`/`Rejected` on finality events.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TerminalFileKeyStatus {
-    /// File key was successfully accepted on-chain.
+pub enum FileKeyStatusUpdate {
+    /// Transaction included in block, awaiting finalization.
+    Submitted,
+    /// File key was successfully accepted on-chain (finalized).
     Accepted,
-    /// File key was explicitly rejected on-chain.
+    /// File key was explicitly rejected on-chain (finalized).
     Rejected,
     /// File key failed with a permanent error (non-proof dispatch error).
     Abandoned,
 }
 
-impl From<TerminalFileKeyStatus> for FileKeyStatus {
-    fn from(status: TerminalFileKeyStatus) -> Self {
+impl From<FileKeyStatusUpdate> for FileKeyStatus {
+    fn from(status: FileKeyStatusUpdate) -> Self {
         match status {
-            TerminalFileKeyStatus::Accepted => FileKeyStatus::Accepted,
-            TerminalFileKeyStatus::Rejected => FileKeyStatus::Rejected,
-            TerminalFileKeyStatus::Abandoned => FileKeyStatus::Abandoned,
+            FileKeyStatusUpdate::Submitted => FileKeyStatus::Submitted,
+            FileKeyStatusUpdate::Accepted => FileKeyStatus::Accepted,
+            FileKeyStatusUpdate::Rejected => FileKeyStatus::Rejected,
+            FileKeyStatusUpdate::Abandoned => FileKeyStatus::Abandoned,
         }
     }
 }

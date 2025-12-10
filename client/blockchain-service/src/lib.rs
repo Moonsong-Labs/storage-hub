@@ -23,7 +23,7 @@ use shc_common::types::StorageHubClient;
 
 pub use self::{
     handler::BlockchainService,
-    types::{FileKeyStatus, TerminalFileKeyStatus},
+    types::{FileKeyStatus, FileKeyStatusUpdate},
 };
 
 pub async fn spawn_blockchain_service<FSH, Runtime>(

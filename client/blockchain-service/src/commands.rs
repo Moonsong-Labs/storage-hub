@@ -37,10 +37,10 @@ use crate::{
     handler::BlockchainService,
     transaction_manager::wait_for_transaction_status,
     types::{
-        ConfirmStoringRequest, Extrinsic, ExtrinsicResult, FileDeletionRequest, MinimalBlockInfo,
-        RespondStorageRequest, RetryStrategy, SendExtrinsicOptions, StatusToWait,
-        StopStoringForInsolventUserRequest, SubmitProofRequest, SubmittedExtrinsicInfo,
-        TerminalFileKeyStatus, WatchTransactionError,
+        ConfirmStoringRequest, Extrinsic, ExtrinsicResult, FileDeletionRequest,
+        FileKeyStatusUpdate, MinimalBlockInfo, RespondStorageRequest, RetryStrategy,
+        SendExtrinsicOptions, StatusToWait, StopStoringForInsolventUserRequest, SubmitProofRequest,
+        SubmittedExtrinsicInfo, WatchTransactionError,
     },
 };
 
@@ -201,11 +201,11 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     /// Only terminal statuses are allowed—`Processing` is set exclusively by the
     /// blockchain service when emitting [`NewStorageRequest`] events.
     ///
-    /// See [`TerminalFileKeyStatus`] for available statuses.
+    /// See [`FileKeyStatusUpdate`] for available statuses.
     #[command(mode = "FireAndForget")]
     SetFileKeyStatus {
         file_key: FileKey,
-        status: TerminalFileKeyStatus,
+        status: FileKeyStatusUpdate,
     },
     /// Remove a file key from the status tracking.
     ///

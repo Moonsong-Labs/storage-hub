@@ -209,7 +209,7 @@ impl FileDeletionRequestRightIndexName {
 
 // Deprecated column families - kept for backward compatibility with existing RocksDB databases.
 // The functionality has been replaced with in-memory queueing in `MspHandler`.
-#[allow(deprecated)]
+#[allow(deprecated, dead_code)]
 mod deprecated_cfs {
     use super::*;
 
