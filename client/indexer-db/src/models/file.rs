@@ -251,8 +251,20 @@ impl File {
         step: FileStorageRequestStep,
     ) -> Result<(), diesel::result::Error> {
         let file_key = file_key.as_ref().to_vec();
+
+        // Get the ID of the latest file record for this file key
+        // Step changes only apply to the currently active storage request,
+        // which always corresponds to the most recent file record
+        let latest_file_id: i64 = file::table
+            .filter(file::file_key.eq(&file_key))
+            .order(file::created_at.desc())
+            .select(file::id)
+            .first(conn)
+            .await?;
+
+        // Update only the latest file record
         diesel::update(file::table)
-            .filter(file::file_key.eq(file_key))
+            .filter(file::id.eq(latest_file_id))
             .set(file::step.eq(step as i32))
             .execute(conn)
             .await?;
