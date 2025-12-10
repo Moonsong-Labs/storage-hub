@@ -31,7 +31,9 @@ where
         let bytes = try_bytes?;
         buffer.extend_from_slice(&bytes);
 
-        while buffer.len() >= CHUNK_ID_SIZE + (FILE_CHUNK_SIZE as usize) {
+            // Here we call with cap_at_file_chunk_size = true because we want to read chunk by chunk.
+            // If there are remaining bytes in the buffer, they could belong to half a chunk that will be
+            // filled in the next iteration of the `while let Some(try_bytes) = request_stream.next().await` loop.
             let (chunk_id, chunk_data) = read_chunk_with_id_from_buffer(&mut buffer, true)?;
             last_write_outcome =
                 write_chunk(file_storage, file_key, &chunk_id, &chunk_data).await?;
