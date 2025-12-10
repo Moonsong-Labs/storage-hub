@@ -503,12 +503,14 @@ impl RetryStrategy {
         self
     }
 
-    /// Sets [`Self::should_retry`] to retry only if the extrinsic times out.
+    /// Sets [`Self::should_retry`] to retry only if the extrinsic submission times out.
     ///
-    /// This means that the extrinsic will not be sent again if, for example, it
-    /// is included in a block but it fails.
+    /// This is the recommended retry strategy for extrinsic submissions where the extrinsic
+    /// itself is idempotent or safe to retry. Timeouts ([`WatchTransactionError::Timeout`])
+    /// are transient errors that may be resolved by retrying (e.g., network congestion,
+    /// collator unavailability).
     ///
-    /// See [`WatchTransactionError`] for other possible errors.
+    /// See [`WatchTransactionError`] for the full list of possible errors.
     pub fn retry_only_if_timeout(mut self) -> Self {
         self.should_retry = Some(Box::new(|error| {
             Box::pin(async move {
@@ -563,8 +565,16 @@ pub enum StatusToWait {
     Finalized,
 }
 
+/// Errors that can occur while watching a transaction's lifecycle.
+///
+/// These errors are used by the retry mechanism in [`RetryStrategy`] to determine
+/// whether to retry an extrinsic submission. By default, all errors cause a retry
+/// (up to `max_retries`).
 #[derive(thiserror::Error, Debug, Clone)]
 pub enum WatchTransactionError {
+    /// The transaction was not included in a block within the timeout period.
+    ///
+    /// This is a transient error that may be resolved by retrying.
     #[error("Timeout waiting for transaction to be included in a block")]
     Timeout,
     #[error("Transaction not found in the manager")]
@@ -808,7 +818,7 @@ impl<Runtime: StorageEnableRuntime> BspHandler<Runtime> {
 /// | Status        | Meaning                                    | Next Block Behavior                           |
 /// | ------------- | ------------------------------------------ | ----------------------------------------------|
 /// | `Processing`  | File key is in the pipeline                | **Skip** (already being handled)              |
-/// | `Submitted`   | Tx included in block, awaiting finality    | **Skip** OR **Retry** if reorg detected       |
+/// | `InBlock`     | Tx included in block, awaiting finality    | **Skip** OR **Retry** if reorg detected       |
 /// | `Accepted`    | Finalized as accepted on-chain             | **Skip** (completed)                          |
 /// | `Rejected`    | Finalized as rejected on-chain             | **Skip** (completed)                          |
 /// | `Abandoned`   | Failed with non-proof dispatch error       | **Skip** (permanent failure)                  |
@@ -818,8 +828,8 @@ impl<Runtime: StorageEnableRuntime> BspHandler<Runtime> {
 ///
 /// File keys are **removed** from statuses to signal they should be re-processed:
 /// - **Proof errors**: Removed to retry with regenerated proofs
-/// - **Extrinsic submission failures**: Removed to retry (may be transient)
-/// - **Reorgs**: `Submitted` file keys still in pending requests are removed (block was reorged out)
+/// - **Extrinsic submission timeouts**: Removed to retry (timeouts are transient)
+/// - **Reorgs**: `InBlock` file keys still in pending requests are removed (block was reorged out)
 /// - **Non-proof dispatch errors**: Marked as `Abandoned` (permanent failure, no retry)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FileKeyStatus {
@@ -840,7 +850,7 @@ pub enum FileKeyStatus {
     ///
     /// Transitions to `Accepted` or `Rejected` when the corresponding finality event
     /// (`MspAcceptedStorageRequest` or `StorageRequestRejected`) is received.
-    Submitted,
+    InBlock,
     /// File key was successfully accepted on-chain (finalized).
     ///
     /// Set when `MspAcceptedStorageRequest` finality event is received.
@@ -869,13 +879,13 @@ pub enum FileKeyStatus {
 /// This type-safe restriction ensures tasks can only transition file keys to appropriate
 /// states, preventing accidental re-processing of already-handled requests.
 ///
-/// Note: `Submitted` is included here even though it's not truly "terminal" because
+/// Note: `InBlock` is included here even though it's not truly "terminal" because
 /// tasks need to set it after extrinsic inclusion. The blockchain service handles
-/// the transition from `Submitted` to `Accepted`/`Rejected` on finality events.
+/// the transition from `InBlock` to `Accepted`/`Rejected` on finality events.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileKeyStatusUpdate {
     /// Transaction included in block, awaiting finalization.
-    Submitted,
+    InBlock,
     /// File key was successfully accepted on-chain (finalized).
     Accepted,
     /// File key was explicitly rejected on-chain (finalized).
@@ -887,7 +897,7 @@ pub enum FileKeyStatusUpdate {
 impl From<FileKeyStatusUpdate> for FileKeyStatus {
     fn from(status: FileKeyStatusUpdate) -> Self {
         match status {
-            FileKeyStatusUpdate::Submitted => FileKeyStatus::Submitted,
+            FileKeyStatusUpdate::InBlock => FileKeyStatus::InBlock,
             FileKeyStatusUpdate::Accepted => FileKeyStatus::Accepted,
             FileKeyStatusUpdate::Rejected => FileKeyStatus::Rejected,
             FileKeyStatusUpdate::Abandoned => FileKeyStatus::Abandoned,

@@ -36,7 +36,7 @@
 //! │   ProcessMspRespondStoringRequest                                                │
 //! │   (batched extrinsic submission)                                                 │
 //! │          │                                                                       │
-//! │          ├─── InBlock ──────────► set_file_key_status(Submitted)                 │
+//! │          ├─── InBlock ──────────► set_file_key_status(InBlock)                   │
 //! │          │                        (awaiting finalization)                        │
 //! │          │                                                                       │
 //! │          ├─── Proof Error ──────► remove_file_key_status ─┐                      │
@@ -52,12 +52,12 @@
 //! │                                                                                  │
 //! │  ───────────────────────── Finality Events ─────────────────────────             │
 //! │                                                                                  │
-//! │   MspAcceptedStorageRequest (finalized) ──► Submitted → Accepted                 │
-//! │   StorageRequestRejected (finalized) ────► Submitted → Rejected                  │
+//! │   MspAcceptedStorageRequest (finalized) ──► InBlock → Accepted                   │
+//! │   StorageRequestRejected (finalized) ────► InBlock → Rejected                    │
 //! │                                                                                  │
 //! │  ───────────────────────── Reorg Detection ─────────────────────────             │
 //! │                                                                                  │
-//! │   Submitted file key still in pending requests ──► remove_file_key_status        │
+//! │   InBlock file key still in pending requests ──► remove_file_key_status          │
 //! │   (enables automatic retry on next block)                                        │
 //! └──────────────────────────────────────────────────────────────────────────────────┘
 //! ```
@@ -72,7 +72,7 @@
 //! | Status                        | Meaning                                    | Action in BlockchainService                          |  
 //! | ----------------------------- | ------------------------------------------ | -----------------------------------------------------|  
 //! | [`FileKeyStatus::Processing`] | File key is in the pipeline                | **Skip** (don't emit)                                |  
-//! | [`FileKeyStatus::Submitted`]  | Tx included in block, awaiting finality    | **Skip** (don't emit) OR **Retry** if reorg detected |  
+//! | [`FileKeyStatus::InBlock`]    | Tx included in block, awaiting finality    | **Skip** (don't emit) OR **Retry** if reorg detected |  
 //! | [`FileKeyStatus::Accepted`]   | Finalized as accepted on-chain             | **Skip** (don't emit)                                |  
 //! | [`FileKeyStatus::Rejected`]   | Finalized as rejected on-chain             | **Skip** (don't emit)                                |  
 //! | [`FileKeyStatus::Abandoned`]  | Failed with non-proof dispatch error       | **Skip** (don't emit)                                |  
@@ -87,16 +87,16 @@
 //!   `FailedToApplyDelta`): File key is **removed** from statuses via command. The next
 //!   block's processing will re-emit a [`NewStorageRequest`] event with `Processing` status.
 //!
-//! - **Extrinsic submission failures** (timeout after exhausting retries): File key is
-//!   **removed** from statuses via command. This allows retry on the next block since the
-//!   failure may be transient (network issues, collator congestion).
+//! - **Extrinsic submission timeouts**: File key is **removed** from statuses via command.
+//!   Timeouts are retried automatically (see [`RetryStrategy::retry_only_if_timeout`]) since
+//!   they are transient errors (network issues, collator congestion) that may resolve on retry.
 //!
 //! - **Non-proof dispatch errors** (authorization failures, invalid parameters, etc.):
 //!   File key is marked as `Abandoned` via [`FileKeyStatusUpdate`] command.
 //!   These are permanent failures not resolved by retrying, so the file key will be skipped.
 //!
 //! - **Reorgs** (block containing accept/reject tx is reorged out): The blockchain service
-//!   detects `Submitted` file keys that still appear in pending storage requests and removes
+//!   detects `InBlock` file keys that still appear in pending storage requests and removes
 //!   them from statuses. This enables automatic retry on the next block.
 //!
 //! ### Event Handlers
@@ -140,6 +140,7 @@ use shc_blockchain_service::{
     events::{NewStorageRequest, ProcessMspRespondStoringRequest},
 };
 use shc_common::{
+    blockchain_utils::decode_module_error,
     traits::StorageEnableRuntime,
     types::{
         FileKey, FileKeyWithProof, FileMetadata, HashT, RejectedStorageRequestReason,
@@ -616,7 +617,8 @@ where
                 ),
                 RetryStrategy::default()
                     .with_max_retries(self.config.max_try_count)
-                    .with_max_tip(self.config.max_tip.saturated_into()),
+                    .with_max_tip(self.config.max_tip.saturated_into())
+                    .retry_only_if_timeout(),
                 true, // Request events to enable type-safe error checking
             )
             .await;
@@ -688,12 +690,9 @@ where
                     // Proof errors are transient and can be retried with regenerated proofs (direct requeue).
                     // Non-proof errors are permanent failures (mark as Abandoned).
                     // Convert the dispatch error into StorageEnableErrors for type-safe pattern matching.
-                    // Uses TryFrom to decode ModuleError into RuntimeError, then Into to convert to StorageEnableErrors.
                     let error: Option<StorageEnableErrors<Runtime>> = match dispatch_error {
                         sp_runtime::DispatchError::Module(module_error) => {
-                            <Runtime as StorageEnableRuntime>::RuntimeError::try_from(module_error)
-                                .ok()
-                                .map(Into::into)
+                            decode_module_error::<Runtime>(module_error).ok()
                         }
                         _ => None,
                     };
@@ -835,7 +834,7 @@ where
                                 .blockchain
                                 .set_file_key_status(
                                     fk.file_key.into(),
-                                    FileKeyStatusUpdate::Submitted,
+                                    FileKeyStatusUpdate::InBlock,
                                 )
                                 .await;
                         }
@@ -862,7 +861,7 @@ where
                             .blockchain
                             .set_file_key_status(
                                 rejected.file_key.into(),
-                                FileKeyStatusUpdate::Submitted,
+                                FileKeyStatusUpdate::InBlock,
                             )
                             .await;
 

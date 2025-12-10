@@ -324,17 +324,17 @@ pub trait StorageEnableRuntime:
     /// Conversion to [`StorageEnableErrors`] should be simple variant matching (no byte decoding),
     /// following the same pattern as [`StorageEnableEvents`].
     ///
-    /// The `TryFrom<sp_runtime::ModuleError>` bound enables the client to decode raw module
-    /// errors into the typed `RuntimeError`. Each runtime implements this conversion separately.
+    /// # Decoding Module Errors
+    ///
+    /// To decode raw [`sp_runtime::ModuleError`] bytes into [`StorageEnableErrors`], use
+    /// [`crate::blockchain_utils::decode_module_error`]. This function uses compile-time pallet
+    /// indices to determine which pallet the error originated from and decodes accordingly.
     ///
     /// # Note
     ///
-    /// The `TryFrom` implementation uses compile-time pallet indices. For version-aware
-    /// decoding (processing blocks from different runtime versions), metadata-based decoding
-    /// should be implemented in the client layer in the future.
-    type RuntimeError: Into<StorageEnableErrors<Self>>
-        + TryFrom<sp_runtime::ModuleError>
-        + core::fmt::Debug;
+    /// For version-aware decoding (processing blocks from different runtime versions),
+    /// metadata-based decoding should be implemented in the client layer in the future.
+    type RuntimeError: Into<StorageEnableErrors<Self>> + core::fmt::Debug;
 }
 
 /// Trait for abstracting key type operations to support multiple cryptographic schemes.
