@@ -359,35 +359,26 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                         event_name: "MoveBucketAccepted (new MSP)".to_string(),
                     })?;
 
-                // Handle MSP-file associations based on whether old_msp exists
+                // Delete any old MSP associations that the files in the bucket had
                 if let Some(old_msp) = old_msp {
-                    // Update existing associations from old to new MSP
-                    MspFile::update_msp_for_bucket(
-                        conn,
-                        bucket_id.as_ref(),
-                        old_msp.id,
-                        new_msp.id,
-                    )
-                    .await
-                    .map_err(|e| {
-                        IndexBlockError::EventIndexingDatabaseError {
-                            database_error: e,
-                            block_number: block_number.saturated_into(),
-                            event_name: "MoveBucketAccepted (update MSP-file associations)"
-                                .to_string(),
-                        }
-                    })?;
-                } else {
-                    // Create new associations for all files in the bucket
-                    MspFile::create_for_bucket(conn, bucket_id.as_ref(), new_msp.id)
+                    MspFile::delete_by_bucket(conn, bucket_id.as_ref(), old_msp.id)
                         .await
                         .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
                             database_error: e,
                             block_number: block_number.saturated_into(),
-                            event_name: "MoveBucketAccepted (create MSP-file associations)"
+                            event_name: "MoveBucketAccepted (delete old MSP-file associations)"
                                 .to_string(),
                         })?;
                 }
+
+                // Create new MSP associations for all files in the bucket
+                MspFile::create_for_bucket(conn, bucket_id.as_ref(), new_msp.id)
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "MoveBucketAccepted (create MSP-file associations)".to_string(),
+                    })?;
 
                 // Update bucket's MSP reference
                 Bucket::update_msp(conn, bucket_id.as_ref().to_vec(), new_msp.id)
@@ -699,28 +690,33 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                         })?;
 
                     if is_in_bucket || has_bsp {
-                        // File is still being stored, mark for deletion
-                        File::update_deletion_status(
-                            conn,
-                            file_key.as_ref(),
-                            FileDeletionStatus::InProgress,
-                            None,
-                        )
-                        .await
-                        .map_err(|e| {
-                            IndexBlockError::EventIndexingDatabaseError {
-                                database_error: e,
-                                block_number: block_number.saturated_into(),
-                                event_name:
-                                    "IncompleteStorageRequest (update file deletion status)"
-                                        .to_string(),
-                            }
-                        })?;
+                        // File is still being stored, check if it has already been marked for deletion
+                        // and if not, mark it for deletion.
+                        // This is because a deletion request (with the user's signed intention) takes precedence,
+                        // and we don't want to clear the user's signature.
+                        if file_record.deletion_status.is_none() {
+                            File::update_deletion_status(
+                                conn,
+                                file_key.as_ref(),
+                                FileDeletionStatus::InProgress,
+                                None,
+                            )
+                            .await
+                            .map_err(|e| {
+                                IndexBlockError::EventIndexingDatabaseError {
+                                    database_error: e,
+                                    block_number: block_number.saturated_into(),
+                                    event_name:
+                                        "IncompleteStorageRequest (update file deletion status)"
+                                            .to_string(),
+                                }
+                            })?;
 
-                        log::debug!(
+                            log::debug!(
                         		"Incomplete storage request for file {:?} (id: {:?}) is still being stored (in_bucket: {}, BSP: {}), marked for deletion without signature",
                         		file_key, file_record.id, is_in_bucket, has_bsp
                     		);
+                        }
                     } else {
                         // No storage, safe to delete immediately
                         File::delete(conn, file_record.id).await.map_err(|e| {
@@ -897,6 +893,10 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 owner: _,
                 bucket_id,
             } => {
+                // In this scenario, there's no need to update the `is_in_bucket` field of the files in the bucket,
+                // since the bucket still exists and is still storing the files (according to its on-chain forest root).
+
+                // Delete the MSP-file associations for all files in the bucket
                 let msp = Msp::get_by_onchain_msp_id(conn, OnchainMspId::from(*msp_id))
                     .await
                     .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
@@ -912,6 +912,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                         event_name: "MspStoppedStoringBucket (delete MSP-file associations)"
                             .to_string(),
                     })?;
+
+                // Unset the MSP from the bucket to reflect on-chain state
                 Bucket::unset_msp(conn, bucket_id.as_ref().to_vec())
                     .await
                     .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
@@ -930,16 +932,69 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 location: _,
                 new_root: _,
             } => {
-                // We are now only deleting for BSP as BSP are associating with files
-                // MSP will handle insolvent user at the level of buckets (an MSP will delete the full bucket for an insolvent user and it will produce a new kind of event)
-                BspFile::delete_for_bsp(conn, file_key, OnchainBspId::from(*sp_id))
+                // Get the file's bucket ID before any deletions in case we have to clean up the bucket afterwards
+                let file_record = File::get_latest_by_file_key(conn, file_key.as_ref().to_vec())
+                    .await
+                    .ok();
+                let onchain_bucket_id = file_record.map(|f| f.onchain_bucket_id);
+
+                // This event can be emitted by either a BSP or MSP stopping storage for an insolvent user.
+                // We need to check which type of provider it is and handle accordingly.
+                let bsp_result = Bsp::get_by_onchain_bsp_id(conn, OnchainBspId::from(*sp_id)).await;
+
+                // If it's a BSP, delete the BSP-file association
+                if bsp_result.is_ok() {
+                    BspFile::delete_for_bsp(conn, file_key, OnchainBspId::from(*sp_id))
+                        .await
+                        .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name: "SpStopStoringInsolventUser (delete BSP-file associations)"
+                                .to_string(),
+                        })?;
+                } else {
+                    // It's an MSP, delete the MSP-file association
+                    MspFile::delete(conn, file_key.as_ref(), OnchainMspId::from(*sp_id))
+                        .await
+                        .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name: "SpStopStoringInsolventUser (delete MSP-file associations)"
+                                .to_string(),
+                        })?;
+                }
+
+                // Clean up the file if it has no remaining associations
+                File::delete_if_orphaned(conn, file_key.as_ref())
                     .await
                     .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
                         database_error: e,
                         block_number: block_number.saturated_into(),
-                        event_name: "SpStopStoringInsolventUser (delete BSP-file associations)"
+                        event_name: "SpStopStoringInsolventUser (delete file if orphaned)"
                             .to_string(),
                     })?;
+
+                // If the file was deleted and belonged to a bucket that was deleted on-chain
+                // try to clean up the bucket as well
+                if let Some(bucket_id) = onchain_bucket_id {
+                    // Only attempt bucket cleanup if the bucket has no MSP, as this means
+                    // the MSP has already deleted the bucket.
+                    if let Ok(bucket) =
+                        Bucket::get_by_onchain_bucket_id(conn, bucket_id.clone()).await
+                    {
+                        if bucket.msp_id.is_none() {
+                            Bucket::delete_if_orphaned(conn, bucket_id)
+                                .await
+                                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                                    database_error: e,
+                                    block_number: block_number.saturated_into(),
+                                    event_name:
+                                        "SpStopStoringInsolventUser (delete bucket if orphaned)"
+                                            .to_string(),
+                                })?;
+                        }
+                    }
+                }
             }
             pallet_file_system::Event::MspStopStoringBucketInsolventUser {
                 msp_id,
@@ -953,6 +1008,17 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                         block_number: block_number.saturated_into(),
                         event_name: "MspStopStoringBucketInsolventUser (get MSP)".to_string(),
                     })?;
+
+                // Get all files in this bucket before deleting associations
+                let files = File::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec())
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "MspStopStoringBucketInsolventUser (get files)".to_string(),
+                    })?;
+
+                // Delete the MSP-file associations for all files in the bucket
                 MspFile::delete_by_bucket(conn, bucket_id.as_ref(), msp.id)
                     .await
                     .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
@@ -962,6 +1028,30 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                             "MspStopStoringBucketInsolventUser (delete MSP-file associations)"
                                 .to_string(),
                     })?;
+
+                // Mark all files as no longer in the bucket and clean up orphaned files.
+                for file in files {
+                    File::update_bucket_membership(conn, &file.file_key, bucket_id.as_ref(), false)
+                        .await
+                        .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name:
+                                "MspStopStoringBucketInsolventUser (update file bucket membership)"
+                                    .to_string(),
+                        })?;
+                    File::delete_if_orphaned(conn, &file.file_key)
+                        .await
+                        .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name:
+                                "MspStopStoringBucketInsolventUser (delete file if orphaned)"
+                                    .to_string(),
+                        })?;
+                }
+
+                // Unset the MSP from the bucket to reflect on-chain state
                 Bucket::unset_msp(conn, bucket_id.as_ref().to_vec())
                     .await
                     .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
@@ -971,6 +1061,18 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                             "MspStopStoringBucketInsolventUser (unset bucket MSP reference)"
                                 .to_string(),
                     })?;
+
+                // Try to delete the bucket if no files reference it anymore.
+                // If files still exist (e.g. BSPs are still storing them), the bucket
+                // record is kept and will be cleaned up when the last file is deleted.
+                Bucket::delete_if_orphaned(conn, bucket_id.as_ref().to_vec())
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "MspStopStoringBucketInsolventUser (delete bucket if orphaned)"
+                            .to_string(),
+                    })?;
             }
 
             // File deletion events
@@ -978,7 +1080,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 signed_delete_intention,
                 signature,
             } => {
-                // Mark file for deletion with user signature
+                // Mark the file for deletion with the user signed deletion intention.
                 let file_key = &signed_delete_intention.file_key;
                 let signature_bytes = signature.encode();
                 File::update_deletion_status(

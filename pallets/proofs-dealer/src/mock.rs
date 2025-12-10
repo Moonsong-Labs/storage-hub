@@ -19,7 +19,7 @@ use shp_traits::{
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
 use sp_runtime::{
-    traits::{BlakeTwo256, BlockNumberProvider, Convert, ConvertBack, IdentityLookup},
+    traits::{BlakeTwo256, Convert, ConvertBack, IdentityLookup},
     BuildStorage, DispatchError, Perbill, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
@@ -179,19 +179,6 @@ pub struct BlockNumberToBalance;
 impl Convert<BlockNumberFor<Test>, Balance> for BlockNumberToBalance {
     fn convert(block_number: BlockNumberFor<Test>) -> Balance {
         block_number.into() // In this converter we assume that the block number type is smaller in size than the balance type
-    }
-}
-
-/// Mock implementation of the relay chain data provider, which should return the relay chain block
-/// that the previous parachain block was anchored to.
-pub struct MockRelaychainDataProvider;
-impl BlockNumberProvider for MockRelaychainDataProvider {
-    type BlockNumber = u32;
-    fn current_block_number() -> Self::BlockNumber {
-        frame_system::Pallet::<Test>::block_number()
-            .saturating_sub(1)
-            .try_into()
-            .unwrap()
     }
 }
 
