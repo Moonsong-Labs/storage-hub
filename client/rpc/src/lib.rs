@@ -1433,37 +1433,6 @@ where
             Ok(GetValuePropositionsResult::NotAnMsp)
         }
     }
-
-    async fn get_current_price_per_giga_unit_per_tick(&self) -> RpcResult<u128> {
-        let api = self.client.runtime_api();
-        let at_hash = self.client.info().best_hash;
-
-        let balance = api
-            .get_current_price_per_giga_unit_per_tick(at_hash)
-            .map_err(|e| {
-                JsonRpseeError::owned(
-                    INTERNAL_ERROR_CODE,
-                    format!(
-                        "Failed to get current price per giga unit per tick: {:?}",
-                        e
-                    ),
-                    None::<()>,
-                )
-            })?;
-
-        // Saturate the obtained price into a `u128`.
-        // If the configured `Balance` type of the `payment-streams` pallet is of a greater
-        // capacity (such as a u256), this could cause issues, so be wary.
-        let result: u128 = balance.saturated_into();
-
-        info!(
-            target: LOG_TARGET,
-            "get_current_price_per_giga_unit_per_tick succeeded with result={}",
-            result
-        );
-
-        Ok(result)
-    }
 }
 
 /// Get the file name for the given public key and key type.
