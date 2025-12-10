@@ -9,7 +9,7 @@ use tracing::{debug, error};
 
 use crate::{
     config::AuthConfig,
-    constants::auth::{AUTH_NONCE_ENDPOINT, MOCK_ENS},
+    constants::auth::MOCK_ENS,
     data::storage::{BoxedStorage, WithExpiry},
     error::Error,
     models::auth::{JwtClaims, NonceResponse, TokenResponse, UserProfile, VerifyResponse},
@@ -38,8 +38,6 @@ pub struct AuthService {
     session_duration: Duration,
     /// The duration for the stored nonces
     nonce_duration: Duration,
-    /// The SIWE domain to use when generating messages
-    siwe_domain: String,
 }
 
 impl AuthService {
@@ -87,7 +85,6 @@ impl AuthService {
             validate_signature: true,
             session_duration,
             nonce_duration,
-            siwe_domain: config.siwe_domain.clone(),
         };
 
         #[cfg(feature = "mocks")]
@@ -136,19 +133,17 @@ impl AuthService {
         domain: &str,
         nonce: &str,
         chain_id: u64,
+        uri: &str,
     ) -> String {
         debug!(target: "auth_service::construct_auth_message", address = %address, domain = %domain, nonce = %nonce, chain_id = chain_id, "Constructing auth message");
 
-        let scheme = "https";
-
-        let uri = format!("{scheme}://{domain}{AUTH_NONCE_ENDPOINT}");
         let statement = "I authenticate to this MSP Backend with my address";
         let version = 1;
         let issued_at = chrono::Utc::now().to_rfc3339();
 
         // SIWE message format as per EIP-4361
         format!(
-            "{scheme}://{domain} wants you to sign in with your Ethereum account:\n\
+            "{domain} wants you to sign in with your Ethereum account:\n\
             {address}\n\
             \n\
             {statement}\n\
@@ -188,11 +183,14 @@ impl AuthService {
         &self,
         address: &Address,
         chain_id: u64,
+        domain: &str,
+        uri: &str,
     ) -> Result<NonceResponse, Error> {
         debug!(target: "auth_service::challenge", address = %address, chain_id = chain_id, "Generating challenge");
 
         let nonce = Self::generate_random_nonce();
-        let message = Self::construct_auth_message(address, &self.siwe_domain, &nonce, chain_id);
+
+        let message = Self::construct_auth_message(address, domain, &nonce, chain_id, uri);
 
         // Store message paired with address in storage
         // Using message as key and address as value
@@ -391,7 +389,13 @@ mod tests {
         let nonce = "testNonce123";
         let chain_id = 1;
 
-        let message = AuthService::construct_auth_message(&address, domain, nonce, chain_id);
+        let message = AuthService::construct_auth_message(
+            &address,
+            domain,
+            nonce,
+            chain_id,
+            "https://localhost/",
+        );
 
         // Check that message contains the address
         assert!(
@@ -430,7 +434,10 @@ mod tests {
     async fn challenge_stores_nonce_for_valid_address() {
         let (auth_service, storage, _) = create_test_auth_service(true);
 
-        let result = auth_service.challenge(&MOCK_ADDRESS, 1).await.unwrap();
+        let result = auth_service
+            .challenge(&MOCK_ADDRESS, 1, "localhost", "https://localhost/")
+            .await
+            .unwrap();
 
         // Check that message was stored in storage
         let stored_address = storage.get_nonce(&result.message).await.unwrap();
@@ -495,7 +502,10 @@ mod tests {
         let (auth_service, _, _) = create_test_auth_service(true);
         let (address, sk) = eth_wallet();
 
-        let challenge = auth_service.challenge(&address, 1).await.unwrap();
+        let challenge = auth_service
+            .challenge(&address, 1, "localhost", "https://localhost/")
+            .await
+            .unwrap();
         let sig_str = sign_message(&sk, &challenge.message);
 
         // Advance time to expire the nonce
@@ -517,7 +527,10 @@ mod tests {
         let (auth_service, _, _) = create_test_auth_service(true);
 
         // Get challenge for test address
-        let challenge = auth_service.challenge(&MOCK_ADDRESS, 1).await.unwrap();
+        let challenge = auth_service
+            .challenge(&MOCK_ADDRESS, 1, "localhost", "https://localhost/")
+            .await
+            .unwrap();
 
         // Give signature from different address
         let (_, sk) = eth_wallet();
@@ -534,7 +547,10 @@ mod tests {
     async fn login_accepts_invalid_signature_when_validation_disabled() {
         let (auth_service, _, _) = create_test_auth_service(false);
 
-        let challenge_result = auth_service.challenge(&MOCK_ADDRESS, 1).await.unwrap();
+        let challenge_result = auth_service
+            .challenge(&MOCK_ADDRESS, 1, "localhost", "https://localhost/")
+            .await
+            .unwrap();
         let invalid_sig = format!("0x{}", hex::encode(&[0u8; 32]));
 
         let result = auth_service
@@ -554,7 +570,10 @@ mod tests {
         let (address, sk) = eth_wallet();
 
         // Get challenge and sign it
-        let challenge = auth_service.challenge(&address, 1).await.unwrap();
+        let challenge = auth_service
+            .challenge(&address, 1, "localhost", "https://localhost/")
+            .await
+            .unwrap();
         let sig_str = sign_message(&sk, &challenge.message);
 
         // First login should succeed

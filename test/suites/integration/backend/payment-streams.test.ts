@@ -2,6 +2,7 @@ import assert, { strictEqual } from "node:assert";
 import type { u64, u128 } from "@polkadot/types";
 import type { H256 } from "@polkadot/types/interfaces";
 import { describeMspNet, type EnrichedBspApi } from "../../../util";
+import { BACKEND_URI } from "../../../util/backend/consts";
 import { fetchJwtToken, type PaymentStreamsResponse } from "../../../util/backend";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import { ETH_SH_USER_ADDRESS, ETH_SH_USER_PRIVATE_KEY } from "../../../util/evmNet/keyring";
@@ -105,7 +106,7 @@ await describeMspNet(
 
       const userJWT = await fetchJwtToken(ETH_SH_USER_PRIVATE_KEY, SH_EVM_SOLOCHAIN_CHAIN_ID);
 
-      const response = await fetch("http://localhost:8080/payment_streams", {
+      const response = await fetch(`${BACKEND_URI}/payment_streams`, {
         headers: {
           Authorization: `Bearer ${userJWT}`
         }

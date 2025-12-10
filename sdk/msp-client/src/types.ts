@@ -129,13 +129,28 @@ export interface Bucket {
   fileCount: number;
 }
 
-export type FileStatus = "inProgress" | "ready" | "expired" | "deletionInProgress";
+export type FileStatus =
+  | "inProgress"
+  | "ready"
+  | "expired"
+  | "revoked"
+  | "rejected"
+  | "deletionInProgress";
 
 export type FileTree = {
   name: string;
 } & (
-  | { type: "file"; sizeBytes: number; fileKey: `0x${string}`; status: FileStatus }
-  | { type: "folder"; children: FileTree[] }
+  | {
+      type: "file";
+      sizeBytes: number;
+      fileKey: `0x${string}`;
+      status: FileStatus;
+      uploadedAt: Date;
+    }
+  | {
+      type: "folder";
+      children: FileTree[];
+    }
 );
 
 export interface FileListResponse {

@@ -39,6 +39,7 @@ export type FileTree = {
       sizeBytes: number;
       fileKey: string;
       status: FileStatus;
+      uploadedAt: string;
     }
   | {
       type: "folder";

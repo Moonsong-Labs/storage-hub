@@ -19,7 +19,7 @@ use sh_solochain_evm_runtime::configs::time;
 use shc_client::types::FileStorageT;
 use shc_common::{
     traits::StorageEnableRuntime,
-    types::{OpaqueBlock, ParachainClient},
+    types::{OpaqueBlock, StorageHubClient},
 };
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_rpc::{StorageHubClientApiServer, StorageHubClientRpc, StorageHubClientRpcConfig};
@@ -35,7 +35,7 @@ where
     Runtime: StorageEnableRuntime,
 {
     /// The client instance to use.
-    pub client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+    pub client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
     /// Transaction pool instance.
     pub pool: Arc<P>,
     /// RPC configuration.
@@ -98,7 +98,7 @@ where
     Runtime: StorageEnableRuntime,
     A: sc_transaction_pool::ChainApi<Block = OpaqueBlock>,
 {
-    pub client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+    pub client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
     pub pool: Arc<P>,
     pub maybe_storage_hub_client_config: Option<StorageHubClientRpcConfig<FL, FS, Runtime>>,
     pub command_sink: Option<futures::channel::mpsc::Sender<EngineCommand<H256>>>,
@@ -127,12 +127,12 @@ where
     FL: FileStorageT,
     FSH: ForestStorageHandler<Runtime> + Send + Sync + 'static,
     A: sc_transaction_pool::ChainApi<Block = OpaqueBlock> + 'static,
-    ParachainClient<Runtime::RuntimeApi>: ProvideRuntimeApi<OpaqueBlock>
+    StorageHubClient<Runtime::RuntimeApi>: ProvideRuntimeApi<OpaqueBlock>
         + sc_client_api::HeaderBackend<OpaqueBlock>
         + sc_client_api::UsageProvider<OpaqueBlock>
         + sc_client_api::blockchain::HeaderMetadata<OpaqueBlock, Error = sp_blockchain::Error>
         + 'static,
-    <ParachainClient<Runtime::RuntimeApi> as ProvideRuntimeApi<OpaqueBlock>>::Api:
+    <StorageHubClient<Runtime::RuntimeApi> as ProvideRuntimeApi<OpaqueBlock>>::Api:
         fp_rpc::EthereumRuntimeRPCApi<OpaqueBlock>
             + fp_rpc::ConvertTransactionRuntimeApi<OpaqueBlock>
             + sp_block_builder::BlockBuilder<OpaqueBlock>,
@@ -181,7 +181,7 @@ where
 
     let signers = Vec::new();
     let pending_consensus_data_provider: Option<
-        Box<(dyn fc_rpc::pending::ConsensusDataProvider<_>)>,
+        Box<dyn fc_rpc::pending::ConsensusDataProvider<_>>,
     > = None;
 
     let pending_create_inherent_data_providers = move |_, _| async move {

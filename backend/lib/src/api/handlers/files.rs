@@ -206,6 +206,14 @@ pub async fn upload_file(
         ));
     }
 
+    // Check if this file_key is already being uploaded and register the upload session.
+    // This prevents concurrent uploads of the same file.
+    // The returned guard will automatically clean up the session when it goes out of scope.
+    let _upload_guard = services
+        .upload_sessions
+        .start_upload(file_key.clone())
+        .map_err(|e| Error::BadRequest(e))?;
+
     // Extract from the request the file data stream and file metadata.
     let mut file_data_stream: Option<Field> = None;
     let mut file_metadata: Option<FileMetadata> = None;

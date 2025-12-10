@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use shc_indexer_db::models::{Bucket as DBBucket, File as DBFile};
@@ -45,6 +46,7 @@ pub struct FileTreeFile {
     pub size_bytes: u64,
     pub file_key: String,
     pub status: FileStatus,
+    pub uploaded_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Serialize)]
@@ -132,6 +134,7 @@ impl FileTree {
                         size_bytes: file.size as u64,
                         file_key: hex::encode(&file.file_key),
                         status: FileInfo::status_from_db(&file),
+                        uploaded_at: file.updated_at.and_utc(),
                     }));
             } else {
                 // This is a folder (has more segments after the first)
@@ -216,6 +219,8 @@ mod tests {
             created_at: DateTime::from_timestamp(0, 0).unwrap().naive_utc(),
             updated_at: DateTime::from_timestamp(0, 0).unwrap().naive_utc(),
             is_in_bucket: false,
+            block_hash: vec![0u8; 32], // Placeholder block hash for test data
+            tx_hash: None,             // No transaction hash for test data
         }
     }
 

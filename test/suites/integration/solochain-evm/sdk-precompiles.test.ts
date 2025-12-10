@@ -19,8 +19,8 @@ import {
   describeMspNet,
   type EnrichedBspApi,
   ShConsts,
-  waitFor,
-  type SqlClient
+  type SqlClient,
+  waitFor
 } from "../../../util";
 import type { StatsResponse } from "../../../util/backend/types";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
@@ -48,6 +48,8 @@ await describeMspNet(
     let bucketId: string;
     let fileManager: FileManager;
     let fileKey: H256;
+    let storageRequestBlockHash: `0x${string}`;
+    let storageRequestTxHash: `0x${string}`;
     let fileLocation: string;
     let mspClient: MspClient;
     let sessionToken: string | undefined;
@@ -114,7 +116,9 @@ await describeMspNet(
       assert(healthResponse.status === "healthy", "MSP health response should be healthy");
 
       // Set up the authentication with the MSP backend
-      const siweSession = await mspClient.auth.SIWE(walletClient);
+      const siweDomain = "localhost:3000";
+      const siweUri = "http://localhost:3000";
+      const siweSession = await mspClient.auth.SIWE(walletClient, siweDomain, siweUri);
       sessionToken = siweSession.token;
 
       assert(createIndexerApi, "Indexer API not available");
@@ -335,11 +339,13 @@ await describeMspNet(
       const peerIds = [
         userApi.shConsts.NODE_INFOS.msp1.expectedPeerId // MSP peer ID
       ];
-      const replicationLevel = ReplicationLevel.Basic;
-      const replicas = 0; // Used only when ReplicationLevel = Custom
+      // Use Custom replication with 1 replica so the storage request gets fulfilled quickly
+      // This allows us to test file deletion without having an active storage request
+      const replicationLevel = ReplicationLevel.Custom;
+      const replicas = 1;
 
       // Issue the storage request using the SDK
-      const txHash = await storageHubClient.issueStorageRequest(
+      storageRequestTxHash = await storageHubClient.issueStorageRequest(
         bucketId as `0x${string}`,
         fileLocation,
         fingerprint.toHex() as `0x${string}`,
@@ -359,8 +365,11 @@ await describeMspNet(
       // Seal the block so the tx gets included
       await userApi.block.seal();
 
-      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: storageRequestTxHash });
       assert(receipt.status === "success", "Storage request transaction failed");
+
+      // Store the block hash where the transaction was included
+      storageRequestBlockHash = receipt.blockHash;
 
       // Compute the file key
       const registry = new TypeRegistry();
@@ -467,6 +476,16 @@ await describeMspNet(
       // Ensure the file is now stored in the MSP's file storage
       await msp1Api.wait.fileStorageComplete(hexFileKey);
 
+      // Wait for at least 1 BSP to confirm so the storage request gets fulfilled
+      await userApi.wait.bspStored({ expectedExts: 1 });
+
+      // Verify the storage request has been fulfilled and removed
+      const storageRequestAfterConfirm = await userApi.query.fileSystem.storageRequests(fileKey);
+      assert(
+        storageRequestAfterConfirm.isNone,
+        "Storage request should be fulfilled and removed after BSP confirms"
+      );
+
       await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
       // Ensure file tree and file info are available via backend for this bucket
@@ -478,6 +497,21 @@ await describeMspNet(
       const fileInfo = await mspClient.files.getFileInfo(bucketId, fileKey.toHex());
       strictEqual(fileInfo.bucketId, bucketId, "BucketId should match");
       strictEqual(fileInfo.fileKey, fileKey.toHex(), "FileKey should match");
+
+      // Verify that the block hash is correctly stored and returned
+      strictEqual(
+        fileInfo.blockHash.toLowerCase(),
+        storageRequestBlockHash.toLowerCase(),
+        "File blockHash should match the block hash where the transaction was included"
+      );
+
+      // Verify that the EVM transaction hash is correctly stored and returned
+      assert(fileInfo.txHash, "File should have a txHash since it was created via EVM transaction");
+      strictEqual(
+        fileInfo.txHash.toLowerCase(),
+        storageRequestTxHash.toLowerCase(),
+        "File txHash should match the EVM transaction hash that created it"
+      );
     });
 
     it("Should fetch payment streams using the SDK's MspClient", async () => {

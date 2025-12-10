@@ -132,7 +132,7 @@ where
     NT::FSH: FishermanForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: BatchFileDeletions) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: BatchFileDeletions) -> anyhow::Result<String> {
         // Hold the Arc reference to the permit for the lifetime of this handler
         // The permit will be automatically released when this handler completes or fails
         // (when the Arc is dropped, the permit is dropped, releasing the semaphore)
@@ -209,7 +209,10 @@ where
                 event.deletion_type
             );
             // Permit will be automatically released when handler returns
-            return Ok(());
+            return Ok(format!(
+                "No pending [{:?}] deletions found",
+                event.deletion_type
+            ));
         }
 
         // Await all futures
@@ -254,7 +257,11 @@ where
         // Explicitly drop to release the semaphore permit
         // Next batch deletion cycle will be able to acquire a new permit
         drop(permit_arc);
-        Ok(())
+
+        Ok(format!(
+            "Processed batch file deletions: {} successes, {} failures",
+            successes, failures
+        ))
     }
 }
 
@@ -447,9 +454,16 @@ where
         // Fetch all files and convert to FileMetadata
         let mut all_file_metadatas = Vec::new();
         for key in &all_file_keys {
-            let file = shc_indexer_db::models::File::get_by_file_key(&mut conn, key)
+            let file_records = shc_indexer_db::models::File::get_by_file_key(&mut conn, key)
                 .await
-                .map_err(|e| anyhow!("Failed to get file: {:?}", e))?;
+                .map_err(|e| anyhow!("Failed to get file records: {:?}", e))?;
+
+            // There can be multiple file records for a given file key if there were multiple
+            // storage requests for the same file key. Any of them is good to use to get the file metadata,
+            // so we just pick the first one.
+            let file = file_records
+                .first()
+                .ok_or_else(|| anyhow!("No file records found for file key: {:?}", key))?;
 
             let metadata = file
                 .to_file_metadata(file.onchain_bucket_id.clone())
@@ -827,18 +841,18 @@ where
             // Convert bucket_id from Runtime type to DB type
             let bucket_id_bytes = bucket_id.as_ref().map(|id| id.as_ref() as &[u8]);
 
-            // Query bucket files from DB
+            // Query bucket files from DB with deduplication
             // Only get files that are in the bucket's forest
-            let bucket_files =
-                shc_indexer_db::models::File::get_files_pending_deletion_grouped_by_bucket(
-                    &mut bucket_conn,
-                    deletion_type,
-                    bucket_id_bytes,
-                    Some(true),
-                    limit,
-                    offset,
-                )
-                .await?;
+            // Use deduplicated version to avoid duplicate file keys in batch deletion
+            let bucket_files = shc_indexer_db::models::File::get_files_pending_deletion_grouped_by_bucket_deduplicated(
+                &mut bucket_conn,
+                deletion_type,
+                bucket_id_bytes,
+                Some(true),
+                limit,
+                offset,
+            )
+            .await?;
 
             drop(bucket_conn);
 
@@ -856,16 +870,16 @@ where
             // Convert bsp_id from Runtime type to DB type
             let bsp_id_db = bsp_id.map(shc_indexer_db::OnchainBspId::new);
 
-            // Query BSP files from DB
-            let bsp_files =
-                shc_indexer_db::models::BspFile::get_files_pending_deletion_grouped_by_bsp(
-                    &mut bsp_conn,
-                    deletion_type,
-                    bsp_id_db,
-                    limit,
-                    offset,
-                )
-                .await?;
+            // Query BSP files from DB with deduplication
+            // Use deduplicated version to avoid duplicate file keys in batch deletion
+            let bsp_files = shc_indexer_db::models::BspFile::get_files_pending_deletion_grouped_by_bsp_deduplicated(
+                &mut bsp_conn,
+                deletion_type,
+                bsp_id_db,
+                limit,
+                offset,
+            )
+            .await?;
 
             drop(bsp_conn);
 

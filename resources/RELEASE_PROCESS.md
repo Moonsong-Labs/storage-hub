@@ -47,7 +47,7 @@ git diff --stat 05d269a26d11c1ed8a6d917b3e08ff3b5d3d4b22..HEAD
 
 5. Publish the release via GitHub UI
 
-- Go to: GitHub → `storage-hub` repository → Create new release.
+- Go to: GitHub → `storage-hub` repository → Releases → Draft a new release.
 - Target: `release/vX.Y`.
 - Tag: `vX.Y.Z` (create new tag on publish).
 - Title: `StorageHub vX.Y.Z`.

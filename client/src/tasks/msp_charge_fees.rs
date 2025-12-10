@@ -83,7 +83,7 @@ where
     NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, _event: NotifyPeriod) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, _event: NotifyPeriod) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
             "Charging users",
@@ -105,8 +105,11 @@ where
                 }
             },
             None => {
-                warn!(target: LOG_TARGET, "Provider not registred yet. We can't charge users.");
-                return Ok(());
+                let msg =
+                    "Provider not registered yet; cannot charge users. Skipping NotifyPeriod task."
+                        .to_string();
+                warn!(target: LOG_TARGET, "{msg}");
+                return Ok(msg);
             }
         };
 
@@ -161,6 +164,9 @@ where
             }
         }
 
-        Ok(())
+        Ok(format!(
+            "NotifyPeriod handled successfully for MSP [{:x}]",
+            own_msp_id
+        ))
     }
 }
