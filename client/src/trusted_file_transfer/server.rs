@@ -126,7 +126,7 @@ where
         target: LOG_TARGET,
         host = %config.host,
         port = config.port,
-        "Trusted file transfer HTTP server listening"
+        "👂 Trusted file transfer HTTP server listening"
     );
 
     tokio::spawn(async move {
