@@ -251,8 +251,20 @@ impl File {
         step: FileStorageRequestStep,
     ) -> Result<(), diesel::result::Error> {
         let file_key = file_key.as_ref().to_vec();
+
+        // Get the ID of the latest file record for this file key
+        // Step changes only apply to the currently active storage request,
+        // which always corresponds to the most recent file record
+        let latest_file_id: i64 = file::table
+            .filter(file::file_key.eq(&file_key))
+            .order(file::created_at.desc())
+            .select(file::id)
+            .first(conn)
+            .await?;
+
+        // Update only the latest file record
         diesel::update(file::table)
-            .filter(file::file_key.eq(file_key))
+            .filter(file::id.eq(latest_file_id))
             .set(file::step.eq(step as i32))
             .execute(conn)
             .await?;
@@ -707,6 +719,78 @@ impl File {
         }
 
         Ok(grouped)
+    }
+
+    /// Get files pending deletion grouped by bucket with deduplication.
+    ///
+    /// Same as [`get_files_pending_deletion_grouped_by_bucket`] but deduplicates files by their
+    /// `file_key`, keeping only the most recently created file record for each unique key.
+    ///
+    /// This is essential for batch deletion extrinsics which can only process each file key once.
+    /// When multiple storage requests exist for the same file key, submitting duplicates in a
+    /// single extrinsic will cause it to fail.
+    ///
+    /// # Arguments
+    /// * `deletion_type` - Filter for user deletions (with signature) or incomplete deletions (without signature)
+    /// * `bucket_id` - Optional filter by specific bucket's onchain ID (returns only that bucket's files)
+    /// * `is_in_bucket` - Optional filter by whether files are in the bucket's forest (None = all files)
+    /// * `limit` - Maximum number of files to return across all buckets (default: 1000)
+    /// * `offset` - Number of files to skip for pagination (default: 0)
+    ///
+    /// # Returns
+    /// HashMap mapping bucket IDs (as `Vec<u8>`) to vectors of deduplicated files pending deletion in that bucket.
+    pub async fn get_files_pending_deletion_grouped_by_bucket_deduplicated<'a>(
+        conn: &mut DbConnection<'a>,
+        deletion_type: FileDeletionType,
+        bucket_id: Option<&[u8]>,
+        is_in_bucket: Option<bool>,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<HashMap<Vec<u8>, Vec<Self>>, diesel::result::Error> {
+        let files_map = Self::get_files_pending_deletion_grouped_by_bucket(
+            conn,
+            deletion_type,
+            bucket_id,
+            is_in_bucket,
+            limit,
+            offset,
+        )
+        .await?;
+
+        // Deduplicate files by file_key within each bucket
+        // Keep the most recently created record for each unique file_key
+        let mut deduplicated: HashMap<Vec<u8>, Vec<Self>> = HashMap::new();
+
+        for (bucket_id, files) in files_map {
+            // Use HashMap to deduplicate by file_key
+            let mut unique_files: HashMap<Vec<u8>, Self> = HashMap::new();
+            for file in files {
+                let file_key = file.file_key.clone();
+                unique_files
+                    .entry(file_key)
+                    .and_modify(|existing| {
+                        // Keep the more recently created file
+                        if file.created_at > existing.created_at {
+                            *existing = file.clone();
+                        }
+                    })
+                    .or_insert(file);
+            }
+
+            // Convert back to Vec and add to result
+            let mut files_vec: Vec<Self> = unique_files.into_values().collect();
+
+            // Sort by deletion_requested_at and file_key for consistent ordering
+            files_vec.sort_by(|a, b| {
+                a.deletion_requested_at
+                    .cmp(&b.deletion_requested_at)
+                    .then_with(|| a.file_key.cmp(&b.file_key))
+            });
+
+            deduplicated.insert(bucket_id, files_vec);
+        }
+
+        Ok(deduplicated)
     }
 
     /// Update the bucket membership status for a file.
