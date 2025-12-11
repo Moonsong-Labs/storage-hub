@@ -320,19 +320,24 @@ where
         debug!(target: LOG_TARGET, "Processing NewStorageRequest for file key {:?}", file_key);
 
         let result = self.handle_new_storage_request_event(event).await;
-        if let Err(reason) = result {
-            self.handle_rejected_storage_request(&file_key, bucket_id, reason.clone())
-                .await?;
+        match result {
+            Ok(()) => Ok(format!(
+                "Handled NewStorageRequest for file_key [{:x}]",
+                file_key
+            )),
+            Err(reason) => {
+                self.handle_rejected_storage_request(&file_key, bucket_id, reason.clone())
+                    .await
+                    .map_err(|e| {
+                        anyhow::anyhow!("Failed to handle rejected storage request: {:?}", e)
+                    })?;
 
-            return Err(anyhow::anyhow!(
-                "Failed to handle new storage request: {:?}",
-                reason
-            ));
+                return Err(anyhow::anyhow!(
+                    "Failed to handle new storage request: {:?}",
+                    reason
+                ));
+            }
         }
-        Ok(format!(
-            "Handled NewStorageRequest for file_key [{:x}]",
-            file_key
-        ))
     }
 }
 
