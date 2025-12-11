@@ -286,13 +286,16 @@ where
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: NewStorageRequest<Runtime>) -> anyhow::Result<String> {
+        info!(
+            target: LOG_TARGET,
+            "Registering user peer for file_key {:x}, location 0x{}, fingerprint {:x}",
+            event.file_key,
+            hex::encode(event.location.as_slice()),
+            event.fingerprint
+        );
+
         let bucket_id = H256::from_slice(event.bucket_id.as_ref());
         let file_key = H256::from_slice(event.file_key.as_ref());
-
-        // Status tracking is handled by the blockchain service's MspHandler.
-        // This event is only emitted for file keys that don't have a status yet,
-        // so we can proceed directly with processing.
-        debug!(target: LOG_TARGET, "Processing NewStorageRequest for file key {:?}", file_key);
 
         let result = self.handle_new_storage_request_event(event).await;
         match result {
