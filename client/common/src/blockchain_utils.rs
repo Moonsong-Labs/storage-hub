@@ -41,6 +41,14 @@ pub enum EventsRetrievalError {
     StorageNotFound,
 }
 
+#[derive(Error, Debug)]
+pub enum ModuleErrorDecodeError {
+    #[error("Unknown pallet index {0}: no matching pallet found")]
+    UnknownPallet(u8),
+    #[error("Failed to decode error for pallet index {0}: {1}")]
+    DecodeError(u8, codec::Error),
+}
+
 /// Get the events storage element for a given block.
 ///
 /// TODO: Version-aware decoding should be implemented in the client layer in the future to support
@@ -74,7 +82,7 @@ pub fn get_events_at_block<Runtime: StorageEnableRuntime>(
 /// processing blocks from different runtime versions.
 pub fn decode_module_error<Runtime: StorageEnableRuntime>(
     module_error: sp_runtime::ModuleError,
-) -> Result<StorageEnableErrors<Runtime>, sp_runtime::ModuleError> {
+) -> Result<StorageEnableErrors<Runtime>, ModuleErrorDecodeError> {
     let system_index = frame_system::Pallet::<Runtime>::index() as u8;
     let providers_index = pallet_storage_providers::Pallet::<Runtime>::index() as u8;
     let proofs_dealer_index = pallet_proofs_dealer::Pallet::<Runtime>::index() as u8;
@@ -87,39 +95,39 @@ pub fn decode_module_error<Runtime: StorageEnableRuntime>(
         i if i == system_index => {
             frame_system::Error::<Runtime>::decode(&mut &module_error.error[..])
                 .map(StorageEnableErrors::System)
-                .map_err(|_| module_error)
+                .map_err(|e| ModuleErrorDecodeError::DecodeError(i, e))
         }
         i if i == providers_index => {
             pallet_storage_providers::Error::<Runtime>::decode(&mut &module_error.error[..])
                 .map(StorageEnableErrors::StorageProviders)
-                .map_err(|_| module_error)
+                .map_err(|e| ModuleErrorDecodeError::DecodeError(i, e))
         }
         i if i == proofs_dealer_index => {
             pallet_proofs_dealer::Error::<Runtime>::decode(&mut &module_error.error[..])
                 .map(StorageEnableErrors::ProofsDealer)
-                .map_err(|_| module_error)
+                .map_err(|e| ModuleErrorDecodeError::DecodeError(i, e))
         }
         i if i == payment_streams_index => {
             pallet_payment_streams::Error::<Runtime>::decode(&mut &module_error.error[..])
                 .map(StorageEnableErrors::PaymentStreams)
-                .map_err(|_| module_error)
+                .map_err(|e| ModuleErrorDecodeError::DecodeError(i, e))
         }
         i if i == file_system_index => {
             pallet_file_system::Error::<Runtime>::decode(&mut &module_error.error[..])
                 .map(StorageEnableErrors::FileSystem)
-                .map_err(|_| module_error)
+                .map_err(|e| ModuleErrorDecodeError::DecodeError(i, e))
         }
         i if i == balances_index => {
             pallet_balances::Error::<Runtime>::decode(&mut &module_error.error[..])
                 .map(StorageEnableErrors::Balances)
-                .map_err(|_| module_error)
+                .map_err(|e| ModuleErrorDecodeError::DecodeError(i, e))
         }
         i if i == bucket_nfts_index => {
             pallet_bucket_nfts::Error::<Runtime>::decode(&mut &module_error.error[..])
                 .map(StorageEnableErrors::BucketNfts)
-                .map_err(|_| module_error)
+                .map_err(|e| ModuleErrorDecodeError::DecodeError(i, e))
         }
-        _ => Err(module_error),
+        _ => Err(ModuleErrorDecodeError::UnknownPallet(module_error.index)),
     }
 }
 

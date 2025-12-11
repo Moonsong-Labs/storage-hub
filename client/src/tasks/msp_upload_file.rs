@@ -692,7 +692,17 @@ where
                     // Convert the dispatch error into StorageEnableErrors for type-safe pattern matching.
                     let error: Option<StorageEnableErrors<Runtime>> = match dispatch_error {
                         sp_runtime::DispatchError::Module(module_error) => {
-                            decode_module_error::<Runtime>(module_error).ok()
+                            match decode_module_error::<Runtime>(module_error) {
+                                Ok(decoded) => Some(decoded),
+                                Err(e) => {
+                                    warn!(
+                                        target: LOG_TARGET,
+                                        "Failed to decode module error, treating as non-proof error: {:?}",
+                                        e
+                                    );
+                                    None
+                                }
+                            }
                         }
                         _ => None,
                     };
