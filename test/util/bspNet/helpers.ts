@@ -16,7 +16,6 @@ import * as ShConsts from "./consts.ts";
 import { addBspContainer, showContainers } from "./docker";
 import type { EnrichedBspApi } from "./test-api.ts";
 
-const exec = util.promisify(child_process.exec);
 const execFileAsync = util.promisify(child_process.execFile);
 
 export const getContainerIp = async (containerName: string, verbose = false): Promise<string> => {
