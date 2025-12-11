@@ -2,8 +2,12 @@
 
 use axum::body::Body;
 use log::info;
-use shc_common::{trusted_file_transfer::read_chunk_with_id_from_buffer, types::ChunkId};
+use shc_common::{
+    trusted_file_transfer::{read_chunk_with_id_from_buffer, CHUNK_ID_SIZE},
+    types::ChunkId,
+};
 use shc_file_manager::traits::FileStorageWriteOutcome;
+use shp_constants::FILE_CHUNK_SIZE;
 use shp_file_metadata::Chunk;
 use tokio_stream::StreamExt;
 
@@ -29,11 +33,14 @@ where
         let bytes = try_bytes?;
         buffer.extend_from_slice(&bytes);
 
-        // Here we call with cap_at_file_chunk_size = true because we want to read chunk by chunk.
-        // If there are remaining bytes in the buffer, they could belong to half a chunk that will be
-        // filled in the next iteration of the `while let Some(try_bytes) = request_stream.next().await` loop.
-        let (chunk_id, chunk_data) = read_chunk_with_id_from_buffer(&mut buffer, true)?;
-        last_write_outcome = write_chunk(file_storage, file_key, &chunk_id, &chunk_data).await?;
+        while buffer.len() >= CHUNK_ID_SIZE + (FILE_CHUNK_SIZE as usize) {
+            // Here we call with cap_at_file_chunk_size = true because we want to read chunk by chunk.
+            // If there are remaining bytes in the buffer, they could belong to half a chunk that will be
+            // filled in the next iteration of the `while let Some(try_bytes) = request_stream.next().await` loop.
+            let (chunk_id, chunk_data) = read_chunk_with_id_from_buffer(&mut buffer, true)?;
+            last_write_outcome =
+                write_chunk(file_storage, file_key, &chunk_id, &chunk_data).await?;
+        }
     }
 
     // Now that we have read all the "full" chunks, and there is no more data being streamed,
@@ -85,7 +92,6 @@ mod tests {
         types::{FileMetadata, StorageProofsMerkleTrieLayout},
     };
     use shc_file_manager::{in_memory::InMemoryFileStorage, traits::FileStorage};
-    use shp_constants::FILE_CHUNK_SIZE;
     use sp_core::{blake2_256, H256};
     use sp_runtime::AccountId32;
     use std::sync::Arc;
