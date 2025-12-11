@@ -9,8 +9,10 @@ use bytes::Bytes;
 use codec::Decode;
 use futures::stream;
 use serde::{Deserialize, Serialize};
-use shc_common::trusted_file_transfer::encode_chunk_with_id;
-use shc_common::types::{ChunkId, FileMetadata, StorageProofsMerkleTrieLayout, FILE_CHUNK_SIZE};
+use shc_common::{
+    trusted_file_transfer::encode_chunk_with_id,
+    types::{ChunkId, FileMetadata, StorageProofsMerkleTrieLayout, FILE_CHUNK_SIZE},
+};
 use shc_file_manager::{in_memory::InMemoryFileDataTrie, traits::FileDataTrie};
 use shc_rpc::{
     GetFileFromFileStorageResult, GetValuePropositionsResult, RpcProviderId, SaveFileToDisk,

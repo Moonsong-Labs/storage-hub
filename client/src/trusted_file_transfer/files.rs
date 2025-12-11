@@ -1,10 +1,8 @@
 //! File encoding/decoding utilities
 
 use axum::body::Body;
-use shc_common::{
-    trusted_file_transfer::{read_chunk_with_id_from_buffer, CHUNK_ID_SIZE},
-    types::{ChunkId, FILE_CHUNK_SIZE},
-};
+use log::info;
+use shc_common::{trusted_file_transfer::read_chunk_with_id_from_buffer, types::ChunkId};
 use shc_file_manager::traits::FileStorageWriteOutcome;
 use shp_file_metadata::Chunk;
 use tokio_stream::StreamExt;
@@ -31,18 +29,17 @@ where
         let bytes = try_bytes?;
         buffer.extend_from_slice(&bytes);
 
-            // Here we call with cap_at_file_chunk_size = true because we want to read chunk by chunk.
-            // If there are remaining bytes in the buffer, they could belong to half a chunk that will be
-            // filled in the next iteration of the `while let Some(try_bytes) = request_stream.next().await` loop.
-            let (chunk_id, chunk_data) = read_chunk_with_id_from_buffer(&mut buffer, true)?;
-            last_write_outcome =
-                write_chunk(file_storage, file_key, &chunk_id, &chunk_data).await?;
-        }
+        // Here we call with cap_at_file_chunk_size = true because we want to read chunk by chunk.
+        // If there are remaining bytes in the buffer, they could belong to half a chunk that will be
+        // filled in the next iteration of the `while let Some(try_bytes) = request_stream.next().await` loop.
+        let (chunk_id, chunk_data) = read_chunk_with_id_from_buffer(&mut buffer, true)?;
+        last_write_outcome = write_chunk(file_storage, file_key, &chunk_id, &chunk_data).await?;
     }
 
-    // Check if there's remaining data for the last chunk (This is the case when data is
     // Now that we have read all the "full" chunks, and there is no more data being streamed,
-    // we know that whatever is left in the buffer is the last chunk, which may not be a multiple of FILE_CHUNK_SIZE.
+    // we know that if there is data left in the buffer, it represents the last chunk whose data size
+    // is smaller than FILE_CHUNK_SIZE (in the case where it is exactly equal, it will be processed
+    // in the loop above, and the buffer will be empty).
     if !buffer.is_empty() {
         let (chunk_id, chunk_data) = read_chunk_with_id_from_buffer(&mut buffer, false)?;
         last_write_outcome = write_chunk(file_storage, file_key, &chunk_id, &chunk_data).await?;
@@ -50,10 +47,11 @@ where
 
     // Verify the file is complete using the last write outcome
     if matches!(last_write_outcome, FileStorageWriteOutcome::FileComplete) {
+        info!("File {file_key} processed successfully");
         Ok(())
     } else {
         Err(anyhow::anyhow!(
-            "File incomplete after processing all data streamed"
+            "File {file_key} incomplete after processing all data streamed"
         ))
     }
 }
@@ -82,10 +80,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shc_common::trusted_file_transfer::encode_chunk_with_id;
-    use shc_common::types::{FileMetadata, StorageProofsMerkleTrieLayout};
-    use shc_file_manager::in_memory::InMemoryFileStorage;
-    use shc_file_manager::traits::FileStorage;
+    use shc_common::{
+        trusted_file_transfer::encode_chunk_with_id,
+        types::{FileMetadata, StorageProofsMerkleTrieLayout},
+    };
+    use shc_file_manager::{in_memory::InMemoryFileStorage, traits::FileStorage};
+    use shp_constants::FILE_CHUNK_SIZE;
     use sp_core::{blake2_256, H256};
     use sp_runtime::AccountId32;
     use std::sync::Arc;
