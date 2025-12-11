@@ -84,6 +84,7 @@ pub enum FileTransferServiceCommand<Runtime: StorageEnableRuntime> {
         /// part of the specified bucket.
         bucket_id: Option<BucketId<Runtime>>,
     },
+    // TODO: Remove this command once legacy upload is deprecated
     #[command(
         mode = "AsyncResponse",
         success_type = (Vec<u8>, ProtocolName),

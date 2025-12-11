@@ -723,6 +723,7 @@ impl MspService {
         Ok(())
     }
 
+    // TODO: Remove this method once legacy upload is deprecated
     /// Legacy method: Upload file in batches using RPC calls
     async fn legacy_upload_file_in_batches(
         &self,
@@ -794,6 +795,7 @@ impl MspService {
         Ok(())
     }
 
+    // TODO: Remove this method once legacy upload is deprecated
     /// Legacy method: Upload chunks to MSP via RPC
     async fn legacy_upload_to_msp(
         &self,
@@ -829,6 +831,7 @@ impl MspService {
         ret
     }
 
+    // TODO: Remove this method once legacy upload is deprecated
     /// Legacy method: Send upload request to MSP via RPC
     async fn legacy_send_upload_request_to_msp(
         &self,

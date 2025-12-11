@@ -181,6 +181,7 @@ impl<Runtime: StorageEnableRuntime> Actor for FileTransferService<Runtime> {
                         ),
                     }
                 }
+                // TODO: Remove this handler once legacy upload is deprecated
                 FileTransferServiceCommand::ReceiveBackendFileChunksRequest {
                     file_key,
                     file_key_proof,

@@ -58,6 +58,7 @@ struct Args {
     #[arg(long)]
     msp_trusted_file_transfer_server_url: Option<String>,
 
+    // TODO: Remove this CLI flag once legacy upload is deprecated
     /// Use legacy RPC-based upload method (receiveBackendFileChunks)
     #[arg(long)]
     msp_use_legacy_upload_method: bool,

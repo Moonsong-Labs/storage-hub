@@ -200,6 +200,7 @@ pub struct MspConfig {
     pub upload_retry_attempts: u32,
     /// Delay in seconds between file upload retry attempts
     pub upload_retry_delay_secs: u64,
+    // TODO: Remove this field once legacy upload is deprecated
     /// If true, use legacy RPC-based upload method instead of trusted file transfer server
     pub use_legacy_upload_method: bool,
 }
