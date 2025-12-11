@@ -5,7 +5,8 @@ pub mod handler;
 pub mod handler_bsp;
 pub mod handler_msp;
 pub mod state;
-pub mod transaction;
+pub mod transaction_manager;
+pub mod transaction_watchers;
 pub mod types;
 pub mod utils;
 
@@ -18,14 +19,14 @@ use sp_keystore::KeystorePtr;
 
 use capacity_manager::{CapacityConfig, CapacityRequestQueue};
 use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
-use shc_common::types::ParachainClient;
+use shc_common::types::StorageHubClient;
 
 pub use self::handler::BlockchainService;
 
 pub async fn spawn_blockchain_service<FSH, Runtime>(
     task_spawner: &TaskSpawner,
     config: BlockchainServiceConfig<Runtime>,
-    client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+    client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
     keystore: KeystorePtr,
     rpc_handlers: Arc<RpcHandlers>,
     forest_storage_handler: FSH,

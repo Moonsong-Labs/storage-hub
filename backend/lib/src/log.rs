@@ -85,17 +85,17 @@ fn expand_path_params(json_str: &str) -> String {
                 let before = &json_str[..start_idx];
                 let after = &json_str[value_start + end_idx + 1..];
 
-                // Handle comma removal
-                let cleaned_before = if before.trim_end().ends_with(',') {
-                    before.trim_end().trim_end_matches(',')
+                // Handle comma removal.
+                // Note: we remove from EITHER before OR after, but not both to maintain valid JSON structure
+                let (cleaned_before, cleaned_after) = if before.trim_end().ends_with(',') {
+                    // Remove trailing comma from before, keep after as-is
+                    (before.trim_end().trim_end_matches(','), after)
+                } else if after.trim_start().starts_with(',') {
+                    // Keep before as-is, remove leading comma from after
+                    (before, &after[1..])
                 } else {
-                    before
-                };
-
-                let cleaned_after = if after.trim_start().starts_with(',') {
-                    &after[1..]
-                } else {
-                    after
+                    // No comma to remove
+                    (before, after)
                 };
 
                 return format!("{}{}", cleaned_before, cleaned_after);

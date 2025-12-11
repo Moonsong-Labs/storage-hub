@@ -1,9 +1,11 @@
-//! TODO(MOCK): this service returns pretty rough health status of the underlying services
-//! it doesn't check ALL services in use by the backend, nor does an accurate analysis
-//! of all the parts that it does check
-
 use std::sync::Arc;
 
+use axum::{
+    body::Body,
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    Json,
+};
 use serde::Serialize;
 use shc_rpc::RpcProviderId;
 use tracing::{debug, error};
@@ -16,6 +18,24 @@ pub struct DetailedHealthStatus {
     pub version: String,
     pub service: String,
     pub components: HealthComponents,
+}
+
+impl DetailedHealthStatus {
+    pub fn is_healthy(&self) -> bool {
+        self.status == HealthService::HEALTHY
+    }
+}
+
+impl IntoResponse for DetailedHealthStatus {
+    fn into_response(self) -> Response<Body> {
+        let status = if self.is_healthy() {
+            StatusCode::OK
+        } else {
+            StatusCode::SERVICE_UNAVAILABLE
+        };
+
+        (status, Json(self)).into_response()
+    }
 }
 
 #[derive(Serialize)]
@@ -32,8 +52,6 @@ pub struct ComponentHealth {
     pub message: Option<String>,
 }
 
-// TODO(SCAFFOLDING): This health service is a stub and should be replaced with
-// logic more appropriate to the final usecase
 pub struct HealthService {
     storage: Arc<dyn BoxedStorage>,
     db: Arc<DBClient>,
@@ -44,12 +62,7 @@ impl HealthService {
     pub const HEALTHY: &str = "healthy";
     pub const UNHEALTHY: &str = "unhealthy";
 
-    /// Instantiate a new [`HealthService`]
-    ///
-    /// This service uses the following services:
-    /// * storage: determine if storage is healthy
-    /// * db: determine if the db connection is healthy
-    /// * rpc: determine if the rpc connection is healthy
+    /// Creates a new health service instance
     pub fn new(
         storage: Arc<dyn BoxedStorage>,
         db: Arc<DBClient>,
@@ -98,8 +111,11 @@ impl HealthService {
 
         let (status, message) = match self.storage.health_check().await {
             Ok(true) => (Self::HEALTHY, None),
-            Ok(false) => (Self::UNHEALTHY, None),
-            Err(e) => (Self::UNHEALTHY, Some(format!("Storage error: {e}"))),
+            Ok(false) => (Self::UNHEALTHY, Some("Storage is not healthy".to_string())),
+            Err(e) => (
+                Self::UNHEALTHY,
+                Some(format!("Storage health check failed: {e}")),
+            ),
         };
 
         ComponentHealth {
@@ -113,7 +129,10 @@ impl HealthService {
 
         let (status, message) = match self.db.test_connection().await {
             Ok(_) => (Self::HEALTHY, None),
-            Err(e) => (Self::UNHEALTHY, Some(format!("Database error: {e}"))),
+            Err(e) => (
+                Self::UNHEALTHY,
+                Some(format!("Database connection failed: {e}")),
+            ),
         };
 
         ComponentHealth {
@@ -125,17 +144,6 @@ impl HealthService {
     async fn check_rpc(&self) -> ComponentHealth {
         debug!(target: "health_service::check_rpc", "Checking RPC health");
 
-        // First check if the connection to the RPC is established
-        if !self.rpc.is_connected().await {
-            error!(target: "health_service::check_rpc", "RPC health check failed - connection not established");
-            return ComponentHealth {
-                status: Self::UNHEALTHY.to_string(),
-                message: Some("RPC connection not established".to_string()),
-            };
-        }
-
-        // Then to make sure everything works test actual RPC functionality
-        // by getting the provider ID of the connected node.
         let (status, message) = match self.rpc.get_provider_id().await {
             Ok(RpcProviderId::Msp(_)) => (Self::HEALTHY, None),
             Ok(RpcProviderId::Bsp(_)) => {
@@ -153,8 +161,15 @@ impl HealthService {
                 )
             }
             Err(e) => {
-                error!(target: "health_service::check_rpc", error = %e, "RPC health check failed - RPC call error");
-                (Self::UNHEALTHY, Some(format!("RPC call failed: {}", e)))
+                let connected = self.rpc.is_connected().await;
+                let message = if connected {
+                    format!("RPC call failed: {}", e)
+                } else {
+                    "RPC connection not established".to_string()
+                };
+
+                error!(target: "health_service::check_rpc", error = %e, %connected, "RPC health check failed - RPC call error");
+                (Self::UNHEALTHY, Some(message))
             }
         };
 

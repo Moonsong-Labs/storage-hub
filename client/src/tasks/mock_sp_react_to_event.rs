@@ -58,7 +58,7 @@ where
     NT: ShNodeType<Runtime> + 'static,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: EventToReactTo<Runtime>) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: EventToReactTo<Runtime>) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
             "Initiating task for event: {:?}",
@@ -77,17 +77,21 @@ where
             .blockchain
             .send_extrinsic(
                 call,
-                SendExtrinsicOptions::new(Duration::from_secs(
-                    self.storage_hub_handler
-                        .provider_config
-                        .blockchain_service
-                        .extrinsic_retry_timeout,
-                )),
+                SendExtrinsicOptions::new(
+                    Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .blockchain_service
+                            .extrinsic_retry_timeout,
+                    ),
+                    Some("system".to_string()),
+                    Some("remarkWithEvent".to_string()),
+                ),
             )
             .await?
             .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
 
-        Ok(())
+        Ok(format!("Handled EventToReactTo mock event: {:?}", event))
     }
 }

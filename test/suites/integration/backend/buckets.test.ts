@@ -1,6 +1,7 @@
 import assert, { strictEqual } from "node:assert";
 import type { Hash } from "@polkadot/types/interfaces";
 import { describeMspNet, type EnrichedBspApi } from "../../../util";
+import { BACKEND_URI } from "../../../util/backend/consts";
 import { fetchJwtToken } from "../../../util/backend/jwt";
 import type { Bucket, FileInfo, FileListResponse } from "../../../util/backend/types";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
@@ -43,7 +44,7 @@ await describeMspNet(
 
     it("Postgres DB is ready", async () => {
       await userApi.docker.waitForLog({
-        containerName: "storage-hub-sh-postgres-1",
+        containerName: userApi.shConsts.NODE_INFOS.indexerDb.containerName,
         searchString: "database system is ready to accept connections",
         timeout: 10000
       });
@@ -51,7 +52,7 @@ await describeMspNet(
 
     it("Backend service is ready", async () => {
       await userApi.docker.waitForLog({
-        containerName: "storage-hub-sh-backend-1",
+        containerName: userApi.shConsts.NODE_INFOS.backend.containerName,
         searchString: "Server listening",
         timeout: 10000
       });
@@ -70,7 +71,7 @@ await describeMspNet(
     it("Should successfully list no buckets", async () => {
       assert(userJWT, "User token is initialized");
 
-      const response = await fetch("http://localhost:8080/buckets", {
+      const response = await fetch(`${BACKEND_URI}/buckets`, {
         headers: {
           Authorization: `Bearer ${userJWT}`
         }
@@ -139,7 +140,7 @@ await describeMspNet(
       assert(userJWT, "User token is initialized");
       assert(bucketId, "Bucket should have been created");
 
-      const response = await fetch(`http://localhost:8080/buckets/${bucketId}`, {
+      const response = await fetch(`${BACKEND_URI}/buckets/${bucketId}`, {
         headers: {
           Authorization: `Bearer ${userJWT}`
         }
@@ -157,7 +158,7 @@ await describeMspNet(
       assert(userJWT, "User token is initialized");
       assert(bucketId, "Bucket should have been created");
 
-      const response = await fetch("http://localhost:8080/buckets", {
+      const response = await fetch(`${BACKEND_URI}/buckets`, {
         headers: {
           Authorization: `Bearer ${userJWT}`
         }
@@ -177,7 +178,7 @@ await describeMspNet(
       assert(userJWT, "User token is initialized");
       assert(bucketId, "Bucket should have been created");
 
-      const response = await fetch(`http://localhost:8080/buckets/${bucketId}/files`, {
+      const response = await fetch(`${BACKEND_URI}/buckets/${bucketId}/files`, {
         headers: {
           Authorization: `Bearer ${userJWT}`
         }
@@ -189,12 +190,8 @@ await describeMspNet(
 
       strictEqual(fileList.bucketId, bucketId, "file list's bucket id should match queried");
 
-      strictEqual(fileList.files.length, 1, "File list should have exactly 1 entry");
-
-      const files = fileList.files[0];
+      const files = fileList.tree;
       strictEqual(files.name, "/", "First entry of bucket should be root");
-      assert(files.type === "folder", "Root entry should be a folder");
-
       assert(files.children.length > 0, "At least one file in the root");
 
       const test = files.children.find((entry) => entry.name === fileLocationSubPath);
@@ -207,7 +204,7 @@ await describeMspNet(
       assert(bucketId, "Bucket should have been created");
 
       const response = await fetch(
-        `http://localhost:8080/buckets/${bucketId}/files?path=${fileLocationSubPath}`,
+        `${BACKEND_URI}/buckets/${bucketId}/files?path=${fileLocationSubPath}`,
         {
           headers: {
             Authorization: `Bearer ${userJWT}`
@@ -225,11 +222,8 @@ await describeMspNet(
 
       strictEqual(fileList.bucketId, bucketId, "file list's bucket id should match queried");
 
-      strictEqual(fileList.files.length, 1, "File list should have exactly 1 entry");
-
-      const files = fileList.files[0];
+      const files = fileList.tree;
       strictEqual(files.name, fileLocationSubPath, "First entry should be the folder of the path");
-      assert(files.type === "folder", "First entry should be a folder");
 
       assert(files.children.length > 0, `At least one file in the ${fileLocationSubPath} folder`);
 
@@ -258,14 +252,11 @@ await describeMspNet(
       assert(userJWT, "User token is initialized");
       assert(bucketId, "Bucket should have been created");
 
-      const response = await fetch(
-        `http://localhost:8080/buckets/${bucketId}/info/${fileKey.toHex()}`,
-        {
-          headers: {
-            Authorization: `Bearer ${userJWT}`
-          }
+      const response = await fetch(`${BACKEND_URI}/buckets/${bucketId}/info/${fileKey.toHex()}`, {
+        headers: {
+          Authorization: `Bearer ${userJWT}`
         }
-      );
+      });
 
       strictEqual(response.status, 200, "/bucket/bucket_id/info/fileKey should return OK status");
 

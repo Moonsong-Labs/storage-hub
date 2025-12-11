@@ -99,6 +99,12 @@ impl From<Vec<u8>> for NoKey {
     }
 }
 
+impl AsRef<[u8]> for NoKey {
+    fn as_ref(&self) -> &[u8] {
+        &[]
+    }
+}
+
 #[async_trait]
 impl<Runtime> ForestStorageHandler<Runtime>
     for ForestStorageSingle<InMemoryForestStorage<StorageProofsMerkleTrieLayout>, Runtime>
@@ -323,7 +329,7 @@ where
 impl<K, Runtime> ForestStorageHandler<Runtime>
     for ForestStorageCaching<K, InMemoryForestStorage<StorageProofsMerkleTrieLayout>, Runtime>
 where
-    K: Eq + Hash + From<Vec<u8>> + Clone + Debug + Send + Sync + 'static,
+    K: Eq + Hash + From<Vec<u8>> + AsRef<[u8]> + Clone + Debug + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
     type Key = K;
@@ -388,7 +394,7 @@ impl<K, Runtime> ForestStorageHandler<Runtime>
         Runtime,
     >
 where
-    K: Eq + Hash + From<Vec<u8>> + Clone + Debug + Display + Send + Sync + 'static,
+    K: Eq + Hash + From<Vec<u8>> + AsRef<[u8]> + Clone + Debug + Display + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
     type Key = K;
@@ -454,8 +460,21 @@ where
             .storage_path
             .clone()
             .expect("Storage path should be set");
-        let src = format!("{}_{:?}", storage_path, src_key);
-        let dest = format!("{}_{:?}", storage_path, dest_key);
+
+        // Build source and destination paths following:
+        // {storage_path}/storagehub/forest_storage/{key}
+        let mut src_path = PathBuf::new();
+        src_path.push(&storage_path);
+        src_path.push(FOREST_STORAGE_PATH);
+        src_path.push(src_key.to_string());
+
+        let mut dest_path = PathBuf::new();
+        dest_path.push(&storage_path);
+        dest_path.push(FOREST_STORAGE_PATH);
+        dest_path.push(dest_key.to_string());
+
+        let src = src_path.to_string_lossy().to_string();
+        let dest = dest_path.to_string_lossy().to_string();
 
         // Read-lock the source Forest Storage.
         let src_fs = fs_instances.get(src_key)?.read().await;

@@ -30,6 +30,7 @@ export type ShEntity = {
 export class NetworkLauncher {
   private composeYaml?: any;
   private entities?: ShEntity[];
+  private tempFiles: string[] = [];
 
   constructor(
     private readonly type: NetworkType,
@@ -57,6 +58,30 @@ export class NetworkLauncher {
 
     this.composeYaml = composeYaml;
     return this;
+  }
+
+  private async waitForPendingDbReady(serviceName: string, cwd: string, tmpFile: string) {
+    // Wait for the Postgres service to be ready by scanning logs for readiness message
+    const deadline = Date.now() + 30_000;
+    const readyMsg = "database system is ready to accept connections";
+    while (Date.now() < deadline) {
+      try {
+        const logs = await compose.logs(serviceName, {
+          cwd,
+          config: tmpFile,
+          log: false,
+          follow: false
+        });
+        const stdout = typeof logs === "string" ? logs : (logs.out || "") + (logs.err || "");
+        if (stdout.includes(readyMsg)) {
+          return;
+        }
+      } catch (_) {
+        // ignore transient compose log errors
+      }
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    throw new Error(`Timed out waiting for ${serviceName} to be ready`);
   }
 
   public async getPeerId(serviceName: string) {
@@ -128,11 +153,18 @@ export class NetworkLauncher {
       if (this.config.fisherman && this.type === "fullnet") {
         composeYaml.services["sh-fisherman"].command.push("--chain=solochain-evm-dev");
       }
+
+      // Add the runtime type to the command for standalone indexer if enabled
+      if (this.config.indexer && this.config.standaloneIndexer && this.type === "fullnet") {
+        composeYaml.services["sh-indexer"].command.push("--chain=solochain-evm-dev");
+      }
     }
 
     // Configure fisherman service
     if (!this.config.fisherman || this.type !== "fullnet") {
-      delete composeYaml.services["sh-fisherman"];
+      if (composeYaml.services["sh-fisherman"]) {
+        delete composeYaml.services["sh-fisherman"];
+      }
     } else {
       // Add fisherman incomplete sync parameters if specified
       if (this.config.fishermanIncompleteSyncMax !== undefined) {
@@ -149,7 +181,9 @@ export class NetworkLauncher {
 
     // Remove standalone indexer service if not enabled or not using standalone mode
     if (!this.config.indexer || !this.config.standaloneIndexer || this.type !== "fullnet") {
-      delete composeYaml.services["sh-indexer"];
+      if (composeYaml.services["sh-indexer"]) {
+        delete composeYaml.services["sh-indexer"];
+      }
     }
 
     if (this.config.extrinsicRetryTimeout) {
@@ -163,6 +197,24 @@ export class NetworkLauncher {
         composeYaml.services["sh-msp-1"].command.push(
           `--extrinsic-retry-timeout=${this.config.extrinsicRetryTimeout}`
         );
+      }
+    }
+
+    // Configure log level for all services using -l flag
+    if (this.config.logLevel) {
+      const logFlag = `-l${this.config.logLevel}`;
+      composeYaml.services["sh-bsp"].command.push(logFlag);
+      composeYaml.services["sh-user"].command.push(logFlag);
+
+      if (this.type === "fullnet") {
+        composeYaml.services["sh-msp-1"].command.push(logFlag);
+        composeYaml.services["sh-msp-2"].command.push(logFlag);
+      }
+      if (this.config.fisherman && this.type === "fullnet") {
+        composeYaml.services["sh-fisherman"].command.push(logFlag);
+      }
+      if (this.config.indexer && this.config.standaloneIndexer && this.type === "fullnet") {
+        composeYaml.services["sh-indexer"].command.push(logFlag);
       }
     }
 
@@ -191,6 +243,22 @@ export class NetworkLauncher {
       }
     }
 
+    // Configure database access for MSPs when indexer is enabled
+    // Only add --msp-database-url when indexer is enabled (MSPs need database for move bucket operations)
+    if (this.config.indexer) {
+      // Only add for MSPs if they exist in the compose file
+      if (composeYaml.services["sh-msp-1"]) {
+        composeYaml.services["sh-msp-1"].command.push(
+          `--msp-database-url=postgresql://postgres:postgres@${ShConsts.NODE_INFOS.indexerDb.containerName}:5432/storage_hub`
+        );
+      }
+      if (composeYaml.services["sh-msp-2"]) {
+        composeYaml.services["sh-msp-2"].command.push(
+          `--msp-database-url=postgresql://postgres:postgres@${ShConsts.NODE_INFOS.indexerDb.containerName}:5432/storage_hub`
+        );
+      }
+    }
+
     if (this.config.indexer) {
       // If using standalone indexer, configure the sh-indexer service
       if (this.config.standaloneIndexer && this.type === "fullnet") {
@@ -207,26 +275,19 @@ export class NetworkLauncher {
           composeYaml.services["sh-user"].environment ?? {};
         composeYaml.services["sh-user"].environment.SH_INDEXER_DB_AUTO_MIGRATE = "false";
         composeYaml.services["sh-user"].command.push(
-          "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+          `--indexer-database-url=postgresql://postgres:postgres@${ShConsts.NODE_INFOS.indexerDb.containerName}:5432/storage_hub`
         );
         if (this.config.indexerMode) {
           composeYaml.services["sh-user"].command.push(`--indexer-mode=${this.config.indexerMode}`);
         }
-
-        // For fullnet, also configure MSPs
-        if (this.type === "fullnet") {
-          composeYaml.services["sh-msp-1"].command.push(
-            "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
-          );
-          composeYaml.services["sh-msp-2"].command.push("--indexer");
-          composeYaml.services["sh-msp-2"].environment =
-            composeYaml.services["sh-msp-2"].environment ?? {};
-          composeYaml.services["sh-msp-2"].environment.SH_INDEXER_DB_AUTO_MIGRATE = "false";
-          composeYaml.services["sh-msp-2"].command.push(
-            "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
-          );
-        }
       }
+    }
+
+    // If pending DB is enabled, add CLI arg to MSP 1 only
+    if (this.config.pendingTxDb && this.type === "fullnet") {
+      composeYaml.services["sh-msp-1"].command.push(
+        `--pending-db-url=postgresql://postgres:postgres@${ShConsts.NODE_INFOS.pendingDb.containerName}:5432/pending_tx`
+      );
     }
 
     const cwd = path.resolve(process.cwd(), "..", "docker");
@@ -265,7 +326,8 @@ export class NetworkLauncher {
       doubleQuotedAsJSON: true,
       flowCollectionPadding: true
     });
-    fs.mkdirSync(path.join(cwd, "tmp"), { recursive: true });
+    const tmpDir = path.join(cwd, "tmp");
+    fs.mkdirSync(tmpDir, { recursive: true });
     const tmpFile = tmp.fileSync({ postfix: ".yml" });
     fs.writeFileSync(tmpFile.name, updatedCompose);
     return tmpFile.name;
@@ -281,6 +343,19 @@ export class NetworkLauncher {
         config: tmpFile,
         log: verbose
       });
+    }
+
+    // Postgres is only needed when indexer is enabled
+    if (this.config.indexer) {
+      await compose.upOne("sh-indexer-postgres", {
+        cwd: cwd,
+        config: tmpFile,
+        log: verbose
+      });
+
+      // Run external migrations when indexer enabled
+      // (MSPs and standalone indexer auto-migrate themselves)
+      await this.runMigrations();
     }
 
     await compose.upOne("sh-bsp", {
@@ -307,6 +382,16 @@ export class NetworkLauncher {
 
     process.env.BSP_IP = bspIp;
     process.env.BSP_PEER_ID = bspPeerId;
+
+    // Optional: start pending tx Postgres first (so MSP can connect on boot)
+    if (this.type === "fullnet" && this.config.pendingTxDb) {
+      await compose.upOne("sh-pending-postgres", {
+        cwd,
+        config: tmpFile,
+        log: verbose
+      });
+      await this.waitForPendingDbReady("sh-pending-postgres", cwd, tmpFile);
+    }
 
     if (this.type === "fullnet") {
       const mspServices = Object.keys(this.composeYaml.services).filter((service) =>
@@ -351,27 +436,20 @@ export class NetworkLauncher {
       }
     }
 
-    if (this.config.indexer) {
-      await compose.upOne("sh-postgres", {
+    // Start backend only if backend flag is enabled (depends on postgres, so requires indexer)
+    if (this.config.backend) {
+      if (!this.config.indexer) {
+        throw new Error("Backend requires indexer to be enabled");
+      }
+      await compose.upOne("sh-backend", {
         cwd: cwd,
         config: tmpFile,
-        log: verbose
+        log: verbose,
+        env: {
+          ...process.env,
+          JWT_SECRET: JWT_SECRET
+        }
       });
-
-      await this.runMigrations();
-
-      // Start backend only if backend flag is enabled (depends on msp-1 and postgres)
-      if (this.config.backend && this.type === "fullnet") {
-        await compose.upOne("sh-backend", {
-          cwd: cwd,
-          config: tmpFile,
-          log: verbose,
-          env: {
-            ...process.env,
-            JWT_SECRET: JWT_SECRET
-          }
-        });
-      }
     }
 
     await compose.upOne("sh-user", {
@@ -397,7 +475,9 @@ export class NetworkLauncher {
       });
     }
 
-    // Only start standalone indexer service if it's enabled and we're using fullnet
+    // Only start standalone indexer service if it's enabled and we're using fullnet.
+    // The indexer itself runs in the `sh-indexer` service, while its Postgres
+    // backend is provided by the `sh-indexer-postgres` service started earlier.
     if (this.config.indexer && this.config.standaloneIndexer && this.type === "fullnet") {
       await compose.upOne("sh-indexer", {
         cwd: cwd,
@@ -420,6 +500,7 @@ export class NetworkLauncher {
   }
 
   private async runMigrations() {
+    // Migrations are needed when indexer is enabled
     assert(this.config.indexer, "Indexer must be enabled to run migrations");
 
     const dieselCheck = spawnSync("diesel", ["--version"], { stdio: "ignore" });
@@ -432,7 +513,7 @@ export class NetworkLauncher {
       lambda: async () => {
         try {
           execSync(
-            "docker exec storage-hub-sh-postgres-1 pg_isready -U postgres -h 127.0.0.1 -p 5432 -t 1",
+            `docker exec ${ShConsts.NODE_INFOS.indexerDb.containerName} pg_isready -U postgres -h 127.0.0.1 -p 5432 -t 1`,
             {
               stdio: "ignore"
             }
@@ -526,12 +607,16 @@ export class NetworkLauncher {
         .signAsync(sudo, { nonce: 3 }),
       api.tx.sudo
         .sudo(api.tx.balances.forceSetBalance(api.accounts.mspDownKey.address, amount))
-        .signAsync(sudo, { nonce: 4 })
+        .signAsync(sudo, { nonce: 4 }),
+      api.tx.sudo
+        .sudo(api.tx.balances.forceSetBalance(api.accounts.fishermanKey.address, amount))
+        .signAsync(sudo, { nonce: 5 })
     ];
 
     const sudoTxns = await Promise.all(signedCalls);
 
-    return api.block.seal({ calls: sudoTxns });
+    await api.block.seal({ calls: sudoTxns });
+    return;
   }
 
   public async setupMsp(api: EnrichedBspApi, who: string, multiAddressMsp: string, mspId?: string) {
@@ -715,6 +800,50 @@ export class NetworkLauncher {
     return { fileMetadata };
   }
 
+  // Same as execDemoStorageRequest but creating a big file on the fly
+  public async execBigFileStorageRequest(fileSizeGB: number) {
+    const { generateLargeFile } = await import("../fileGeneration");
+
+    await using api = await this.getApi("sh-user");
+
+    // Generate file in docker/resource/ (mounted as /res in container)
+    const timestamp = Date.now();
+    const fileName = `benchmark-${fileSizeGB}gb-${timestamp}.bin`;
+    const hostPath = `../docker/resource/${fileName}`; // Host filesystem path
+    const containerPath = `/res/${fileName}`; // Container path (for RPC)
+
+    await generateLargeFile(fileSizeGB, hostPath);
+
+    const destination = `test/bigfile-${fileSizeGB}gb.bin`;
+    const bucketName = `benchmark-bucket-${timestamp}`;
+
+    const fileMetadata = await api.file.createBucketAndSendNewStorageRequest(
+      containerPath, // Use container path for RPC
+      destination,
+      bucketName,
+      null,
+      DUMMY_MSP_ID,
+      api.accounts.shUser,
+      1
+    );
+
+    if (this.type === "bspnet") {
+      await api.wait.bspVolunteer();
+      await api.wait.bspStored();
+    }
+
+    if (this.type === "fullnet") {
+      // This will advance the block which also contains the BSP volunteer tx.
+      // Hence why we can wait for the BSP to confirm storing.
+      await api.wait.mspResponseInTxPool();
+      await api.wait.bspVolunteerInTxPool();
+      await api.block.seal();
+      await api.wait.bspStored();
+    }
+
+    return { fileMetadata, tempFilePath: hostPath, fileSizeGB };
+  }
+
   public async initExtraBsps() {
     await using api = await this.getApi("sh-user");
 
@@ -877,6 +1006,7 @@ export class NetworkLauncher {
       for (const service of mspServices) {
         const mspContainerName = launchedNetwork.composeYaml.services[service].container_name;
         assert(mspContainerName, "MSP container name not found in compose file");
+
         const mspIp = await getContainerIp(mspContainerName);
         const mspPeerId = await launchedNetwork.getPeerId(service);
         const multiAddressMsp = `/ip4/${mspIp}/tcp/30350/p2p/${mspPeerId}`;
@@ -921,6 +1051,14 @@ export class NetworkLauncher {
       return await launchedNetwork.execDemoStorageRequest();
     }
 
+    if (launchedNetwork.config.big_file) {
+      const result = await launchedNetwork.execBigFileStorageRequest(
+        launchedNetwork.config.big_file
+      );
+      launchedNetwork.tempFiles.push(result.tempFilePath);
+      return result;
+    }
+
     // Attempt to debounce and stabilise
     await sleep(1500);
     return undefined;
@@ -938,6 +1076,12 @@ export type NetLaunchConfig = {
    * Optional parameter to set the network to be initialised with a pre-existing state.
    */
   initialised?: boolean | "multi";
+
+  /**
+   * Generate and upload a large file (in GB) for performance testing.
+   * File stored in docker/tmp/ and cleaned up after test.
+   */
+  big_file?: number;
 
   /**
    * If true, simulates a noisy network environment with added latency and bandwidth limitations.
@@ -1024,4 +1168,15 @@ export type NetLaunchConfig = {
    * Must be at least 1.
    */
   fishermanIncompleteSyncPageSize?: number;
+
+  /**
+   * Optional parameter to set the Rust log level for all nodes.
+   * Defaults to 'info' if not specified.
+   */
+  logLevel?: string;
+  /**
+   * Optional parameter to enable pending transactions Postgres DB for MSP 1 (and other MSPs if extended).
+   * When true, launches a dedicated Postgres container and passes its URL to MSP 1 as a CLI arg.
+   */
+  pendingTxDb?: boolean;
 };

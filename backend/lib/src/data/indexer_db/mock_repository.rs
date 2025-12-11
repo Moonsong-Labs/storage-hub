@@ -14,7 +14,6 @@ use std::{
 use async_trait::async_trait;
 use bigdecimal::BigDecimal;
 use chrono::Utc;
-use hex_literal::hex;
 use tokio::sync::RwLock;
 
 use shc_indexer_db::{
@@ -95,13 +94,10 @@ impl MockRepository {
 
         // Create 3 buckets, one per MSP
         // Bucket 1: For MOCK_ADDRESS and DUMMY_MSP_ID, as expected by SDK tests
-        // same hash as what the SDK test excepts
-        let bucket1_hash = Hash::from_slice(&hex!(
-            "d8793e4187f5642e96016a96fb33849a7e03eda91358b311bbd426ed38b26692"
-        ));
+        let bucket1_hash = Hash::from_slice(&test::bucket::BUCKET1_BUCKET_ID);
         let bucket1 = this
             .create_bucket(
-                MOCK_ADDRESS,
+                &MOCK_ADDRESS.to_string(),
                 Some(msp1.id),
                 b"Documents",
                 &bucket1_hash,
@@ -142,12 +138,9 @@ impl MockRepository {
         // but bucket 1 should have 2 files
 
         // File 1: /Reports/Q1-2024.pdf
-        // same hash as what the SDK test excepts
-        let bucket1_file1_key = Hash::from_slice(&hex!(
-            "e901c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f7"
-        ));
+        let bucket1_file1_key = Hash::from_slice(&test::file::BUCKET1_FILE1_KEY);
         this.create_file(
-            MOCK_ADDRESS.as_bytes(),
+            MOCK_ADDRESS.to_string().as_bytes(),
             &bucket1_file1_key,
             bucket1.id,
             &bucket1_hash,
@@ -161,7 +154,7 @@ impl MockRepository {
         // File 2: /Thesis/chapter1.pdf
         let bucket1_file2_key = random_hash();
         this.create_file(
-            MOCK_ADDRESS.as_bytes(),
+            MOCK_ADDRESS.to_string().as_bytes(),
             &bucket1_file2_key,
             bucket1.id,
             &bucket1_hash,
@@ -170,7 +163,22 @@ impl MockRepository {
             1048576, // 1MB
         )
         .await
-        .expect("should create file 1");
+        .expect("should create file 2");
+
+        // File 3: files/e2e-bucket/adolphus.jpg
+        // expected by the SDK tests
+        let bucket1_file3_key = Hash::from_slice(&test::file::BUCKET1_FILE3_KEY);
+        this.create_file(
+            MOCK_ADDRESS.to_string().as_bytes(),
+            &bucket1_file3_key,
+            bucket1.id,
+            &bucket1_hash,
+            b"files/e2e-bucket/adolphus.jpg", // expected by the SDK tests
+            &test::file::BUCKET1_FILE3_FINGERPRINT,
+            1048576, // 1MB
+        )
+        .await
+        .expect("should create file 3");
 
         // File 2: In bucket 2
         let file2_key = random_hash();
@@ -202,7 +210,7 @@ impl MockRepository {
 
         // Create some sample payment streams
         this.create_payment_stream(
-            MOCK_ADDRESS,
+            &MOCK_ADDRESS.to_string(),
             &hex::encode(DUMMY_MSP_ID),
             BigDecimal::from(500000),
             PaymentStreamKind::Fixed {
@@ -213,7 +221,7 @@ impl MockRepository {
         .expect("should create fixed payment stream");
 
         this.create_payment_stream(
-            MOCK_ADDRESS,
+            &MOCK_ADDRESS.to_string(),
             &hex::encode(random_bytes_32()),
             BigDecimal::from(200000),
             PaymentStreamKind::Dynamic {
@@ -438,6 +446,9 @@ impl IndexerOpsMut for MockRepository {
             merkle_root: test::bucket::DEFAULT_MERKLE_ROOT.to_vec(),
             created_at: now,
             updated_at: now,
+            file_count: test::bucket::DEFAULT_FILE_COUNT,
+            total_size: test::bucket::DEFAULT_BUCKET_SIZE.into(),
+            value_prop_id: format!("{:#?}", test::bucket::DEFAULT_VALUE_PROP_ID),
         };
 
         self.buckets.write().await.insert(id, bucket.clone());
@@ -488,7 +499,21 @@ impl IndexerOpsMut for MockRepository {
             deletion_requested_at: None,
             created_at: now,
             updated_at: now,
+            is_in_bucket: false,
+            block_hash: vec![0u8; 32], // Placeholder block hash for test data
+            tx_hash: None,             // No transaction hash for test data
         };
+
+        // Update bucket statistics
+        let mut buckets = self.buckets.write().await;
+        if let Some(bucket) = buckets.get_mut(&bucket_id) {
+            bucket.file_count += 1;
+            bucket.total_size += BigDecimal::from(size);
+            bucket.updated_at = now;
+        } else {
+            return Err(RepositoryError::not_found("Bucket"));
+        }
+        drop(buckets);
 
         self.files.write().await.insert(id, file.clone());
         Ok(file)
@@ -496,13 +521,26 @@ impl IndexerOpsMut for MockRepository {
 
     async fn delete_file(&self, file_key: &Hash) -> RepositoryResult<()> {
         let mut files = self.files.write().await;
-        let id_to_remove = files
+        let file_to_remove = files
             .values()
             .find(|f| f.file_key == file_key.as_bytes())
-            .map(|f| f.id);
+            .map(|f| (f.id, f.bucket_id, f.size));
 
-        if let Some(id) = id_to_remove {
+        if let Some((id, bucket_id, size)) = file_to_remove {
             files.remove(&id);
+            drop(files);
+
+            // Update bucket statistics
+            let now = Utc::now().naive_utc();
+            let mut buckets = self.buckets.write().await;
+            if let Some(bucket) = buckets.get_mut(&bucket_id) {
+                bucket.file_count = bucket.file_count.saturating_sub(1);
+                bucket.total_size -= BigDecimal::from(size);
+                bucket.updated_at = now;
+            } else {
+                return Err(RepositoryError::not_found("Bucket"));
+            }
+
             Ok(())
         } else {
             Err(RepositoryError::not_found("File"))
@@ -582,7 +620,7 @@ pub mod tests {
     #[tokio::test]
     async fn get_bucket_by_onchain_id() {
         let repo = MockRepository::new();
-        let bucket_hash = Hash::from_slice(bucket::DEFAULT_BUCKET_ID.as_slice());
+        let bucket_hash = Hash::from_slice(bucket::BUCKET1_BUCKET_ID.as_slice());
         let created_bucket = repo
             .create_bucket(
                 TEST_BSP_ACCOUNT_STR,
@@ -600,16 +638,13 @@ pub mod tests {
             .expect("should find bucket by onchain ID");
 
         assert_eq!(bucket.id, created_bucket.id);
-        assert_eq!(
-            bucket.onchain_bucket_id,
-            bucket::DEFAULT_BUCKET_ID.as_slice()
-        );
+        assert_eq!(bucket.onchain_bucket_id, bucket_hash.as_ref(),);
     }
 
     #[tokio::test]
     async fn get_bucket_by_onchain_id_not_found() {
         let repo = MockRepository::new();
-        let bucket_hash = Hash::from_slice(bucket::DEFAULT_BUCKET_ID.as_slice());
+        let bucket_hash = Hash::from_slice(bucket::BUCKET1_BUCKET_ID.as_slice());
         repo.create_bucket(
             TEST_BSP_ACCOUNT_STR,
             None,
@@ -634,7 +669,7 @@ pub mod tests {
         let repo = MockRepository::new();
 
         // Create a bucket with files
-        let bucket_hash = Hash::from_slice(bucket::DEFAULT_BUCKET_ID.as_slice());
+        let bucket_hash = Hash::from_slice(bucket::BUCKET1_BUCKET_ID.as_slice());
         let bucket = repo
             .create_bucket(
                 TEST_BSP_ACCOUNT_STR,
@@ -725,7 +760,7 @@ pub mod tests {
     async fn get_files_by_bucket_pagination() {
         let repo = MockRepository::new();
 
-        let bucket_hash = Hash::from_slice(bucket::DEFAULT_BUCKET_ID.as_slice());
+        let bucket_hash = Hash::from_slice(bucket::BUCKET1_BUCKET_ID.as_slice());
         let bucket = repo
             .create_bucket(
                 TEST_BSP_ACCOUNT_STR,
@@ -737,7 +772,7 @@ pub mod tests {
             .await
             .expect("should create bucket");
 
-        let file1_bucket_hash = Hash::from_slice(bucket::DEFAULT_BUCKET_ID.as_slice());
+        let file1_bucket_hash = Hash::from_slice(bucket::BUCKET1_BUCKET_ID.as_slice());
         let file1 = repo
             .create_file(
                 TEST_BSP_ACCOUNT_STR.as_bytes(),
@@ -751,7 +786,7 @@ pub mod tests {
             .await
             .expect("should create file1");
 
-        let file2_bucket_hash = Hash::from_slice(bucket::DEFAULT_BUCKET_ID.as_slice());
+        let file2_bucket_hash = Hash::from_slice(bucket::BUCKET1_BUCKET_ID.as_slice());
         let file2 = repo
             .create_file(
                 TEST_BSP_ACCOUNT_STR.as_bytes(),
@@ -765,7 +800,7 @@ pub mod tests {
             .await
             .expect("should create file2");
 
-        let file3_bucket_hash = Hash::from_slice(bucket::DEFAULT_BUCKET_ID.as_slice());
+        let file3_bucket_hash = Hash::from_slice(bucket::BUCKET1_BUCKET_ID.as_slice());
         let file3 = repo
             .create_file(
                 TEST_BSP_ACCOUNT_STR.as_bytes(),
@@ -813,7 +848,7 @@ pub mod tests {
     async fn get_files_by_bucket_empty_bucket() {
         let repo = MockRepository::new();
 
-        let bucket_hash = Hash::from_slice(bucket::DEFAULT_BUCKET_ID.as_slice());
+        let bucket_hash = Hash::from_slice(bucket::BUCKET1_BUCKET_ID.as_slice());
         let empty_bucket = repo
             .create_bucket(
                 TEST_BSP_ACCOUNT_STR,
@@ -1157,12 +1192,13 @@ pub mod tests {
     #[tokio::test]
     async fn get_file_by_file_key() {
         let repo = MockRepository::new();
+        let bucket_onchain_id = Hash::from_slice(bucket::BUCKET1_BUCKET_ID.as_slice());
         let bucket = repo
             .create_bucket(
                 TEST_BSP_ACCOUNT_STR,
                 None,
                 bucket::DEFAULT_BUCKET_NAME.as_bytes(),
-                &Hash::from_slice(bucket::DEFAULT_BUCKET_ID.as_slice()),
+                &bucket_onchain_id,
                 !bucket::DEFAULT_IS_PUBLIC,
             )
             .await
@@ -1174,7 +1210,7 @@ pub mod tests {
                 TEST_BSP_ACCOUNT_STR.as_bytes(),
                 &file_key,
                 bucket.id,
-                &Hash::from_slice(bucket::DEFAULT_BUCKET_ID.as_slice()),
+                &bucket_onchain_id,
                 file::DEFAULT_LOCATION.as_bytes(),
                 file::DEFAULT_FINGERPRINT,
                 file::DEFAULT_SIZE,
@@ -1195,12 +1231,13 @@ pub mod tests {
     #[tokio::test]
     async fn get_file_by_file_key_not_found() {
         let repo = MockRepository::new();
+        let bucket_onchain_id = Hash::from_slice(bucket::BUCKET1_BUCKET_ID.as_slice());
         let bucket = repo
             .create_bucket(
                 TEST_BSP_ACCOUNT_STR,
                 None,
                 bucket::DEFAULT_BUCKET_NAME.as_bytes(),
-                &Hash::from_slice(bucket::DEFAULT_BUCKET_ID.as_slice()),
+                &bucket_onchain_id,
                 !bucket::DEFAULT_IS_PUBLIC,
             )
             .await
@@ -1209,7 +1246,7 @@ pub mod tests {
             TEST_BSP_ACCOUNT_STR.as_bytes(),
             &random_hash(),
             bucket.id,
-            &Hash::from_slice(bucket::DEFAULT_BUCKET_ID.as_slice()),
+            &bucket_onchain_id,
             file::DEFAULT_LOCATION.as_bytes(),
             file::DEFAULT_FINGERPRINT,
             file::DEFAULT_SIZE,

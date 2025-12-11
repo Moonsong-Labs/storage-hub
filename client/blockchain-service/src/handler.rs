@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use futures::prelude::*;
-use std::{collections::BTreeMap, marker::PhantomData, path::PathBuf, sync::Arc};
+use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 
 use sc_client_api::{
     BlockImportNotification, BlockchainEvents, FinalityNotification, HeaderBackend,
@@ -8,6 +8,7 @@ use sc_client_api::{
 use sc_network_types::PeerId;
 use sc_service::RpcHandlers;
 use sc_tracing::tracing::{debug, error, info, trace, warn};
+use sc_transaction_pool_api::TransactionStatus;
 use shc_common::traits::StorageEnableRuntime;
 use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_blockchain::TreeRoute;
@@ -16,7 +17,8 @@ use sp_runtime::{traits::Header, SaturatedConversion, Saturating};
 
 use pallet_file_system_runtime_api::{
     FileSystemApi, IsStorageRequestOpenToVolunteersError, QueryBspConfirmChunksToProveForFileError,
-    QueryFileEarliestVolunteerTickError, QueryMspConfirmChunksToProveForFileError,
+    QueryBspsVolunteeredForFileError, QueryFileEarliestVolunteerTickError,
+    QueryMspConfirmChunksToProveForFileError,
 };
 use pallet_payment_streams_runtime_api::{GetUsersWithDebtOverThresholdError, PaymentStreamsApi};
 use pallet_proofs_dealer_runtime_api::{
@@ -29,10 +31,11 @@ use pallet_storage_providers_runtime_api::{
     QueryProviderMultiaddressesError, QueryStorageProviderCapacityError, StorageProvidersApi,
 };
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
+use shc_blockchain_service_db::{leadership::LeadershipClient, store::PendingTxStore};
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
-    types::{AccountId, BlockNumber, OpaqueBlock, ParachainClient, TickNumber},
+    types::{AccountId, BlockNumber, OpaqueBlock, StorageHubClient, TickNumber},
 };
 use shc_forest_manager::traits::ForestStorageHandler;
 
@@ -41,8 +44,11 @@ use crate::{
     commands::BlockchainServiceCommand,
     events::BlockchainServiceEventBusProvider,
     state::{BlockchainServiceStateStore, LastProcessedBlockNumberCf},
-    transaction::SubmittedTransaction,
-    types::{FileDistributionInfo, ManagedProvider, MinimalBlockInfo, NewBlockNotificationKind},
+    transaction_manager::{TransactionManager, TransactionManagerConfig},
+    types::{
+        FileDistributionInfo, ManagedProvider, MinimalBlockInfo, MultiInstancesNodeRole,
+        NewBlockNotificationKind,
+    },
 };
 
 pub(crate) const LOG_TARGET: &str = "blockchain-service";
@@ -50,7 +56,7 @@ pub(crate) const LOG_TARGET: &str = "blockchain-service";
 /// The BlockchainService actor.
 ///
 /// This actor is responsible for sending extrinsics to the runtime and handling block import notifications.
-/// For such purposes, it uses the [`ParachainClient<RuntimeApi>`] to interact with the runtime, the [`RpcHandlers`] to send
+/// For such purposes, it uses the [`StorageHubClient<RuntimeApi>`] to interact with the runtime, the [`RpcHandlers`] to send
 /// extrinsics, and the [`Keystore`] to sign the extrinsics.
 pub struct BlockchainService<FSH, Runtime>
 where
@@ -62,8 +68,8 @@ where
     /// The event bus provider.
     pub(crate) event_bus_provider: BlockchainServiceEventBusProvider<Runtime>,
     /// The parachain client. Used to interact with the runtime.
-    /// TODO: Consider not using `ParachainClient` here.
-    pub(crate) client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+    /// TODO: Consider not using `StorageHubClient` here.
+    pub(crate) client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
     /// The keystore. Used to sign extrinsics.
     pub(crate) keystore: KeystorePtr,
     /// The RPC handlers. Used to send extrinsics.
@@ -78,6 +84,8 @@ where
     /// This is used to detect when the BlockchainService gets out of syncing mode and should therefore
     /// run some initialisation tasks. Also used to detect reorgs.
     pub(crate) best_block: MinimalBlockInfo<Runtime>,
+    /// The hash and number of the last finalised block processed by the BlockchainService.
+    pub(crate) last_finalised_block_processed: MinimalBlockInfo<Runtime>,
     /// Nonce counter for the extrinsics.
     pub(crate) nonce_counter: u32,
     /// A registry of waiters for a block number.
@@ -103,8 +111,25 @@ where
     pub(crate) capacity_manager: Option<CapacityRequestQueue<Runtime>>,
     /// Whether the node is running in maintenance mode.
     pub(crate) maintenance_mode: bool,
-    /// Phantom data for the Runtime type.
-    _runtime: PhantomData<Runtime>,
+    /// Transaction manager for tracking pending transactions and managing nonces.
+    pub(crate) transaction_manager:
+        TransactionManager<Runtime::Hash, Runtime::Call, BlockNumber<Runtime>>,
+    /// Channel for transaction watchers to send status updates.
+    ///
+    /// Watchers send TransactionStatus events for all lifecycle changes (Future, Ready, InBlock,
+    /// Retracted, Finalized, Invalid, Dropped, Usurped). Terminal failure states (Invalid, Dropped)
+    /// trigger immediate removal from the manager, enabling gap detection without waiting for timeout.
+    pub(crate) tx_status_sender: tokio::sync::mpsc::UnboundedSender<(
+        u32,
+        Runtime::Hash,
+        TransactionStatus<Runtime::Hash, Runtime::Hash>,
+    )>,
+    /// Optional pending tx store (Postgres). When present, tx sends and cleanups are persisted.
+    pub(crate) pending_tx_store: Option<PendingTxStore>,
+    /// Current role of this node in the HA group.
+    pub(crate) role: MultiInstancesNodeRole,
+    /// Dedicated leadership connection used to hold advisory locks when DB is enabled.
+    pub(crate) leadership_conn: Option<LeadershipClient>,
 }
 
 #[derive(Debug, Clone)]
@@ -138,6 +163,8 @@ where
     /// If set to `false`, MSP distribution tasks will be disabled even if the node
     /// is otherwise configured as a distributor (e.g. has a peer_id).
     pub enable_msp_distribute_files: bool,
+    /// Optional Postgres URL for the pending transactions DB. If None, DB is disabled.
+    pub pending_db_url: Option<String>,
 }
 
 impl<Runtime> Default for BlockchainServiceConfig<Runtime>
@@ -152,6 +179,7 @@ where
             max_blocks_behind_to_catch_up_root_changes: 10u32.into(),
             peer_id: None,
             enable_msp_distribute_files: false,
+            pending_db_url: None,
         }
     }
 }
@@ -164,6 +192,11 @@ where
 {
     receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand<Runtime>>,
     actor: BlockchainService<FSH, Runtime>,
+    tx_status_receiver: tokio::sync::mpsc::UnboundedReceiver<(
+        u32,
+        Runtime::Hash,
+        TransactionStatus<Runtime::Hash, Runtime::Hash>,
+    )>,
 }
 
 /// Merged event loop message for the BlockchainService actor.
@@ -174,6 +207,13 @@ where
     Command(BlockchainServiceCommand<Runtime>),
     BlockImportNotification(BlockImportNotification<OpaqueBlock>),
     FinalityNotification(FinalityNotification<OpaqueBlock>),
+    TxStatusUpdate(
+        (
+            u32,
+            Runtime::Hash,
+            TransactionStatus<Runtime::Hash, Runtime::Hash>,
+        ),
+    ),
 }
 
 /// Implement the ActorEventLoop trait for the BlockchainServiceEventLoop.
@@ -187,11 +227,49 @@ where
         actor: BlockchainService<FSH, Runtime>,
         receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand<Runtime>>,
     ) -> Self {
-        Self { actor, receiver }
+        // Create transaction status channel and wire sender into actor
+        let (tx_status_sender, tx_status_receiver) = tokio::sync::mpsc::unbounded_channel();
+        let mut actor = actor;
+        actor.tx_status_sender = tx_status_sender;
+
+        Self {
+            actor,
+            receiver,
+            tx_status_receiver,
+        }
     }
 
     async fn run(mut self) {
         info!(target: LOG_TARGET, "💾 StorageHub's Blockchain Service starting up!");
+
+        // Initialise pending transactions DB store if configured
+        self.actor.init_pending_tx_store().await;
+        // Role-specific initialisation based on the result of init_pending_tx_store.
+        match self.actor.role {
+            MultiInstancesNodeRole::Leader => {
+                info!(
+                    target: LOG_TARGET,
+                    "🧑‍✈️ Node role is LEADER; re-subscribing pending transactions from DB"
+                );
+                // Re-subscribe watchers for eligible pending transactions persisted in DB.
+                self.actor
+                    .resubscribe_pending_transactions_on_startup()
+                    .await;
+            }
+            MultiInstancesNodeRole::Follower => {
+                info!(
+                    target: LOG_TARGET,
+                    "👂 Node role is FOLLOWER; initialising follower pending-tx view"
+                );
+                self.actor.init_follower_pending_tx_state().await;
+            }
+            MultiInstancesNodeRole::Standalone => {
+                info!(
+                    target: LOG_TARGET,
+                    "📦 Node role is STANDALONE; pending transactions will not be persisted or shared across instances"
+                );
+            }
+        }
 
         // Import notification stream to be notified of new blocks.
         // The behaviour of this stream is:
@@ -204,6 +282,13 @@ where
         let finality_notification_stream = self.actor.client.finality_notification_stream();
 
         // Merging notification streams with command stream.
+        let tx_status_stream = futures::stream::unfold(self.tx_status_receiver, |mut rx| async {
+            match rx.recv().await {
+                Some(item) => Some((item, rx)),
+                None => None,
+            }
+        });
+
         let mut merged_stream = stream::select_all(vec![
             self.receiver
                 .map(MergedEventLoopMessage::<Runtime>::Command)
@@ -213,6 +298,9 @@ where
                 .boxed(),
             finality_notification_stream
                 .map(|n| MergedEventLoopMessage::<Runtime>::FinalityNotification(n))
+                .boxed(),
+            tx_status_stream
+                .map(MergedEventLoopMessage::<Runtime>::TxStatusUpdate)
                 .boxed(),
         ]);
 
@@ -229,6 +317,11 @@ where
                 }
                 MergedEventLoopMessage::FinalityNotification(notification) => {
                     self.actor.handle_finality_notification(notification).await;
+                }
+                MergedEventLoopMessage::TxStatusUpdate((nonce, tx_hash, status)) => {
+                    self.actor
+                        .handle_transaction_status_update(nonce, tx_hash, status)
+                        .await;
                 }
             };
         }
@@ -258,17 +351,12 @@ where
                 } => match self.send_extrinsic(call, &options).await {
                     Ok(output) => {
                         debug!(target: LOG_TARGET, "Extrinsic sent successfully: {:?}", output);
-                        match callback.send(Ok(SubmittedTransaction::new(
-                            output.receiver,
-                            output.hash,
-                            output.nonce,
-                            options.timeout(),
-                        ))) {
+                        match callback.send(Ok(output)) {
                             Ok(_) => {
-                                trace!(target: LOG_TARGET, "Receiver sent successfully");
+                                trace!(target: LOG_TARGET, "Submitted extrinsic info sent successfully");
                             }
                             Err(e) => {
-                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                                error!(target: LOG_TARGET, "Failed to send submitted extrinsic info: {:?}", e);
                             }
                         }
                     }
@@ -318,33 +406,6 @@ where
                         }
                     }
                 }
-                BlockchainServiceCommand::UnwatchExtrinsic {
-                    subscription_id,
-                    callback,
-                } => match self.unwatch_extrinsic(subscription_id).await {
-                    Ok(output) => {
-                        debug!(target: LOG_TARGET, "Extrinsic unwatched successfully: {:?}", output);
-                        match callback.send(Ok(())) {
-                            Ok(_) => {
-                                trace!(target: LOG_TARGET, "Receiver sent successfully");
-                            }
-                            Err(e) => {
-                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        warn!(target: LOG_TARGET, "Failed to unwatch extrinsic: {:?}", e);
-                        match callback.send(Err(e)) {
-                            Ok(_) => {
-                                trace!(target: LOG_TARGET, "Receiver sent successfully");
-                            }
-                            Err(e) => {
-                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
-                            }
-                        }
-                    }
-                },
                 BlockchainServiceCommand::GetBestBlockInfo { callback } => {
                     let best_block_info = self.best_block;
                     match callback.send(Ok(best_block_info)) {
@@ -599,6 +660,30 @@ where
                         }
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send chunks to prove file: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueryBspVolunteeredForFile {
+                    bsp_id,
+                    file_key,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let bsps_volunteered = self
+                        .client
+                        .runtime_api()
+                        .query_bsps_volunteered_for_file(current_block_hash, file_key)
+                        .unwrap_or_else(|_| Err(QueryBspsVolunteeredForFileError::InternalError));
+
+                    let volunteered = bsps_volunteered.map(|bsps| bsps.contains(&bsp_id));
+
+                    match callback.send(volunteered) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "BSP volunteered status sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send BSP volunteered status: {:?}", e);
                         }
                     }
                 }
@@ -1270,7 +1355,7 @@ where
     /// Create a new [`BlockchainService`].
     pub fn new(
         config: BlockchainServiceConfig<Runtime>,
-        client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+        client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
         keystore: KeystorePtr,
         rpc_handlers: Arc<RpcHandlers>,
         forest_storage_handler: FSH,
@@ -1279,6 +1364,7 @@ where
         capacity_request_queue: Option<CapacityRequestQueue<Runtime>>,
         maintenance_mode: bool,
     ) -> Self {
+        let genesis_hash = client.info().genesis_hash;
         Self {
             config,
             event_bus_provider: BlockchainServiceEventBusProvider::new(),
@@ -1286,7 +1372,14 @@ where
             keystore,
             rpc_handlers,
             forest_storage_handler,
-            best_block: MinimalBlockInfo::default(),
+            best_block: MinimalBlockInfo {
+                number: 0u32.into(),
+                hash: genesis_hash,
+            },
+            last_finalised_block_processed: MinimalBlockInfo {
+                number: 0u32.into(),
+                hash: genesis_hash,
+            },
             nonce_counter: 0,
             wait_for_block_request_by_number: BTreeMap::new(),
             wait_for_tick_request_by_number: BTreeMap::new(),
@@ -1295,7 +1388,15 @@ where
             notify_period,
             capacity_manager: capacity_request_queue,
             maintenance_mode,
-            _runtime: PhantomData,
+            transaction_manager: TransactionManager::new(TransactionManagerConfig::default()),
+            // Temporary sender, will be replaced by the event loop during startup
+            tx_status_sender: {
+                let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+                tx
+            },
+            pending_tx_store: None,
+            role: MultiInstancesNodeRole::Standalone,
+            leadership_conn: None,
         }
     }
 
@@ -1400,6 +1501,11 @@ where
     ) {
         trace!(target: LOG_TARGET, "📠 Processing block import #{}: {}", block_number, block_hash);
 
+        // Cleanup manager and DB, and handle old nonce gaps in one helper
+        // TODO: Consider doing this in a spawned task to avoid blocking the main thread.
+        self.cleanup_tx_manager_and_handle_nonce_gaps(*block_number, *block_hash)
+            .await;
+
         // Provider-specific code to run at the start of every block import.
         match self.maybe_managed_provider {
             Some(ManagedProvider::Bsp(_)) => {
@@ -1447,7 +1553,7 @@ where
                 for ev in block_events {
                     // Process the events applicable regardless of whether this node is managing a BSP or an MSP.
 
-                    self.process_common_block_import_events(ev.event.clone().into());
+                    self.process_msp_and_bsp_block_import_events(ev.event.clone().into());
 
                     // Process Provider-specific events.
                     match &self.maybe_managed_provider {
@@ -1546,5 +1652,20 @@ where
                 error!(target: LOG_TARGET, "Failed to get events storage element: {:?}", e);
             }
         }
+
+        // Cleanup the pending transaction store for the last finalised block processed.
+        // Transactions with a nonce below the on-chain nonce of this block are finalised.
+        // Still, we'll delete up to the last finalised block processed, to leave transactions with
+        // a terminal state in the pending DB for a short period of time.
+        if matches!(self.role, MultiInstancesNodeRole::Leader) {
+            self.cleanup_pending_tx_store(self.last_finalised_block_processed.hash)
+                .await;
+        }
+
+        // Update the last finalised block processed.
+        self.last_finalised_block_processed = MinimalBlockInfo {
+            number: block_number.saturated_into(),
+            hash: block_hash,
+        };
     }
 }

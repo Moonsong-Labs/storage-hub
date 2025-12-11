@@ -1,7 +1,11 @@
+use std::time::Duration;
+
 use anyhow::anyhow;
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::{commands::BlockchainServiceCommandInterface, events::NotifyPeriod};
+use shc_blockchain_service::{
+    commands::BlockchainServiceCommandInterface, events::NotifyPeriod, types::SendExtrinsicOptions,
+};
 use shc_common::{traits::StorageEnableRuntime, types::StorageProviderId};
 use sp_core::Get;
 use sp_runtime::traits::SaturatedConversion;
@@ -79,7 +83,7 @@ where
     NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, _event: NotifyPeriod) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, _event: NotifyPeriod) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
             "Charging users",
@@ -101,8 +105,11 @@ where
                 }
             },
             None => {
-                warn!(target: LOG_TARGET, "Provider not registred yet. We can't charge users.");
-                return Ok(());
+                let msg =
+                    "Provider not registered yet; cannot charge users. Skipping NotifyPeriod task."
+                        .to_string();
+                warn!(target: LOG_TARGET, "{msg}");
+                return Ok(msg);
             }
         };
 
@@ -131,15 +138,25 @@ where
             .into();
 
             // TODO: watch for success (we might want to do it for BSP too)
+            let options = SendExtrinsicOptions::new(
+                Duration::from_secs(
+                    self.storage_hub_handler
+                        .provider_config
+                        .blockchain_service
+                        .extrinsic_retry_timeout,
+                ),
+                Some("paymentStreams".to_string()),
+                Some("chargeMultipleUsersPaymentStreams".to_string()),
+            );
             let charging_result = self
                 .storage_hub_handler
                 .blockchain
-                .send_extrinsic(call, Default::default())
+                .send_extrinsic(call, options)
                 .await;
 
             match charging_result {
                 Ok(submitted_transaction) => {
-                    debug!(target: LOG_TARGET, "Submitted extrinsic to charge users with debt: {}", submitted_transaction.hash());
+                    debug!(target: LOG_TARGET, "Submitted extrinsic to charge users with debt: {}", submitted_transaction.hash);
                 }
                 Err(e) => {
                     error!(target: LOG_TARGET, "Failed to send extrinsic to charge users with debt: {}", e);
@@ -147,6 +164,9 @@ where
             }
         }
 
-        Ok(())
+        Ok(format!(
+            "NotifyPeriod handled successfully for MSP [{:x}]",
+            own_msp_id
+        ))
     }
 }

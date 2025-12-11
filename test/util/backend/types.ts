@@ -39,16 +39,19 @@ export type FileTree = {
       sizeBytes: number;
       fileKey: string;
       status: FileStatus;
+      uploadedAt: string;
     }
   | {
       type: "folder";
-      children: FileTree[];
     }
 );
 
 export interface FileListResponse {
   bucketId: string;
-  files: FileTree[];
+  tree: {
+    name: string;
+    children: FileTree[];
+  };
 }
 
 export interface FileInfo {
@@ -71,4 +74,16 @@ export interface PaymentStream {
 
 export interface PaymentStreamsResponse {
   streams: PaymentStream[];
+}
+
+export interface StatsResponse {
+  capacity: {
+    totalBytes: string;
+    usedBytes: string;
+    availableBytes: string;
+  };
+  activeUsers: number;
+  lastCapacityChange: string;
+  valuePropsAmount: string;
+  bucketsAmount: string;
 }

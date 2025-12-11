@@ -4,7 +4,7 @@ use std::{sync::Mutex, time::Duration};
 
 use sc_tracing::tracing::*;
 use sp_core::H256;
-use sp_runtime::traits::{CheckedAdd, SaturatedConversion, Zero};
+use sp_runtime::traits::{CheckedAdd, CheckedSub, SaturatedConversion, Zero};
 
 use pallet_file_system::types::BucketMoveRequestResponse;
 use shc_actors_framework::event_bus::EventHandler;
@@ -111,7 +111,7 @@ where
     async fn handle_event(
         &mut self,
         event: MoveBucketRequestedForMsp<Runtime>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
             "MSP: user requested to move bucket {:?} to us",
@@ -125,10 +125,17 @@ where
                 "Failed to handle move bucket request: {:?}",
                 error
             );
-            return self.reject_bucket_move(event.bucket_id).await;
+            self.reject_bucket_move(event.bucket_id).await?;
+            return Ok(format!(
+                "Rejected MoveBucketRequestedForMsp for bucket [{:x}] due to error {:?}",
+                event.bucket_id, error
+            ));
         }
 
-        Ok(())
+        Ok(format!(
+            "Handled MoveBucketRequestedForMsp for bucket [{:x}]",
+            event.bucket_id
+        ))
     }
 }
 
@@ -142,7 +149,7 @@ where
     async fn handle_event(
         &mut self,
         event: StartMovedBucketDownload<Runtime>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
             "StartMovedBucketDownload: Starting download process for bucket {:?}",
@@ -180,7 +187,10 @@ where
                 "No files to download for bucket {:?}", event.bucket_id
             );
             self.pending_bucket_id = None;
-            return Ok(());
+            return Ok(format!(
+                "No files to download for bucket [{:x}]",
+                event.bucket_id
+            ));
         }
 
         // Convert indexer files to FileMetadata
@@ -248,7 +258,10 @@ where
             "Bucket move completed for bucket {:?}", event.bucket_id
         );
 
-        Ok(())
+        Ok(format!(
+            "Handled StartMovedBucketDownload for bucket [{:x}]",
+            event.bucket_id
+        ))
     }
 }
 
@@ -463,12 +476,16 @@ where
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
-                SendExtrinsicOptions::new(Duration::from_secs(
-                    self.storage_hub_handler
-                        .provider_config
-                        .blockchain_service
-                        .extrinsic_retry_timeout,
-                )),
+                SendExtrinsicOptions::new(
+                    Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .blockchain_service
+                            .extrinsic_retry_timeout,
+                    ),
+                    Some("fileSystem".to_string()),
+                    Some("mspRespondMoveBucketRequest".to_string()),
+                ),
                 RetryStrategy::default()
                     .with_max_retries(self.config.max_try_count)
                     .with_max_tip(self.config.max_tip),
@@ -508,12 +525,16 @@ where
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
-                SendExtrinsicOptions::new(Duration::from_secs(
-                    self.storage_hub_handler
-                        .provider_config
-                        .blockchain_service
-                        .extrinsic_retry_timeout,
-                )),
+                SendExtrinsicOptions::new(
+                    Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .blockchain_service
+                            .extrinsic_retry_timeout,
+                    ),
+                    Some("file_system".to_string()),
+                    Some("msp_respond_move_bucket_request".to_string()),
+                ),
                 RetryStrategy::default()
                     .with_max_retries(self.config.max_try_count)
                     .with_max_tip(self.config.max_tip),
@@ -536,6 +557,22 @@ where
         required_size: StorageDataUnit<Runtime>,
         own_msp_id: ProviderId<Runtime>,
     ) -> anyhow::Result<()> {
+        let max_storage_capacity = self
+            .storage_hub_handler
+            .provider_config
+            .capacity_config
+            .max_capacity();
+
+        let current_capacity = self
+            .storage_hub_handler
+            .blockchain
+            .query_storage_provider_capacity(own_msp_id)
+            .await
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "Failed to query storage provider capacity: {:?}", e);
+                anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
+            })?;
+
         let available_capacity = self
             .storage_hub_handler
             .blockchain
@@ -546,6 +583,32 @@ where
                 anyhow::anyhow!("Failed to query available storage capacity: {:?}", e)
             })?;
 
+        // Calculate currently used storage
+        let used_capacity = current_capacity
+            .checked_sub(&available_capacity)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Available capacity ({}) exceeds current capacity ({})",
+                    available_capacity,
+                    current_capacity
+                )
+            })?;
+
+        // Check if accepting this bucket would exceed our local max storage capacity limit
+        let projected_usage = used_capacity
+            .checked_add(&required_size)
+            .ok_or_else(|| anyhow::anyhow!("Overflow calculating projected storage usage"))?;
+
+        // Respect the maximum storage capacity limit set locally even if the available capacity is sufficient on chain.
+        if projected_usage > max_storage_capacity {
+            let err_msg = format!(
+                "Accepting bucket would exceed maximum storage capacity limit. Used: {}, Required: {}, Max: {}",
+                used_capacity, required_size, max_storage_capacity
+            );
+            warn!(target: LOG_TARGET, "{}", err_msg);
+            return Err(anyhow::anyhow!(err_msg));
+        }
+
         // Increase storage capacity if the available capacity is less than the required size
         if available_capacity < required_size {
             warn!(
@@ -554,31 +617,6 @@ where
                 available_capacity,
                 required_size
             );
-
-            let current_capacity = self
-                .storage_hub_handler
-                .blockchain
-                .query_storage_provider_capacity(own_msp_id)
-                .await
-                .map_err(|e| {
-                    error!(target: LOG_TARGET, "Failed to query storage provider capacity: {:?}", e);
-                    anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
-                })?;
-
-            let max_storage_capacity = self
-                .storage_hub_handler
-                .provider_config
-                .capacity_config
-                .max_capacity();
-
-            if max_storage_capacity <= current_capacity {
-                let err_msg =
-                    "Reached maximum storage capacity limit. Unable to add more storage capacity.";
-                error!(
-                    target: LOG_TARGET, "{}", err_msg
-                );
-                return Err(anyhow::anyhow!(err_msg));
-            }
 
             self.storage_hub_handler
                 .blockchain

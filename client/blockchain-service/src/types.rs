@@ -1,4 +1,4 @@
-use log::warn;
+use log::{debug, info, warn};
 use std::{
     cmp::{min, Ordering},
     collections::{BTreeMap, BTreeSet, HashMap},
@@ -10,6 +10,7 @@ use std::{
 use codec::{Decode, Encode};
 use frame_system::DispatchEventInfo;
 use sc_client_api::BlockImportNotification;
+use sc_transaction_pool_api::TransactionStatus;
 use shc_common::{
     traits::StorageEnableRuntime,
     types::{
@@ -25,7 +26,10 @@ use sp_runtime::{
     DispatchError, SaturatedConversion,
 };
 
-use crate::handler::LOG_TARGET;
+use crate::{
+    commands::BlockchainServiceCommandInterfaceExt, handler::LOG_TARGET,
+    transaction_manager::wait_for_transaction_status,
+};
 
 /// A struct that holds the information to submit a storage proof.
 ///
@@ -192,6 +196,116 @@ pub struct Extrinsic<Runtime: StorageEnableRuntime> {
     pub events: StorageHubEventsVec<Runtime>,
 }
 
+/// Information about a submitted extrinsic.
+///
+/// This struct is returned by `send_extrinsic()` and contains basic information
+/// about the submitted transaction. The transaction is automatically watched
+/// in the background by a spawned watcher task.
+#[derive(Debug, Clone)]
+pub struct SubmittedExtrinsicInfo<Runtime: StorageEnableRuntime> {
+    /// Hash of the submitted extrinsic.
+    pub hash: Runtime::Hash,
+    /// The nonce of the extrinsic.
+    pub nonce: u32,
+    /// Status subscription receiver for tracking transaction lifecycle.
+    /// Subscribe to this to get notified of status changes (Ready, InBlock, Finalized, etc.)
+    pub status_subscription:
+        tokio::sync::watch::Receiver<TransactionStatus<Runtime::Hash, Runtime::Hash>>,
+}
+
+impl<Runtime: StorageEnableRuntime> SubmittedExtrinsicInfo<Runtime> {
+    /// Wait for the transaction to be included in a block and verify it succeeded.
+    ///
+    /// This method waits for the transaction to reach InBlock status, then fetches the
+    /// extrinsic from the block and checks if it succeeded or failed by examining the
+    /// ExtrinsicSuccess/ExtrinsicFailed events.
+    ///
+    /// Returns an error if:
+    /// - The transaction fails to be included in a block (timeout, dropped, invalid, etc.)
+    /// - The transaction is included but the extrinsic failed (ExtrinsicFailed event)
+    pub async fn watch_for_success<T>(self, blockchain: &T) -> anyhow::Result<()>
+    where
+        T: BlockchainServiceCommandInterfaceExt<Runtime>,
+    {
+        // Wait for InBlock status with a reasonable timeout
+        let block_hash = wait_for_transaction_status(
+            self.nonce,
+            self.status_subscription,
+            StatusToWait::InBlock,
+            std::time::Duration::from_secs(60),
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!("Transaction failed to be included in block: {:?}", e))?;
+
+        // Fetch the extrinsic from the block to check if it succeeded
+        let extrinsic = blockchain
+            .get_extrinsic_from_block(block_hash, self.hash)
+            .await
+            .map_err(|e| {
+                anyhow::anyhow!(
+                    "Failed to get extrinsic from block after InBlock status: {:?}",
+                    e
+                )
+            })?;
+
+        // Check if the extrinsic was successful by examining the events
+        let extrinsic_result = T::extrinsic_result(extrinsic.clone()).map_err(|e| {
+            anyhow::anyhow!(
+                "Extrinsic does not contain an ExtrinsicFailed nor ExtrinsicSuccess event: {:?}",
+                e
+            )
+        })?;
+
+        match extrinsic_result {
+            ExtrinsicResult::Success { dispatch_info } => {
+                info!(
+                    target: LOG_TARGET,
+                    "Extrinsic with nonce {} succeeded with dispatch info: {:?}",
+                    self.nonce,
+                    dispatch_info
+                );
+                debug!(target: LOG_TARGET, "Extrinsic events: {:?}", extrinsic.events);
+                Ok(())
+            }
+            ExtrinsicResult::Failure {
+                dispatch_error,
+                dispatch_info,
+            } => {
+                log::error!(
+                    target: LOG_TARGET,
+                    "Extrinsic with nonce {} failed with dispatch error: {:?}, dispatch info: {:?}",
+                    self.nonce,
+                    dispatch_error,
+                    dispatch_info
+                );
+                Err(anyhow::anyhow!(
+                    "Extrinsic failed: dispatch_error={:?}, dispatch_info={:?}",
+                    dispatch_error,
+                    dispatch_info
+                ))
+            }
+        }
+    }
+
+    /// Wait for the transaction to be finalized.
+    ///
+    /// This is a convenience method that waits for the transaction to reach Finalized status.
+    /// Returns an error if the transaction fails or times out.
+    /// TODO: Add a timeout parameter.
+    pub async fn watch_for_finalization(self) -> anyhow::Result<()> {
+        wait_for_transaction_status(
+            self.nonce,
+            self.status_subscription,
+            StatusToWait::Finalized,
+            std::time::Duration::from_secs(60),
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!("Transaction failed: {:?}", e))?;
+
+        Ok(())
+    }
+}
+
 /// ExtrinsicResult enum.
 ///
 /// This enum represents the result of an extrinsic execution. It can be either a success or a failure.
@@ -225,15 +339,28 @@ pub struct SendExtrinsicOptions {
     nonce: Option<u32>,
     /// Maximum time to wait for a response before assuming the extrinsic submission has failed.
     timeout: Duration,
+    /// The module (pallet) that the extrinsic belongs to. For instance, when sending a system_remark
+    /// extrinsic, the module would be "system".
+    module: Option<String>,
+    /// The method that the extrinsic is calling. For instance, when sending a system_remark
+    /// extrinsic, the method would be "remark".
+    method: Option<String>,
 }
 
 impl SendExtrinsicOptions {
-    pub fn new(timeout: Duration) -> Self {
+    pub fn new(timeout: Duration, module: Option<String>, method: Option<String>) -> Self {
         Self {
             tip: 0u128,
             nonce: None,
             timeout,
+            module,
+            method,
         }
+    }
+
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
+        self
     }
 
     pub fn with_tip(mut self, tip: u128) -> Self {
@@ -243,6 +370,16 @@ impl SendExtrinsicOptions {
 
     pub fn with_nonce(mut self, nonce: Option<u32>) -> Self {
         self.nonce = nonce;
+        self
+    }
+
+    pub fn with_module(mut self, module: Option<String>) -> Self {
+        self.module = module;
+        self
+    }
+
+    pub fn with_method(mut self, method: Option<String>) -> Self {
+        self.method = method;
         self
     }
 
@@ -257,6 +394,14 @@ impl SendExtrinsicOptions {
     pub fn timeout(&self) -> Duration {
         self.timeout
     }
+
+    pub fn module(&self) -> Option<String> {
+        self.module.clone()
+    }
+
+    pub fn method(&self) -> Option<String> {
+        self.method.clone()
+    }
 }
 
 impl Default for SendExtrinsicOptions {
@@ -265,6 +410,8 @@ impl Default for SendExtrinsicOptions {
             tip: 0u128,
             nonce: None,
             timeout: Duration::from_secs(60),
+            module: None,
+            method: None,
         }
     }
 }
@@ -407,10 +554,23 @@ impl Default for RetryStrategy {
     }
 }
 
+/// Status to wait for when monitoring a transaction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StatusToWait {
+    /// Wait for the transaction to be included in a block.
+    InBlock,
+    /// Wait for the transaction to be finalized.
+    Finalized,
+}
+
 #[derive(thiserror::Error, Debug, Clone)]
 pub enum WatchTransactionError {
     #[error("Timeout waiting for transaction to be included in a block")]
     Timeout,
+    #[error("Transaction not found in the manager")]
+    TransactionNotFound,
+    #[error("Transaction hash does not match the hash in the manager")]
+    TransactionHashMismatch,
     #[error("Transaction watcher channel closed")]
     WatcherChannelClosed,
     #[error("Transaction failed. DispatchError: {dispatch_error}, DispatchInfo: {dispatch_info}")]
@@ -420,6 +580,22 @@ pub enum WatchTransactionError {
     },
     #[error("Unexpected error: {0}")]
     Internal(String),
+}
+
+#[derive(thiserror::Error, Debug, Clone)]
+pub enum SubmitAndWatchError {
+    #[error("Invalid Transaction: transaction is outdated (nonce {nonce})")]
+    InvalidTransactionOutdated { nonce: u32 },
+    #[error("RPC transport error: {message}")]
+    RpcTransport { message: String },
+    #[error("Malformed RPC response: {message}")]
+    MalformedResponse { message: String },
+    #[error("RPC error {code}: {message}")]
+    RpcError {
+        code: i64,
+        message: String,
+        data: Option<String>,
+    },
 }
 
 /// Minimum block information needed to register what is the current best block
@@ -680,4 +856,29 @@ impl<Runtime: StorageEnableRuntime> ManagedProvider<Runtime> {
             StorageProviderId::MainStorageProvider(msp_id) => Self::Msp(MspHandler::new(msp_id)),
         }
     }
+}
+
+/// Role of this node in a group of multiple instances of nodes running the same MSP/BSP.
+///
+/// - `Leader`: the only node allowed to submit extrinsics and manage nonces.
+/// - `Follower`: keeps a local copy of Merkle Patricia Forests and file
+///   chunks, but never submits extrinsics.
+/// - `Standalone`: pending-tx DB is disabled; node behaves as a single-instance
+///   deployment and does not persist pending transactions in the DB.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MultiInstancesNodeRole {
+    /// The only node allowed to submit extrinsics and manage nonces.
+    ///
+    /// This role means that the pending transactions DB is used to persist pending transactions
+    /// and this node was the one to acquire the leadership advisory lock.
+    Leader,
+    /// Keeps a local copy of Merkle Patricia Forests and file chunks, but never submits extrinsics.
+    ///
+    /// This role means that the pending transactions DB is used to persist pending transactions
+    /// and this node was not the one to acquire the leadership advisory lock. It keeps the Forest
+    /// and file chunks stored to be able to take on the leadership role, should the `Leader` stop working.
+    Follower,
+    /// Pending-tx DB is disabled; node behaves as a single-instance deployment and does not persist
+    /// pending transactions in the DB.
+    Standalone,
 }

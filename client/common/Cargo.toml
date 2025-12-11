@@ -56,10 +56,10 @@ k256 = { workspace = true, features = ["ecdsa", "arithmetic"] }
 # Polkadot
 polkadot-primitives = { workspace = true }
 
-# Cumulus
-cumulus-client-service = { workspace = true }
-cumulus-primitives-core = { workspace = true }
-cumulus-primitives-storage-weight-reclaim = { workspace = true }
+# Cumulus (optional, for parachain support)
+cumulus-client-service = { workspace = true, optional = true }
+cumulus-primitives-core = { workspace = true, optional = true }
+cumulus-primitives-storage-weight-reclaim = { workspace = true, optional = true }
 
 # Frontier
 fp-account = { workspace = true }
@@ -72,6 +72,7 @@ shp-forest-verifier = { workspace = true }
 shp-opaque = { workspace = true }
 shp-traits = { workspace = true }
 shp-types = { workspace = true }
+shp-tx-implicits-runtime-api = { workspace = true }
 
 # Local pallets
 pallet-bucket-nfts = { workspace = true }
@@ -90,6 +91,11 @@ tempfile = "3.8"
 
 [features]
 default = ["std"]
+parachain = [
+	"cumulus-client-service",
+	"cumulus-primitives-core",
+	"cumulus-primitives-storage-weight-reclaim",
+]
 std = [
 	"codec/std",
 	"frame-benchmarking/std",
@@ -111,8 +117,8 @@ std = [
 	"sp-std/std",
 	"trie-db/std",
 	"polkadot-primitives/std",
-	"cumulus-primitives-core/std",
-	"cumulus-primitives-storage-weight-reclaim/std",
+	"cumulus-primitives-core?/std",
+	"cumulus-primitives-storage-weight-reclaim?/std",
 	"shp-constants/std",
 	"shp-file-key-verifier/std",
 	"shp-file-metadata/std",
@@ -120,6 +126,7 @@ std = [
 	"shp-traits/std",
 	"shp-opaque/std",
 	"shp-types/std",
+	"shp-tx-implicits-runtime-api/std",
 	"pallet-balances/std",
 	"pallet-bucket-nfts/std",
 	"pallet-file-system/std",

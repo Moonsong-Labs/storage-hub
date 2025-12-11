@@ -11,24 +11,28 @@ use jsonrpsee::core::traits::ToRpcParams;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use tokio::{
-    fs,
     sync::{Mutex, RwLock},
     time::sleep,
 };
+use tracing::{debug, error};
 
+use frame_support::storage::StoragePrefixedMap;
 use shc_common::types::FileMetadata;
-use shc_rpc::{GetValuePropositionsResult, RpcProviderId, SaveFileToDisk};
+use shc_rpc::{
+    GetFileFromFileStorageResult, GetValuePropositionsResult, RpcProviderId, SaveFileToDisk,
+};
+use shp_types::Hash;
 use sp_core::H256;
 
 use crate::{
     constants::{
         mocks::{DOWNLOAD_FILE_CONTENT, MOCK_PRICE_PER_GIGA_UNIT},
-        rpc::DUMMY_MSP_ID,
-        rpc::TIMEOUT_MULTIPLIER,
+        rpc::{DUMMY_MSP_ID, TIMEOUT_MULTIPLIER},
+        test::file::DEFAULT_FINGERPRINT,
     },
     data::rpc::{
         connection::error::{RpcConnectionError, RpcResult},
-        methods, RpcConnection,
+        methods, runtime_apis, RpcConnection,
     },
     models::msp_info::{ValueProposition, ValuePropositionWithId},
     test_utils::random_bytes_32,
@@ -102,7 +106,7 @@ impl MockConnection {
     }
 
     /// Simulate reconnection
-    pub async fn reconnect(&self) {
+    pub async fn connect(&self) {
         let mut connected = self.connected.write().await;
         *connected = true;
     }
@@ -142,39 +146,102 @@ impl MockConnection {
         }
     }
 
-    /// Build mock JSON response for `storagehubclient_saveFileToDisk` and write mock file
+    async fn mock_runtime_apis<P>(&self, params: P) -> Value
+    where
+        P: ToRpcParams + Send,
+    {
+        // Extract [runtime_method, scale_encoded_parameters]
+        let raw = params.to_rpc_params().unwrap().unwrap();
+        let (method, params): (String, String) = serde_json::from_str(raw.get()).unwrap();
+        let _params = hex::decode(params.trim_start_matches("0x"))
+            .expect("runtime API params as encoded hex string");
+
+        // Match against the runtime API method names
+        let current_price_method =
+            runtime_apis::RuntimeApiCalls::GetCurrentPricePerGigaUnitPerTick.method_name();
+        let users_of_provider_method =
+            runtime_apis::RuntimeApiCalls::GetUsersOfPaymentStreamsOfProvider.method_name();
+
+        match method.as_str() {
+            m if m == current_price_method => {
+                let price = format!("0x{}", hex::encode(MOCK_PRICE_PER_GIGA_UNIT.encode()));
+                serde_json::json!(price)
+            }
+            m if m == users_of_provider_method => {
+                // SCALE-encoded DUMMY MSP users list
+                serde_json::json!("0x040b17ca3a1454cd058b231090c6fd635dd348659a")
+            }
+            api => {
+                error!(api = %api, "no mock registered for requested runtime api");
+                serde_json::json!(null)
+            }
+        }
+    }
+
+    async fn mock_state_queries<P>(&self, params: P) -> Value
+    where
+        P: ToRpcParams + Send,
+    {
+        // Extract (storage_key) from params
+        // We assume params are [storage_key]
+        let raw = params.to_rpc_params().unwrap().unwrap();
+        let (storage_key,): (String,) = serde_json::from_str(raw.get()).unwrap();
+        debug!(key = %storage_key, "mocking state query");
+
+        let storage_key = hex::decode(storage_key.trim_start_matches("0x"))
+            .expect("storage queries' storage key to be encoded as hex string");
+
+        // Get the storage prefix for MSP info queries
+        // This corresponds to state_queries::MspInfoQuery
+        let msp_info_prefix = crate::runtime::MainStorageProvidersStorageMap::final_prefix();
+
+        match storage_key {
+            // Match against MSP info storage queries (state_queries::MspInfoQuery)
+            msp if msp.starts_with(msp_info_prefix.as_slice()) => {
+                // this is some sample data returned by the RPC during tests
+                // it should be the SCALE-encoded MainStorageProvider for the solochain runtime
+                serde_json::json!("0x0000002000000000934c0300000000000449012f6970342f3137322e31382e302e332f7463702f33303335302f7032702f313244334b6f6f575355767a38514d35583474664161534c4572415a6a523270756f6a6f313670554c42487971544d474b744e5601000000000000000000000000000000010000000d0000004c31b93792ab99e2553bff747199b7a4951185b24c31b93792ab99e2553bff747199b7a4951185b20d000000")
+            }
+            key => {
+                error!(key = %hex::encode(key), "no mock registered for requested storage query");
+                serde_json::json!(null)
+            }
+        }
+    }
+
+    /// Build mock JSON response for `storagehubclient_saveFileToDisk` and stream mock content
     async fn mock_save_file_to_disk<P>(&self, params: P) -> Value
     where
         P: ToRpcParams + Send,
     {
+        // Extract (file_key, upload_url) from params
         // We assume params are [file_key, upload_url]
         let raw = params.to_rpc_params().unwrap().unwrap();
         let (file_key, upload_url): (String, String) = serde_json::from_str(raw.get()).unwrap();
 
-        // Derive filename from upload_url
+        // Derive filename from provided upload_url, fallback to file_key
         let file_name = upload_url
             .rsplit('/')
             .next()
             .unwrap_or_else(|| file_key.as_str())
             .to_string();
-        let local_path = format!("/tmp/uploads/{}", file_name);
 
-        // Create mock file content
-        let _ = fs::create_dir_all("/tmp/uploads").await;
+        // Best-effort: perform the request but don't fail hard if the server isn't running
+        let client = reqwest::Client::new();
         let content = DOWNLOAD_FILE_CONTENT.as_bytes();
-        let _ = fs::write(&local_path, content).await;
+        let _ = client.put(upload_url).body(content.to_vec()).send().await;
 
         // Return expected response shape
-        serde_json::json!(SaveFileToDisk::Success(
-            FileMetadata::new(
-                vec![0; 32],
-                vec![0; 32],
-                file_name.as_bytes().to_vec(),
-                content.len() as u64,
-                vec![0u8; 32].as_slice().into(),
-            )
-            .expect("a valid file metadata descriptor")
-        ))
+        let metadata = FileMetadata::new(
+            vec![0; 32],
+            vec![0; 32],
+            file_name.as_bytes().to_vec(),
+            content.len() as u64,
+            DEFAULT_FINGERPRINT.as_slice().into(),
+        )
+        .expect("a valid file metadata descriptor");
+
+        serde_json::json!(SaveFileToDisk::Success(metadata))
     }
 }
 
@@ -214,10 +281,23 @@ impl RpcConnection for MockConnection {
 
         // Build JSON response by method
         let response: Value = match method {
-            methods::SAVE_FILE_TO_DISK => self.mock_save_file_to_disk(params).await,
             methods::FILE_KEY_EXPECTED => serde_json::json!(true),
+            methods::IS_FILE_IN_FILE_STORAGE => {
+                let metadata = FileMetadata::new(
+                    vec![0; 32],
+                    vec![0; 32],
+                    b"mock_file.bin".to_vec(),
+                    1u64,
+                    DEFAULT_FINGERPRINT.as_slice().into(),
+                )
+                .expect("valid dummy metadata");
+                serde_json::json!(GetFileFromFileStorageResult::FileFound(metadata))
+            }
+            methods::SAVE_FILE_TO_DISK => {
+                self.mock_save_file_to_disk(params).await
+            }
             methods::PROVIDER_ID => serde_json::json!(RpcProviderId::Msp(
-                shp_types::Hash::from_slice(DUMMY_MSP_ID.as_slice())
+                Hash::from_slice(DUMMY_MSP_ID.as_slice())
             )),
             methods::VALUE_PROPS => {
                 serde_json::json!(GetValuePropositionsResult::Success(vec![
@@ -248,18 +328,18 @@ impl RpcConnection for MockConnection {
             methods::PEER_IDS => serde_json::json!(vec![
                 "/ip4/192.168.0.10/tcp/30333/p2p/12D3KooWSUvz8QM5X4tfAaSLErAZjR2puojo16pULBHyqTMGKtNV"
             ]),
-            methods::CURRENT_PRICE => {
-                // Return a mock price value (e.g., 100 units)
-                serde_json::json!(MOCK_PRICE_PER_GIGA_UNIT)
-            },
             methods::RECEIVE_FILE_CHUNKS => {
                 serde_json::json!([])
             }
-            _ => {
+            methods::API_CALL => self.mock_runtime_apis(params).await,
+            methods::STATE_QUERY => self.mock_state_queries(params).await,
+            method => {
                 let responses = self.responses.read().await;
-                responses
+                let response = responses
                     .get(method)
-                    .cloned()
+                    .cloned();
+
+                response
                     .unwrap_or(serde_json::json!(null))
             }
         };
@@ -275,8 +355,8 @@ impl RpcConnection for MockConnection {
         *connected
     }
 
-    async fn close(&self) -> RpcResult<()> {
-        self.disconnect().await;
+    async fn reconnect(&self) -> RpcResult<()> {
+        self.connect().await;
         Ok(())
     }
 }
@@ -309,8 +389,8 @@ mod tests {
         // Test connection status
         assert!(conn.is_connected().await);
 
-        // Test close
-        conn.close().await.unwrap();
+        // Test disconnection
+        conn.disconnect().await;
         assert!(!conn.is_connected().await);
     }
 
@@ -418,9 +498,6 @@ mod tests {
     async fn test_connection_disconnect_reconnect() {
         let conn = MockConnection::new();
 
-        // Initially connected
-        assert!(conn.is_connected().await);
-
         // Disconnect
         conn.disconnect().await;
         assert!(!conn.is_connected().await);
@@ -430,7 +507,7 @@ mod tests {
         assert!(matches!(result, Err(RpcConnectionError::ConnectionClosed)));
 
         // Reconnect
-        conn.reconnect().await;
+        conn.connect().await;
         assert!(conn.is_connected().await);
 
         // Call should work now

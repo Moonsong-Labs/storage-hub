@@ -123,8 +123,11 @@ export const cleardownTest = async (cleardownOptions: {
       (container) =>
         container.Image === DOCKER_IMAGE ||
         container.Names.some((name) => name.includes("toxiproxy")) ||
+        container.Names.some((name) =>
+          name.includes(ShConsts.NODE_INFOS.pendingDb.containerName)
+        ) ||
         container.Names.some((name) => name.includes("storage-hub-sh-copyparty")) ||
-        container.Names.some((name) => name.includes("storage-hub-sh-backend"))
+        container.Names.some((name) => name.includes(ShConsts.NODE_INFOS.backend.containerName))
     );
 
     if (relevantContainers.length > 0) {
@@ -171,6 +174,18 @@ export const createCheckBucket = async (api: EnrichedBspApi, bucketName: string)
   assert(newBucketEventDataBlob, "Event doesn't match Type");
 
   return newBucketEventDataBlob;
+};
+
+/**
+ * Converts a hex string to a Buffer.
+ * Handles hex strings with or without '0x' prefix.
+ *
+ * @param hex - The hex string to convert
+ * @returns Buffer representation of the hex string
+ */
+export const hexToBuffer = (hex: string): Buffer => {
+  const cleanHex = hex.startsWith("0x") ? hex.slice(2) : hex;
+  return Buffer.from(cleanHex, "hex");
 };
 
 export const addBsp = async (

@@ -1,8 +1,8 @@
+import assert from "node:assert";
 import type { ApiPromise } from "@polkadot/api";
 import type { EventRecord } from "@polkadot/types/interfaces";
 import type { IsEvent } from "@polkadot/types/metadata/decorate/types";
 import type { AnyTuple, IEvent } from "@polkadot/types/types";
-import assert from "node:assert";
 import { sealBlock, waitForLog } from "./bspNet";
 import { sleep } from "./timer";
 
@@ -120,12 +120,21 @@ export const assertExtrinsicPresent = async (
         return matches;
       }
 
-      throw new Error(`No matching extrinsic found for ${options.module}.${options.method}`);
+      // If we are expecting 0 extrinsics and we found none, return an empty array instead of throwing an error.
+      if (matches.length === 0 && options.assertLength === 0 && options.exactLength === true) {
+        return [];
+      }
+
+      // No matches found, continue to next iteration
+      lastError = new Error(
+        `No extrinsic matching ${options.module}.${options.method} found in block`
+      );
     } catch (error) {
       lastError = error as Error;
-      if (i === iterations) {
-        break;
-      }
+    }
+
+    // Sleep before next iteration (unless this is the last iteration)
+    if (i < iterations) {
       await sleep(100);
     }
   }

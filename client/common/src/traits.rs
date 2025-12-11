@@ -10,6 +10,7 @@ use polkadot_primitives::Nonce;
 use sc_service::TFullClient;
 use scale_info::StaticTypeInfo;
 use shp_opaque::Block;
+use shp_tx_implicits_runtime_api::TxImplicitsApi as TxImplicitsRuntimeApi;
 use sp_api::ConstructRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_core::{crypto::KeyTypeId, H256};
@@ -47,7 +48,7 @@ use crate::types::*;
 ///
 /// ## In Function Signatures
 /// ```ignore
-/// fn spawn_blockchain_service<RuntimeApi>(client: Arc<ParachainClient<RuntimeApi>>)
+/// fn spawn_blockchain_service<RuntimeApi>(client: Arc<StorageHubClient<RuntimeApi>>)
 /// where
 ///     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 /// {
@@ -85,6 +86,7 @@ pub trait StorageEnableApiCollection<Runtime>:
     pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance<Runtime>>
     + substrate_frame_rpc_system::AccountNonceApi<Block, AccountId<Runtime>, Nonce>
     + BlockBuilder<Block>
+    + TxImplicitsRuntimeApi<Block>
     + ProofsDealerRuntimeApi<
         Block,
         ProofsDealerProviderId<Runtime>,
@@ -134,6 +136,7 @@ where
     T: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance<Runtime>>
         + substrate_frame_rpc_system::AccountNonceApi<Block, AccountId<Runtime>, Nonce>
         + BlockBuilder<Block>
+        + TxImplicitsRuntimeApi<Block>
         + ProofsDealerRuntimeApi<
             Block,
             ProofsDealerProviderId<Runtime>,
@@ -178,7 +181,7 @@ where
 }
 
 pub trait StorageEnableRuntimeApi:
-    ConstructRuntimeApi<Block, TFullClient<Block, Self, ParachainExecutor>>
+    ConstructRuntimeApi<Block, TFullClient<Block, Self, StorageHubExecutor>>
     + Sized
     + Send
     + Sync
@@ -187,7 +190,7 @@ pub trait StorageEnableRuntimeApi:
 }
 
 impl<T> StorageEnableRuntimeApi for T where
-    T: ConstructRuntimeApi<Block, TFullClient<Block, Self, ParachainExecutor>>
+    T: ConstructRuntimeApi<Block, TFullClient<Block, Self, StorageHubExecutor>>
         + Sized
         + Send
         + Sync
@@ -261,8 +264,9 @@ pub trait StorageEnableRuntime:
         + pallet_transaction_payment::Config
         + pallet_balances::Config<Balance: Into<BigDecimal> + Into<NumberOrHex> + MaybeDisplay>
         + pallet_nfts::Config<CollectionId: Send + Sync + Display>
-        + pallet_bucket_nfts::Config
-        + pallet_randomness::Config
+    + pallet_bucket_nfts::Config
+    + pallet_randomness::Config
+    + TransactionHashProvider
         + Copy
         + Debug
         + Send
@@ -493,20 +497,31 @@ pub trait ExtensionOperations<
     /// # Returns
     /// A fully constructed extension ready for use in transaction signing
     fn from_minimal_extension(minimal: MinimalExtension) -> Self;
+}
 
-    /// Generates the implicit data required by this extension.
-    ///
-    /// Implicit data is information that is not explicitly included in the
-    /// transaction but is required for validation. This typically includes:
-    /// - The genesis block hash (for chain identification)
-    /// - The current block hash (for mortality checks)
-    /// - Runtime version information
+/// Trait for extracting transaction identifiers from events in a block.
+///
+/// This trait provides a unified interface for obtaining transaction hashes/identifiers,
+/// which can vary depending on the runtime type:
+/// - **EVM-enabled runtimes**: Should return the Ethereum transaction hash from `pallet_ethereum::Event::Executed`
+/// - **Standard Substrate runtimes**: Should return the Substrate extrinsic hash
+///
+/// # Purpose
+///
+/// This allows the indexer to associate any event with its originating transaction
+/// in a runtime-agnostic way, while still providing the most useful identifier for each runtime type.
+pub trait TransactionHashProvider: frame_system::Config {
+    /// Builds a mapping of extrinsic index to transaction hash/identifier.
     ///
     /// # Parameters
-    /// - `genesis_block_hash`: The hash of the genesis block
-    /// - `current_block_hash`: The hash of the current block
+    /// - `all_events`: All events from the block being indexed
     ///
     /// # Returns
-    /// The implicit data structure required by this extension type
-    fn implicit(genesis_block_hash: Self::Hash, current_block_hash: Self::Hash) -> Self::Implicit;
+    /// A HashMap mapping extrinsic indices (u32) to transaction hashes (H256).
+    /// - For EVM runtimes: Maps to Ethereum transaction hashes
+    /// - For Substrate runtimes: Could map to extrinsic hashes (requires additional data)
+    /// - Returns empty map if transaction hash extraction is not supported/needed
+    fn build_transaction_hash_map(
+        all_events: &StorageHubEventsVec<Self>,
+    ) -> std::collections::HashMap<u32, H256>;
 }

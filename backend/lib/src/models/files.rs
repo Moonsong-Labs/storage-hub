@@ -1,8 +1,10 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
+use serde_with::{serde_as, DisplayFromStr};
 use tracing::error;
 
 use shc_indexer_db::models::{File as DBFile, FileStorageRequestStep};
+use shp_types::Hash;
 
 use crate::models::buckets::FileTree;
 
@@ -15,24 +17,38 @@ pub enum FileStatus {
     Ready,
     /// Indicates that the file's storage request has not been fulfilled completely but is still with the MSP
     Expired,
+    /// Indicates that the user explicitly revoked the storage request
+    Revoked,
+    /// Indicates that the MSP rejected the storage request
+    Rejected,
     /// Indicates that the file's has been marked for deletion and will be removed from the MSP soon
     DeletionInProgress,
 }
 
+#[serde_as]
 #[derive(Debug, Serialize)]
 pub struct FileInfo {
     #[serde(rename = "fileKey")]
     pub file_key: String,
-    pub fingerprint: String,
+    #[serde(serialize_with = "crate::utils::serde::hex_string")]
+    pub fingerprint: [u8; 32],
     #[serde(rename = "bucketId")]
     pub bucket_id: String,
     pub location: String,
+    #[serde_as(as = "DisplayFromStr")]
     pub size: u64,
     #[serde(rename = "isPublic")]
     pub is_public: bool,
     #[serde(rename = "uploadedAt")]
     pub uploaded_at: DateTime<Utc>,
     pub status: FileStatus,
+    /// Block hash where the file was created.
+    #[serde(rename = "blockHash")]
+    pub block_hash: String,
+    /// EVM transaction hash that created this file (if created via EVM transaction).
+    /// For files created via native Substrate extrinsics, this will be None.
+    #[serde(rename = "txHash", skip_serializing_if = "Option::is_none")]
+    pub tx_hash: Option<String>,
 }
 
 impl FileInfo {
@@ -43,6 +59,8 @@ impl FileInfo {
                 Ok(FileStorageRequestStep::Requested) => FileStatus::InProgress,
                 Ok(FileStorageRequestStep::Stored) => FileStatus::Ready,
                 Ok(FileStorageRequestStep::Expired) => FileStatus::Expired,
+                Ok(FileStorageRequestStep::Revoked) => FileStatus::Revoked,
+                Ok(FileStorageRequestStep::Rejected) => FileStatus::Rejected,
                 Err(step) => {
                     error!(step, "Unsupported File's StorageRequest step");
                     unreachable!("unknown storage request step #{step} present in Indexer DB")
@@ -53,7 +71,7 @@ impl FileInfo {
     pub fn from_db(db: &DBFile, is_public: bool) -> Self {
         Self {
             file_key: hex::encode(&db.file_key),
-            fingerprint: hex::encode(&db.fingerprint),
+            fingerprint: Hash::from_slice(&db.fingerprint).to_fixed_bytes(),
             bucket_id: hex::encode(&db.onchain_bucket_id),
             // TODO: determine if lossy conversion is acceptable here
             location: String::from_utf8_lossy(&db.location).into_owned(),
@@ -61,7 +79,13 @@ impl FileInfo {
             is_public,
             uploaded_at: db.updated_at.and_utc(),
             status: Self::status_from_db(&db),
+            block_hash: hex::encode(&db.block_hash),
+            tx_hash: db.tx_hash.as_ref().map(|hash| hex::encode(hash)),
         }
+    }
+
+    pub fn fingerprint_hexstr(&self) -> String {
+        hex::encode(&self.fingerprint)
     }
 }
 
@@ -77,8 +101,7 @@ pub struct DistributeResponse {
 pub struct FileListResponse {
     #[serde(rename = "bucketId")]
     pub bucket_id: String,
-    // TODO: consider renaming to "tree" and removing the Vec
-    pub files: Vec<FileTree>,
+    pub tree: FileTree,
 }
 
 #[derive(Debug, Serialize)]

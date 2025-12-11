@@ -5,7 +5,6 @@ use std::sync::Arc;
 use auth::AuthService;
 use axum::extract::FromRef;
 use axum_jwt::Decoder;
-use tracing::error;
 
 #[cfg(all(test, feature = "mocks"))]
 use crate::data::{
@@ -19,11 +18,15 @@ use crate::{
 };
 
 pub mod auth;
+pub mod download_session;
 pub mod health;
 pub mod msp;
+pub mod upload_session;
 
+use download_session::DownloadSessionManager;
 use health::HealthService;
 use msp::MspService;
+use upload_session::UploadSessionManager;
 
 /// Container for all backend services
 #[derive(Clone)]
@@ -35,6 +38,8 @@ pub struct Services {
     pub storage: Arc<dyn BoxedStorage>,
     pub postgres: Arc<DBClient>,
     pub rpc: Arc<StorageHubRpcClient>,
+    pub download_sessions: Arc<DownloadSessionManager>,
+    pub upload_sessions: Arc<UploadSessionManager>,
 }
 
 impl Services {
@@ -45,42 +50,8 @@ impl Services {
         rpc: Arc<StorageHubRpcClient>,
         config: Config,
     ) -> Self {
-        let jwt_secret = config
-            .auth
-            .jwt_secret
-            .as_ref()
-            .ok_or_else(|| {
-                error!("JWT_SECRET is not set. Please set it in the config file or as an environment variable.");
-                "JWT_SECRET is not configured"
-            })
-            .and_then(|secret| {
-                hex::decode(secret.trim_start_matches("0x"))
-                    .map_err(|e| {
-                        error!(error = %e, "Invalid JWT_SECRET format - must be a valid hex string");
-                        "Invalid JWT_SECRET format"
-                    })
-            })
-            .and_then(|decoded| {
-                if decoded.len() < 32 {
-                    error!(length = decoded.len(), "JWT_SECRET is too short - must be at least 32 bytes (64 hex characters)");
-                    Err("JWT_SECRET must be at least 32 bytes")
-                } else {
-                    Ok(decoded)
-                }
-            })
-            .expect("JWT secret configuration should be valid");
+        let auth = Arc::new(AuthService::from_config(&config.auth, storage.clone()));
 
-        #[allow(unused_mut)] // triggers warning without mocks feature
-        let mut auth = AuthService::new(jwt_secret.as_slice(), storage.clone());
-
-        #[cfg(feature = "mocks")]
-        {
-            if config.auth.mock_mode {
-                auth.insecure_disable_validation();
-            }
-        }
-
-        let auth = Arc::new(auth);
         let health = Arc::new(HealthService::new(
             storage.clone(),
             postgres.clone(),
@@ -88,15 +59,17 @@ impl Services {
         ));
 
         let msp = Arc::new(
-            MspService::new(
-                storage.clone(),
-                postgres.clone(),
-                rpc.clone(),
-                config.storage_hub.msp_callback_url.clone(),
-            )
-            .await
-            .expect("MSP must be available when starting the backend's services"),
+            MspService::new(postgres.clone(), rpc.clone(), config.msp.clone())
+                .await
+                .expect("MSP must be available when starting the backend's services"),
         );
+
+        let download_sessions = Arc::new(DownloadSessionManager::new(
+            config.file_transfer.max_download_sessions,
+        ));
+        let upload_sessions = Arc::new(UploadSessionManager::new(
+            config.file_transfer.max_upload_sessions,
+        ));
 
         Self {
             config,
@@ -106,6 +79,8 @@ impl Services {
             storage,
             postgres,
             rpc,
+            download_sessions,
+            upload_sessions,
         }
     }
 }

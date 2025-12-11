@@ -5,6 +5,7 @@ import postgres from "postgres";
 import stripAnsi from "strip-ansi";
 import tmp from "tmp";
 import { DOCKER_IMAGE } from ".";
+import * as ShConsts from "./bspNet/consts";
 
 export const printDockerStatus = async (verbose = false) => {
   const docker = new Docker();
@@ -50,7 +51,7 @@ export const verifyContainerFreshness = async () => {
     (container) =>
       container.Image === DOCKER_IMAGE ||
       container.Names.some((name) => name.includes("toxiproxy")) ||
-      container.Names.some((name) => name.includes("storage-hub-sh-backend"))
+      container.Names.some((name) => name.includes(ShConsts.NODE_INFOS.backend.containerName))
   );
 
   if (existingContainers.length > 0) {
@@ -81,9 +82,43 @@ export const createSqlClient = () => {
   });
 };
 
+export const createPendingSqlClient = () => {
+  // Pending transactions DB (launched as sh-pending-postgres with host port 5433)
+  return postgres({
+    host: "localhost",
+    port: 5433,
+    database: "pending_tx",
+    username: "postgres",
+    password: "postgres"
+  });
+};
+
 export const checkSHRunningContainers = async (docker: Docker) => {
   const allContainers = await docker.listContainers({ all: true });
   return allContainers.filter((container) => container.Image === DOCKER_IMAGE);
+};
+
+const extractAndStoreContainerLogs = async (
+  container: Docker.Container,
+  containerName: string,
+  tmpDirPath: string,
+  verbose = false
+) => {
+  try {
+    const logs = await container.logs({
+      stdout: true,
+      stderr: true,
+      timestamps: true
+    });
+    verbose && console.log(`Extracting logs for container ${containerName}`);
+    const sanitizedName = containerName.replace("/", "");
+
+    await fs.writeFile(`${tmpDirPath}/${sanitizedName}.log`, stripAnsi(logs.toString()), {
+      encoding: "utf8"
+    });
+  } catch (e) {
+    console.warn(`Failed to extract logs for container ${containerName}:`, e);
+  }
 };
 
 export const cleanupEnvironment = async (verbose = false) => {
@@ -100,7 +135,11 @@ export const cleanupEnvironment = async (verbose = false) => {
   );
 
   const postgresContainer = allContainers.find((container) =>
-    container.Names.some((name) => name.includes("storage-hub-sh-postgres-1"))
+    container.Names.some((name) => name.includes(ShConsts.NODE_INFOS.indexerDb.containerName))
+  );
+
+  const pendingPostgresContainer = allContainers.find((container) =>
+    container.Names.some((name) => name.includes(ShConsts.NODE_INFOS.pendingDb.containerName))
   );
 
   const copypartyContainers = allContainers.filter((container) =>
@@ -108,29 +147,25 @@ export const cleanupEnvironment = async (verbose = false) => {
   );
 
   const backendContainer = allContainers.find((container) =>
-    container.Names.some((name) => name.includes("storage-hub-sh-backend"))
+    container.Names.some((name) => name.includes(ShConsts.NODE_INFOS.backend.containerName))
   );
 
   const tmpDir = tmp.dirSync({ prefix: "bsp-logs-", unsafeCleanup: true });
 
-  const logPromises = existingNodes.map(async (node) => {
-    const container = docker.getContainer(node.Id);
-    try {
-      const logs = await container.logs({
-        stdout: true,
-        stderr: true,
-        timestamps: true
-      });
-      verbose && console.log(`Extracting logs for container ${node.Names[0]}`);
-      const containerName = node.Names[0].replace("/", "");
+  const logPromises = existingNodes.map((node) =>
+    extractAndStoreContainerLogs(docker.getContainer(node.Id), node.Names[0], tmpDir.name, verbose)
+  );
 
-      await fs.writeFile(`${tmpDir.name}/${containerName}.log`, stripAnsi(logs.toString()), {
-        encoding: "utf8"
-      });
-    } catch (e) {
-      console.warn(`Failed to extract logs for container ${node.Names[0]}:`, e);
-    }
-  });
+  if (backendContainer) {
+    logPromises.push(
+      extractAndStoreContainerLogs(
+        docker.getContainer(backendContainer.Id),
+        backendContainer.Names[0],
+        tmpDir.name,
+        verbose
+      )
+    );
+  }
 
   await Promise.all(logPromises);
   console.log(`Container logs saved to ${tmpDir.name}`);
@@ -152,6 +187,13 @@ export const cleanupEnvironment = async (verbose = false) => {
     promises.push(docker.getContainer(postgresContainer.Id).remove({ force: true }));
   } else {
     verbose && console.log("No postgres container found, skipping");
+  }
+
+  if (pendingPostgresContainer) {
+    console.log("Stopping pending postgres container");
+    promises.push(docker.getContainer(pendingPostgresContainer.Id).remove({ force: true }));
+  } else {
+    verbose && console.log("No pending postgres container found, skipping");
   }
 
   if (copypartyContainers.length > 0) {

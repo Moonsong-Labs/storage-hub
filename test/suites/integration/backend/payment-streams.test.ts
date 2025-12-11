@@ -1,10 +1,11 @@
 import assert, { strictEqual } from "node:assert";
-import { type EnrichedBspApi, describeMspNet } from "../../../util";
+import type { u64, u128 } from "@polkadot/types";
+import type { H256 } from "@polkadot/types/interfaces";
+import { describeMspNet, type EnrichedBspApi } from "../../../util";
+import { BACKEND_URI } from "../../../util/backend/consts";
 import { fetchJwtToken, type PaymentStreamsResponse } from "../../../util/backend";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
-import { ETH_SH_USER_PRIVATE_KEY, ETH_SH_USER_ADDRESS } from "../../../util/evmNet/keyring";
-import type { H256 } from "@polkadot/types/interfaces";
-import type { u128, u64 } from "@polkadot/types";
+import { ETH_SH_USER_ADDRESS, ETH_SH_USER_PRIVATE_KEY } from "../../../util/evmNet/keyring";
 
 type OnChainPaymentStream = { provider: string; user: `0x${string}` } & (
   | { type: "fixed"; rate: u128 }
@@ -36,7 +37,7 @@ await describeMspNet(
 
     it("Postgres DB is ready", async () => {
       await userApi.docker.waitForLog({
-        containerName: "storage-hub-sh-postgres-1",
+        containerName: userApi.shConsts.NODE_INFOS.indexerDb.containerName,
         searchString: "database system is ready to accept connections",
         timeout: 10000
       });
@@ -44,7 +45,7 @@ await describeMspNet(
 
     it("Backend service is ready", async () => {
       await userApi.docker.waitForLog({
-        containerName: "storage-hub-sh-backend-1",
+        containerName: userApi.shConsts.NODE_INFOS.backend.containerName,
         searchString: "Server listening",
         timeout: 10000
       });
@@ -56,20 +57,6 @@ await describeMspNet(
 
       const mspNodePeerId = await msp1Api.rpc.system.localPeerId();
       strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp1.expectedPeerId);
-    });
-
-    it("Should be able to retrieve current price per giga unit per tick", async () => {
-      const current_price =
-        await msp1Api.call.paymentStreamsApi.getCurrentPricePerGigaUnitPerTick();
-
-      const current_price_rpc =
-        await msp1Api.rpc.storagehubclient.getCurrentPricePerGigaUnitPerTick();
-
-      strictEqual(
-        current_price.toString(),
-        current_price_rpc.toString(),
-        "Runtime API and RPC should have the same value"
-      );
     });
 
     it("Should fetch payment streams from chain", async () => {
@@ -119,7 +106,7 @@ await describeMspNet(
 
       const userJWT = await fetchJwtToken(ETH_SH_USER_PRIVATE_KEY, SH_EVM_SOLOCHAIN_CHAIN_ID);
 
-      const response = await fetch("http://localhost:8080/payment_streams", {
+      const response = await fetch(`${BACKEND_URI}/payment_streams`, {
         headers: {
           Authorization: `Bearer ${userJWT}`
         }
@@ -162,24 +149,49 @@ await describeMspNet(
         "Backend API BSP streams count should match on chain data"
       );
 
-      // Verify each API stream has a matching chain stream with correct type
+      // Get current price per giga unit per tick for dynamic rate calculations
+      const currentPricePerGigaUnitPerTick =
+        await userApi.query.paymentStreams.currentPricePerGigaUnitPerTick();
+      const GIGAUNIT = BigInt(2 ** 30); // 1073741824
+
+      // Verify each API stream has a matching chain stream with correct type and values
       for (const apiStream of data.streams) {
         const expectedType = apiStream.providerType === "msp" ? "fixed" : "dynamic";
         const matchingChainStream = chainPaymentStreams.find(
           (s) => s.provider === apiStream.provider && s.type === expectedType
         );
 
-        const costPerTick = BigInt(apiStream.costPerTick);
-        strictEqual(
-          costPerTick.toString(),
-          apiStream.costPerTick,
-          "costPerTick should be parseable as BigInt"
-        );
-
         assert(
           matchingChainStream,
           `Stream for provider ${apiStream.provider} with type ${expectedType} should exist on chain`
         );
+
+        const apiCostPerTick = BigInt(apiStream.costPerTick);
+
+        if (expectedType === "fixed" && matchingChainStream.type === "fixed") {
+          // For fixed-rate streams (MSP), costPerTick should equal the on-chain rate
+          const expectedCostPerTick = BigInt(matchingChainStream.rate.toString());
+          strictEqual(
+            apiCostPerTick.toString(),
+            expectedCostPerTick.toString(),
+            `Fixed-rate stream costPerTick (${apiCostPerTick}) should match on-chain rate (${expectedCostPerTick})`
+          );
+        } else if (expectedType === "dynamic" && matchingChainStream.type === "dynamic") {
+          // For dynamic-rate streams (BSP), costPerTick should equal:
+          // (currentPricePerGigaUnitPerTick * amountProvided) / GIGAUNIT (truncated down)
+          const amountProvided = BigInt(matchingChainStream.amountProvided.toString());
+          const currentPrice = BigInt(currentPricePerGigaUnitPerTick.toString());
+
+          // Calculate expected cost: (price * amountProvided) / GIGAUNIT
+          // Using BigInt division which truncates towards zero (same as Rust's integer division)
+          const expectedCostPerTick = (currentPrice * amountProvided) / GIGAUNIT;
+
+          strictEqual(
+            apiCostPerTick.toString(),
+            expectedCostPerTick.toString(),
+            `Dynamic-rate stream costPerTick (${apiCostPerTick}) should match calculated value (${expectedCostPerTick}) for amountProvided=${amountProvided}, price=${currentPrice}`
+          );
+        }
       }
     });
   }

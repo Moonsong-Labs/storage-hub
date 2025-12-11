@@ -24,13 +24,13 @@ use crate::{
     events::{
         DistributeFileToBsp, FinalisedBucketMovedAway, FinalisedBucketMutationsApplied,
         FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
-        ForestWriteLockTaskData, MoveBucketRequestedForMsp, NewStorageRequest,
-        ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData,
+        FinalisedStorageRequestRejected, ForestWriteLockTaskData, MoveBucketRequestedForMsp,
+        NewStorageRequest, ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData,
         ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
         StartMovedBucketDownload, VerifyMspBucketForests,
     },
     handler::LOG_TARGET,
-    types::{FileDistributionInfo, ManagedProvider},
+    types::{FileDistributionInfo, ManagedProvider, MultiInstancesNodeRole},
     BlockchainService,
 };
 
@@ -83,64 +83,85 @@ where
             }
         };
 
+        // Process the events that are common to all roles.
         match event {
-            StorageEnableEvents::FileSystem(pallet_file_system::Event::MoveBucketAccepted {
-                bucket_id,
-                old_msp_id: _,
-                new_msp_id,
-                value_prop_id,
-            }) => {
-                // As an MSP, this node is interested in the *imported* event if
-                // this node is the new MSP - to start downloading the bucket.
-                // Otherwise, ignore the event. Check finalised events for the old
-                // MSP branch.
-                if managed_msp_id == &new_msp_id {
-                    self.emit(StartMovedBucketDownload {
-                        bucket_id,
-                        value_prop_id,
-                    });
-                }
+            _ => {
+                trace!(target: LOG_TARGET, "No common MSP block import events to process while in LEADER, STANDALONE or FOLLOWER role");
             }
-            StorageEnableEvents::FileSystem(pallet_file_system::Event::BspConfirmedStoring {
-                who: _,
-                bsp_id,
-                confirmed_file_keys,
-                skipped_file_keys: _,
-                new_root: _,
-            }) if self.config.enable_msp_distribute_files => {
-                for (file_key, _file_metadata) in confirmed_file_keys {
-                    // If this is a BSP confirming a file that this MSP distributed, remove it from
-                    // the list of BSPs distributing, and move it into the list of BSPs confirmed.
-                    if let Some(ManagedProvider::Msp(msp_handler)) =
-                        &mut self.maybe_managed_provider
-                    {
-                        if let Some(file_distribution_info) =
-                            msp_handler.files_to_distribute.get_mut(&file_key.into())
-                        {
-                            file_distribution_info.bsps_distributing.remove(&bsp_id);
-                            file_distribution_info.bsps_confirmed.insert(bsp_id);
+        }
 
-                            debug!(target: LOG_TARGET, "BSP [{:?}] confirmed storing file [{:?}]", bsp_id, file_key);
+        // Process the events that are common to all roles.
+        match self.role {
+            MultiInstancesNodeRole::Leader | MultiInstancesNodeRole::Standalone => {
+                match event {
+                    StorageEnableEvents::FileSystem(
+                        pallet_file_system::Event::MoveBucketAccepted {
+                            bucket_id,
+                            old_msp_id: _,
+                            new_msp_id,
+                            value_prop_id,
+                        },
+                    ) => {
+                        // As an MSP, this node is interested in the *imported* event if
+                        // this node is the new MSP - to start downloading the bucket.
+                        // Otherwise, ignore the event. Check finalised events for the old
+                        // MSP branch.
+                        if managed_msp_id == &new_msp_id {
+                            self.emit(StartMovedBucketDownload {
+                                bucket_id,
+                                value_prop_id,
+                            });
                         }
                     }
-                }
-            }
-            StorageEnableEvents::FileSystem(
-                pallet_file_system::Event::StorageRequestFulfilled { file_key }
-                | pallet_file_system::Event::StorageRequestExpired { file_key }
-                | pallet_file_system::Event::StorageRequestRevoked { file_key }
-                | pallet_file_system::Event::StorageRequestRejected { file_key, .. },
-            ) if self.config.enable_msp_distribute_files => {
-                // Any of these events means that the storage request has finished its
-                // lifecycle, so we can remove it from the list of files to distribute.
-                if let Some(ManagedProvider::Msp(msp_handler)) = &mut self.maybe_managed_provider {
-                    msp_handler.files_to_distribute.remove(&file_key.into());
+                    StorageEnableEvents::FileSystem(
+                        pallet_file_system::Event::BspConfirmedStoring {
+                            who: _,
+                            bsp_id,
+                            confirmed_file_keys,
+                            skipped_file_keys: _,
+                            new_root: _,
+                        },
+                    ) if self.config.enable_msp_distribute_files => {
+                        for (file_key, _file_metadata) in confirmed_file_keys {
+                            // If this is a BSP confirming a file that this MSP distributed, remove it from
+                            // the list of BSPs distributing, and move it into the list of BSPs confirmed.
+                            if let Some(ManagedProvider::Msp(msp_handler)) =
+                                &mut self.maybe_managed_provider
+                            {
+                                if let Some(file_distribution_info) =
+                                    msp_handler.files_to_distribute.get_mut(&file_key.into())
+                                {
+                                    file_distribution_info.bsps_distributing.remove(&bsp_id);
+                                    file_distribution_info.bsps_confirmed.insert(bsp_id);
 
-                    debug!(target: LOG_TARGET, "Storage request [{:?}] finished its lifecycle, removing it from the list of files to distribute", file_key);
+                                    debug!(target: LOG_TARGET, "BSP [{:?}] confirmed storing file [{:?}]", bsp_id, file_key);
+                                }
+                            }
+                        }
+                    }
+                    StorageEnableEvents::FileSystem(
+                        pallet_file_system::Event::StorageRequestFulfilled { file_key }
+                        | pallet_file_system::Event::StorageRequestExpired { file_key }
+                        | pallet_file_system::Event::StorageRequestRevoked { file_key }
+                        | pallet_file_system::Event::StorageRequestRejected { file_key, .. },
+                    ) if self.config.enable_msp_distribute_files => {
+                        // Any of these events means that the storage request has finished its
+                        // lifecycle, so we can remove it from the list of files to distribute.
+                        if let Some(ManagedProvider::Msp(msp_handler)) =
+                            &mut self.maybe_managed_provider
+                        {
+                            msp_handler.files_to_distribute.remove(&file_key.into());
+
+                            debug!(target: LOG_TARGET, "Storage request [{:?}] finished its lifecycle, removing it from the list of files to distribute", file_key);
+                        }
+                    }
+                    // Ignore all other events.
+                    _ => {}
                 }
             }
-            // Ignore all other events.
-            _ => {}
+            MultiInstancesNodeRole::Follower => {
+                trace!(target: LOG_TARGET, "No MSP block import events to process while in FOLLOWER role");
+            }
         }
     }
 
@@ -174,7 +195,8 @@ where
             }
         };
 
-        match event {
+        // Process the events that are common to all roles.
+        match event.clone() {
             StorageEnableEvents::FileSystem(
                 pallet_file_system::Event::MspStoppedStoringBucket {
                     msp_id,
@@ -188,20 +210,6 @@ where
                         owner,
                         bucket_id,
                     })
-                }
-            }
-            StorageEnableEvents::FileSystem(pallet_file_system::Event::MoveBucketRequested {
-                who: _,
-                bucket_id,
-                new_msp_id,
-                new_value_prop_id,
-            }) => {
-                // As an MSP, this node is interested in the event only if this node is the new MSP.
-                if managed_msp_id == &new_msp_id {
-                    self.emit(MoveBucketRequestedForMsp {
-                        bucket_id,
-                        value_prop_id: new_value_prop_id,
-                    });
                 }
             }
             StorageEnableEvents::FileSystem(
@@ -235,6 +243,23 @@ where
                     }
                 }
             }
+            StorageEnableEvents::FileSystem(
+                pallet_file_system::Event::StorageRequestRejected {
+                    file_key,
+                    msp_id,
+                    bucket_id,
+                    reason: _,
+                },
+            ) => {
+                // Process either InternalError or RequestExpire if this provider is managing the bucket.
+                if managed_msp_id == &msp_id {
+                    self.emit(FinalisedStorageRequestRejected {
+                        file_key: file_key.into(),
+                        provider_id: msp_id.into(),
+                        bucket_id,
+                    })
+                }
+            }
             StorageEnableEvents::ProofsDealer(pallet_proofs_dealer::Event::MutationsApplied {
                 mutations,
                 old_root: _,
@@ -244,16 +269,16 @@ where
                 // The mutations are applied to a Bucket's Forest root.
                 // Check that this MSP is managing at least one bucket.
                 let buckets_managed_by_msp =
-                    self.client
-                            .runtime_api()
-                            .query_buckets_for_msp(*block_hash, managed_msp_id)
-                            .inspect_err(|e| error!(target: LOG_TARGET, "Runtime API call failed while querying buckets for MSP [{:?}]: {:?}", managed_msp_id, e))
+            self.client
+                    .runtime_api()
+                    .query_buckets_for_msp(*block_hash, managed_msp_id)
+                    .inspect_err(|e| error!(target: LOG_TARGET, "Runtime API call failed while querying buckets for MSP [{:?}]: {:?}", managed_msp_id, e))
+                    .ok()
+                    .and_then(|api_result| {
+                        api_result
+                            .inspect_err(|e| error!(target: LOG_TARGET, "Runtime API error while querying buckets for MSP [{:?}]: {:?}", managed_msp_id, e))
                             .ok()
-                            .and_then(|api_result| {
-                                api_result
-                                    .inspect_err(|e| error!(target: LOG_TARGET, "Runtime API error while querying buckets for MSP [{:?}]: {:?}", managed_msp_id, e))
-                                    .ok()
-                            });
+                    });
 
                 let Some(bucket_id) = self.validate_bucket_mutations_for_msp(
                     block_hash,
@@ -269,9 +294,37 @@ where
                     new_root,
                 });
             }
-
-            // Ignore all other events.
             _ => {}
+        }
+
+        // Process the events that are specific to the role of the node.
+        match self.role {
+            MultiInstancesNodeRole::Leader | MultiInstancesNodeRole::Standalone => {
+                match event {
+                    StorageEnableEvents::FileSystem(
+                        pallet_file_system::Event::MoveBucketRequested {
+                            who: _,
+                            bucket_id,
+                            new_msp_id,
+                            new_value_prop_id,
+                        },
+                    ) => {
+                        // As an MSP, this node is interested in the event only if this node is the new MSP.
+                        if managed_msp_id == &new_msp_id {
+                            self.emit(MoveBucketRequestedForMsp {
+                                bucket_id,
+                                value_prop_id: new_value_prop_id,
+                            });
+                        }
+                    }
+
+                    // Ignore all other events.
+                    _ => {}
+                }
+            }
+            MultiInstancesNodeRole::Follower => {
+                trace!(target: LOG_TARGET, "No MSP finality events to process while in FOLLOWER role");
+            }
         }
     }
 
@@ -279,9 +332,8 @@ where
     /// Check if there are any pending requests to update the Forest root on the runtime, and process them.
     ///
     /// The priority is given by:
-    /// 1. `FileDeletionRequest` over...
-    /// 2. `RespondStorageRequest` over...
-    /// 3. `StopStoringForInsolventUserRequest`.
+    /// 1. `RespondStorageRequest` over...
+    /// 2. `StopStoringForInsolventUserRequest`.
     ///
     /// This function is called every time a new block is imported and after each request is queued.
     ///
@@ -342,8 +394,8 @@ where
             return;
         }
 
-        // If we have no pending file deletion requests, we can also check for pending respond storing requests.
-        if next_event_data.is_none() {
+        // Check for pending respond storing requests.
+        {
             let max_batch_respond = MAX_BATCH_MSP_RESPOND_STORE_REQUESTS;
 
             // Batch multiple respond storing requests up to the runtime configured maximum.
@@ -583,9 +635,17 @@ where
     ///   the in-memory `files_to_distribute` state to not spawn duplicate tasks or
     ///   re-emit for already-confirmed BSPs.
     pub(crate) fn spawn_distribute_file_to_bsps_tasks(&mut self, block_hash: &Runtime::Hash) {
+        debug!(target: LOG_TARGET, "Spawning distribute file to BSPs tasks");
+
+        // Followers do not distribute files to BSPs.
+        if self.role == MultiInstancesNodeRole::Follower {
+            debug!(target: LOG_TARGET, "Follower node does not distribute files to BSPs. Skipping distribution scan.");
+            return;
+        }
+
         // Only distribute files to BSPs when explicitly enabled via configuration.
         if !self.config.enable_msp_distribute_files {
-            trace!(target: LOG_TARGET, "MSP file distribution disabled by configuration. Skipping distribution scan.");
+            debug!(target: LOG_TARGET, "MSP file distribution disabled by configuration. Skipping distribution scan.");
             return;
         }
 
@@ -602,7 +662,7 @@ where
         let managed_msp_peer_id = match self.config.peer_id.clone() {
             Some(peer_id) => peer_id,
             None => {
-                trace!(target: LOG_TARGET, "MSP node peer ID is not set, meaning it is not meant to be a distributor. Skipping distribution of files.");
+                debug!(target: LOG_TARGET, "MSP node peer ID is not set, meaning it is not meant to be a distributor. Skipping distribution of files.");
                 return;
             }
         };
@@ -625,7 +685,7 @@ where
         // Also keep only those for which this MSP node is listed as one of
         // the `user_peer_ids` of the storage request, meaning it is meant to
         // be a distributor of the file.
-        let storage_requests_to_distribute =
+        let mut storage_requests_to_distribute =
             pending_storage_requests_for_this_msp
                 .iter()
                 .filter(|(_, storage_request)| {
@@ -665,7 +725,13 @@ where
                     });
 
                     msp_is_distributor
-                });
+                })
+								.peekable();
+
+        if storage_requests_to_distribute.peek().is_none() {
+            debug!(target: LOG_TARGET, "No storage requests to distribute for MSP [{:?}]", managed_msp_id);
+            return;
+        }
 
         // Distribute the files to the BSPs.
         for storage_request in storage_requests_to_distribute {
@@ -697,6 +763,8 @@ where
         block_hash: &Runtime::Hash,
         file_key: &Runtime::Hash,
     ) {
+        debug!(target: LOG_TARGET, "Distributing file [{:?}] to BSPs", file_key);
+
         let managed_msp = match &mut self.maybe_managed_provider {
             Some(ManagedProvider::Msp(msp_handler)) => msp_handler,
             _ => {

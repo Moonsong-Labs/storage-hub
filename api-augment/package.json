@@ -1,6 +1,6 @@
 {
   "name": "@storagehub/api-augment",
-  "version": "0.2.8",
+  "version": "0.2.12",
   "description": "",
   "scripts": {
     "scrape": "pnpm tsx scripts/scrapeMetadata.ts",

@@ -1,0 +1,28 @@
+{
+  "chain": {
+    "id": 55932,
+    "name": "DataHaven Stagenet",
+    "nativeCurrency": { "name": "Stage", "symbol": "STAGE", "decimals": 18 },
+    "evmRpcHttpUrl": "https://services.datahaven-dev.network/stagenet",
+    "substrateRpcWsUrl": "wss://services.datahaven-dev.network/stagenet",
+    "filesystemPrecompileAddress": "0x0000000000000000000000000000000000000404"
+  },
+  "msp": {
+    "baseUrl": "https://deo-dh-backend.stagenet.datahaven-infra.network",
+    "timeoutMs": 30000,
+    "headers": {}
+  },
+  "auth": {
+    "siweDomain": "localhost:3001",
+    "siweUri": "http://localhost:3001"
+  },
+  "defaults": {
+    "replicationLevel": "Basic",
+    "replicas": 0,
+    "gas": "600000",
+    "gasPriceWei": "2000000000",
+    "delays": { "postStorageRequestMs": 2000, "beforeUploadMs": 3000 }
+  }
+}
+
+

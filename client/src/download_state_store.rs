@@ -284,7 +284,9 @@ impl<'a, Runtime: StorageEnableRuntime> DownloadStateStoreRwContext<'a, Runtime>
 impl<'a, Runtime: StorageEnableRuntime> ProvidesDbContext
     for DownloadStateStoreRwContext<'a, Runtime>
 {
-    fn db_context(&self) -> &TypedDbContext<TypedRocksDB, BufferedWriteSupport<TypedRocksDB>> {
+    fn db_context(
+        &self,
+    ) -> &TypedDbContext<'_, TypedRocksDB, BufferedWriteSupport<'_, TypedRocksDB>> {
         &self.db_context
     }
 }
@@ -308,7 +310,9 @@ pub struct MissingChunksMap<'a> {
 }
 
 impl<'a> ProvidesDbContext for MissingChunksMap<'a> {
-    fn db_context(&self) -> &TypedDbContext<TypedRocksDB, BufferedWriteSupport<TypedRocksDB>> {
+    fn db_context(
+        &self,
+    ) -> &TypedDbContext<'_, TypedRocksDB, BufferedWriteSupport<'_, TypedRocksDB>> {
         self.db_context
     }
 }

@@ -10,6 +10,8 @@ pub mod auth;
 pub mod buckets;
 pub mod files;
 
+mod pagination;
+
 // ==================== MSP Info Handlers ====================
 
 pub async fn info(State(services): State<Services>) -> Result<impl IntoResponse, Error> {
@@ -32,8 +34,7 @@ pub async fn value_props(State(services): State<Services>) -> Result<impl IntoRe
 
 pub async fn msp_health(State(services): State<Services>) -> Result<impl IntoResponse, Error> {
     debug!("GET health check");
-    let response = services.health.check_health().await;
-    Ok(Json(response))
+    Ok(services.health.check_health().await)
 }
 
 // ==================== Payment Handler ====================

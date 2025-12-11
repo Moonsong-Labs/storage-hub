@@ -97,7 +97,7 @@ use sh_solochain_evm_runtime::{
 //╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 // Generic client type over Runtime
 pub(crate) type StorageEnableClient<Runtime> =
-    shc_common::types::ParachainClient<<Runtime as StorageEnableRuntime>::RuntimeApi>;
+    shc_common::types::StorageHubClient<<Runtime as StorageEnableRuntime>::RuntimeApi>;
 pub(crate) type StorageEnableBackend = TFullBackend<Block>;
 pub(crate) type StorageEnableSelectChain = sc_consensus::LongestChain<StorageEnableBackend, Block>;
 pub(crate) type StorageEnablePool<Runtime> =
@@ -189,10 +189,10 @@ async fn configure_and_spawn_indexer<Runtime: StorageEnableRuntime>(
     indexer_options: &Option<IndexerOptions>,
     task_manager: &TaskManager,
     client: Arc<StorageEnableClient<Runtime>>,
-) -> Result<Option<DbPool>, sc_service::Error> {
+) -> Result<(), sc_service::Error> {
     let indexer_options = match indexer_options {
         Some(config) => config,
-        None => return Ok(None),
+        None => return Ok(()),
     };
 
     // Setup database pool
@@ -212,7 +212,7 @@ async fn configure_and_spawn_indexer<Runtime: StorageEnableRuntime>(
     )
     .await;
 
-    Ok(Some(db_pool))
+    Ok(())
 }
 
 /// Initialize the StorageHub builder with configured services based on the node's role.
@@ -247,9 +247,7 @@ where
     StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder,
 {
     // Spawn indexer service if enabled. Runs before role check to allow standalone operation.
-    let maybe_indexer_db_pool =
-        configure_and_spawn_indexer::<Runtime>(&indexer_options, &task_manager, client.clone())
-            .await?;
+    configure_and_spawn_indexer::<Runtime>(&indexer_options, &task_manager, client.clone()).await?;
 
     let role_options = match role_options {
         Some(role) => role,
@@ -303,6 +301,7 @@ where
             bsp_charge_fees,
             bsp_submit_proof,
             blockchain_service,
+            msp_database_url,
             ..
         }) => {
             info!(
@@ -328,9 +327,14 @@ where
 
             // MSP-specific configuration
             if *provider_type == ProviderType::Msp {
-                builder
-                    .with_notify_period(*msp_charging_period)
-                    .with_indexer_db_pool(maybe_indexer_db_pool);
+                builder.with_notify_period(*msp_charging_period);
+
+                // MSPs can optionally have database access to execute move bucket operations.
+                if let Some(db_url) = msp_database_url {
+                    info!("Setting up MSP database connection: {}", db_url);
+                    let msp_db_pool = setup_database_pool(db_url.clone()).await?;
+                    builder.with_indexer_db_pool(Some(msp_db_pool));
+                }
             }
 
             if let Some(c) = blockchain_service {
@@ -688,7 +692,7 @@ pub fn new_partial_parachain(
             extra_pages: h as _,
         });
 
-    let executor = ParachainExecutor::builder()
+    let executor = StorageHubExecutor::builder()
         .with_execution_method(config.executor.wasm_method)
         .with_onchain_heap_alloc_strategy(heap_pages)
         .with_offchain_heap_alloc_strategy(heap_pages)
@@ -2542,7 +2546,7 @@ pub fn new_partial_solochain_evm(
         })
         .transpose()?;
 
-    // Wasm executor (reuse ParachainExecutor host functions)
+    // Wasm executor
     let heap_pages = config
         .executor
         .default_heap_pages
@@ -2550,7 +2554,7 @@ pub fn new_partial_solochain_evm(
             extra_pages: h as _,
         });
 
-    let executor = shc_common::types::ParachainExecutor::builder()
+    let executor = shc_common::types::StorageHubExecutor::builder()
         .with_execution_method(config.executor.wasm_method)
         .with_onchain_heap_alloc_strategy(heap_pages)
         .with_offchain_heap_alloc_strategy(heap_pages)

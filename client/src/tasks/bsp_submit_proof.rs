@@ -120,10 +120,10 @@ where
     async fn handle_event(
         &mut self,
         event: MultipleNewChallengeSeeds<Runtime>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
-            "Initiating BSP multiple proof submissions for BSP ID: {:?}, with seeds: {:?}",
+            "Initiating BSP multiple proof submissions for BSP ID: {:x}, with seeds: {:?}",
             event.provider_id,
             event.seeds
         );
@@ -136,7 +136,10 @@ where
                 .await?;
         }
 
-        Ok(())
+        Ok(format!(
+            "Handled MultipleNewChallengeSeeds for provider {:x}",
+            event.provider_id
+        ))
     }
 }
 
@@ -161,7 +164,7 @@ where
     async fn handle_event(
         &mut self,
         event: ProcessSubmitProofRequest<Runtime>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
             "Processing SubmitProofRequest {:?}",
@@ -170,7 +173,9 @@ where
 
         if event.data.forest_challenges.is_empty() && event.data.checkpoint_challenges.is_empty() {
             warn!(target: LOG_TARGET, "No challenges to respond to. Skipping proof submission.");
-            return Ok(());
+            return Ok(
+                "Skipped ProcessSubmitProofRequest: no challenges to respond to".to_string(),
+            );
         }
 
         // Acquire Forest root write lock. This prevents other Forest-root-writing tasks from starting while we are processing this task.
@@ -302,9 +307,9 @@ where
             // - If the proof is outdated.
             // - If the Forest root of the BSP has changed.
             Box::pin(Self::should_retry_submit_proof(
-                cloned_sh_handler.clone(),
-                cloned_event.clone(),
-                cloned_forest_root.clone(),
+                cloned_sh_handler,
+                cloned_event,
+                cloned_forest_root,
                 error,
             )) as Pin<Box<dyn Future<Output = bool> + Send>>
         };
@@ -314,12 +319,16 @@ where
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
-                SendExtrinsicOptions::new(Duration::from_secs(
-                    self.storage_hub_handler
-                        .provider_config
-                        .blockchain_service
-                        .extrinsic_retry_timeout,
-                )),
+                SendExtrinsicOptions::new(
+                    Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .blockchain_service
+                            .extrinsic_retry_timeout,
+                    ),
+                    Some("proofsDealer".to_string()),
+                    Some("submitProof".to_string()),
+                ),
                 RetryStrategy::default()
                     .with_max_retries(self.config.max_submission_attempts)
                     .with_max_tip(max_tip.saturated_into())
@@ -338,7 +347,12 @@ where
         self.storage_hub_handler
             .blockchain
             .release_forest_root_write_lock(forest_root_write_tx)
-            .await
+            .await?;
+
+        Ok(format!(
+            "Handled ProcessSubmitProofRequest for provider {:x}",
+            event.data.provider_id
+        ))
     }
 }
 

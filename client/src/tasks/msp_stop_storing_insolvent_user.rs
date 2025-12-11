@@ -91,7 +91,7 @@ where
     NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: UserWithoutFunds<Runtime>) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: UserWithoutFunds<Runtime>) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
             "Processing UserWithoutFunds for user {:?}. Stopping storing all buckets for the insolvent user.",
@@ -197,15 +197,18 @@ where
                     insolvent_user
                 );
             }
+            Ok(format!(
+                "Stopped storing all buckets for insolvent user [{}]",
+                hex::encode(insolvent_user)
+            ))
         } else {
-            info!(
-                target: LOG_TARGET,
-                "No buckets found for insolvent user {:?}. Nothing to do.",
-                insolvent_user
+            let msg = format!(
+                "No buckets found for insolvent user [{}]. Nothing to do.",
+                hex::encode(insolvent_user)
             );
+            info!(target: LOG_TARGET, "{msg}");
+            Ok(msg)
         }
-
-        Ok(())
     }
 }
 
@@ -227,7 +230,7 @@ where
     async fn handle_event(
         &mut self,
         event: FinalisedMspStopStoringBucketInsolventUser<Runtime>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
             "Deleting bucket {:?} for MSP {:?} from file storage since its stop storing event reached finality.",
@@ -261,7 +264,10 @@ where
             .remove_forest_storage(&ForestStorageKey::from(event.bucket_id.as_ref().to_vec()))
             .await;
 
-        Ok(())
+        Ok(format!(
+            "Handled FinalisedMspStopStoringBucketInsolventUser for bucket [{:x}] and MSP [{:x}]",
+            event.bucket_id, event.msp_id
+        ))
     }
 }
 
@@ -286,12 +292,16 @@ where
             .blockchain
             .send_extrinsic(
                 stop_storing_bucket_for_insolvent_user_call,
-                SendExtrinsicOptions::new(Duration::from_secs(
-                    self.storage_hub_handler
-                        .provider_config
-                        .blockchain_service
-                        .extrinsic_retry_timeout,
-                )),
+                SendExtrinsicOptions::new(
+                    Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .blockchain_service
+                            .extrinsic_retry_timeout,
+                    ),
+                    Some("fileSystem".to_string()),
+                    Some("mspStopStoringBucketForInsolventUser".to_string()),
+                ),
             )
             .await?
             .watch_for_success(&self.storage_hub_handler.blockchain)

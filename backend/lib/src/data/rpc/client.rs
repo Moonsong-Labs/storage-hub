@@ -2,13 +2,21 @@
 
 use std::sync::Arc;
 
+use bigdecimal::BigDecimal;
+use codec::{Decode, Encode};
 use jsonrpsee::core::traits::ToRpcParams;
 use serde::de::DeserializeOwned;
 use tracing::debug;
 
-use shc_rpc::{GetValuePropositionsResult, RpcProviderId, SaveFileToDisk};
+use shc_indexer_db::OnchainMspId;
+use shc_rpc::{
+    GetFileFromFileStorageResult, GetValuePropositionsResult, RpcProviderId, SaveFileToDisk,
+};
 
-use crate::data::rpc::{connection::error::RpcResult, methods, AnyRpcConnection, RpcConnection};
+use crate::data::rpc::{
+    connection::error::{RpcConnectionError, RpcResult},
+    methods, runtime_apis, state_queries, AnyRpcConnection, RpcConnection,
+};
 
 /// StorageHub RPC client that uses an RpcConnection
 pub struct StorageHubRpcClient {
@@ -25,12 +33,22 @@ impl StorageHubRpcClient {
         self.connection.is_connected().await
     }
 
+    /// Attempts to reconnect if the connection isn't connected
+    async fn ensure_connected(&self) {
+        if !self.is_connected().await {
+            // TODO: More robust reconnection mechanism, like we do for the original connection
+            _ = self.connection.reconnect().await;
+        }
+    }
+
     /// Call a JSON-RPC method on the connected node
     pub async fn call<P, R>(&self, method: &str, params: P) -> RpcResult<R>
     where
         P: ToRpcParams + Send,
         R: DeserializeOwned,
     {
+        self.ensure_connected().await;
+
         self.connection.call(method, params).await
     }
 
@@ -39,29 +57,155 @@ impl StorageHubRpcClient {
     where
         R: DeserializeOwned,
     {
+        self.ensure_connected().await;
+
         self.connection.call_no_params(method).await
     }
 
+    /// Wrapper over [`call`] for runtime APIs
+    ///
+    /// # Type Parameters:
+    /// - `RuntimeApiCallType` is a type that implements `RuntimeApiCallTypes`, which encodes both
+    ///   the parameter type and return type for the API call.
+    ///
+    /// # Arguments:
+    /// - `params` is the set of parameters for the runtime API call
+    pub async fn call_runtime_api<RuntimeApiCallType>(
+        &self,
+        params: RuntimeApiCallType::Params,
+    ) -> RpcResult<RuntimeApiCallType::ReturnType>
+    where
+        RuntimeApiCallType: runtime_apis::RuntimeApiCallTypes,
+    {
+        // Get the runtime API call variant
+        let runtime_api_call = RuntimeApiCallType::runtime_api_call();
+
+        // The RPC method expects the parameters to be a hex-encoded SCALE-encoded string
+        let encoded = format!("0x{}", hex::encode(params.encode()));
+        debug!(method = %runtime_api_call.method_name(), ?encoded, "calling runtime api");
+
+        let response = self
+            .call::<_, String>(
+                methods::API_CALL,
+                jsonrpsee::rpc_params![runtime_api_call.method_name(), encoded],
+            )
+            .await?;
+
+        // The RPC also replies with a hex-encoded SCALE-encoded response
+        let response = hex::decode(response.trim_start_matches("0x")).map_err(|e| {
+            RpcConnectionError::Serialization(format!(
+                "RPC runtime API did not respond with a valid hex string: {}",
+                e.to_string()
+            ))
+        })?;
+
+        RuntimeApiCallType::ReturnType::decode(&mut response.as_slice())
+            .map_err(|e| RpcConnectionError::Serialization(e.to_string()))
+    }
+
+    /// Wrapper over [`call`] for reading storage keys
+    ///
+    /// # Type Parameters:
+    /// - `QueryType` is a type that implements `StorageQueryTypes`, which encodes both
+    ///   the key parameters and the value type for the storage query.
+    ///
+    /// # Arguments:
+    /// - `params` are the parameters needed to generate the storage key
+    pub async fn query_storage<QueryType>(
+        &self,
+        params: QueryType::KeyParams,
+    ) -> RpcResult<Option<QueryType::Value>>
+    where
+        QueryType: state_queries::StorageQueryTypes,
+    {
+        let key = QueryType::storage_key(params);
+        let encoded = format!("0x{}", hex::encode(&key.0));
+        debug!(key = encoded, "reading storage key");
+
+        let response = self
+            .call::<_, Option<String>>(methods::STATE_QUERY, jsonrpsee::rpc_params![encoded])
+            .await?;
+
+        let Some(response) = response else {
+            return Ok(None);
+        };
+
+        // The RPC replies with a hex-encoded SCALE-encoded response
+        let response = hex::decode(response.trim_start_matches("0x")).map_err(|e| {
+            RpcConnectionError::Serialization(format!(
+                "RPC runtime API did not respond with a valid hex string: {}",
+                e.to_string()
+            ))
+        })?;
+
+        QueryType::Value::decode(&mut response.as_slice())
+            .map(Some)
+            .map_err(|e| RpcConnectionError::Serialization(e.to_string()))
+    }
+
+    // RPC Calls:
     // TODO: Explore the possibility of directly using StorageHubClientApi trait
     // from the client's RPC module to avoid having to manually implement new RPC calls
 
     /// Get the current price per giga unit per tick
     ///
-    /// Returns the price value (u128) that represents the cost per giga unit per tick
+    /// Returns the price value that represents the cost per giga unit per tick
     /// in the StorageHub network.
-    pub async fn get_current_price_per_giga_unit_per_tick(&self) -> RpcResult<u128> {
+    pub async fn get_current_price_per_giga_unit_per_tick(&self) -> RpcResult<BigDecimal> {
         debug!(target: "rpc::client::get_current_price_per_giga_unit_per_tick", "RPC call: get_current_price_per_giga_unit_per_tick");
 
-        self.connection.call_no_params(methods::CURRENT_PRICE).await
+        self.call_runtime_api::<runtime_apis::GetCurrentPricePerGigaUnitPerTick>(())
+            .await
+            .map(|price| price.into())
+    }
+
+    /// Retrieve the current number of active users
+    pub async fn get_number_of_active_users(&self, provider: OnchainMspId) -> RpcResult<usize> {
+        debug!(target: "rpc::client::get_number_of_active_users", "Runtime API: get_users_of_payment_streams_of_provider");
+
+        self.call_runtime_api::<runtime_apis::GetUsersOfPaymentStreamsOfProvider>(
+            *provider.as_h256(),
+        )
+        .await
+        .map(|users| users.len())
+    }
+
+    /// Retrieve the MSP information for the given provider
+    ///
+    /// This function will read into the chain state from the Provider pallet's MainStorageProviders map
+    pub async fn get_msp_info(
+        &self,
+        provider: OnchainMspId,
+    ) -> RpcResult<Option<state_queries::MspInfo>> {
+        debug!(target: "rpc::client::get_msp", provider = %provider, "State Query: get_msp_info");
+        self.query_storage::<state_queries::MspInfoQuery>(provider)
+            .await
     }
 
     /// Returns whether the given `file_key` is expected to be received by the MSP node
     pub async fn is_file_key_expected(&self, file_key: &str) -> RpcResult<bool> {
         debug!(target: "rpc::client::is_file_key_expected", file_key = %file_key, "RPC call: is_file_key_expected");
 
-        self.connection
-            .call(methods::FILE_KEY_EXPECTED, jsonrpsee::rpc_params![file_key])
+        self.call(methods::FILE_KEY_EXPECTED, jsonrpsee::rpc_params![file_key])
             .await
+    }
+
+    /// Checks the status of a file in MSP storage by its file key.
+    ///
+    /// # Returns
+    /// - `FileNotFound`: File does not exist in storage
+    /// - `FileFound`: File exists and is complete
+    /// - `IncompleteFile`: File exists but is missing chunks
+    /// - `FileFoundWithInconsistency`: File exists but has data integrity issues
+    pub async fn is_file_in_file_storage(
+        &self,
+        file_key: &str,
+    ) -> RpcResult<GetFileFromFileStorageResult> {
+        self.call(
+            methods::IS_FILE_IN_FILE_STORAGE,
+            jsonrpsee::rpc_params![file_key],
+        )
+        .await
     }
 
     /// Request the MSP node to export the given `file_key` to the given URL
@@ -73,12 +217,11 @@ impl StorageHubRpcClient {
             "RPC call: save_file_to_disk"
         );
 
-        self.connection
-            .call(
-                methods::SAVE_FILE_TO_DISK,
-                jsonrpsee::rpc_params![file_key, url],
-            )
-            .await
+        self.call(
+            methods::SAVE_FILE_TO_DISK,
+            jsonrpsee::rpc_params![file_key, url],
+        )
+        .await
     }
 
     /// Request the MSP to accept a FileKeyProof (`proof`) for the given `file_key`
@@ -90,38 +233,38 @@ impl StorageHubRpcClient {
             "RPC call: receive_file_chunks"
         );
 
-        self.connection
-            .call(
-                methods::RECEIVE_FILE_CHUNKS,
-                jsonrpsee::rpc_params![file_key, proof],
-            )
-            .await
+        self.call(
+            methods::RECEIVE_FILE_CHUNKS,
+            jsonrpsee::rpc_params![file_key, proof],
+        )
+        .await
     }
 
     /// Retrieve the Onchain Provider ID of the MSP Node (therefore the MSP ID)
     pub async fn get_provider_id(&self) -> RpcResult<RpcProviderId> {
         debug!(target: "rpc::client::get_provider_id", "RPC call: get_provider_id");
 
-        self.connection.call_no_params(methods::PROVIDER_ID).await
+        self.call_no_params(methods::PROVIDER_ID).await
     }
 
     /// Retrieve the list of value propositions of the MSP Node
     pub async fn get_value_props(&self) -> RpcResult<GetValuePropositionsResult> {
         debug!(target: "rpc::client::get_value_props", "RPC call: get_value_props");
 
-        self.connection.call_no_params(methods::VALUE_PROPS).await
+        self.call_no_params(methods::VALUE_PROPS).await
     }
 
     /// Retrieve the list of multiaddresses associated with the MSP Node
     pub async fn get_multiaddresses(&self) -> RpcResult<Vec<String>> {
         debug!(target: "rpc::client::get_multiaddresses", "RPC call: get_multiaddresses");
 
-        self.connection.call_no_params(methods::PEER_IDS).await
+        self.call_no_params(methods::PEER_IDS).await
     }
 }
 
 #[cfg(all(test, feature = "mocks"))]
 mod tests {
+    use bigdecimal::Signed;
     use codec::Decode;
 
     use shp_types::Hash;
@@ -134,8 +277,6 @@ mod tests {
         test_utils::random_bytes_32,
     };
 
-    // TODO(SCAFFOLDING): this will contain proper tests when we have defined
-    // what RPC methods to make use of
     #[tokio::test]
     async fn use_mock_connection() {
         let mock_conn = MockConnection::new();
@@ -155,6 +296,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn reconnect_automatically() {
+        let conn = MockConnection::new();
+        conn.disconnect().await;
+        let conn = Arc::new(AnyRpcConnection::Mock(conn));
+        let client = StorageHubRpcClient::new(conn);
+
+        assert!(
+            !client.is_connected().await,
+            "Should not be connected initially"
+        );
+
+        let result = client.get_provider_id().await;
+        assert!(
+            result.is_ok(),
+            "Should reconnect and be able to retrieve provider id"
+        );
+
+        assert!(client.is_connected().await, "Should be connected now");
+    }
+
+    #[tokio::test]
     async fn get_current_price_per_unit_per_tick() {
         let client = mock_rpc();
 
@@ -163,7 +325,10 @@ mod tests {
             .get_current_price_per_giga_unit_per_tick()
             .await
             .expect("able to retrieve current price per giga unit");
-        assert!(price > 0);
+        assert!(
+            price.is_positive(),
+            "Price per giga unit should always be > 0"
+        );
     }
 
     #[tokio::test]
@@ -294,5 +459,20 @@ mod tests {
             .expect("should be able to retrieve multiaddresses");
 
         assert!(response.len() > 0, "should have at least 1 multiaddress");
+    }
+
+    #[tokio::test]
+    async fn is_file_in_file_storage() {
+        let client = mock_rpc();
+
+        let response = client
+            .is_file_in_file_storage(&hex::encode(random_bytes_32()))
+            .await
+            .expect("should be able to upload file");
+
+        assert!(
+            matches!(response, GetFileFromFileStorageResult::FileFound(_)),
+            "should be successfull"
+        );
     }
 }

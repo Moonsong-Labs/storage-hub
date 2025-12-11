@@ -68,6 +68,52 @@ export interface BspNetApi extends ApiPromise {
     method: string,
     events?: EventRecord[]
   ): { event: Event; data: Codec[] & IEventData };
+
+  /**
+   * Pending transactions DB helpers namespace.
+   * Provides convenience helpers to query/assert the pending transactions Postgres database.
+   */
+  pendingDb: {
+    /**
+     * Creates and returns a SQL client connected to the pending transactions DB.
+     */
+    createClient: () => SqlClient;
+    /**
+     * Converts an ss58 address to AccountId bytes for DB queries.
+     */
+    accountIdFromAddress: (address: string) => Buffer;
+    /**
+     * Returns the row for (accountId, nonce) if it exists.
+     */
+    getByNonce: (options: { sql: SqlClient; accountId: Buffer; nonce: bigint }) => Promise<any>;
+    /**
+     * Returns all rows for an account ordered by nonce.
+     */
+    getAllByAccount: (options: { sql: SqlClient; accountId: Buffer }) => Promise<any[]>;
+    /**
+     * Counts active-state rows for an account.
+     */
+    countActive: (options: { sql: SqlClient; accountId: Buffer }) => Promise<bigint>;
+    /**
+     * Waits until a given nonce reaches the provided state.
+     */
+    waitForState: (options: {
+      sql: SqlClient;
+      accountId: Buffer;
+      nonce: bigint;
+      state: string;
+      timeoutMs?: number;
+      pollMs?: number;
+    }) => Promise<void>;
+    /**
+     * Asserts there are no active rows with nonce < onChainNonce.
+     */
+    expectClearedBelow: (options: {
+      sql: SqlClient;
+      accountId: Buffer;
+      onChainNonce: bigint;
+    }) => Promise<void>;
+  };
 }
 
 /**
@@ -204,6 +250,12 @@ export type BspNetConfig = {
    * Must be at least 1.
    */
   fishermanIncompleteSyncPageSize?: number;
+
+  /**
+   * Optional parameter to set the Rust log level for all nodes.
+   * Defaults to 'info' if not specified.
+   */
+  logLevel?: string;
 };
 
 /**
@@ -304,6 +356,13 @@ export type FullNetContext = {
   createFishermanApi?: () => ReturnType<typeof BspNetTestApi.create>;
 
   /**
+   * Creates and returns a connected API instance for the indexer node.
+   * Only available when standalone indexer is enabled in test options.
+   * @returns A promise that resolves to an enriched api instance for indexer operations.
+   */
+  createIndexerApi?: () => ReturnType<typeof BspNetTestApi.create>;
+
+  /**
    * Creates and returns a connected API instance for a BSP node.
    * @returns A promise that resolves to  an enriched api instance for BSP operations.
    */
@@ -386,13 +445,18 @@ export type TestOptions = {
    * - "multi": Runs tests with both initialised and non-initialised network configurations
    */
   initialised?: boolean | "multi";
+  /**
+   * Generate and upload a large file (in GB) for performance testing.
+   * File stored in docker/tmp/ and cleaned up after test.
+   */
+  big_file?: number;
   /** Set a custom capacity for the BSP */
   capacity?: bigint;
   /** Set a custom BSP weight */
   bspStartingWeight?: bigint;
   /** Custom toxics to apply to the network */
   toxics?: ToxicInfo[];
-  /** Set a custom timeout interval for submit extrinsic retries */
+  /** Set a custom timeout interval for submit extrinsic retries, in seconds */
   extrinsicRetryTimeout?: number;
   /** If true, runs launched userNode has attached indexer service enabled. */
   indexer?: boolean;
@@ -408,6 +472,8 @@ export type TestOptions = {
   fisherman?: boolean;
   /** If true, runs backend service */
   backend?: boolean;
+  /** If true, enable Pending Transactions Postgres DB for MSP 1 during tests (fullnet only) */
+  pendingTxDb?: boolean;
   /**
    * Set the runtime type to use
    * 'parachain' - Polkadot parachain runtime (default)
@@ -424,6 +490,11 @@ export type TestOptions = {
    * Must be at least 1.
    */
   fishermanIncompleteSyncPageSize?: number;
+  /**
+   * Optional parameter to set the Rust log level for all nodes.
+   * Defaults to 'info' if not specified.
+   */
+  logLevel?: string;
 };
 
 /**

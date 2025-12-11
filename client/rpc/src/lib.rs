@@ -2,7 +2,6 @@ use std::{
     collections::HashSet, fmt::Debug, marker::PhantomData, path::PathBuf, str::FromStr, sync::Arc,
 };
 
-use futures::StreamExt;
 use jsonrpsee::{
     core::{async_trait, RpcResult},
     proc_macros::rpc,
@@ -10,10 +9,14 @@ use jsonrpsee::{
     Extensions,
 };
 use log::{debug, error, info};
-use tokio::{fs, io::AsyncReadExt, sync::RwLock};
+use tokio::{
+    fs,
+    io::AsyncReadExt,
+    sync::{mpsc, RwLock},
+};
+use tokio_stream::wrappers::ReceiverStream;
 
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
-use pallet_payment_streams_runtime_api::PaymentStreamsApi as PaymentStreamsRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
 use pallet_storage_providers_runtime_api::StorageProvidersApi as StorageProvidersRuntimeApi;
 use sc_rpc_api::check_if_safe;
@@ -24,7 +27,7 @@ use shc_common::{
     traits::StorageEnableRuntime,
     types::{
         BlockHash, ChunkId, FileKey, FileKeyProof, FileMetadata, HashT, KeyProof, KeyProofs,
-        OpaqueBlock, ParachainClient, ProofsDealerProviderId, Proven, RandomnessOutput,
+        OpaqueBlock, ProofsDealerProviderId, Proven, RandomnessOutput, StorageHubClient,
         StorageProof, StorageProofsMerkleTrieLayout, StorageProviderId, BCSV_KEY_TYPE,
     },
 };
@@ -38,7 +41,7 @@ use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use sp_core::{sr25519::Pair as Sr25519Pair, Encode, Pair};
 use sp_keystore::{Keystore, KeystorePtr};
-use sp_runtime::{Deserialize, KeyTypeId, SaturatedConversion, Serialize};
+use sp_runtime::{Deserialize, KeyTypeId, Serialize};
 use sp_runtime_interface::pass_by::PassByInner;
 
 pub mod remote_file;
@@ -359,10 +362,6 @@ pub trait StorageHubClientApi {
     /// Get the value propositions of the node if it's an MSP, or None if it's a BSP
     #[method(name = "getValuePropositions", with_extensions)]
     async fn get_value_propositions(&self) -> RpcResult<GetValuePropositionsResult>;
-
-    /// Get the current price per giga unit per tick from the payment streams pallet.
-    #[method(name = "getCurrentPricePerGigaUnitPerTick")]
-    async fn get_current_price_per_giga_unit_per_tick(&self) -> RpcResult<u128>;
 }
 
 /// Stores the required objects to be used in our RPC method.
@@ -370,7 +369,7 @@ pub struct StorageHubClientRpc<FL, FSH, Runtime, Block>
 where
     Runtime: StorageEnableRuntime,
 {
-    client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+    client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
     file_storage: Arc<RwLock<FL>>,
     forest_storage_handler: FSH,
     keystore: KeystorePtr,
@@ -386,7 +385,7 @@ where
     FSH: ForestStorageHandler<Runtime> + Send + Sync,
 {
     pub fn new(
-        client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+        client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
         storage_hub_client_rpc_config: StorageHubClientRpcConfig<FL, FSH, Runtime>,
     ) -> Self {
         Self {
@@ -556,11 +555,23 @@ where
         let mut write_file_storage = self.file_storage.write().await;
 
         // Remove the files from the file storage.
-        for file_key in file_keys {
+        for file_key in &file_keys {
             write_file_storage
-                .delete_file(&file_key)
+                .delete_file(file_key)
                 .map_err(into_rpc_error)?;
+
+            info!(
+                target: LOG_TARGET,
+                "remove_files_from_file_storage successfully removed file with key=[{:x}] from file storage.",
+                file_key
+            );
         }
+
+        info!(
+            target: LOG_TARGET,
+            "remove_files_from_file_storage finished. Successfully removed {} files from file storage.",
+            file_keys.len()
+        );
 
         Ok(())
     }
@@ -581,6 +592,12 @@ where
             .delete_files_with_prefix(&prefix.inner())
             .map_err(into_rpc_error)?;
 
+        info!(
+            target: LOG_TARGET,
+            "remove_files_with_prefix_from_file_storage finished for prefix=[{:x}]. Successfully removed files with prefix from file storage.",
+            prefix
+        );
+
         Ok(())
     }
 
@@ -593,7 +610,7 @@ where
         // Check if the execution is safe.
         check_if_safe(ext)?;
 
-        // Acquire FileStorage read lock.
+        // Acquire FileStorage read lock to validate metadata and completeness.
         let read_file_storage = self.file_storage.read().await;
 
         // Retrieve file metadata from File Storage.
@@ -619,39 +636,77 @@ where
             }));
         }
 
+        // Release the read lock before performing the potentially long-running streaming operation.
+        drop(read_file_storage);
+
         // Create file handler for writing to local or remote destination.
         let remote_file_config = self.config.remote_file.clone();
         let (handler, _url) =
             RemoteFileHandlerFactory::create_from_string(&file_path, remote_file_config)
                 .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;
 
-        // TODO: Optimize memory usage for large file transfers
-        // Current implementation loads all chunks into memory before streaming to remote location.
-        // This can cause memory exhaustion for large files.
+        // Stream file chunks from FileStorage to the destination using a bounded channel.
         //
-        // Proposed solution: Implement true streaming by:
-        // 1. Create a custom Stream implementation that reads chunks on-demand
-        // 2. Then, pass this stream directly to the remote handler
-        // 3. This would allow chunks to be read from source and written to destination
-        //    without buffering the entire file in memory
+        // This avoids loading the entire file into memory:
+        // - A small, bounded channel limits the number of in-flight chunks.
+        // - Chunks are read from storage in small batches under a short-lived read lock.
+        // - Backpressure from the upload side naturally slows down chunk production.
         //
-        // This has the problem of holding onto the file storage read lock, perhaps that's ok?
-        // If it is we would need to shield against slow peers. We already have timeouts but not on the transfer as a whole
-        // We also might need to allow pagination to resume transfer
-        let mut chunks = Vec::new();
-        for chunk_idx in 0..total_chunks {
-            let chunk_id = ChunkId::new(chunk_idx);
-            let chunk = read_file_storage
-                .get_chunk(&file_key, &chunk_id)
-                .map_err(into_rpc_error)?;
-            chunks.push(chunk);
-        }
-        drop(read_file_storage);
+        // The maximum default buffered size will be internal_buffer_size (default 1024) * FILE_CHUNK_SIZE (1Kb) = 1 Mb
+        let queue_buffered_size = self.config.remote_file.internal_buffer_size;
+        let (tx, rx) = mpsc::channel::<Result<bytes::Bytes, std::io::Error>>(queue_buffered_size);
 
-        let chunks = futures::stream::iter(chunks.into_iter().map(Ok::<_, std::io::Error>));
+        let file_storage = Arc::clone(&self.file_storage);
+        let file_key_clone = file_key.clone();
 
-        let reader =
-            tokio_util::io::StreamReader::new(chunks.map(|result| result.map(bytes::Bytes::from)));
+        // We read chunks in batches to amortize the cost of acquiring the read lock.
+        // Note: we don't leave it locked as the download process velocity depends on the client receiving the file.
+        let batch_size = queue_buffered_size as u64;
+
+        // Channel Sender: reads chunks from FileStorage in batches and sends them through the channel.
+        tokio::spawn(async move {
+            let mut current_chunk: u64 = 0;
+
+            while current_chunk < total_chunks {
+                let batch_end =
+                    std::cmp::min(total_chunks, current_chunk.saturating_add(batch_size));
+
+                // Read a batch of chunks under a single read lock.
+                let mut batch = Vec::with_capacity((batch_end - current_chunk) as usize);
+                {
+                    let read_storage = file_storage.read().await;
+                    for idx in current_chunk..batch_end {
+                        let chunk_id = ChunkId::new(idx);
+                        match read_storage.get_chunk(&file_key_clone, &chunk_id) {
+                            Ok(chunk) => batch.push(chunk),
+                            Err(e) => {
+                                // Propagate the error to the consumer and stop producing.
+                                let _ = tx
+                                    .send(Err(std::io::Error::new(
+                                        std::io::ErrorKind::Other,
+                                        format!("Error reading chunk {idx}: {:?}", e),
+                                    )))
+                                    .await;
+                                return;
+                            }
+                        }
+                    }
+                }
+
+                // Send the batch to the consumer, backpressure ensured by the bounded channel.
+                for chunk in batch {
+                    if tx.send(Ok(bytes::Bytes::from(chunk))).await.is_err() {
+                        // Consumer dropped (e.g., RPC cancelled or upload failed); stop producing.
+                        return;
+                    }
+                }
+
+                current_chunk = batch_end;
+            }
+        });
+
+        let stream = ReceiverStream::new(rx);
+        let reader = tokio_util::io::StreamReader::new(stream);
         let boxed_reader = Box::new(reader) as _;
 
         let file_size = file_metadata.file_size();
@@ -660,6 +715,13 @@ where
             .upload_file(boxed_reader, file_size, None)
             .await
             .map_err(|e| remote_file_error_to_rpc_error(e))?;
+
+        info!(
+            target: LOG_TARGET,
+            "save_file_to_disk finished for file_key=[{:x}]. File saved to destination at path={} successfully.",
+            file_key,
+            file_path
+        );
 
         Ok(SaveFileToDisk::Success(file_metadata))
     }
@@ -692,6 +754,13 @@ where
             .insert_files_metadata(&metadata_of_files_to_add)
             .map_err(into_rpc_error)?;
 
+        info!(
+            target: LOG_TARGET,
+            "add_files_to_forest_storage finished for forest_key=[{}]. Successfully added {} files.",
+            hex::encode(forest_key),
+            metadata_of_files_to_add.len()
+        );
+
         Ok(AddFilesToForestStorageResult::Success)
     }
 
@@ -719,11 +788,16 @@ where
         let mut write_fs = fs.write().await;
 
         // Remove the file keys from the forest storage.
-        for file_key in file_keys {
-            write_fs
-                .delete_file_key(&file_key)
-                .map_err(into_rpc_error)?;
+        for file_key in &file_keys {
+            write_fs.delete_file_key(file_key).map_err(into_rpc_error)?;
         }
+
+        info!(
+            target: LOG_TARGET,
+            "remove_files_from_forest_storage finished for forest_key=[{}]. Successfully removed {} files.",
+            hex::encode(forest_key),
+            file_keys.len()
+        );
 
         Ok(RemoveFilesFromForestStorageResult::Success)
     }
@@ -737,15 +811,34 @@ where
             None => CURRENT_FOREST_KEY.to_vec().into(),
         };
 
-        // return None if not found
-        let fs = match self.forest_storage_handler.get(&forest_key).await {
-            Some(fs) => fs,
-            None => return Ok(None),
+        // Return None if not found
+        let maybe_root = match self.forest_storage_handler.get(&forest_key).await {
+            Some(fs) => {
+                let read_fs = fs.read().await;
+                Some(read_fs.root())
+            }
+            None => None,
         };
 
-        let read_fs = fs.read().await;
+        match maybe_root {
+            Some(root) => {
+                info!(
+                    target: LOG_TARGET,
+                    "get_forest_root successfully retrieved forest root for forest_key=[{}]. Root: [{:x}]",
+                    hex::encode(forest_key),
+                    root
+                );
+            }
+            None => {
+                info!(
+                    target: LOG_TARGET,
+                    "get_forest_root didn't find a forest root for forest_key=[{}]. Returning None.",
+                    hex::encode(forest_key)
+                );
+            }
+        }
 
-        Ok(Some(read_fs.root()))
+        Ok(maybe_root)
     }
 
     async fn is_file_in_forest(
@@ -767,9 +860,19 @@ where
             })?;
 
         let read_fs = fs.read().await;
-        Ok(read_fs
+        let result = read_fs
             .contains_file_key(&file_key)
-            .map_err(into_rpc_error)?)
+            .map_err(into_rpc_error)?;
+
+        info!(
+            target: LOG_TARGET,
+            "is_file_in_forest finished for forest_key=[{}], file_key=[{:x}]. Result: {}",
+            hex::encode(forest_key),
+            file_key,
+            result
+        );
+
+        Ok(result)
     }
 
     async fn is_file_in_file_storage(
@@ -780,38 +883,40 @@ where
         let read_file_storage = self.file_storage.read().await;
 
         // See if the file metadata is in the File Storage.
-        match read_file_storage
+        let result = match read_file_storage
             .get_metadata(&file_key)
             .map_err(into_rpc_error)?
         {
-            None => Ok(GetFileFromFileStorageResult::FileNotFound),
+            None => GetFileFromFileStorageResult::FileNotFound,
             Some(file_metadata) => {
                 let stored_chunks = read_file_storage
                     .stored_chunks_count(&file_key)
                     .map_err(into_rpc_error)?;
                 let total_chunks = file_metadata.chunks_count();
                 if stored_chunks < total_chunks {
-                    Ok(GetFileFromFileStorageResult::IncompleteFile(
-                        IncompleteFileStatus {
-                            file_metadata,
-                            stored_chunks,
-                            total_chunks,
-                        },
-                    ))
-                } else if stored_chunks > total_chunks {
-                    Ok(GetFileFromFileStorageResult::FileFoundWithInconsistency(
+                    GetFileFromFileStorageResult::IncompleteFile(IncompleteFileStatus {
                         file_metadata,
-                    ))
+                        stored_chunks,
+                        total_chunks,
+                    })
+                } else if stored_chunks > total_chunks {
+                    GetFileFromFileStorageResult::FileFoundWithInconsistency(file_metadata)
                 } else {
-                    Ok(GetFileFromFileStorageResult::FileFound(file_metadata))
+                    GetFileFromFileStorageResult::FileFound(file_metadata)
                 }
             }
-        }
+        };
+
+        info!(
+            target: LOG_TARGET,
+            "is_file_in_file_storage finished for file_key=[{:x}]. Result: {:?}",
+            file_key,
+            result
+        );
+
+        Ok(result)
     }
 
-    // Note: this method could use either the file storage or the forest storage, but it's using the forest storage.
-    // WARNING: Right now, forests don't have the file metadata saved to them, so don't expect to get the file
-    // metadata from this method until that's fixed.
     async fn get_file_metadata(
         &self,
         forest_key: Option<shp_types::Hash>,
@@ -831,9 +936,19 @@ where
             })?;
 
         let read_fs = fs.read().await;
-        Ok(read_fs
+        let result = read_fs
             .get_file_metadata(&file_key)
-            .map_err(into_rpc_error)?)
+            .map_err(into_rpc_error)?;
+
+        info!(
+            target: LOG_TARGET,
+            "get_file_metadata finished for forest_key=[{}], file_key=[{:x}]. Result: {:?}",
+            hex::encode(forest_key),
+            file_key,
+            result
+        );
+
+        Ok(result)
     }
 
     async fn is_file_key_expected(&self, file_key: shp_types::Hash) -> RpcResult<bool> {
@@ -842,6 +957,14 @@ where
             .is_file_expected(file_key.into())
             .await
             .map_err(into_rpc_error)?;
+
+        info!(
+            target: LOG_TARGET,
+            "is_file_key_expected finished for file_key=[{:x}]. Result: {}",
+            file_key,
+            expected
+        );
+
         Ok(expected)
     }
 
@@ -868,7 +991,15 @@ where
             .generate_proof(challenged_file_keys)
             .map_err(into_rpc_error)?;
 
-        Ok(forest_proof.encode())
+        let encoded = forest_proof.encode();
+
+        info!(
+            target: LOG_TARGET,
+            "generate_forest_proof finished for forest_key=[{}].",
+            hex::encode(forest_key),
+        );
+
+        Ok(encoded)
     }
 
     async fn generate_proof(
@@ -997,8 +1128,15 @@ where
             forest_proof: proven_file_keys.proof.into(),
             key_proofs,
         };
+        let encoded = proof.encode();
 
-        Ok(proof.encode())
+        info!(
+            target: LOG_TARGET,
+            "generate_proof finished for provider_id=[{:x}].",
+            provider_id
+        );
+
+        Ok(encoded)
     }
 
     async fn generate_file_key_proof_bsp_confirm(
@@ -1027,7 +1165,16 @@ where
         )
         .await?;
 
-        Ok(key_proof.proof.encode())
+        let encoded = key_proof.proof.encode();
+
+        info!(
+            target: LOG_TARGET,
+            "generate_file_key_proof_bsp_confirm finished for bsp_id=[{:x}], file_key=[{:x}].",
+            bsp_id,
+            file_key
+        );
+
+        Ok(encoded)
     }
 
     async fn generate_file_key_proof_msp_accept(
@@ -1056,7 +1203,16 @@ where
         )
         .await?;
 
-        Ok(key_proof.proof.encode())
+        let encoded = key_proof.proof.encode();
+
+        info!(
+            target: LOG_TARGET,
+            "generate_file_key_proof_msp_accept finished for msp_id=[{:x}], file_key=[{:x}].",
+            msp_id,
+            file_key
+        );
+
+        Ok(encoded)
     }
 
     // TODO: Add support for other signature schemes.
@@ -1085,6 +1241,11 @@ where
             }
         };
 
+        info!(
+            target: LOG_TARGET,
+            "insert_bcsv_keys finished, generated new public key."
+        );
+
         Ok(new_pub_key.to_string())
     }
 
@@ -1094,6 +1255,8 @@ where
 
         let pub_keys = self.keystore.keys(BCSV_KEY_TYPE).map_err(into_rpc_error)?;
         let key_path = PathBuf::from(keystore_path);
+
+        let total_keys = pub_keys.len();
 
         for pub_key in pub_keys {
             let mut key = key_path.clone();
@@ -1106,6 +1269,12 @@ where
                 error!(target: LOG_TARGET, "Failed to remove key: {:?}", e);
             });
         }
+
+        info!(
+            target: LOG_TARGET,
+            "remove_bcsv_keys finished, attempted to remove {} keys.",
+            total_keys
+        );
 
         Ok(())
     }
@@ -1127,6 +1296,13 @@ where
 
         drop(write_file_storage);
 
+        info!(
+            target: LOG_TARGET,
+            "add_to_exclude_list finished for file_key=[{:x}], exclude_type={}",
+            file_key,
+            exclude_type
+        );
+
         Ok(())
     }
 
@@ -1146,6 +1322,13 @@ where
             .map_err(into_rpc_error)?;
 
         drop(write_file_storage);
+
+        info!(
+            target: LOG_TARGET,
+            "remove_from_exclude_list finished for file_key=[{:x}], exclude_type={}",
+            file_key,
+            exclude_type
+        );
 
         Ok(())
     }
@@ -1172,6 +1355,12 @@ where
             .map_err(into_rpc_error)?;
 
         // Return the raw response
+        info!(
+            target: LOG_TARGET,
+            "receive_backend_file_chunks finished for file_key=[{:x}].",
+            file_key
+        );
+
         Ok(raw)
     }
 
@@ -1191,6 +1380,12 @@ where
             Some(StorageProviderId::BackupStorageProvider(id)) => RpcProviderId::Bsp(id.into()),
             Some(StorageProviderId::MainStorageProvider(id)) => RpcProviderId::Msp(id.into()),
         };
+
+        info!(
+            target: LOG_TARGET,
+            "get_provider_id finished with result={:?}",
+            result
+        );
 
         Ok(result)
     }
@@ -1221,33 +1416,22 @@ where
                 .map(|vp| vp.encode())
                 .collect::<Vec<_>>();
 
-            Ok(GetValuePropositionsResult::Success(value_propositions))
+            let result = GetValuePropositionsResult::Success(value_propositions);
+
+            info!(
+                target: LOG_TARGET,
+                "get_value_propositions finished for MSP=[{:x}].",
+                msp_id
+            );
+
+            Ok(result)
         } else {
+            info!(
+                target: LOG_TARGET,
+                "get_value_propositions called on a node that is not an MSP"
+            );
             Ok(GetValuePropositionsResult::NotAnMsp)
         }
-    }
-
-    async fn get_current_price_per_giga_unit_per_tick(&self) -> RpcResult<u128> {
-        let api = self.client.runtime_api();
-        let at_hash = self.client.info().best_hash;
-
-        let balance = api
-            .get_current_price_per_giga_unit_per_tick(at_hash)
-            .map_err(|e| {
-                JsonRpseeError::owned(
-                    INTERNAL_ERROR_CODE,
-                    format!(
-                        "Failed to get current price per giga unit per tick: {:?}",
-                        e
-                    ),
-                    None::<()>,
-                )
-            })?;
-
-        // Saturate the obtained price into a `u128`.
-        // If the configured `Balance` type of the `payment-streams` pallet is of a greater
-        // capacity (such as a u256), this could cause issues, so be wary.
-        Ok(balance.saturated_into())
     }
 }
 
@@ -1262,6 +1446,7 @@ fn key_file_name(public: &[u8], key_type: KeyTypeId) -> PathBuf {
 
 /// Converts into the expected kind of error for `jsonrpsee`'s `RpcResult<_>`.
 fn into_rpc_error(e: impl Debug) -> JsonRpseeError {
+    error!("into_rpc_error called with error: {:?}", e);
     JsonRpseeError::owned(
         INTERNAL_ERROR_CODE,
         INTERNAL_ERROR_MSG,
@@ -1279,7 +1464,7 @@ fn remote_file_error_to_rpc_error(e: remote_file::RemoteFileError) -> JsonRpseeE
 }
 
 async fn generate_key_proof<FL, Runtime>(
-    client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+    client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
     file_storage: Arc<RwLock<FL>>,
     file_key: shp_types::Hash,
     provider_id: ProofsDealerProviderId<Runtime>,

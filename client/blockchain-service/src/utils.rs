@@ -1,6 +1,5 @@
 use anyhow::{anyhow, Result};
 use log::{debug, error, info, trace, warn};
-use serde_json::Number;
 use std::{cmp::max, sync::Arc, vec};
 
 use codec::{Decode, Encode};
@@ -13,7 +12,13 @@ use pallet_storage_providers_runtime_api::{
 use polkadot_runtime_common::BlockHashCount;
 use sc_client_api::{BlockBackend, BlockImportNotification, HeaderBackend};
 use sc_network::Multiaddr;
+use sc_transaction_pool_api::TransactionStatus;
 use shc_actors_framework::actor::Actor;
+use shc_blockchain_service_db::{
+    leadership::{open_leadership_connection, try_acquire_leadership, LEADERSHIP_LOCK_KEY},
+    setup_db_pool,
+    store::PendingTxStore,
+};
 use shc_common::{
     blockchain_utils::{
         convert_raw_multiaddresses_to_multiaddr, get_events_at_block,
@@ -21,13 +26,14 @@ use shc_common::{
     },
     traits::{ExtensionOperations, KeyTypeOperations, StorageEnableRuntime},
     types::{
-        BlockNumber, FileKey, Fingerprint, ForestRoot, MinimalExtension, OpaqueBlock,
-        ParachainClient, ProofsDealerProviderId, StorageEnableEvents, StorageProviderId,
+        AccountId, BlockNumber, FileKey, Fingerprint, ForestRoot, MinimalExtension, OpaqueBlock,
+        ProofsDealerProviderId, StorageEnableEvents, StorageHubClient, StorageProviderId,
         TrieAddMutation, TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
     },
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shp_file_metadata::FileMetadata;
+use shp_tx_implicits_runtime_api::TxImplicitsApi;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::{HashAndNumber, TreeRoute};
 use sp_core::{Blake2Hasher, Hasher, U256};
@@ -45,9 +51,11 @@ use crate::{
         SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
     handler::LOG_TARGET,
+    transaction_watchers::spawn_transaction_watcher,
     types::{
         BspHandler, Extrinsic, ManagedProvider, MinimalBlockInfo, MspHandler,
-        NewBlockNotificationKind, SendExtrinsicOptions,
+        MultiInstancesNodeRole, NewBlockNotificationKind, SendExtrinsicOptions,
+        SubmitAndWatchError, SubmittedExtrinsicInfo,
     },
     BlockchainService,
 };
@@ -57,6 +65,121 @@ where
     FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
+    /// Initialise the pending transactions DB store and Leader/Follower role if configured.
+    ///
+    /// Behaviour:
+    /// - If the pending transactions DB URL is not found in the configuration or environment variable,
+    ///   the node runs in `NodeRole::Standalone` and the pending-tx DB remains disabled.
+    /// - If the DB pool or leadership connection / lock cannot be created, the node falls back to
+    ///   `NodeRole::Standalone` and the pending-tx DB remains disabled.
+    /// - Only `NodeRole::Leader` and `NodeRole::Follower` ever use the pending-tx DB; `NodeRole::Standalone`
+    ///   always means "no DB usage".
+    pub(crate) async fn init_pending_tx_store(&mut self) {
+        let maybe_url = self
+            .config
+            .pending_db_url
+            .clone()
+            .or_else(|| std::env::var("SH_PENDING_DB_URL").ok());
+        let Some(db_url) = maybe_url else {
+            // No URL configured: run in pure standalone mode with DB completely disabled.
+            warn!(
+                target: LOG_TARGET,
+                "Pending transactions DB URL not found in configuration or environment variable; running in STANDALONE mode"
+            );
+            warn!(
+                target: LOG_TARGET,
+                "Pending transactions will not be persisted or shared across instances"
+            );
+            self.pending_tx_store = None;
+            self.leadership_conn = None;
+            self.role = MultiInstancesNodeRole::Standalone;
+            return;
+        };
+
+        debug!(
+            target: LOG_TARGET,
+            "Pending transactions DB URL found, initialising pool and leadership lock"
+        );
+
+        let pool = match setup_db_pool(db_url.clone()).await {
+            Ok(pool) => pool,
+            Err(e) => {
+                // Do not fail startup; just log and continue without DB persistence
+                warn!(target: LOG_TARGET, "Pending transactions DB init failed: {:?}", e);
+                self.pending_tx_store = None;
+                self.leadership_conn = None;
+                self.role = MultiInstancesNodeRole::Standalone;
+                return;
+            }
+        };
+
+        // Establish dedicated leadership connection and attempt to acquire advisory lock.
+        let client = match open_leadership_connection(&db_url).await {
+            Ok(client) => client,
+            Err(e) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "Failed to open leadership connection; pending-tx coordination disabled: {:?}",
+                    e
+                );
+                self.pending_tx_store = None;
+                self.leadership_conn = None;
+                self.role = MultiInstancesNodeRole::Standalone;
+                return;
+            }
+        };
+
+        match try_acquire_leadership(&client, LEADERSHIP_LOCK_KEY).await {
+            Ok(true) => {
+                debug!(
+                    target: LOG_TARGET,
+                    "This node acquired the leadership advisory lock; running as LEADER"
+                );
+                self.pending_tx_store = Some(PendingTxStore::new(pool));
+                self.leadership_conn = Some(client);
+                self.role = MultiInstancesNodeRole::Leader;
+                info!(target: LOG_TARGET, "🗃️ Pending transactions store initialised");
+            }
+            Ok(false) => {
+                info!(
+                    target: LOG_TARGET,
+                    "Leadership advisory lock already held by another instance; running as FOLLOWER"
+                );
+                self.pending_tx_store = Some(PendingTxStore::new(pool));
+                self.leadership_conn = Some(client);
+                self.role = MultiInstancesNodeRole::Follower;
+                info!(target: LOG_TARGET, "🗃️ Pending transactions store initialised");
+            }
+            Err(e) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "Failed to acquire leadership advisory lock; falling back to STANDALONE mode: {:?}",
+                    e
+                );
+                // In STANDALONE mode we explicitly disable the pending-tx DB to keep semantics clear.
+                self.pending_tx_store = None;
+                self.leadership_conn = None;
+                self.role = MultiInstancesNodeRole::Standalone;
+            }
+        }
+    }
+
+    /// Initialise follower-specific pending transaction state from the shared DB.
+    ///
+    /// This function will:
+    /// - Perform a startup snapshot from `pending_transactions` for this node's account.
+    /// - Seed the local `TransactionManager` with existing non-terminal rows.
+    /// - Start LISTEN/NOTIFY-based updates and periodic repair polling.
+    ///
+    /// TODO: Implement the follower DB → TransactionManager bridge as described in
+    /// `leader_follower_design.md` (section 6).
+    pub(crate) async fn init_follower_pending_tx_state(&mut self) {
+        debug!(
+            target: LOG_TARGET,
+            "init_follower_pending_tx_state called, but follower DB → TransactionManager bridge is not implemented yet"
+        );
+    }
+
     /// Notify tasks waiting for a block number.
     pub(crate) fn notify_import_block_number(&mut self, block_number: &BlockNumber<Runtime>) {
         let mut keys_to_remove = Vec::new();
@@ -143,7 +266,7 @@ where
             {
                 // Check if extrinsic was included in the current block.
                 if let Ok(extrinsic) = self
-                    .get_extrinsic_from_block(current_block_hash, last_submitted_transaction.hash())
+                    .get_extrinsic_from_block(current_block_hash, last_submitted_transaction.hash)
                     .await
                     .map_err(|e| anyhow::anyhow!("Failed to get extrinsic from block: {:?}", e))
                 {
@@ -355,21 +478,37 @@ where
     }
 
     /// Get the current account nonce on-chain for a generic signature type.
-    pub(crate) fn account_nonce(&self, block_hash: &Runtime::Hash) -> u32 {
+    pub(crate) fn account_nonce(&self, block_hash: &Runtime::Hash) -> Result<u32> {
         let pub_key = Self::caller_pub_key(self.keystore.clone());
         self.client
             .runtime_api()
             .account_nonce(*block_hash, pub_key.into())
-            .expect("Fetching account nonce works; qed")
+            .map_err(|e| anyhow!("Fetching account nonce failed: {e}"))
     }
 
     /// Checks if the account nonce on-chain is higher than the nonce in the [`BlockchainService`].
     ///
     /// If the nonce is higher, the `nonce_counter` is updated in the [`BlockchainService`].
     pub(crate) fn sync_nonce(&mut self, block_hash: &Runtime::Hash) {
-        let latest_nonce = self.account_nonce(block_hash);
-        if latest_nonce > self.nonce_counter {
-            self.nonce_counter = latest_nonce
+        let on_chain_nonce = match self.account_nonce(block_hash) {
+            Ok(nonce) => nonce,
+            Err(e) => {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to sync nonce for block {}: {e}",
+                    block_hash
+                );
+                return;
+            }
+        };
+        if on_chain_nonce > self.nonce_counter {
+            debug!(
+                target: LOG_TARGET,
+                "Syncing nonce from {} (local) to {} (on-chain)",
+                self.nonce_counter,
+                on_chain_nonce
+            );
+            self.nonce_counter = on_chain_nonce;
         }
     }
 
@@ -453,68 +592,140 @@ where
         &mut self,
         call: impl Into<Runtime::Call>,
         options: &SendExtrinsicOptions,
-    ) -> Result<RpcExtrinsicOutput<Runtime>> {
+    ) -> Result<SubmittedExtrinsicInfo<Runtime>> {
+        if matches!(self.role, MultiInstancesNodeRole::Follower) {
+            error!(target: LOG_TARGET, "This node is a follower and cannot submit transactions. Only leader or standalone nodes may send transactions.");
+            return Err(anyhow!(
+            "This node is a follower and cannot submit transactions. Only leader or standalone nodes may send transactions."
+        ));
+        }
+
         debug!(target: LOG_TARGET, "Sending extrinsic to the runtime");
+        debug!(target: LOG_TARGET, "Extrinsic options: {:?}", options);
 
         let block_hash = self.client.info().best_hash;
+        let block_number = self.client.info().best_number.saturated_into();
 
-        // Use the highest valid nonce.
-        let nonce = max(
-            options.nonce().unwrap_or(self.nonce_counter),
-            self.account_nonce(&block_hash),
-        );
+        // Check if there's a nonce gap we can fill with this transaction
+        let on_chain_nonce = self.account_nonce(&block_hash).map_err(|e| {
+            error!(target: LOG_TARGET, "Failed to get on-chain nonce while sending extrinsic: {e}");
+            e
+        })?;
+        let gaps =
+            self.transaction_manager
+                .detect_gaps(on_chain_nonce, self.nonce_counter, block_number);
+
+        // Use the highest valid nonce, OR the first gap nonce if one exists
+        let nonce = if !gaps.is_empty() && options.nonce().is_none() {
+            let gap_nonce = gaps[0].nonce;
+            info!(
+                target: LOG_TARGET,
+                "🔧 Using transaction to fill nonce gap at {} (would have been {})",
+                gap_nonce,
+                self.nonce_counter
+            );
+            gap_nonce
+        } else {
+            max(
+                options.nonce().unwrap_or(self.nonce_counter),
+                on_chain_nonce,
+            )
+        };
 
         // Construct the extrinsic.
-        let extrinsic = self.construct_extrinsic(self.client.clone(), call, nonce, options.tip());
+        let call: Runtime::Call = call.into();
+        let extrinsic =
+            self.construct_extrinsic(self.client.clone(), call.clone(), nonce, options.tip());
 
         // Generate a unique ID for this query.
-        let id_hash = Blake2Hasher::hash(&extrinsic.encode());
-        // TODO: Consider storing the ID in a hashmap if later retrieval is needed.
+        let extrinsic_bytes = extrinsic.encode();
+        let id_hash = Blake2Hasher::hash(&extrinsic_bytes);
 
-        let (result, rx) = self
-            .rpc_handlers
-            .rpc_query(&format!(
-                r#"{{
-                    "jsonrpc": "2.0",
-                    "method": "author_submitAndWatchExtrinsic",
-                    "params": ["0x{}"],
-                    "id": {:?}
-                }}"#,
-                array_bytes::bytes2hex("", &extrinsic.encode()),
-                array_bytes::bytes2hex("", &id_hash.as_bytes())
-            ))
-            .await
-            .expect("Sending query failed even when it is correctly formatted as JSON-RPC; qed");
+        // Submit the transaction and set up the watcher infrastructure for it.
+        // We submit before tracking because Substrate's transaction pool validates everything
+        // (including nonce conflicts, tip comparisons, etc.). If the RPC accepts it, it's safe to track
+        let (tx_hash, watch_rx) = self
+            .submit_and_watch_extrinsic(extrinsic_bytes.clone(), nonce, id_hash)
+            .await?;
+        let module = options.module().unwrap_or("unknown".to_string());
+        let method = options.method().unwrap_or("unknown".to_string());
+        info!(target: LOG_TARGET, "Transaction {}_{} submitted successfully with hash {:?} and nonce {}", module, method, tx_hash, nonce);
 
-        let json: serde_json::Value =
-            serde_json::from_str(&result).expect("the result can only be a JSONRPC string; qed");
-        let error = json
-            .as_object()
-            .expect("JSON result is always an object; qed")
-            .get("error");
+        // Persist the transaction in the DB (best-effort) after RPC acceptance
+        // TODO: Consider doing this in a spawned thread to avoid blocking the main thread.
+        if let Some(store) = &self.pending_tx_store {
+            let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
+            let account_id: AccountId<Runtime> = caller_pub_key.into();
+            let account_bytes_owned: Vec<u8> = account_id.as_ref().to_vec();
+            let call_scale = call.encode();
+            // TODO: Use this when we implement multiple instances of the same provider.
+            let creator_id =
+                std::env::var("SH_NODE_INSTANCE_ID").unwrap_or_else(|_| "local".to_string());
+            if let Err(e) = store
+                .upsert_sent(
+                    &account_bytes_owned,
+                    nonce as i64,
+                    tx_hash.as_bytes(),
+                    &call_scale,
+                    &extrinsic_bytes,
+                    &creator_id,
+                )
+                .await
+            {
+                warn!(target: LOG_TARGET, "Failed to persist pending tx (nonce {}, and hash {:?}): {:?}", nonce, tx_hash, e);
+            }
+        }
 
-        if let Some(error) = error {
-            // TODO: Consider how to handle a low nonce error, and retry.
-            return Err(anyhow::anyhow!("Error in RPC call: {}", error.to_string()));
+        // Add the transaction to the transaction manager to track it
+        if let Err(e) = self.transaction_manager.track_transaction(
+            nonce,
+            id_hash,
+            Some(call),
+            options.tip(),
+            block_number,
+        ) {
+            warn!(
+                target: LOG_TARGET,
+                "Failed to track transaction in manager: {:?}. Transaction will still be watched but not tracked for gap detection.",
+                e
+            );
         }
 
         // TODO: Handle nonce overflow.
-        // Only update nonce after we are sure no errors
-        // occurred submitting the extrinsic.
-        self.nonce_counter = nonce + 1;
+        // Only update nonce after we are sure no errors occurred submitting the extrinsic to the node.
+        // Use max() to prevent regression when filling gaps. For example, if we're filling a gap at
+        // nonce 25 but our local nonce counter is already at 28, we want to keep it at 28, not drop it to 26
+        self.nonce_counter = max(self.nonce_counter, nonce + 1);
 
-        Ok(RpcExtrinsicOutput {
-            hash: id_hash,
-            result,
-            receiver: rx,
+        // Spawn the transaction watcher
+        spawn_transaction_watcher::<Runtime>(
             nonce,
+            tx_hash,
+            watch_rx,
+            self.tx_status_sender.clone(),
+        );
+
+        // Create a status subscription for this transaction
+        let status_subscription = self
+            .transaction_manager
+            .subscribe_to_status(nonce)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Transaction was just added to the manager, so it must have a status subscription"
+                )
+            })?;
+
+        Ok(SubmittedExtrinsicInfo {
+            hash: id_hash,
+            nonce,
+            status_subscription,
         })
     }
 
     /// Construct an extrinsic that can be applied to the runtime using a generic signature type.
     pub fn construct_extrinsic(
         &self,
-        client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+        client: Arc<StorageHubClient<Runtime::RuntimeApi>>,
         function: impl Into<Runtime::Call>,
         nonce: u32,
         tip: u128,
@@ -525,25 +736,26 @@ where
         Runtime::Extension,
     > {
         let function = function.into();
+        let current_block: u64 = client.info().best_number.saturated_into();
         let current_block_hash = client.info().best_hash;
-        let current_block = client.info().best_number.saturated_into();
-        let genesis_block = client
-            .hash(0)
-            .expect("Failed to get genesis block hash, always present; qed")
-            .expect("Genesis block hash should never not be on-chain; qed");
         let period = BlockHashCount::get()
             .checked_next_power_of_two()
             .map(|c| c / 2)
             .unwrap_or(2) as u64;
 
-        let minimal_extra =
-            MinimalExtension::new(generic::Era::mortal(period, current_block), nonce, tip);
+        let era = generic::Era::mortal(period, current_block.saturating_sub(1));
+        let minimal_extra = MinimalExtension::new(era, nonce, tip);
         let extra: Runtime::Extension = Runtime::Extension::from_minimal_extension(minimal_extra);
-        let implicit =
-            <Runtime::Extension as ExtensionOperations<Runtime::Call, Runtime>>::implicit(
-                genesis_block,
-                current_block_hash,
-            );
+
+        let implicit_bytes = client
+            .runtime_api()
+            .compute_signed_extra_implicit(current_block_hash, era, false)
+            .expect("Runtime API compute_signed_extra_implicit call should always succeed")
+            .expect("Runtime API compute_signed_extra_implicit returned error");
+        let implicit: <Runtime::Extension as sp_runtime::traits::TransactionExtension<
+            Runtime::Call,
+        >>::Implicit = Decode::decode(&mut &implicit_bytes[..])
+            .expect("Decoding implicit returned by runtime must succeed; qed");
 
         let raw_payload = SignedPayload::from_raw(function.clone(), extra.clone(), implicit);
 
@@ -579,6 +791,193 @@ where
                 .as_str(),
             );
         caller_pub_key
+    }
+
+    /// Re-subscribe transaction watchers from the pending transactions DB on startup.
+    ///
+    /// Behaviour:
+    /// - Loads non-terminal rows for this node's account with states:
+    ///   "future", "ready", "broadcast", "retracted", "in_block".
+    /// - Skips rows with empty `extrinsic_scale` (cannot re-submit for watcher).
+    /// - Skips rows already tracked in the transaction manager.
+    /// - Re-attaches the watcher by submitAndWatch using stored `extrinsic_scale` (full signed bytes).
+    ///   Decodes `call_scale` only to enrich transaction-manager tracking.
+    ///
+    /// If the transaction re-watched returns an InvalidTransactionOutdated error,
+    /// we skip it and do not mark it as watched. That would be the case if a transaction
+    /// we're trying to re-watch is now included in a block. This is an acceptable scenario.
+    pub(crate) async fn resubscribe_pending_transactions_on_startup(&mut self) {
+        // If DB is not configured, there is nothing to do.
+        let Some(store) = self.pending_tx_store.clone() else {
+            return;
+        };
+
+        let block_number = self.client.info().best_number.saturated_into();
+
+        // Resolve our account id bytes to filter by account in DB
+        let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
+        let account_id: AccountId<Runtime> = caller_pub_key.into();
+        let account_bytes_owned: Vec<u8> = account_id.as_ref().to_vec();
+
+        // On startup, pessimistically mark all pending transactions as not watched.
+        // We will only flip `watched=true` again for rows that end up re-attached.
+        if let Err(e) = store.set_watched_for_all(false).await {
+            warn!(
+                target: LOG_TARGET,
+                "Failed to reset watched flags for pending txs on startup: {:?}",
+                e
+            );
+            return;
+        }
+
+        // Allowed non-terminal states for re-subscription.
+        // For transactions that are InBlock, we attempt to re-subscribe in case they were retracted
+        // while this node was out of sync.
+        let allowed_states = vec![
+            TransactionStatus::Future,
+            TransactionStatus::Ready,
+            TransactionStatus::Broadcast(Default::default()),
+            TransactionStatus::InBlock(Default::default()),
+            TransactionStatus::Retracted(Default::default()),
+        ];
+
+        // Fetch candidate rows with full extrinsic bytes
+        let rows = match store
+            .load_resubscribe_rows::<Runtime::Hash>(&account_bytes_owned, allowed_states)
+            .await
+        {
+            Ok(rows) => rows,
+            Err(e) => {
+                warn!(target: LOG_TARGET, "Failed to load pending txs for re-subscription: {:?}", e);
+                return;
+            }
+        };
+
+        // Collect the nonces that end up being watched so we can perform a single
+        // bulk `watched=true` update at the end.
+        let mut re_watched_nonces: Vec<i64> = Vec::new();
+
+        for row in rows {
+            let nonce_i64 = row.nonce;
+            let watched = self
+                .resubscribe_one_pending(
+                    nonce_i64,
+                    &row.extrinsic_scale,
+                    row.call_scale.as_deref(),
+                    &row.state,
+                    block_number,
+                )
+                .await;
+            if watched {
+                re_watched_nonces.push(nonce_i64);
+            }
+        }
+
+        if let Err(e) = store
+            .set_watched_for_nonces(&account_bytes_owned, &re_watched_nonces, true)
+            .await
+        {
+            error!(
+                target: LOG_TARGET,
+                "Failed to mark re-watched pending txs on startup: {:?}",
+                e
+            );
+        }
+    }
+
+    /// Attempt to re-subscribe a single pending transaction row using stored extrinsic bytes.
+    /// Returns true if the transaction is being watched after this call (either already tracked or successfully re-subscribed).
+    async fn resubscribe_one_pending(
+        &mut self,
+        nonce_i64: i64,
+        extrinsic_scale: &[u8],
+        call_scale: Option<&[u8]>,
+        state: &str,
+        block_number: BlockNumber<Runtime>,
+    ) -> bool {
+        // Convert nonce to u32 bound used by manager/watcher
+        let nonce_u32 = match u32::try_from(nonce_i64) {
+            Ok(n) => n,
+            Err(_) => {
+                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Skipping pending tx with out-of-range nonce {}. The chain has gone beyond the 2^32 nonce limit. This is a critical bug. Please report it to the StorageHub team.", nonce_i64);
+                return false;
+            }
+        };
+        // Already tracked -> considered watched
+        if self.transaction_manager.pending.contains_key(&nonce_u32) {
+            warn!(
+                target: LOG_TARGET,
+                "Skipping pending tx (nonce {}) because we are already tracking it",
+                nonce_u32
+            );
+            return true;
+        }
+        // Need full extrinsic bytes to attach watcher
+        if extrinsic_scale.is_empty() {
+            warn!(
+                target: LOG_TARGET,
+                "Cannot resubscribe pending tx (nonce {}) due to empty extrinsic_scale; skipping",
+                nonce_u32
+            );
+            return false;
+        }
+
+        let id_hash = Blake2Hasher::hash(extrinsic_scale);
+        match self
+            .submit_and_watch_extrinsic(extrinsic_scale.to_vec(), nonce_u32, id_hash)
+            .await
+        {
+            Ok((tx_hash, watch_rx)) => {
+                info!(
+                    target: LOG_TARGET,
+                    "🔁 Re-subscribed watcher for pending tx (nonce {}, state {}, hash {:?})",
+                    nonce_u32,
+                    state,
+                    tx_hash
+                );
+                // Decode call_scale (if present) solely to enrich manager tracking.
+                // If unavailable or decoding fails, we track without the call.
+                let call: Option<Runtime::Call> = call_scale.and_then(|bytes| {
+                    if bytes.is_empty() {
+                        None
+                    } else {
+                        <Runtime::Call as Decode>::decode(&mut &bytes[..]).ok()
+                    }
+                });
+                if let Err(e) = self.transaction_manager.track_transaction(
+                    nonce_u32,
+                    id_hash,
+                    call,
+                    0,
+                    block_number,
+                ) {
+                    warn!(target: LOG_TARGET, "Failed to track re-subscribed tx (nonce {}): {:?}", nonce_u32, e);
+                }
+
+                // Spawn watcher
+                spawn_transaction_watcher::<Runtime>(
+                    nonce_u32,
+                    tx_hash,
+                    watch_rx,
+                    self.tx_status_sender.clone(),
+                );
+                true
+            }
+            Err(SubmitAndWatchError::InvalidTransactionOutdated { nonce }) => {
+                info!(target: LOG_TARGET, "Skipping pending tx (nonce {}) because it is outdated", nonce);
+                false
+            }
+            Err(e) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "Failed to re-watch with submitAndWatchExtrinsic for pending tx (nonce {}, old status '{}'): {:?}",
+                    nonce_u32,
+                    state,
+                    e
+                );
+                false
+            }
+        }
     }
 
     /// Get an extrinsic from a block.
@@ -619,9 +1018,10 @@ where
         // Each event record is composed of the `phase`, `event` and `topics` fields.
         // We are interested in those events whose `phase` is equal to `ApplyExtrinsic` with the index of the extrinsic.
         // For more information see: https://polkadot.js.org/docs/api/cookbook/blocks/#how-do-i-map-extrinsics-to-their-events
+        let extrinsic_index_u32: u32 = extrinsic_index.saturated_into();
         let events = events_in_block
             .into_iter()
-            .filter(|ev| ev.phase == frame_system::Phase::ApplyExtrinsic(extrinsic_index as u32))
+            .filter(|ev| ev.phase == frame_system::Phase::ApplyExtrinsic(extrinsic_index_u32))
             .collect();
 
         // Construct the extrinsic.
@@ -630,45 +1030,6 @@ where
             block_hash,
             events,
         })
-    }
-
-    /// Unwatch an extrinsic.
-    pub(crate) async fn unwatch_extrinsic(&self, subscription_id: Number) -> Result<String> {
-        let (result, _rx) = self
-            .rpc_handlers
-            .rpc_query(&format!(
-                r#"{{
-                    "jsonrpc": "2.0",
-                    "method": "author_unwatchExtrinsic",
-                    "params": [{}],
-                    "id": {}
-                }}"#,
-                subscription_id, subscription_id
-            ))
-            .await
-            .expect("Sending query failed even when it is correctly formatted as JSON-RPC; qed");
-
-        let json: serde_json::Value =
-            serde_json::from_str(&result).expect("the result can only be a JSONRPC string; qed");
-        let unwatch_result = json
-            .as_object()
-            .expect("JSON result is always an object; qed")
-            .get("result");
-
-        if let Some(unwatch_result) = unwatch_result {
-            if unwatch_result
-                .as_bool()
-                .expect("Result is always a boolean; qed")
-            {
-                debug!(target: LOG_TARGET, "Extrinsic unwatched successfully");
-            } else {
-                return Err(anyhow::anyhow!("Failed to unwatch extrinsic"));
-            }
-        } else {
-            return Err(anyhow::anyhow!("Failed to unwatch extrinsic"));
-        }
-
-        Ok(result)
     }
 
     /// Check if the challenges tick is one that this provider has to submit a proof for,
@@ -744,6 +1105,528 @@ where
         };
 
         (current_tick_minus_last_submission % provider_challenge_period) == Zero::zero()
+    }
+
+    /// Cleanup manager gaps with nonce < on-chain nonce; then handle old gaps.
+    ///
+    /// This method performs the following steps:
+    /// 1. Cleans up the transaction manager's stale nonce gaps (i.e. nonce gaps whose nonce is less than the on-chain nonce).
+    /// 2. Detects and handles old nonce gaps that haven't been filled in the transaction manager.
+    pub(crate) async fn cleanup_tx_manager_and_handle_nonce_gaps(
+        &mut self,
+        block_number: BlockNumber<Runtime>,
+        block_hash: Runtime::Hash,
+    ) {
+        let on_chain_nonce = match self.account_nonce(&block_hash) {
+            Ok(nonce) => nonce,
+            Err(e) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "Failed to get on-chain nonce while cleaning up tx manager at block {}. If this is the genesis block or a sufficiently old block, this is expected and can be ignored: {e}",
+                    block_hash
+                );
+                return;
+            }
+        };
+        self.transaction_manager
+            .cleanup_stale_nonce_gaps(on_chain_nonce);
+
+        // Handle old nonce gaps that haven't been filled in the transaction manager
+        self.handle_old_nonce_gaps(block_number, block_hash).await;
+    }
+
+    /// Cleanup the pending transaction store for the given block hash.
+    ///
+    /// Get the on-chain nonce for the given block hash and cleans up all pending transactions below that nonce.
+    pub(crate) async fn cleanup_pending_tx_store(&self, block_hash: Runtime::Hash) {
+        if matches!(
+            self.role,
+            MultiInstancesNodeRole::Follower | MultiInstancesNodeRole::Standalone
+        ) {
+            error!(
+                target: LOG_TARGET,
+                "This node is a follower or standalone and cannot perform DB cleanup. Only leader nodes may perform DB cleanup"
+            );
+            return;
+        }
+
+        let on_chain_nonce = match self.account_nonce(&block_hash) {
+            Ok(nonce) => nonce,
+            Err(e) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "Failed to get on-chain nonce while cleaning up pending tx store at block {}. If this is the genesis block or a sufficiently old block, this is expected and can be ignored: {e}",
+                    block_hash
+                );
+                return;
+            }
+        };
+
+        if let Some(store) = &self.pending_tx_store {
+            let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
+            let account_id: AccountId<Runtime> = caller_pub_key.into();
+            let account_bytes_owned: Vec<u8> = account_id.as_ref().to_vec();
+            // Fire-and-forget; log errors but don't block block processing on DB
+            if let Err(e) = store
+                .delete_below_nonce(&account_bytes_owned, on_chain_nonce as i64)
+                .await
+            {
+                warn!(target: LOG_TARGET, "Failed to cleanup DB pending txs below nonce {}: {:?}", on_chain_nonce, e);
+            }
+        }
+    }
+
+    /// Handle a single transaction status update, notifying subscribers and updating
+    /// the transaction manager state (including cleanup for terminal states).
+    ///
+    /// Immediate removal from our transaction manager (all terminal states):
+    /// - Invalid (retriable - gap preserved)
+    /// - Dropped (retriable - gap preserved)
+    /// - Usurped (replaced - gap cleared)
+    /// - Finalized (success - gap cleared)
+    /// - FinalityTimeout (timeout - gap cleared)
+    ///
+    /// Kept in our transaction manager (non-terminal states):
+    /// - Future
+    /// - Ready
+    /// - Broadcast
+    /// - InBlock
+    /// - Retracted
+    pub(crate) async fn handle_transaction_status_update(
+        &mut self,
+        nonce: u32,
+        tx_hash: Runtime::Hash,
+        status: TransactionStatus<Runtime::Hash, Runtime::Hash>,
+    ) {
+        // Only broadcast to subscribers if this update belongs to the current attempt for this nonce
+        let is_current_transaction_for_broadcast = self
+            .transaction_manager
+            .pending
+            .get(&nonce)
+            .map(|tx| tx.hash == tx_hash)
+            .unwrap_or(false);
+
+        if is_current_transaction_for_broadcast {
+            self.transaction_manager
+                .notify_status_change(nonce, status.clone());
+
+            // Update Postgres state for this transaction
+            if let Some(store) = &self.pending_tx_store {
+                // TODO: Consider spawning this into a background worker to avoid blocking the watcher path
+                let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
+                let account_id: AccountId<Runtime> = caller_pub_key.into();
+                let account_bytes_owned: Vec<u8> = account_id.as_ref().to_vec();
+                if let Err(e) = store
+                    .update_state(
+                        &account_bytes_owned,
+                        nonce as i64,
+                        &status,
+                        tx_hash.as_bytes(),
+                    )
+                    .await
+                {
+                    error!(target: LOG_TARGET, "Failed to update DB state for nonce {}: {:?}", nonce, e);
+                }
+            }
+        }
+
+        // Check if this is a terminal state that requires immediate removal
+        let should_remove = matches!(
+            status,
+            TransactionStatus::Invalid
+                | TransactionStatus::Dropped
+                | TransactionStatus::Usurped(_)
+                | TransactionStatus::Finalized(_)
+                | TransactionStatus::FinalityTimeout(_)
+        );
+
+        if should_remove {
+            // Check if this transaction is still the current one in the manager
+            // (it might have been replaced by a newer transaction with the same nonce)
+            let is_current_transaction = self
+                .transaction_manager
+                .pending
+                .get(&nonce)
+                .map(|tx| tx.hash == tx_hash)
+                .unwrap_or(false);
+
+            match &status {
+                TransactionStatus::Dropped => {
+                    if is_current_transaction {
+                        warn!(
+                            target: LOG_TARGET,
+                            "⚠️ Transaction with nonce {} (hash: {:?}) was dropped from Substrate's transaction pool. Removing from tracking but keeping gap detection.",
+                            nonce, tx_hash
+                        );
+                        self.transaction_manager.remove_pending_but_keep_gap(nonce);
+                    } else {
+                        debug!(
+                            target: LOG_TARGET,
+                            "Ignoring Dropped event for old transaction with nonce {} (hash: {:?}), current transaction is different",
+                            nonce, tx_hash
+                        );
+                    }
+                }
+                TransactionStatus::Invalid => {
+                    if is_current_transaction {
+                        warn!(
+                            target: LOG_TARGET,
+                            "⚠️ Transaction with nonce {} (hash: {:?}) is invalid. Removing from tracking but keeping gap detection.",
+                            nonce, tx_hash
+                        );
+                        self.transaction_manager.remove_pending_but_keep_gap(nonce);
+                    } else {
+                        debug!(
+                            target: LOG_TARGET,
+                            "Ignoring Invalid event for old transaction with nonce {} (hash: {:?}), current transaction is different",
+                            nonce, tx_hash
+                        );
+                    }
+                }
+                TransactionStatus::Usurped(_) => {
+                    if is_current_transaction {
+                        debug!(
+                            target: LOG_TARGET,
+                            "✓ Transaction with nonce {} (hash: {:?}) was usurped. Removing from tracking.",
+                            nonce, tx_hash
+                        );
+                        self.transaction_manager.remove(nonce);
+                    } else {
+                        debug!(
+                            target: LOG_TARGET,
+                            "Ignoring Usurped event for old transaction with nonce {} (hash: {:?}), it was already replaced",
+                            nonce, tx_hash
+                        );
+                    }
+                }
+                TransactionStatus::Finalized(_) => {
+                    if is_current_transaction {
+                        debug!(
+                            target: LOG_TARGET,
+                            "✓ Transaction with nonce {} (hash: {:?}) was finalized. Removing from tracking.",
+                            nonce, tx_hash
+                        );
+                    } else {
+                        warn!(
+                            target: LOG_TARGET,
+                            "⚠️ Old transaction with nonce {} (hash: {:?}) was finalized, but we have a different transaction ({:?}) in manager. \
+                                Removing newer transaction as nonce is now consumed.",
+                            nonce, tx_hash, self.transaction_manager.pending.get(&nonce).map(|tx| tx.hash)
+                        );
+                    }
+                    self.transaction_manager.remove(nonce);
+                }
+                TransactionStatus::FinalityTimeout(_) => {
+                    if is_current_transaction {
+                        debug!(
+                            target: LOG_TARGET,
+                            "⏱️ Transaction with nonce {} (hash: {:?}) had finality timeout. Removing from tracking.",
+                            nonce, tx_hash
+                        );
+                        self.transaction_manager.remove(nonce);
+                    } else {
+                        debug!(
+                            target: LOG_TARGET,
+                            "Ignoring FinalityTimeout event for old transaction with nonce {} (hash: {:?}), current transaction is different",
+                            nonce, tx_hash
+                        );
+                    }
+                }
+                _ => {}
+            }
+        } else if let Some(tx) = self.transaction_manager.pending.get_mut(&nonce) {
+            // Only update status if this is the current transaction
+            if tx.hash == tx_hash {
+                debug!(
+                    target: LOG_TARGET,
+                    "📊 Transaction with nonce {} (hash: {:?}) status updated: {:?}",
+                    nonce, tx_hash, status
+                );
+                tx.latest_status = status;
+            } else {
+                debug!(
+                    target: LOG_TARGET,
+                    "Ignoring status update for old transaction with nonce {} (hash: {:?}), current hash is {:?}",
+                    nonce, tx_hash, tx.hash
+                );
+            }
+        }
+    }
+
+    /// Handle old nonce gaps that haven't been filled in the transaction manager.
+    ///
+    /// Nonce gaps can occur when a transaction is dropped from the mempool after RPC acceptance
+    /// so it fails to be included, but higher nonces were submitted optimistically.
+    ///
+    /// Normally, nonce gaps are filled automatically when a new transaction is submitted, but in case
+    /// a new transaction is not submitted after a certain number of blocks, we will send a `remark`
+    /// transaction to fill the gap and avoid the client getting stuck.
+    pub(crate) async fn handle_old_nonce_gaps(
+        &mut self,
+        block_number: BlockNumber<Runtime>,
+        block_hash: Runtime::Hash,
+    ) {
+        // Detect gaps in the nonce sequence
+        let on_chain_nonce = match self.account_nonce(&block_hash) {
+            Ok(nonce) => nonce,
+            Err(e) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "Failed to get on-chain nonce while handling old nonce gaps at block {}. If this is the genesis block or a sufficiently old block, this is expected and can be ignored: {e}",
+                    block_hash
+                );
+                return;
+            }
+        };
+        let gaps =
+            self.transaction_manager
+                .detect_gaps(on_chain_nonce, self.nonce_counter, block_number);
+
+        if gaps.is_empty() {
+            return;
+        }
+
+        // Send gap-filling transactions for old gaps
+        let gap_fill_threshold = self.transaction_manager.config.gap_fill_threshold_blocks;
+
+        for gap in gaps {
+            if gap.age_in_blocks >= gap_fill_threshold {
+                warn!(
+                    target: LOG_TARGET,
+                    "Gap at nonce {} is {} blocks old, sending gap-filling transaction",
+                    gap.nonce,
+                    gap.age_in_blocks
+                );
+
+                if let Err(e) = self.send_gap_filling_transaction(gap.nonce).await {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to send gap-filling transaction for nonce {}: {:?}",
+                        gap.nonce,
+                        e
+                    );
+                }
+            } else {
+                debug!(
+                    target: LOG_TARGET,
+                    "Gap at nonce {} is only {} blocks old, waiting before filling",
+                    gap.nonce,
+                    gap.age_in_blocks
+                );
+            }
+        }
+    }
+
+    /// Send a gap-filling transaction using system.remark("").
+    ///
+    /// This is used as a fallback when a nonce gap persists after a timeout
+    /// and no other transaction have been submitted to fill the gap.
+    async fn send_gap_filling_transaction(&mut self, nonce: u32) -> Result<()> {
+        if matches!(self.role, MultiInstancesNodeRole::Follower) {
+            error!(target: LOG_TARGET, "This node is a follower and cannot submit gap-filling transactions. Only leader or standalone nodes may send transactions.");
+            return Ok(());
+        }
+
+        info!(
+                target: LOG_TARGET,
+                "Sending gap-filling transaction (system.remark) for nonce {}",
+                nonce
+        );
+
+        // Create a system.remark("") call
+        let remark_call = frame_system::Call::<Runtime>::remark { remark: vec![] };
+        let call: Runtime::Call = remark_call.into();
+
+        // Construct the extrinsic
+        let extrinsic = self.construct_extrinsic(self.client.clone(), call.clone(), nonce, 0);
+
+        // Calculate the transaction hash
+        let extrinsic_bytes = extrinsic.encode();
+        let id_hash = sp_core::Blake2Hasher::hash(&extrinsic_bytes);
+
+        // Submit the transaction and set up the watcher infrastructure for it.
+        // We submit before tracking because Substrate's transaction pool validates everything
+        // (including nonce conflicts, tip comparisons, etc.). If the RPC accepts it, it's safe to track
+        let (tx_hash, watch_rx) = self
+            .submit_and_watch_extrinsic(extrinsic_bytes.clone(), nonce, id_hash)
+            .await?;
+
+        // Persist the transaction in the DB (best-effort) after RPC acceptance
+        // TODO: Consider doing this in a spawned thread to avoid blocking the main thread.
+        if let Some(store) = &self.pending_tx_store {
+            let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
+            let account_id: AccountId<Runtime> = caller_pub_key.into();
+            let account_bytes_owned: Vec<u8> = account_id.as_ref().to_vec();
+            let call_scale = call.encode();
+            // TODO: Use this when we implement multiple instances of the same provider.
+            let creator_id =
+                std::env::var("SH_NODE_INSTANCE_ID").unwrap_or_else(|_| "local".to_string());
+            if let Err(e) = store
+                .upsert_sent(
+                    &account_bytes_owned,
+                    nonce as i64,
+                    tx_hash.as_bytes(),
+                    &call_scale,
+                    &extrinsic_bytes,
+                    &creator_id,
+                )
+                .await
+            {
+                warn!(target: LOG_TARGET, "Failed to persist pending tx (nonce {}, and hash {:?}): {:?}", nonce, tx_hash, e);
+            }
+        }
+
+        // Add the transaction to the transaction manager to track it
+        let block_number = self.client.info().best_number.saturated_into();
+        if let Err(e) = self.transaction_manager.track_transaction(
+            nonce,
+            id_hash,
+            Some(call.clone()),
+            0,
+            block_number,
+        ) {
+            warn!(
+                target: LOG_TARGET,
+                "Failed to track gap-filling transaction: {:?}. It will still be watched.",
+                e
+            );
+        }
+
+        // Spawn the watcher for the gap-filling transaction
+        // We don't care to keep track of this transaction, as there are no other tasks that depend on it.
+        spawn_transaction_watcher::<Runtime>(
+            nonce,
+            tx_hash,
+            watch_rx,
+            self.tx_status_sender.clone(),
+        );
+
+        info!(
+                target: LOG_TARGET,
+                "Successfully sent gap-filling transaction for nonce {}",
+                nonce
+        );
+
+        Ok(())
+    }
+
+    /// Submit an extrinsic via RPC and return the status receiver.
+    ///
+    /// This is the common logic for submitting transactions and monitoring their status.
+    /// It handles RPC errors, JSON parsing, and returns the receiver for status updates.
+    ///
+    /// Returns a tuple of (transaction_hash, receiver_for_watcher)
+    async fn submit_and_watch_extrinsic(
+        &self,
+        extrinsic_encoded: Vec<u8>,
+        nonce: u32,
+        id_hash: Runtime::Hash,
+    ) -> std::result::Result<
+        (Runtime::Hash, tokio::sync::mpsc::Receiver<String>),
+        SubmitAndWatchError,
+    > {
+        // Submit the transaction via RPC
+        let (result, rx) = match self
+            .rpc_handlers
+            .rpc_query(&format!(
+                r#"{{
+                    "jsonrpc": "2.0",
+                    "method": "author_submitAndWatchExtrinsic",
+                    "params": ["0x{}"],
+                    "id": {:?}
+                }}"#,
+                array_bytes::bytes2hex("", &extrinsic_encoded),
+                array_bytes::bytes2hex("", &id_hash.as_bytes())
+            ))
+            .await
+        {
+            Ok((result, rx)) => (result, rx),
+            Err(e) => {
+                error!(
+                    target: LOG_TARGET,
+                    "RPC query failed for transaction with nonce {}: {}",
+                    nonce,
+                    e
+                );
+                return Err(SubmitAndWatchError::RpcTransport {
+                    message: e.to_string(),
+                });
+            }
+        };
+
+        // Parse JSON response
+        let json: serde_json::Value = match serde_json::from_str(&result) {
+            Ok(json) => json,
+            Err(e) => {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to parse RPC response for nonce {}: {}",
+                    nonce,
+                    e
+                );
+                return Err(SubmitAndWatchError::MalformedResponse {
+                    message: e.to_string(),
+                });
+            }
+        };
+
+        // Check for errors in response
+        let error = match json.as_object() {
+            Some(obj) => obj.get("error"),
+            None => {
+                error!(
+                    target: LOG_TARGET,
+                    "RPC response is not a JSON object for nonce {}",
+                    nonce
+                );
+                return Err(SubmitAndWatchError::MalformedResponse {
+                    message: "RPC response is not a JSON object".into(),
+                });
+            }
+        };
+
+        if let Some(error) = error {
+            // Try to decode the standard JSON-RPC error shape
+            if let Some(err_obj) = error.as_object() {
+                let code = err_obj
+                    .get("code")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or_default();
+                let message = err_obj
+                    .get("message")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Unknown error")
+                    .to_string();
+                let data_str_opt = err_obj
+                    .get("data")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+
+                // Special-case: Invalid Transaction, Transaction is outdated (code 1010)
+                if code == 1010
+                    && message == "Invalid Transaction"
+                    && data_str_opt
+                        .as_ref()
+                        .map(|s| s.to_ascii_lowercase().contains("outdated"))
+                        .unwrap_or(false)
+                {
+                    return Err(SubmitAndWatchError::InvalidTransactionOutdated { nonce });
+                }
+
+                return Err(SubmitAndWatchError::RpcError {
+                    code,
+                    message,
+                    data: data_str_opt,
+                });
+            } else {
+                return Err(SubmitAndWatchError::MalformedResponse {
+                    message: "RPC error field is not a JSON object".into(),
+                });
+            }
+        }
+
+        // Return the RPC receiver
+        Ok((id_hash, rx))
     }
 
     /// Applies Forest root changes found in a [`TreeRoute`].
@@ -1022,103 +1905,131 @@ where
         Ok(reverted_mutation)
     }
 
-    pub(crate) fn process_common_block_import_events(
+    /// Processes runtime events emitted on block import that are common to both MSP and BSP nodes.
+    ///
+    /// The events processed here are processed equally for both MSP and BSP nodes.
+    pub(crate) fn process_msp_and_bsp_block_import_events(
         &mut self,
         event: StorageEnableEvents<Runtime>,
     ) {
+        // Process the events that are common to all MultiInstancesNodeRole roles.
         match event {
-            // New storage request event coming from pallet-file-system.
-            StorageEnableEvents::FileSystem(pallet_file_system::Event::NewStorageRequest {
-                who,
-                file_key,
-                bucket_id,
-                location,
-                fingerprint,
-                size,
-                peer_ids,
-                expires_at,
-            }) => self.emit(NewStorageRequest {
-                who,
-                file_key: FileKey::from(file_key.as_ref()),
-                bucket_id,
-                location,
-                fingerprint: fingerprint.as_ref().into(),
-                size,
-                user_peer_ids: peer_ids,
-                expires_at: expires_at,
-            }),
-            // A provider has been marked as slashable.
-            StorageEnableEvents::ProofsDealer(pallet_proofs_dealer::Event::SlashableProvider {
-                provider,
-                next_challenge_deadline,
-            }) => self.emit(SlashableProvider {
-                provider,
-                next_challenge_deadline: next_challenge_deadline.saturated_into(),
-            }),
-            // The last chargeable info of a provider has been updated
-            StorageEnableEvents::PaymentStreams(
-                pallet_payment_streams::Event::LastChargeableInfoUpdated {
-                    provider_id,
-                    last_chargeable_tick,
-                    last_chargeable_price_index,
-                },
-            ) => {
-                if let Some(managed_provider_id) = &self.maybe_managed_provider {
-                    // We only emit the event if the Provider ID is the one that this node is managing.
-                    // It's irrelevant if the Provider ID is a MSP or a BSP.
-                    let managed_provider_id = match managed_provider_id {
-                        ManagedProvider::Bsp(bsp_handler) => &bsp_handler.bsp_id,
-                        ManagedProvider::Msp(msp_handler) => &msp_handler.msp_id,
-                    };
-                    if provider_id == *managed_provider_id {
-                        self.emit(LastChargeableInfoUpdated {
+            _ => {
+                trace!(target: LOG_TARGET, "No common block import events to process regarding of the role of the node");
+            }
+        }
+
+        // Process the events that are specific to the MultiInstancesNodeRole role of the node.
+        match self.role {
+            MultiInstancesNodeRole::Leader | MultiInstancesNodeRole::Standalone => {
+                match event {
+                    // New storage request event coming from pallet-file-system.
+                    StorageEnableEvents::FileSystem(
+                        pallet_file_system::Event::NewStorageRequest {
+                            who,
+                            file_key,
+                            bucket_id,
+                            location,
+                            fingerprint,
+                            size,
+                            peer_ids,
+                            expires_at,
+                        },
+                    ) => self.emit(NewStorageRequest {
+                        who,
+                        file_key: FileKey::from(file_key.as_ref()),
+                        bucket_id,
+                        location,
+                        fingerprint: fingerprint.as_ref().into(),
+                        size,
+                        user_peer_ids: peer_ids,
+                        expires_at: expires_at,
+                    }),
+                    // A provider has been marked as slashable.
+                    StorageEnableEvents::ProofsDealer(
+                        pallet_proofs_dealer::Event::SlashableProvider {
+                            provider,
+                            next_challenge_deadline,
+                        },
+                    ) => self.emit(SlashableProvider {
+                        provider,
+                        next_challenge_deadline: next_challenge_deadline.saturated_into(),
+                    }),
+                    // The last chargeable info of a provider has been updated
+                    StorageEnableEvents::PaymentStreams(
+                        pallet_payment_streams::Event::LastChargeableInfoUpdated {
                             provider_id,
                             last_chargeable_tick,
                             last_chargeable_price_index,
-                        })
+                        },
+                    ) => {
+                        if let Some(managed_provider_id) = &self.maybe_managed_provider {
+                            // We only emit the event if the Provider ID is the one that this node is managing.
+                            // It's irrelevant if the Provider ID is a MSP or a BSP.
+                            let managed_provider_id = match managed_provider_id {
+                                ManagedProvider::Bsp(bsp_handler) => &bsp_handler.bsp_id,
+                                ManagedProvider::Msp(msp_handler) => &msp_handler.msp_id,
+                            };
+                            if provider_id == *managed_provider_id {
+                                self.emit(LastChargeableInfoUpdated {
+                                    provider_id,
+                                    last_chargeable_tick,
+                                    last_chargeable_price_index,
+                                })
+                            }
+                        }
                     }
-                }
-            }
-            // A user has been flagged as without funds in the runtime
-            StorageEnableEvents::PaymentStreams(
-                pallet_payment_streams::Event::UserWithoutFunds { who },
-            ) => {
-                self.emit(UserWithoutFunds { who });
-            }
-            // A file was correctly deleted from a user without funds
-            StorageEnableEvents::FileSystem(
-                pallet_file_system::Event::SpStopStoringInsolventUser {
-                    sp_id,
-                    file_key,
-                    owner,
-                    location,
-                    new_root,
-                },
-            ) => {
-                if let Some(managed_provider_id) = &self.maybe_managed_provider {
-                    // We only emit the event if the Provider ID is the one that this node is managing.
-                    // It's irrelevant if the Provider ID is a MSP or a BSP.
-                    let managed_provider_id = match managed_provider_id {
-                        ManagedProvider::Bsp(bsp_handler) => &bsp_handler.bsp_id,
-                        ManagedProvider::Msp(msp_handler) => &msp_handler.msp_id,
-                    };
-                    if sp_id == *managed_provider_id {
-                        self.emit(SpStopStoringInsolventUser {
+                    // A user has been flagged as without funds in the runtime
+                    StorageEnableEvents::PaymentStreams(
+                        pallet_payment_streams::Event::UserWithoutFunds { who },
+                    ) => {
+                        self.emit(UserWithoutFunds { who });
+                    }
+                    // A file was correctly deleted from a user without funds
+                    StorageEnableEvents::FileSystem(
+                        pallet_file_system::Event::SpStopStoringInsolventUser {
                             sp_id,
-                            file_key: file_key.into(),
+                            file_key,
                             owner,
                             location,
                             new_root,
-                        })
+                        },
+                    ) => {
+                        if let Some(managed_provider_id) = &self.maybe_managed_provider {
+                            // We only emit the event if the Provider ID is the one that this node is managing.
+                            // It's irrelevant if the Provider ID is a MSP or a BSP.
+                            let managed_provider_id = match managed_provider_id {
+                                ManagedProvider::Bsp(bsp_handler) => &bsp_handler.bsp_id,
+                                ManagedProvider::Msp(msp_handler) => &msp_handler.msp_id,
+                            };
+                            if sp_id == *managed_provider_id {
+                                self.emit(SpStopStoringInsolventUser {
+                                    sp_id,
+                                    file_key: file_key.into(),
+                                    owner,
+                                    location,
+                                    new_root,
+                                })
+                            }
+                        }
                     }
+                    _ => {}
                 }
             }
-            _ => {}
+            MultiInstancesNodeRole::Follower => {
+                trace!(target: LOG_TARGET, "No block import events to process while in FOLLOWER role");
+            }
         }
     }
 
     pub(crate) fn process_common_finality_events(&self, _event: StorageEnableEvents<Runtime>) {
-        {}
+        match self.role {
+            MultiInstancesNodeRole::Leader
+            | MultiInstancesNodeRole::Standalone
+            | MultiInstancesNodeRole::Follower => {
+                trace!(target: LOG_TARGET, "No finality events to process while in LEADER, STANDALONE or FOLLOWER role");
+            }
+        }
     }
 
     pub(crate) fn process_test_user_events(&self, event: StorageEnableEvents<Runtime>) {
@@ -1159,27 +2070,5 @@ where
             }
             _ => {}
         }
-    }
-}
-
-/// The output of an RPC extrinsic.
-pub struct RpcExtrinsicOutput<Runtime: StorageEnableRuntime> {
-    /// Hash of the extrinsic.
-    pub hash: Runtime::Hash,
-    /// The nonce of the extrinsic.
-    pub nonce: u32,
-    /// The output string of the extrinsic if any.
-    pub result: String,
-    /// An async receiver if data will be returned via a callback.
-    pub receiver: tokio::sync::mpsc::Receiver<String>,
-}
-
-impl<Runtime: StorageEnableRuntime> std::fmt::Debug for RpcExtrinsicOutput<Runtime> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "RpcExtrinsicOutput {{ hash: {:?}, result: {:?}, receiver }}",
-            self.hash, self.result
-        )
     }
 }

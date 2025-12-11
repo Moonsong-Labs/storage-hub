@@ -57,14 +57,20 @@ where
     NT: ShNodeType<Runtime> + 'static,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: SlashableProvider<Runtime>) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: SlashableProvider<Runtime>) -> anyhow::Result<String> {
+        let provider = event.provider.clone();
         info!(
             target: LOG_TARGET,
-            "Slashing provider {:?}",
-            event.provider,
+            "Slashing provider [{:x}]",
+            provider,
         );
 
-        self.handle_slashable_provider_event(event).await
+        self.handle_slashable_provider_event(event).await?;
+
+        Ok(format!(
+            "Handled SlashableProvider event for provider [{:x}]",
+            provider
+        ))
     }
 }
 
@@ -88,12 +94,16 @@ where
             .blockchain
             .send_extrinsic(
                 call,
-                SendExtrinsicOptions::new(Duration::from_secs(
-                    self.storage_hub_handler
-                        .provider_config
-                        .blockchain_service
-                        .extrinsic_retry_timeout,
-                )),
+                SendExtrinsicOptions::new(
+                    Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .blockchain_service
+                            .extrinsic_retry_timeout,
+                    ),
+                    Some("storageProviders".to_string()),
+                    Some("slash".to_string()),
+                ),
             )
             .await?
             .watch_for_success(&self.storage_hub_handler.blockchain)

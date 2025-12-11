@@ -72,7 +72,7 @@ where
     async fn handle_event(
         &mut self,
         event: FinalisedBucketMovedAway<Runtime>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
             "MSP: bucket {:?} moved to MSP {:?}, starting cleanup",
@@ -90,13 +90,10 @@ where
             return Err(e);
         }
 
-        info!(
-            target: LOG_TARGET,
-            "MSP: successfully deleted bucket {:?} after move",
+        Ok(format!(
+            "MSP: successfully deleted bucket [{:x}] after move",
             event.bucket_id,
-        );
-
-        Ok(())
+        ))
     }
 }
 
@@ -110,7 +107,7 @@ where
     async fn handle_event(
         &mut self,
         event: FinalisedMspStoppedStoringBucket<Runtime>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
             "MSP: deleting bucket {:?} for MSP {:?}",
@@ -128,13 +125,10 @@ where
             return Err(e);
         }
 
-        info!(
-            target: LOG_TARGET,
-            "MSP: successfully deleted bucket {:?} after stop storing",
+        Ok(format!(
+            "MSP: successfully deleted bucket [{:x}] after stop storing",
             event.bucket_id,
-        );
-
-        Ok(())
+        ))
     }
 }
 

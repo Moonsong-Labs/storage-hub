@@ -1,0 +1,27 @@
+{
+  "chain": {
+    "id": 181222,
+    "name": "StorageHub Solochain EVM",
+    "nativeCurrency": { "name": "StorageHub", "symbol": "SH", "decimals": 18 },
+    "evmRpcHttpUrl": "http://127.0.0.1:9888",
+    "substrateRpcWsUrl": "ws://127.0.0.1:9888",
+    "filesystemPrecompileAddress": "0x0000000000000000000000000000000000000064"
+  },
+  "msp": {
+    "baseUrl": "http://127.0.0.1:8080",
+    "timeoutMs": 30000
+  },
+  "auth": {
+    "siweDomain": "localhost:3001",
+    "siweUri": "http://localhost:3001"
+  },
+  "defaults": {
+    "replicationLevel": "Basic",
+    "replicas": 0,
+    "gas": "500000",
+    "gasPriceWei": "1000000000",
+    "delays": { "postStorageRequestMs": 2000, "beforeUploadMs": 3000 }
+  }
+}
+
+

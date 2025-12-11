@@ -103,8 +103,8 @@ where
     async fn handle_event(
         &mut self,
         event: LastChargeableInfoUpdated<Runtime>,
-    ) -> anyhow::Result<()> {
-        info!(target: LOG_TARGET, "A proof was accepted for provider {:?} and users' fees are going to be charged.", event.provider_id);
+    ) -> anyhow::Result<String> {
+        info!(target: LOG_TARGET, "A proof was accepted for provider {:x} and users' fees are going to be charged.", event.provider_id);
 
         // Retrieves users with debt over the min_debt threshold from config
         // using a Runtime API.
@@ -131,15 +131,25 @@ where
                 }
                 .into();
 
+            let options = SendExtrinsicOptions::new(
+                Duration::from_secs(
+                    self.storage_hub_handler
+                        .provider_config
+                        .blockchain_service
+                        .extrinsic_retry_timeout,
+                ),
+                Some("paymentStreams".to_string()),
+                Some("chargeMultipleUsersPaymentStreams".to_string()),
+            );
             let charging_result = self
                 .storage_hub_handler
                 .blockchain
-                .send_extrinsic(call, Default::default())
+                .send_extrinsic(call, options)
                 .await;
 
             match charging_result {
                 Ok(submitted_transaction) => {
-                    info!(target: LOG_TARGET, "Submitted extrinsic to charge users with debt: {}", submitted_transaction.hash());
+                    info!(target: LOG_TARGET, "Submitted extrinsic to charge users with debt: {}", submitted_transaction.hash);
                 }
                 Err(e) => {
                     error!(target: LOG_TARGET, "Failed to send extrinsic to charge users with debt: {}", e);
@@ -147,7 +157,10 @@ where
             }
         }
 
-        Ok(())
+        Ok(format!(
+            "Handled LastChargeableInfoUpdated for provider {:x}",
+            event.provider_id
+        ))
     }
 }
 
@@ -157,7 +170,7 @@ where
     NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: UserWithoutFunds<Runtime>) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: UserWithoutFunds<Runtime>) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
             "Processing UserWithoutFunds for user {:?}",
@@ -191,11 +204,15 @@ where
             self.storage_hub_handler
                 .blockchain
                 .queue_stop_storing_for_insolvent_user_request(
-                    StopStoringForInsolventUserRequest::new(insolvent_user),
+                    StopStoringForInsolventUserRequest::new(insolvent_user.clone()),
                 )
                 .await?;
         }
-        Ok(())
+
+        Ok(format!(
+            "Handled UserWithoutFunds for user [{}]",
+            hex::encode(insolvent_user)
+        ))
     }
 }
 
@@ -209,7 +226,7 @@ where
     async fn handle_event(
         &mut self,
         event: SpStopStoringInsolventUser<Runtime>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
             "Processing SpStopStoringForInsolventUser for user {:?}",
@@ -243,11 +260,15 @@ where
             self.storage_hub_handler
                 .blockchain
                 .queue_stop_storing_for_insolvent_user_request(
-                    StopStoringForInsolventUserRequest::new(insolvent_user),
+                    StopStoringForInsolventUserRequest::new(insolvent_user.clone()),
                 )
                 .await?;
         }
-        Ok(())
+
+        Ok(format!(
+            "Handled SpStopStoringInsolventUser for user [{}]",
+            hex::encode(insolvent_user)
+        ))
     }
 }
 
@@ -265,7 +286,7 @@ where
     async fn handle_event(
         &mut self,
         event: ProcessStopStoringForInsolventUserRequest<Runtime>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
             "Processing StopStoringForInsolventUserRequest for user: {:?}",
@@ -340,12 +361,16 @@ where
                 .blockchain
                 .send_extrinsic(
                     stop_storing_for_insolvent_user_call,
-                    SendExtrinsicOptions::new(Duration::from_secs(
-                        self.storage_hub_handler
-                            .provider_config
-                            .blockchain_service
-                            .extrinsic_retry_timeout,
-                    )),
+                    SendExtrinsicOptions::new(
+                        Duration::from_secs(
+                            self.storage_hub_handler
+                                .provider_config
+                                .blockchain_service
+                                .extrinsic_retry_timeout,
+                        ),
+                        Some("fileSystem".to_string()),
+                        Some("stopStoringForInsolventUser".to_string()),
+                    ),
                 )
                 .await?;
 
@@ -355,19 +380,29 @@ where
             if user_files.len() == 1 {
                 let call: Runtime::Call =
                     pallet_payment_streams::Call::<Runtime>::charge_payment_streams {
-                        user_account: insolvent_user,
+                        user_account: insolvent_user.clone(),
                     }
                     .into();
 
+                let options = SendExtrinsicOptions::new(
+                    Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .blockchain_service
+                            .extrinsic_retry_timeout,
+                    ),
+                    Some("paymentStreams".to_string()),
+                    Some("chargePaymentStreams".to_string()),
+                );
                 let charging_result = self
                     .storage_hub_handler
                     .blockchain
-                    .send_extrinsic(call, Default::default())
+                    .send_extrinsic(call, options)
                     .await;
 
                 match charging_result {
                     Ok(submitted_transaction) => {
-                        info!(target: LOG_TARGET, "Submitted extrinsic to charge users with debt: {}", submitted_transaction.hash());
+                        info!(target: LOG_TARGET, "Submitted extrinsic to charge users with debt: {}", submitted_transaction.hash);
                     }
                     Err(e) => {
                         error!(target: LOG_TARGET, "Failed to send extrinsic to charge users with debt: {}", e);
@@ -380,7 +415,12 @@ where
         self.storage_hub_handler
             .blockchain
             .release_forest_root_write_lock(forest_root_write_tx)
-            .await
+            .await?;
+
+        Ok(format!(
+            "Handled ProcessStopStoringForInsolventUserRequest for user [{}]",
+            hex::encode(insolvent_user)
+        ))
     }
 }
 

@@ -4,13 +4,15 @@ use crate::{
     types::{
         BalanceOf, BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionIdFor,
         FileKeyWithProof, FileLocation, FileMetadata, FileOperation, FileOperationIntention,
-        MoveBucketRequestMetadata, PeerIds, ProviderIdFor, ReplicationTarget, StorageDataUnit,
-        StorageRequestBspsMetadata, StorageRequestMetadata, StorageRequestMspAcceptedFileKeys,
-        StorageRequestMspBucketResponse, StorageRequestTtl, ThresholdType, TickNumber, ValuePropId,
+        IncompleteStorageRequestMetadata, MoveBucketRequestMetadata, PeerIds, ProviderIdFor,
+        ReplicationTarget, StorageDataUnit, StorageRequestBspsMetadata, StorageRequestMetadata,
+        StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse, StorageRequestTtl,
+        ThresholdType, TickNumber, ValuePropId,
     },
     weights::WeightInfo,
-    Config, Error, Event, NextAvailableStorageRequestExpirationTick, PendingMoveBucketRequests,
-    PendingStopStoringRequests, StorageRequestExpirations, StorageRequests,
+    Config, Error, Event, IncompleteStorageRequests, NextAvailableStorageRequestExpirationTick,
+    PendingMoveBucketRequests, PendingStopStoringRequests, StorageRequestExpirations,
+    StorageRequests,
 };
 use codec::Encode;
 use frame_support::{
@@ -23,6 +25,7 @@ use frame_support::{
     },
     weights::Weight,
 };
+use pallet_payment_streams::types::UnitsProvidedFor;
 use pallet_proofs_dealer::ProviderToProofSubmissionRecord;
 use pallet_storage_providers::types::{Bucket, StorageProviderId, ValueProposition};
 use shp_traits::{
@@ -2148,6 +2151,78 @@ mod request_storage {
                         ReplicationTarget::Standard
                     ),
                     Error::<Test>::OperationNotAllowedForInsolventProvider
+                );
+            });
+        }
+
+        #[test]
+        fn request_storage_fails_with_incomplete_storage_request() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let user = RuntimeOrigin::signed(owner_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let file_content = b"test".to_vec();
+                let fingerprint = BlakeTwo256::hash(&file_content);
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
+
+                // Compute file key
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                )
+                .unwrap();
+
+                // Setup BSP for incomplete storage request
+                let bsp = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp.clone());
+                let storage_amount: StorageDataUnit<Test> = 100;
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+                let bsp_id = Providers::get_provider_id(&bsp).unwrap();
+
+                // Create an incomplete storage request for this file key
+                IncompleteStorageRequests::<Test>::insert(
+                    file_key,
+                    IncompleteStorageRequestMetadata {
+                        owner: owner_account_id.clone(),
+                        bucket_id,
+                        location: location.clone(),
+                        fingerprint,
+                        file_size: size,
+                        pending_bsp_removals: BoundedVec::try_from(vec![bsp_id]).unwrap(),
+                        pending_bucket_removal: false,
+                    },
+                );
+
+                // Attempt to issue storage request - should fail because there's an incomplete storage request
+                assert_noop!(
+                    FileSystem::issue_storage_request(
+                        user.clone(),
+                        bucket_id,
+                        location.clone(),
+                        fingerprint,
+                        size,
+                        msp_id,
+                        peer_ids.clone(),
+                        ReplicationTarget::Standard
+                    ),
+                    Error::<Test>::FileHasIncompleteStorageRequest
                 );
             });
         }
@@ -7174,6 +7249,78 @@ mod bsp_stop_storing {
         }
 
         #[test]
+        fn bsp_request_stop_storing_fails_with_incomplete_storage_request() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let fingerprint = H256::zero();
+                let storage_amount: StorageDataUnit<Test> = 100;
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(vec![1]).unwrap();
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
+
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
+
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                )
+                .unwrap();
+
+                // Create an incomplete storage request for this file key
+                IncompleteStorageRequests::<Test>::insert(
+                    file_key,
+                    IncompleteStorageRequestMetadata {
+                        owner: owner_account_id.clone(),
+                        bucket_id,
+                        location: location.clone(),
+                        fingerprint,
+                        file_size: size,
+                        pending_bsp_removals: BoundedVec::try_from(vec![bsp_id]).unwrap(),
+                        pending_bucket_removal: false,
+                    },
+                );
+
+                // Try to request stop storing. This should fail with FileHasIncompleteStorageRequest
+                // Note: The check happens before forest proof verification, so we don't need a valid proof
+                assert_noop!(
+                    FileSystem::bsp_request_stop_storing(
+                        bsp_signed.clone(),
+                        file_key,
+                        bucket_id,
+                        location.clone(),
+                        owner_account_id.clone(),
+                        fingerprint,
+                        size,
+                        false,
+                        CompactProof {
+                            encoded_nodes: vec![file_key.as_ref().to_vec()],
+                        },
+                    ),
+                    Error::<Test>::FileHasIncompleteStorageRequest
+                );
+            });
+        }
+
+        #[test]
         fn bsp_confirm_stop_storing_fails_if_not_enough_time_has_passed_since_request() {
             new_test_ext().execute_with(|| {
                 let owner_account_id = Keyring::Alice.to_account_id();
@@ -7840,7 +7987,7 @@ mod bsp_stop_storing {
         }
 
         #[test]
-        fn bsp_confirm_stop_storing_success_and_deletes_payment_stream_for_last_file() {
+        fn bsp_request_stop_storing_deletes_payment_stream_for_last_file() {
             new_test_ext().execute_with(|| {
                 let owner_account_id = Keyring::Alice.to_account_id();
                 let owner = RuntimeOrigin::signed(owner_account_id.clone());
@@ -8043,41 +8190,12 @@ mod bsp_stop_storing {
                         bsp_id,
                         file_key,
                         owner: owner_account_id.clone(),
-                        location,
+                        location: location.clone(),
                     }
                     .into(),
                 );
 
-                // Advance enough blocks to allow the BSP to confirm the stop storing request.
-                roll_to(
-                    frame_system::Pallet::<Test>::block_number() + MinWaitForStopStoring::get(),
-                );
-
-                // Dispatch BSP confirm stop storing.
-                assert_ok!(FileSystem::bsp_confirm_stop_storing(
-                    bsp_signed.clone(),
-                    file_key,
-                    CompactProof {
-                        encoded_nodes: vec![file_key.as_ref().to_vec()],
-                    },
-                ));
-
-                // Assert that the pending stop storing request was removed.
-                assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_none());
-
-                // Assert that the correct event was deposited.
-                let new_root = Providers::get_root(bsp_id).unwrap();
-
-                System::assert_last_event(
-                    Event::BspConfirmStoppedStoring {
-                        bsp_id,
-                        file_key,
-                        new_root,
-                    }
-                    .into(),
-                );
-
-				// Check that the dynamic-rate payment stream between the user and the provider doesn't exist
+				// Check that the dynamic-rate payment stream between the user and the provider was deleted
                 assert!(<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_info(
 					&bsp_id,
 					&owner_account_id
@@ -8086,7 +8204,7 @@ mod bsp_stop_storing {
         }
 
         #[test]
-        fn bsp_confirm_stop_storing_success_and_updates_payment_streams_amount_provided() {
+        fn bsp_request_stop_storing_updates_payment_streams_amount_provided() {
             new_test_ext().execute_with(|| {
                 let owner_account_id = Keyring::Alice.to_account_id();
                 let owner = RuntimeOrigin::signed(owner_account_id.clone());
@@ -8355,6 +8473,22 @@ mod bsp_stop_storing {
                     .into(),
                 );
 
+				// Check that the amount provided of the dynamic-rate payment stream between the user and the provider was updated
+                assert!(
+					<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_info(
+						&bsp_id,
+						&owner_account_id
+					)
+					.is_some()
+				);
+				let maybe_amount_provided = <Test as crate::Config>::PaymentStreams::get_dynamic_rate_payment_stream_amount_provided(
+					&bsp_id,
+					&owner_account_id
+				);
+				assert!(maybe_amount_provided.is_some());
+				let amount_provided = maybe_amount_provided.unwrap();
+				assert_eq!(amount_provided, size);
+
                 // Advance enough blocks to allow the BSP to confirm the stop storing request.
                 roll_to(
                     frame_system::Pallet::<Test>::block_number() + MinWaitForStopStoring::get(),
@@ -8384,7 +8518,7 @@ mod bsp_stop_storing {
                     .into(),
                 );
 
-				// Check that the amount provided of the dynamic-rate payment stream between the user and the provider was updated
+                // Check that the amount provided of the dynamic-rate payment stream between the user and the provider has not changed
                 assert!(
 					<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_info(
 						&bsp_id,
@@ -8392,13 +8526,13 @@ mod bsp_stop_storing {
 					)
 					.is_some()
 				);
-				let maybe_amount_provided = <Test as crate::Config>::PaymentStreams::get_dynamic_rate_payment_stream_amount_provided(
+				let maybe_amount_provided_after_confirm = <Test as crate::Config>::PaymentStreams::get_dynamic_rate_payment_stream_amount_provided(
 					&bsp_id,
 					&owner_account_id
 				);
-				assert!(maybe_amount_provided.is_some());
-				let amount_provided = maybe_amount_provided.unwrap();
-				assert_eq!(amount_provided, size);
+				assert!(maybe_amount_provided_after_confirm.is_some());
+				let amount_provided_after_confirm = maybe_amount_provided_after_confirm.unwrap();
+				assert_eq!(amount_provided_after_confirm, amount_provided);
             });
         }
 
@@ -8624,6 +8758,15 @@ mod bsp_stop_storing {
                 // Increase the data used by the registered bsp, to simulate that it is indeed storing the file
                 assert_ok!(Providers::increase_capacity_used(&bsp_id, size,));
 
+                // Create payment stream to simulate that BSP confirmed storing the file at a previous time
+                let amount_provided = UnitsProvidedFor::<Test>::from(2 * size);
+                assert_ok!(PaymentStreams::create_dynamic_rate_payment_stream(
+                    frame_system::RawOrigin::Root.into(),
+                    bsp_id,
+                    owner_account_id.clone(),
+                    amount_provided,
+                ));
+
                 // Dispatch BSP stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
                     bsp_signed.clone(),
@@ -8711,6 +8854,15 @@ mod bsp_stop_storing {
 
                 // Increase the data used by the registered bsp, to simulate that it is indeed storing the file
                 assert_ok!(Providers::increase_capacity_used(&bsp_id, size,));
+
+                // Create payment stream to simulate that BSP confirmed storing the file at a previous time
+                let amount_provided = UnitsProvidedFor::<Test>::from(2 * size);
+                assert_ok!(PaymentStreams::create_dynamic_rate_payment_stream(
+                    frame_system::RawOrigin::Root.into(),
+                    bsp_id,
+                    owner_account_id.clone(),
+                    amount_provided,
+                ));
 
 				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
                 let current_tick_plus_storage_request_ttl =
@@ -11925,6 +12077,169 @@ mod request_file_deletion {
             );
         });
     }
+
+    #[test]
+    fn request_delete_file_fails_with_active_storage_request() {
+        new_test_ext().execute_with(|| {
+            // 1. Setup: Create account and get keypair
+            let alice_pair = Keyring::Alice.pair();
+            let alice_account = Keyring::Alice.to_account_id();
+            let alice_origin = RuntimeOrigin::signed(alice_account.clone());
+
+            // Setup MSP and bucket
+            let msp = Keyring::Charlie.to_account_id();
+            let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+            let bucket_name =
+                BucketNameFor::<Test>::try_from("test-bucket".as_bytes().to_vec()).unwrap();
+            let (bucket_id, _) =
+                create_bucket(&alice_account, bucket_name, msp_id, value_prop_id, false);
+
+            // Test file metadata
+            let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+            let file_content = b"test_file_content".to_vec();
+            let size = 4;
+            let fingerprint = BlakeTwo256::hash(&file_content);
+            let peer_ids = BoundedVec::try_from(vec![]).unwrap();
+
+            // Compute file key
+            let file_key = FileSystem::compute_file_key(
+                alice_account.clone(),
+                bucket_id,
+                location.clone(),
+                size,
+                fingerprint,
+            )
+            .unwrap();
+
+            // 2. Create an active storage request for this file
+            let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+            StorageRequests::<Test>::insert(
+                file_key,
+                StorageRequestMetadata {
+                    requested_at: current_tick,
+                    owner: alice_account.clone(),
+                    bucket_id,
+                    location: location.clone(),
+                    fingerprint,
+                    size,
+                    msp: None,
+                    user_peer_ids: peer_ids.clone(),
+                    bsps_required: <Test as Config>::StandardReplicationTarget::get(),
+                    bsps_confirmed: 0,
+                    bsps_volunteered: 0,
+                    expires_at: current_tick + 100,
+                    deposit_paid: 0,
+                },
+            );
+
+            // 3. Construct the file deletion intention
+            let signed_delete_intention = FileOperationIntention::<Test> {
+                file_key,
+                operation: FileOperation::Delete,
+            };
+
+            // 4. Sign the intention
+            let signed_delete_intention_encoded = signed_delete_intention.encode();
+            let signature_bytes = alice_pair.sign(&signed_delete_intention_encoded);
+            let signature = MultiSignature::Sr25519(signature_bytes);
+
+            // 5. Attempt to request file deletion - should fail
+            assert_noop!(
+                FileSystem::request_delete_file(
+                    alice_origin,
+                    signed_delete_intention,
+                    signature,
+                    bucket_id,
+                    location,
+                    size,
+                    fingerprint
+                ),
+                Error::<Test>::FileHasActiveStorageRequest
+            );
+        });
+    }
+
+    #[test]
+    fn request_delete_file_fails_with_incomplete_storage_request() {
+        new_test_ext().execute_with(|| {
+            // 1. Setup: Create account and get keypair
+            let alice_pair = Keyring::Alice.pair();
+            let alice_account = Keyring::Alice.to_account_id();
+            let alice_origin = RuntimeOrigin::signed(alice_account.clone());
+
+            // Setup MSP and bucket
+            let msp = Keyring::Charlie.to_account_id();
+            let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+            let bucket_name =
+                BucketNameFor::<Test>::try_from("test-bucket".as_bytes().to_vec()).unwrap();
+            let (bucket_id, _) =
+                create_bucket(&alice_account, bucket_name, msp_id, value_prop_id, false);
+
+            // Test file metadata
+            let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+            let file_content = b"test_file_content".to_vec();
+            let size = 4;
+            let fingerprint = BlakeTwo256::hash(&file_content);
+
+            // Compute file key
+            let file_key = FileSystem::compute_file_key(
+                alice_account.clone(),
+                bucket_id,
+                location.clone(),
+                size,
+                fingerprint,
+            )
+            .unwrap();
+
+            // Setup BSP for incomplete storage request
+            let bsp = Keyring::Bob.to_account_id();
+            let bsp_signed = RuntimeOrigin::signed(bsp.clone());
+            let storage_amount: StorageDataUnit<Test> = 100;
+            assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+            let bsp_id = Providers::get_provider_id(&bsp).unwrap();
+
+            // 2. Create an incomplete storage request for this file
+            IncompleteStorageRequests::<Test>::insert(
+                file_key,
+                IncompleteStorageRequestMetadata {
+                    owner: alice_account.clone(),
+                    bucket_id,
+                    location: location.clone(),
+                    fingerprint,
+                    file_size: size,
+                    pending_bsp_removals: BoundedVec::try_from(vec![bsp_id]).unwrap(),
+                    pending_bucket_removal: false,
+                },
+            );
+
+            // 3. Construct the file deletion intention
+            let signed_delete_intention = FileOperationIntention::<Test> {
+                file_key,
+                operation: FileOperation::Delete,
+            };
+
+            // 4. Sign the intention
+            let signed_delete_intention_encoded = signed_delete_intention.encode();
+            let signature_bytes = alice_pair.sign(&signed_delete_intention_encoded);
+            let signature = MultiSignature::Sr25519(signature_bytes);
+
+            // 5. Attempt to request file deletion - should fail
+            assert_noop!(
+                FileSystem::request_delete_file(
+                    alice_origin,
+                    signed_delete_intention,
+                    signature,
+                    bucket_id,
+                    location,
+                    size,
+                    fingerprint
+                ),
+                Error::<Test>::FileHasIncompleteStorageRequest
+            );
+        });
+    }
 }
 
 mod delete_file_tests {
@@ -12653,6 +12968,663 @@ mod delete_file_tests {
                 ),);
             });
         }
+
+        #[test]
+        fn bucket_delete_files_cleans_up_incomplete_storage_request() {
+            new_test_ext().execute_with(|| {
+                let alice = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                let (bucket_id, file_key, location, size, fingerprint, _msp_id, _value_prop_id) =
+                    setup_file_in_msp_bucket(&alice, &msp);
+
+                // Setup BSP for incomplete storage request
+                let bsp = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp.clone());
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), 100));
+                let bsp_id = Providers::get_provider_id(&bsp).unwrap();
+
+                // Create an incomplete storage request with bucket pending removal
+                IncompleteStorageRequests::<Test>::insert(
+                    file_key,
+                    IncompleteStorageRequestMetadata {
+                        owner: alice.clone(),
+                        bucket_id,
+                        location: location.clone(),
+                        fingerprint,
+                        file_size: size,
+                        pending_bsp_removals: BoundedVec::try_from(vec![bsp_id]).unwrap(),
+                        pending_bucket_removal: true,
+                    },
+                );
+
+                // Verify incomplete storage request exists
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_some(),
+                    "Incomplete storage request should exist"
+                );
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key)
+                        .unwrap()
+                        .pending_bucket_removal,
+                    "Bucket should be in pending removals"
+                );
+
+                // Create signature and proof
+                let (signed_delete_intention, signature) =
+                    create_file_deletion_signature(&Keyring::Alice, file_key);
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                // Delete file from bucket
+                assert_ok!(FileSystem::delete_files(
+                    RuntimeOrigin::signed(alice.clone()),
+                    vec![crate::types::FileDeletionRequest {
+                        file_owner: alice.clone(),
+                        signed_intention: signed_delete_intention,
+                        signature,
+                        bucket_id,
+                        location,
+                        size,
+                        fingerprint,
+                    }]
+                    .try_into()
+                    .unwrap(),
+                    None,
+                    forest_proof,
+                ));
+
+                // Verify bucket was removed from incomplete storage request
+                let incomplete_storage_request = IncompleteStorageRequests::<Test>::get(&file_key);
+                assert!(
+                    incomplete_storage_request.is_some(),
+                    "Incomplete storage request should still exist (BSP still pending)"
+                );
+                let incomplete_storage_request = incomplete_storage_request.unwrap();
+                assert!(
+                    !incomplete_storage_request.pending_bucket_removal,
+                    "Bucket should no longer be in pending removals"
+                );
+                assert_eq!(
+                    incomplete_storage_request.pending_bsp_removals.len(),
+                    1,
+                    "BSP should still be in pending removals"
+                );
+            });
+        }
+
+        #[test]
+        fn bsp_delete_files_cleans_up_incomplete_storage_request() {
+            new_test_ext().execute_with(|| {
+                let alice = Keyring::Alice.to_account_id();
+                let bsp = Keyring::Bob.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+
+                // Sign up BSP
+                let bsp_signed = RuntimeOrigin::signed(bsp.clone());
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), 100));
+                let bsp_id = Providers::get_provider_id(&bsp).unwrap();
+
+                // Create bucket for Alice
+                let (bucket_id, file_key, location, size, fingerprint, _, _) =
+                    setup_file_in_msp_bucket(&alice, &msp);
+
+                // Increase the data used by the registered bsp, to simulate that it is storing the file
+                assert_ok!(Providers::increase_capacity_used(&bsp_id, size));
+
+                // Create payment stream for the BSP
+                let amount_provided = UnitsProvidedFor::<Test>::from(size);
+                assert_ok!(PaymentStreams::create_dynamic_rate_payment_stream(
+                    frame_system::RawOrigin::Root.into(),
+                    bsp_id,
+                    alice.clone(),
+                    amount_provided,
+                ));
+
+                // Create an incomplete storage request with BSP pending removal
+                IncompleteStorageRequests::<Test>::insert(
+                    file_key,
+                    IncompleteStorageRequestMetadata {
+                        owner: alice.clone(),
+                        bucket_id,
+                        location: location.clone(),
+                        fingerprint,
+                        file_size: size,
+                        pending_bsp_removals: BoundedVec::try_from(vec![bsp_id]).unwrap(),
+                        pending_bucket_removal: true,
+                    },
+                );
+
+                // Verify incomplete storage request exists
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_some(),
+                    "Incomplete storage request should exist"
+                );
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key)
+                        .unwrap()
+                        .pending_bsp_removals
+                        .contains(&bsp_id),
+                    "BSP should be in pending removals"
+                );
+
+                // Create signature and proof
+                let (signed_delete_intention, signature) =
+                    create_file_deletion_signature(&Keyring::Alice, file_key);
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                // Delete file from BSP
+                assert_ok!(FileSystem::delete_files(
+                    RuntimeOrigin::signed(alice.clone()),
+                    vec![crate::types::FileDeletionRequest {
+                        file_owner: alice.clone(),
+                        signed_intention: signed_delete_intention,
+                        signature,
+                        bucket_id,
+                        location,
+                        size,
+                        fingerprint,
+                    }]
+                    .try_into()
+                    .unwrap(),
+                    Some(bsp_id),
+                    forest_proof,
+                ));
+
+                // Verify BSP was removed from incomplete storage request
+                let incomplete_storage_request = IncompleteStorageRequests::<Test>::get(&file_key);
+                assert!(
+                    incomplete_storage_request.is_some(),
+                    "Incomplete storage request should still exist (bucket still pending)"
+                );
+                let incomplete_storage_request = incomplete_storage_request.unwrap();
+                assert!(
+                    incomplete_storage_request.pending_bucket_removal,
+                    "Bucket should still be in pending removals"
+                );
+                assert!(
+                    incomplete_storage_request.pending_bsp_removals.is_empty(),
+                    "BSP should no longer be in pending removals"
+                );
+            });
+        }
+
+        #[test]
+        fn bucket_delete_files_creates_incomplete_storage_request_when_storage_request_exists() {
+            new_test_ext().execute_with(|| {
+                let alice = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                    setup_file_in_msp_bucket(&alice, &msp);
+
+                // Setup BSP
+                let bsp = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp.clone());
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), size * 2));
+                let bsp_id = Providers::get_provider_id(&bsp).unwrap();
+
+                // Issue storage request
+                assert_ok!(FileSystem::issue_storage_request(
+                    RuntimeOrigin::signed(alice.clone()),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    PeerIds::<Test>::try_from(vec![]).unwrap(),
+                    ReplicationTarget::Basic,
+                ));
+
+                // BSP volunteers and confirms to simulate a confirmed storage provider
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
+                let file_key_with_proof = FileKeyWithProof {
+                    file_key,
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
+                };
+                let forest_proof_confirm = CompactProof {
+                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                };
+                assert_ok!(FileSystem::bsp_confirm_storing(
+                    bsp_signed,
+                    forest_proof_confirm,
+                    BoundedVec::try_from(vec![file_key_with_proof]).unwrap(),
+                ));
+
+                // Verify storage request exists
+                assert!(
+                    StorageRequests::<Test>::get(&file_key).is_some(),
+                    "Storage request should exist"
+                );
+
+                // Verify no incomplete storage request exists
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_none(),
+                    "Incomplete storage request should not exist yet"
+                );
+
+                // Create signature and proof
+                let (signed_delete_intention, signature) =
+                    create_file_deletion_signature(&Keyring::Alice, file_key);
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                // Delete file from bucket (this simulates user deleting from MSP bucket while storage request is still open)
+                assert_ok!(FileSystem::delete_files(
+                    RuntimeOrigin::signed(alice.clone()),
+                    vec![crate::types::FileDeletionRequest {
+                        file_owner: alice.clone(),
+                        signed_intention: signed_delete_intention,
+                        signature,
+                        bucket_id,
+                        location,
+                        size,
+                        fingerprint,
+                    }]
+                    .try_into()
+                    .unwrap(),
+                    None,
+                    forest_proof,
+                ));
+
+                // Verify storage request was cleaned up
+                assert!(
+                    StorageRequests::<Test>::get(&file_key).is_none(),
+                    "Storage request should be removed"
+                );
+
+                // Verify incomplete storage request was created with BSP pending removal
+                let incomplete_storage_request = IncompleteStorageRequests::<Test>::get(&file_key);
+                assert!(
+                    incomplete_storage_request.is_some(),
+                    "Incomplete storage request should be created"
+                );
+                let incomplete_storage_request = incomplete_storage_request.unwrap();
+                assert!(
+                    incomplete_storage_request
+                        .pending_bsp_removals
+                        .contains(&bsp_id),
+                    "BSP should be in pending removals"
+                );
+            });
+        }
+
+        #[test]
+        fn bsp_delete_files_creates_incomplete_storage_request_when_storage_request_exists() {
+            new_test_ext().execute_with(|| {
+                let alice = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                    setup_file_in_msp_bucket(&alice, &msp);
+
+                // Setup BSP
+                let bsp = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp.clone());
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), size * 2));
+                let bsp_id = Providers::get_provider_id(&bsp).unwrap();
+
+                // Issue storage request with Custom(2) so it requires 2 BSPs and won't be fulfilled
+                // after 1 BSP confirms and MSP accepts
+                assert_ok!(FileSystem::issue_storage_request(
+                    RuntimeOrigin::signed(alice.clone()),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    PeerIds::<Test>::try_from(vec![]).unwrap(),
+                    ReplicationTarget::Custom(2),
+                ));
+
+                // BSP volunteers and confirms to simulate a confirmed storage provider
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
+                let file_key_with_proof = FileKeyWithProof {
+                    file_key,
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
+                };
+                let forest_proof_confirm = CompactProof {
+                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                };
+                assert_ok!(FileSystem::bsp_confirm_storing(
+                    bsp_signed,
+                    forest_proof_confirm,
+                    BoundedVec::try_from(vec![file_key_with_proof]).unwrap(),
+                ));
+
+                // MSP accepts the storage request
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
+                    RuntimeOrigin::signed(msp.clone()),
+                    vec![StorageRequestMspBucketResponse {
+                        bucket_id,
+                        accept: Some(StorageRequestMspAcceptedFileKeys {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_key,
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                }
+                            }],
+                            forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
+                        }),
+                        reject: vec![],
+                    }],
+                ));
+
+                // Verify storage request still exists (because we need 2 BSPs and only 1 confirmed)
+                assert!(
+                    StorageRequests::<Test>::get(&file_key).is_some(),
+                    "Storage request should still exist (needs 2 BSPs, only 1 confirmed)"
+                );
+                // Verify MSP has accepted
+                let storage_request = StorageRequests::<Test>::get(&file_key).unwrap();
+                assert!(
+                    matches!(storage_request.msp, Some((_, true))),
+                    "MSP should have accepted the storage request"
+                );
+
+                // Verify no incomplete storage request exists
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_none(),
+                    "Incomplete storage request should not exist yet"
+                );
+
+                // Create signature and proof
+                let (signed_delete_intention, signature) =
+                    create_file_deletion_signature(&Keyring::Alice, file_key);
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                // Delete file from BSP (this simulates BSP deleting the file while storage request is still open)
+                assert_ok!(FileSystem::delete_files(
+                    RuntimeOrigin::signed(alice.clone()),
+                    vec![crate::types::FileDeletionRequest {
+                        file_owner: alice.clone(),
+                        signed_intention: signed_delete_intention,
+                        signature,
+                        bucket_id,
+                        location,
+                        size,
+                        fingerprint,
+                    }]
+                    .try_into()
+                    .unwrap(),
+                    Some(bsp_id),
+                    forest_proof,
+                ));
+
+                // Verify storage request was cleaned up
+                assert!(
+                    StorageRequests::<Test>::get(&file_key).is_none(),
+                    "Storage request should be removed"
+                );
+
+                // Verify incomplete storage request was created with bucket pending removal
+                let incomplete_storage_request = IncompleteStorageRequests::<Test>::get(&file_key);
+                assert!(
+                    incomplete_storage_request.is_some(),
+                    "Incomplete storage request should be created"
+                );
+                let incomplete_storage_request = incomplete_storage_request.unwrap();
+                // The BSP was removed from pending list since we just deleted from BSP
+                // but bucket should be in pending since the file was stored by MSP (MSP accepted)
+                assert!(
+                    incomplete_storage_request.pending_bucket_removal,
+                    "Bucket should be in pending removals since MSP accepted"
+                );
+            });
+        }
+
+        #[test]
+        fn bucket_delete_files_removes_incomplete_storage_request_when_fully_cleaned() {
+            new_test_ext().execute_with(|| {
+                let alice = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                let (bucket_id, file_key, location, size, fingerprint, _msp_id, _value_prop_id) =
+                    setup_file_in_msp_bucket(&alice, &msp);
+
+                // Create an incomplete storage request with only bucket pending removal (no BSPs)
+                IncompleteStorageRequests::<Test>::insert(
+                    file_key,
+                    IncompleteStorageRequestMetadata {
+                        owner: alice.clone(),
+                        bucket_id,
+                        location: location.clone(),
+                        fingerprint,
+                        file_size: size,
+                        pending_bsp_removals: BoundedVec::try_from(vec![]).unwrap(),
+                        pending_bucket_removal: true,
+                    },
+                );
+
+                // Verify incomplete storage request exists
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_some(),
+                    "Incomplete storage request should exist"
+                );
+
+                // Create signature and proof
+                let (signed_delete_intention, signature) =
+                    create_file_deletion_signature(&Keyring::Alice, file_key);
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                // Delete file from bucket
+                assert_ok!(FileSystem::delete_files(
+                    RuntimeOrigin::signed(alice.clone()),
+                    vec![crate::types::FileDeletionRequest {
+                        file_owner: alice.clone(),
+                        signed_intention: signed_delete_intention,
+                        signature,
+                        bucket_id,
+                        location,
+                        size,
+                        fingerprint,
+                    }]
+                    .try_into()
+                    .unwrap(),
+                    None,
+                    forest_proof,
+                ));
+
+                // Verify incomplete storage request was completely removed
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_none(),
+                    "Incomplete storage request should be completely removed"
+                );
+            });
+        }
+
+        #[test]
+        fn bsp_delete_files_removes_incomplete_storage_request_when_fully_cleaned() {
+            new_test_ext().execute_with(|| {
+                let alice = Keyring::Alice.to_account_id();
+                let bsp = Keyring::Bob.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+
+                // Sign up BSP
+                let bsp_signed = RuntimeOrigin::signed(bsp.clone());
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), 100));
+                let bsp_id = Providers::get_provider_id(&bsp).unwrap();
+
+                // Create bucket for Alice
+                let (bucket_id, file_key, location, size, fingerprint, _, _) =
+                    setup_file_in_msp_bucket(&alice, &msp);
+
+                // Increase the data used by the registered bsp, to simulate that it is storing the file
+                assert_ok!(Providers::increase_capacity_used(&bsp_id, size));
+
+                // Create payment stream for the BSP
+                let amount_provided = UnitsProvidedFor::<Test>::from(size);
+                assert_ok!(PaymentStreams::create_dynamic_rate_payment_stream(
+                    frame_system::RawOrigin::Root.into(),
+                    bsp_id,
+                    alice.clone(),
+                    amount_provided,
+                ));
+
+                // Create an incomplete storage request with only BSP pending removal (no bucket)
+                IncompleteStorageRequests::<Test>::insert(
+                    file_key,
+                    IncompleteStorageRequestMetadata {
+                        owner: alice.clone(),
+                        bucket_id,
+                        location: location.clone(),
+                        fingerprint,
+                        file_size: size,
+                        pending_bsp_removals: BoundedVec::try_from(vec![bsp_id]).unwrap(),
+                        pending_bucket_removal: false, // No bucket pending
+                    },
+                );
+
+                // Verify incomplete storage request exists
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_some(),
+                    "Incomplete storage request should exist"
+                );
+
+                // Create signature and proof
+                let (signed_delete_intention, signature) =
+                    create_file_deletion_signature(&Keyring::Alice, file_key);
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                // Delete file from BSP
+                assert_ok!(FileSystem::delete_files(
+                    RuntimeOrigin::signed(alice.clone()),
+                    vec![crate::types::FileDeletionRequest {
+                        file_owner: alice.clone(),
+                        signed_intention: signed_delete_intention,
+                        signature,
+                        bucket_id,
+                        location,
+                        size,
+                        fingerprint,
+                    }].try_into().unwrap(),
+                    Some(bsp_id),
+                    forest_proof,
+                ));
+
+                // Verify incomplete storage request was completely removed
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_none(),
+                    "Incomplete storage request should be completely removed when last BSP is removed"
+                );
+            });
+        }
+
+        #[test]
+        fn bsp_delete_files_partial_cleanup_with_multiple_bsps() {
+            new_test_ext().execute_with(|| {
+                let alice = Keyring::Alice.to_account_id();
+                let bsp1 = Keyring::Bob.to_account_id();
+                let bsp2 = Keyring::Dave.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+
+                // Sign up BSP1
+                let bsp1_signed = RuntimeOrigin::signed(bsp1.clone());
+                assert_ok!(bsp_sign_up(bsp1_signed.clone(), 100));
+                let bsp1_id = Providers::get_provider_id(&bsp1).unwrap();
+
+                // Sign up BSP2
+                let bsp2_signed = RuntimeOrigin::signed(bsp2.clone());
+                assert_ok!(bsp_sign_up(bsp2_signed.clone(), 100));
+                let bsp2_id = Providers::get_provider_id(&bsp2).unwrap();
+
+                // Create bucket for Alice
+                let (bucket_id, file_key, location, size, fingerprint, _, _) =
+                    setup_file_in_msp_bucket(&alice, &msp);
+
+                // Increase the data used by BSP1, to simulate that it is storing the file
+                assert_ok!(Providers::increase_capacity_used(&bsp1_id, size));
+
+                // Create payment stream for BSP1
+                let amount_provided = UnitsProvidedFor::<Test>::from(size);
+                assert_ok!(PaymentStreams::create_dynamic_rate_payment_stream(
+                    frame_system::RawOrigin::Root.into(),
+                    bsp1_id,
+                    alice.clone(),
+                    amount_provided,
+                ));
+
+                // Create an incomplete storage request with 2 BSPs pending removal
+                IncompleteStorageRequests::<Test>::insert(
+                    file_key,
+                    IncompleteStorageRequestMetadata {
+                        owner: alice.clone(),
+                        bucket_id,
+                        location: location.clone(),
+                        fingerprint,
+                        file_size: size,
+                        pending_bsp_removals: BoundedVec::try_from(vec![bsp1_id, bsp2_id]).unwrap(),
+                        pending_bucket_removal: false,
+                    },
+                );
+
+                // Verify incomplete storage request exists with 2 BSPs
+                let incomplete_req = IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
+                assert_eq!(
+                    incomplete_req.pending_bsp_removals.len(),
+                    2,
+                    "Should have 2 BSPs pending"
+                );
+
+                // Create signature and proof
+                let (signed_delete_intention, signature) =
+                    create_file_deletion_signature(&Keyring::Alice, file_key);
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                // Delete file from BSP1 only
+                assert_ok!(FileSystem::delete_files(
+                    RuntimeOrigin::signed(alice.clone()),
+                    vec![crate::types::FileDeletionRequest {
+                        file_owner: alice.clone(),
+                        signed_intention: signed_delete_intention,
+                        signature,
+                        bucket_id,
+                        location,
+                        size,
+                        fingerprint,
+                    }]
+                    .try_into()
+                    .unwrap(),
+                    Some(bsp1_id),
+                    forest_proof,
+                ));
+
+                // Verify incomplete storage request still exists with 1 BSP pending
+                let incomplete_req = IncompleteStorageRequests::<Test>::get(&file_key);
+                assert!(
+                    incomplete_req.is_some(),
+                    "Incomplete storage request should still exist (BSP2 still pending)"
+                );
+                let incomplete_req = incomplete_req.unwrap();
+                assert_eq!(
+                    incomplete_req.pending_bsp_removals.len(),
+                    1,
+                    "Should have 1 BSP pending after BSP1 removal"
+                );
+                assert!(
+                    incomplete_req.pending_bsp_removals.contains(&bsp2_id),
+                    "BSP2 should still be in pending removals"
+                );
+                assert!(
+                    !incomplete_req.pending_bsp_removals.contains(&bsp1_id),
+                    "BSP1 should no longer be in pending removals"
+                );
+            });
+        }
     }
 }
 
@@ -12742,6 +13714,8 @@ mod delete_files_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::StorageRequestRejected {
                         file_key,
+                        msp_id,
+                        bucket_id,
                         reason: RejectedStorageRequestReason::RequestExpired,
                     }
                     .into(),
@@ -13022,6 +13996,8 @@ mod delete_files_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::StorageRequestRejected {
                         file_key: file_key2,
+                        msp_id,
+                        bucket_id,
                         reason: RejectedStorageRequestReason::RequestExpired,
                     }
                     .into(),
@@ -13229,6 +14205,8 @@ mod delete_files_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::StorageRequestRejected {
                         file_key,
+                        msp_id,
+                        bucket_id,
                         reason: RejectedStorageRequestReason::RequestExpired,
                     }
                     .into(),
@@ -13915,6 +14893,8 @@ mod delete_files_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::StorageRequestRejected {
                         file_key,
+                        msp_id,
+                        bucket_id,
                         reason: RejectedStorageRequestReason::ReachedMaximumCapacity,
                     }
                     .into(),
@@ -13998,6 +14978,8 @@ mod delete_files_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::StorageRequestRejected {
                         file_key,
+                        msp_id,
+                        bucket_id,
                         reason: RejectedStorageRequestReason::RequestExpired,
                     }.into()
                 );
@@ -14146,6 +15128,8 @@ mod delete_files_for_incomplete_storage_request_tests {
                 System::assert_has_event(
                     Event::StorageRequestRejected {
                         file_key,
+                        msp_id,
+                        bucket_id,
                         reason: RejectedStorageRequestReason::ReachedMaximumCapacity,
                     }
                     .into(),
