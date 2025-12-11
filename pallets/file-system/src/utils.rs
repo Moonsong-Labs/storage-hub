@@ -2317,36 +2317,64 @@ where
         <StorageRequests<T>>::remove(file_key);
     }
 
-    /// BSP stops storing a file.
+    /// Opens a pending request for a BSP to stop storing a file.
     ///
-    /// *Callable only by BSP accounts*
+    /// This is the first step of the two-phase stop storing process. The BSP must later call
+    /// [`do_bsp_confirm_stop_storing`] after a minimum waiting period to complete the process.
     ///
-    /// This function covers a few scenarios in which a BSP invokes this function to stop storing a file:
+    /// ## Important
     ///
-    /// 1. The BSP has volunteered and confirmed storing the file and wants to stop storing it while the storage request is still open.
+    /// **This function does NOT modify the BSP's forest root.** The file remains in the BSP's
+    /// forest until [`do_bsp_confirm_stop_storing`] is called. The inclusion proof is only used
+    /// to verify that the BSP currently has the file in their forest.
     ///
-    /// > In this case, the BSP has volunteered and confirmed storing the file for an existing storage request.
-    ///     Therefore, we decrement the `bsps_confirmed` by 1 and remove the BSP as a data server for the file.
+    /// ## Scenarios
     ///
-    /// 2. The BSP stops storing a file that has an opened storage request but is not a volunteer.
+    /// This function handles three different scenarios based on the current state:
     ///
-    /// > In this case, the storage request was probably created by another BSP for some reason (e.g. that BSP lost the file)
-    ///     and the current BSP is not a volunteer for this since it is already storing it. But since they to have stopped storing it,
-    ///     we increment the `bsps_required` by 1.
+    /// 1. **Storage request exists and BSP has confirmed storing it**: The BSP is removed from the
+    ///    storage request's confirmed and volunteered lists. The `bsps_confirmed` and `bsps_volunteered`
+    ///    counts are decremented, and the BSP is removed from `StorageRequestBsps`.
     ///
-    /// 3. The BSP stops storing a file that no longer has an opened storage request.
+    /// 2. **Storage request exists but BSP is not in the volunteer list**: This can happen if the
+    ///    storage request was created by another BSP (e.g., one that lost the file) and the current
+    ///    BSP is already storing the file from a previous fulfilled request. In this case, we increment
+    ///    `bsps_required` by 1 to ensure another BSP picks up the file.
     ///
-    /// > In this case, there is no storage request opened for the file they no longer are storing. Therefore, we
-    ///     create a storage request with `bsps_required` set to 1.
+    /// 3. **No storage request exists**: A new storage request is created with `bsps_required = 1`
+    ///    so another BSP can volunteer and maintain the file's replication. If `can_serve` is true,
+    ///    the requesting BSP is added as a confirmed data server to help the new volunteer download
+    ///    the file before the requesting BSP completes the stop storing process.
     ///
-    /// *This function does not give BSPs the possibility to remove themselves from being a __volunteer__ of a storage request.*
+    /// ## Parameters
     ///
-    /// A proof of inclusion is required to record the new root of the BSPs merkle patricia trie. First we validate the proof
-    /// and ensure the `file_key` is indeed part of the merkle patricia trie. Then finally compute the new merkle patricia trie root
-    /// by removing the `file_key` and update the root of the BSP.
+    /// * `can_serve` - Whether the BSP can still serve the file to other BSPs. If true and no storage
+    ///   request exists, the BSP is added as a data server for the newly created storage request.
     ///
-    /// `can_serve`: A flag that indicates if the BSP can serve the file to other BSPs. If the BSP can serve the file, then
-    /// they are added to the storage request as a data server.
+    /// ## Restrictions
+    ///
+    /// This function will fail with [`FileHasIncompleteStorageRequest`] if an `IncompleteStorageRequest`
+    /// exists for the file key. This enforces the invariant that a `StorageRequest` and
+    /// `IncompleteStorageRequest` cannot coexist for the same file key (since scenario 3 can create
+    /// a new storage request). The BSP must wait until fisherman nodes clean up the incomplete request.
+    ///
+    /// ## Fees
+    ///
+    /// The BSP is charged a penalty fee ([`BspStopStoringFilePenalty`]) which is transferred to the treasury.
+    ///
+    /// ## Payment Stream
+    ///
+    /// The payment stream with the file owner is **updated immediately** in this function, not in
+    /// [`do_bsp_confirm_stop_storing`]. This removes any financial incentive for the BSP to delay
+    /// or skip the confirmation, as they stop getting paid as soon as they announce their intent to stop storing.
+    ///
+    /// Note: This creates a temporary inconsistency where the payment stream's `amount_provided` is
+    /// less than the actual data being stored by the BSP for the file owner. This is acceptable because
+    /// the BSP is incentivized to correct this by confirming the stop storing request.
+    ///
+    /// ## Returns
+    ///
+    /// The provider ID of the BSP on success.
     pub(crate) fn do_bsp_request_stop_storing(
         sender: T::AccountId,
         file_key: MerkleHash<T>,
@@ -2402,6 +2430,15 @@ where
         ensure!(
             file_key == computed_file_key,
             Error::<T>::InvalidFileKeyMetadata
+        );
+
+        // Check that an `IncompleteStorageRequest` does not exist for this file key.
+        // This is enforced to maintain the invariant that a `StorageRequest` and `IncompleteStorageRequest`
+        // cannot coexist for the same file key.
+        // The BSP must wait until fisherman nodes clean up the incomplete request.
+        ensure!(
+            !<IncompleteStorageRequests<T>>::contains_key(&file_key),
+            Error::<T>::FileHasIncompleteStorageRequest
         );
 
         // Check that a pending stop storing request for that BSP and file does not exist yet.
@@ -2488,6 +2525,27 @@ where
             }
         };
 
+        // Update the payment stream between the user and the BSP.
+        // This is done in the request phase (not confirm) to remove any financial incentive
+        // for the BSP to delay or skip the confirmation.
+        // This is safe to do as the BSP must have a payment stream with the user and its amount
+        // provided must be equal or greater than the file size, otherwise it would mean the BSP
+        // does not have the file and as such shouldn't be able to provide an inclusion proof.
+        let new_amount_provided = <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(&bsp_id, &owner)
+            .ok_or(Error::<T>::DynamicRatePaymentStreamNotFound)?
+            .saturating_sub(size);
+        if new_amount_provided.is_zero() {
+            <T::PaymentStreams as PaymentStreamsInterface>::delete_dynamic_rate_payment_stream(
+                &bsp_id, &owner,
+            )?;
+        } else {
+            <T::PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
+                &bsp_id,
+                &owner,
+                &new_amount_provided,
+            )?;
+        }
+
         // Add the pending stop storing request to storage.
         <PendingStopStoringRequests<T>>::insert(
             &bsp_id,
@@ -2502,6 +2560,33 @@ where
         Ok(bsp_id)
     }
 
+    /// Confirms a BSP's request to stop storing a file and removes it from their forest.
+    ///
+    /// This is the second step of the two-phase stop storing process. The BSP must have previously
+    /// called [`do_bsp_request_stop_storing`] to open a pending stop storing request.
+    ///
+    /// ## Minimum Wait Time
+    ///
+    /// A minimum waiting period ([`MinWaitForStopStoring`]) must pass between the request and this
+    /// confirmation. This prevents BSPs from immediately dropping a file when challenged for it,
+    /// ensuring they can't avoid slashing by quickly calling stop storing upon receiving a challenge.
+    ///
+    /// ## What this function does
+    ///
+    /// 1. Retrieves and removes the [`PendingStopStoringRequest`] for this BSP and file
+    /// 2. Verifies the minimum wait time has passed since the request was opened
+    /// 3. Verifies the file is still in the BSP's forest via the inclusion proof
+    /// 4. **Removes the file from the BSP's forest and computes the new root**
+    /// 5. Updates the BSP's root in storage
+    /// 6. Decreases the BSP's used capacity by the file size
+    /// 7. Stops the BSP's challenge and randomness cycles if their forest is now empty
+    ///
+    /// Note: The payment stream was already updated in [`do_bsp_request_stop_storing`].
+    ///
+    /// ## Returns
+    ///
+    /// A tuple of (bsp_id, new_root) on success, where `new_root` is the BSP's updated forest root
+    /// after removing the file.
     pub(crate) fn do_bsp_confirm_stop_storing(
         sender: T::AccountId,
         file_key: MerkleHash<T>,
@@ -2572,13 +2657,9 @@ where
             &bsp_id, file_size,
         )?;
 
-        // Update payment stream and manage BSP cycles after file removal
-        Self::update_bsp_payment_and_cycles_after_file_removal(
-            bsp_id,
-            &file_owner,
-            file_size,
-            new_root,
-        )?;
+        // Note: Payment stream was already updated in do_bsp_request_stop_storing.
+        // Here we only need to manage the BSP cycles if the root becomes default.
+        Self::stop_bsp_cycles_if_root_is_default(bsp_id, new_root)?;
 
         Ok((bsp_id, new_root))
     }
@@ -3170,6 +3251,35 @@ where
             )?;
         }
 
+        // If the root of the BSP is now the default root, stop its cycles.
+        if new_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root() {
+            // Check the current used capacity of the BSP. Since its root is the default one, it should
+            // be zero.
+            let used_capacity =
+                <T::Providers as ReadStorageProvidersInterface>::get_used_capacity(&bsp_id);
+            if !used_capacity.is_zero() {
+                // Emit event if we have inconsistency. We can later monitor for those.
+                Self::deposit_event(Event::UsedCapacityShouldBeZero {
+                    actual_used_capacity: used_capacity,
+                });
+            }
+
+            // Stop the BSP's challenge and randomness cycles.
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(&bsp_id)?;
+            <T::CrRandomness as CommitRevealRandomnessInterface>::stop_randomness_cycle(&bsp_id)?;
+        }
+
+        Ok(())
+    }
+
+    /// Stops a BSP's challenge and randomness cycles if their forest root is the default (empty) root.
+    ///
+    /// Also performs a sanity check that used_capacity is zero when root is default, and emits
+    /// an event if there's an inconsistency.
+    fn stop_bsp_cycles_if_root_is_default(
+        bsp_id: ProviderIdFor<T>,
+        new_root: MerkleHash<T>,
+    ) -> DispatchResult {
         // If the root of the BSP is now the default root, stop its cycles.
         if new_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root() {
             // Check the current used capacity of the BSP. Since its root is the default one, it should
