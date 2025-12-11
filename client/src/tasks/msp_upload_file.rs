@@ -357,8 +357,6 @@ where
     ) -> anyhow::Result<String> {
         trace!(target: LOG_TARGET, "Received remote upload request for file {:x} and peer {:?}", event.file_key, event.peer);
 
-        let file_key: H256 = event.file_key.into();
-
         let file_complete = match self.handle_remote_upload_request_event(event.clone()).await {
             Ok(complete) => complete,
             Err(e) => {
@@ -387,7 +385,7 @@ where
 
         // Handle file completion if the entire file is uploaded or is already being stored.
         if file_complete {
-            self.on_file_complete(&file_key).await;
+            self.on_file_complete(&event.file_key.into()).await;
         }
 
         Ok(format!(
@@ -418,12 +416,7 @@ where
     ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
-            "Processing ProcessMspRespondStoringRequest",
-        );
-
-        debug!(
-            target: LOG_TARGET,
-            "ProcessMspRespondStoringRequest storing requests: {:?}",
+            "Processing ProcessMspRespondStoringRequest: {:?}",
             event.data.respond_storing_requests,
         );
 
@@ -495,13 +488,16 @@ where
         let mut file_key_responses = HashMap::new();
 
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+
         // Filter out requests that are not pending
-        for respond in event
+        let filtered_pending_file_keys = event
             .data
             .respond_storing_requests
             .iter()
             .filter(|r| pending_file_keys.contains(&r.file_key))
-        {
+            .collect::<Vec<_>>();
+
+        for respond in filtered_pending_file_keys {
             let bucket_id = match read_file_storage.get_metadata(&respond.file_key) {
                 Ok(Some(metadata)) => H256::from_slice(metadata.bucket_id().as_ref()),
                 Ok(None) => {
