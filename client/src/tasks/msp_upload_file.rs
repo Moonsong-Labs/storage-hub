@@ -1467,7 +1467,7 @@ where
     }
 
     async fn on_file_complete(&self, file_key: &H256) {
-        debug!(target: LOG_TARGET, "File upload complete (file_key {:x})", file_key);
+        info!(target: LOG_TARGET, "File upload complete (file_key {:x})", file_key);
 
         // Unregister the file from the file transfer service.
         if let Err(e) = self
