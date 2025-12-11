@@ -27,9 +27,9 @@ use shc_common::{
     consts::CURRENT_FOREST_KEY,
     traits::StorageEnableRuntime,
     types::{
-        BlockHash, ChunkId, FileMetadata, HashT, KeyProof, KeyProofs, OpaqueBlock,
-        ProofsDealerProviderId, Proven, RandomnessOutput, StorageHubClient, StorageProof,
-        StorageProofsMerkleTrieLayout, StorageProviderId, BCSV_KEY_TYPE,
+        BlockHash, ChunkId, FileKey, FileKeyProof, FileMetadata, HashT, KeyProof, KeyProofs,
+        OpaqueBlock, ProofsDealerProviderId, Proven, RandomnessOutput, StorageHubClient,
+        StorageProof, StorageProofsMerkleTrieLayout, StorageProviderId, BCSV_KEY_TYPE,
     },
 };
 use shc_file_manager::traits::{ExcludeType, FileDataTrie, FileStorage, FileStorageError};
@@ -347,6 +347,14 @@ pub trait StorageHubClientApi {
         file_key: shp_types::Hash,
         exclude_type: String,
     ) -> RpcResult<()>;
+
+    /// Send a RemoteUploadDataRequest via the node's FileTransferService
+    #[method(name = "receiveBackendFileChunks", with_extensions)]
+    async fn receive_backend_file_chunks(
+        &self,
+        file_key: shp_types::Hash,
+        file_key_proof: Vec<u8>,
+    ) -> RpcResult<Vec<u8>>;
 
     /// Get the provider ID of the current node, if any
     #[method(name = "getProviderId", with_extensions)]
@@ -1328,6 +1336,31 @@ where
         );
 
         Ok(())
+    }
+
+    async fn receive_backend_file_chunks(
+        &self,
+        ext: &Extensions,
+        file_key: shp_types::Hash,
+        file_key_proof: Vec<u8>,
+    ) -> RpcResult<Vec<u8>> {
+        // Check if the execution is safe.
+        check_if_safe(ext)?;
+
+        // Parse inputs
+        let file_key: FileKey = file_key.into();
+        let proof: FileKeyProof = codec::Decode::decode(&mut &file_key_proof[..])
+            .map_err(|e| into_rpc_error(format!("Failed to decode FileKeyProof: {:?}", e)))?;
+
+        // Forward via FileTransferService's local `ReceiveBackendFileChunksRequest` command
+        let (raw, _proto) = self
+            .file_transfer
+            .receive_backend_file_chunks_request(file_key, proof)
+            .await
+            .map_err(into_rpc_error)?;
+
+        // Return the raw response
+        Ok(raw)
     }
 
     async fn get_provider_id(&self, ext: &Extensions) -> RpcResult<RpcProviderId> {
