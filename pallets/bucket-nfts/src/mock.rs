@@ -21,7 +21,7 @@ use sp_runtime::{
     traits::{BlakeTwo256, Convert, ConvertBack, IdentifyAccount, IdentityLookup, Verify},
     BuildStorage, MultiSignature, SaturatedConversion,
 };
-use sp_std::collections::btree_set::BTreeSet;
+use sp_std::collections::btree_map::BTreeMap;
 use sp_trie::{LayoutV1, TrieConfiguration, TrieLayout};
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -183,24 +183,24 @@ impl ProofsDealerInterface for MockProofsDealer {
         _who: &Self::ProviderId,
         _challenges: &[Self::MerkleHash],
         _proof: &Self::ForestProof,
-    ) -> Result<BTreeSet<Self::MerkleHash>, sp_runtime::DispatchError> {
-        Ok(BTreeSet::new())
+    ) -> Result<BTreeMap<Self::MerkleHash, Vec<u8>>, sp_runtime::DispatchError> {
+        Ok(BTreeMap::new())
     }
 
     fn verify_generic_forest_proof(
         _root: &Self::MerkleHash,
         _challenges: &[Self::MerkleHash],
         _proof: &Self::ForestProof,
-    ) -> Result<BTreeSet<Self::MerkleHash>, sp_runtime::DispatchError> {
-        Ok(BTreeSet::new())
+    ) -> Result<BTreeMap<Self::MerkleHash, Vec<u8>>, sp_runtime::DispatchError> {
+        Ok(BTreeMap::new())
     }
 
     fn verify_key_proof(
         _key: &Self::MerkleHash,
         _challenges: &[Self::MerkleHash],
         _proof: &Self::KeyProof,
-    ) -> Result<BTreeSet<Self::MerkleHash>, sp_runtime::DispatchError> {
-        Ok(BTreeSet::new())
+    ) -> Result<BTreeMap<Self::MerkleHash, Vec<u8>>, sp_runtime::DispatchError> {
+        Ok(BTreeMap::new())
     }
 
     fn generate_challenges_from_seed(

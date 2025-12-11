@@ -17,7 +17,7 @@ use sp_runtime::{
     },
     BoundedVec, DispatchError,
 };
-use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
+use sp_std::{collections::btree_map::BTreeMap, vec::Vec};
 
 #[cfg(feature = "std")]
 pub trait MaybeDebug: Debug {}
@@ -803,7 +803,7 @@ pub trait ProofsDealerInterface {
         provider_id: &Self::ProviderId,
         challenges: &[Self::MerkleHash],
         proof: &Self::ForestProof,
-    ) -> Result<BTreeSet<Self::MerkleHash>, DispatchError>;
+    ) -> Result<BTreeMap<Self::MerkleHash, Vec<u8>>, DispatchError>;
 
     /// Verify a proof for a Merkle Patricia Forest, without requiring it to be associated with a Provider.
     ///
@@ -817,7 +817,7 @@ pub trait ProofsDealerInterface {
         root: &Self::MerkleHash,
         challenges: &[Self::MerkleHash],
         proof: &Self::ForestProof,
-    ) -> Result<BTreeSet<Self::MerkleHash>, DispatchError>;
+    ) -> Result<BTreeMap<Self::MerkleHash, Vec<u8>>, DispatchError>;
 
     /// Verify a proof for a key within the Merkle Patricia Forest of a Provider.
     ///
@@ -827,7 +827,7 @@ pub trait ProofsDealerInterface {
         key: &Self::MerkleHash,
         challenges: &[Self::MerkleHash],
         proof: &Self::KeyProof,
-    ) -> Result<BTreeSet<Self::MerkleHash>, DispatchError>;
+    ) -> Result<BTreeMap<Self::MerkleHash, Vec<u8>>, DispatchError>;
 
     /// Submit a new proof challenge.
     fn challenge(key_challenged: &Self::MerkleHash) -> DispatchResult;
@@ -916,13 +916,13 @@ pub trait CommitmentVerifier {
 
     /// Verify a proof based on a commitment and a set of challenges.
     ///
-    /// The function returns a vector of keys that are verified by the proof, or an error if the proof
+    /// The function returns a map of the keys that are verified by the proof and their values, or an error if the proof
     /// is invalid.
     fn verify_proof(
         commitment: &Self::Commitment,
         challenges: &[Self::Challenge],
         proof: &Self::Proof,
-    ) -> Result<BTreeSet<Self::Challenge>, DispatchError>;
+    ) -> Result<BTreeMap<Self::Challenge, Vec<u8>>, DispatchError>;
 }
 
 /// Enum representing the type of mutation (addition or removal of a key).
@@ -963,6 +963,10 @@ impl TrieRemoveMutation {
         Self {
             maybe_value: Some(value),
         }
+    }
+
+    pub fn with_maybe_value(maybe_value: Option<Vec<u8>>) -> Self {
+        Self { maybe_value }
     }
 }
 

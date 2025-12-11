@@ -236,7 +236,7 @@ fn commitment_verifier_many_challenges_success() {
     };
 
     // Verify proof
-    let proven_challenges = FileKeyVerifier::<
+    let proven_challenges_with_values = FileKeyVerifier::<
         LayoutV1<BlakeTwo256>,
         { BlakeTwo256::LENGTH },
         { CHUNK_SIZE },
@@ -245,7 +245,11 @@ fn commitment_verifier_many_challenges_success() {
     .expect("Failed to verify proof");
 
     assert_eq!(
-        proven_challenges.into_iter().collect::<Vec<_>>().sort(),
+        proven_challenges_with_values
+            .keys()
+            .into_iter()
+            .collect::<Vec<_>>()
+            .sort(),
         challenges.sort()
     );
 }
@@ -295,7 +299,7 @@ fn commitment_verifier_many_challenges_random_file_success() {
     };
 
     // Verify proof
-    let proven_challenges = FileKeyVerifier::<
+    let proven_challenges_with_values = FileKeyVerifier::<
         LayoutV1<BlakeTwo256>,
         { BlakeTwo256::LENGTH },
         { CHUNK_SIZE },
@@ -304,7 +308,10 @@ fn commitment_verifier_many_challenges_random_file_success() {
     .expect("Failed to verify proof");
 
     assert_eq!(
-        proven_challenges.into_iter().collect::<Vec<_>>().sort(),
+        proven_challenges_with_values
+            .into_iter()
+            .collect::<Vec<_>>()
+            .sort(),
         challenges.sort()
     );
 }
@@ -354,7 +361,7 @@ fn commitment_verifier_many_challenges_keccak_success() {
     };
 
     // Verify proof
-    let proven_challenges = FileKeyVerifier::<
+    let proven_challenges_with_values = FileKeyVerifier::<
         LayoutV1<Keccak256>,
         H_LENGTH,
         CHUNK_SIZE,
@@ -363,7 +370,11 @@ fn commitment_verifier_many_challenges_keccak_success() {
     .expect("Failed to verify proof");
 
     assert_eq!(
-        proven_challenges.into_iter().collect::<Vec<_>>().sort(),
+        proven_challenges_with_values
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>()
+            .sort(),
         challenges.sort()
     );
 }
@@ -414,7 +425,7 @@ fn commitment_verifier_many_challenges_one_chunk_success() {
     };
 
     // Verify proof
-    let proven_challenges = FileKeyVerifier::<
+    let proven_challenges_with_values = FileKeyVerifier::<
         LayoutV1<BlakeTwo256>,
         H_LENGTH,
         CHUNK_SIZE,
@@ -423,7 +434,11 @@ fn commitment_verifier_many_challenges_one_chunk_success() {
     .expect("Failed to verify proof");
 
     assert_eq!(
-        proven_challenges.into_iter().collect::<Vec<_>>().sort(),
+        proven_challenges_with_values
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>()
+            .sort(),
         challenges.sort()
     );
 }
@@ -474,7 +489,7 @@ fn commitment_verifier_many_challenges_two_chunks_success() {
     };
 
     // Verify proof
-    let proven_challenges = FileKeyVerifier::<
+    let proven_challenges_with_values = FileKeyVerifier::<
         LayoutV1<BlakeTwo256>,
         H_LENGTH,
         CHUNK_SIZE,
@@ -483,7 +498,11 @@ fn commitment_verifier_many_challenges_two_chunks_success() {
     .expect("Failed to verify proof");
 
     assert_eq!(
-        proven_challenges.into_iter().collect::<Vec<_>>().sort(),
+        proven_challenges_with_values
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>()
+            .sort(),
         challenges.sort()
     );
 }

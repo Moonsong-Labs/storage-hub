@@ -1636,7 +1636,10 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
                     .iter()
                     .filter_map(|custom_challenge| {
                         if custom_challenge.should_remove_key {
-                            Some((custom_challenge.key, TrieRemoveMutation::default().into()))
+                            Some((
+                                custom_challenge.key,
+                                TrieRemoveMutation::with_value(Vec::new()).into(),
+                            ))
                         } else {
                             None
                         }

@@ -14,14 +14,14 @@ use pallet_proofs_dealer_runtime_api::{
 use shp_traits::{
     CommitmentVerifier, MutateChallengeableProvidersInterface, ProofSubmittersInterface,
     ProofsDealerInterface, ReadChallengeableProvidersInterface, StorageHubTickGetter, TrieMutation,
-    TrieProofDeltaApplier,
+    TrieProofDeltaApplier, TrieRemoveMutation,
 };
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, CheckedSub, Convert, Hash, One, Zero},
     ArithmeticError, BoundedVec, DispatchError, SaturatedConversion, Saturating,
 };
 use sp_std::{
-    collections::{btree_set::BTreeSet, vec_deque::VecDeque},
+    collections::{btree_map::BTreeMap, vec_deque::VecDeque},
     vec::Vec,
 };
 
@@ -296,7 +296,7 @@ where
         }
 
         // Verify forest proof.
-        let mut forest_keys_proven =
+        let mut forest_keys_proven_with_values =
             ForestVerifierFor::<T>::verify_proof(&root, &challenges, forest_proof)
                 .map_err(|_| Error::<T>::ForestProofVerificationFailed)?;
 
@@ -309,11 +309,15 @@ where
                     // The key should be removed if `should_remove_key` is `true` and if when the Provider responds to this challenge with a proof,
                     // in that proof there is an inclusion proof for that key (i.e. the key is in the Merkle Patricia Forest).
                     if custom_challenge.should_remove_key
-                        && forest_keys_proven.contains(&custom_challenge.key)
+                        && forest_keys_proven_with_values.contains_key(&custom_challenge.key)
                     {
                         Some((
                             custom_challenge.key,
-                            TrieMutation::Remove(Default::default()),
+                            TrieMutation::Remove(TrieRemoveMutation::with_maybe_value(
+                                forest_keys_proven_with_values
+                                    .get(&custom_challenge.key)
+                                    .cloned(),
+                            )),
                         ))
                     } else {
                         None
@@ -338,7 +342,7 @@ where
 
                 for (key, maybe_value) in mutated_keys_and_values.iter() {
                     // Remove the mutated key from the list of `forest_keys_proven` to avoid having to verify the key proof.
-                    forest_keys_proven.remove(key);
+                    forest_keys_proven_with_values.remove(key);
 
                     // Use the interface exposed by the Providers pallet to update the submitting Provider
                     // after the key removal if the key had a value.
@@ -372,12 +376,12 @@ where
 
         // Check that the correct number of key proofs were submitted.
         ensure!(
-            key_proofs.len() == forest_keys_proven.len(),
+            key_proofs.len() == forest_keys_proven_with_values.len(),
             Error::<T>::IncorrectNumberOfKeyProofs
         );
 
         // Verify each key proof.
-        for key_proven in forest_keys_proven {
+        for key_proven in forest_keys_proven_with_values.keys() {
             // Check that there is a key proof for each key proven.
             let key_proof = key_proofs
                 .get(&key_proven)
@@ -1025,7 +1029,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         provider_id: &Self::ProviderId,
         challenges: &[Self::MerkleHash],
         proof: &Self::ForestProof,
-    ) -> Result<BTreeSet<Self::MerkleHash>, DispatchError> {
+    ) -> Result<BTreeMap<Self::MerkleHash, Vec<u8>>, DispatchError> {
         // Check if submitter is a registered Provider.
         ensure!(
             ProvidersPalletFor::<T>::is_provider(*provider_id),
@@ -1046,7 +1050,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         root: &Self::MerkleHash,
         challenges: &[Self::MerkleHash],
         proof: &Self::ForestProof,
-    ) -> Result<BTreeSet<Self::MerkleHash>, DispatchError> {
+    ) -> Result<BTreeMap<Self::MerkleHash, Vec<u8>>, DispatchError> {
         // Verify forest proof.
         ForestVerifierFor::<T>::verify_proof(&root, challenges, proof)
             .map_err(|_| Error::<T>::ForestProofVerificationFailed.into())
@@ -1056,7 +1060,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         key: &Self::MerkleHash,
         challenges: &[Self::MerkleHash],
         proof: &Self::KeyProof,
-    ) -> Result<BTreeSet<Self::MerkleHash>, DispatchError> {
+    ) -> Result<BTreeMap<Self::MerkleHash, Vec<u8>>, DispatchError> {
         // Verify key proof.
         KeyVerifierFor::<T>::verify_proof(key, &challenges, proof)
             .map_err(|_| Error::<T>::KeyProofVerificationFailed.into())

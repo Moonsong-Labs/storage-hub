@@ -1581,7 +1581,7 @@ where
                 .ok_or(Error::<T>::BucketNotFound)?;
 
         // Verify the proof of non-inclusion.
-        let proven_keys: BTreeSet<MerkleHash<T>> =
+        let proven_keys_with_values: BTreeMap<MerkleHash<T>, Vec<u8>> =
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_generic_forest_proof(
                 &bucket_root,
                 file_keys.as_slice(),
@@ -1646,7 +1646,7 @@ where
             // Only check the key proof, increase the bucket size and capacity used if the file key is not in the forest proof, and
             // add the file metadata to the `accepted_files_metadata` since all keys in this array will be added to the bucket forest via an apply delta.
             // This can happen if the storage request was issued again by the user and the MSP has already stored the file.
-            if !proven_keys.contains(&file_key_with_proof.file_key) {
+            if !proven_keys_with_values.contains_key(&file_key_with_proof.file_key) {
                 accepted_files_metadata.push((file_metadata.clone(), file_key_with_proof));
 
                 // Check that the key proof is valid.
@@ -1924,7 +1924,7 @@ where
         );
 
         // Verify the proof of non-inclusion.
-        let proven_keys: BTreeSet<MerkleHash<T>> =
+        let proven_keys_with_values: BTreeMap<MerkleHash<T>, Vec<u8>> =
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
                 &bsp_id,
                 file_keys_and_proofs
@@ -2082,7 +2082,7 @@ where
             // Ensure that the file key IS NOT part of the BSP's forest.
             // Note: The runtime is responsible for adding and removing keys, computing the new root and updating the BSP's root.
             ensure!(
-                !proven_keys.contains(&file_key),
+                !proven_keys_with_values.contains_key(&file_key),
                 Error::<T>::ExpectedNonInclusionProof
             );
 
@@ -2448,7 +2448,7 @@ where
         );
 
         // Verify the proof of inclusion.
-        let proven_keys =
+        let proven_keys_with_values =
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
                 &bsp_id,
                 &[file_key],
@@ -2457,7 +2457,7 @@ where
 
         // Ensure that the file key IS part of the BSP's forest.
         ensure!(
-            proven_keys.contains(&file_key),
+            proven_keys_with_values.contains_key(&file_key),
             Error::<T>::ExpectedInclusionProof
         );
 
@@ -2628,7 +2628,7 @@ where
         );
 
         // Verify the proof of inclusion.
-        let proven_keys =
+        let proven_keys_with_values =
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
                 &bsp_id,
                 &[file_key],
@@ -2638,14 +2638,20 @@ where
         // Ensure that the file key IS part of the BSP's forest.
         // The runtime is responsible for adding and removing keys, computing the new root and updating the BSP's root.
         ensure!(
-            proven_keys.contains(&file_key),
+            proven_keys_with_values.contains_key(&file_key),
             Error::<T>::ExpectedInclusionProof
         );
 
         // Compute new root after removing file key from forest partial trie.
         let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
             &bsp_id,
-            &[(file_key, TrieRemoveMutation::default().into())],
+            &[(
+                file_key,
+                TrieRemoveMutation::with_maybe_value(
+                    proven_keys_with_values.get(&file_key).cloned(),
+                )
+                .into(),
+            )],
             &inclusion_forest_proof,
         )?;
 
@@ -2716,7 +2722,7 @@ where
         // Verify the proof of inclusion.
         // If the Provider is a BSP, the proof is verified against the BSP's forest.
         let new_root = if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&sp_id) {
-            let proven_keys =
+            let proven_keys_with_values =
                 <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
                     &sp_id,
                     &[file_key],
@@ -2725,14 +2731,20 @@ where
 
             // Ensure that the file key IS part of the BSP's forest.
             ensure!(
-                proven_keys.contains(&file_key),
+                proven_keys_with_values.contains_key(&file_key),
                 Error::<T>::ExpectedInclusionProof
             );
 
             // Compute new root after removing file key from forest partial trie.
             let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
                 &sp_id,
-                &[(file_key, TrieRemoveMutation::default().into())],
+                &[(
+                    file_key,
+                    TrieRemoveMutation::with_maybe_value(
+                        proven_keys_with_values.get(&file_key).cloned(),
+                    )
+                    .into(),
+                )],
                 &inclusion_forest_proof,
             )?;
 
@@ -2775,7 +2787,7 @@ where
                 <T::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id)
                     .ok_or(Error::<T>::BucketNotFound)?;
 
-            let proven_keys =
+            let proven_keys_with_values =
                 <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_generic_forest_proof(
                     &bucket_root,
                     &[file_key],
@@ -2784,7 +2796,7 @@ where
 
             // Ensure that the file key IS part of the Bucket's trie.
             ensure!(
-                proven_keys.contains(&file_key),
+                proven_keys_with_values.contains_key(&file_key),
                 Error::<T>::ExpectedInclusionProof
             );
 
@@ -2792,7 +2804,13 @@ where
             let new_root =
                 <T::ProofDealer as shp_traits::ProofsDealerInterface>::generic_apply_delta(
                     &bucket_root,
-                    &[(file_key, TrieRemoveMutation::default().into())],
+                    &[(
+                        file_key,
+                        TrieRemoveMutation::with_maybe_value(
+                            proven_keys_with_values.get(&file_key).cloned(),
+                        )
+                        .into(),
+                    )],
                     &inclusion_forest_proof,
                     Some(bucket_id.encode()),
                 )?;
@@ -3003,7 +3021,6 @@ where
                 Error::<T>::FailedToPushFileKeyToBucketDeletionVector,
                 result
             );
-            mutations.push((*file_key, TrieRemoveMutation::default().into()));
             total_size = total_size.saturating_add(*size);
 
             // Check if there's an open storage request for this file key
@@ -3033,18 +3050,28 @@ where
             .ok_or(Error::<T>::BucketNotFound)?;
 
         // Verify all file keys are part of the bucket's forest
-        let proven_keys = <T::ProofDealer as ProofsDealerInterface>::verify_generic_forest_proof(
-            &old_bucket_root,
-            file_keys.as_slice(),
-            &forest_proof,
-        )?;
+        let proven_keys_with_values =
+            <T::ProofDealer as ProofsDealerInterface>::verify_generic_forest_proof(
+                &old_bucket_root,
+                file_keys.as_slice(),
+                &forest_proof,
+            )?;
 
         // Ensure that all file keys are proven
         for file_key in &file_keys {
             ensure!(
-                proven_keys.contains(file_key),
+                proven_keys_with_values.contains_key(file_key),
                 Error::<T>::ExpectedInclusionProof
             );
+
+            // Add the mutation to the mutations vector.
+            mutations.push((
+                *file_key,
+                TrieRemoveMutation::with_maybe_value(
+                    proven_keys_with_values.get(file_key).cloned(),
+                )
+                .into(),
+            ));
         }
 
         // Compute new root after removing all file keys from forest
@@ -3143,7 +3170,6 @@ where
                 Error::<T>::FailedToPushFileKeyToBspDeletionVector,
                 result
             );
-            mutations.push((*file_key, TrieRemoveMutation::default().into()));
             total_size = total_size.saturating_add(*size);
 
             // Aggregate sizes per owner for payment stream updates.
@@ -3175,18 +3201,28 @@ where
         drop(seen_keys);
 
         // Verify all file keys are part of the BSP's forest
-        let proven_keys = <T::ProofDealer as ProofsDealerInterface>::verify_forest_proof(
-            &bsp_id,
-            file_keys.as_slice(),
-            &forest_proof,
-        )?;
+        let proven_keys_with_values =
+            <T::ProofDealer as ProofsDealerInterface>::verify_forest_proof(
+                &bsp_id,
+                file_keys.as_slice(),
+                &forest_proof,
+            )?;
 
         // Ensure that all file keys are proven
         for file_key in &file_keys {
             ensure!(
-                proven_keys.contains(file_key),
+                proven_keys_with_values.contains_key(file_key),
                 Error::<T>::ExpectedInclusionProof
             );
+
+            // Add the mutation to the mutations vector.
+            mutations.push((
+                *file_key,
+                TrieRemoveMutation::with_maybe_value(
+                    proven_keys_with_values.get(file_key).cloned(),
+                )
+                .into(),
+            ));
         }
 
         // Compute new root after removing all file keys from forest

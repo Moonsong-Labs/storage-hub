@@ -22,7 +22,7 @@ use sp_runtime::{
     traits::{BlakeTwo256, Convert, ConvertBack, IdentityLookup},
     BuildStorage, DispatchError, Perbill, SaturatedConversion,
 };
-use sp_std::collections::btree_set::BTreeSet;
+use sp_std::collections::btree_map::BTreeMap;
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -396,9 +396,13 @@ where
         _root: &Self::Commitment,
         challenges: &[Self::Challenge],
         proof: &CompactProof,
-    ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
+    ) -> Result<BTreeMap<Self::Challenge, Vec<u8>>, DispatchError> {
         if proof.encoded_nodes.len() > 0 {
-            let challenges: BTreeSet<Self::Challenge> = challenges.iter().cloned().collect();
+            let challenges: BTreeMap<Self::Challenge, Vec<u8>> = challenges
+                .iter()
+                .cloned()
+                .map(|key| (key, Vec::new()))
+                .collect();
             Ok(challenges)
         } else {
             Err("Proof is empty".into())

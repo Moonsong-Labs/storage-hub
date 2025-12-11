@@ -25,7 +25,7 @@ use sp_runtime::{
 use sp_runtime::{traits::Convert, BoundedBTreeSet};
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 use sp_weights::Weight;
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
@@ -352,12 +352,13 @@ where
         _root: &Self::Commitment,
         _challenges: &[Self::Challenge],
         proof: &CompactProof,
-    ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
+    ) -> Result<BTreeMap<Self::Challenge, Vec<u8>>, DispatchError> {
         if proof.encoded_nodes.len() > 0 {
             Ok(proof
                 .encoded_nodes
                 .iter()
                 .map(|node| H256::from_slice(&node[..]))
+                .map(|key| (key, Vec::new()))
                 .collect())
         } else {
             Err("Proof is empty".into())

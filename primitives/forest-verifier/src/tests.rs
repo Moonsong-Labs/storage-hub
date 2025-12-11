@@ -6,7 +6,7 @@ use shp_traits::{
 };
 use sp_core::H256;
 use sp_runtime::traits::BlakeTwo256;
-use sp_std::collections::btree_set::BTreeSet;
+use sp_std::collections::btree_map::BTreeMap;
 use sp_trie::{
     recorder::Recorder, CompactProof, LayoutV1, MemoryDB, Trie, TrieDBBuilder, TrieDBMutBuilder,
     TrieLayout, TrieMut,
@@ -263,7 +263,7 @@ mod verify_proof_tests {
             .expect("Failed to create compact proof from recorder");
 
         // Verify proof
-        let proof_keys =
+        let proof_keys_with_values =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
                 &[*challenge_key],
@@ -271,7 +271,10 @@ mod verify_proof_tests {
             )
             .expect("Failed to verify proof");
 
-        assert_eq!(proof_keys, BTreeSet::from_iter(vec![*challenge_key]));
+        assert_eq!(
+            proof_keys_with_values.keys().cloned().collect::<Vec<_>>(),
+            vec![*challenge_key]
+        );
     }
 
     #[test]
@@ -320,7 +323,7 @@ mod verify_proof_tests {
             .expect("Failed to create compact proof from recorder");
 
         // Verify proof
-        let proof_keys =
+        let proof_keys_with_values =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
                 &[challenge_key],
@@ -328,9 +331,11 @@ mod verify_proof_tests {
             )
             .expect("Failed to verify proof");
 
+        let mut expected_keys = vec![leaf_keys[0], leaf_keys[1]];
+        expected_keys.sort();
         assert_eq!(
-            proof_keys,
-            BTreeSet::from_iter(vec![leaf_keys[0], leaf_keys[1]])
+            proof_keys_with_values.keys().cloned().collect::<Vec<_>>(),
+            expected_keys
         );
     }
 
@@ -377,7 +382,7 @@ mod verify_proof_tests {
             .expect("Failed to create compact proof from recorder");
 
         // Verify proof
-        let proof_keys =
+        let proof_keys_with_values =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
                 &[challenge_key],
@@ -385,7 +390,10 @@ mod verify_proof_tests {
             )
             .expect("Failed to verify proof");
 
-        assert_eq!(proof_keys, BTreeSet::from_iter(vec![leaf_keys[0]]));
+        assert_eq!(
+            proof_keys_with_values.keys().cloned().collect::<Vec<_>>(),
+            vec![leaf_keys[0]]
+        );
     }
 
     #[test]
@@ -437,7 +445,7 @@ mod verify_proof_tests {
             .expect("Failed to create compact proof from recorder");
 
         // Verify proof
-        let proof_keys =
+        let proof_keys_with_values =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
                 &[challenge_key],
@@ -445,7 +453,10 @@ mod verify_proof_tests {
             )
             .expect("Failed to verify proof");
 
-        assert_eq!(proof_keys, BTreeSet::from_iter(vec![largest_key.0]));
+        assert_eq!(
+            proof_keys_with_values.keys().cloned().collect::<Vec<_>>(),
+            vec![largest_key.0]
+        );
     }
 
     #[test]
@@ -483,7 +494,7 @@ mod verify_proof_tests {
             .expect("Failed to create compact proof from recorder");
 
         // Verify proof
-        let proof_keys =
+        let proof_keys_with_values =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
                 &challenge_keys,
@@ -491,9 +502,11 @@ mod verify_proof_tests {
             )
             .expect("Failed to verify proof");
 
+        let mut expected_keys: Vec<_> = challenge_keys.iter().cloned().collect();
+        expected_keys.sort();
         assert_eq!(
-            proof_keys,
-            BTreeSet::from_iter(challenge_keys.iter().cloned())
+            proof_keys_with_values.keys().cloned().collect::<Vec<_>>(),
+            expected_keys
         );
     }
 
@@ -540,7 +553,7 @@ mod verify_proof_tests {
             .expect("Failed to create compact proof from recorder");
 
         // Verify proof
-        let proof_keys =
+        let proof_keys_with_values =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
                 &challenge_keys,
@@ -548,9 +561,11 @@ mod verify_proof_tests {
             )
             .expect("Failed to verify proof");
 
+        let mut expected_keys = vec![leaf_keys[0], leaf_keys[1], leaf_keys[2], leaf_keys[3]];
+        expected_keys.sort();
         assert_eq!(
-            proof_keys,
-            BTreeSet::from_iter([leaf_keys[0], leaf_keys[1], leaf_keys[2], leaf_keys[3]])
+            proof_keys_with_values.keys().cloned().collect::<Vec<_>>(),
+            expected_keys
         );
     }
 
@@ -597,7 +612,7 @@ mod verify_proof_tests {
             .expect("Failed to create compact proof from recorder");
 
         // Verify proof
-        let proof_keys =
+        let proof_keys_with_values =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
                 &challenge_keys,
@@ -605,9 +620,11 @@ mod verify_proof_tests {
             )
             .expect("Failed to verify proof");
 
+        let mut expected_keys = vec![leaf_keys[0], leaf_keys[1], leaf_keys[2]];
+        expected_keys.sort();
         assert_eq!(
-            proof_keys,
-            BTreeSet::from_iter([leaf_keys[0], leaf_keys[1], leaf_keys[2]])
+            proof_keys_with_values.keys().cloned().collect::<Vec<_>>(),
+            expected_keys
         );
     }
 
@@ -661,7 +678,7 @@ mod verify_proof_tests {
             .expect("Failed to create compact proof from recorder");
 
         // Verify proof
-        let proof_keys =
+        let proof_keys_with_values =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
                 &challenge_keys,
@@ -669,16 +686,19 @@ mod verify_proof_tests {
             )
             .expect("Failed to verify proof");
 
+        let mut expected_keys = vec![
+            leaf_keys[0],
+            leaf_keys[1],
+            leaf_keys[2],
+            leaf_keys[3],
+            leaf_keys[4],
+            *largest_key,
+        ];
+        expected_keys.sort();
+        expected_keys.dedup();
         assert_eq!(
-            proof_keys,
-            BTreeSet::from_iter([
-                leaf_keys[0],
-                leaf_keys[1],
-                leaf_keys[2],
-                leaf_keys[3],
-                leaf_keys[4],
-                *largest_key
-            ])
+            proof_keys_with_values.keys().cloned().collect::<Vec<_>>(),
+            expected_keys
         );
     }
 
@@ -728,7 +748,7 @@ mod verify_proof_tests {
             .expect("Failed to create compact proof from recorder");
 
         // Verify proof
-        let proof_keys =
+        let proof_keys_with_values =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
                 &challenge_keys,
@@ -736,7 +756,10 @@ mod verify_proof_tests {
             )
             .expect("Failed to verify proof");
 
-        assert_eq!(proof_keys, BTreeSet::from_iter([leaf_keys[0]]));
+        assert_eq!(
+            proof_keys_with_values.keys().cloned().collect::<Vec<_>>(),
+            vec![leaf_keys[0]]
+        );
     }
 
     #[test]
@@ -785,7 +808,7 @@ mod verify_proof_tests {
             .expect("Failed to create compact proof from recorder");
 
         // Verify proof
-        let proof_keys =
+        let proof_keys_with_values =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
                 &challenge_keys,
@@ -793,7 +816,10 @@ mod verify_proof_tests {
             )
             .expect("Failed to verify proof");
 
-        assert_eq!(proof_keys, BTreeSet::from_iter([leaf_keys[0]]));
+        assert_eq!(
+            proof_keys_with_values.keys().cloned().collect::<Vec<_>>(),
+            vec![leaf_keys[0]]
+        );
     }
 
     #[test]
@@ -840,7 +866,7 @@ mod verify_proof_tests {
             .expect("Failed to create compact proof from recorder");
 
         // Verify proof
-        let proof_keys =
+        let proof_keys_with_values =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
                 &challenge_keys,
@@ -848,7 +874,10 @@ mod verify_proof_tests {
             )
             .expect("Failed to verify proof");
 
-        assert_eq!(proof_keys, BTreeSet::from_iter([leaf_keys[0]]));
+        assert_eq!(
+            proof_keys_with_values.keys().cloned().collect::<Vec<_>>(),
+            vec![leaf_keys[0]]
+        );
     }
 
     #[test]
@@ -892,7 +921,7 @@ mod verify_proof_tests {
             .expect("Failed to create compact proof from recorder");
 
         // Verify proof
-        let proof_keys =
+        let proof_keys_with_values =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
                 &challenge_keys,
@@ -900,9 +929,11 @@ mod verify_proof_tests {
             )
             .expect("Failed to verify proof");
 
+        let mut expected_keys = vec![leaf_keys[0], leaf_keys[1]];
+        expected_keys.sort();
         assert_eq!(
-            proof_keys,
-            BTreeSet::from_iter([leaf_keys[0], leaf_keys[1],])
+            proof_keys_with_values.keys().cloned().collect::<Vec<_>>(),
+            expected_keys
         );
     }
 
@@ -947,7 +978,7 @@ mod verify_proof_tests {
             .expect("Failed to create compact proof from recorder");
 
         // Verify proof
-        let proof_keys =
+        let proof_keys_with_values =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
                 &challenge_keys,
@@ -955,9 +986,11 @@ mod verify_proof_tests {
             )
             .expect("Failed to verify proof");
 
+        let mut expected_keys = vec![leaf_keys[0], leaf_keys[1]];
+        expected_keys.sort();
         assert_eq!(
-            proof_keys,
-            BTreeSet::from_iter([leaf_keys[0], leaf_keys[1],])
+            proof_keys_with_values.keys().cloned().collect::<Vec<_>>(),
+            expected_keys
         );
     }
 
@@ -1432,7 +1465,7 @@ mod verify_proof_tests {
                 &[H256::random(), H256::random(), H256::random()],
                 &proof
             ),
-            Ok(BTreeSet::new())
+            Ok(BTreeMap::new())
         );
     }
 }

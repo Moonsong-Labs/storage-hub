@@ -1,6 +1,6 @@
 //! A minimal runtime including the pallet-cr-randomness pallet
 use core::marker::PhantomData;
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 
 use super::*;
 use crate as pallet_cr_randomness;
@@ -386,9 +386,13 @@ where
         _root: &Self::Commitment,
         challenges: &[Self::Challenge],
         proof: &CompactProof,
-    ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
+    ) -> Result<BTreeMap<Self::Challenge, Vec<u8>>, DispatchError> {
         if proof.encoded_nodes.len() > 0 {
-            let challenges: BTreeSet<Self::Challenge> = challenges.iter().cloned().collect();
+            let challenges: BTreeMap<Self::Challenge, Vec<u8>> = challenges
+                .iter()
+                .cloned()
+                .map(|key| (key, Vec::new()))
+                .collect();
             Ok(challenges)
         } else {
             Err("Proof is empty".into())

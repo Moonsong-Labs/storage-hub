@@ -3,7 +3,7 @@
 use frame_support::sp_runtime::DispatchError;
 use shp_file_metadata::ChunkId;
 use shp_traits::CommitmentVerifier;
-use sp_std::collections::btree_set::BTreeSet;
+use sp_std::{collections::btree_map::BTreeMap, vec::Vec};
 use sp_trie::{Trie, TrieDBBuilder, TrieLayout};
 use types::FileKeyProof;
 
@@ -49,7 +49,7 @@ where
         expected_file_key: &Self::Commitment,
         challenges: &[Self::Challenge],
         proof: &Self::Proof,
-    ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
+    ) -> Result<BTreeMap<Self::Challenge, Vec<u8>>, DispatchError> {
         // Check that `challenges` is not empty.
         if challenges.is_empty() {
             return Err("No challenges provided.".into());
@@ -91,7 +91,7 @@ where
         let trie = TrieDBBuilder::<T>::new(&memdb, &root).build();
 
         // Initialise vector of proven challenges. We use a `BTreeSet` to ensure that the items are unique.
-        let mut proven_challenges = BTreeSet::new();
+        let mut proven_challenges_with_values = BTreeMap::new();
         let mut challenges_iter = challenges.iter();
 
         // Iterate over the challenges, compute the modulo of the challenged hashes with the number of chunks in the file,
@@ -115,10 +115,13 @@ where
                 );
             }
 
-            // Add the challenge to the proven challenges vector.
-            proven_challenges.insert(*challenge);
+            // Add the challenge to the proven challenges and values btree map.
+            proven_challenges_with_values.insert(
+                *challenge,
+                chunk.expect("We checked that the chunk is not None"),
+            );
         }
 
-        Ok(proven_challenges)
+        Ok(proven_challenges_with_values)
     }
 }

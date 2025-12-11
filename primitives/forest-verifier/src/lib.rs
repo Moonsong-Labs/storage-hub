@@ -2,7 +2,7 @@
 
 use frame_support::sp_runtime::DispatchError;
 use shp_traits::{CommitmentVerifier, TrieMutation, TrieProofDeltaApplier};
-use sp_std::collections::btree_set::BTreeSet;
+use sp_std::collections::btree_map::BTreeMap;
 use sp_std::vec::Vec;
 use sp_trie::{CompactProof, MemoryDB, TrieDBBuilder, TrieDBMutBuilder, TrieLayout, TrieMut};
 use trie_db::TrieIterator;
@@ -34,7 +34,7 @@ where
         root: &Self::Commitment,
         challenges: &[Self::Challenge],
         proof: &Self::Proof,
-    ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
+    ) -> Result<BTreeMap<Self::Challenge, Vec<u8>>, DispatchError> {
         // Check that `challenges` is not empty.
         if challenges.is_empty() {
             return Err("No challenges provided.".into());
@@ -53,15 +53,17 @@ where
             .into_double_ended_iter()
             .map_err(|_| "Failed to create trie iterator.")?;
 
+        // Initialise the btree map of proven keys and values. We use a `BTreeMap` to ensure that the keys are unique.
+        let mut proven_keys_with_values = BTreeMap::new();
+
         // Check if the iterator has at least one leaf.
         if trie_de_iter.next().is_none() {
             // If there are no leaves, and still we reached this point, it is because this is a proof of an empty forest.
             // In this case, we return an empty set of proven keys, meaning that this is a valid proof of having an empty forest.
-            return Ok(BTreeSet::new());
+            return Ok(proven_keys_with_values);
         }
 
-        // Initialise vector of proven keys. We use a `BTreeSet` to ensure that the keys are unique.
-        let mut proven_keys = BTreeSet::new();
+        // Initialise the challenges iterator
         let mut challenges_iter = challenges.iter();
 
         // Iterate over the challenges and check if there is a pair of consecutive
@@ -87,7 +89,9 @@ where
             match (prev_leaf, next_leaf) {
                 // Scenario 1 (valid): `next_leaf` is the challenged leaf which is included in the proof.
                 // The challenge is the leaf itself (i.e. the challenge exists in the trie).
-                (_, Some((next_key, _))) if next_key == challenge.as_ref().to_vec() => {
+                (_, Some((next_key, next_key_value)))
+                    if next_key == challenge.as_ref().to_vec() =>
+                {
                     // Converting the key to a slice and then to a fixed size array.
                     let next_key: &[u8; H_LENGTH] = next_key
                         .as_slice()
@@ -99,12 +103,12 @@ where
                         .try_into()
                         .map_err(|_| "Failed to convert proven key.")?;
 
-                    proven_keys.insert(next_key);
+                    proven_keys_with_values.insert(next_key, next_key_value);
                     continue;
                 }
                 // Scenario 2 (valid): `prev_leaf` and `next_leaf` are consecutive leaves.
                 // The challenge is between the two leaves (i.e. the challenge exists in the trie).
-                (Some((prev_key, _)), Some((next_key, _)))
+                (Some((prev_key, prev_key_value)), Some((next_key, next_key_value)))
                     if prev_key < challenge.as_ref().to_vec()
                         && challenge.as_ref().to_vec() < next_key =>
                 {
@@ -119,7 +123,7 @@ where
                         .try_into()
                         .map_err(|_| "Failed to convert proven key.")?;
 
-                    proven_keys.insert(prev_key);
+                    proven_keys_with_values.insert(prev_key, prev_key_value);
 
                     // Converting the key to a slice and then to a fixed size array.
                     let next_key: &[u8; H_LENGTH] = next_key
@@ -132,13 +136,13 @@ where
                         .try_into()
                         .map_err(|_| "Failed to convert proven key.")?;
 
-                    proven_keys.insert(next_key);
+                    proven_keys_with_values.insert(next_key, next_key_value);
 
                     continue;
                 }
                 // Scenario 3 (valid): `next_leaf` is the first leaf since the next previous leaf is `None`.
                 // The challenge is before the first leaf (i.e. the challenge does not exist in the trie).
-                (None, Some((next_key, _))) => {
+                (None, Some((next_key, next_key_value))) => {
                     // Converting the key to a slice and then to a fixed size array.
                     let next_key: &[u8; H_LENGTH] = next_key
                         .as_slice()
@@ -150,16 +154,15 @@ where
                         .try_into()
                         .map_err(|_| "Failed to convert proven key.")?;
 
-                    proven_keys.insert(next_key);
+                    proven_keys_with_values.insert(next_key, next_key_value);
 
                     continue;
                 }
                 // Scenario 4 (valid): `prev_leaf` is the last leaf since `next_leaf` is `None`.
                 // The challenge is after the last leaf (i.e. the challenge does not exist in the trie).
-                (Some(prev_leaf), None) => {
+                (Some((prev_key, prev_key_value)), None) => {
                     // Converting the key to a slice and then to a fixed size array.
-                    let prev_key: &[u8; H_LENGTH] = prev_leaf
-                        .0
+                    let prev_key: &[u8; H_LENGTH] = prev_key
                         .as_slice()
                         .try_into()
                         .map_err(|_| "Failed to convert proven key to a fixed size array.")?;
@@ -169,7 +172,7 @@ where
                         .try_into()
                         .map_err(|_| "Failed to convert proven key.")?;
 
-                    proven_keys.insert(prev_key);
+                    proven_keys_with_values.insert(prev_key, prev_key_value);
 
                     continue;
                 }
@@ -201,7 +204,7 @@ where
             }
         }
 
-        return Ok(proven_keys);
+        return Ok(proven_keys_with_values);
     }
 }
 
