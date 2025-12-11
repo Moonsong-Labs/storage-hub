@@ -252,7 +252,9 @@ impl<'a> BspPeerManagerRwContext<'a> {
 }
 
 impl<'a> ProvidesDbContext for BspPeerManagerRwContext<'a> {
-    fn db_context(&self) -> &TypedDbContext<TypedRocksDB, BufferedWriteSupport<TypedRocksDB>> {
+    fn db_context(
+        &self,
+    ) -> &TypedDbContext<'_, TypedRocksDB, BufferedWriteSupport<'_, TypedRocksDB>> {
         &self.db_context
     }
 }
