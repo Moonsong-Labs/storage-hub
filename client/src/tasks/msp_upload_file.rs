@@ -266,31 +266,6 @@ where
         self.config = config;
         self
     }
-
-    /// Constructs file metadata and derives the file key from a storage request.
-    ///
-    /// This is a pure computation helper that converts storage request data into
-    /// the internal [`FileMetadata`] and [`FileKey`] representations.
-    fn construct_file_metadata_and_key(
-        event: &NewStorageRequest<Runtime>,
-    ) -> anyhow::Result<(FileMetadata, FileKey)> {
-        let who = event.who.as_ref().to_vec();
-        let metadata = FileMetadata::new(
-            who,
-            event.bucket_id.as_ref().to_vec(),
-            event.location.to_vec(),
-            event.size.saturated_into(),
-            event.fingerprint,
-        )
-        .map_err(|_| anyhow::anyhow!("Invalid file metadata"))?;
-
-        let file_key: FileKey = metadata
-            .file_key::<HashT<StorageProofsMerkleTrieLayout>>()
-            .as_ref()
-            .try_into()?;
-
-        Ok((metadata, file_key))
-    }
 }
 
 /// Handles the [`NewStorageRequest`] event.
@@ -326,13 +301,18 @@ where
                 file_key
             )),
             Err(reason) => {
-                self.handle_rejected_storage_request(&file_key, bucket_id, reason.clone())
-                    .await
-                    .map_err(|e| {
-                        anyhow::anyhow!("Failed to handle rejected storage request: {:?}", e)
-                    })?;
+                error!(target: LOG_TARGET, "Failed to handle new storage request: {:?}", reason);
 
-                return Err(anyhow::anyhow!(
+                self.handle_rejected_storage_request(
+                    &file_key,
+                    bucket_id,
+                    // TODO: Receive actual reason error variant from internal call to `handle_new_storage_request_event`
+                    RejectedStorageRequestReason::InternalError,
+                )
+                .await
+                .map_err(|e| anyhow!("Failed to handle rejected storage request: {:?}", e))?;
+
+                return Err(anyhow!(
                     "Failed to handle new storage request: {:?}",
                     reason
                 ));
@@ -360,6 +340,8 @@ where
         let file_complete = match self.handle_remote_upload_request_event(event.clone()).await {
             Ok(complete) => complete,
             Err(e) => {
+                error!(target: LOG_TARGET, "Failed to handle remote upload request: {:?}", e);
+
                 // Send error response through FileTransferService
                 if let Err(e) = self
                     .storage_hub_handler
@@ -903,7 +885,7 @@ where
     async fn handle_new_storage_request_event(
         &mut self,
         event: NewStorageRequest<Runtime>,
-    ) -> Result<(), RejectedStorageRequestReason> {
+    ) -> anyhow::Result<()> {
         trace!(
             target: LOG_TARGET,
             "handle_new_storage_request_event called for file_key {:?}, bucket_id {:?}",
@@ -911,10 +893,11 @@ where
             event.bucket_id
         );
 
-        if event.size.is_zero() {
+        // TODO: Use Zero trait call `is_zero` instead of comparing to zero
+        if event.size == Zero::zero() {
             let err_msg = "File size cannot be 0";
             error!(target: LOG_TARGET, err_msg);
-            return Err(RejectedStorageRequestReason::InternalError);
+            return Err(anyhow!(err_msg));
         }
 
         let own_provider_id = self
@@ -922,10 +905,7 @@ where
             .blockchain
             .query_storage_provider_id(None)
             .await
-            .map_err(|e| {
-                error!(target: LOG_TARGET, "Failed to query storage provider ID: {:?}", e);
-                RejectedStorageRequestReason::InternalError
-            })?;
+            .map_err(|e| anyhow!("Failed to query storage provider ID: {:?}", e))?;
 
         let Some(StorageProviderId::MainStorageProvider(own_msp_id)) = own_provider_id else {
             let err_msg = match own_provider_id {
@@ -934,8 +914,7 @@ where
                 }
                 _ => "Failed to get own MSP ID.",
             };
-            error!(target: LOG_TARGET, err_msg);
-            return Err(RejectedStorageRequestReason::InternalError);
+            return Err(anyhow!(err_msg));
         };
 
         let msp_id_of_bucket_id = self
@@ -944,12 +923,12 @@ where
             .query_msp_id_of_bucket_id(event.bucket_id)
             .await
             .map_err(|e| {
-                error!(
-                    target: LOG_TARGET,
-                    "Failed to query MSP ID of bucket ID {:?}: {:?}",
+                let err_msg = format!(
+                    "Failed to query MSP ID of bucket ID {:?}\n Error: {:?}",
                     event.bucket_id, e
                 );
-                RejectedStorageRequestReason::InternalError
+                error!(target: LOG_TARGET, err_msg);
+                anyhow!(err_msg)
             })?;
 
         if let Some(msp_id) = msp_id_of_bucket_id {
@@ -962,11 +941,22 @@ where
             return Ok(());
         }
 
-        // Construct file metadata and derive file key.
-        let (metadata, file_key) = Self::construct_file_metadata_and_key(&event).map_err(|e| {
-            error!(target: LOG_TARGET, "Failed to construct file metadata and key: {:?}", e);
-            RejectedStorageRequestReason::InternalError
-        })?;
+        // Construct file metadata.
+        let who = event.who.as_ref().to_vec();
+        let metadata = FileMetadata::new(
+            who,
+            event.bucket_id.as_ref().to_vec(),
+            event.location.to_vec(),
+            event.size.saturated_into(),
+            event.fingerprint,
+        )
+        .map_err(|_| anyhow!("Invalid file metadata"))?;
+
+        // Get the file key.
+        let file_key: FileKey = metadata
+            .file_key::<HashT<StorageProofsMerkleTrieLayout>>()
+            .as_ref()
+            .try_into()?;
 
         let fs = self
             .storage_hub_handler
@@ -977,12 +967,9 @@ where
 
         // If we do not have the file already in forest storage, we must take into account the
         // available storage capacity.
-        let file_in_forest_storage = read_fs.contains_file_key(&file_key.into()).map_err(|e| {
-            error!(target: LOG_TARGET, "Failed to check if file key is in forest storage: {:?}", e);
-            RejectedStorageRequestReason::InternalError
-        })?;
+        let file_in_forest_storage = read_fs.contains_file_key(&file_key.into())?;
         if !file_in_forest_storage {
-            debug!(target: LOG_TARGET, "File key {:x} not found in forest storage. Checking available storage capacity.", file_key);
+            info!(target: LOG_TARGET, "File key {:x} not found in forest storage. Checking available storage capacity.", file_key);
 
             let max_storage_capacity = self
                 .storage_hub_handler
@@ -995,31 +982,24 @@ where
                 .blockchain
                 .query_storage_provider_capacity(own_msp_id)
                 .await
-                .map_err(|e| {
-                    error!(target: LOG_TARGET, "Failed to query storage provider capacity: {:?}", e);
-                    RejectedStorageRequestReason::InternalError
-                })?;
+                .map_err(|e| anyhow!("Failed to query storage provider capacity: {:?}", e))?;
 
             let available_capacity = self
                 .storage_hub_handler
                 .blockchain
                 .query_available_storage_capacity(own_msp_id)
                 .await
-                .map_err(|e| {
-                    let err_msg = format!("Failed to query available storage capacity: {:?}", e);
-                    error!(target: LOG_TARGET, "{}", err_msg);
-                    RejectedStorageRequestReason::InternalError
-                })?;
+                .map_err(|e| anyhow!("Failed to query available storage capacity: {:?}", e))?;
 
             // Calculate currently used storage
             let used_capacity = current_capacity
                 .checked_sub(&available_capacity)
-                .ok_or_else(|| RejectedStorageRequestReason::ReachedMaximumCapacity)?;
+                .ok_or_else(|| anyhow!("Overflow calculating used storage"))?;
 
             // Check if accepting this file would exceed our local max storage capacity limit
             let projected_usage = used_capacity
                 .checked_add(&event.size)
-                .ok_or_else(|| RejectedStorageRequestReason::ReachedMaximumCapacity)?;
+                .ok_or_else(|| anyhow!("Overflow calculating projected storage usage"))?;
 
             if projected_usage > max_storage_capacity {
                 let err_msg = format!(
@@ -1027,7 +1007,7 @@ where
                     used_capacity, event.size, max_storage_capacity
                 );
                 warn!(target: LOG_TARGET, "{}", err_msg);
-                return Err(RejectedStorageRequestReason::ReachedMaximumCapacity);
+                return Err(anyhow!(err_msg));
             }
 
             // Increase storage capacity if the available capacity is less than the file size.
@@ -1042,30 +1022,24 @@ where
                     .blockchain
                     .increase_capacity(CapacityRequestData::new(event.size))
                     .await
-                    .map_err(|e| {
-                        let err_msg = format!("Failed to increase storage capacity: {:?}", e);
-                        error!(target: LOG_TARGET, "{}", err_msg);
-                        RejectedStorageRequestReason::InternalError
-                    })?;
+                    .map_err(|e| anyhow!("Failed to increase storage capacity: {:?}", e))?;
 
                 let available_capacity = self
                     .storage_hub_handler
                     .blockchain
                     .query_available_storage_capacity(own_msp_id)
                     .await
-                    .map_err(|e| {
-                        let err_msg =
-                            format!("Failed to query available storage capacity: {:?}", e);
-                        error!(target: LOG_TARGET, "{}", err_msg);
-                        RejectedStorageRequestReason::InternalError
-                    })?;
+                    .map_err(|e| anyhow!("Failed to query available storage capacity: {:?}", e))?;
 
                 // Reject storage request if the new available capacity is still less than the file size.
                 if available_capacity < event.size {
-                    let err_msg = "Increased storage capacity is still insufficient to volunteer for file. Rejecting storage request.";
-                    warn!(target: LOG_TARGET, "{}", err_msg);
+                    let err_msg = format!(
+                        "Increased storage capacity is still insufficient to volunteer for file. Rejecting storage request. Available: {}, Required: {}",
+                        available_capacity, event.size
+                    );
+                    warn!(target: LOG_TARGET, err_msg);
 
-                    return Err(RejectedStorageRequestReason::ReachedMaximumCapacity);
+                    return Err(anyhow!(err_msg));
                 }
             }
         } else {
@@ -1077,11 +1051,7 @@ where
         // Create file in file storage if it is not present so we can write uploaded chunks as soon as possible.
         let file_in_file_storage = write_file_storage
             .get_metadata(&file_key.into())
-            .map_err(|e| {
-                let err_msg = format!("Failed to get metadata from file storage: {:?}", e);
-                error!(target: LOG_TARGET, "{}", err_msg);
-                RejectedStorageRequestReason::InternalError
-            })?
+            .map_err(|e| anyhow!("Failed to get metadata from file storage: {:?}", e))?
             .is_some();
 
         debug!(
@@ -1099,11 +1069,7 @@ where
                     metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>(),
                     metadata,
                 )
-                .map_err(|e| {
-                    let err_msg = format!("Failed to insert file in file storage: {:?}", e);
-                    error!(target: LOG_TARGET, "{}", err_msg);
-                    RejectedStorageRequestReason::InternalError
-                })?;
+                .map_err(|e| anyhow!("Failed to insert file in file storage: {:?}", e))?;
         } else {
             debug!(target: LOG_TARGET, "File key {:x} found in file storage.", file_key);
         }
@@ -1111,11 +1077,11 @@ where
         // If the file is in file storage, we can skip the file transfer,
         // and proceed to accepting the storage request directly, provided that we have the entire file in file storage.
         if file_in_file_storage {
-            debug!(target: LOG_TARGET, "File key {:?} found in both file storage. No need to receive the file from the user.", file_key);
+            info!(target: LOG_TARGET, "File key {:?} found in both file storage. No need to receive the file from the user.", file_key);
 
             // Do not skip the file key even if it is in forest storage since not responding to the storage request or rejecting it would result in the file key being deleted from the network entirely.
             if file_in_forest_storage {
-                debug!(target: LOG_TARGET, "File key {:?} found in forest storage when storage request is open. The storage request is most likely opened to increase replication amongst BSPs, but still requires the MSP to accept the request.", file_key);
+                info!(target: LOG_TARGET, "File key {:?} found in forest storage when storage request is open. The storage request is most likely opened to increase replication amongst BSPs, but still requires the MSP to accept the request.", file_key);
             }
 
             // Check if the file is complete in file storage.
@@ -1128,15 +1094,8 @@ where
                 }
             };
 
-            debug!(
-                target: LOG_TARGET,
-                "File key {:?}: file_complete={}",
-                file_key,
-                file_complete
-            );
-
             if file_complete {
-                debug!(target: LOG_TARGET, "File key {:x} is complete in file storage. Proceeding to accept storage request.", file_key);
+                info!(target: LOG_TARGET, "File key {:x} is complete in file storage. Proceeding to accept storage request.", file_key);
                 self.on_file_complete(&file_key.into()).await;
 
                 // This finishes the task, as we already have the entire file in file storage and we queued
@@ -1156,24 +1115,15 @@ where
         // the entire file so that the file uploading process is complete.
         for peer_id in event.user_peer_ids.iter() {
             let peer_id = match std::str::from_utf8(&peer_id.as_slice()) {
-                Ok(str_slice) => PeerId::from_str(str_slice).map_err(|e| {
-                    error!(target: LOG_TARGET, "Failed to convert peer ID to PeerId: {}", e);
-                    RejectedStorageRequestReason::InternalError
-                })?,
-                Err(e) => {
-                    error!(target: LOG_TARGET, "Failed to convert peer ID to a string: {}", e);
-                    return Err(RejectedStorageRequestReason::InternalError);
-                }
+                Ok(str_slice) => PeerId::from_str(str_slice)
+                    .map_err(|e| anyhow!("Failed to convert peer ID to PeerId: {}", e))?,
+                Err(e) => return Err(anyhow!("Failed to convert peer ID to a string: {}", e)),
             };
             self.storage_hub_handler
                 .file_transfer
                 .register_new_file(peer_id, file_key)
                 .await
-                .map_err(|e| {
-                    let err_msg = format!("Failed to register new file peer: {:?}", e);
-                    error!(target: LOG_TARGET, "{}", err_msg);
-                    RejectedStorageRequestReason::InternalError
-                })?;
+                .map_err(|e| anyhow!("Failed to register new file peer: {:?}", e))?;
         }
 
         Ok(())
