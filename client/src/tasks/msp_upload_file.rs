@@ -483,6 +483,7 @@ where
             .collect::<Vec<_>>();
 
         for respond in filtered_pending_file_keys {
+            info!(target: LOG_TARGET, "Processing response for file key {:x}", respond.file_key);
             let bucket_id = match read_file_storage.get_metadata(&respond.file_key) {
                 Ok(Some(metadata)) => H256::from_slice(metadata.bucket_id().as_ref()),
                 Ok(None) => {
