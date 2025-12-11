@@ -125,6 +125,7 @@ impl MspService {
                 Error::BadRequest(format!("Failed to get MSP multiaddresses: {}", e))
             })?;
 
+        // TODO: fetch from RPC the appropriate details
         Ok(InfoResponse {
             client: "storagehub-node v1.0.0".to_string(),
             version: "StorageHub MSP v0.1.0".to_string(),
@@ -140,19 +141,39 @@ impl MspService {
 
     /// Get MSP statistics
     pub async fn get_stats(&self) -> Result<StatsResponse, Error> {
-        // TODO(MOCK): replace with actual values retrieved from the RPC/DB
         debug!(target: "msp_service::get_stats", "Getting MSP stats");
+
+        let info = self
+            .rpc
+            .get_msp_info(self.msp_id)
+            .await
+            .map_err(|e| Error::BadRequest(format!("Failed to retrieve MSP stats from RPC: {e}")))?
+            .ok_or(Error::BadRequest(
+                "Unable to retrieve MSP info: MSP not found".to_string(),
+            ))?;
+
+        let active_users = self
+            .rpc
+            .get_number_of_active_users(self.msp_id)
+            .await
+            .map_err(|e| {
+                Error::BadRequest(format!(
+                    "Field to retrieve number of active users from RPC: {e}"
+                ))
+            })?;
+
+        debug!(?info, %active_users, "msp stats");
 
         Ok(StatsResponse {
             capacity: Capacity {
-                total_bytes: 1099511627776,
-                available_bytes: 879609302220,
-                used_bytes: 219902325556,
+                total_bytes: BigDecimal::from(info.capacity).to_string(),
+                available_bytes: BigDecimal::from(info.capacity - info.capacity_used).to_string(),
+                used_bytes: BigDecimal::from(info.capacity_used).to_string(),
             },
-            active_users: 152,
-            last_capacity_change: 123,
-            value_props_amount: 42,
-            buckets_amount: 1024,
+            active_users: active_users as u64,
+            last_capacity_change: BigDecimal::from(info.last_capacity_change).to_string(),
+            value_props_amount: BigDecimal::from(info.amount_of_value_props).to_string(),
+            buckets_amount: BigDecimal::from(info.amount_of_buckets).to_string(),
         })
     }
 
@@ -359,13 +380,11 @@ impl MspService {
                     // This is a BSP (dynamic rate payment stream)
                     // Cost per tick = amount_provided * 1e-9 * current_price_per_giga_unit_per_tick
 
-                    // Convert u128 price to BigDecimal and multiply
-                    let price_bd = BigDecimal::from(current_price_per_giga_unit_per_tick);
-
                     // Matches the computation done in the runtime
                     //
                     // (price * amount) / gigaunit
-                    let cost = (price_bd * amount_provided) / shp_constants::GIGAUNIT;
+                    let cost = (&current_price_per_giga_unit_per_tick * amount_provided)
+                        / shp_constants::GIGAUNIT;
 
                     // Truncate the decimal digits of the cost per tick
                     let cost = cost.with_scale_round(0, RoundingMode::Down);
@@ -926,7 +945,7 @@ impl MspService {
 mod tests {
     use std::{str::FromStr, sync::Arc};
 
-    use bigdecimal::BigDecimal;
+    use bigdecimal::{BigDecimal, Signed};
     use serde_json::Value;
 
     use shp_types::Hash;
@@ -1009,11 +1028,87 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_stats() {
-        let service = MockMspServiceBuilder::new().build().await;
+        let service = MockMspServiceBuilder::new()
+            .init_repository_with(|client| {
+                Box::pin(async move {
+                    // Create MSP with the ID that matches the default config
+                    let _ = client
+                        .create_msp(
+                            &MOCK_ADDRESS.to_string(),
+                            OnchainMspId::new(Hash::from_slice(&DUMMY_MSP_ID)),
+                        )
+                        .await
+                        .expect("should create MSP");
+                })
+            })
+            .await
+            .build()
+            .await;
         let stats = service.get_stats().await.unwrap();
 
-        assert!(stats.capacity.total_bytes > 0);
-        assert!(stats.capacity.available_bytes <= stats.capacity.total_bytes);
+        let total_bytes = stats
+            .capacity
+            .total_bytes
+            .parse::<BigDecimal>()
+            .expect("total_bytes to be a number");
+        let available_bytes = stats
+            .capacity
+            .available_bytes
+            .parse::<BigDecimal>()
+            .expect("available_bytes to be a number");
+        let used_bytes = stats
+            .capacity
+            .used_bytes
+            .parse::<BigDecimal>()
+            .expect("used_bytes to be a number");
+
+        assert!(
+            total_bytes.is_positive(),
+            "Total bytes should always be positive"
+        );
+        assert!(
+            available_bytes <= total_bytes,
+            "Available bytes should never be more than total bytes"
+        );
+        assert!(
+            used_bytes <= total_bytes,
+            "Used bytes should never be more than total bytes"
+        );
+        assert_eq!(
+            used_bytes + available_bytes,
+            total_bytes,
+            "Available + used bytes should always equal total bytes"
+        );
+
+        // Verify last_capacity_change is a valid number string
+        let last_capacity_change = stats
+            .last_capacity_change
+            .parse::<BigDecimal>()
+            .expect("last_capacity_change to be a valid number");
+        assert!(
+            !last_capacity_change.is_negative(),
+            "Last capacity change should be non-negative"
+        );
+
+        // Verify value_props_amount is a valid number string
+        let value_props_amount = stats
+            .value_props_amount
+            .parse::<BigDecimal>()
+            .expect("value_props_amount to be a valid number");
+        assert!(
+            !value_props_amount.is_negative(),
+            "Value props amount should be non-negative"
+        );
+
+        // Verify buckets_amount is a valid number string
+        let buckets_amount = stats
+            .buckets_amount
+            .parse::<BigDecimal>()
+            .expect("buckets_amount to be a valid number");
+        assert!(
+            !buckets_amount.is_negative(),
+            "Buckets amount should be non-negative"
+        );
     }
 
     #[tokio::test]
