@@ -23,7 +23,7 @@ use shc_rpc::{
     GetFileFromFileStorageResult, GetValuePropositionsResult, RpcProviderId, SaveFileToDisk,
 };
 use sp_core::Blake2Hasher;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 use shc_indexer_db::{models::Bucket as DBBucket, OnchainMspId};
 use shp_types::Hash;
