@@ -28,7 +28,12 @@ export const getContainerIp = async (containerName: string, verbose = false): Pr
 
     // TODO: Replace with dockerode command
     try {
-      const { stdout } = await execFileAsync("docker", ["inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", containerName]);
+      const { stdout } = await execFileAsync("docker", [
+        "inspect",
+        "-f",
+        "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
+        containerName
+      ]);
       return stdout.trim();
     } catch {
       await sleep(sleepTime);

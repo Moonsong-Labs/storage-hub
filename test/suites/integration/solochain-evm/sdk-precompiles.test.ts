@@ -27,7 +27,6 @@ import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import { ALITH_PRIVATE_KEY } from "../../../util/evmNet/keyring";
 import { fileURLToPath } from "node:url";
 
-
 await describeMspNet(
   "Solochain EVM SDK Precompiles Integration",
   {
