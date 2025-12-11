@@ -57,6 +57,10 @@ struct Args {
     /// Override MSP trusted file transfer server URL
     #[arg(long)]
     msp_trusted_file_transfer_server_url: Option<String>,
+
+    /// Use legacy RPC-based upload method (receiveBackendFileChunks)
+    #[arg(long)]
+    msp_use_legacy_upload_method: bool,
 }
 
 #[tokio::main]
@@ -80,6 +84,7 @@ async fn main() -> Result<()> {
     debug!(target: "main", rpc_url = %config.storage_hub.rpc_url, "RPC configuration");
     debug!(target: "main", msp_callback_url = %config.msp.callback_url, "MSP callback configuration");
     debug!(target: "main", msp_trusted_file_transfer_server_url = %config.msp.trusted_file_transfer_server_url, "MSP trusted file transfer server configuration");
+    debug!(target: "main", use_legacy_upload_method = %config.msp.use_legacy_upload_method, "MSP upload method configuration");
 
     let memory_storage = InMemoryStorage::new();
     let storage = Arc::new(BoxedStorageWrapper::new(memory_storage));
@@ -144,6 +149,9 @@ fn load_config() -> Result<Config> {
     }
     if let Some(msp_trusted_file_transfer_server_url) = args.msp_trusted_file_transfer_server_url {
         config.msp.trusted_file_transfer_server_url = msp_trusted_file_transfer_server_url;
+    }
+    if args.msp_use_legacy_upload_method {
+        config.msp.use_legacy_upload_method = true;
     }
 
     Ok(config)

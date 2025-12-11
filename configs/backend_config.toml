@@ -67,6 +67,9 @@ trusted_file_transfer_server_url = "http://localhost:7070"
 upload_retry_attempts = 3
 # Delay in seconds between file upload retry attempts (default: 1)
 upload_retry_delay_secs = 1
+# Use legacy RPC-based upload method instead of trusted file transfer server (default: false)
+# When true, file chunks (and proofs) are sent via the receiveBackendFileChunks RPC endpoint
+use_legacy_upload_method = false
 
 # Database configuration
 [database]

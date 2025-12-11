@@ -13,14 +13,17 @@ use futures::stream;
 use serde::{Deserialize, Serialize};
 use shc_common::{
     trusted_file_transfer::encode_chunk_with_id,
-    types::{ChunkId, FileKeyProof, FileMetadata, StorageProofsMerkleTrieLayout, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE, FILE_CHUNK_SIZE},
+    types::{
+        ChunkId, FileKeyProof, FileMetadata, StorageProofsMerkleTrieLayout,
+        BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE, FILE_CHUNK_SIZE,
+    },
 };
 use shc_file_manager::{in_memory::InMemoryFileDataTrie, traits::FileDataTrie};
 use shc_rpc::{
     GetFileFromFileStorageResult, GetValuePropositionsResult, RpcProviderId, SaveFileToDisk,
 };
 use sp_core::Blake2Hasher;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use shc_indexer_db::{models::Bucket as DBBucket, OnchainMspId};
 use shp_types::Hash;
@@ -610,10 +613,15 @@ impl MspService {
 
         // Choose upload method based on configuration
         if self.msp_config.use_legacy_upload_method {
-            debug!(target: "msp_service::process_and_upload_file", "Using legacy RPC-based upload method");
+            debug!(target: "msp_service::process_and_upload_file", "Using legacy RPC-based upload method (receiveBackendFileChunks)");
             self.legacy_upload_file_in_batches(&trie, &file_metadata, total_chunks)
                 .await
-                .map_err(|e| Error::BadRequest(format!("Failed to send chunks to MSP via legacy method: {}", e)))?;
+                .map_err(|e| {
+                    Error::BadRequest(format!(
+                        "Failed to send chunks to MSP via legacy method: {}",
+                        e
+                    ))
+                })?;
         } else {
             debug!(target: "msp_service::process_and_upload_file", "Using new trusted file transfer server upload method");
             self.send_chunks_to_msp(trie, file_key, total_chunks)
@@ -803,7 +811,10 @@ impl MspService {
     }
 
     /// Legacy method: Send upload request to MSP via RPC
-    async fn legacy_send_upload_request_to_msp(&self, file_key_proof: FileKeyProof) -> Result<(), Error> {
+    async fn legacy_send_upload_request_to_msp(
+        &self,
+        file_key_proof: FileKeyProof,
+    ) -> Result<(), Error> {
         debug!(
             target: "msp_service::legacy_send_upload_request_to_msp",
             "Attempting to send upload request to MSP"
