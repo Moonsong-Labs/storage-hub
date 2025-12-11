@@ -5,13 +5,15 @@ use std::sync::Arc;
 use alloy_core::{hex::ToHexExt, primitives::Address};
 use axum_extra::extract::multipart::Field;
 use bigdecimal::{BigDecimal, RoundingMode};
+use std::collections::HashSet;
+
 use bytes::Bytes;
-use codec::Decode;
+use codec::{Decode, Encode};
 use futures::stream;
 use serde::{Deserialize, Serialize};
 use shc_common::{
     trusted_file_transfer::encode_chunk_with_id,
-    types::{ChunkId, FileMetadata, StorageProofsMerkleTrieLayout, FILE_CHUNK_SIZE},
+    types::{ChunkId, FileKeyProof, FileMetadata, StorageProofsMerkleTrieLayout, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE, FILE_CHUNK_SIZE},
 };
 use shc_file_manager::{in_memory::InMemoryFileDataTrie, traits::FileDataTrie};
 use shc_rpc::{
@@ -606,9 +608,18 @@ impl MspService {
 
         debug!(target: "msp_service::process_and_upload_file", total_chunks = total_chunks, "File chunking completed");
 
-        self.send_chunks_to_msp(trie, file_key, total_chunks)
-            .await
-            .map_err(|e| Error::BadRequest(format!("Failed to send chunks to MSP: {}", e)))?;
+        // Choose upload method based on configuration
+        if self.msp_config.use_legacy_upload_method {
+            debug!(target: "msp_service::process_and_upload_file", "Using legacy RPC-based upload method");
+            self.legacy_upload_file_in_batches(&trie, &file_metadata, total_chunks)
+                .await
+                .map_err(|e| Error::BadRequest(format!("Failed to send chunks to MSP via legacy method: {}", e)))?;
+        } else {
+            debug!(target: "msp_service::process_and_upload_file", "Using new trusted file transfer server upload method");
+            self.send_chunks_to_msp(trie, file_key, total_chunks)
+                .await
+                .map_err(|e| Error::BadRequest(format!("Failed to send chunks to MSP: {}", e)))?;
+        }
 
         // If the complete file was uploaded to the MSP successfully, we can return the response.
         let bytes_location = file_metadata.location();
@@ -683,6 +694,168 @@ impl MspService {
             )));
         }
         Ok(())
+    }
+
+    /// Legacy method: Upload file in batches using RPC calls
+    async fn legacy_upload_file_in_batches(
+        &self,
+        trie: &InMemoryFileDataTrie<StorageProofsMerkleTrieLayout>,
+        file_metadata: &FileMetadata,
+        total_chunks: u64,
+    ) -> Result<(), Error> {
+        // Get how many chunks fit in a batch of BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE, rounding down.
+        const CHUNKS_PER_BATCH: u64 = BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE as u64 / FILE_CHUNK_SIZE;
+
+        // Initialize the index of the initial chunk to process in this batch.
+        let mut batch_start_chunk_index = 0;
+        let total_batches = (total_chunks + CHUNKS_PER_BATCH - 1) / CHUNKS_PER_BATCH;
+        let mut batch_number = 1;
+
+        // Start processing batches, until all chunks have been processed.
+        while batch_start_chunk_index < total_chunks {
+            // Get the chunks to send in this batch, capping at the total amount of chunks of the file.
+            let chunks = (batch_start_chunk_index
+                ..(batch_start_chunk_index + CHUNKS_PER_BATCH).min(total_chunks))
+                .map(ChunkId::new)
+                .collect::<HashSet<_>>();
+            let chunks_in_batch = chunks.len() as u64;
+
+            debug!(
+                target: "msp_service::legacy_upload_file_in_batches",
+                batch_number = batch_number,
+                total_batches = total_batches,
+                chunk_start = batch_start_chunk_index,
+                chunk_end = batch_start_chunk_index + chunks_in_batch - 1,
+                "Processing batch"
+            );
+
+            // Generate the proof for the batch.
+            let file_proof = trie.generate_proof(&chunks).map_err(|e| {
+                Error::BadRequest(format!(
+                    "Failed to generate proof for batch {}: {}",
+                    batch_number, e
+                ))
+            })?;
+
+            // Convert the generated proof to a FileKeyProof and send it to the MSP.
+            let file_key_proof = file_proof
+                .to_file_key_proof(file_metadata.clone())
+                .map_err(|e| Error::BadRequest(format!("Failed to convert proof: {:?}", e)))?;
+
+            // Send the proof with the chunks to the MSP.
+            self.legacy_upload_to_msp(&chunks, &file_key_proof)
+                .await
+                .map_err(|e| {
+                    Error::BadRequest(format!(
+                        "Failed to upload batch {} to MSP: {}",
+                        batch_number, e
+                    ))
+                })?;
+
+            debug!(
+                target: "msp_service::legacy_upload_file_in_batches",
+                batch_number = batch_number,
+                total_batches = total_batches,
+                "Batch uploaded successfully"
+            );
+
+            // Update the initial chunk index for the next batch.
+            batch_start_chunk_index += chunks_in_batch;
+            batch_number += 1;
+        }
+
+        Ok(())
+    }
+
+    /// Legacy method: Upload chunks to MSP via RPC
+    async fn legacy_upload_to_msp(
+        &self,
+        chunk_ids: &HashSet<ChunkId>,
+        file_key_proof: &FileKeyProof,
+    ) -> Result<(), Error> {
+        debug!(
+            target: "msp_service::legacy_upload_to_msp",
+            chunk_count = chunk_ids.len(),
+            "Uploading chunks to MSP"
+        );
+
+        // Ensure we are not incorrectly trying to upload an empty file.
+        if chunk_ids.is_empty() {
+            return Err(Error::BadRequest(
+                "Cannot upload file with no chunks".to_string(),
+            ));
+        }
+
+        debug!(target: "msp_service::legacy_upload_to_msp", "Trying to send the chunks batch");
+        let ret = self
+            .legacy_send_upload_request_to_msp(file_key_proof.clone())
+            .await;
+        if ret.is_ok() {
+            debug!(
+                target: "msp_service::legacy_upload_to_msp",
+                chunk_count = chunk_ids.len(),
+                file_key = %format!("0x{}", hex::encode(file_key_proof.file_metadata.file_key::<Blake2Hasher>())),
+                bucket_id = %format!("0x{}", hex::encode(file_key_proof.file_metadata.bucket_id())),
+                "Successfully uploaded chunks to MSP"
+            );
+        }
+        ret
+    }
+
+    /// Legacy method: Send upload request to MSP via RPC
+    async fn legacy_send_upload_request_to_msp(&self, file_key_proof: FileKeyProof) -> Result<(), Error> {
+        debug!(
+            target: "msp_service::legacy_send_upload_request_to_msp",
+            "Attempting to send upload request to MSP"
+        );
+
+        // Get the file metadata from the received FileKeyProof.
+        let file_metadata = file_key_proof.clone().file_metadata;
+
+        // Get the file key from the file metadata.
+        let file_key: shp_types::Hash = file_metadata.file_key::<Blake2Hasher>();
+        let file_key_hexstr = format!("{file_key:x}");
+
+        // Encode the FileKeyProof as SCALE for transport
+        let encoded_proof = file_key_proof.encode();
+
+        let max_retries = self.msp_config.upload_retry_attempts;
+        let delay_between_retries_secs = self.msp_config.upload_retry_delay_secs;
+        let mut retry_attempts = 0;
+
+        while retry_attempts < max_retries {
+            debug!(target: "msp_service::legacy_send_upload_request_to_msp", "Sending file chunks to MSP via RPC");
+            let result: Result<Vec<u8>, _> = self
+                .rpc
+                .receive_file_chunks(&file_key_hexstr, encoded_proof.clone())
+                .await;
+
+            match result {
+                Ok(_raw) => {
+                    debug!("Successfully sent upload request to MSP");
+                    return Ok(());
+                }
+                Err(e) => {
+                    retry_attempts += 1;
+                    if retry_attempts < max_retries {
+                        warn!(
+                            target: "msp_service::legacy_send_upload_request_to_msp",
+                            retry_attempt = retry_attempts,
+                            error = ?e,
+                            "Upload request to MSP failed via RPC, retrying... (attempt {retry_attempts})",
+                        );
+                        tokio::time::sleep(std::time::Duration::from_secs(
+                            delay_between_retries_secs,
+                        ))
+                        .await;
+                    } else {
+                        return Err(Error::Internal);
+                    }
+                }
+            }
+        }
+
+        Err(Error::Internal)
     }
 
     /// Verifies that a user can access the given bucket.

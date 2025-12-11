@@ -200,6 +200,8 @@ pub struct MspConfig {
     pub upload_retry_attempts: u32,
     /// Delay in seconds between file upload retry attempts
     pub upload_retry_delay_secs: u64,
+    /// If true, use legacy RPC-based upload method instead of trusted file transfer server
+    pub use_legacy_upload_method: bool,
 }
 
 /// Database configuration for PostgreSQL connection
@@ -251,6 +253,7 @@ impl Default for Config {
                     .to_string(),
                 upload_retry_attempts: DEFAULT_UPLOAD_RETRY_ATTEMPTS,
                 upload_retry_delay_secs: DEFAULT_UPLOAD_RETRY_DELAY_SECS,
+                use_legacy_upload_method: false,
             },
             database: DatabaseConfig {
                 url: DEFAULT_DATABASE_URL.to_string(),
