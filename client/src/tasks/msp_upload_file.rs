@@ -665,11 +665,10 @@ where
                 }
 
                 // Release the forest root write lock before returning error
-                let _ = self
-                    .storage_hub_handler
+                self.storage_hub_handler
                     .blockchain
                     .release_forest_root_write_lock(forest_root_write_tx)
-                    .await;
+                    .await?;
 
                 return Err(e);
             }
@@ -747,11 +746,10 @@ where
                         }
 
                         // Release the forest root write lock before requeueing
-                        let _ = self
-                            .storage_hub_handler
+                        self.storage_hub_handler
                             .blockchain
                             .release_forest_root_write_lock(forest_root_write_tx)
-                            .await;
+                            .await?;
 
                         return Err(anyhow!(
                             "Extrinsic failed with proof error: {:?}",
@@ -800,11 +798,10 @@ where
                     }
 
                     // Release the forest root write lock before returning error
-                    let _ = self
-                        .storage_hub_handler
+                    self.storage_hub_handler
                         .blockchain
                         .release_forest_root_write_lock(forest_root_write_tx)
-                        .await;
+                        .await?;
 
                     return Err(anyhow!("Extrinsic failed: {:?}", dispatch_error));
                 }
