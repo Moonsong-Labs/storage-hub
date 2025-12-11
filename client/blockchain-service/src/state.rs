@@ -376,7 +376,9 @@ impl<'a> BlockchainServiceStateStoreRwContext<'a> {
 }
 
 impl<'a> ProvidesDbContext for BlockchainServiceStateStoreRwContext<'a> {
-    fn db_context(&self) -> &TypedDbContext<TypedRocksDB, BufferedWriteSupport<TypedRocksDB>> {
+    fn db_context(
+        &self,
+    ) -> &TypedDbContext<'_, TypedRocksDB, BufferedWriteSupport<'_, TypedRocksDB>> {
         &self.db_context
     }
 }
@@ -394,7 +396,9 @@ pub struct PendingConfirmStoringRequestDequeAPI<'a, Runtime: StorageEnableRuntim
 impl<'a, Runtime: StorageEnableRuntime> ProvidesDbContext
     for PendingConfirmStoringRequestDequeAPI<'a, Runtime>
 {
-    fn db_context(&self) -> &TypedDbContext<TypedRocksDB, BufferedWriteSupport<TypedRocksDB>> {
+    fn db_context(
+        &self,
+    ) -> &TypedDbContext<'_, TypedRocksDB, BufferedWriteSupport<'_, TypedRocksDB>> {
         &self.db_context
     }
 }
@@ -421,7 +425,9 @@ pub struct PendingMspRespondStorageRequestDequeAPI<'a, Runtime: StorageEnableRun
 impl<'a, Runtime: StorageEnableRuntime> ProvidesDbContext
     for PendingMspRespondStorageRequestDequeAPI<'a, Runtime>
 {
-    fn db_context(&self) -> &TypedDbContext<TypedRocksDB, BufferedWriteSupport<TypedRocksDB>> {
+    fn db_context(
+        &self,
+    ) -> &TypedDbContext<'_, TypedRocksDB, BufferedWriteSupport<'_, TypedRocksDB>> {
         &self.db_context
     }
 }
@@ -448,7 +454,9 @@ pub struct PendingStopStoringForInsolventUserRequestDequeAPI<'a, Runtime: Storag
 impl<'a, Runtime: StorageEnableRuntime> ProvidesDbContext
     for PendingStopStoringForInsolventUserRequestDequeAPI<'a, Runtime>
 {
-    fn db_context(&self) -> &TypedDbContext<TypedRocksDB, BufferedWriteSupport<TypedRocksDB>> {
+    fn db_context(
+        &self,
+    ) -> &TypedDbContext<'_, TypedRocksDB, BufferedWriteSupport<'_, TypedRocksDB>> {
         &self.db_context
     }
 }
@@ -476,7 +484,9 @@ pub struct PendingFileDeletionRequestDequeAPI<'a, Runtime: StorageEnableRuntime>
 impl<'a, Runtime: StorageEnableRuntime> ProvidesDbContext
     for PendingFileDeletionRequestDequeAPI<'a, Runtime>
 {
-    fn db_context(&self) -> &TypedDbContext<TypedRocksDB, BufferedWriteSupport<TypedRocksDB>> {
+    fn db_context(
+        &self,
+    ) -> &TypedDbContext<'_, TypedRocksDB, BufferedWriteSupport<'_, TypedRocksDB>> {
         &self.db_context
     }
 }

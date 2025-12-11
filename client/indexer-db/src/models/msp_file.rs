@@ -1,7 +1,11 @@
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
-use crate::{schema::msp_file, types::OnchainMspId, DbConnection};
+use crate::{
+    schema::{bucket, file, msp, msp_file},
+    types::OnchainMspId,
+    DbConnection,
+};
 
 /// Association table between MSP and File
 #[derive(Debug, Queryable, Insertable, Selectable, Associations)]
@@ -34,8 +38,6 @@ impl MspFile {
         file_key: &[u8],
         onchain_msp_id: OnchainMspId,
     ) -> Result<(), diesel::result::Error> {
-        use crate::schema::{file, msp};
-
         // First, get the database MSP ID from the onchain MSP ID
         let msp_db_id: i64 = msp::table
             .filter(msp::onchain_msp_id.eq(onchain_msp_id))
@@ -53,7 +55,7 @@ impl MspFile {
         // Log if we found multiple files with the same key
         if file_ids.len() > 1 {
             log::warn!(
-                "Found {} files with the same file_key: {:?}. This is an inconsistent state. Will proceed to delete all associated file IDs with this key.",
+                "Found {} files with the same file_key: {:?}. This is expected only if there was more than one storage request for the same file key. Will proceed to delete all associated file IDs with this key.",
                 file_ids.len(),
                 file_key
             );
@@ -88,12 +90,9 @@ impl MspFile {
         bucket_id: &[u8],
         msp_id: i64,
     ) -> Result<(), diesel::result::Error> {
-        use crate::schema::{bucket, file};
-
-        // Get all file IDs for this bucket
+        // Get all file IDs that match the onchain bucket ID, regardless of the DB bucket ID
         let file_ids: Vec<i64> = file::table
-            .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
-            .filter(bucket::onchain_bucket_id.eq(bucket_id))
+            .filter(file::onchain_bucket_id.eq(bucket_id))
             .select(file::id)
             .load(conn)
             .await?;
@@ -116,12 +115,13 @@ impl MspFile {
         bucket_id: &[u8],
         msp_id: i64,
     ) -> Result<usize, diesel::result::Error> {
-        use crate::schema::{bucket, file};
-
         // Get all file IDs for this bucket
+        // Only create MSP-file associations for files that are in the bucket's forest,
+        // as files could have been deleted while the bucket was orphaned from a MSP.
         let file_ids: Vec<i64> = file::table
             .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
             .filter(bucket::onchain_bucket_id.eq(bucket_id))
+            .filter(file::is_in_bucket.eq(true))
             .select(file::id)
             .load(conn)
             .await?;
@@ -153,53 +153,10 @@ impl MspFile {
         Ok(created_count)
     }
 
-    /// Updates all MSP-file associations for a bucket from old MSP to new MSP
-    pub async fn update_msp_for_bucket<'a>(
-        conn: &mut DbConnection<'a>,
-        bucket_id: &[u8],
-        old_msp_id: i64,
-        new_msp_id: i64,
-    ) -> Result<usize, diesel::result::Error> {
-        use crate::schema::{bucket, file};
-
-        // Get all file IDs for this bucket
-        let file_ids: Vec<i64> = file::table
-            .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
-            .filter(bucket::onchain_bucket_id.eq(bucket_id))
-            .select(file::id)
-            .load(conn)
-            .await?;
-
-        if file_ids.is_empty() {
-            log::debug!("No files found in bucket: {:?}", bucket_id);
-            return Ok(0);
-        }
-
-        // Update all msp_file associations from old MSP to new MSP
-        let updated_count = diesel::update(msp_file::table)
-            .filter(msp_file::msp_id.eq(old_msp_id))
-            .filter(msp_file::file_id.eq_any(&file_ids))
-            .set(msp_file::msp_id.eq(new_msp_id))
-            .execute(conn)
-            .await?;
-
-        log::debug!(
-            "Updated {} MSP-file associations for bucket {:?} from MSP {} to MSP {}",
-            updated_count,
-            bucket_id,
-            old_msp_id,
-            new_msp_id
-        );
-
-        Ok(updated_count)
-    }
-
     pub async fn get_msp_for_file_key<'a>(
         conn: &mut DbConnection<'a>,
         file_key: &[u8],
     ) -> Result<Option<OnchainMspId>, diesel::result::Error> {
-        use crate::schema::{file, msp};
-
         let msp_id: Option<OnchainMspId> = file::table
             .filter(file::file_key.eq(file_key))
             .inner_join(msp_file::table.on(file::id.eq(msp_file::file_id)))

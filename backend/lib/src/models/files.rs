@@ -17,6 +17,10 @@ pub enum FileStatus {
     Ready,
     /// Indicates that the file's storage request has not been fulfilled completely but is still with the MSP
     Expired,
+    /// Indicates that the user explicitly revoked the storage request
+    Revoked,
+    /// Indicates that the MSP rejected the storage request
+    Rejected,
     /// Indicates that the file's has been marked for deletion and will be removed from the MSP soon
     DeletionInProgress,
 }
@@ -55,6 +59,8 @@ impl FileInfo {
                 Ok(FileStorageRequestStep::Requested) => FileStatus::InProgress,
                 Ok(FileStorageRequestStep::Stored) => FileStatus::Ready,
                 Ok(FileStorageRequestStep::Expired) => FileStatus::Expired,
+                Ok(FileStorageRequestStep::Revoked) => FileStatus::Revoked,
+                Ok(FileStorageRequestStep::Rejected) => FileStatus::Rejected,
                 Err(step) => {
                     error!(step, "Unsupported File's StorageRequest step");
                     unreachable!("unknown storage request step #{step} present in Indexer DB")

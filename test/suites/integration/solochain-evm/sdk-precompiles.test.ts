@@ -22,6 +22,7 @@ import {
   type SqlClient,
   waitFor
 } from "../../../util";
+import type { StatsResponse } from "../../../util/backend/types";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import { ALITH_PRIVATE_KEY } from "../../../util/evmNet/keyring";
 
@@ -230,59 +231,55 @@ await describeMspNet(
     });
 
     it("Should get MSP stats via the SDK's MspClient", async () => {
-      const stats = await mspClient.info.getStats();
-      // TODO: Backend returns mocked stats (see backend/lib/src/services/msp.rs).
-      // When the backend serves real values, replace these fixed expectations
-      // with config-driven or dynamic assertions.
-      const expectedTotal = 1_099_511_627_776; // 1 TiB
-      const expectedUsed = 219_902_325_556;
-      const expectedAvailable = 879_609_302_220;
-      const expectedBuckets = 1024;
-      const expectedActiveUsers = 152;
-      const expectedLastCapacityChange = 123;
-      const expectedValuePropsAmount = 42;
+      // Get MSP info from chain to compare with backend stats
+      const mspId = userApi.shConsts.DUMMY_MSP_ID;
+      const mspInfoOption = await userApi.query.providers.mainStorageProviders(mspId);
+      assert(mspInfoOption.isSome, "MSP should exist on chain");
+      const mspInfo = mspInfoOption.unwrap();
 
+      // Get active users count via runtime API
+      const activeUsersList =
+        await userApi.call.paymentStreamsApi.getUsersOfPaymentStreamsOfProvider(mspId);
+      const activeUsersCount = activeUsersList.length;
+
+      // Get stats from backend via SDK
+      const stats = (await mspClient.info.getStats()) as StatsResponse;
+
+      // Verify capacity values match chain data
       strictEqual(
         stats.capacity.totalBytes,
-        expectedTotal,
-        "MSP total capacity should match backend mock value"
+        mspInfo.capacity.toString(),
+        "MSP total capacity should match on-chain data"
       );
       strictEqual(
         stats.capacity.usedBytes,
-        expectedUsed,
-        "MSP used capacity should match backend mock value"
+        mspInfo.capacityUsed.toString(),
+        "MSP used capacity should match on-chain data"
       );
       strictEqual(
         stats.capacity.availableBytes,
-        expectedAvailable,
-        "MSP available capacity should match backend mock value"
+        (mspInfo.capacity.toBigInt() - mspInfo.capacityUsed.toBigInt()).toString(),
+        "MSP available capacity should match calculated value (total - used)"
       );
       strictEqual(
         stats.bucketsAmount,
-        expectedBuckets,
-        "MSP buckets amount should match backend mock value"
+        mspInfo.amountOfBuckets.toString(),
+        "MSP buckets amount should match on-chain data"
       );
       strictEqual(
         stats.activeUsers,
-        expectedActiveUsers,
-        "MSP active users should match backend mock value"
+        activeUsersCount,
+        "MSP active users should match runtime API data"
       );
       strictEqual(
         stats.lastCapacityChange,
-        expectedLastCapacityChange,
-        "MSP last capacity change should match backend mock value"
+        mspInfo.lastCapacityChange.toString(),
+        "MSP last capacity change should match on-chain data"
       );
       strictEqual(
         stats.valuePropsAmount,
-        expectedValuePropsAmount,
-        "MSP value props amount should match backend mock value"
-      );
-
-      // Sanity check invariants
-      strictEqual(
-        stats.capacity.availableBytes + stats.capacity.usedBytes,
-        stats.capacity.totalBytes,
-        "available + used should equal total capacity"
+        mspInfo.amountOfValueProps.toString(),
+        "MSP value props amount should match on-chain data"
       );
     });
 
@@ -369,8 +366,10 @@ await describeMspNet(
       const peerIds = [
         userApi.shConsts.NODE_INFOS.msp1.expectedPeerId // MSP peer ID
       ];
-      const replicationLevel = ReplicationLevel.Basic;
-      const replicas = 0; // Used only when ReplicationLevel = Custom
+      // Use Custom replication with 1 replica so the storage request gets fulfilled quickly
+      // This allows us to test file deletion without having an active storage request
+      const replicationLevel = ReplicationLevel.Custom;
+      const replicas = 1;
 
       // Issue the storage request using the SDK
       storageRequestTxHash = await storageHubClient.issueStorageRequest(
@@ -503,6 +502,16 @@ await describeMspNet(
 
       // Ensure the file is now stored in the MSP's file storage
       await msp1Api.wait.fileStorageComplete(hexFileKey);
+
+      // Wait for at least 1 BSP to confirm so the storage request gets fulfilled
+      await userApi.wait.bspStored({ expectedExts: 1 });
+
+      // Verify the storage request has been fulfilled and removed
+      const storageRequestAfterConfirm = await userApi.query.fileSystem.storageRequests(fileKey);
+      assert(
+        storageRequestAfterConfirm.isNone,
+        "Storage request should be fulfilled and removed after BSP confirms"
+      );
 
       await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 

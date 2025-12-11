@@ -988,6 +988,11 @@ pub mod pallet {
         FileKeyMismatch,
         /// Incomplete storage request not found.
         IncompleteStorageRequestNotFound,
+        /// File has an active storage request and as such is not eligible for deletion.
+        /// The user should use the `revoke_storage_request` extrinsic to revoke it first.
+        FileHasActiveStorageRequest,
+        /// File has an `IncompleteStorageRequest` associated with it and as such is not eligible for a new storage request
+        FileHasIncompleteStorageRequest,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -1319,12 +1324,45 @@ pub mod pallet {
 
         /// Executed by a BSP to request to stop storing a file.
         ///
-        /// In the event when a storage request no longer exists for the data the BSP no longer stores,
-        /// it is required that the BSP still has access to the metadata of the initial storage request.
-        /// If they do not, they will at least need that metadata to reconstruct the File ID and from wherever
-        /// the BSP gets that data is up to it. One example could be from the assigned MSP.
-        /// This metadata is necessary since it is needed to reconstruct the leaf node key in the storage
-        /// provider's Merkle Forest.
+        /// This is the first step of a two-phase process for a BSP to voluntarily stop storing a file.
+        /// The BSP must later call [`bsp_confirm_stop_storing`] after a minimum waiting period to
+        /// complete the process and actually remove the file from their forest.
+        ///
+        /// **Important**: This extrinsic does NOT modify the BSP's forest root. The file remains in the
+        /// BSP's forest until [`bsp_confirm_stop_storing`] is called.
+        ///
+        /// The BSP is required to provide the file metadata (bucket_id, location, owner, fingerprint, size)
+        /// to reconstruct and verify the file key. The BSP can get this metadata from its file storage, but
+        /// it providing it is not a proof that the BSP actually has the file, since this metadata can be obtained
+        /// from the original storage request or from the assigned MSP if the storage request no longer exists.
+        ///
+        /// ## Behavior based on storage request state
+        ///
+        /// 1. **Storage request exists and BSP has confirmed storing it**: The BSP is removed from the
+        ///    storage request's confirmed and volunteered lists and the confirmed/volunteered counts are decremented.
+        ///    The BSP is also removed from the storage request as a data server.
+        ///
+        /// 2. **Storage request exists but BSP is not a volunteer**: The `bsps_required` count is
+        ///    incremented to compensate for the BSP leaving.
+        ///
+        /// 3. **No storage request exists**: A new storage request is created with `bsps_required = 1`
+        ///    so another BSP can pick up the file and maintain its replication target. If `can_serve` is true,
+        ///    the requesting BSP is added as a data server to help the new volunteer download the file.
+        ///
+        /// ## Fees
+        ///
+        /// The BSP is charged a penalty fee ([`BspStopStoringFilePenalty`]) which is transferred to the treasury.
+        ///
+        /// ## Payment Stream
+        ///
+        /// The payment stream with the file owner is **updated immediately** in this extrinsic (not in
+        /// [`bsp_confirm_stop_storing`]). This removes any financial incentive for the BSP to delay or
+        /// skip the confirmation, as they stop getting paid as soon as they announce their intent to stop storing.
+        ///
+        /// ## Restrictions
+        ///
+        /// This extrinsic will fail with [`FileHasIncompleteStorageRequest`] if an `IncompleteStorageRequest`
+        /// exists for the file key. The BSP must wait until fisherman nodes clean up the incomplete request.
         #[pallet::call_index(12)]
         #[pallet::weight(T::WeightInfo::bsp_request_stop_storing())]
         pub fn bsp_request_stop_storing(
@@ -1364,11 +1402,31 @@ pub mod pallet {
             Ok(())
         }
 
-        /// Executed by a BSP to confirm to stop storing a file.
+        /// Executed by a BSP to confirm stopping storage of a file and remove it from their forest.
         ///
-        /// It has to have previously opened a pending stop storing request using the `bsp_request_stop_storing` extrinsic.
-        /// The minimum amount of blocks between the request and the confirmation is defined by the runtime, such that the
-        /// BSP can't immediately stop storing a file it has previously lost when receiving a challenge for it.
+        /// This is the second step of the two-phase stop storing process. The BSP must have previously
+        /// called [`bsp_request_stop_storing`] to open a pending stop storing request.
+        ///
+        /// A minimum waiting period ([`MinWaitForStopStoring`]) must pass between the request and this
+        /// confirmation. This prevents a BSP from immediately dropping a file when challenged for it,
+        /// ensuring they can't avoid slashing by quickly calling stop storing upon receiving a challenge.
+        ///
+        /// ## What this extrinsic does
+        ///
+        /// 1. Verifies the pending stop storing request exists and the minimum wait time has passed
+        /// 2. Verifies the file is still in the BSP's forest via the inclusion proof
+        /// 3. **Removes the file from the BSP's forest and updates their root**
+        /// 4. Decreases the BSP's used capacity
+        /// 5. Stops challenge/randomness cycles if the BSP has no more files
+        ///
+        /// Note: The payment stream was already updated in [`bsp_request_stop_storing`].
+        ///
+        /// ## Errors
+        ///
+        /// - [`PendingStopStoringRequestNotFound`]: No pending request exists for this BSP and file
+        /// - [`MinWaitForStopStoringNotReached`]: The minimum waiting period hasn't passed yet
+        /// - [`OperationNotAllowedWithInsolventUser`]: The file owner is insolvent (the BSP should use
+        ///   [`stop_storing_for_insolvent_user`] instead)
         #[pallet::call_index(13)]
         #[pallet::weight(T::WeightInfo::bsp_confirm_stop_storing())]
         pub fn bsp_confirm_stop_storing(
