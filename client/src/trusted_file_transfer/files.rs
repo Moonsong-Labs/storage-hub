@@ -1,7 +1,7 @@
 //! File encoding/decoding utilities
 
 use axum::body::Body;
-use log::info;
+use log::{error, info};
 use shc_common::{
     trusted_file_transfer::{read_chunk_with_id_from_buffer, CHUNK_ID_SIZE},
     types::ChunkId,
@@ -9,11 +9,10 @@ use shc_common::{
 use shc_file_manager::traits::FileStorageWriteOutcome;
 use shp_constants::FILE_CHUNK_SIZE;
 use shp_file_metadata::Chunk;
+use tokio::sync::RwLock;
 use tokio_stream::StreamExt;
 
-use crate::types::FileStorageT;
-
-use tokio::sync::RwLock;
+use crate::{trusted_file_transfer::server::LOG_TARGET, types::FileStorageT};
 
 /// Get chunks from a request body as a stream and write them to storage
 pub(crate) async fn process_chunk_stream<FL>(
@@ -54,11 +53,21 @@ where
 
     // Verify the file is complete using the last write outcome
     if matches!(last_write_outcome, FileStorageWriteOutcome::FileComplete) {
-        info!("File {file_key} processed successfully");
+        info!(
+            target: LOG_TARGET,
+            "File [{:x}] processed successfully",
+            file_key
+        );
         Ok(())
     } else {
+        error!(
+            target: LOG_TARGET,
+            "File [{:x}] incomplete after processing all data streamed",
+            file_key
+        );
         Err(anyhow::anyhow!(
-            "File {file_key} incomplete after processing all data streamed"
+            "File [{:x}] incomplete after processing all data streamed",
+            file_key
         ))
     }
 }

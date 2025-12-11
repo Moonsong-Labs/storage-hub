@@ -1357,6 +1357,12 @@ where
             .map_err(into_rpc_error)?;
 
         // Return the raw response
+        info!(
+            target: LOG_TARGET,
+            "receive_backend_file_chunks finished for file_key=[{:x}].",
+            file_key
+        );
+
         Ok(raw)
     }
 

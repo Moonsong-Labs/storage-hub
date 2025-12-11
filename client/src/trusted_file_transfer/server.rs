@@ -1,7 +1,6 @@
 //! HTTP server for receiving file chunks from trusted backends
 
-use std::panic::AssertUnwindSafe;
-use std::sync::Arc;
+use std::{panic::AssertUnwindSafe, sync::Arc};
 
 use axum::{
     body::Body,
@@ -28,7 +27,7 @@ use tokio::{net::TcpListener, sync::RwLock};
 
 use crate::{trusted_file_transfer::files::process_chunk_stream, types::FileStorageT};
 
-const LOG_TARGET: &str = "trusted-file-transfer-server";
+pub(crate) const LOG_TARGET: &str = "trusted-file-transfer-server";
 
 /// Configuration for the trusted file transfer HTTP server
 #[derive(Debug, Clone)]
