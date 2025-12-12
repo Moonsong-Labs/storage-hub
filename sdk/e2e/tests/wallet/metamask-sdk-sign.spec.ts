@@ -1,13 +1,5 @@
-import {
-  type BrowserContext,
-  type Page,
-  test as baseTest,
-  expect,
-} from "@playwright/test";
-import dappwright, {
-  type Dappwright,
-  MetaMaskWallet,
-} from "@tenkeylabs/dappwright";
+import { type BrowserContext, type Page, test as baseTest, expect } from "@playwright/test";
+import dappwright, { type Dappwright, MetaMaskWallet } from "@tenkeylabs/dappwright";
 
 // Fingerprint taken from StorageHub node E2E tests
 // See: test/util/bspNet/consts.ts → TEST_ARTEFACTS["res/adolphus.jpg"].fingerprint
@@ -28,7 +20,7 @@ export const test = baseTest.extend<{
       const { browserContext } = await dappwright.launch("", {
         wallet: "metamask",
         version: MetaMaskWallet.recommendedVersion,
-        headless: false,
+        headless: false
       });
 
       const wallet = await dappwright.getWallet("metamask", browserContext);
