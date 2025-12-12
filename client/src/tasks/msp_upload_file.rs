@@ -130,7 +130,10 @@ use shc_blockchain_service::types::{
 };
 use shc_blockchain_service::{capacity_manager::CapacityRequestData, types::SendExtrinsicOptions};
 use sp_core::H256;
-use sp_runtime::traits::{CheckedAdd, CheckedSub, SaturatedConversion, Zero};
+use sp_runtime::{
+    traits::{CheckedAdd, CheckedSub, SaturatedConversion, Zero},
+    DispatchError,
+};
 
 use pallet_file_system::types::RejectedStorageRequest;
 use pallet_proofs_dealer;
@@ -144,9 +147,9 @@ use shc_common::{
     traits::StorageEnableRuntime,
     types::{
         FileKey, FileKeyWithProof, FileMetadata, HashT, RejectedStorageRequestReason,
-        StorageEnableErrors, StorageProofsMerkleTrieLayout, StorageProviderId,
-        StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
-        BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
+        StorageEnableErrors, StorageEnableEvents, StorageHubEventsVec,
+        StorageProofsMerkleTrieLayout, StorageProviderId, StorageRequestMspAcceptedFileKeys,
+        StorageRequestMspBucketResponse, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
     },
 };
 use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
@@ -626,28 +629,14 @@ where
         // Handle extrinsic submission result
         match extrinsic_result {
             Err(e) => {
-                // Extrinsic submission failed after exhausting all retries (timeout, dropped, etc.)
-                // Remove file keys from statuses to enable automatic retry on the next block.
-                // This is appropriate because submission failures may be transient (network issues,
-                // collator congestion) and retrying with fresh proofs on the next block may succeed.
-                warn!(
+                error!(
                     target: LOG_TARGET,
                     "Extrinsic submission failed after exhausting retries, removing file keys from statuses for retry: {:?}",
                     e
                 );
 
-                // Remove file keys from statuses to trigger retry on the next block
-                for file_key in all_file_keys {
-                    info!(
-                        target: LOG_TARGET,
-                        "Removing file key {:?} status (extrinsic submission exhausted retries)",
-                        file_key
-                    );
-                    self.storage_hub_handler
-                        .blockchain
-                        .remove_file_key_status(file_key.into())
-                        .await;
-                }
+                self.handle_extrinsic_submission_failure(&all_file_keys)
+                    .await;
 
                 // Release the forest root write lock before returning error
                 self.storage_hub_handler
@@ -658,183 +647,95 @@ where
                 return Err(e);
             }
             Ok(Some(events)) => {
-                // Extrinsic was included in a block, check if it succeeded or failed by
-                // looking for an ExtrinsicFailed event
-                let dispatch_error = events.iter().find_map(|event_record| {
-                    if let shc_common::types::StorageEnableEvents::System(
-                        frame_system::Event::ExtrinsicFailed { dispatch_error, .. },
-                    ) = event_record.event.clone().into()
-                    {
-                        Some(dispatch_error)
-                    } else {
-                        None
-                    }
-                });
-
-                if let Some(dispatch_error) = dispatch_error {
-                    // Proof errors are transient and can be retried with regenerated proofs (direct requeue).
-                    // Non-proof errors are permanent failures (mark as Abandoned).
-                    // Convert the dispatch error into StorageEnableErrors for type-safe pattern matching.
-                    let error: Option<StorageEnableErrors<Runtime>> = match dispatch_error {
-                        sp_runtime::DispatchError::Module(module_error) => {
-                            match decode_module_error::<Runtime>(module_error) {
-                                Ok(decoded) => Some(decoded),
-                                Err(e) => {
-                                    warn!(
-                                        target: LOG_TARGET,
-                                        "Failed to decode module error, treating as non-proof error: {:?}",
-                                        e
-                                    );
-                                    None
-                                }
-                            }
-                        }
-                        _ => None,
-                    };
-
-                    let is_proof_error = matches!(
-                        error,
-                        Some(StorageEnableErrors::ProofsDealer(
-                            pallet_proofs_dealer::Error::ForestProofVerificationFailed
-                                | pallet_proofs_dealer::Error::FailedToApplyDelta
-                        ))
-                    );
-
-                    if is_proof_error {
-                        // Proof-related error: remove file keys from statuses to enable automatic retry.
-                        // The next block's NewStorageRequest events will re-insert them with Processing
-                        // status and regenerate proofs with the updated forest root.
-                        warn!(
-                            target: LOG_TARGET,
-                            "Proof-related error detected, removing file keys from statuses for retry: {:?}",
-                            dispatch_error
-                        );
-
-                        // Remove file keys from statuses to trigger retry on the next block
-                        for file_key in all_file_keys {
-                            debug!(target: LOG_TARGET, "Removing file key {:?} status (proof error)", file_key);
-                            self.storage_hub_handler
-                                .blockchain
-                                .remove_file_key_status(file_key.into())
-                                .await;
-                        }
-
-                        // Release the forest root write lock before requeueing
-                        self.storage_hub_handler
-                            .blockchain
-                            .release_forest_root_write_lock(forest_root_write_tx)
-                            .await?;
-
-                        return Err(anyhow!(
-                            "Extrinsic failed with proof error: {:?}",
-                            dispatch_error
-                        ));
-                    } else {
-                        // Non-proof error: mark file keys as Abandoned since this is a permanent failure
-                        // that is not guaranteed to be resolved by retrying (e.g., invalid parameters, authorization errors, inconsistent runtime state, etc.).
-                        warn!(
-                            target: LOG_TARGET,
-                            "Non-proof dispatch error, marking file keys as Abandoned: {:?}",
-                            error
-                        );
-
-                        // Mark file keys as Abandoned to trigger retry on the next block
-                        for file_key in all_file_keys {
-                            trace!(
-                                target: LOG_TARGET,
-                                "Marking file key {:?} as Abandoned (non-proof error)",
-                                file_key
-                            );
-                            self.storage_hub_handler
-                                .blockchain
-                                .set_file_key_status(
-                                    file_key.into(),
-                                    FileKeyStatusUpdate::Abandoned,
-                                )
-                                .await;
-                        }
-                    }
-
+                if let Err(err) = self
+                    .handle_extrinsic_dispatch_result(events, &all_file_keys)
+                    .await
+                {
+                    error!(target: LOG_TARGET, "Failed to handle extrinsic dispatch result: {:?}", err);
                     // Release the forest root write lock before returning error
                     self.storage_hub_handler
                         .blockchain
                         .release_forest_root_write_lock(forest_root_write_tx)
                         .await?;
 
-                    return Err(anyhow!("Extrinsic failed: {:?}", dispatch_error));
+                    return Err(err);
                 }
             }
             Ok(None) => {
-                // This shouldn't happen since we requested events with `with_events: true`
-                warn!(
+                error!(
                     target: LOG_TARGET,
-                    "Expected events but got None - this should not happen. Proceeding to mark file keys as InBlock since this may be a client bug which
-                    may not be an indicator that the file keys were not accepted or rejected on chain."
+                    "Expected events but got None - this should not happen. Removing file key statuses to allow re-evaluation on next block."
                 );
+                self.handle_missing_extrinsic_events(&all_file_keys).await;
             }
         }
 
-        // Process all responses in a single pass: log, update statuses, and delete rejected files.
         // Accepted files will be added to the Bucket's Forest Storage by the BlockchainService.
-        if !storage_request_msp_response.is_empty() {
-            for response in &storage_request_msp_response {
-                // Process accepted file keys
-                if let Some(ref accepted) = response.accept {
-                    if !accepted.file_keys_and_proofs.is_empty() {
-                        info!(
-                            target: LOG_TARGET,
-                            "📤 Submitted accept for {} file(s) in bucket {:?} (awaiting finalization)",
-                            accepted.file_keys_and_proofs.len(),
-                            response.bucket_id,
-                        );
+        for storage_request_msp_bucket_response in storage_request_msp_response {
+            // Log accepted file keys
+            if let Some(ref accepted) = storage_request_msp_bucket_response.accept {
+                let accepted_file_keys: Vec<_> = accepted
+                    .file_keys_and_proofs
+                    .iter()
+                    .map(|fk| fk.file_key)
+                    .collect();
 
-                        for fk in &accepted.file_keys_and_proofs {
-                            info!(
-                                target: LOG_TARGET,
-                                "Marking file key {:?} as Submitted (awaiting finalization)",
-                                fk.file_key
-                            );
-                            self.storage_hub_handler
-                                .blockchain
-                                .set_file_key_status(
-                                    fk.file_key.into(),
-                                    FileKeyStatusUpdate::InBlock,
-                                )
-                                .await;
-                        }
-                    }
-                }
-
-                // Process rejected file keys
-                if !response.reject.is_empty() {
+                if !accepted_file_keys.is_empty() {
                     info!(
                         target: LOG_TARGET,
-                        "📤 Submitted reject for {} file(s) in bucket {:?} (awaiting finalization)",
-                        response.reject.len(),
-                        response.bucket_id,
+                        "✅ Accepted {} file(s) for bucket {:?}: {:?}",
+                        accepted_file_keys.len(),
+                        storage_request_msp_bucket_response.bucket_id,
+                        accepted_file_keys
                     );
+                }
 
-                    for rejected in &response.reject {
-                        info!(
-                            target: LOG_TARGET,
-                            "Marking file key {:?} as Submitted (rejection awaiting finalization, reason: {:?})",
-                            rejected.file_key,
-                            rejected.reason
-                        );
-                        self.storage_hub_handler
-                            .blockchain
-                            .set_file_key_status(
-                                rejected.file_key.into(),
-                                FileKeyStatusUpdate::InBlock,
-                            )
-                            .await;
+                for fk in &accepted.file_keys_and_proofs {
+                    info!(
+                        target: LOG_TARGET,
+                        "Marking file key {:?} as Submitted (awaiting finalization)",
+                        fk.file_key
+                    );
+                    self.storage_hub_handler
+                        .blockchain
+                        .set_file_key_status(fk.file_key.into(), FileKeyStatusUpdate::InBlock)
+                        .await;
+                }
+            }
 
-                        let mut write_fs = self.storage_hub_handler.file_storage.write().await;
+            // Log and delete rejected file keys
+            if !storage_request_msp_bucket_response.reject.is_empty() {
+                let rejected_file_keys: Vec<_> = storage_request_msp_bucket_response
+                    .reject
+                    .iter()
+                    .map(|r| (r.file_key, &r.reason))
+                    .collect();
 
-                        if let Err(e) = write_fs.delete_file(&rejected.file_key.into()) {
-                            error!(target: LOG_TARGET, "Failed to delete file {:?}: {:?}", rejected.file_key, e);
-                        }
-                        drop(write_fs);
+                info!(
+                    target: LOG_TARGET,
+                    "❌ Rejected {} file(s) for bucket {:?}: {:?}",
+                    rejected_file_keys.len(),
+                    storage_request_msp_bucket_response.bucket_id,
+                    rejected_file_keys
+                );
+
+                let mut fs = self.storage_hub_handler.file_storage.write().await;
+                for RejectedStorageRequest { file_key, reason } in
+                    &storage_request_msp_bucket_response.reject
+                {
+                    info!(
+                        target: LOG_TARGET,
+                        "Marking file key {:?} as Submitted (rejection awaiting finalization, reason: {:?})",
+                        file_key,
+                        reason
+                    );
+                    self.storage_hub_handler
+                        .blockchain
+                        .set_file_key_status((*file_key).into(), FileKeyStatusUpdate::InBlock)
+                        .await;
+
+                    if let Err(e) = fs.delete_file(&file_key) {
+                        error!(target: LOG_TARGET, "Failed to delete file {:x}: {:?}", file_key, e);
                     }
                 }
             }
@@ -874,17 +775,22 @@ where
             .storage_hub_handler
             .blockchain
             .query_storage_provider_id(None)
-            .await
-            .map_err(|e| anyhow!("Failed to query storage provider ID: {:?}", e))?;
+            .await?;
 
-        let Some(StorageProviderId::MainStorageProvider(own_msp_id)) = own_provider_id else {
-            let err_msg = match own_provider_id {
-                Some(StorageProviderId::BackupStorageProvider(_)) => {
-                    "Current node account is a Backup Storage Provider. Expected a Main Storage Provider ID."
+        let own_msp_id = match own_provider_id {
+            Some(id) => match id {
+                StorageProviderId::MainStorageProvider(id) => id,
+                StorageProviderId::BackupStorageProvider(_) => {
+                    let err_msg = "Current node account is a Backup Storage Provider. Expected a Main Storage Provider ID.";
+                    error!(target: LOG_TARGET, err_msg);
+                    return Err(anyhow!(err_msg));
                 }
-                _ => "Failed to get own MSP ID.",
-            };
-            return Err(anyhow!(err_msg));
+            },
+            None => {
+                let err_msg = "Failed to get own MSP ID.";
+                error!(target: LOG_TARGET, err_msg);
+                return Err(anyhow!(err_msg));
+            }
         };
 
         let msp_id_of_bucket_id = self
@@ -952,19 +858,35 @@ where
                 .blockchain
                 .query_storage_provider_capacity(own_msp_id)
                 .await
-                .map_err(|e| anyhow!("Failed to query storage provider capacity: {:?}", e))?;
+                .map_err(|e| {
+                    error!(target: LOG_TARGET, "Failed to query storage provider capacity: {:?}", e);
+                    anyhow!("Failed to query storage provider capacity: {:?}", e)
+                })?;
 
             let available_capacity = self
                 .storage_hub_handler
                 .blockchain
                 .query_available_storage_capacity(own_msp_id)
                 .await
-                .map_err(|e| anyhow!("Failed to query available storage capacity: {:?}", e))?;
+                .map_err(|e| {
+                    let err_msg = format!("Failed to query available storage capacity: {:?}", e);
+                    error!(
+                        target: LOG_TARGET,
+                        err_msg
+                    );
+                    anyhow!(err_msg)
+                })?;
 
             // Calculate currently used storage
             let used_capacity = current_capacity
                 .checked_sub(&available_capacity)
-                .ok_or_else(|| anyhow!("Overflow calculating used storage"))?;
+                .ok_or_else(|| {
+                    anyhow!(
+                        "Available capacity ({}) exceeds current capacity ({})",
+                        available_capacity,
+                        current_capacity
+                    )
+                })?;
 
             // Check if accepting this file would exceed our local max storage capacity limit
             let projected_usage = used_capacity
@@ -999,7 +921,15 @@ where
                     .blockchain
                     .query_available_storage_capacity(own_msp_id)
                     .await
-                    .map_err(|e| anyhow!("Failed to query available storage capacity: {:?}", e))?;
+                    .map_err(|e| {
+                        let err_msg =
+                            format!("Failed to query available storage capacity: {:?}", e);
+                        error!(
+                            target: LOG_TARGET,
+                            err_msg
+                        );
+                        anyhow!(err_msg)
+                    })?;
 
                 // Reject storage request if the new available capacity is still less than the file size.
                 if available_capacity < event.size {
@@ -1085,8 +1015,10 @@ where
         // the entire file so that the file uploading process is complete.
         for peer_id in event.user_peer_ids.iter() {
             let peer_id = match std::str::from_utf8(&peer_id.as_slice()) {
-                Ok(str_slice) => PeerId::from_str(str_slice)
-                    .map_err(|e| anyhow!("Failed to convert peer ID to PeerId: {}", e))?,
+                Ok(str_slice) => PeerId::from_str(str_slice).map_err(|e| {
+                    error!(target: LOG_TARGET, "Failed to convert peer ID to PeerId: {}", e);
+                    e
+                })?,
                 Err(e) => return Err(anyhow!("Failed to convert peer ID to a string: {}", e)),
             };
             self.storage_hub_handler
@@ -1112,8 +1044,16 @@ where
             .read()
             .await
             .get_metadata(&file_key)
-            .map_err(|e| anyhow!("Failed to get file metadata: {:?}", e))?
-            .ok_or_else(|| anyhow!("File does not exist for key {:?}", file_key))?;
+            .map_err(|e| {
+                let err_msg = format!("Failed to get file metadata: {:?}", e);
+                error!(target: LOG_TARGET, err_msg);
+                anyhow!(err_msg)
+            })?
+            .ok_or_else(|| {
+                let err_msg = format!("File does not exist for key {:?}", file_key);
+                error!(target: LOG_TARGET, err_msg);
+                anyhow!(err_msg)
+            })?;
 
         let bucket_id = H256::from_slice(file_metadata.bucket_id().as_ref());
 
@@ -1462,5 +1402,155 @@ where
             .await;
 
         debug!(target: LOG_TARGET, "File {:?} queued for confirmation", file_key);
+    }
+
+    /// Handles extrinsic submission failure after exhausting all retries.
+    ///
+    /// Removes file keys from statuses to enable automatic retry on the next block.
+    /// This is appropriate because submission failures may be transient (network issues,
+    /// collator congestion) and retrying with fresh proofs on the next block may succeed.
+    async fn handle_extrinsic_submission_failure(&self, file_keys: &[H256]) {
+        // Remove file keys from statuses to trigger retry on the next block
+        for file_key in file_keys {
+            info!(
+                target: LOG_TARGET,
+                "Removing file key {:?} status (extrinsic submission exhausted retries)",
+                file_key
+            );
+            self.storage_hub_handler
+                .blockchain
+                .remove_file_key_status((*file_key).into())
+                .await;
+        }
+    }
+
+    /// Handles extrinsic dispatch result when events are present.
+    ///
+    /// Checks for dispatch errors in the events and handles them appropriately:
+    /// - Proof errors: Removes file keys from statuses to enable automatic retry
+    /// - Non-proof errors: Marks file keys as Abandoned (permanent failure)
+    ///
+    /// Returns `Ok(None)` if no dispatch error was found (extrinsic succeeded),
+    /// or `Ok(Some(error))` if there was a dispatch error that should be returned to the caller.
+    async fn handle_extrinsic_dispatch_result(
+        &self,
+        events: StorageHubEventsVec<Runtime>,
+        file_keys: &[H256],
+    ) -> anyhow::Result<()> {
+        // Check if the extrinsic succeeded or failed by looking for an ExtrinsicFailed event
+        let maybe_dispatch_error = events.iter().find_map(|event_record| {
+            if let StorageEnableEvents::System(frame_system::Event::ExtrinsicFailed {
+                dispatch_error,
+                ..
+            }) = event_record.event.clone().into()
+            {
+                // Found an ExtrinsicFailed event, return the dispatch error
+                Some(dispatch_error)
+            } else {
+                // No ExtrinsicFailed event found, continue searching
+                None
+            }
+        });
+
+        let Some(dispatch_error) = maybe_dispatch_error else {
+            // No dispatch error found, extrinsic succeeded
+            return Ok(());
+        };
+
+        // Convert dispatch error to known StorageHub errors
+        let error: Option<StorageEnableErrors<Runtime>> = match dispatch_error {
+            DispatchError::Module(module_error) => {
+                match decode_module_error::<Runtime>(module_error) {
+                    Ok(decoded) => Some(decoded),
+                    Err(e) => {
+                        error!(
+                            target: LOG_TARGET,
+                            "Failed to decode module error: {:?}",
+                            e
+                        );
+                        return Err(anyhow!("Failed to decode module error: {:?}", e));
+                    }
+                }
+            }
+            _ => {
+                warn!(
+                    target: LOG_TARGET,
+                    "Treating non-module error as non-proof error: {:?}",
+                    dispatch_error
+                );
+                None
+            }
+        };
+
+        let is_proof_error = matches!(
+            error,
+            Some(StorageEnableErrors::ProofsDealer(
+                pallet_proofs_dealer::Error::ForestProofVerificationFailed
+                    | pallet_proofs_dealer::Error::FailedToApplyDelta
+            ))
+        );
+
+        if is_proof_error {
+            // Removes file keys from statuses to enable automatic retry.
+            // The next block's NewStorageRequest events will re-insert them with Processing
+            // status and regenerate proofs with the updated forest root.
+            warn!(
+                target: LOG_TARGET,
+                "Proof-related error detected, removing file keys from statuses for retry: {:?}",
+                dispatch_error
+            );
+
+            // Remove file keys from statuses to trigger retry on the next block
+            for file_key in file_keys {
+                debug!(target: LOG_TARGET, "Removing file key {:?} status (proof error)", file_key);
+                self.storage_hub_handler
+                    .blockchain
+                    .remove_file_key_status((*file_key).into())
+                    .await;
+            }
+        } else {
+            // Marks file keys as Abandoned since this is a permanent failure
+            // that is not guaranteed to be resolved by retrying (e.g., invalid parameters,
+            // authorization errors, inconsistent runtime state, etc.).
+            warn!(
+                target: LOG_TARGET,
+                "Non-proof dispatch error, marking file keys as Abandoned: {:?}",
+                error
+            );
+
+            // Mark file keys as Abandoned
+            for file_key in file_keys {
+                trace!(
+                    target: LOG_TARGET,
+                    "Marking file key {:?} as Abandoned (non-proof error)",
+                    file_key
+                );
+                self.storage_hub_handler
+                    .blockchain
+                    .set_file_key_status((*file_key).into(), FileKeyStatusUpdate::Abandoned)
+                    .await;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Handles the case when extrinsic events are missing.
+    ///
+    /// This shouldn't happen since we requested events with `with_events: true`.
+    /// Since we cannot determine the extrinsic outcome, we remove file key statuses
+    /// to allow the system to re-evaluate them on the next block.
+    async fn handle_missing_extrinsic_events(&self, file_keys: &[H256]) {
+        for file_key in file_keys {
+            debug!(
+                target: LOG_TARGET,
+                "Removing file key {:?} status (missing events)",
+                file_key
+            );
+            self.storage_hub_handler
+                .blockchain
+                .remove_file_key_status((*file_key).into())
+                .await;
+        }
     }
 }
