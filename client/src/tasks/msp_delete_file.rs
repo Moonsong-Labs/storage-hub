@@ -6,7 +6,7 @@ use shc_blockchain_service::events::{
 };
 use shc_common::{
     traits::StorageEnableRuntime,
-    types::{FileKey, TrieMutation, TrieRemoveMutation},
+    types::{FileKey, TrieMutation},
 };
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -106,8 +106,8 @@ where
             // Get the file key from the mutation.
             let file_key = FileKey::from(mutation.0);
 
-            // Only process remove mutations in this task..
-            if mutation.1 != TrieMutation::Remove(TrieRemoveMutation::new()) {
+            // Only process remove mutations in this task.
+            if !matches!(mutation.1, TrieMutation::Remove(_)) {
                 debug!(target: LOG_TARGET, "Skipping non-remove mutation for file key {:?}", file_key);
                 continue;
             }

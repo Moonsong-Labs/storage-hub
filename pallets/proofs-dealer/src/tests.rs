@@ -17,6 +17,7 @@ use frame_system::{
     limits::BlockWeights, pallet_prelude::BlockNumberFor, BlockWeight, ConsumedWeight,
 };
 use pallet_storage_providers::HoldReason;
+use shp_file_metadata::{FileMetadata, Fingerprint};
 use shp_traits::{ProofsDealerInterface, ReadChallengeableProvidersInterface, TrieRemoveMutation};
 use sp_core::{blake2_256, Get, Hasher, H256};
 use sp_runtime::{
@@ -1628,6 +1629,21 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
         // Dispatch submit proof extrinsic.
         assert_ok!(ProofsDealer::submit_proof(user.clone(), proof, None));
 
+        // Construct the file metadata that the mock returns for remove mutations.
+        // This must match the file metadata constructed in the mock's apply_delta.
+        let file_metadata: FileMetadata<
+            { shp_constants::H_LENGTH },
+            { shp_constants::FILE_CHUNK_SIZE },
+            { shp_constants::FILE_SIZE_TO_CHALLENGES },
+        > = FileMetadata::new(
+            1_u64.encode(),
+            blake2_256(b"bucket").as_ref().to_vec(),
+            b"path/to/file".to_vec(),
+            1,
+            Fingerprint::default().into(),
+        )
+        .expect("Failed to create file metadata");
+
         // Check that the event for mutations applied is emitted.
         System::assert_has_event(
             Event::MutationsAppliedForProvider {
@@ -1636,7 +1652,10 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
                     .iter()
                     .filter_map(|custom_challenge| {
                         if custom_challenge.should_remove_key {
-                            Some((custom_challenge.key, TrieRemoveMutation::default().into()))
+                            Some((
+                                custom_challenge.key,
+                                TrieRemoveMutation::with_value(file_metadata.encode()).into(),
+                            ))
                         } else {
                             None
                         }
