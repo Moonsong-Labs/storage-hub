@@ -33,6 +33,7 @@ services:
     ports:
       - "9777:9944"
       - "30555:30350"
+      - "7070:7070"
     volumes:
       - ./dev-keystores/msp:/keystore:rw
     command:
@@ -55,6 +56,8 @@ services:
         "--base-path=/data",
         "--msp-charging-period=12",
         "--msp-distribute-files",
+        "--trusted-file-transfer-server",
+        "--trusted-file-transfer-server-host=0.0.0.0",
       ]
   sh-msp-2:
     image: storage-hub:local
@@ -63,6 +66,7 @@ services:
     ports:
       - "9778:9944"
       - "30556:30350"
+      - "7071:7070"
     volumes:
       - ./dev-keystores/msp-two:/keystore:rw
     command:
@@ -85,6 +89,8 @@ services:
         "--base-path=/data",
         "--msp-charging-period=12",
         "--msp-distribute-files",
+        "--trusted-file-transfer-server",
+        "--trusted-file-transfer-server-host=0.0.0.0",
       ]
   sh-user:
     image: storage-hub:local
@@ -205,6 +211,8 @@ services:
         "postgresql://postgres:postgres@storage-hub-sh-indexer-postgres-1:5432/storage_hub",
         "--msp-callback-url",
         "http://storage-hub-sh-backend-1:8080",
+        "--msp-trusted-file-transfer-server-url",
+        "http://storage-hub-sh-msp-1:7070",
       ]
     ports:
       - "8080:8080"

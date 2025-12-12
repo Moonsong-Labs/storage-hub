@@ -224,6 +224,7 @@ impl StorageHubRpcClient {
         .await
     }
 
+    // TODO: Remove this method once legacy upload is deprecated
     /// Request the MSP to accept a FileKeyProof (`proof`) for the given `file_key`
     pub async fn receive_file_chunks(&self, file_key: &str, proof: Vec<u8>) -> RpcResult<Vec<u8>> {
         debug!(
@@ -374,6 +375,7 @@ mod tests {
         assert!(metadata.file_size() > 0, "should have some data");
     }
 
+    // TODO: Remove this test once legacy upload is deprecated
     #[tokio::test]
     async fn receive_file_chunks() {
         let client = mock_rpc();

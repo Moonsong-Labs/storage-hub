@@ -347,6 +347,7 @@ pub trait StorageHubClientApi {
         exclude_type: String,
     ) -> RpcResult<()>;
 
+    // TODO: Remove this RPC method once legacy upload is deprecated
     /// Send a RemoteUploadDataRequest via the node's FileTransferService
     #[method(name = "receiveBackendFileChunks", with_extensions)]
     async fn receive_backend_file_chunks(
@@ -1333,6 +1334,7 @@ where
         Ok(())
     }
 
+    // TODO: Remove this RPC implementation once legacy upload is deprecated
     async fn receive_backend_file_chunks(
         &self,
         ext: &Extensions,

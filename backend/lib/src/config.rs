@@ -12,8 +12,9 @@ use crate::constants::{
     database::DEFAULT_DATABASE_URL,
     download::MAX_DOWNLOAD_SESSIONS,
     rpc::{
-        DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_MSP_CALLBACK_URL, DEFAULT_RPC_URL,
-        DEFAULT_TIMEOUT_SECS, DEFAULT_UPLOAD_RETRY_ATTEMPTS, DEFAULT_UPLOAD_RETRY_DELAY_SECS,
+        DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_MSP_CALLBACK_URL,
+        DEFAULT_MSP_TRUSTED_FILE_TRANSFER_SERVER_URL, DEFAULT_RPC_URL, DEFAULT_TIMEOUT_SECS,
+        DEFAULT_UPLOAD_RETRY_ATTEMPTS, DEFAULT_UPLOAD_RETRY_DELAY_SECS,
     },
     server::{DEFAULT_HOST, DEFAULT_PORT},
     upload::MAX_UPLOAD_SESSIONS,
@@ -193,10 +194,15 @@ pub struct StorageHubConfig {
 pub struct MspConfig {
     /// URL for the node to reach the MSP backend
     pub callback_url: String,
+    /// URL for the MSP trusted file transfer server
+    pub trusted_file_transfer_server_url: String,
     /// Number of retry attempts for file upload operations
     pub upload_retry_attempts: u32,
     /// Delay in seconds between file upload retry attempts
     pub upload_retry_delay_secs: u64,
+    // TODO: Remove this field once legacy upload is deprecated
+    /// If true, use legacy RPC-based upload method instead of trusted file transfer server
+    pub use_legacy_upload_method: bool,
 }
 
 /// Database configuration for PostgreSQL connection
@@ -244,8 +250,11 @@ impl Default for Config {
             },
             msp: MspConfig {
                 callback_url: DEFAULT_MSP_CALLBACK_URL.to_string(),
+                trusted_file_transfer_server_url: DEFAULT_MSP_TRUSTED_FILE_TRANSFER_SERVER_URL
+                    .to_string(),
                 upload_retry_attempts: DEFAULT_UPLOAD_RETRY_ATTEMPTS,
                 upload_retry_delay_secs: DEFAULT_UPLOAD_RETRY_DELAY_SECS,
+                use_legacy_upload_method: false,
             },
             database: DatabaseConfig {
                 url: DEFAULT_DATABASE_URL.to_string(),
