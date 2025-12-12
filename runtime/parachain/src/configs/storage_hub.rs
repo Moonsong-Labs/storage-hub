@@ -80,8 +80,6 @@ impl TransactionHashProvider for crate::Runtime {
 }
 
 // Map the runtime error into the client-facing storage errors enum.
-// This follows the same pattern as StorageEnableEvents - simple variant matching
-// on already-decoded error types, with no pallet index comparison or byte decoding.
 impl Into<StorageEnableErrors<crate::Runtime>> for crate::RuntimeError {
     fn into(self) -> StorageEnableErrors<crate::Runtime> {
         match self {
@@ -94,7 +92,6 @@ impl Into<StorageEnableErrors<crate::Runtime>> for crate::RuntimeError {
             crate::RuntimeError::FileSystem(error) => StorageEnableErrors::FileSystem(error),
             crate::RuntimeError::Balances(error) => StorageEnableErrors::Balances(error),
             crate::RuntimeError::BucketNfts(error) => StorageEnableErrors::BucketNfts(error),
-            other => StorageEnableErrors::Other(format!("{:?}", other)),
         }
     }
 }
