@@ -1,19 +1,23 @@
-// This module implements the StorageHub client traits for the runtime types.
-// It is only compiled for native (std) builds to avoid pulling `shc-common` into the
-// no_std Wasm runtime.
+//! StorageHub client trait implementations for the parachain runtime.
+//!
+//! This module implements the [`StorageEnableRuntime`] and related traits for the concrete
+//! parachain runtime types. It is only compiled for native (std) builds to avoid pulling
+//! `shc-common` into the no_std Wasm runtime.
+
 use shc_common::{
     traits::{ExtensionOperations, StorageEnableRuntime, TransactionHashProvider},
-    types::{MinimalExtension, StorageEnableEvents, StorageHubEventsVec},
+    types::{MinimalExtension, StorageEnableErrors, StorageEnableEvents, StorageHubEventsVec},
 };
 use sp_core::H256;
 
-// Implement the client-facing runtime trait for the concrete runtime.
+/// Implementation of [`StorageEnableRuntime`] for the parachain runtime.
 impl StorageEnableRuntime for crate::Runtime {
     type Address = crate::Address;
     type Call = crate::RuntimeCall;
     type Signature = crate::Signature;
     type Extension = crate::SignedExtra;
     type RuntimeApi = crate::apis::RuntimeApi;
+    type RuntimeError = crate::RuntimeError;
 }
 
 // Implement the transaction extension helpers for the concrete runtime's SignedExtra.
@@ -72,5 +76,23 @@ impl TransactionHashProvider for crate::Runtime {
         _all_events: &StorageHubEventsVec<Self>,
     ) -> std::collections::HashMap<u32, H256> {
         std::collections::HashMap::new()
+    }
+}
+
+// Map the runtime error into the client-facing storage errors enum.
+impl Into<StorageEnableErrors<crate::Runtime>> for crate::RuntimeError {
+    fn into(self) -> StorageEnableErrors<crate::Runtime> {
+        match self {
+            crate::RuntimeError::System(error) => StorageEnableErrors::System(error),
+            crate::RuntimeError::Providers(error) => StorageEnableErrors::StorageProviders(error),
+            crate::RuntimeError::ProofsDealer(error) => StorageEnableErrors::ProofsDealer(error),
+            crate::RuntimeError::PaymentStreams(error) => {
+                StorageEnableErrors::PaymentStreams(error)
+            }
+            crate::RuntimeError::FileSystem(error) => StorageEnableErrors::FileSystem(error),
+            crate::RuntimeError::Balances(error) => StorageEnableErrors::Balances(error),
+            crate::RuntimeError::BucketNfts(error) => StorageEnableErrors::BucketNfts(error),
+            other => StorageEnableErrors::Other(format!("{:?}", other)),
+        }
     }
 }

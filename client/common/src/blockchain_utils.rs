@@ -1,4 +1,4 @@
-use frame_support::{StorageHasher, Twox128, Twox64Concat};
+use frame_support::{traits::PalletInfoAccess, StorageHasher, Twox128, Twox64Concat};
 use lazy_static::lazy_static;
 use log::error;
 use sc_network::Multiaddr;
@@ -14,7 +14,8 @@ use sp_core::{H256, U256};
 use crate::{
     traits::{KeyTypeOperations, StorageEnableRuntime},
     types::{
-        Multiaddresses, StorageHubClient, StorageHubEventsVec, StorageProviderId, BCSV_KEY_TYPE,
+        Multiaddresses, StorageEnableErrors, StorageHubClient, StorageHubEventsVec,
+        StorageProviderId, BCSV_KEY_TYPE,
     },
 };
 
@@ -40,7 +41,18 @@ pub enum EventsRetrievalError {
     StorageNotFound,
 }
 
+#[derive(Error, Debug)]
+pub enum ModuleErrorDecodeError {
+    #[error("Unknown pallet index {0}: no matching pallet found")]
+    UnknownPallet(u8),
+    #[error("Failed to decode error for pallet index {0}: {1}")]
+    DecodeError(u8, codec::Error),
+}
+
 /// Get the events storage element for a given block.
+///
+/// TODO: Version-aware decoding should be implemented in the client layer in the future to support
+/// processing blocks from different runtime versions.
 pub fn get_events_at_block<Runtime: StorageEnableRuntime>(
     client: &Arc<StorageHubClient<Runtime::RuntimeApi>>,
     block_hash: &H256,
@@ -53,6 +65,70 @@ pub fn get_events_at_block<Runtime: StorageEnableRuntime>(
         .map(|raw_storage| StorageHubEventsVec::<Runtime>::decode(&mut raw_storage.0.as_slice()))
         .transpose()?
         .ok_or(EventsRetrievalError::StorageNotFound)
+}
+
+/// Decode a [`sp_runtime::ModuleError`] into [`StorageEnableErrors`].
+///
+/// This uses compile-time pallet indices to determine which pallet the error originated from,
+/// then decodes the error bytes into the appropriate error variant.
+///
+/// # Note
+///
+/// This uses compile-time pallet indices. For version-aware decoding (processing blocks
+/// from different runtime versions), metadata-based decoding should be implemented in
+/// the client layer in the future.
+///
+/// TODO: Version-aware decoding should be implemented in the client layer in the future to support
+/// processing blocks from different runtime versions.
+pub fn decode_module_error<Runtime: StorageEnableRuntime>(
+    module_error: sp_runtime::ModuleError,
+) -> Result<StorageEnableErrors<Runtime>, ModuleErrorDecodeError> {
+    let system_index = frame_system::Pallet::<Runtime>::index() as u8;
+    let providers_index = pallet_storage_providers::Pallet::<Runtime>::index() as u8;
+    let proofs_dealer_index = pallet_proofs_dealer::Pallet::<Runtime>::index() as u8;
+    let payment_streams_index = pallet_payment_streams::Pallet::<Runtime>::index() as u8;
+    let file_system_index = pallet_file_system::Pallet::<Runtime>::index() as u8;
+    let balances_index = pallet_balances::Pallet::<Runtime>::index() as u8;
+    let bucket_nfts_index = pallet_bucket_nfts::Pallet::<Runtime>::index() as u8;
+
+    match module_error.index {
+        i if i == system_index => {
+            frame_system::Error::<Runtime>::decode(&mut &module_error.error[..])
+                .map(StorageEnableErrors::System)
+                .map_err(|e| ModuleErrorDecodeError::DecodeError(i, e))
+        }
+        i if i == providers_index => {
+            pallet_storage_providers::Error::<Runtime>::decode(&mut &module_error.error[..])
+                .map(StorageEnableErrors::StorageProviders)
+                .map_err(|e| ModuleErrorDecodeError::DecodeError(i, e))
+        }
+        i if i == proofs_dealer_index => {
+            pallet_proofs_dealer::Error::<Runtime>::decode(&mut &module_error.error[..])
+                .map(StorageEnableErrors::ProofsDealer)
+                .map_err(|e| ModuleErrorDecodeError::DecodeError(i, e))
+        }
+        i if i == payment_streams_index => {
+            pallet_payment_streams::Error::<Runtime>::decode(&mut &module_error.error[..])
+                .map(StorageEnableErrors::PaymentStreams)
+                .map_err(|e| ModuleErrorDecodeError::DecodeError(i, e))
+        }
+        i if i == file_system_index => {
+            pallet_file_system::Error::<Runtime>::decode(&mut &module_error.error[..])
+                .map(StorageEnableErrors::FileSystem)
+                .map_err(|e| ModuleErrorDecodeError::DecodeError(i, e))
+        }
+        i if i == balances_index => {
+            pallet_balances::Error::<Runtime>::decode(&mut &module_error.error[..])
+                .map(StorageEnableErrors::Balances)
+                .map_err(|e| ModuleErrorDecodeError::DecodeError(i, e))
+        }
+        i if i == bucket_nfts_index => {
+            pallet_bucket_nfts::Error::<Runtime>::decode(&mut &module_error.error[..])
+                .map(StorageEnableErrors::BucketNfts)
+                .map_err(|e| ModuleErrorDecodeError::DecodeError(i, e))
+        }
+        _ => Err(ModuleErrorDecodeError::UnknownPallet(module_error.index)),
+    }
 }
 
 /// Get the Ethereum block hash from `pallet_ethereum::BlockHash` storage for a given block number.
