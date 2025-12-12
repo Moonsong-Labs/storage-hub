@@ -6,12 +6,7 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "api-augment",
-    "types-bundle",
-    "test",
-    "sdk",
-    "sdk/core",
-    "sdk/msp-client"
+    "test"
   ],
   "scripts": {
     "lint": "pnpm -r lint",
