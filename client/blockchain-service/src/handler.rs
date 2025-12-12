@@ -1393,7 +1393,7 @@ where
                     if let Some(ManagedProvider::Msp(msp_handler)) =
                         &mut self.maybe_managed_provider
                     {
-                        trace!(
+                        info!(
                             target: LOG_TARGET,
                             "Setting file key {:?} status to {:?}",
                             file_key,
@@ -1415,7 +1415,7 @@ where
                     if let Some(ManagedProvider::Msp(msp_handler)) =
                         &mut self.maybe_managed_provider
                     {
-                        trace!(
+                        info!(
                             target: LOG_TARGET,
                             "Removing file key {:?} from statuses (enabling retry)",
                             file_key

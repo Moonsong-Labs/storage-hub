@@ -956,7 +956,7 @@ where
                 .file_key_statuses
                 .iter()
                 .filter_map(|(file_key, status)| {
-                    if matches!(status, FileKeyStatus::Submitted)
+                    if matches!(status, FileKeyStatus::InBlock)
                         && pending_file_keys.contains(file_key)
                     {
                         Some(*file_key)
@@ -969,7 +969,7 @@ where
             if !reorged_keys.is_empty() {
                 warn!(
                     target: LOG_TARGET,
-                    "🔄 Detected {} file key(s) with Submitted status still pending (reorged out), enabling retry",
+                    "🔄 Detected {} file key(s) with InBlock status still pending (reorged out), enabling retry",
                     reorged_keys.len()
                 );
                 for file_key in reorged_keys {

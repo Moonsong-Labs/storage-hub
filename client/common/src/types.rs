@@ -334,11 +334,8 @@ where
 /// storage-related errors that the client cares about. It allows the client to match on these
 /// errors without having to know about every pallet that may exist in the runtime.
 ///
-/// The enum intentionally includes a catch-all [`Other`](Self::Other) variant so that
-/// unrecognized or out-of-scope errors can be handled without breaking client logic.
-///
 /// Conversion from the runtime's `RuntimeError` is up to each StorageHub-compatible
-/// runtime to implement, following the same pattern as [`StorageEnableEvents`].
+/// runtime to implement.
 #[derive(Debug)]
 pub enum StorageEnableErrors<Runtime>
 where
@@ -366,10 +363,4 @@ where
     Balances(pallet_balances::Error<Runtime>),
     /// Errors from [`pallet_bucket_nfts`].
     BucketNfts(pallet_bucket_nfts::Error<Runtime>),
-    /// Catch-all for errors from pallets we do not need to handle specifically in the SH Client.
-    ///
-    /// Contains a debug representation of the original error for logging purposes.
-    /// Note: [`pallet_randomness`] and `pallet_transaction_payment` are not included as they
-    /// don't define custom pallet errors.
-    Other(String),
 }
