@@ -1092,15 +1092,13 @@ where
         {
             Ok(proven) => {
                 if proven.is_empty() {
-                    Err(anyhow::anyhow!(
-                        "Expected at least one proven chunk but got none."
-                    ))
+                    Err(anyhow!("Expected at least one proven chunk but got none."))
                 } else {
                     // Calculate total batch size
                     let total_batch_size: usize = proven.iter().map(|chunk| chunk.data.len()).sum();
 
                     if total_batch_size > BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE {
-                        Err(anyhow::anyhow!(
+                        Err(anyhow!(
                             "Total batch size {} bytes exceeds maximum allowed size of {} bytes",
                             total_batch_size,
                             BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE
@@ -1110,7 +1108,7 @@ where
                     }
                 }
             }
-            Err(e) => Err(anyhow::anyhow!(
+            Err(e) => Err(anyhow!(
                 "Failed to verify and get proven file key chunks: {:?}",
                 e
             )),
@@ -1156,7 +1154,7 @@ where
                     rejection.reason,
                 )
                 .await?;
-                Err(anyhow::anyhow!(rejection.error_message))
+                Err(anyhow!(rejection.error_message))
             }
         }
     }
