@@ -55,7 +55,7 @@ where
     /// 1. Catch up to Forest root changes in this BSP's Forest.
     /// 2. In blocks that are a multiple of `BlockchainServiceConfig::check_for_pending_proofs_period`, catch up to proof submissions for the current tick.
     pub(crate) async fn bsp_init_block_processing<Block>(
-        &self,
+        &mut self,
         block_hash: &Runtime::Hash,
         block_number: &BlockNumber<Runtime>,
         tree_route: TreeRoute<Block>,
@@ -404,7 +404,7 @@ where
     }
 
     pub(crate) async fn bsp_process_forest_root_changing_events(
-        &self,
+        &mut self,
         event: StorageEnableEvents<Runtime>,
         revert: bool,
     ) {
