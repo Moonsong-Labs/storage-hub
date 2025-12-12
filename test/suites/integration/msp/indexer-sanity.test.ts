@@ -72,6 +72,11 @@ await describeMspNet(
 
       await userApi.file.newBucket(bucketName);
 
+      // The indexer writes bucket data to Postgres asynchronously from the chain.
+      // On faster or less loaded machines this assertion can race the indexer.
+      // Wait until the bucket has actually been indexed before querying.
+      await userApi.indexer.waitForBucketIndexed({ sql, bucketName });
+
       sqlResp = await sql`
                 SELECT *
                 FROM bucket
