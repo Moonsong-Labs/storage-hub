@@ -363,4 +363,6 @@ where
     Balances(pallet_balances::Error<Runtime>),
     /// Errors from [`pallet_bucket_nfts`].
     BucketNfts(pallet_bucket_nfts::Error<Runtime>),
+    /// Catch-all for errors from pallets that the SH Client does not specifically handle.
+    Other(String),
 }
