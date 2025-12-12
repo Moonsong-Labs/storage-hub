@@ -323,7 +323,7 @@ where
 
             if !mutations.is_empty() {
                 // Apply the mutations to the Forest.
-                let (_, new_root, mutated_keys_and_values) = <T::ForestVerifier as TrieProofDeltaApplier<
+                let (_, new_root, applied_mutations) = <T::ForestVerifier as TrieProofDeltaApplier<
                     T::MerkleTrieHashing,
                 >>::apply_delta(
                     &root, mutations.as_slice(), forest_proof
@@ -332,21 +332,24 @@ where
 
                 // Check that the number of mutated keys is the same as the mutations expected.
                 ensure!(
-                    mutated_keys_and_values.len() == mutations.len(),
+                    applied_mutations.len() == mutations.len(),
                     Error::<T>::UnexpectedNumberOfRemoveMutations
                 );
 
-                for (key, maybe_value) in mutated_keys_and_values.iter() {
+                for (key, mutation) in applied_mutations.iter() {
                     // Remove the mutated key from the list of `forest_keys_proven` to avoid having to verify the key proof.
                     forest_keys_proven.remove(key);
 
                     // Use the interface exposed by the Providers pallet to update the submitting Provider
                     // after the key removal if the key had a value.
-                    if let Some(trie_value) = maybe_value {
-                        ProvidersPalletFor::<T>::update_provider_after_key_removal(
-                            submitter, trie_value,
-                        )
-                        .map_err(|_| Error::<T>::FailedToApplyDelta)?;
+                    if let TrieMutation::Remove(trie_remove_mutation) = mutation {
+                        if let Some(trie_value) = &trie_remove_mutation.maybe_value {
+                            ProvidersPalletFor::<T>::update_provider_after_key_removal(
+                                submitter,
+                                &trie_value,
+                            )
+                            .map_err(|_| Error::<T>::FailedToApplyDelta)?;
+                        }
                     }
                 }
 
@@ -363,7 +366,7 @@ where
                 // Emit event of mutation applied.
                 Self::deposit_event(Event::MutationsAppliedForProvider {
                     provider_id: *submitter,
-                    mutations: mutations.to_vec(),
+                    mutations: applied_mutations.into_iter().collect(),
                     old_root: root,
                     new_root,
                 });
@@ -1097,16 +1100,15 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         let root = ProvidersPalletFor::<T>::get_root(*provider_id)
             .ok_or(Error::<T>::ProviderRootNotFound)?;
 
-        let (_, new_root, _) =
-            <T::ForestVerifier as TrieProofDeltaApplier<T::MerkleTrieHashing>>::apply_delta(
-                &root, mutations, proof,
-            )
-            .map_err(|_| Error::<T>::FailedToApplyDelta)?;
+        let (_, new_root, applied_mutations) = <T::ForestVerifier as TrieProofDeltaApplier<
+            T::MerkleTrieHashing,
+        >>::apply_delta(&root, mutations, proof)
+        .map_err(|_| Error::<T>::FailedToApplyDelta)?;
 
         // Emit event of mutation applied.
         Self::deposit_event(Event::MutationsAppliedForProvider {
             provider_id: *provider_id,
-            mutations: mutations.to_vec(),
+            mutations: applied_mutations.into_iter().collect(),
             old_root: root,
             new_root,
         });
@@ -1120,15 +1122,14 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         proof: &Self::ForestProof,
         event_info: Option<Vec<u8>>,
     ) -> Result<Self::MerkleHash, DispatchError> {
-        let (_, new_root, _) =
-            <T::ForestVerifier as TrieProofDeltaApplier<T::MerkleTrieHashing>>::apply_delta(
-                &root, mutations, proof,
-            )
-            .map_err(|_| Error::<T>::FailedToApplyDelta)?;
+        let (_, new_root, applied_mutations) = <T::ForestVerifier as TrieProofDeltaApplier<
+            T::MerkleTrieHashing,
+        >>::apply_delta(&root, mutations, proof)
+        .map_err(|_| Error::<T>::FailedToApplyDelta)?;
 
         // Emit event of mutation applied.
         Self::deposit_event(Event::MutationsApplied {
-            mutations: mutations.to_vec(),
+            mutations: applied_mutations.into_iter().collect(),
             old_root: *root,
             new_root,
             event_info,

@@ -1,9 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use frame_support::sp_runtime::DispatchError;
-use shp_traits::{CommitmentVerifier, TrieMutation, TrieProofDeltaApplier};
-use sp_std::collections::btree_set::BTreeSet;
-use sp_std::vec::Vec;
+use shp_traits::{CommitmentVerifier, TrieMutation, TrieProofDeltaApplier, TrieRemoveMutation};
+use sp_std::collections::{btree_map::BTreeMap, btree_set::BTreeSet};
 use sp_trie::{CompactProof, MemoryDB, TrieDBBuilder, TrieDBMutBuilder, TrieLayout, TrieMut};
 use trie_db::TrieIterator;
 
@@ -221,7 +220,7 @@ where
         (
             MemoryDB<T::Hash>,
             Self::Key,
-            Vec<(Self::Key, Option<Vec<u8>>)>,
+            BTreeMap<Self::Key, TrieMutation>,
         ),
         DispatchError,
     > {
@@ -248,13 +247,13 @@ where
         let mut trie = TrieDBMutBuilder::<T>::from_existing(&mut memdb, &mut root).build();
 
         // Apply mutations to the trie
-        let mut mutated_keys_and_values: Vec<(Self::Key, Option<Vec<u8>>)> = Vec::new();
+        let mut mutated_keys_and_values: BTreeMap<Self::Key, TrieMutation> = BTreeMap::new();
         for mutation in mutations.iter() {
             match mutation {
                 (key, TrieMutation::Add(mutation)) => {
                     trie.insert(key.as_ref(), &mutation.value)
                         .map_err(|_| "Failed to insert key into trie.")?;
-                    mutated_keys_and_values.push((*key, Some(mutation.value.clone())));
+                    mutated_keys_and_values.insert(*key, mutation.clone().into());
                 }
                 (key, TrieMutation::Remove(_)) => {
                     let previous_value = trie
@@ -262,7 +261,10 @@ where
                         .map_err(|_| "Failed to get value from trie.")?;
                     trie.remove(key.as_ref())
                         .map_err(|_| "Failed to remove key from trie.")?;
-                    mutated_keys_and_values.push((*key, previous_value));
+                    mutated_keys_and_values.insert(
+                        *key,
+                        TrieRemoveMutation::with_maybe_value(previous_value).into(),
+                    );
                 }
             }
         }

@@ -25,7 +25,7 @@ use sp_runtime::{
 use sp_runtime::{traits::Convert, BoundedBTreeSet};
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 use sp_weights::Weight;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
@@ -381,12 +381,12 @@ where
         (
             MemoryDB<T::Hash>,
             Self::Key,
-            Vec<(Self::Key, Option<Vec<u8>>)>,
+            BTreeMap<Self::Key, TrieMutation>,
         ),
         DispatchError,
     > {
         // Just return the root as is with no mutations
-        Ok((MemoryDB::<T::Hash>::default(), *root, Vec::new()))
+        Ok((MemoryDB::<T::Hash>::default(), *root, BTreeMap::new()))
     }
 }
 
