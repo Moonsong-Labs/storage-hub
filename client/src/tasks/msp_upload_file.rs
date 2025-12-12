@@ -435,24 +435,20 @@ where
             }
         };
 
-        // Collect file keys we want to accept to check if they're still pending
+        // Collect all file keys (both accept and reject) to check if they're still pending to filter
+        // any stale file keys which no longer have a pending storage requests.
         let file_keys_to_check: Vec<FileKey> = event
             .data
             .respond_storing_requests
             .iter()
-            .filter_map(|r| {
-                if let MspRespondStorageRequest::Accept = &r.response {
-                    Some(r.file_key.into())
-                } else {
-                    None
-                }
-            })
+            .map(|r| r.file_key.into())
             .collect();
 
-        // Query pending storage requests for these specific file keys.
-        // The runtime API already filters to only return requests that are:
+        // Query pending storage requests for all file keys (both accepts and rejects).
+        // The runtime API filters to only return requests that are:
         // 1. Assigned to this MSP
-        // 2. Not yet accepted (msp.1 == false)
+        // 2. Not yet responded to (msp.1 == false, meaning not yet accepted/confirmed)
+        // Note: We let the blockchain service handle removing stale file keys from statuses.
         let pending_file_keys: HashSet<H256> = if !file_keys_to_check.is_empty() {
             self.storage_hub_handler
                 .blockchain
@@ -477,7 +473,7 @@ where
 
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
 
-        // Filter out requests that are not pending
+        // Filter out requests that are do not have any pending storage requests.
         let filtered_pending_file_keys = event
             .data
             .respond_storing_requests
