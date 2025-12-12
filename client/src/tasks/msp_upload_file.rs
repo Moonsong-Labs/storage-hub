@@ -589,7 +589,6 @@ where
             .into();
 
         // Submit the extrinsic with events so we can inspect the dispatch error if it fails.
-        // This enables type-safe error checking against pallet_proofs_dealer::Error variants.
         let extrinsic_result = self
             .storage_hub_handler
             .blockchain
@@ -609,7 +608,7 @@ where
                     .with_max_retries(self.config.max_try_count)
                     .with_max_tip(self.config.max_tip.saturated_into())
                     .retry_only_if_timeout(),
-                true, // Request events to enable type-safe error checking
+                true,
             )
             .await;
 
@@ -627,6 +626,9 @@ where
             .collect::<Vec<_>>();
 
         // Handle extrinsic submission result
+        // - If the extrinsic failed, we remove the file keys from statuses to enable automatic retry on the next block.
+        // - If the extrinsic succeeded, we mark the file keys as Submitted if there were no errors.
+        // - If the extrinsic succeeded but no events were emitted, we remove the file keys from statuses to enable automatic retry on the next block.
         match extrinsic_result {
             Err(e) => {
                 error!(
@@ -1036,26 +1038,39 @@ where
         event: RemoteUploadRequest<Runtime>,
     ) -> anyhow::Result<bool> {
         let file_key = event.file_key.into();
-
-        // Get file metadata once for both bucket_id and fingerprint verification
-        let file_metadata = self
+        let bucket_id = match self
             .storage_hub_handler
             .file_storage
             .read()
             .await
             .get_metadata(&file_key)
-            .map_err(|e| {
+        {
+            Ok(metadata) => match metadata {
+                Some(metadata) => H256::from_slice(metadata.bucket_id().as_ref()),
+                None => {
+                    let err_msg = format!(
+                        "File does not exist for key {:?}. Maybe we forgot to unregister before deleting?",
+                        event.file_key
+                    );
+                    error!(target: LOG_TARGET, err_msg);
+                    return Err(anyhow!(err_msg));
+                }
+            },
+            Err(e) => {
                 let err_msg = format!("Failed to get file metadata: {:?}", e);
                 error!(target: LOG_TARGET, err_msg);
-                anyhow!(err_msg)
-            })?
-            .ok_or_else(|| {
-                let err_msg = format!("File does not exist for key {:?}", file_key);
-                error!(target: LOG_TARGET, err_msg);
-                anyhow!(err_msg)
-            })?;
+                return Err(anyhow!(err_msg));
+            }
+        };
 
-        let bucket_id = H256::from_slice(file_metadata.bucket_id().as_ref());
+        // Get the file metadata to verify the fingerprint
+        let file_metadata = {
+            let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+            read_file_storage
+                .get_metadata(&file_key)
+                .map_err(|e| anyhow!("Failed to get file metadata: {:?}", e))?
+                .ok_or_else(|| anyhow!("File metadata not found"))?
+        };
 
         // Verify that the fingerprint in the proof matches the expected file fingerprint
         let expected_fingerprint = file_metadata.fingerprint();
