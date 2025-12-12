@@ -7263,6 +7263,78 @@ mod bsp_stop_storing {
         }
 
         #[test]
+        fn bsp_request_stop_storing_fails_with_incomplete_storage_request() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let fingerprint = H256::zero();
+                let storage_amount: StorageDataUnit<Test> = 100;
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(vec![1]).unwrap();
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
+
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
+
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                )
+                .unwrap();
+
+                // Create an incomplete storage request for this file key
+                IncompleteStorageRequests::<Test>::insert(
+                    file_key,
+                    IncompleteStorageRequestMetadata {
+                        owner: owner_account_id.clone(),
+                        bucket_id,
+                        location: location.clone(),
+                        fingerprint,
+                        file_size: size,
+                        pending_bsp_removals: BoundedVec::try_from(vec![bsp_id]).unwrap(),
+                        pending_bucket_removal: false,
+                    },
+                );
+
+                // Try to request stop storing. This should fail with FileHasIncompleteStorageRequest
+                // Note: The check happens before forest proof verification, so we don't need a valid proof
+                assert_noop!(
+                    FileSystem::bsp_request_stop_storing(
+                        bsp_signed.clone(),
+                        file_key,
+                        bucket_id,
+                        location.clone(),
+                        owner_account_id.clone(),
+                        fingerprint,
+                        size,
+                        false,
+                        CompactProof {
+                            encoded_nodes: vec![file_key.as_ref().to_vec()],
+                        },
+                    ),
+                    Error::<Test>::FileHasIncompleteStorageRequest
+                );
+            });
+        }
+
+        #[test]
         fn bsp_confirm_stop_storing_fails_if_not_enough_time_has_passed_since_request() {
             new_test_ext().execute_with(|| {
                 let owner_account_id = Keyring::Alice.to_account_id();
@@ -7935,7 +8007,7 @@ mod bsp_stop_storing {
         }
 
         #[test]
-        fn bsp_confirm_stop_storing_success_and_deletes_payment_stream_for_last_file() {
+        fn bsp_request_stop_storing_deletes_payment_stream_for_last_file() {
             new_test_ext().execute_with(|| {
                 let owner_account_id = Keyring::Alice.to_account_id();
                 let owner = RuntimeOrigin::signed(owner_account_id.clone());
@@ -8140,41 +8212,12 @@ mod bsp_stop_storing {
                         bsp_id,
                         file_key,
                         owner: owner_account_id.clone(),
-                        location,
+                        location: location.clone(),
                     }
                     .into(),
                 );
 
-                // Advance enough blocks to allow the BSP to confirm the stop storing request.
-                roll_to(
-                    frame_system::Pallet::<Test>::block_number() + MinWaitForStopStoring::get(),
-                );
-
-                // Dispatch BSP confirm stop storing.
-                assert_ok!(FileSystem::bsp_confirm_stop_storing(
-                    bsp_signed.clone(),
-                    file_key,
-                    CompactProof {
-                        encoded_nodes: vec![file_key.as_ref().to_vec()],
-                    },
-                ));
-
-                // Assert that the pending stop storing request was removed.
-                assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_none());
-
-                // Assert that the correct event was deposited.
-                let new_root = Providers::get_root(bsp_id).unwrap();
-
-                System::assert_last_event(
-                    Event::BspConfirmStoppedStoring {
-                        bsp_id,
-                        file_key,
-                        new_root,
-                    }
-                    .into(),
-                );
-
-				// Check that the dynamic-rate payment stream between the user and the provider doesn't exist
+				// Check that the dynamic-rate payment stream between the user and the provider was deleted
                 assert!(<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_info(
 					&bsp_id,
 					&owner_account_id
@@ -8183,7 +8226,7 @@ mod bsp_stop_storing {
         }
 
         #[test]
-        fn bsp_confirm_stop_storing_success_and_updates_payment_streams_amount_provided() {
+        fn bsp_request_stop_storing_updates_payment_streams_amount_provided() {
             new_test_ext().execute_with(|| {
                 let owner_account_id = Keyring::Alice.to_account_id();
                 let owner = RuntimeOrigin::signed(owner_account_id.clone());
@@ -8455,6 +8498,22 @@ mod bsp_stop_storing {
                     .into(),
                 );
 
+				// Check that the amount provided of the dynamic-rate payment stream between the user and the provider was updated
+                assert!(
+					<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_info(
+						&bsp_id,
+						&owner_account_id
+					)
+					.is_some()
+				);
+				let maybe_amount_provided = <Test as crate::Config>::PaymentStreams::get_dynamic_rate_payment_stream_amount_provided(
+					&bsp_id,
+					&owner_account_id
+				);
+				assert!(maybe_amount_provided.is_some());
+				let amount_provided = maybe_amount_provided.unwrap();
+				assert_eq!(amount_provided, size);
+
                 // Advance enough blocks to allow the BSP to confirm the stop storing request.
                 roll_to(
                     frame_system::Pallet::<Test>::block_number() + MinWaitForStopStoring::get(),
@@ -8484,7 +8543,7 @@ mod bsp_stop_storing {
                     .into(),
                 );
 
-				// Check that the amount provided of the dynamic-rate payment stream between the user and the provider was updated
+                // Check that the amount provided of the dynamic-rate payment stream between the user and the provider has not changed
                 assert!(
 					<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_info(
 						&bsp_id,
@@ -8492,13 +8551,13 @@ mod bsp_stop_storing {
 					)
 					.is_some()
 				);
-				let maybe_amount_provided = <Test as crate::Config>::PaymentStreams::get_dynamic_rate_payment_stream_amount_provided(
+				let maybe_amount_provided_after_confirm = <Test as crate::Config>::PaymentStreams::get_dynamic_rate_payment_stream_amount_provided(
 					&bsp_id,
 					&owner_account_id
 				);
-				assert!(maybe_amount_provided.is_some());
-				let amount_provided = maybe_amount_provided.unwrap();
-				assert_eq!(amount_provided, size);
+				assert!(maybe_amount_provided_after_confirm.is_some());
+				let amount_provided_after_confirm = maybe_amount_provided_after_confirm.unwrap();
+				assert_eq!(amount_provided_after_confirm, amount_provided);
             });
         }
 
@@ -8725,6 +8784,15 @@ mod bsp_stop_storing {
                 // Increase the data used by the registered bsp, to simulate that it is indeed storing the file
                 assert_ok!(Providers::increase_capacity_used(&bsp_id, size,));
 
+                // Create payment stream to simulate that BSP confirmed storing the file at a previous time
+                let amount_provided = UnitsProvidedFor::<Test>::from(2 * size);
+                assert_ok!(PaymentStreams::create_dynamic_rate_payment_stream(
+                    frame_system::RawOrigin::Root.into(),
+                    bsp_id,
+                    owner_account_id.clone(),
+                    amount_provided,
+                ));
+
                 // Dispatch BSP stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
                     bsp_signed.clone(),
@@ -8813,6 +8881,15 @@ mod bsp_stop_storing {
 
                 // Increase the data used by the registered bsp, to simulate that it is indeed storing the file
                 assert_ok!(Providers::increase_capacity_used(&bsp_id, size,));
+
+                // Create payment stream to simulate that BSP confirmed storing the file at a previous time
+                let amount_provided = UnitsProvidedFor::<Test>::from(2 * size);
+                assert_ok!(PaymentStreams::create_dynamic_rate_payment_stream(
+                    frame_system::RawOrigin::Root.into(),
+                    bsp_id,
+                    owner_account_id.clone(),
+                    amount_provided,
+                ));
 
 				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
                 let current_tick_plus_storage_request_ttl =
