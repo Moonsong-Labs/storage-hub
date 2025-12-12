@@ -109,18 +109,21 @@ export const waitForBspVolunteer = async (api: ApiPromise, checkQuantity?: numbe
  *
  * @param api - The ApiPromise instance to interact with the blockchain.
  * @param checkQuantity - Optional param to specify the number of expected extrinsics.
+ * @param timeoutMs - Optional param to specify the timeout in milliseconds (default: 10000ms).
  * @returns A Promise that resolves when a BSP has volunteered and been accepted.
  *
  * @throws Will throw an error if the expected extrinsic is not found.
  */
 export const waitForBspVolunteerWithoutSealing = async (
   api: ApiPromise,
-  checkQuantity?: number
+  checkQuantity?: number,
+  timeoutMs?: number
 ) => {
   await waitForTxInPool(api, {
     module: "fileSystem",
     method: "bspVolunteer",
-    checkQuantity
+    checkQuantity,
+    timeout: timeoutMs
   });
 };
 

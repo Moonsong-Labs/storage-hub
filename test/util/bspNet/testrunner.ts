@@ -2,6 +2,11 @@ import { EventEmitter } from "node:events";
 import { after, afterEach, before, beforeEach, describe, it } from "node:test";
 import { createSqlClient, verifyContainerFreshness } from "..";
 import { NetworkLauncher } from "../netLaunch";
+import {
+  type DynamicNetworkContext,
+  launchNetworkFromTopology,
+  type NetworkTopology
+} from "../netLaunch";
 import * as ShConsts from "./consts";
 import { cleardownTest } from "./helpers";
 import { BspNetTestApi, type EnrichedBspApi } from "./test-api";
@@ -299,3 +304,83 @@ const pickConfig = (options: TestOptions) => {
               { noisy: false, rocksdb: true }
             ];
 };
+
+/**
+ * Dynamic network context for topology-based tests.
+ */
+export interface DynamicNetworkTestContext {
+  it: typeof it;
+  network: DynamicNetworkContext;
+  before: typeof before;
+  after: typeof after;
+  beforeEach: typeof beforeEach;
+  afterEach: typeof afterEach;
+}
+
+/**
+ * Describes a test suite using dynamic network topology.
+ *
+ * Creates test networks with arbitrary numbers of BSPs, MSPs, and fishermen.
+ * See topology.ts for infrastructure architecture.
+ *
+ * @example
+ * ```ts
+ * describeNetwork(
+ *   "100 BSP scale test",
+ *   { bsps: 100, msps: 2, fishermen: 1 },
+ *   { timeout: 300000 },
+ *   (ctx) => {
+ *     ctx.it("all BSPs can volunteer", async () => {
+ *       const results = await ctx.network.mapBsps(async (api, index) => {
+ *         return api.sealBlock(api.tx.fileSystem.bspVolunteer(...));
+ *       });
+ *       assert.equal(results.length, 100);
+ *     });
+ *   }
+ * );
+ * ```
+ */
+export async function describeNetwork(
+  title: string,
+  topology: NetworkTopology,
+  options: TestOptions,
+  tests: (context: DynamicNetworkTestContext) => void
+): Promise<void> {
+  const describeFunc = options?.only ? describe.only : options?.skip ? describe.skip : describe;
+
+  describeFunc(`DynamicNetwork: ${title}`, { timeout: options?.timeout }, () => {
+    let network: DynamicNetworkContext | undefined;
+
+    before(async () => {
+      await verifyContainerFreshness();
+
+      network = await launchNetworkFromTopology(topology, {
+        runtimeType: options?.runtimeType ?? "parachain"
+      });
+    });
+
+    after(async () => {
+      if (network && !options?.keepAlive) {
+        await network.cleanup();
+      } else if (options?.keepAlive) {
+        process.exit(0);
+      }
+    });
+
+    const context: DynamicNetworkTestContext = {
+      it,
+      get network() {
+        if (!network) {
+          throw new Error("Network not initialized - before() hook may have failed");
+        }
+        return network;
+      },
+      before,
+      after,
+      beforeEach,
+      afterEach
+    };
+
+    tests(context);
+  });
+}
