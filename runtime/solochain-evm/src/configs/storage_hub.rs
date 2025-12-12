@@ -106,6 +106,7 @@ impl Into<StorageEnableErrors<crate::Runtime>> for crate::RuntimeError {
             crate::RuntimeError::FileSystem(error) => StorageEnableErrors::FileSystem(error),
             crate::RuntimeError::Balances(error) => StorageEnableErrors::Balances(error),
             crate::RuntimeError::BucketNfts(error) => StorageEnableErrors::BucketNfts(error),
+            other => StorageEnableErrors::Other(format!("{:?}", other)),
         }
     }
 }
