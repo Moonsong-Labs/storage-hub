@@ -121,6 +121,7 @@ pub trait StorageEnableApiCollection<Runtime>:
         BucketId<Runtime>,
         Multiaddresses<Runtime>,
         ValuePropositionWithId<Runtime>,
+        Runtime::Hash,
     > + PaymentStreamsRuntimeApi<Block, ProviderId<Runtime>, Balance<Runtime>, AccountId<Runtime>>
 where
     Runtime: frame_system::Config
@@ -171,6 +172,7 @@ where
             BucketId<Runtime>,
             Multiaddresses<Runtime>,
             ValuePropositionWithId<Runtime>,
+            Runtime::Hash,
         > + PaymentStreamsRuntimeApi<Block, ProviderId<Runtime>, Balance<Runtime>, AccountId<Runtime>>,
     Runtime: frame_system::Config
         + pallet_storage_providers::Config
