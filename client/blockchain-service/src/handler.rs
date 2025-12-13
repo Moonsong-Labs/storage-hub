@@ -156,21 +156,10 @@ where
 {
     /// Extrinsic retry timeout in seconds.
     pub extrinsic_retry_timeout: u64,
-    /// The minimum number of blocks behind the current best block to consider the node out of sync.
-    ///
-    /// This triggers a catch-up of proofs and Forest root changes in the blockchain service, before
-    /// continuing to process incoming events.
-    pub sync_mode_min_blocks_behind: BlockNumber<Runtime>,
 
     /// On blocks that are multiples of this number, the blockchain service will trigger the catch
     /// up of proofs (see [`BlockchainService::proof_submission_catch_up`]).
     pub check_for_pending_proofs_period: BlockNumber<Runtime>,
-
-    /// The maximum number of blocks from the past that will be processed for catching up the root
-    /// changes (see [`BlockchainService::forest_root_changes_catchup`]). This constant determines
-    /// the maximum size of the `tree_route` in the [`NewBlockNotificationKind::NewBestBlock`] enum
-    /// variant.
-    pub max_blocks_behind_to_catch_up_root_changes: BlockNumber<Runtime>,
 
     /// The peer ID of this node.
     pub peer_id: Option<PeerId>,
@@ -191,9 +180,7 @@ where
     fn default() -> Self {
         Self {
             extrinsic_retry_timeout: 30,
-            sync_mode_min_blocks_behind: 5u32.into(),
             check_for_pending_proofs_period: 4u32.into(),
-            max_blocks_behind_to_catch_up_root_changes: 10u32.into(),
             peer_id: None,
             enable_msp_distribute_files: false,
             pending_db_url: None,
@@ -288,6 +275,9 @@ where
                 );
             }
         }
+
+        // Catch up on any blocks that were imported but not processed
+        self.actor.catch_up_missed_blocks().await;
 
         // Import notification stream to be notified of new blocks.
         // The behaviour of this stream is:
@@ -1516,7 +1506,7 @@ where
     /// - **Reorg during sync**: Both `every_import_notification_stream` and `block_import_notification_stream` fire
     ///
     /// When a reorg happens during sync:
-    /// 1. This handler receives the notification but skips it (because `tree_route.is_some()`)
+    /// 1. This handler receives the notification but skips it (reorg detection via `register_best_block_and_check_reorg`)
     /// 2. `block_import_notification_stream` also fires (because `tree_route.is_some()` makes
     ///    `should_notify_recent_block = true` in Substrate)
     /// 3. The normal `process_block_import` flow gets executed
@@ -1528,25 +1518,30 @@ where
         &mut self,
         notification: BlockImportNotification<OpaqueBlock>,
     ) {
-        // Only process during initial sync and only for new best blocks that are linear extensions.
-        //
-        // We skip blocks where:
-        // - origin != NetworkInitialSync: Not a sync block, will be handled by normal flow
-        // - !is_new_best: Uncle/stale block, not on the canonical chain
-        // - tree_route.is_some(): Reorg block, will be handled by `block_import_notification_stream`
-        //   which fires for reorgs even during sync, triggering `forest_root_changes_catchup`
-        if notification.origin != sp_consensus::BlockOrigin::NetworkInitialSync
-            || !notification.is_new_best
-            || notification.tree_route.is_some()
-        {
+        // Only process during initial sync
+        if notification.origin != sp_consensus::BlockOrigin::NetworkInitialSync {
             return;
         }
 
-        // Get the imported block's hash and number.
-        let block_hash = notification.hash;
-        let block_number: BlockNumber<Runtime> = (*notification.header.number()).into();
+        // Check if this new imported block is the new best, and if it causes a reorg.
+        let new_block_notification_kind = self.register_best_block_and_check_reorg(&notification);
 
-        trace!(target: LOG_TARGET, "🔄 Processing sync block #{}: {}", block_number, block_hash);
+        // Only process new best blocks that are linear extensions (not reorgs or non-best blocks).
+        let block_info = match new_block_notification_kind {
+            NewBlockNotificationKind::NewBestBlock { new_best_block, .. } => new_best_block,
+            // Skip non-best blocks (uncle/stale blocks not on the canonical chain)
+            NewBlockNotificationKind::NewNonBestBlock(_) => return,
+            // Skip reorgs siknce they're handled by `block_import_notification_stream` which fires
+            // for reorgs even during sync, triggering proper forest_root_changes_catchup
+            NewBlockNotificationKind::Reorg { .. } => return,
+        };
+
+        let MinimalBlockInfo {
+            number: block_number,
+            hash: block_hash,
+        } = block_info;
+
+        info!(target: LOG_TARGET, "🔄 Processing initial sync block #{}: {:?}", block_number, block_hash);
 
         // Ensure the provider ID is synced before processing mutations
         self.sync_provider_id(&block_hash);
@@ -1563,12 +1558,6 @@ where
             }
             None => {}
         }
-
-        // Update our best_block to track the progress through sync
-        self.best_block = MinimalBlockInfo {
-            number: block_number,
-            hash: block_hash,
-        };
 
         // Update the last processed block number in persistent storage for tracking
         self.update_last_processed_block(block_number);
@@ -1787,10 +1776,129 @@ where
         };
     }
 
+    /// Catch up on any blocks that were imported to the database but not processed.
+    ///
+    /// This handles race conditions during shutdown where the Substrate client database commits a block write
+    /// before our handlers fully processed it. On restart, we compare `last_processed_block`
+    /// (from persistent storage) with the database's `best_block` and process any gap.
+    ///
+    /// This function also initializes `self.best_block` to the client's actual best block,
+    /// ensuring we start from the correct position regardless of whether there are missed blocks.
+    async fn catch_up_missed_blocks(&mut self) {
+        // Get the best block saved in the node's Substrate client database
+        let chain_info = self.client.info();
+        let best_number: BlockNumber<Runtime> = chain_info.best_number.saturated_into();
+        let best_hash = chain_info.best_hash;
+
+        // Initialize self.best_block to match the client's actual state
+        self.best_block = MinimalBlockInfo {
+            number: best_number,
+            hash: best_hash,
+        };
+
+        // Get the last processed block saved in the node's persistent storage
+        let Some(last_processed_number) = self.get_last_processed_block() else {
+            // If there's no `last_processed_block` in persistent storage, it means this is the first startup of the node, which
+            // means there's nothing to catch up on.
+            info!(target: LOG_TARGET, "No last processed block found in persistent storage. Skipping startup catch up.");
+            return;
+        };
+
+        // If the best block is not greater than the last processed block, there's nothing to catch up on
+        if best_number <= last_processed_number {
+            info!(
+                target: LOG_TARGET,
+                "No missed blocks to catch up (last_processed={}, best={})",
+                last_processed_number, best_number
+            );
+            return;
+        }
+
+        // If the best block is greater than the last processed block, there are missed blocks to catch up on
+        info!(
+            target: LOG_TARGET,
+            "🔄 Catching up missed blocks from #{} to #{}",
+            last_processed_number, best_number
+        );
+
+        // Get the hash of the last processed block
+        let last_processed_hash = match self.client.hash(last_processed_number.saturated_into()) {
+            Ok(Some(hash)) => hash,
+            Ok(None) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "Could not find hash for last processed block #{}. Skipping startup catchup.",
+                    last_processed_number
+                );
+                return;
+            }
+            Err(e) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "Failed to get hash for last processed block #{}: {:?}. Skipping startup catchup.",
+                    last_processed_number, e
+                );
+                return;
+            }
+        };
+
+        // Build the tree route from the last processed block to the best block
+        let tree_route = match sp_blockchain::tree_route(
+            self.client.as_ref(),
+            last_processed_hash,
+            best_hash,
+        ) {
+            Ok(route) => route,
+            Err(e) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "Failed to build tree route for startup catchup: {:?}. Block may have been pruned.",
+                    e
+                );
+                return;
+            }
+        };
+
+        let enacted_count = tree_route.enacted().len();
+
+        // Process mutations for each enacted block
+        for block in tree_route.enacted() {
+            info!(target: LOG_TARGET, "⏩ Processing startup catch up block #{}: {:?}", block.number, block.hash);
+            // Sync the provider ID for this block (in case it changed)
+            self.sync_provider_id(&block.hash);
+
+            // Process mutations based on provider type
+            match &self.maybe_managed_provider {
+                Some(ManagedProvider::Bsp(bsp_handler)) => {
+                    let bsp_id = bsp_handler.bsp_id;
+                    self.process_bsp_sync_mutations(&block.hash, bsp_id).await;
+                }
+                Some(ManagedProvider::Msp(msp_handler)) => {
+                    let msp_id = msp_handler.msp_id;
+                    self.process_msp_sync_mutations(&block.hash, msp_id).await;
+                }
+                None => {}
+            }
+        }
+
+        // Update the local best block and last processed block to reflect the catch up
+        self.best_block = MinimalBlockInfo {
+            number: best_number,
+            hash: best_hash,
+        };
+        self.update_last_processed_block(best_number);
+
+        info!(
+            target: LOG_TARGET,
+            "✅ Startup catchup complete. Processed {} missed block(s).",
+            enacted_count
+        );
+    }
+
     /// Update the last processed block number in persistent storage.
     ///
-    /// Note: This value is currently not being used, but it's good practice to update it in case at some point
-    /// we need it.
+    /// This value is used on startup to detect and process any blocks that were imported
+    /// to the database but not fully processed (e.g., due to race conditions during shutdown).
     fn update_last_processed_block(&self, block_number: BlockNumber<Runtime>) {
         let state_store_context = self.persistent_state.open_rw_context_with_overlay();
         state_store_context
@@ -1799,5 +1907,17 @@ where
             })
             .write(&block_number);
         state_store_context.commit();
+    }
+
+    /// Read the last processed block number from persistent storage.
+    ///
+    /// Returns `None` if no block has been processed yet (first run).
+    fn get_last_processed_block(&self) -> Option<BlockNumber<Runtime>> {
+        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+        state_store_context
+            .access_value(&LastProcessedBlockNumberCf::<Runtime> {
+                phantom: Default::default(),
+            })
+            .read()
     }
 }

@@ -666,10 +666,7 @@ pub enum NewBlockNotificationKind<Runtime: StorageEnableRuntime> {
     /// - `new_best_block`: The new best block that was imported.
     /// - `tree_route`: The [`TreeRoute`] with `new_best_block` as the last element. The
     ///   length of the `tree_route` is determined by the number of blocks between the
-    ///   `last_best_block_processed` and `new_best_block`, but if there are more than
-    ///   `BlockchainServiceConfig::max_blocks_behind_to_catch_up_root_changes` blocks between the two, the route
-    ///   will be trimmed to include the first `BlockchainServiceConfig::max_blocks_behind_to_catch_up_root_changes`
-    ///   before the `new_best_block`.
+    ///   `last_best_block_processed` and `new_best_block`.
     NewBestBlock {
         last_best_block_processed: MinimalBlockInfo<Runtime>,
         new_best_block: MinimalBlockInfo<Runtime>,

@@ -366,7 +366,6 @@ where
             // Construct the tree route from the last best block processed and the new best block.
             // Fetch the parents of the new best block until:
             // - We reach the genesis block, or
-            // - The size of the route is equal to `BlockchainServiceConfig::max_blocks_behind_to_catch_up_root_changes`, or
             // - The parent block is not found, or
             // - We reach the last best block processed.
             let mut route = vec![new_block_info.into()];
@@ -378,13 +377,9 @@ where
                     break;
                 }
 
-                // Check if the route reached the maximum number of blocks to catch up on.
-                // The cast is safe because it is reasonable to assume the route length is less than u32::MAX.
-                let route_length = BlockNumber::<Runtime>::from(route.len() as u32);
-                if route_length == self.config.max_blocks_behind_to_catch_up_root_changes {
-                    trace!(target: LOG_TARGET, "Reached maximum blocks to catch up on while building tree route for new best block");
-                    break;
-                }
+                // We don't truncate the route here as it will be always smaller or equal to the `MAJOR_SYNC_BLOCKS` constant
+                // of Substrate (otherwise the `handle_block_import_notification` handler would not have been executed, since we
+                // would be in sync mode) and this constant is small enough to not cause any performance issues or overly long tree routes.
 
                 // Get the parent block.
                 let parent_hash = match self.client.header(last_block_added.hash) {

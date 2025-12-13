@@ -345,21 +345,9 @@ where
             blockchain_service_config.extrinsic_retry_timeout = extrinsic_retry_timeout;
         }
 
-        if let Some(sync_mode_min_blocks_behind) = config.sync_mode_min_blocks_behind {
-            blockchain_service_config.sync_mode_min_blocks_behind =
-                sync_mode_min_blocks_behind.saturated_into();
-        }
-
         if let Some(check_for_pending_proofs_period) = config.check_for_pending_proofs_period {
             blockchain_service_config.check_for_pending_proofs_period =
                 check_for_pending_proofs_period.saturated_into();
-        }
-
-        if let Some(max_blocks_behind_to_catch_up_root_changes) =
-            config.max_blocks_behind_to_catch_up_root_changes
-        {
-            blockchain_service_config.max_blocks_behind_to_catch_up_root_changes =
-                max_blocks_behind_to_catch_up_root_changes.saturated_into();
         }
 
         if let Some(peer_id) = config.peer_id {
@@ -807,12 +795,8 @@ impl Into<BspSubmitProofConfig> for BspSubmitProofOptions {
 pub struct BlockchainServiceOptions {
     /// Extrinsic retry timeout in seconds.
     pub extrinsic_retry_timeout: Option<u64>,
-    /// The minimum number of blocks behind the current best block to consider the node out of sync.
-    pub sync_mode_min_blocks_behind: Option<u32>,
     /// On blocks that are multiples of this number, the blockchain service will trigger the catch of proofs.
     pub check_for_pending_proofs_period: Option<u32>,
-    /// The maximum number of blocks from the past that will be processed for catching up the root changes.
-    pub max_blocks_behind_to_catch_up_root_changes: Option<u32>,
     /// The peer ID of this node.
     pub peer_id: Option<Vec<u8>>,
     /// Whether MSP nodes should distribute files to BSPs.
@@ -832,16 +816,8 @@ impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
 
         BlockchainServiceConfig {
             extrinsic_retry_timeout: self.extrinsic_retry_timeout.unwrap_or_default(),
-            sync_mode_min_blocks_behind: self
-                .sync_mode_min_blocks_behind
-                .unwrap_or_default()
-                .saturated_into(),
             check_for_pending_proofs_period: self
                 .check_for_pending_proofs_period
-                .unwrap_or_default()
-                .saturated_into(),
-            max_blocks_behind_to_catch_up_root_changes: self
-                .max_blocks_behind_to_catch_up_root_changes
                 .unwrap_or_default()
                 .saturated_into(),
             peer_id,
