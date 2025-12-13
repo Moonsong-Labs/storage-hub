@@ -21,7 +21,7 @@ use shc_blockchain_service::{
         NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
         ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
         ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser,
-        StartMovedBucketDownload, UserWithoutFunds, VerifyMspBucketForests,
+        StartMovedBucketDownload, UserWithoutFunds,
     },
     handler::BlockchainServiceConfig,
     BlockchainService,
@@ -54,7 +54,6 @@ use crate::{
         msp_retry_bucket_move::MspRetryBucketMoveTask,
         msp_stop_storing_insolvent_user::MspStopStoringInsolventUserTask,
         msp_upload_file::MspUploadFileTask,
-        msp_verify_bucket_forests::MspVerifyBucketForestsTask,
         sp_slash_provider::SlashProviderTask,
         user_sends_file::UserSendsFileTask,
     },
@@ -319,7 +318,6 @@ where
                 // MspRemoveFinalisedFilesTask handles events for removing files from file storage after mutations are finalised.
                 FinalisedBucketMutationsApplied<Runtime> => MspDeleteFileTask,
                 FinalisedStorageRequestRejected<Runtime> => MspDeleteFileTask,
-                VerifyMspBucketForests => MspVerifyBucketForestsTask,
             ]
         );
     }
