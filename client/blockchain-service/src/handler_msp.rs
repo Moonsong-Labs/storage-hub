@@ -114,7 +114,7 @@ where
                     debug!(target: LOG_TARGET, "Applying {} mutations during sync for bucket [{:?}]", mutations.len(), bucket_id);
                     let forest_key = bucket_id.as_ref().to_vec();
                     for (file_key, mutation) in mutations {
-                        debug!(target: LOG_TARGET, "Applying mutation {:?} for file key {}", mutation, file_key);
+                        info!(target: LOG_TARGET, "🔧 Applying mutation {:?} for file key {:?} in bucket [{:?}]", mutation, file_key, bucket_id);
                         if let Err(e) = self
                             .apply_forest_mutation(forest_key.clone(), &file_key, &mutation)
                             .await

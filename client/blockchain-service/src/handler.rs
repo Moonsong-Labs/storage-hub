@@ -111,6 +111,23 @@ where
     pub(crate) capacity_manager: Option<CapacityRequestQueue<Runtime>>,
     /// Whether the node is running in maintenance mode.
     pub(crate) maintenance_mode: bool,
+    /// Tracks whether initial sync tasks have been completed after startup/recovery.
+    ///
+    /// This flag starts as `false` and is set to `true` after the first block is processed
+    /// via `handle_block_import_notification`. This is the natural "sync completed" signal
+    /// because `handle_block_import_notification` only fires for `NetworkBroadcast` blocks
+    /// (i.e., live blocks after sync is complete), not for `NetworkInitialSync` blocks.
+    ///
+    /// This covers all scenarios:
+    /// - Cold start when already synced: First block triggers initial sync
+    /// - Cold start needing sync: All sync blocks processed, then the first post-sync block triggers initial sync
+    /// - Recovery after falling behind: Same as above
+    ///
+    /// When `false`, the first `handle_block_import_notification` call will trigger
+    /// `handle_initial_sync` to perform provider-specific initialization tasks:
+    /// - MSP: Verify bucket forest roots, emit pending storage requests
+    /// - BSP: Verify forest root, catch up on proof submissions
+    pub(crate) initial_sync_completed: bool,
     /// Transaction manager for tracking pending transactions and managing nonces.
     pub(crate) transaction_manager:
         TransactionManager<Runtime::Hash, Runtime::Call, BlockNumber<Runtime>>,
@@ -1405,6 +1422,7 @@ where
             notify_period,
             capacity_manager: capacity_request_queue,
             maintenance_mode,
+            initial_sync_completed: false,
             transaction_manager: TransactionManager::new(TransactionManagerConfig::default()),
             // Temporary sender, will be replaced by the event loop during startup
             tx_status_sender: {
@@ -1426,8 +1444,6 @@ where
             trace!(target: LOG_TARGET, "🔒 Maintenance mode is enabled. Skipping processing of block import notification: {:?}", notification);
             return;
         }
-
-        let last_block_processed = self.best_block;
 
         // Check if this new imported block is the new best, and if it causes a reorg.
         let new_block_notification_kind = self.register_best_block_and_check_reorg(&notification);
@@ -1457,13 +1473,10 @@ where
         // Get provider IDs linked to keys in this node's keystore and update the nonce.
         self.init_block_processing(&block_hash);
 
-        // If this is the first block import notification, we might need to catch up.
-        // Check if we just came out of syncing mode.
-        // We use saturating_sub because in a reorg, there is a potential scenario where the last
-        // block processed is higher than the current block number.
-        let sync_mode_min_blocks_behind = self.config.sync_mode_min_blocks_behind;
-        if block_number.saturating_sub(last_block_processed.number) > sync_mode_min_blocks_behind {
+        // Trigger initial sync tasks on the first block import notification after startup/recovery.
+        if !self.initial_sync_completed {
             self.handle_initial_sync(notification).await;
+            self.initial_sync_completed = true;
         }
 
         let block_number = block_number.saturated_into();
@@ -1486,6 +1499,16 @@ where
     /// would end up with a provider who's forest is out of sync with the on-chain state and who
     /// has no way of recovering other than manually applying the required changes to the forest.
     ///
+    /// ## Sync handling approach
+    ///
+    /// Substrate uses `MAJOR_SYNC_BLOCKS = 5` to determine when a node is "major syncing":
+    /// - **6+ blocks behind**: `BlockOrigin::NetworkInitialSync` → handled by this function
+    /// - **≤5 blocks behind**: `BlockOrigin::NetworkBroadcast` → handled by normal flow
+    ///
+    /// This creates a natural hybrid approach:
+    /// 1. If the node requires heavy sync (6+ blocks behind): Process only mutations block-by-block
+    /// 2. If the node is already near the chain tip (≤5 blocks behind): Normal flow with full event processing
+    ///
     /// ## Reorg handling during sync
     ///
     /// Substrate's notification behavior during initial sync:
@@ -1498,7 +1521,7 @@ where
     ///    `should_notify_recent_block = true` in Substrate)
     /// 3. The normal `process_block_import` flow gets executed
     /// 4. `forest_root_changes_catchup(&tree_route)` properly reverts the retracted blocks' mutations
-    /// and enacts the new blocks' mutations.
+    ///    and enacts the new blocks' mutations.
     ///
     /// This ensures reorgs are always handled correctly with proper mutation reversions, even during sync.
     async fn handle_sync_block_notification(
@@ -1540,6 +1563,12 @@ where
             }
             None => {}
         }
+
+        // Update our best_block to track the progress through sync
+        self.best_block = MinimalBlockInfo {
+            number: block_number,
+            hash: block_hash,
+        };
 
         // Update the last processed block number in persistent storage for tracking
         self.update_last_processed_block(block_number);
