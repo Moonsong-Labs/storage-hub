@@ -450,6 +450,18 @@ declare module '@polkadot/api-base/types/events' {
                 fileKey: H256;
             }>;
             /**
+             * Notifies that an incomplete storage request has been fully cleaned up.
+             *
+             * This event is emitted in two scenarios:
+             * 1. When an incomplete storage request is created but there are no providers to clean
+             * (e.g., MSP confirmed with inclusion proof and no BSPs confirmed).
+             * 2. When the file has been removed from all providers and the incomplete storage
+             * request entry is removed from storage.
+             **/
+            IncompleteStorageRequestCleanedUp: AugmentedEvent<ApiType, [fileKey: H256], {
+                fileKey: H256;
+            }>;
+            /**
              * Notifies that a bucket has been moved to a new MSP under a new value proposition.
              **/
             MoveBucketAccepted: AugmentedEvent<ApiType, [bucketId: H256, oldMspId: Option<H256>, newMspId: H256, valuePropId: H256], {
