@@ -1826,7 +1826,7 @@ where
     /// If `mutation` is a [`TrieRemoveMutation`], it will remove the file with the key `file_key` from the Forest.
     ///
     /// Changes are applied to the Forest in `self.forest_storage_handler.get(forest_key)`.
-    async fn apply_forest_mutation(
+    pub(crate) async fn apply_forest_mutation(
         &self,
         forest_key: Vec<u8>,
         file_key: &Runtime::Hash,
@@ -1834,9 +1834,14 @@ where
     ) -> Result<()> {
         let fs = self
             .forest_storage_handler
-            .get(&forest_key.into())
+            .get(&forest_key.clone().into())
             .await
-            .ok_or_else(|| anyhow!("CRITICAL❗️❗️ Failed to get forest storage."))?;
+            .ok_or_else(|| {
+                anyhow!(
+                    "CRITICAL❗️❗️ Failed to get forest storage for forest key [{:x?}].",
+                    forest_key
+                )
+            })?;
 
         // Write lock is released when exiting the scope of this `match` statement.
         match mutation {

@@ -1,5 +1,5 @@
 use log::{debug, error, info, trace, warn};
-use std::{str, sync::Arc};
+use std::{collections::HashSet, str, sync::Arc};
 use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
 use sc_client_api::HeaderBackend;
@@ -12,13 +12,14 @@ use pallet_file_system_runtime_api::FileSystemApi;
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use shc_actors_framework::actor::Actor;
 use shc_common::{
+    blockchain_utils::get_events_at_block,
     traits::StorageEnableRuntime,
     typed_store::CFDequeAPI,
     types::{
         BackupStorageProviderId, BlockHash, BlockNumber, BucketId, ProviderId, StorageEnableEvents,
     },
 };
-use shc_forest_manager::traits::ForestStorageHandler;
+use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
 use crate::{
     events::{
@@ -27,7 +28,7 @@ use crate::{
         FinalisedStorageRequestRejected, ForestWriteLockTaskData, MoveBucketRequestedForMsp,
         NewStorageRequest, ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData,
         ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
-        StartMovedBucketDownload, VerifyMspBucketForests,
+        StartMovedBucketDownload,
     },
     handler::LOG_TARGET,
     types::{FileDistributionInfo, ManagedProvider, MultiInstancesNodeRole},
@@ -42,15 +43,105 @@ where
     FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
+    /// Process mutation events during network initial sync.
+    ///
+    /// This is called for each sync block to apply `MutationsApplied` events
+    /// for buckets managed by this MSP before state pruning can occur.
+    /// This ensures the local bucket forests stay in sync with the on-chain state
+    /// even when the node has been offline for a long period.
+    pub(crate) async fn process_msp_sync_mutations(
+        &self,
+        block_hash: &Runtime::Hash,
+        msp_id: ProviderId<Runtime>,
+    ) {
+        // Get the buckets managed by this MSP
+        let buckets = match self
+            .client
+            .runtime_api()
+            .query_buckets_for_msp(*block_hash, &msp_id)
+        {
+            Ok(Ok(buckets)) => buckets,
+            Ok(Err(e)) => {
+                trace!(target: LOG_TARGET, "Failed to query buckets for MSP during sync: {:?}", e);
+                return;
+            }
+            Err(e) => {
+                trace!(target: LOG_TARGET, "Runtime API error querying buckets for MSP during sync: {:?}", e);
+                return;
+            }
+        };
+
+        if buckets.is_empty() {
+            return;
+        }
+
+        // Get all events for the block
+        let events = match get_events_at_block::<Runtime>(&self.client, block_hash) {
+            Ok(events) => events,
+            Err(e) => {
+                warn!(target: LOG_TARGET, "Failed to get events during sync: {:?}", e);
+                return;
+            }
+        };
+
+        // Create a set of bucket IDs to quickly check if a bucket is managed by this MSP
+        let bucket_set: HashSet<_> = buckets.iter().cloned().collect();
+
+        // Apply any mutations in the block that are relevant to this MSP
+        for ev in events {
+            if let StorageEnableEvents::ProofsDealer(
+                pallet_proofs_dealer::Event::MutationsApplied {
+                    mutations,
+                    event_info,
+                    ..
+                },
+            ) = ev.event.clone().into()
+            {
+                // Decode the bucket ID from the event info
+                let bucket_id = match self
+                    .client
+                    .runtime_api()
+                    .decode_generic_apply_delta_event_info(
+                        *block_hash,
+                        event_info.unwrap_or_default(),
+                    ) {
+                    Ok(Ok(bid)) => bid,
+                    _ => continue,
+                };
+
+                // Check if this bucket is managed by this MSP
+                if bucket_set.contains(&bucket_id) {
+                    debug!(target: LOG_TARGET, "Applying {} mutations during sync for bucket [{:?}]", mutations.len(), bucket_id);
+                    let forest_key = bucket_id.as_ref().to_vec();
+                    for (file_key, mutation) in mutations {
+                        debug!(target: LOG_TARGET, "Applying mutation {:?} for file key {}", mutation, file_key);
+                        if let Err(e) = self
+                            .apply_forest_mutation(forest_key.clone(), &file_key, &mutation)
+                            .await
+                        {
+                            error!(target: LOG_TARGET, "Failed to apply mutation during sync for bucket [{:?}]: {:?}", bucket_id, e);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /// Handles the initial sync of a MSP, after coming out of syncing mode.
     ///
-    /// Steps:
-    /// TODO
-    pub(crate) fn msp_initial_sync(&self, block_hash: Runtime::Hash, msp_id: ProviderId<Runtime>) {
-        // TODO: Catch up to Forest root writes in the Bucket's Forests.
-        // Emit event to check that this node has a Forest Storage for each Bucket this MSP manages.
-        self.emit(VerifyMspBucketForests {});
+    /// At this point, mutations have already been applied during sync via
+    /// `process_msp_sync_mutations`, so we:
+    /// 1. Verify all bucket forest roots match the on-chain roots
+    /// 2. Emit pending storage requests
+    pub(crate) async fn msp_initial_sync(
+        &mut self,
+        block_hash: Runtime::Hash,
+        msp_id: ProviderId<Runtime>,
+    ) {
+        // Verify all bucket forest roots match their on-chain roots
+        self.verify_msp_bucket_roots(&block_hash, &msp_id).await;
 
+        // Emit pending storage requests
         self.emit_pending_storage_requests_for_msp(block_hash, msp_id);
     }
 
@@ -820,6 +911,123 @@ where
                 file_key: file_key.into(),
                 bsp_id,
             });
+        }
+    }
+
+    /// Verifies that all MSP bucket forest roots match the on-chain roots.
+    ///
+    /// This is a sanity check after coming out of sync to ensure mutations were
+    /// correctly applied during the sync process.
+    ///
+    /// This function creates the forest storage under a key if it doesn't exist. This is because a user could have
+    /// created a bucket during the downtime, and since the MSP didn't confirm any storage request for it, no mutations
+    /// were applied and as such the forest storage was not created previously during the initial sync.
+    ///
+    /// TODO: A bucket could have been unassigned from this MSP if a user requested to move it to another MSP.
+    /// We should handle this by deleting the bucket's forest storage and cleaning up the file storage from
+    /// the file keys of that bucket.
+    async fn verify_msp_bucket_roots(
+        &mut self,
+        block_hash: &Runtime::Hash,
+        msp_id: &ProviderId<Runtime>,
+    ) {
+        // Get all buckets managed by this MSP
+        let buckets = match self
+            .client
+            .runtime_api()
+            .query_buckets_for_msp(*block_hash, msp_id)
+        {
+            Ok(Ok(buckets)) => buckets,
+            Ok(Err(e)) => {
+                error!(target: LOG_TARGET, "Failed to query buckets for MSP during root verification: {:?}", e);
+                return;
+            }
+            Err(e) => {
+                error!(target: LOG_TARGET, "Runtime API call failed for query_buckets_for_msp: {:?}", e);
+                return;
+            }
+        };
+
+        if buckets.is_empty() {
+            info!(target: LOG_TARGET, "✅ MSP has no buckets to verify after sync");
+            return;
+        }
+
+        let mut mismatches = 0;
+        let mut verified = 0;
+        let mut missing = 0;
+
+        for bucket_id in buckets {
+            let forest_key = bucket_id.as_ref().to_vec();
+
+            // Check if the forest exists locally, or log a warning and create it if it doesn't
+            let local_root = match self
+                .forest_storage_handler
+                .get(&forest_key.clone().into())
+                .await
+            {
+                Some(fs) => fs.read().await.root(),
+                None => {
+                    warn!(
+                            target: LOG_TARGET,
+                            "❌ Bucket [{:?}] forest storage not found locally after sync, created it.",
+                            bucket_id
+                    );
+                    self.forest_storage_handler
+                        .create(&forest_key.clone().into())
+                        .await;
+                    missing += 1;
+                    continue;
+                }
+            };
+
+            // Get the on-chain root of the bucket
+            let onchain_root = match self
+                .client
+                .runtime_api()
+                .query_bucket_root(*block_hash, &bucket_id)
+            {
+                Ok(Ok(root)) => root,
+                Ok(Err(e)) => {
+                    error!(target: LOG_TARGET, "Failed to query bucket root for [{:?}]: {:?}", bucket_id, e);
+                    continue;
+                }
+                Err(e) => {
+                    error!(target: LOG_TARGET, "Runtime API call failed for query_bucket_root [{:?}]: {:?}", bucket_id, e);
+                    continue;
+                }
+            };
+
+            // Compare the roots
+            if local_root != onchain_root {
+                error!(
+                        target: LOG_TARGET,
+                        "❌ CRITICAL: Bucket [{:?}] root mismatch after sync! Local: {:?}, On-chain: {:?}",
+                        bucket_id, local_root, onchain_root
+                );
+                mismatches += 1;
+            } else {
+                trace!(
+                        target: LOG_TARGET,
+                        "Bucket [{:?}] root verified: {:?}",
+                        bucket_id, local_root
+                );
+                verified += 1;
+            }
+        }
+
+        if mismatches > 0 || missing > 0 {
+            error!(
+                    target: LOG_TARGET,
+                    "❌ MSP bucket verification after sync: {} verified, {} mismatches, {} missing",
+                    verified, mismatches, missing
+            );
+        } else {
+            info!(
+                    target: LOG_TARGET,
+                    "✅ All {} MSP bucket roots verified after sync",
+                    verified
+            );
         }
     }
 

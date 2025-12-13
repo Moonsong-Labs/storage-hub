@@ -206,6 +206,7 @@ where
 {
     Command(BlockchainServiceCommand<Runtime>),
     BlockImportNotification(BlockImportNotification<OpaqueBlock>),
+    SyncBlockNotification(BlockImportNotification<OpaqueBlock>),
     FinalityNotification(FinalityNotification<OpaqueBlock>),
     TxStatusUpdate(
         (
@@ -278,6 +279,14 @@ where
         // 2. Once the node is synced, it will notify us of every new block.
         let block_import_notification_stream = self.actor.client.import_notification_stream();
 
+        // Every block notification stream.
+        // Fires for all blocks including sync blocks, which is its main purpose here:
+        // - We use it to process mutations during initial sync before state is pruned.
+        // - We only process linear chain extensions, not reorgs. This is because, as mentioned, that's handled
+        // by the `block_import_notification_stream` above.
+        // - After the initial sync period, this notification stream is just ignored.
+        let every_block_notification_stream = self.actor.client.every_import_notification_stream();
+
         // Finality notification stream to be notified of blocks being finalised.
         let finality_notification_stream = self.actor.client.finality_notification_stream();
 
@@ -296,6 +305,9 @@ where
             block_import_notification_stream
                 .map(|n| MergedEventLoopMessage::<Runtime>::BlockImportNotification(n))
                 .boxed(),
+            every_block_notification_stream
+                .map(|n| MergedEventLoopMessage::<Runtime>::SyncBlockNotification(n))
+                .boxed(),
             finality_notification_stream
                 .map(|n| MergedEventLoopMessage::<Runtime>::FinalityNotification(n))
                 .boxed(),
@@ -313,6 +325,11 @@ where
                 MergedEventLoopMessage::BlockImportNotification(notification) => {
                     self.actor
                         .handle_block_import_notification(notification)
+                        .await;
+                }
+                MergedEventLoopMessage::SyncBlockNotification(notification) => {
+                    self.actor
+                        .handle_sync_block_notification(notification)
                         .await;
                 }
                 MergedEventLoopMessage::FinalityNotification(notification) => {
@@ -1454,6 +1471,80 @@ where
             .await;
     }
 
+    /// Handle block notifications during network initial sync.
+    ///
+    /// This function is called for every imported block (via `every_import_notification_stream`),
+    /// but only processes mutation events during initial sync to keep the local forest in sync
+    /// before state pruning can occur.
+    ///
+    /// ## Why we need this
+    ///
+    /// During initial sync, `block_import_notification_stream` (the normal notification stream)
+    /// only fires for reorgs, not for linear chain extensions. This means if we relied solely
+    /// on that stream, we'd miss processing mutations for the vast majority of sync blocks.
+    /// By the time we come out of sync mode, those blocks' state may have been pruned, and we
+    /// would end up with a provider who's forest is out of sync with the on-chain state and who
+    /// has no way of recovering other than manually applying the required changes to the forest.
+    ///
+    /// ## Reorg handling during sync
+    ///
+    /// Substrate's notification behavior during initial sync:
+    /// - **Linear sync blocks**: Only `every_import_notification_stream` fires
+    /// - **Reorg during sync**: Both `every_import_notification_stream` and `block_import_notification_stream` fire
+    ///
+    /// When a reorg happens during sync:
+    /// 1. This handler receives the notification but skips it (because `tree_route.is_some()`)
+    /// 2. `block_import_notification_stream` also fires (because `tree_route.is_some()` makes
+    ///    `should_notify_recent_block = true` in Substrate)
+    /// 3. The normal `process_block_import` flow gets executed
+    /// 4. `forest_root_changes_catchup(&tree_route)` properly reverts the retracted blocks' mutations
+    /// and enacts the new blocks' mutations.
+    ///
+    /// This ensures reorgs are always handled correctly with proper mutation reversions, even during sync.
+    async fn handle_sync_block_notification(
+        &mut self,
+        notification: BlockImportNotification<OpaqueBlock>,
+    ) {
+        // Only process during initial sync and only for new best blocks that are linear extensions.
+        //
+        // We skip blocks where:
+        // - origin != NetworkInitialSync: Not a sync block, will be handled by normal flow
+        // - !is_new_best: Uncle/stale block, not on the canonical chain
+        // - tree_route.is_some(): Reorg block, will be handled by `block_import_notification_stream`
+        //   which fires for reorgs even during sync, triggering `forest_root_changes_catchup`
+        if notification.origin != sp_consensus::BlockOrigin::NetworkInitialSync
+            || !notification.is_new_best
+            || notification.tree_route.is_some()
+        {
+            return;
+        }
+
+        // Get the imported block's hash and number.
+        let block_hash = notification.hash;
+        let block_number: BlockNumber<Runtime> = (*notification.header.number()).into();
+
+        trace!(target: LOG_TARGET, "🔄 Processing sync block #{}: {}", block_number, block_hash);
+
+        // Ensure the provider ID is synced before processing mutations
+        self.sync_provider_id(&block_hash);
+
+        // Process mutations based on the provider type
+        match &self.maybe_managed_provider {
+            Some(ManagedProvider::Bsp(bsp_handler)) => {
+                let bsp_id = bsp_handler.bsp_id;
+                self.process_bsp_sync_mutations(&block_hash, bsp_id).await;
+            }
+            Some(ManagedProvider::Msp(msp_handler)) => {
+                let msp_id = msp_handler.msp_id;
+                self.process_msp_sync_mutations(&block_hash, msp_id).await;
+            }
+            None => {}
+        }
+
+        // Update the last processed block number in persistent storage for tracking
+        self.update_last_processed_block(block_number);
+    }
+
     /// Initialises the Blockchain Service with variables that should be checked and
     /// potentially updated at the start of every block processing.
     ///
@@ -1472,20 +1563,24 @@ where
     }
 
     /// Handle the situation after the node comes out of syncing mode (i.e. hasn't processed many of the last blocks).
+    ///
+    /// At this point, mutations have already been applied during sync via the
+    /// `every_import_notification_stream` handler, so we only need to perform provider-specific initialization tasks.
     async fn handle_initial_sync(&mut self, notification: BlockImportNotification<OpaqueBlock>) {
         let block_hash = notification.hash;
-        let block_number = *notification.header.number();
+        let block_number: BlockNumber<Runtime> = (*notification.header.number()).into();
 
-        // If this is the first block import notification, we might need to catch up.
         info!(target: LOG_TARGET, "🥱 Handling coming out of sync mode (synced to #{}: {})", block_number, block_hash);
 
-        // Initialise the Provider.
+        // Perform provider-specific initialization
         match &self.maybe_managed_provider {
-            Some(ManagedProvider::Bsp(_)) => {
-                self.bsp_initial_sync();
+            Some(ManagedProvider::Bsp(bsp_handler)) => {
+                let bsp_id = bsp_handler.bsp_id;
+                self.bsp_initial_sync(block_hash, bsp_id).await;
             }
             Some(ManagedProvider::Msp(msp_handler)) => {
-                self.msp_initial_sync(block_hash, msp_handler.msp_id);
+                let msp_id = msp_handler.msp_id;
+                self.msp_initial_sync(block_hash, msp_id).await;
             }
             None => {
                 warn!(target: LOG_TARGET, "No Provider ID found. This node is not managing a Provider.");
@@ -1600,13 +1695,7 @@ where
             }
         }
 
-        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-        state_store_context
-            .access_value(&LastProcessedBlockNumberCf::<Runtime> {
-                phantom: Default::default(),
-            })
-            .write(block_number);
-        state_store_context.commit();
+        self.update_last_processed_block(*block_number);
     }
 
     /// Handle a finality notification.
@@ -1667,5 +1756,19 @@ where
             number: block_number.saturated_into(),
             hash: block_hash,
         };
+    }
+
+    /// Update the last processed block number in persistent storage.
+    ///
+    /// Note: This value is currently not being used, but it's good practice to update it in case at some point
+    /// we need it.
+    fn update_last_processed_block(&self, block_number: BlockNumber<Runtime>) {
+        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+        state_store_context
+            .access_value(&LastProcessedBlockNumberCf::<Runtime> {
+                phantom: Default::default(),
+            })
+            .write(&block_number);
+        state_store_context.commit();
     }
 }
