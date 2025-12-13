@@ -13,6 +13,8 @@ use shc_file_transfer_service::commands::{
 
 use crate::{
     handler::StorageHubHandler,
+    inc_counter,
+    metrics::{STATUS_FAILURE, STATUS_PENDING, STATUS_SUCCESS},
     types::{BspForestStorageHandlerT, ShNodeType},
 };
 
@@ -95,6 +97,13 @@ where
             event.new_msp_id
         );
 
+        // Increment metric for bucket moves
+        inc_counter!(
+            handler: self.storage_hub_handler,
+            bsp_bucket_moves_total,
+            STATUS_PENDING
+        );
+
         let multiaddress_vec = self
             .storage_hub_handler
             .blockchain
@@ -150,6 +159,13 @@ where
             event.old_msp_id
         );
 
+        // Increment metric for bucket moves
+        inc_counter!(
+            handler: self.storage_hub_handler,
+            bsp_bucket_moves_total,
+            STATUS_SUCCESS
+        );
+
         self.storage_hub_handler
             .file_transfer
             .schedule_unregister_bucket(
@@ -184,6 +200,13 @@ where
             event.new_msp_id
         );
 
+        // Increment metric for bucket moves
+        inc_counter!(
+            handler: self.storage_hub_handler,
+            bsp_bucket_moves_total,
+            STATUS_FAILURE
+        );
+
         self.storage_hub_handler
             .file_transfer
             .schedule_unregister_bucket(event.bucket_id, None)
@@ -212,6 +235,13 @@ where
             target: LOG_TARGET,
             "MoveBucketExpired: BSP will no longer accept download requests for files in bucket {:?}",
             event.bucket_id,
+        );
+
+        // Increment metric for bucket moves
+        inc_counter!(
+            handler: self.storage_hub_handler,
+            bsp_bucket_moves_total,
+            STATUS_FAILURE
         );
 
         self.storage_hub_handler

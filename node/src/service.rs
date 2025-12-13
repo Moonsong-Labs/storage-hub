@@ -229,6 +229,7 @@ async fn init_sh_builder<R, S, Runtime: StorageEnableRuntime>(
     network: Arc<dyn NetworkService>,
     keystore: KeystorePtr,
     client: Arc<StorageEnableClient<Runtime>>,
+    prometheus_registry: Option<&Registry>,
 ) -> Result<
     Option<(
         StorageHubBuilder<R, S, Runtime>,
@@ -379,6 +380,9 @@ where
             RpcConfig::default()
         }
     };
+
+    // Set the Prometheus metrics registry
+    builder.with_metrics(prometheus_registry);
 
     // Create RPC configuration
     let storage_hub_client_rpc_config = builder.create_rpc_config(keystore, rpc_config);
@@ -952,6 +956,7 @@ where
             network.clone(),
             keystore.clone(),
             client.clone(),
+            prometheus_registry.as_ref(),
         )
         .await?
         {
@@ -1263,6 +1268,9 @@ where
 
     // No offchain workers in maintenance mode - intentionally omitted
 
+    // Get prometheus registry for metrics
+    let prometheus_registry = config.prometheus_registry().cloned();
+
     // Create command_sink for RPC
     let (command_sink, _) = futures::channel::mpsc::channel(1000);
 
@@ -1276,6 +1284,7 @@ where
             network.clone(),
             keystore.clone(),
             client.clone(),
+            prometheus_registry.as_ref(),
         )
         .await?
         {
@@ -1485,6 +1494,7 @@ where
             network.clone(),
             keystore.clone(),
             client.clone(),
+            prometheus_registry.as_ref(),
         )
         .await?
         {
@@ -1690,6 +1700,9 @@ where
 
     // No need for offchain workers in maintenance mode
 
+    // Get prometheus registry for metrics
+    let prometheus_registry = parachain_config.prometheus_registry().cloned();
+
     // If node is running as a Storage Provider, start building the StorageHubHandler using the StorageHubBuilder.
     let (sh_builder, maybe_storage_hub_client_rpc_config) =
         match init_sh_builder::<R, S, ParachainRuntime>(
@@ -1700,6 +1713,7 @@ where
             network.clone(),
             keystore.clone(),
             client.clone(),
+            prometheus_registry.as_ref(),
         )
         .await?
         {
@@ -2147,6 +2161,9 @@ where
         );
     }
 
+    // Get prometheus registry for metrics
+    let prometheus_registry = config.prometheus_registry().cloned();
+
     // Build StorageHub services if provider
     let (sh_builder, maybe_storage_hub_client_rpc_config) =
         match init_sh_builder::<R, S, SolochainEvmRuntime>(
@@ -2157,6 +2174,7 @@ where
             network.clone(),
             keystore_container.keystore(),
             client.clone(),
+            prometheus_registry.as_ref(),
         )
         .await?
         {
@@ -2815,6 +2833,9 @@ where
         );
     }
 
+    // Get prometheus registry for metrics
+    let prometheus_registry = config.prometheus_registry().cloned();
+
     let (sh_builder, maybe_storage_hub_client_rpc_config) =
         match init_sh_builder::<R, S, SolochainEvmRuntime>(
             &role_options,
@@ -2824,6 +2845,7 @@ where
             network.clone(),
             keystore_container.keystore(),
             client.clone(),
+            prometheus_registry.as_ref(),
         )
         .await?
         {
@@ -2842,7 +2864,7 @@ where
         let storage_override = storage_override.clone();
         let network = network.clone();
         let sync_service = sync_service.clone();
-        let prometheus_registry = config.prometheus_registry().cloned();
+        let prometheus_registry = prometheus_registry.clone();
         let spawn_handle = task_manager.spawn_handle();
         let block_data_cache = Arc::new(fc_rpc::EthBlockDataCacheTask::new(
             spawn_handle.clone(),
@@ -3150,6 +3172,9 @@ where
             metrics,
         })?;
 
+    // Get prometheus registry for metrics
+    let prometheus_registry = config.prometheus_registry().cloned();
+
     let (sh_builder, maybe_storage_hub_client_rpc_config) =
         match init_sh_builder::<R, S, SolochainEvmRuntime>(
             &role_options,
@@ -3159,6 +3184,7 @@ where
             network.clone(),
             keystore_container.keystore(),
             client.clone(),
+            prometheus_registry.as_ref(),
         )
         .await?
         {
@@ -3171,7 +3197,7 @@ where
         let transaction_pool = transaction_pool.clone();
         let network = network.clone();
         let sync_service = sync_service.clone();
-        let prometheus_registry = config.prometheus_registry().cloned();
+        let prometheus_registry = prometheus_registry.clone();
         let spawn_handle = task_manager.spawn_handle();
         Box::new(move |_| {
             crate::rpc::create_full_solochain_evm::<_, _, _, SolochainEvmRuntime, _>(

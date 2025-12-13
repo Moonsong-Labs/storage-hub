@@ -37,6 +37,9 @@ use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
 use crate::{
     handler::StorageHubHandler,
+    inc_counter, inc_counter_by,
+    metrics::{STATUS_FAILURE, STATUS_PENDING, STATUS_SUCCESS},
+    observe_histogram,
     types::{BspForestStorageHandlerT, ForestStorageKey, ShNodeType},
 };
 
@@ -139,6 +142,13 @@ where
             event.fingerprint
         );
 
+        // Increment metric for new storage request
+        inc_counter!(
+            handler: self.storage_hub_handler,
+            bsp_storage_requests_total,
+            STATUS_PENDING
+        );
+
         let file_key = event.file_key;
         let result = self.handle_new_storage_request_event(event).await;
 
@@ -148,6 +158,12 @@ where
                 file_key
             )),
             Err(e) => {
+                // Increment metric for failed storage request
+                inc_counter!(
+                    handler: self.storage_hub_handler,
+                    bsp_storage_requests_total,
+                    STATUS_FAILURE
+                );
                 if let Some(file_key) = &self.file_key_cleanup {
                     self.unvolunteer_file(*file_key).await;
                 }
@@ -174,9 +190,24 @@ where
         trace!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
 
         let file_complete = match self.handle_remote_upload_request_event(event.clone()).await {
-            Ok(complete) => complete,
+            Ok(complete) => {
+                // Increment metric for successfully received chunk upload
+                inc_counter!(
+                    handler: self.storage_hub_handler,
+                    bsp_upload_chunks_received_total,
+                    STATUS_SUCCESS
+                );
+                complete
+            }
             Err(e) => {
                 error!(target: LOG_TARGET, "Failed to handle remote upload request: {:?}", e);
+
+                // Increment metric for failed chunk upload
+                inc_counter!(
+                    handler: self.storage_hub_handler,
+                    bsp_upload_chunks_received_total,
+                    STATUS_FAILURE
+                );
 
                 // Send error response through FileTransferService
                 if let Err(e) = self
@@ -259,6 +290,11 @@ where
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
             Some(tx) => tx,
             None => {
+                inc_counter!(
+                    handler: self.storage_hub_handler,
+                    bsp_storage_requests_total,
+                    STATUS_FAILURE
+                );
                 let err_msg = "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. This is a critical bug. Please report it to the StorageHub team.";
                 error!(target: LOG_TARGET, err_msg);
                 return Err(anyhow!(err_msg));
@@ -274,6 +310,11 @@ where
         let own_bsp_id = match own_provider_id {
             Some(id) => match id {
                 StorageProviderId::MainStorageProvider(_) => {
+                    inc_counter!(
+                        handler: self.storage_hub_handler,
+                        bsp_storage_requests_total,
+                        STATUS_FAILURE
+                    );
                     let err_msg = "Current node account is a Main Storage Provider. Expected a Backup Storage Provider ID.";
                     error!(target: LOG_TARGET, err_msg);
                     return Err(anyhow!(err_msg));
@@ -281,6 +322,11 @@ where
                 StorageProviderId::BackupStorageProvider(id) => id,
             },
             None => {
+                inc_counter!(
+                    handler: self.storage_hub_handler,
+                    bsp_storage_requests_total,
+                    STATUS_FAILURE
+                );
                 error!(target: LOG_TARGET, "Failed to get own BSP ID.");
                 return Err(anyhow!("Failed to get own BSP ID."));
             }
@@ -377,6 +423,11 @@ where
         drop(read_file_storage);
 
         if file_keys_and_proofs.is_empty() {
+            inc_counter!(
+                handler: self.storage_hub_handler,
+                bsp_storage_requests_total,
+                STATUS_FAILURE
+            );
             error!(target: LOG_TARGET, "Failed to generate proofs for ALL the requested files.\n");
             return Err(anyhow!(
                 "Failed to generate proofs for ALL the requested files."
@@ -393,10 +444,20 @@ where
             .forest_storage_handler
             .get(&current_forest_key)
             .await
-            .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+            .ok_or_else(|| {
+                inc_counter!(
+                    handler: self.storage_hub_handler,
+                    bsp_storage_requests_total,
+                    STATUS_FAILURE
+                );
+                anyhow!("Failed to get forest storage.")
+            })?;
 
         // Generate a proof of non-inclusion (executed in closure to drop the read lock on the forest storage).
         let non_inclusion_forest_proof = { fs.read().await.generate_proof(file_keys)? };
+
+        // Save the count for metrics tracking before consuming the vector.
+        let confirmed_requests_count = file_keys_and_proofs.len() as u64;
 
         // Build extrinsic.
         let call: Runtime::Call =
@@ -411,7 +472,8 @@ where
 
         // Send the confirmation transaction and wait for it to be included in the block and
         // continue only if it is successful.
-        self.storage_hub_handler
+        let submit_result = self
+            .storage_hub_handler
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
@@ -431,14 +493,36 @@ where
                     .retry_only_if_timeout(),
                 true,
             )
-            .await
-            .map_err(|e| {
-                anyhow!(
-                    "Failed to confirm file after {} retries: {:?}",
-                    self.config.max_try_count,
-                    e
-                )
-            })?;
+            .await;
+
+        match &submit_result {
+            Ok(_) => {
+                // Increment metric for successfully confirmed storage requests
+                inc_counter_by!(
+                    handler: self.storage_hub_handler,
+                    bsp_storage_requests_total,
+                    STATUS_SUCCESS,
+                    confirmed_requests_count
+                );
+            }
+            Err(_) => {
+                // Increment metric for failed storage request confirmations
+                inc_counter_by!(
+                    handler: self.storage_hub_handler,
+                    bsp_storage_requests_total,
+                    STATUS_FAILURE,
+                    confirmed_requests_count
+                );
+            }
+        }
+
+        submit_result.map_err(|e| {
+            anyhow!(
+                "Failed to confirm file after {} retries: {:?}",
+                self.config.max_try_count,
+                e
+            )
+        })?;
 
         // Release the forest root write "lock" and finish the task.
         self.storage_hub_handler
@@ -460,6 +544,31 @@ where
     Runtime: StorageEnableRuntime,
 {
     async fn handle_new_storage_request_event(
+        &mut self,
+        event: NewStorageRequest<Runtime>,
+    ) -> anyhow::Result<()> {
+        // Track storage request processing timing for metrics.
+        let start_time = std::time::Instant::now();
+
+        // Wrap the main logic to track success/failure
+        let result = self.handle_new_storage_request_inner(event).await;
+
+        // Record histogram with status based on result
+        observe_histogram!(
+            handler: self.storage_hub_handler,
+            storage_request_seconds,
+            if result.is_ok() {
+                STATUS_SUCCESS
+            } else {
+                STATUS_FAILURE
+            },
+            start_time.elapsed().as_secs_f64()
+        );
+
+        result
+    }
+
+    async fn handle_new_storage_request_inner(
         &mut self,
         event: NewStorageRequest<Runtime>,
     ) -> anyhow::Result<()> {
@@ -1050,7 +1159,7 @@ where
 
         drop(read_file_storage);
 
-        return Ok(true);
+        Ok(true)
     }
 
     /// Function to determine if a volunteer request should be retried,
@@ -1129,7 +1238,7 @@ where
             return false;
         }
 
-        return true;
+        true
     }
 
     async fn unvolunteer_file(&self, file_key: Runtime::Hash) {
