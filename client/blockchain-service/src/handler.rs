@@ -1559,6 +1559,10 @@ where
             None => {}
         }
 
+        // Check if this block is already finalized and process finality events if so
+        // This ensures file storage cleanup happens for finalized blocks during sync
+        self.process_finality_events_if_finalized(&block_hash, block_number);
+
         // Update the last processed block number in persistent storage for tracking
         self.update_last_processed_block(block_number);
     }
@@ -1717,6 +1721,10 @@ where
     }
 
     /// Handle a finality notification.
+    ///
+    /// This processes finality events for the finalized block and all implicitly finalized blocks
+    /// in the `tree_route`. This is important for scenarios where finality jumps multiple blocks
+    /// at once (e.g., after a node restart, network partition recovery or solved finality staleness).
     async fn handle_finality_notification(
         &mut self,
         notification: FinalityNotification<OpaqueBlock>,
@@ -1730,35 +1738,24 @@ where
             return;
         }
 
-        info!(target: LOG_TARGET, "📨 Finality notification #{}: {}", block_number, block_hash);
+        info!(target: LOG_TARGET, "📨 Finality notification #{}: {:?}", block_number, block_hash);
 
-        // Get events from storage.
-        match get_events_at_block::<Runtime>(&self.client, &block_hash) {
-            Ok(block_events) => {
-                for ev in block_events {
-                    // Process the events applicable regardless of whether this node is managing a BSP or an MSP.
-                    self.process_common_finality_events(ev.event.clone().into());
-
-                    // Process Provider-specific events.
-                    match &self.maybe_managed_provider {
-                        Some(ManagedProvider::Bsp(_)) => {
-                            self.bsp_process_finality_events(&block_hash, ev.event.clone().into());
-                        }
-                        Some(ManagedProvider::Msp(_)) => {
-                            self.msp_process_finality_events(&block_hash, ev.event.clone().into());
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            Err(e) => {
-                // TODO: Handle case where the storage cannot be decoded.
-                // TODO: This would happen if we're parsing a block authored with an older version of the runtime, using
-                // TODO: a node that has a newer version of the runtime, therefore the EventsVec type is different.
-                // TODO: Consider using runtime APIs for getting old data of previous blocks, and this just for current blocks.
-                error!(target: LOG_TARGET, "Failed to get events storage element: {:?}", e);
+        // Process finality events for all implicitly finalized blocks in tree_route.
+        // tree_route contains all blocks from (old_finalized, new_finalized), i.e., the blocks
+        // that were implicitly finalized when jumping from the old finalized to the new one.
+        if !notification.tree_route.is_empty() {
+            info!(
+                target: LOG_TARGET,
+                "📦 Processing finality events for {} implicitly finalized blocks",
+                notification.tree_route.len()
+            );
+            for intermediate_hash in notification.tree_route.iter() {
+                self.process_finality_events(intermediate_hash);
             }
         }
+
+        // Process finality events for the newly finalized block itself
+        self.process_finality_events(&block_hash);
 
         // Cleanup the pending transaction store for the last finalised block processed.
         // Transactions with a nonce below the on-chain nonce of this block are finalised.
@@ -1774,6 +1771,87 @@ where
             number: block_number.saturated_into(),
             hash: block_hash,
         };
+    }
+
+    /// Process finality events for a block if it has been finalized.
+    ///
+    /// This is used during catch-up and initial sync to emit finality events for blocks
+    /// that are already finalized, ensuring file storage cleanup happens correctly.
+    /// The check compares the block number against the current finalized block number
+    /// from the client.
+    ///
+    /// Additionally updates `last_finalised_block_processed` to track finality progress
+    /// during sync.
+    fn process_finality_events_if_finalized(
+        &mut self,
+        block_hash: &Runtime::Hash,
+        block_number: BlockNumber<Runtime>,
+    ) {
+        // Get the current finalized block number from the client
+        let finalized_number: BlockNumber<Runtime> =
+            self.client.info().finalized_number.saturated_into();
+
+        // Only process if this block is finalized
+        if block_number > finalized_number {
+            return;
+        }
+
+        info!(
+            target: LOG_TARGET,
+            "📦 Processing finality events for already-finalized block #{} during sync",
+            block_number
+        );
+
+        self.process_finality_events(block_hash);
+
+        // Update last_finalised_block_processed if this block is more recent
+        if block_number > self.last_finalised_block_processed.number {
+            self.last_finalised_block_processed = MinimalBlockInfo {
+                number: block_number,
+                hash: *block_hash,
+            };
+        }
+    }
+
+    /// Process finality events for a given block.
+    ///
+    /// This retrieves the events from storage for the block and processes them:
+    /// - Common finality events applicable to all provider types
+    /// - Provider-specific finality events (BSP or MSP)
+    ///
+    /// This is called both from `handle_finality_notification` for real-time finality
+    /// and from `process_finality_events_if_finalized` during catch-up/sync.
+    fn process_finality_events(&self, block_hash: &Runtime::Hash) {
+        match get_events_at_block::<Runtime>(&self.client, block_hash) {
+            Ok(block_events) => {
+                for ev in block_events {
+                    // Process the events applicable regardless of whether this node is managing a BSP or an MSP.
+                    self.process_common_finality_events(ev.event.clone().into());
+
+                    // Process Provider-specific events.
+                    match &self.maybe_managed_provider {
+                        Some(ManagedProvider::Bsp(_)) => {
+                            self.bsp_process_finality_events(block_hash, ev.event.clone().into());
+                        }
+                        Some(ManagedProvider::Msp(_)) => {
+                            self.msp_process_finality_events(block_hash, ev.event.clone().into());
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Err(e) => {
+                // TODO: This can happen for older blocks where state has been pruned, or if
+                // we're parsing a block authored with an older version of the runtime
+                // using a node that has a newer version of the runtime. Consider using runtime APIs
+                // for getting old data of previous blocks, and this just for current blocks.
+                error!(
+                        target: LOG_TARGET,
+                        "Failed to get events for block {:?}: {:?}",
+                        block_hash, e
+                );
+            }
+        }
     }
 
     /// Catch up on any blocks that were imported to the database but not processed.
@@ -1861,6 +1939,9 @@ where
 
         let enacted_count = tree_route.enacted().len();
 
+        // Get the finalized block number before catching up
+        let finalized_number: BlockNumber<Runtime> = chain_info.finalized_number.saturated_into();
+
         // Process mutations for each enacted block
         for block in tree_route.enacted() {
             info!(target: LOG_TARGET, "⏩ Processing startup catch up block #{}: {:?}", block.number, block.hash);
@@ -1879,6 +1960,10 @@ where
                 }
                 None => {}
             }
+
+            // If this block is finalized, also process finality events for file storage cleanup
+            let block_num: BlockNumber<Runtime> = block.number.saturated_into();
+            self.process_finality_events_if_finalized(&block.hash, block_num);
         }
 
         // Update the local best block and last processed block to reflect the catch up
@@ -1887,6 +1972,23 @@ where
             hash: best_hash,
         };
         self.update_last_processed_block(best_number);
+
+        // Update last_finalised_block_processed based on how far we've caught up
+        // If best_number <= finalized_number, all caught-up blocks are finalized
+        if best_number <= finalized_number {
+            self.last_finalised_block_processed = MinimalBlockInfo {
+                number: best_number,
+                hash: best_hash,
+            };
+        } else {
+            // Only some blocks are finalized, update to the finalized block
+            if let Ok(Some(finalized_hash)) = self.client.hash(finalized_number.saturated_into()) {
+                self.last_finalised_block_processed = MinimalBlockInfo {
+                    number: finalized_number,
+                    hash: finalized_hash,
+                };
+            }
+        }
 
         info!(
             target: LOG_TARGET,
