@@ -111,23 +111,27 @@ where
     pub(crate) capacity_manager: Option<CapacityRequestQueue<Runtime>>,
     /// Whether the node is running in maintenance mode.
     pub(crate) maintenance_mode: bool,
-    /// Tracks whether initial sync tasks have been completed after startup/recovery.
+    /// Tracks whether the node has caught up with the chain and completed initial sync tasks.
     ///
     /// This flag starts as `false` and is set to `true` after the first block is processed
     /// via `handle_block_import_notification`. This is the natural "sync completed" signal
     /// because `handle_block_import_notification` only fires for `NetworkBroadcast` blocks
     /// (i.e., live blocks after sync is complete), not for `NetworkInitialSync` blocks.
     ///
+    /// This flag is also reset to `false` whenever a `NetworkInitialSync` block is
+    /// received, indicating the node has fallen behind and needs to re-sync. This ensures
+    /// `handle_initial_sync` runs again after catching up, even if the node wasn't restarted.
+    ///
     /// This covers all scenarios:
     /// - Cold start when already synced: First block triggers initial sync
     /// - Cold start needing sync: All sync blocks processed, then the first post-sync block triggers initial sync
-    /// - Recovery after falling behind: Same as above
+    /// - Node falling behind (without restart): Sync blocks reset the flag, then post-sync block triggers initial sync
     ///
     /// When `false`, the first `handle_block_import_notification` call will trigger
     /// `handle_initial_sync` to perform provider-specific initialization tasks:
     /// - MSP: Verify bucket forest roots, emit pending storage requests
     /// - BSP: Verify forest root, catch up on proof submissions
-    pub(crate) initial_sync_completed: bool,
+    pub(crate) caught_up: bool,
     /// Transaction manager for tracking pending transactions and managing nonces.
     pub(crate) transaction_manager:
         TransactionManager<Runtime::Hash, Runtime::Call, BlockNumber<Runtime>>,
@@ -1412,7 +1416,7 @@ where
             notify_period,
             capacity_manager: capacity_request_queue,
             maintenance_mode,
-            initial_sync_completed: false,
+            caught_up: false,
             transaction_manager: TransactionManager::new(TransactionManagerConfig::default()),
             // Temporary sender, will be replaced by the event loop during startup
             tx_status_sender: {
@@ -1463,10 +1467,11 @@ where
         // Get provider IDs linked to keys in this node's keystore and update the nonce.
         self.init_block_processing(&block_hash);
 
-        // Trigger initial sync tasks on the first block import notification after startup/recovery.
-        if !self.initial_sync_completed {
+        // Trigger initial sync tasks on the first block import notification after startup/recovery
+        // or after the node fell behind and re-synced.
+        if !self.caught_up {
             self.handle_initial_sync(notification).await;
-            self.initial_sync_completed = true;
+            self.caught_up = true;
         }
 
         let block_number = block_number.saturated_into();
@@ -1521,6 +1526,16 @@ where
         // Only process during initial sync
         if notification.origin != sp_consensus::BlockOrigin::NetworkInitialSync {
             return;
+        }
+
+        // Reset the caught_up flag since we're receiving sync blocks, indicating the node
+        // has fallen behind. This ensures handle_initial_sync runs again after catching up.
+        if self.caught_up {
+            info!(
+                target: LOG_TARGET,
+                "🔄 Node fell behind chain tip, resetting caught_up flag to re-run initial sync after catching up"
+            );
+            self.caught_up = false;
         }
 
         // Check if this new imported block is the new best, and if it causes a reorg.
