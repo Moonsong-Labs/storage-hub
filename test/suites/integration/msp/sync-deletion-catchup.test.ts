@@ -33,9 +33,7 @@ await describeMspNet(
     fisherman: true,
     indexerMode: "fishing",
     standaloneIndexer: true,
-    networkConfig: [{ noisy: false, rocksdb: true }],
-    only: true,
-    keepAlive: true
+    networkConfig: [{ noisy: false, rocksdb: true }]
   },
   ({
     before,
