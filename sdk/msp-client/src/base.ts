@@ -1,19 +1,24 @@
 import type { MspClientContext } from "./context.js";
 import type { SessionProvider } from "./types.js";
 
+/**
+ * Shared reference to sessionProvider so all modules use the same instance.
+ */
+type SessionProviderRef = { current: SessionProvider };
+
 export abstract class ModuleBase {
   protected readonly ctx: MspClientContext;
-  private readonly sessionProvider: SessionProvider;
+  protected readonly sessionProviderRef: SessionProviderRef;
 
-  constructor(ctx: MspClientContext, sessionProvider: SessionProvider) {
+  constructor(ctx: MspClientContext, sessionProviderRef: SessionProviderRef) {
     this.ctx = ctx;
-    this.sessionProvider = sessionProvider;
+    this.sessionProviderRef = sessionProviderRef;
   }
 
   protected async withAuth(
     headers?: Record<string, string>
   ): Promise<Record<string, string> | undefined> {
-    const session = await this.sessionProvider();
+    const session = await this.sessionProviderRef.current();
     const token = session?.token;
     if (!token) return headers;
     return headers

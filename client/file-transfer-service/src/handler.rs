@@ -164,13 +164,16 @@ impl<Runtime: StorageEnableRuntime> Actor for FileTransferService<Runtime> {
                     request.encode(&mut request_data);
 
                     let (tx, rx) = futures::channel::oneshot::channel();
+                    // Use TryConnect to attempt dialing the peer using registered known addresses
+                    // if not already connected. This is essential for MSP file distribution to BSPs
+                    // that may not have an existing peer connection.
                     self.network.start_request(
                         peer_id.into(),
                         self.protocol_name.clone(),
                         request_data,
                         None,
                         tx,
-                        IfDisconnected::ImmediateError,
+                        IfDisconnected::TryConnect,
                     );
 
                     match callback.send(rx) {
@@ -329,13 +332,16 @@ impl<Runtime: StorageEnableRuntime> Actor for FileTransferService<Runtime> {
                     request.encode(&mut request_data);
 
                     let (tx, rx) = futures::channel::oneshot::channel();
+                    // Use TryConnect to attempt dialing the peer using registered known addresses
+                    // if not already connected. This is essential for file downloads from peers
+                    // that may not have an existing peer connection.
                     self.network.start_request(
                         peer_id.into(),
                         self.protocol_name.clone(),
                         request_data,
                         None,
                         tx,
-                        IfDisconnected::ImmediateError,
+                        IfDisconnected::TryConnect,
                     );
 
                     match callback.send(rx) {

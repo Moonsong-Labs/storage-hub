@@ -16191,6 +16191,7 @@ dependencies = [
  "headers",
  "hex",
  "hex-literal",
+ "http 1.4.0",
  "jsonrpsee 0.24.10",
  "jsonwebtoken",
  "pallet-storage-providers",
