@@ -1837,8 +1837,8 @@ where
         // Lazily create the Forest storage if it does not yet exist.
         // MSP Follower nodes do not create the Forests in the tasks when there is a new
         // storage request, because they do not handle these events. So this is useful for them.
-        let forest_key_cloned = forest_key.clone().into();
-        let fs = if let Some(existing) = self.forest_storage_handler.get(&forest_key_cloned).await {
+        let forest_key = forest_key.into();
+        let fs = if let Some(existing) = self.forest_storage_handler.get(&forest_key).await {
             existing
         } else {
             info!(
@@ -1846,7 +1846,7 @@ where
                 "Forest storage for key [{:?}] not found while applying mutation; creating new instance",
                 forest_key
             );
-            self.forest_storage_handler.create(&forest_key_cloned).await
+            self.forest_storage_handler.create(&forest_key).await
         };
 
         // Write lock is released when exiting the scope of this `match` statement.
