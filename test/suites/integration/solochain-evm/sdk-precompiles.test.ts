@@ -25,6 +25,7 @@ import {
 import type { StatsResponse } from "../../../util/backend/types";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import { ALITH_PRIVATE_KEY } from "../../../util/evmNet/keyring";
+import { fileURLToPath } from "node:url";
 
 await describeMspNet(
   "Solochain EVM SDK Precompiles Integration",
@@ -88,8 +89,9 @@ await describeMspNet(
       });
 
       // Set up the FileManager instance for the file to manipulate
-      const testFilePath = new URL("../../../../docker/resource/adolphus.jpg", import.meta.url)
-        .pathname;
+      const testFilePath = fileURLToPath(
+        new URL("../../../../docker/resource/adolphus.jpg", import.meta.url)
+      );
       const testFileSize = statSync(testFilePath).size;
       fileManager = new FileManager({
         size: testFileSize,
