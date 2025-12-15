@@ -58,6 +58,7 @@
 use log::{debug, info};
 use rocksdb::{ColumnFamilyDescriptor, Options, DB};
 use std::collections::HashSet;
+use std::path::Path;
 use thiserror::Error;
 
 pub mod v1;
@@ -135,23 +136,6 @@ impl MigrationRunner {
             .last()
             .map(|m| m.version())
             .unwrap_or(0)
-    }
-
-    /// Get all column families that have been deprecated across all migrations.
-    pub fn all_deprecated_cfs() -> HashSet<&'static str> {
-        Self::all_migrations()
-            .iter()
-            .flat_map(|m| m.deprecated_column_families().iter().copied())
-            .collect()
-    }
-
-    /// Get deprecated column families for migrations up to and including the given version.
-    pub fn deprecated_cfs_up_to_version(version: u32) -> HashSet<&'static str> {
-        Self::all_migrations()
-            .iter()
-            .filter(|m| m.version() <= version)
-            .flat_map(|m| m.deprecated_column_families().iter().copied())
-            .collect()
     }
 
     /// Validates the migration order and returns any issues found.
@@ -248,18 +232,25 @@ impl MigrationRunner {
     /// Run all pending migrations on the database.
     ///
     /// This will:
-    /// 1. Read the current schema version
-    /// 2. Check for downgrade attempts (current version > latest known version)
-    /// 3. Find migrations with version > current
-    /// 4. For each pending migration, drop the deprecated column families
-    /// 5. Update the schema version after each successful migration
+    /// 1. Validate the migration configuration (no duplicates, no gaps, starts from 1)
+    /// 2. Read the current schema version
+    /// 3. Check for downgrade attempts (current version > latest known version)
+    /// 4. Find migrations with version > current
+    /// 5. For each pending migration, drop the deprecated column families
+    /// 6. Update the schema version after each successful migration
     ///
     /// # Errors
+    ///
+    /// Returns `MigrationError::MigrationFailed` if the migration configuration is invalid
+    /// (e.g., duplicate versions, gaps in sequence, or not starting from version 1).
     ///
     /// Returns `MigrationError::CannotDowngrade` if the database was created with a newer
     /// version of the software than the current code supports. This prevents data corruption
     /// from running older code against a newer database schema.
     pub fn run_pending(db: &mut DB) -> Result<u32, MigrationError> {
+        // Validate migration configuration before running
+        Self::validate_migration_order()?;
+
         let current_version = Self::read_schema_version(db)?;
         let latest_version = Self::latest_version();
 
@@ -365,10 +356,11 @@ pub fn merge_column_families<'a>(
 /// Opens a RocksDB database with automatic migration support.
 ///
 /// This function:
-/// 1. Lists existing column families in the database (or uses defaults for new DBs)
-/// 2. Merges existing CFs with the current schema's CFs
-/// 3. Opens the database with all necessary CFs
-/// 4. Runs any pending migrations to drop deprecated CFs
+/// 1. Checks if the database exists (via CURRENT file presence)
+/// 2. Lists existing column families in the database (or uses empty list for new DBs)
+/// 3. Merges existing CFs with the current schema's CFs
+/// 4. Opens the database with all necessary CFs
+/// 5. Runs any pending migrations to drop deprecated CFs
 ///
 /// # Arguments
 ///
@@ -379,25 +371,32 @@ pub fn merge_column_families<'a>(
 /// # Returns
 ///
 /// The opened database after running all pending migrations.
+///
+/// # Errors
+///
+/// Returns `MigrationError::RocksDb` if the database exists but cannot be read
+/// (e.g., corruption, permission issues, etc.).
 pub fn open_db_with_migrations(
     opts: &Options,
     path: &str,
     current_schema_cfs: &[&str],
 ) -> Result<DB, MigrationError> {
-    // Try to list existing column families
-    let existing_cfs = match DB::list_cf(opts, path) {
-        Ok(cfs) => {
-            debug!("Found existing column families: {:?}", cfs);
-            cfs
-        }
-        Err(e) => {
-            // This typically means the database doesn't exist yet
-            debug!(
-                "Could not list column families (likely new database): {}",
-                e
-            );
-            vec!["default".to_string()]
-        }
+    // Check if this is an existing database by looking for the CURRENT file.
+    // RocksDB always creates a CURRENT file that points to the current manifest.
+    // If CURRENT exists, this is an existing database and list_cf must succeed.
+    // If CURRENT doesn't exist, this is a new database.
+    let db_path = Path::new(path);
+    let current_file = db_path.join("CURRENT");
+
+    let existing_cfs = if current_file.exists() {
+        // CURRENT file exists - this is an existing database
+        // Any error from list_cf is a real error (corruption, permissions, etc.)
+        debug!("CURRENT file found, listing existing column families");
+        DB::list_cf(opts, path)?
+    } else {
+        // No CURRENT file - this is a new database
+        debug!("No CURRENT file found, treating as new database");
+        vec![]
     };
 
     // Merge existing CFs with current schema CFs

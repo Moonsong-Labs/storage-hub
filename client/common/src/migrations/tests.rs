@@ -64,16 +64,6 @@ mod migration_runner_tests {
     }
 
     #[test]
-    fn all_deprecated_cfs_includes_v1_cfs() {
-        let deprecated = MigrationRunner::all_deprecated_cfs();
-
-        // V1 migration deprecates MSP respond storage request CFs
-        assert!(deprecated.contains("pending_msp_respond_storage_request"));
-        assert!(deprecated.contains("pending_msp_respond_storage_request_left_index"));
-        assert!(deprecated.contains("pending_msp_respond_storage_request_right_index"));
-    }
-
-    #[test]
     fn validate_migration_order_passes_for_valid_migrations() {
         let result = MigrationRunner::validate_migration_order();
         assert!(result.is_ok(), "Valid migrations should pass validation");
@@ -334,6 +324,22 @@ mod database_tests {
 
         let version = MigrationRunner::read_schema_version(&db).unwrap();
         assert_eq!(version, MigrationRunner::latest_version());
+    }
+
+    #[test]
+    fn list_cf_error_for_existing_db_is_propagated() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path();
+
+        // Simulate a directory that *looks* like an existing RocksDB (has a CURRENT file),
+        // but is not a valid DB. `open_db_with_migrations` should not treat this as a
+        // brand-new database.
+        std::fs::write(path.join("CURRENT"), b"not_a_manifest\n").unwrap();
+
+        let opts = default_db_options();
+        let result = open_db_with_migrations(&opts, path.to_str().unwrap(), &["test_cf"]);
+
+        assert!(matches!(result, Err(MigrationError::RocksDb(_))));
     }
 
     #[test]
