@@ -53,9 +53,6 @@ await describeMspNet(
     let storageRequestTxHash: `0x${string}`;
     let fileLocation: string;
     let mspClient: MspClient;
-    let sessionToken: string | undefined;
-    const sessionProvider = async () =>
-      sessionToken ? ({ token: sessionToken, user: { address: "" } } as const) : undefined;
 
     before(async () => {
       userApi = await createUserApi();
@@ -104,7 +101,8 @@ await describeMspNet(
       const mspBackendHttpConfig: HttpClientConfig = {
         baseUrl: "http://127.0.0.1:8080"
       };
-      mspClient = await MspClient.connect(mspBackendHttpConfig, sessionProvider);
+      // Create MspClient without session provider initially
+      mspClient = await MspClient.connect(mspBackendHttpConfig);
 
       // Wait for the backend to be ready
       await userApi.docker.waitForLog({
@@ -121,7 +119,9 @@ await describeMspNet(
       const siweDomain = "localhost:3000";
       const siweUri = "http://localhost:3000";
       const siweSession = await mspClient.auth.SIWE(walletClient, siweDomain, siweUri);
-      sessionToken = siweSession.token;
+
+      // Set the session provider after authentication
+      mspClient.setSessionProvider(async () => siweSession);
 
       assert(createIndexerApi, "Indexer API not available");
       indexerApi = await createIndexerApi();
@@ -151,6 +151,33 @@ await describeMspNet(
         profile.address,
         getAddress(account.address),
         "Profile address should be checksummed and match wallet address"
+      );
+    });
+
+    it("Should authenticate using SIWX (CAIP-122) flow", async () => {
+      // Create a new client without sessionProvider to test SIWX flow
+      const mspBackendHttpConfig: HttpClientConfig = {
+        baseUrl: "http://127.0.0.1:8080"
+      };
+      const siwxClient = await MspClient.connect(mspBackendHttpConfig);
+
+      // Authenticate using SIWX (CAIP-122) - no domain parameter needed
+      const siwxUri = "http://localhost:3000";
+      const siwxSession = await siwxClient.auth.SIWX(walletClient, siwxUri);
+
+      // Verify we got a session token
+      assert(siwxSession.token, "SIWX should return a session token");
+      assert(siwxSession.user, "SIWX should return user info");
+
+      // Update the client's sessionProvider with the new session
+      siwxClient.setSessionProvider(async () => siwxSession);
+
+      // Verify authentication works by fetching profile
+      const profile = await siwxClient.auth.getProfile();
+      strictEqual(
+        profile.address,
+        getAddress(account.address),
+        "SIWX profile address should match wallet address"
       );
     });
 
