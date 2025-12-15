@@ -15,7 +15,7 @@ SET
                 AND file.is_in_bucket = true
         ) f
     ),
-   total_size = (
+    total_size = (
         SELECT COALESCE(SUM(size), 0)
         FROM (
             SELECT DISTINCT ON (file_key) file_key, size
