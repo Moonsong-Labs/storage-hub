@@ -44,11 +44,11 @@
     "ethers": "^6.15.0"
   },
   "peerDependencies": {
-    "viem": ">=2.38.3"
+    "viem": ">=2.41.2"
   },
   "devDependencies": {
     "@types/node": "^20.11.19",
-    "viem": ">=2.38.3",
+    "viem": ">=2.41.2",
     "solc": "^0.8.26"
   },
   "engines": {

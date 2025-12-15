@@ -8,23 +8,23 @@
  * Binary data (signatures) are passed as Uint8Array. Hex values are 0x-prefixed strings (32-byte IDs).
  */
 
-import { filesystemAbi } from "../abi/filesystem";
-import type { FileInfo } from "../types";
-import type { EvmWriteOptions, StorageHubClientOptions } from "./types";
-import { FileOperation, type ReplicationLevel } from "./types";
 import {
   type Address,
   createPublicClient,
-  getContract,
   type GetContractReturnType,
+  getContract,
   hexToBytes,
   http,
-  parseGwei,
   type PublicClient,
+  parseGwei,
   stringToBytes,
   stringToHex,
   type WalletClient
 } from "viem";
+import { filesystemAbi } from "../abi/filesystem";
+import type { FileInfo } from "../types";
+import type { EvmWriteOptions, StorageHubClientOptions } from "./types";
+import { FileOperation, type ReplicationLevel } from "./types";
 
 // Re-export filesystemAbi for external use
 export { filesystemAbi };
@@ -266,8 +266,15 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas("createBucket", args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    const contract = this.getWriteContract();
-    return await contract.write.createBucket?.(args, txOpts);
+    return await this.walletClient.writeContract({
+      account: this.walletClient.account?.address as `0x${string}`,
+      address: this.filesystemContractAddress,
+      abi: filesystemAbi,
+      functionName: "createBucket",
+      args,
+      ...txOpts,
+      chain: null
+    });
   }
 
   /**

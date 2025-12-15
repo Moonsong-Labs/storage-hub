@@ -15,7 +15,7 @@
     "@storagehub-sdk/core": "workspace:*",
     "@storagehub-sdk/msp-client": "workspace:*",
     "ethers": "^6.15.0",
-    "viem": "2.38.3"
+    "viem": "2.41.2"
   },
   "devDependencies": {
     "typescript": "~5.5.4",
