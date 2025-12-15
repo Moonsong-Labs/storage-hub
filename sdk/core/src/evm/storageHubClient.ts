@@ -58,19 +58,6 @@ export class StorageHubClient {
   private static readonly DEFAULT_GAS_PRICE = parseGwei("1");
 
   /**
-   * Get write contract instance bound to the wallet client.
-   *
-   * @returns Contract instance for write operations (transactions)
-   */
-  private getWriteContract(): FileSystemContract<WalletClient> {
-    return getContract({
-      address: this.filesystemContractAddress,
-      abi: filesystemAbi,
-      client: this.walletClient
-    });
-  }
-
-  /**
    * Get read contract instance bound to the public client.
    *
    * @returns Contract instance for read operations (view calls)
@@ -151,16 +138,6 @@ export class StorageHubClient {
       throw new Error(`${label} exceeds maximum length of ${maxBytes} bytes (got ${bytes.length})`);
     }
     return stringToHex(str);
-  }
-
-  /**
-   * Assert that a value is present (non-null and non-undefined).
-   */
-  private assertPresent<T>(
-    value: T | null | undefined,
-    message: string
-  ): asserts value is NonNullable<T> {
-    if (value == null) throw new Error(message);
   }
 
   /**
@@ -294,8 +271,15 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas("requestMoveBucket", args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    const contract = this.getWriteContract();
-    return await contract.write.requestMoveBucket?.(args, txOpts);
+    return await this.walletClient.writeContract({
+      account: this.walletClient.account?.address as `0x${string}`,
+      address: this.filesystemContractAddress,
+      abi: filesystemAbi,
+      functionName: "requestMoveBucket",
+      args,
+      ...txOpts,
+      chain: null
+    });
   }
 
   /**
@@ -313,8 +297,15 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas("updateBucketPrivacy", args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    const contract = this.getWriteContract();
-    return await contract.write.updateBucketPrivacy?.(args, txOpts);
+    return await this.walletClient.writeContract({
+      account: this.walletClient.account?.address as `0x${string}`,
+      address: this.filesystemContractAddress,
+      abi: filesystemAbi,
+      functionName: "updateBucketPrivacy",
+      args,
+      ...txOpts,
+      chain: null
+    });
   }
 
   /**
@@ -331,8 +322,15 @@ export class StorageHubClient {
     );
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    const contract = this.getWriteContract();
-    return await contract.write.createAndAssociateCollectionWithBucket?.(args, txOpts);
+    return await this.walletClient.writeContract({
+      account: this.walletClient.account?.address as `0x${string}`,
+      address: this.filesystemContractAddress,
+      abi: filesystemAbi,
+      functionName: "createAndAssociateCollectionWithBucket",
+      args,
+      ...txOpts,
+      chain: null
+    });
   }
 
   /**
@@ -345,8 +343,15 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas("deleteBucket", args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    const contract = this.getWriteContract();
-    return await contract.write.deleteBucket?.(args, txOpts);
+    return await this.walletClient.writeContract({
+      account: this.walletClient.account?.address as `0x${string}`,
+      address: this.filesystemContractAddress,
+      abi: filesystemAbi,
+      functionName: "deleteBucket",
+      args,
+      ...txOpts,
+      chain: null
+    });
   }
 
   /**
@@ -393,8 +398,15 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas("issueStorageRequest", args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    const contract = this.getWriteContract();
-    return await contract.write.issueStorageRequest?.(args, txOpts);
+    return await this.walletClient.writeContract({
+      account: this.walletClient.account?.address as `0x${string}`,
+      address: this.filesystemContractAddress,
+      abi: filesystemAbi,
+      functionName: "issueStorageRequest",
+      args,
+      ...txOpts,
+      chain: null
+    });
   }
 
   /**
@@ -407,8 +419,15 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas("revokeStorageRequest", args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    const contract = this.getWriteContract();
-    return await contract.write.revokeStorageRequest?.(args, txOpts);
+    return await this.walletClient.writeContract({
+      account: this.walletClient.account?.address as `0x${string}`,
+      address: this.filesystemContractAddress,
+      abi: filesystemAbi,
+      functionName: "revokeStorageRequest",
+      args,
+      ...txOpts,
+      chain: null
+    });
   }
 
   /**
@@ -438,9 +457,14 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas("requestDeleteFile", args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    const contract = this.getWriteContract();
-    const fn = contract.write.requestDeleteFile;
-    this.assertPresent(fn, "requestDeleteFile not available on this contract/ABI");
-    return await fn(args, txOpts);
+    return await this.walletClient.writeContract({
+      account: this.walletClient.account?.address as `0x${string}`,
+      address: this.filesystemContractAddress,
+      abi: filesystemAbi,
+      functionName: "requestDeleteFile",
+      args,
+      ...txOpts,
+      chain: null
+    });
   }
 }
