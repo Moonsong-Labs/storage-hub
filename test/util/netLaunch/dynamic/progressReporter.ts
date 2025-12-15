@@ -1,8 +1,8 @@
 /**
  * Progress reporting for network startup operations.
  *
- * Provides user feedback during long-running network launches (100+ nodes can
- * take minutes). Supports phase-based reporting with node-level granularity.
+ * Provides user feedback during long-running network launches.
+ * Supports phase-based reporting with node-level granularity.
  */
 
 /**
@@ -58,12 +58,12 @@ export interface ProgressReporter {
  *
  * @example
  * ```
- * [Phase: BSPs] Starting 100 nodes...
- *   [1/100] 1% - bsp-0 ready
- *   [2/100] 2% - bsp-1 ready
+ * [Phase: BSPs] Starting 10 nodes...
+ *   [1/10] 10% - bsp-0 ready
+ *   [2/10] 20% - bsp-1 ready
  *   ...
- *   [100/100] 100% - bsp-99 ready
- * [Phase: BSPs] Complete in 45.32s
+ *   [10/10] 100% - bsp-9 ready
+ * [Phase: BSPs] Complete in 4.53s
  * ```
  */
 export class ConsoleProgressReporter implements ProgressReporter {

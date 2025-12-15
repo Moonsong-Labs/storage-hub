@@ -1,7 +1,7 @@
 /**
  * Type-safe network topology definitions for dynamic test networks.
  *
- * In production-like environments:
+ * Architecture:
  * - BSPs and Users never have indexers or databases
  * - MSPs and Fishermen always have a dedicated Indexer + Postgres pair
  * - Indexers are standalone containers that write to Postgres

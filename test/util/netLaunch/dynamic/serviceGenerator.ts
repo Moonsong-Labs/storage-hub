@@ -208,8 +208,8 @@ export function generateNodeService(
 /**
  * Generates a Postgres database service for an MSP or Fisherman node.
  *
- * In production-like architecture, each MSP and Fisherman gets a dedicated
- * Postgres instance that the indexer writes to and the node reads from.
+ * Each MSP and Fisherman gets a dedicated Postgres instance that the
+ * indexer writes to and the node reads from.
  *
  * @param nodeType - Type of node this database serves ("msp" or "fisherman")
  * @param index - Node index
@@ -243,7 +243,7 @@ export function generatePostgresService(
 /**
  * Generates a standalone indexer service for an MSP or Fisherman.
  *
- * In production-like architecture, indexers are separate containers that:
+ * Indexers are separate containers that:
  * - Connect to the network via bootnode
  * - Subscribe to blockchain events
  * - Write indexed data to their dedicated Postgres instance
@@ -316,7 +316,7 @@ export function generateIndexerService(
  * They connect to the network via a bootnode (typically the first BSP) using
  * environment variable placeholders that are resolved at container startup.
  *
- * In production-like architecture, user nodes never have indexers or databases.
+ * User nodes never have indexers or databases.
  *
  * @param identity - Generated identity for the node
  * @param ports - Port allocation for the node
@@ -383,7 +383,6 @@ export function generateUserService(
   }
 
   // User nodes never have indexers or database dependencies
-  // in production-like architecture
 
   // Add resource volume mount for test files (matching fullnet-base-template.yml)
   // Path is relative to docker directory where compose runs
@@ -403,7 +402,7 @@ export function generateUserService(
 /**
  * Generates all Docker Compose services for a network topology.
  *
- * In production-like architecture:
+ * Container architecture:
  * - BSPs: Only the BSP container (no Postgres, no Indexer)
  * - MSPs: Postgres + Indexer + MSP (3 containers per MSP)
  * - Fishermen: Postgres + Indexer + Fisherman (3 containers per Fisherman)

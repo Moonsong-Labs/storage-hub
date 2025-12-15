@@ -273,7 +273,7 @@ export class DynamicNetworkContext extends BaseNetworkContext {
 /**
  * Launches a network from a topology specification.
  *
- * Bootstrap order (production-like architecture):
+ * Bootstrap order:
  * 1. BSP-0 first (becomes bootnode, needed for indexers to connect)
  * 2. Postgres instances for all MSPs and Fishermen
  * 3. Indexer containers for all MSPs and Fishermen (connect to BSP bootnode)
