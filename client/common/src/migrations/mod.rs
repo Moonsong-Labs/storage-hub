@@ -87,6 +87,9 @@ pub enum MigrationError {
 
     #[error("Cannot downgrade schema version from {current} to {target}")]
     CannotDowngrade { current: u32, target: u32 },
+
+    #[error("Invalid column family configuration: {0}")]
+    InvalidColumnFamilyConfig(String),
 }
 
 /// A trait representing a database schema migration.
@@ -107,6 +110,19 @@ pub trait Migration: Send + Sync {
     /// is applied. The migration system will:
     /// 1. First open the database with these CFs (discovered via `list_cf`)
     /// 2. Then drop them using `drop_cf()`
+    ///
+    /// # Important: Deprecated names are permanently reserved
+    ///
+    /// Once a column family name is listed here, it can **never** be reused in a future
+    /// schema version. The migration system enforces this by:
+    /// - Rejecting any `current_schema_cfs` that include a deprecated CF name
+    /// - Always dropping deprecated CFs during the cleanup pass (even if schema version is current)
+    ///
+    /// This constraint exists for safety:
+    /// - **Prevents data confusion**: Old data could be misinterpreted if the name is reused
+    /// - **Ensures clean separation**: No ambiguity about whether data is old or new
+    ///
+    /// If you need similar functionality in the future, use a new name (e.g., `my_cf_v2`).
     fn deprecated_column_families(&self) -> &'static [&'static str];
 
     /// A human-readable description of what this migration does.
@@ -136,6 +152,25 @@ impl MigrationRunner {
             .last()
             .map(|m| m.version())
             .unwrap_or(0)
+    }
+
+    /// Returns a set of all deprecated column family names across all registered migrations.
+    ///
+    /// This aggregates deprecated CF names from **all** migrations, regardless of version.
+    /// Once a name appears in any migration's `deprecated_column_families()`, it is
+    /// **permanently reserved** and cannot be reused in future schema versions.
+    ///
+    /// This is used to:
+    /// 1. Validate that `current_schema_cfs` don't accidentally include deprecated CF names
+    /// 2. Ensure deprecated CFs are always cleaned up, even if schema version is already latest
+    ///
+    /// See [`Migration::deprecated_column_families()`] for more details on why deprecated
+    /// names can never be reused.
+    pub fn all_deprecated_column_families() -> HashSet<&'static str> {
+        Self::all_migrations()
+            .iter()
+            .flat_map(|m| m.deprecated_column_families().iter().copied())
+            .collect()
     }
 
     /// Validates the migration order and returns any issues found.
@@ -235,9 +270,11 @@ impl MigrationRunner {
     /// 1. Validate the migration configuration (no duplicates, no gaps, starts from 1)
     /// 2. Read the current schema version
     /// 3. Check for downgrade attempts (current version > latest known version)
-    /// 4. Find migrations with version > current
-    /// 5. For each pending migration, drop the deprecated column families
-    /// 6. Update the schema version after each successful migration
+    /// 4. Cleanup pass: drop any straggler deprecated CFs from already-applied migrations
+    ///    (handles partial migration failures, manual tampering, etc.)
+    /// 5. For each pending migration (version > current):
+    ///    - Drop that migration's deprecated column families
+    ///    - Update the schema version
     ///
     /// # Errors
     ///
@@ -264,6 +301,48 @@ impl MigrationRunner {
 
         let migrations = Self::all_migrations();
 
+        // Drop straggler deprecated CFs from already-applied migrations.
+        //
+        // Note:
+        //
+        // RocksDB does not support batching multiple `drop_cf()` calls into a single
+        // atomic transaction. Each `DropColumnFamily` is an independent operation that
+        // immediately records a drop record in the MANIFEST file. There is no API to
+        // roll back a drop or to commit multiple drops atomically.
+        //
+        // This means partial migrations are possible (e.g., crash after dropping CF1
+        // but before dropping CF2). We handle this by making the cleanup **idempotent**:
+        // - We only clean up CFs from migrations that have already been applied (version <= current)
+        // - We check `cf_handle().is_some()` before each drop (already-dropped CFs are skipped)
+        // - This runs on every startup to catch stragglers from crashes or tampering
+        //
+        // This guards against edge cases like:
+        // - Partial migration failures (crash mid-migration)
+        // - Manual DB tampering that recreated deprecated CFs
+        // - Schema version already at latest but deprecated CFs still present
+        //
+        // See: https://github.com/facebook/rocksdb/wiki/column-families
+        for migration in migrations.iter().filter(|m| m.version() <= current_version) {
+            for cf_name in migration.deprecated_column_families() {
+                if db.cf_handle(cf_name).is_some() {
+                    info!(
+                        "Cleanup pass (v{}): dropping straggler column family '{}'",
+                        migration.version(),
+                        cf_name
+                    );
+                    db.drop_cf(cf_name)
+                        .map_err(|e| MigrationError::MigrationFailed {
+                            version: migration.version(),
+                            reason: format!(
+                                "Failed to drop straggler column family '{}': {}",
+                                cf_name, e
+                            ),
+                        })?;
+                }
+            }
+        }
+
+        // Apply migrations that haven't been applied yet
         let pending: Vec<_> = migrations
             .iter()
             .filter(|m| m.version() > current_version)
@@ -296,7 +375,7 @@ impl MigrationRunner {
                 migration.description()
             );
 
-            // Drop deprecated column families
+            // Drop this migration's deprecated column families
             for cf_name in migration.deprecated_column_families() {
                 if db.cf_handle(cf_name).is_some() {
                     info!("  Dropping column family: {}", cf_name);
@@ -306,11 +385,11 @@ impl MigrationRunner {
                             reason: format!("Failed to drop column family '{}': {}", cf_name, e),
                         })?;
                 } else {
-                    debug!("Column family '{}' does not exist, skipping", cf_name);
+                    debug!("  Column family '{}' does not exist, skipping", cf_name);
                 }
             }
 
-            // Update schema version
+            // Update schema version after this migration completes
             Self::write_schema_version(db, migration.version())?;
             applied_version = migration.version();
 
@@ -353,14 +432,49 @@ pub fn merge_column_families<'a>(
     all_cfs
 }
 
+/// Validates that the current schema column families do not include any reserved or deprecated names.
+///
+/// This function checks that:
+/// 1. `current_schema_cfs` does not contain the reserved `__schema_version__` CF
+/// 2. `current_schema_cfs` does not contain any deprecated CF names from registered migrations
+///
+/// # Errors
+///
+/// Returns `MigrationError::InvalidColumnFamilyConfig` if validation fails.
+fn validate_current_schema_cfs(current_schema_cfs: &[&str]) -> Result<(), MigrationError> {
+    // Check for reserved schema version CF
+    if current_schema_cfs.contains(&SCHEMA_VERSION_CF) {
+        return Err(MigrationError::InvalidColumnFamilyConfig(format!(
+            "Column family '{}' is reserved for internal use by the migration system and must not be included in current_schema_cfs",
+            SCHEMA_VERSION_CF
+        )));
+    }
+
+    // Check for deprecated CF names (permanently reserved and cannot be reused)
+    let all_deprecated = MigrationRunner::all_deprecated_column_families();
+    for cf_name in current_schema_cfs {
+        if all_deprecated.contains(cf_name) {
+            return Err(MigrationError::InvalidColumnFamilyConfig(format!(
+                "Column family '{}' was deprecated in a previous migration and cannot be reused. \
+                 Deprecated CF names are permanently reserved to prevent data confusion. \
+                 Use a different name (e.g., '{}_v2') for new functionality.",
+                cf_name, cf_name
+            )));
+        }
+    }
+
+    Ok(())
+}
+
 /// Opens a RocksDB database with automatic migration support.
 ///
 /// This function:
-/// 1. Checks if the database exists (via CURRENT file presence)
-/// 2. Lists existing column families in the database (or uses empty list for new DBs)
-/// 3. Merges existing CFs with the current schema's CFs
-/// 4. Opens the database with all necessary CFs
-/// 5. Runs any pending migrations to drop deprecated CFs
+/// 1. Validates that `current_schema_cfs` doesn't include reserved or deprecated CF names
+/// 2. Checks if the database exists (via CURRENT file presence)
+/// 3. Lists existing column families in the database (or uses empty list for new DBs)
+/// 4. Merges existing CFs with the current schema's CFs
+/// 5. Opens the database with all necessary CFs
+/// 6. Runs any pending migrations to drop deprecated CFs
 ///
 /// # Arguments
 ///
@@ -374,6 +488,9 @@ pub fn merge_column_families<'a>(
 ///
 /// # Errors
 ///
+/// Returns `MigrationError::InvalidColumnFamilyConfig` if `current_schema_cfs` contains
+/// reserved or deprecated CF names.
+///
 /// Returns `MigrationError::RocksDb` if the database exists but cannot be read
 /// (e.g., corruption, permission issues, etc.).
 pub fn open_db_with_migrations(
@@ -381,6 +498,9 @@ pub fn open_db_with_migrations(
     path: &str,
     current_schema_cfs: &[&str],
 ) -> Result<DB, MigrationError> {
+    // Validate current schema CFs before proceeding
+    validate_current_schema_cfs(current_schema_cfs)?;
+
     // Check if this is an existing database by looking for the CURRENT file.
     // RocksDB always creates a CURRENT file that points to the current manifest.
     // If CURRENT exists, this is an existing database and list_cf must succeed.

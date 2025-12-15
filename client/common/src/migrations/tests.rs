@@ -1311,3 +1311,204 @@ mod store_simulation_tests {
         );
     }
 }
+
+/// Tests for column family configuration guardrails.
+mod cf_guardrail_tests {
+    use super::*;
+
+    #[test]
+    fn rejects_deprecated_cf_in_current_schema() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path().to_str().unwrap();
+
+        let opts = default_db_options();
+
+        // Try to include a deprecated CF name from V1 migration
+        let current_cfs = vec![
+            "some_valid_cf",
+            "pending_msp_respond_storage_request", // This is deprecated!
+        ];
+
+        let result = open_db_with_migrations(&opts, path, &current_cfs);
+
+        assert!(result.is_err());
+        match result {
+            Err(MigrationError::InvalidColumnFamilyConfig(msg)) => {
+                assert!(msg.contains("pending_msp_respond_storage_request"));
+                assert!(msg.contains("cannot be reused"));
+            }
+            _ => panic!("Expected InvalidColumnFamilyConfig error, got {:?}", result),
+        }
+    }
+
+    #[test]
+    fn rejects_schema_version_cf_in_current_schema() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path().to_str().unwrap();
+
+        let opts = default_db_options();
+
+        // Try to include the reserved schema version CF
+        let current_cfs = vec!["some_valid_cf", SCHEMA_VERSION_CF];
+
+        let result = open_db_with_migrations(&opts, path, &current_cfs);
+
+        assert!(result.is_err());
+        match result {
+            Err(MigrationError::InvalidColumnFamilyConfig(msg)) => {
+                assert!(msg.contains(SCHEMA_VERSION_CF));
+                assert!(msg.contains("reserved"));
+            }
+            _ => panic!("Expected InvalidColumnFamilyConfig error, got {:?}", result),
+        }
+    }
+
+    #[test]
+    fn all_deprecated_column_families_returns_expected_cfs() {
+        let deprecated = MigrationRunner::all_deprecated_column_families();
+
+        // V1 migration deprecates 3 CFs
+        assert!(deprecated.contains("pending_msp_respond_storage_request"));
+        assert!(deprecated.contains("pending_msp_respond_storage_request_left_index"));
+        assert!(deprecated.contains("pending_msp_respond_storage_request_right_index"));
+    }
+}
+
+/// Tests for resilient deprecated CF cleanup.
+mod cleanup_resilience_tests {
+    use super::*;
+
+    #[test]
+    fn cleanup_drops_deprecated_cf_even_when_schema_at_latest() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path().to_str().unwrap();
+
+        let latest_version = MigrationRunner::latest_version();
+
+        // Create a database at latest schema version but WITH a deprecated CF still present
+        // (simulating manual tampering or partial migration failure)
+        {
+            let mut opts = Options::default();
+            opts.create_if_missing(true);
+            opts.create_missing_column_families(true);
+
+            let cf_descriptors = vec![
+                ColumnFamilyDescriptor::new("default", Options::default()),
+                ColumnFamilyDescriptor::new(SCHEMA_VERSION_CF, Options::default()),
+                ColumnFamilyDescriptor::new("current_cf", Options::default()),
+                // This deprecated CF should NOT exist at latest version, but we create it anyway
+                ColumnFamilyDescriptor::new(
+                    "pending_msp_respond_storage_request",
+                    Options::default(),
+                ),
+            ];
+
+            let db = DB::open_cf_descriptors(&opts, path, cf_descriptors).unwrap();
+
+            // Set schema version to latest
+            MigrationRunner::write_schema_version(&db, latest_version).unwrap();
+
+            // Verify the deprecated CF exists and has data
+            let cf = db.cf_handle("pending_msp_respond_storage_request").unwrap();
+            db.put_cf(&cf, b"tampered_key", b"tampered_value").unwrap();
+        }
+
+        // Now open with the migration system
+        let opts = default_db_options();
+        let db = open_db_with_migrations(&opts, path, &["current_cf"]).unwrap();
+
+        // Deprecated CF should be gone despite schema version already being latest
+        assert!(
+            db.cf_handle("pending_msp_respond_storage_request")
+                .is_none(),
+            "Deprecated CF should have been cleaned up"
+        );
+
+        // Current CF should still work
+        assert!(db.cf_handle("current_cf").is_some());
+
+        // Schema version should still be at latest
+        assert_eq!(
+            MigrationRunner::read_schema_version(&db).unwrap(),
+            latest_version
+        );
+    }
+
+    #[test]
+    fn cleanup_drops_multiple_deprecated_cfs_at_latest_version() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path().to_str().unwrap();
+
+        let latest_version = MigrationRunner::latest_version();
+
+        // Create a database with ALL deprecated CFs present but at latest schema version
+        {
+            let mut opts = Options::default();
+            opts.create_if_missing(true);
+            opts.create_missing_column_families(true);
+
+            let mut cf_descriptors = vec![
+                ColumnFamilyDescriptor::new("default", Options::default()),
+                ColumnFamilyDescriptor::new(SCHEMA_VERSION_CF, Options::default()),
+                ColumnFamilyDescriptor::new("current_cf", Options::default()),
+            ];
+
+            // Add all deprecated CFs from V1
+            let v1_migration = v1::V1Migration;
+            for cf_name in v1_migration.deprecated_column_families() {
+                cf_descriptors.push(ColumnFamilyDescriptor::new(*cf_name, Options::default()));
+            }
+
+            let db = DB::open_cf_descriptors(&opts, path, cf_descriptors).unwrap();
+            MigrationRunner::write_schema_version(&db, latest_version).unwrap();
+        }
+
+        // Open with migration system
+        let opts = default_db_options();
+        let db = open_db_with_migrations(&opts, path, &["current_cf"]).unwrap();
+
+        // All deprecated CFs should be gone
+        let v1_migration = v1::V1Migration;
+        for cf_name in v1_migration.deprecated_column_families() {
+            assert!(
+                db.cf_handle(cf_name).is_none(),
+                "Deprecated CF '{}' should have been cleaned up",
+                cf_name
+            );
+        }
+    }
+
+    #[test]
+    fn cleanup_is_idempotent_when_deprecated_cfs_already_gone() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path().to_str().unwrap();
+
+        let latest_version = MigrationRunner::latest_version();
+
+        // Create a clean database at latest version with no deprecated CFs
+        {
+            let mut opts = Options::default();
+            opts.create_if_missing(true);
+            opts.create_missing_column_families(true);
+
+            let cf_descriptors = vec![
+                ColumnFamilyDescriptor::new("default", Options::default()),
+                ColumnFamilyDescriptor::new(SCHEMA_VERSION_CF, Options::default()),
+                ColumnFamilyDescriptor::new("current_cf", Options::default()),
+            ];
+
+            let db = DB::open_cf_descriptors(&opts, path, cf_descriptors).unwrap();
+            MigrationRunner::write_schema_version(&db, latest_version).unwrap();
+        }
+
+        // Open multiple times - should not fail
+        for _ in 0..3 {
+            let opts = default_db_options();
+            let db = open_db_with_migrations(&opts, path, &["current_cf"]).unwrap();
+            assert_eq!(
+                MigrationRunner::read_schema_version(&db).unwrap(),
+                latest_version
+            );
+        }
+    }
+}
