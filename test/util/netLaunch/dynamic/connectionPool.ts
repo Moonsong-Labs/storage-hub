@@ -2,7 +2,7 @@
  * Lazy connection pool for API instances.
  *
  * Manages WebSocket connections to nodes with lazy initialization and LRU eviction.
- * Prevents resource exhaustion when working with large networks (100+ nodes) by
+ * Prevents resource exhaustion when working with large networks by
  * maintaining a bounded pool of active connections.
  */
 
