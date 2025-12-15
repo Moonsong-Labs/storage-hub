@@ -214,6 +214,7 @@ impl Bucket {
     ///
     /// This recalculates both values from the files table and updates the stored values.
     /// Only counts unique files (by file_key) since the same file can appear multiple times.
+    /// TODO: create an RPC to call this function and update the bucket stats.
     pub async fn sync_stats<'a>(
         conn: &mut DbConnection<'a>,
         onchain_bucket_id: Vec<u8>,
