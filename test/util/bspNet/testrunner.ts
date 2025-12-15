@@ -64,6 +64,9 @@ export async function describeBspNet<
           launchEventEmitter.once("networkLaunched", resolve);
         });
 
+        console.log(
+          `\n=== 🧪 BSPNet: ${title} (${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"}) ===`
+        );
         const launchResponse = await NetworkLauncher.create("fullnet", {
           ...bspNetConfig,
           toxics: options?.toxics,
@@ -160,6 +163,10 @@ export async function describeMspNet<
         responseListenerPromise = new Promise((resolve) => {
           launchEventEmitter.once("networkLaunched", resolve);
         });
+
+        console.log(
+          `\n=== 🧪 FullNet: ${title} (${fullNetConfig.rocksdb ? "RocksDB" : "MemoryDB"}) ===`
+        );
         const launchResponse = await NetworkLauncher.create("fullnet", {
           ...fullNetConfig,
           toxics: options?.toxics,
