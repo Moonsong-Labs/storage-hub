@@ -5,7 +5,8 @@ import { NetworkLauncher } from "../netLaunch";
 import {
   type DynamicNetworkContext,
   launchNetworkFromTopology,
-  type NetworkTopology
+  type NetworkTopology,
+  ConsoleProgressReporter
 } from "../netLaunch";
 import * as ShConsts from "./consts";
 import { cleardownTest } from "./helpers";
@@ -354,8 +355,30 @@ export async function describeNetwork(
     before(async () => {
       await verifyContainerFreshness();
 
+      const verbose = process.env.SH_TEST_VERBOSE === "1";
+      const bspCount = typeof topology.bsps === "number" ? topology.bsps : topology.bsps.length;
+      const mspCount = typeof topology.msps === "number" ? topology.msps : topology.msps.length;
+      const fishCount =
+        typeof topology.fishermen === "number" ? topology.fishermen : topology.fishermen.length;
+
+      console.log(`\n=== 🧪 DynamicNetwork: ${title} (${bspCount} BSPs, ${mspCount} MSPs) ===`);
+
+      if (verbose) {
+        const configTable = [
+          { option: "bsps", value: bspCount },
+          { option: "msps", value: mspCount },
+          { option: "fishermen", value: fishCount },
+          {
+            option: "runtimeType",
+            value: options?.runtimeType ?? "parachain"
+          }
+        ];
+        console.table(configTable);
+      }
+
       network = await launchNetworkFromTopology(topology, {
-        runtimeType: options?.runtimeType ?? "parachain"
+        runtimeType: options?.runtimeType ?? "parachain",
+        progressReporter: verbose ? new ConsoleProgressReporter() : undefined
       });
     });
 
