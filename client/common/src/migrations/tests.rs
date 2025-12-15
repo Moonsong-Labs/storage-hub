@@ -86,7 +86,7 @@ mod validation_tests {
 
     /// Helper to test with custom migrations
     fn validate_custom_migrations(
-        migrations: Vec<MigrationDescriptor>,
+        migrations: Vec<Box<dyn Migration>>,
     ) -> Result<(), MigrationError> {
         if migrations.is_empty() {
             return Ok(());
@@ -130,30 +130,32 @@ mod validation_tests {
     fn detects_duplicate_versions() {
         struct DuplicateV1A;
         impl Migration for DuplicateV1A {
-            const VERSION: u32 = 1;
-            fn deprecated_column_families() -> &'static [&'static str] {
+            fn version(&self) -> u32 {
+                1
+            }
+            fn deprecated_column_families(&self) -> &'static [&'static str] {
                 &[]
             }
-            fn description() -> &'static str {
+            fn description(&self) -> &'static str {
                 "First V1"
             }
         }
 
         struct DuplicateV1B;
         impl Migration for DuplicateV1B {
-            const VERSION: u32 = 1;
-            fn deprecated_column_families() -> &'static [&'static str] {
+            fn version(&self) -> u32 {
+                1
+            }
+            fn deprecated_column_families(&self) -> &'static [&'static str] {
                 &[]
             }
-            fn description() -> &'static str {
+            fn description(&self) -> &'static str {
                 "Second V1 (duplicate)"
             }
         }
 
-        let migrations = vec![
-            MigrationDescriptor::new::<DuplicateV1A>(),
-            MigrationDescriptor::new::<DuplicateV1B>(),
-        ];
+        let migrations: Vec<Box<dyn Migration>> =
+            vec![Box::new(DuplicateV1A), Box::new(DuplicateV1B)];
 
         let result = validate_custom_migrations(migrations);
         assert!(result.is_err());
@@ -170,30 +172,31 @@ mod validation_tests {
     fn detects_version_gaps() {
         struct GapV1;
         impl Migration for GapV1 {
-            const VERSION: u32 = 1;
-            fn deprecated_column_families() -> &'static [&'static str] {
+            fn version(&self) -> u32 {
+                1
+            }
+            fn deprecated_column_families(&self) -> &'static [&'static str] {
                 &[]
             }
-            fn description() -> &'static str {
+            fn description(&self) -> &'static str {
                 "V1"
             }
         }
 
         struct GapV3;
         impl Migration for GapV3 {
-            const VERSION: u32 = 3;
-            fn deprecated_column_families() -> &'static [&'static str] {
+            fn version(&self) -> u32 {
+                3
+            }
+            fn deprecated_column_families(&self) -> &'static [&'static str] {
                 &[]
             }
-            fn description() -> &'static str {
+            fn description(&self) -> &'static str {
                 "V3 (skipping V2)"
             }
         }
 
-        let mut migrations = vec![
-            MigrationDescriptor::new::<GapV1>(),
-            MigrationDescriptor::new::<GapV3>(),
-        ];
+        let mut migrations: Vec<Box<dyn Migration>> = vec![Box::new(GapV1), Box::new(GapV3)];
         migrations.sort_by_key(|m| m.version());
 
         let result = validate_custom_migrations(migrations);
@@ -210,16 +213,18 @@ mod validation_tests {
     fn detects_non_one_start() {
         struct NonOneStartV2;
         impl Migration for NonOneStartV2 {
-            const VERSION: u32 = 2;
-            fn deprecated_column_families() -> &'static [&'static str] {
+            fn version(&self) -> u32 {
+                2
+            }
+            fn deprecated_column_families(&self) -> &'static [&'static str] {
                 &[]
             }
-            fn description() -> &'static str {
+            fn description(&self) -> &'static str {
                 "V2 (no V1)"
             }
         }
 
-        let migrations = vec![MigrationDescriptor::new::<NonOneStartV2>()];
+        let migrations: Vec<Box<dyn Migration>> = vec![Box::new(NonOneStartV2)];
 
         let result = validate_custom_migrations(migrations);
         assert!(result.is_err());
@@ -546,7 +551,7 @@ mod database_tests {
     fn migration_runner_handles_empty_migrations() {
         fn run_with_empty_migrations(db: &mut DB) -> Result<u32, MigrationError> {
             let current_version = MigrationRunner::read_schema_version(db)?;
-            let migrations: Vec<MigrationDescriptor> = vec![];
+            let migrations: Vec<Box<dyn Migration>> = vec![];
 
             if migrations.is_empty() {
                 return Ok(current_version);
@@ -582,13 +587,15 @@ mod test_migrations {
     pub struct TestV2Migration;
 
     impl Migration for TestV2Migration {
-        const VERSION: u32 = 2;
+        fn version(&self) -> u32 {
+            2
+        }
 
-        fn deprecated_column_families() -> &'static [&'static str] {
+        fn deprecated_column_families(&self) -> &'static [&'static str] {
             &["test_deprecated_v2_cf", "test_deprecated_v2_cf_index"]
         }
 
-        fn description() -> &'static str {
+        fn description(&self) -> &'static str {
             "Test V2 migration - removes test deprecated CFs"
         }
     }
@@ -597,13 +604,15 @@ mod test_migrations {
     pub struct TestV3Migration;
 
     impl Migration for TestV3Migration {
-        const VERSION: u32 = 3;
+        fn version(&self) -> u32 {
+            3
+        }
 
-        fn deprecated_column_families() -> &'static [&'static str] {
+        fn deprecated_column_families(&self) -> &'static [&'static str] {
             &["test_deprecated_v3_cf"]
         }
 
-        fn description() -> &'static str {
+        fn description(&self) -> &'static str {
             "Test V3 migration - removes another test deprecated CF"
         }
     }
@@ -612,7 +621,7 @@ mod test_migrations {
 /// Helper function to run migrations with a custom migration list.
 fn run_migrations_with_list(
     db: &mut DB,
-    migrations: Vec<MigrationDescriptor>,
+    migrations: Vec<Box<dyn Migration>>,
 ) -> Result<u32, MigrationError> {
     let current_version = MigrationRunner::read_schema_version(db)?;
     let latest_version = migrations.last().map(|m| m.version()).unwrap_or(0);
@@ -636,7 +645,7 @@ fn run_migrations_with_list(
     let mut applied_version = current_version;
 
     for migration in pending {
-        for cf_name in migration.deprecated_cfs() {
+        for cf_name in migration.deprecated_column_families() {
             if db.cf_handle(cf_name).is_some() {
                 db.drop_cf(cf_name)
                     .map_err(|e| MigrationError::MigrationFailed {
@@ -655,23 +664,23 @@ fn run_migrations_with_list(
 
 /// Tests for multi-version migration scenarios.
 mod multi_version_tests {
-    use super::*;
     use super::test_migrations::*;
+    use super::*;
 
     #[test]
     fn migration_chain_v0_to_v3() {
         let temp_dir = TempDir::new().unwrap();
         let path = temp_dir.path().to_str().unwrap();
 
-        let all_migrations = vec![
-            MigrationDescriptor::new::<v1::V1Migration>(),
-            MigrationDescriptor::new::<TestV2Migration>(),
-            MigrationDescriptor::new::<TestV3Migration>(),
+        let all_migrations: Vec<Box<dyn Migration>> = vec![
+            Box::new(v1::V1Migration),
+            Box::new(TestV2Migration),
+            Box::new(TestV3Migration),
         ];
 
         let all_deprecated_cfs: Vec<&str> = all_migrations
             .iter()
-            .flat_map(|m| m.deprecated_cfs().iter().copied())
+            .flat_map(|m| m.deprecated_column_families().iter().copied())
             .collect();
 
         // Create database at version 0 with all deprecated CFs
@@ -714,7 +723,14 @@ mod multi_version_tests {
                 .collect();
 
             let mut db = DB::open_cf_descriptors(&opts, path, cf_descriptors).unwrap();
-            let final_version = run_migrations_with_list(&mut db, all_migrations.clone()).unwrap();
+
+            // Re-create the migrations list since we can't clone Box<dyn Migration>
+            let all_migrations: Vec<Box<dyn Migration>> = vec![
+                Box::new(v1::V1Migration),
+                Box::new(TestV2Migration),
+                Box::new(TestV3Migration),
+            ];
+            let final_version = run_migrations_with_list(&mut db, all_migrations).unwrap();
 
             assert_eq!(final_version, 3);
             assert_eq!(MigrationRunner::read_schema_version(&db).unwrap(), 3);
@@ -741,10 +757,10 @@ mod multi_version_tests {
         let path = temp_dir.path().to_str().unwrap();
 
         // Create migrations in non-sorted order
-        let mut all_migrations = vec![
-            MigrationDescriptor::new::<TestV3Migration>(),
-            MigrationDescriptor::new::<v1::V1Migration>(),
-            MigrationDescriptor::new::<TestV2Migration>(),
+        let mut all_migrations: Vec<Box<dyn Migration>> = vec![
+            Box::new(TestV3Migration),
+            Box::new(v1::V1Migration),
+            Box::new(TestV2Migration),
         ];
 
         all_migrations.sort_by_key(|m| m.version());
@@ -818,10 +834,10 @@ mod multi_version_tests {
 
         // Run migrations - should only apply V2 and V3
         {
-            let all_migrations = vec![
-                MigrationDescriptor::new::<v1::V1Migration>(),
-                MigrationDescriptor::new::<TestV2Migration>(),
-                MigrationDescriptor::new::<TestV3Migration>(),
+            let all_migrations: Vec<Box<dyn Migration>> = vec![
+                Box::new(v1::V1Migration),
+                Box::new(TestV2Migration),
+                Box::new(TestV3Migration),
             ];
 
             let opts = default_db_options();
@@ -1021,7 +1037,8 @@ mod store_simulation_tests {
                 cf_descriptors.push(ColumnFamilyDescriptor::new(*cf_name, Options::default()));
             }
 
-            for cf_name in v1::V1Migration::deprecated_column_families() {
+            let v1_migration = v1::V1Migration;
+            for cf_name in v1_migration.deprecated_column_families() {
                 cf_descriptors.push(ColumnFamilyDescriptor::new(*cf_name, Options::default()));
             }
 
@@ -1046,7 +1063,8 @@ mod store_simulation_tests {
             let bytes: [u8; 8] = value.unwrap()[..].try_into().unwrap();
             assert_eq!(u64::from_le_bytes(bytes), 42);
 
-            for cf_name in v1::V1Migration::deprecated_column_families() {
+            let v1_migration = v1::V1Migration;
+            for cf_name in v1_migration.deprecated_column_families() {
                 assert!(db.cf_handle(cf_name).is_none());
             }
 
@@ -1062,7 +1080,11 @@ mod store_simulation_tests {
         let temp_dir = TempDir::new().unwrap();
         let path = temp_dir.path().to_str().unwrap();
 
-        let current_store_cfs = vec!["missing_chunks", "file_metadata", "pending_bucket_downloads"];
+        let current_store_cfs = vec![
+            "missing_chunks",
+            "file_metadata",
+            "pending_bucket_downloads",
+        ];
 
         // Create database
         {
@@ -1103,7 +1125,11 @@ mod store_simulation_tests {
         let temp_dir = TempDir::new().unwrap();
         let path = temp_dir.path().to_str().unwrap();
 
-        let current_store_cfs = vec!["bsp_peer_stats", "bsp_peer_file_keys", "bsp_peer_last_update"];
+        let current_store_cfs = vec![
+            "bsp_peer_stats",
+            "bsp_peer_file_keys",
+            "bsp_peer_last_update",
+        ];
 
         // Create database
         {
@@ -1168,10 +1194,7 @@ mod store_simulation_tests {
             let db = open_db_with_migrations(&opts, path, &current_cfs).unwrap();
 
             let cf = db.cf_handle("data_cf").unwrap();
-            assert_eq!(
-                &db.get_cf(&cf, b"key1").unwrap().unwrap()[..],
-                b"value1"
-            );
+            assert_eq!(&db.get_cf(&cf, b"key1").unwrap().unwrap()[..], b"value1");
 
             db.put_cf(&cf, b"key2", b"value2").unwrap();
         }
@@ -1182,14 +1205,8 @@ mod store_simulation_tests {
             let db = open_db_with_migrations(&opts, path, &current_cfs).unwrap();
 
             let cf = db.cf_handle("data_cf").unwrap();
-            assert_eq!(
-                &db.get_cf(&cf, b"key1").unwrap().unwrap()[..],
-                b"value1"
-            );
-            assert_eq!(
-                &db.get_cf(&cf, b"key2").unwrap().unwrap()[..],
-                b"value2"
-            );
+            assert_eq!(&db.get_cf(&cf, b"key1").unwrap().unwrap()[..], b"value1");
+            assert_eq!(&db.get_cf(&cf, b"key2").unwrap().unwrap()[..], b"value2");
         }
     }
 
@@ -1198,7 +1215,8 @@ mod store_simulation_tests {
         let temp_dir = TempDir::new().unwrap();
         let path = temp_dir.path().to_str().unwrap();
 
-        let deprecated_cfs = v1::V1Migration::deprecated_column_families();
+        let v1_migration = v1::V1Migration;
+        let deprecated_cfs = v1_migration.deprecated_column_families();
         assert_eq!(deprecated_cfs.len(), 3, "V1 should deprecate exactly 3 CFs");
 
         let current_cfs = vec![

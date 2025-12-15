@@ -33,13 +33,13 @@
 //! pub struct V2Migration;
 //!
 //! impl Migration for V2Migration {
-//!     const VERSION: u32 = 2;
+//!     fn version(&self) -> u32 { 2 }
 //!
-//!     fn deprecated_column_families() -> &'static [&'static str] {
+//!     fn deprecated_column_families(&self) -> &'static [&'static str] {
 //!         &["old_cf_name_1", "old_cf_name_2"]
 //!     }
 //!
-//!     fn description() -> &'static str {
+//!     fn description(&self) -> &'static str {
 //!         "Remove legacy storage request column families"
 //!     }
 //! }
@@ -55,16 +55,15 @@
 //!
 //! let db = open_db_with_migrations(&db_opts, &path, CURRENT_CFS)?;
 //! ```
+use log::{debug, info};
+use rocksdb::{ColumnFamilyDescriptor, Options, DB};
+use std::collections::HashSet;
+use thiserror::Error;
 
 pub mod v1;
 
 #[cfg(test)]
 mod tests;
-
-use log::{debug, info};
-use rocksdb::{ColumnFamilyDescriptor, Options, DB};
-use std::collections::HashSet;
-use thiserror::Error;
 
 /// The name of the column family used to store the schema version.
 /// This is a reserved name and should not be used for application data.
@@ -99,7 +98,7 @@ pub enum MigrationError {
 pub trait Migration: Send + Sync {
     /// The version number of this migration.
     /// Must be unique and migrations are applied in ascending version order.
-    const VERSION: u32;
+    fn version(&self) -> u32;
 
     /// Returns the names of column families that should be dropped by this migration.
     ///
@@ -107,47 +106,10 @@ pub trait Migration: Send + Sync {
     /// is applied. The migration system will:
     /// 1. First open the database with these CFs (discovered via `list_cf`)
     /// 2. Then drop them using `drop_cf()`
-    fn deprecated_column_families() -> &'static [&'static str];
+    fn deprecated_column_families(&self) -> &'static [&'static str];
 
     /// A human-readable description of what this migration does.
-    fn description() -> &'static str;
-}
-
-/// A descriptor for a migration that can be stored in collections.
-///
-/// This struct captures the static information from a [`Migration`] implementation
-/// for use at runtime without requiring the original type.
-#[derive(Clone)]
-pub struct MigrationDescriptor {
-    version: u32,
-    deprecated_cfs: &'static [&'static str],
-    description: &'static str,
-}
-
-impl MigrationDescriptor {
-    /// Create a new migration descriptor from a type implementing [`Migration`].
-    pub fn new<M: Migration>() -> Self {
-        Self {
-            version: M::VERSION,
-            deprecated_cfs: M::deprecated_column_families(),
-            description: M::description(),
-        }
-    }
-
-    /// Returns the version number of this migration.
-    pub fn version(&self) -> u32 {
-        self.version
-    }
-
-    /// Returns the column families deprecated by this migration.
-    pub fn deprecated_cfs(&self) -> &'static [&'static str] {
-        self.deprecated_cfs
-    }
-
-    /// Returns a human-readable description of this migration.
-    pub fn description(&self) -> &'static str {
-        self.description
-    }
+    fn description(&self) -> &'static str;
 }
 
 /// The migration runner handles discovering existing column families,
@@ -158,9 +120,9 @@ impl MigrationRunner {
     /// Returns all registered migrations in version order.
     ///
     /// When adding new migrations, register them here by adding a new
-    /// `MigrationDescriptor::new::<YourMigration>()` to the vector.
-    pub fn all_migrations() -> Vec<MigrationDescriptor> {
-        let mut migrations = vec![MigrationDescriptor::new::<v1::V1Migration>()];
+    /// `Box::new(YourMigration)` to the vector.
+    pub fn all_migrations() -> Vec<Box<dyn Migration>> {
+        let mut migrations: Vec<Box<dyn Migration>> = vec![Box::new(v1::V1Migration)];
 
         // Sort by version to ensure correct order
         migrations.sort_by_key(|m| m.version());
@@ -179,7 +141,7 @@ impl MigrationRunner {
     pub fn all_deprecated_cfs() -> HashSet<&'static str> {
         Self::all_migrations()
             .iter()
-            .flat_map(|m| m.deprecated_cfs().iter().copied())
+            .flat_map(|m| m.deprecated_column_families().iter().copied())
             .collect()
     }
 
@@ -188,7 +150,7 @@ impl MigrationRunner {
         Self::all_migrations()
             .iter()
             .filter(|m| m.version() <= version)
-            .flat_map(|m| m.deprecated_cfs().iter().copied())
+            .flat_map(|m| m.deprecated_column_families().iter().copied())
             .collect()
     }
 
@@ -344,7 +306,7 @@ impl MigrationRunner {
             );
 
             // Drop deprecated column families
-            for cf_name in migration.deprecated_cfs() {
+            for cf_name in migration.deprecated_column_families() {
                 if db.cf_handle(cf_name).is_some() {
                     info!("  Dropping column family: {}", cf_name);
                     db.drop_cf(cf_name)

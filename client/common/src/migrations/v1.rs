@@ -22,9 +22,11 @@ use super::Migration;
 pub struct V1Migration;
 
 impl Migration for V1Migration {
-    const VERSION: u32 = 1;
+    fn version(&self) -> u32 {
+        1
+    }
 
-    fn deprecated_column_families() -> &'static [&'static str] {
+    fn deprecated_column_families(&self) -> &'static [&'static str] {
         &[
             "pending_msp_respond_storage_request",
             "pending_msp_respond_storage_request_left_index",
@@ -32,7 +34,7 @@ impl Migration for V1Migration {
         ]
     }
 
-    fn description() -> &'static str {
+    fn description(&self) -> &'static str {
         "Remove deprecated MSP respond storage request column families (replaced with in-memory queueing)"
     }
 }
@@ -43,12 +45,14 @@ mod tests {
 
     #[test]
     fn test_v1_migration_version() {
-        assert_eq!(V1Migration::VERSION, 1);
+        let migration = V1Migration;
+        assert_eq!(migration.version(), 1);
     }
 
     #[test]
     fn test_v1_migration_deprecated_cfs() {
-        let cfs = V1Migration::deprecated_column_families();
+        let migration = V1Migration;
+        let cfs = migration.deprecated_column_families();
         assert_eq!(cfs.len(), 3);
         assert!(cfs.contains(&"pending_msp_respond_storage_request"));
         assert!(cfs.contains(&"pending_msp_respond_storage_request_left_index"));
@@ -57,7 +61,8 @@ mod tests {
 
     #[test]
     fn test_v1_migration_description() {
-        let desc = V1Migration::description();
+        let migration = V1Migration;
+        let desc = migration.description();
         assert!(!desc.is_empty());
         assert!(desc.contains("MSP"));
     }

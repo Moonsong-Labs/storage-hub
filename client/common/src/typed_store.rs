@@ -2125,230 +2125,235 @@ mod tests {
 
         #[test]
         fn open_fresh_database() {
-        // Test that TypedRocksDB::open creates a fresh database correctly
-        let temp_dir = tempdir().unwrap();
-        let path = temp_dir.path().to_str().unwrap();
+            // Test that TypedRocksDB::open creates a fresh database correctly
+            let temp_dir = tempdir().unwrap();
+            let path = temp_dir.path().to_str().unwrap();
 
-        let current_cfs = &["test_cf_1", "test_cf_2"];
-        let typed_db = TypedRocksDB::open(path, current_cfs).unwrap();
+            let current_cfs = &["test_cf_1", "test_cf_2"];
+            let typed_db = TypedRocksDB::open(path, current_cfs).unwrap();
 
-        // Verify CFs exist
-        assert!(typed_db.db.cf_handle("test_cf_1").is_some());
-        assert!(typed_db.db.cf_handle("test_cf_2").is_some());
+            // Verify CFs exist
+            assert!(typed_db.db.cf_handle("test_cf_1").is_some());
+            assert!(typed_db.db.cf_handle("test_cf_2").is_some());
 
-        // Verify schema version CF exists
-        assert!(typed_db
-            .db
-            .cf_handle(crate::migrations::SCHEMA_VERSION_CF)
-            .is_some());
+            // Verify schema version CF exists
+            assert!(typed_db
+                .db
+                .cf_handle(crate::migrations::SCHEMA_VERSION_CF)
+                .is_some());
 
-        // Verify schema version is set
-        let version = crate::migrations::MigrationRunner::read_schema_version(&typed_db.db).unwrap();
-        assert_eq!(
-            version,
-            crate::migrations::MigrationRunner::latest_version()
-        );
-    }
+            // Verify schema version is set
+            let version =
+                crate::migrations::MigrationRunner::read_schema_version(&typed_db.db).unwrap();
+            assert_eq!(
+                version,
+                crate::migrations::MigrationRunner::latest_version()
+            );
+        }
 
         #[test]
         fn open_with_deprecated_cfs() {
-        // Test that TypedRocksDB::open handles deprecated CFs correctly
-        let temp_dir = tempdir().unwrap();
-        let path = temp_dir.path().to_str().unwrap();
+            // Test that TypedRocksDB::open handles deprecated CFs correctly
+            let temp_dir = tempdir().unwrap();
+            let path = temp_dir.path().to_str().unwrap();
 
-        let current_cfs = &["current_cf"];
+            let current_cfs = &["current_cf"];
 
-        // Create a database with deprecated CFs (simulating old node)
-        {
-            let mut opts = Options::default();
-            opts.create_if_missing(true);
-            opts.create_missing_column_families(true);
+            // Create a database with deprecated CFs (simulating old node)
+            {
+                let mut opts = Options::default();
+                opts.create_if_missing(true);
+                opts.create_missing_column_families(true);
 
-            let mut cf_descriptors =
-                vec![ColumnFamilyDescriptor::new("default", Options::default())];
-            cf_descriptors.push(ColumnFamilyDescriptor::new("current_cf", Options::default()));
+                let mut cf_descriptors =
+                    vec![ColumnFamilyDescriptor::new("default", Options::default())];
+                cf_descriptors.push(ColumnFamilyDescriptor::new(
+                    "current_cf",
+                    Options::default(),
+                ));
 
-            // Add deprecated CFs from V1 migration
-            for cf_name in crate::migrations::v1::V1Migration::deprecated_column_families() {
-                cf_descriptors.push(ColumnFamilyDescriptor::new(*cf_name, Options::default()));
+                // Add deprecated CFs from V1 migration
+                let v1_migration = crate::migrations::v1::V1Migration;
+                for cf_name in v1_migration.deprecated_column_families() {
+                    cf_descriptors.push(ColumnFamilyDescriptor::new(*cf_name, Options::default()));
+                }
+
+                let db = DB::open_cf_descriptors(&opts, path, cf_descriptors).unwrap();
+
+                // Write data to current CF
+                let cf = db.cf_handle("current_cf").unwrap();
+                db.put_cf(&cf, b"key", b"value").unwrap();
+
+                // Write data to deprecated CF
+                let deprecated_cf = db.cf_handle("pending_msp_respond_storage_request").unwrap();
+                db.put_cf(&deprecated_cf, b"old_key", b"old_data").unwrap();
             }
 
-            let db = DB::open_cf_descriptors(&opts, path, cf_descriptors).unwrap();
+            // Now open with TypedRocksDB
+            let typed_db = TypedRocksDB::open(path, current_cfs).unwrap();
 
-            // Write data to current CF
-            let cf = db.cf_handle("current_cf").unwrap();
-            db.put_cf(&cf, b"key", b"value").unwrap();
+            // Verify current CF still has data
+            let cf = typed_db.db.cf_handle("current_cf").unwrap();
+            let value = typed_db.db.get_cf(&cf, b"key").unwrap();
+            assert!(value.is_some());
+            assert_eq!(&value.unwrap()[..], b"value");
 
-            // Write data to deprecated CF
-            let deprecated_cf = db.cf_handle("pending_msp_respond_storage_request").unwrap();
-            db.put_cf(&deprecated_cf, b"old_key", b"old_data").unwrap();
+            // Verify deprecated CFs are gone
+            let v1_migration = crate::migrations::v1::V1Migration;
+            for cf_name in v1_migration.deprecated_column_families() {
+                assert!(
+                    typed_db.db.cf_handle(cf_name).is_none(),
+                    "Deprecated CF '{}' should have been removed",
+                    cf_name
+                );
+            }
         }
-
-        // Now open with TypedRocksDB
-        let typed_db = TypedRocksDB::open(path, current_cfs).unwrap();
-
-        // Verify current CF still has data
-        let cf = typed_db.db.cf_handle("current_cf").unwrap();
-        let value = typed_db.db.get_cf(&cf, b"key").unwrap();
-        assert!(value.is_some());
-        assert_eq!(&value.unwrap()[..], b"value");
-
-        // Verify deprecated CFs are gone
-        for cf_name in crate::migrations::v1::V1Migration::deprecated_column_families() {
-            assert!(
-                typed_db.db.cf_handle(cf_name).is_none(),
-                "Deprecated CF '{}' should have been removed",
-                cf_name
-            );
-        }
-    }
 
         #[test]
         fn open_prevents_downgrade() {
-        // Test that TypedRocksDB::open prevents opening a database with a higher schema version
-        let temp_dir = tempdir().unwrap();
-        let path = temp_dir.path().to_str().unwrap();
+            // Test that TypedRocksDB::open prevents opening a database with a higher schema version
+            let temp_dir = tempdir().unwrap();
+            let path = temp_dir.path().to_str().unwrap();
 
-        // Create a database with a high schema version
-        {
-            let mut opts = Options::default();
-            opts.create_if_missing(true);
-            opts.create_missing_column_families(true);
+            // Create a database with a high schema version
+            {
+                let mut opts = Options::default();
+                opts.create_if_missing(true);
+                opts.create_missing_column_families(true);
 
-            let cf_descriptors = vec![
-                ColumnFamilyDescriptor::new("default", Options::default()),
-                ColumnFamilyDescriptor::new(
-                    crate::migrations::SCHEMA_VERSION_CF,
-                    Options::default(),
-                ),
-            ];
+                let cf_descriptors = vec![
+                    ColumnFamilyDescriptor::new("default", Options::default()),
+                    ColumnFamilyDescriptor::new(
+                        crate::migrations::SCHEMA_VERSION_CF,
+                        Options::default(),
+                    ),
+                ];
 
-            let db = DB::open_cf_descriptors(&opts, path, cf_descriptors).unwrap();
-            crate::migrations::MigrationRunner::write_schema_version(&db, 999).unwrap();
-        }
-
-        // Try to open with TypedRocksDB - should fail
-        let result = TypedRocksDB::open(path, &["some_cf"]);
-        assert!(result.is_err());
-
-        match result {
-            Err(crate::migrations::MigrationError::CannotDowngrade { current, target }) => {
-                assert_eq!(current, 999);
-                assert_eq!(
-                    target,
-                    crate::migrations::MigrationRunner::latest_version()
-                );
+                let db = DB::open_cf_descriptors(&opts, path, cf_descriptors).unwrap();
+                crate::migrations::MigrationRunner::write_schema_version(&db, 999).unwrap();
             }
-            _ => panic!("Expected CannotDowngrade error"),
+
+            // Try to open with TypedRocksDB - should fail
+            let result = TypedRocksDB::open(path, &["some_cf"]);
+            assert!(result.is_err());
+
+            match result {
+                Err(crate::migrations::MigrationError::CannotDowngrade { current, target }) => {
+                    assert_eq!(current, 999);
+                    assert_eq!(target, crate::migrations::MigrationRunner::latest_version());
+                }
+                _ => panic!("Expected CannotDowngrade error"),
+            }
         }
-    }
 
         #[test]
         fn open_multiple_times() {
-        // Test that TypedRocksDB::open can open the same database multiple times
-        let temp_dir = tempdir().unwrap();
-        let path = temp_dir.path().to_str().unwrap();
+            // Test that TypedRocksDB::open can open the same database multiple times
+            let temp_dir = tempdir().unwrap();
+            let path = temp_dir.path().to_str().unwrap();
 
-        let current_cfs = &["data_cf"];
+            let current_cfs = &["data_cf"];
 
-        // First open
-        {
-            let typed_db = TypedRocksDB::open(path, current_cfs).unwrap();
-            let cf = typed_db.db.cf_handle("data_cf").unwrap();
-            typed_db.db.put_cf(&cf, b"key1", b"value1").unwrap();
-        }
+            // First open
+            {
+                let typed_db = TypedRocksDB::open(path, current_cfs).unwrap();
+                let cf = typed_db.db.cf_handle("data_cf").unwrap();
+                typed_db.db.put_cf(&cf, b"key1", b"value1").unwrap();
+            }
 
-        // Second open
-        {
-            let typed_db = TypedRocksDB::open(path, current_cfs).unwrap();
-            let cf = typed_db.db.cf_handle("data_cf").unwrap();
+            // Second open
+            {
+                let typed_db = TypedRocksDB::open(path, current_cfs).unwrap();
+                let cf = typed_db.db.cf_handle("data_cf").unwrap();
 
-            // Data from first open should persist
-            let value = typed_db.db.get_cf(&cf, b"key1").unwrap();
-            assert_eq!(&value.unwrap()[..], b"value1");
+                // Data from first open should persist
+                let value = typed_db.db.get_cf(&cf, b"key1").unwrap();
+                assert_eq!(&value.unwrap()[..], b"value1");
 
-            typed_db.db.put_cf(&cf, b"key2", b"value2").unwrap();
-        }
+                typed_db.db.put_cf(&cf, b"key2", b"value2").unwrap();
+            }
 
-        // Third open
-        {
-            let typed_db = TypedRocksDB::open(path, current_cfs).unwrap();
-            let cf = typed_db.db.cf_handle("data_cf").unwrap();
+            // Third open
+            {
+                let typed_db = TypedRocksDB::open(path, current_cfs).unwrap();
+                let cf = typed_db.db.cf_handle("data_cf").unwrap();
 
-            // All data should persist
-            assert_eq!(
-                &typed_db.db.get_cf(&cf, b"key1").unwrap().unwrap()[..],
-                b"value1"
-            );
-            assert_eq!(
-                &typed_db.db.get_cf(&cf, b"key2").unwrap().unwrap()[..],
-                b"value2"
-            );
-        }
-    }
-
-        #[test]
-        fn used_with_context() {
-        // Test that TypedRocksDB works correctly with TypedDbContext after migration
-        let temp_dir = tempdir().unwrap();
-        let path = temp_dir.path().to_str().unwrap();
-
-        // Define a simple CF for testing
-        struct TestDataCf;
-        impl ScaleEncodedCf for TestDataCf {
-            type Key = u32;
-            type Value = String;
-            const SCALE_ENCODED_NAME: &'static str = "test_data_cf";
-        }
-
-        impl Default for TestDataCf {
-            fn default() -> Self {
-                Self
+                // All data should persist
+                assert_eq!(
+                    &typed_db.db.get_cf(&cf, b"key1").unwrap().unwrap()[..],
+                    b"value1"
+                );
+                assert_eq!(
+                    &typed_db.db.get_cf(&cf, b"key2").unwrap().unwrap()[..],
+                    b"value2"
+                );
             }
         }
 
-        let current_cfs = &[TestDataCf::SCALE_ENCODED_NAME];
+        #[test]
+        fn used_with_context() {
+            // Test that TypedRocksDB works correctly with TypedDbContext after migration
+            let temp_dir = tempdir().unwrap();
+            let path = temp_dir.path().to_str().unwrap();
 
-        // Create database with deprecated CFs
-        {
-            let mut opts = Options::default();
-            opts.create_if_missing(true);
-            opts.create_missing_column_families(true);
+            // Define a simple CF for testing
+            struct TestDataCf;
+            impl ScaleEncodedCf for TestDataCf {
+                type Key = u32;
+                type Value = String;
+                const SCALE_ENCODED_NAME: &'static str = "test_data_cf";
+            }
 
-            let mut cf_descriptors =
-                vec![ColumnFamilyDescriptor::new("default", Options::default())];
-            cf_descriptors.push(ColumnFamilyDescriptor::new(
-                TestDataCf::SCALE_ENCODED_NAME,
-                Options::default(),
-            ));
-            cf_descriptors.push(ColumnFamilyDescriptor::new(
-                "pending_msp_respond_storage_request",
-                Options::default(),
-            ));
+            impl Default for TestDataCf {
+                fn default() -> Self {
+                    Self
+                }
+            }
 
-            let _db = DB::open_cf_descriptors(&opts, path, cf_descriptors).unwrap();
-        }
+            let current_cfs = &[TestDataCf::SCALE_ENCODED_NAME];
 
-        // Open with TypedRocksDB and use with context
-        let typed_db = TypedRocksDB::open(path, current_cfs).unwrap();
+            // Create database with deprecated CFs
+            {
+                let mut opts = Options::default();
+                opts.create_if_missing(true);
+                opts.create_missing_column_families(true);
 
-        // Create a context and use the typed API
-        let write_support = BufferedWriteSupport::new(&typed_db);
-        let context = TypedDbContext::new(&typed_db, write_support);
+                let mut cf_descriptors =
+                    vec![ColumnFamilyDescriptor::new("default", Options::default())];
+                cf_descriptors.push(ColumnFamilyDescriptor::new(
+                    TestDataCf::SCALE_ENCODED_NAME,
+                    Options::default(),
+                ));
+                cf_descriptors.push(ColumnFamilyDescriptor::new(
+                    "pending_msp_respond_storage_request",
+                    Options::default(),
+                ));
 
-        // Write using typed API
-        context.cf(&TestDataCf).put(&42u32, &"hello world".to_string());
-        context.flush();
+                let _db = DB::open_cf_descriptors(&opts, path, cf_descriptors).unwrap();
+            }
 
-        // Read back
-        let value = context.cf(&TestDataCf).get(&42u32);
-        assert_eq!(value, Some("hello world".to_string()));
+            // Open with TypedRocksDB and use with context
+            let typed_db = TypedRocksDB::open(path, current_cfs).unwrap();
 
-        // Verify deprecated CF is gone
-        assert!(typed_db
-            .db
-            .cf_handle("pending_msp_respond_storage_request")
-            .is_none());
+            // Create a context and use the typed API
+            let write_support = BufferedWriteSupport::new(&typed_db);
+            let context = TypedDbContext::new(&typed_db, write_support);
+
+            // Write using typed API
+            context
+                .cf(&TestDataCf)
+                .put(&42u32, &"hello world".to_string());
+            context.flush();
+
+            // Read back
+            let value = context.cf(&TestDataCf).get(&42u32);
+            assert_eq!(value, Some("hello world".to_string()));
+
+            // Verify deprecated CF is gone
+            assert!(typed_db
+                .db
+                .cf_handle("pending_msp_respond_storage_request")
+                .is_none());
         }
     }
 }
