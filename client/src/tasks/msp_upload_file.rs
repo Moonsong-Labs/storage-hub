@@ -762,7 +762,6 @@ where
         &mut self,
         event: NewStorageRequest<Runtime>,
     ) -> anyhow::Result<()> {
-        // TODO: Use Zero trait call `is_zero` instead of comparing to zero
         if event.size == Zero::zero() {
             let err_msg = "File size cannot be 0";
             error!(target: LOG_TARGET, err_msg);
@@ -975,7 +974,7 @@ where
         // If the file is in file storage, we can skip the file transfer,
         // and proceed to accepting the storage request directly, provided that we have the entire file in file storage.
         if file_in_file_storage {
-            info!(target: LOG_TARGET, "File key {:?} found in both file storage. No need to receive the file from the user.", file_key);
+            info!(target: LOG_TARGET, "File key {:?} found in file storage. No need to receive the file from the user.", file_key);
 
             // Do not skip the file key even if it is in forest storage since not responding to the storage request or rejecting it would result in the file key being deleted from the network entirely.
             if file_in_forest_storage {
@@ -1337,7 +1336,7 @@ where
                     accept: None,
                     reject: vec![RejectedStorageRequest {
                         file_key: *file_key,
-                        reason,
+                        reason: reason.clone(),
                     }],
                 }],
             }

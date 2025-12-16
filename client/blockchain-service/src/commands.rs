@@ -194,7 +194,9 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     /// If `file_keys` is provided, only query those specific storage requests from storage.
     /// If `file_keys` is None, returns all pending storage requests via runtime API.
     #[command(success_type = Vec<NewStorageRequest<Runtime>>)]
-    QueryPendingStorageRequests { file_keys: Option<Vec<FileKey>> },
+    QueryPendingStorageRequests {
+        maybe_file_keys: Option<Vec<FileKey>>,
+    },
     /// Set the terminal status of a file key in the MSP upload pipeline.
     ///
     /// Used by tasks to update the status of a file key after processing.
