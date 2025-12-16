@@ -19,21 +19,21 @@ export class MspClient extends ModuleBase {
   private constructor(
     config: HttpClientConfig,
     http: HttpClient,
-    sessionProvider: SessionProvider
+    sessionProviderRef: { current: SessionProvider }
   ) {
     const context: MspClientContext = { config, http };
-    super(context, sessionProvider);
+    super(context, sessionProviderRef);
     this.config = config;
     this.context = context;
-    this.auth = new AuthModule(this.context, sessionProvider);
-    this.buckets = new BucketsModule(this.context, sessionProvider);
-    this.files = new FilesModule(this.context, sessionProvider);
-    this.info = new InfoModule(this.context, sessionProvider);
+    this.auth = new AuthModule(this.context, sessionProviderRef);
+    this.buckets = new BucketsModule(this.context, sessionProviderRef);
+    this.files = new FilesModule(this.context, sessionProviderRef);
+    this.info = new InfoModule(this.context, sessionProviderRef);
   }
 
   static async connect(
     config: HttpClientConfig,
-    sessionProvider: SessionProvider
+    sessionProvider: SessionProvider = async () => undefined
   ): Promise<MspClient> {
     if (!config?.baseUrl) throw new Error("MspClient.connect: baseUrl is required");
 
@@ -46,7 +46,18 @@ export class MspClient extends ModuleBase {
       ...(config.fetchImpl !== undefined && { fetchImpl: config.fetchImpl })
     });
 
-    if (!sessionProvider) throw new Error("MspClient.connect: sessionProvider is required");
-    return new MspClient(config, http, sessionProvider);
+    // Create a shared reference object
+    const sessionProviderRef = { current: sessionProvider };
+    return new MspClient(config, http, sessionProviderRef);
+  }
+
+  /**
+   * Updates the session provider for this client and all its modules.
+   * This allows updating authentication after the client has been created.
+   *
+   * @param sessionProvider - The new session provider function.
+   */
+  setSessionProvider(sessionProvider: SessionProvider): void {
+    this.sessionProviderRef.current = sessionProvider;
   }
 }

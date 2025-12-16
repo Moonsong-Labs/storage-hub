@@ -40,14 +40,52 @@ export class AuthModule extends ModuleBase {
   }
 
   /**
-   * Verify a Sign-In with Ethereum (SIWE) signature.
+   * Request a message (challenge) for Sign-In with X (SIWX) using CAIP-122 standard.
    *
-   * **Advanced use only:** Most users should use the `SIWE()` method instead, which handles the complete authentication flow automatically. This method is exposed only for custom authentication flows.
+   * **Advanced use only:** Most users should use the `SIWX()` method instead, which handles the complete authentication flow automatically. This method is exposed only for custom authentication flows.
+   *
+   * This method follows the CAIP-122 standard for chain-agnostic authentication.
+   * The message uses CAIP-10 format for addresses (e.g., `eip155:55931:0x...`).
+   *
+   * **Important:** The challenge message expires after a short time (typically 5 minutes).
+   * You must call `verify()` with a valid signature before expiration.
+   *
+   * **Note:** According to CAIP-122, the domain is extracted from the URI automatically.
+   * You do not need to provide the domain separately - it will be extracted from the URI.
+   *
+   * @param address - The blockchain address requesting authentication (checksummed format recommended).
+   * @param chainId - The chain ID the user is connected to.
+   * @param uri - The full URI of your dApp (e.g., "https://datahaven.app"). This should be the dApp URL, not the MSP API URL.
+   *   The domain will be automatically extracted from this URI per CAIP-122 specification.
+   * @param signal - Optional AbortSignal for request cancellation.
+   * @returns A promise resolving to the CAIP-122 challenge message to be signed.
+   */
+  public getMessage(
+    address: string,
+    chainId: number,
+    uri: string,
+    signal?: AbortSignal
+  ): Promise<NonceResponse> {
+    return this.ctx.http.post<NonceResponse>("/auth/message", {
+      body: {
+        address,
+        chainId,
+        uri
+      },
+      headers: { "Content-Type": "application/json" },
+      ...(signal ? { signal } : {})
+    });
+  }
+
+  /**
+   * Verify a Sign-In signature (works with both SIWE and SIWX/CAIP-122 messages).
+   *
+   * **Advanced use only:** Most users should use the `SIWE()` or `SIWX()` methods instead, which handle the complete authentication flow automatically. This method is exposed only for custom authentication flows.
    *
    * **Important:** You must store the returned Session object and provide it via the `sessionProvider` function passed to `MspClient.connect()`.
    * The session is not automatically persisted - you are responsible for managing session storage and ensuring your `sessionProvider` returns it for subsequent authenticated requests.
    *
-   * @param message - The SIWE challenge message received from `getNonce()`.
+   * @param message - The challenge message received from `getNonce()` (SIWE) or `getMessage()` (CAIP-122).
    * @param signature - The signature of the message signed by the user's wallet.
    * @param signal - Optional AbortSignal for request cancellation.
    * @returns A promise resolving to a Session object that you must store and provide via your sessionProvider.
@@ -92,22 +130,91 @@ export class AuthModule extends ModuleBase {
     retry = DEFAULT_SIWE_VERIFY_RETRY_ATTEMPS,
     signal?: AbortSignal
   ): Promise<Session> {
-    // Resolve the current active account from the WalletClient.
-    // - Browser wallets (e.g., MetaMask) surface the user-selected address here.
-    // - Viem/local wallets must set `wallet.account` explicitly before calling.
+    const { account, address, chainId } = await this.resolveAccount(wallet, "SIWE");
+    const { message } = await this.getNonce(address, chainId, domain, uri, signal);
+    return this.signAndVerifyWithRetry(wallet, account, message, retry, signal, "SIWE");
+  }
+
+  /**
+   * Complete Sign-In with X (SIWX) authentication flow using CAIP-122 standard and a `WalletClient`.
+   *
+   * This is the recommended method for CAIP-122 authentication. It handles the complete flow automatically:
+   * derives the wallet address, fetches a CAIP-122 message, prompts the user to sign the message, verifies the signature,
+   * and returns a session token.
+   *
+   * **Important:** You must store the returned Session object and provide it via the `sessionProvider` function
+   * passed to `MspClient.connect()`. The session is not automatically persisted - you are responsible for managing
+   * session storage and ensuring your `sessionProvider` returns it for subsequent authenticated requests.
+   *
+   * **Note:** This method includes automatic retry logic for verification requests (default: 10 attempts with 100ms backoff).
+   * The retry behavior can be customized via the `retry` parameter.
+   *
+   * **CAIP-122:** Unlike SIWE, this method does not require a `domain` parameter. The domain is automatically extracted
+   * from the `uri` parameter on the backend per CAIP-122 specification.
+   *
+   * @param wallet - The Viem `WalletClient` instance. Must have an active account set (`wallet.account`).
+   *   - Browser wallets (e.g., MetaMask) automatically surface the user-selected address.
+   *   - Viem/local wallets must set `wallet.account` explicitly before calling.
+   * @param uri - The full URI of your dApp (e.g., "https://datahaven.app"). This should be the dApp URL, not the MSP API URL.
+   *   The domain will be automatically extracted from this URI per CAIP-122 specification.
+   * @param retry - Number of retry attempts for verification requests (default: 10).
+   * @param signal - Optional AbortSignal for request cancellation.
+   * @returns A promise resolving to a Session object that you must store and provide via your sessionProvider.
+   */
+  async SIWX(
+    wallet: WalletClient,
+    uri: string,
+    retry = DEFAULT_SIWE_VERIFY_RETRY_ATTEMPS,
+    signal?: AbortSignal
+  ): Promise<Session> {
+    const { account, address, chainId } = await this.resolveAccount(wallet, "SIWX");
+    const { message } = await this.getMessage(address, chainId, uri, signal);
+    return this.signAndVerifyWithRetry(wallet, account, message, retry, signal, "SIWX");
+  }
+
+  /**
+   * Resolves and validates the account from a WalletClient.
+   *
+   * @param wallet - The Viem WalletClient instance.
+   * @param methodName - The name of the calling method (for error messages).
+   * @returns An object containing the account, checksummed address, and chainId.
+   * @throws Error if the wallet has no active account.
+   */
+  private async resolveAccount(
+    wallet: WalletClient,
+    methodName: string
+  ): Promise<{ account: NonNullable<WalletClient["account"]>; address: string; chainId: number }> {
     const account = wallet.account;
     const resolvedAddress = typeof account === "string" ? account : account?.address;
     if (!resolvedAddress || !account) {
       throw new Error(
-        "Wallet client has no active account; set wallet.account before calling SIWE"
+        `Wallet client has no active account; set wallet.account before calling ${methodName}`
       );
     }
-    // Get the checksummed address
     const address = getAddress(resolvedAddress);
     const chainId = await wallet.getChainId();
-    const { message } = await this.getNonce(address, chainId, domain, uri, signal);
+    return { account, address, chainId };
+  }
 
-    // Sign using the active account resolved above (string or Account object)
+  /**
+   * Signs a message and verifies it with retry logic.
+   *
+   * @param wallet - The Viem WalletClient instance.
+   * @param account - The account to sign with.
+   * @param message - The message to sign.
+   * @param retry - Number of retry attempts for verification.
+   * @param signal - Optional AbortSignal for request cancellation.
+   * @param methodName - The name of the calling method (for error messages).
+   * @returns A promise resolving to a Session object.
+   */
+  private async signAndVerifyWithRetry(
+    wallet: WalletClient,
+    account: NonNullable<WalletClient["account"]>,
+    message: string,
+    retry: number,
+    signal: AbortSignal | undefined,
+    methodName: string
+  ): Promise<Session> {
     const signature = await wallet.signMessage({ account, message });
 
     // TODO: remove the retry logic once the backend is fixed.
@@ -120,7 +227,7 @@ export class AuthModule extends ModuleBase {
         await this.delay(DEFAULT_SIWE_VERIFY_BACKOFF_MS);
       }
     }
-    throw lastError instanceof Error ? lastError : new Error("SIWE verification failed");
+    throw lastError instanceof Error ? lastError : new Error(`${methodName} verification failed`);
   }
 
   private async delay(ms: number): Promise<void> {
