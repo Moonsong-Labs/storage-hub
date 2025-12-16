@@ -3,3 +3,7 @@
 --
 -- Reverting this migration would require restoring arbitrary (likely incorrect)
 -- values, which defeats the purpose of the fix.
+
+-- NOOP query required to not break the revertion
+
+SELECT 1;
