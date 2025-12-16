@@ -2553,13 +2553,13 @@ mod benchmarks {
             )?;
 
             // Insert storage request
-            crate::StorageRequests::<T>::insert(&file_key, storage_request_metadata);
+            <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
 
             // Add to bucket's storage requests
-            crate::BucketsWithStorageRequests::<T>::insert(&bucket_id, &file_key, ());
+            <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_key, ());
 
             // Add to expiration queue
-            crate::StorageRequestExpirations::<T>::mutate(expiration_tick, |items| {
+            <StorageRequestExpirations<T>>::mutate(expiration_tick, |items| {
                 let _ = items.try_push(file_key);
             });
 
@@ -2569,7 +2569,7 @@ mod benchmarks {
             let bsp_id_for_sr =
                 <T as frame_system::Config>::Hash::decode(&mut encoded_bsp_id_for_sr.as_ref())
                     .expect("BSP ID should be decodable");
-            crate::StorageRequestBsps::<T>::insert(
+            StorageRequestBsps::<T>::insert(
                 &file_key,
                 &bsp_id_for_sr,
                 StorageRequestBspsMetadata::<T> {
@@ -2746,7 +2746,7 @@ mod benchmarks {
         // Ensure storage requests were cleaned up
         for file_key in file_keys_bounded.iter() {
             assert!(
-                !crate::StorageRequests::<T>::contains_key(file_key),
+                !StorageRequests::<T>::contains_key(file_key),
                 "StorageRequest should be removed after deletion"
             );
         }
@@ -2898,19 +2898,19 @@ mod benchmarks {
             )?;
 
             // Insert storage request
-            crate::StorageRequests::<T>::insert(&file_key, storage_request_metadata);
+            <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
 
             // Add to bucket's storage requests
-            crate::BucketsWithStorageRequests::<T>::insert(&bucket_id, &file_key, ());
+            <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_key, ());
 
             // Add to expiration queue
-            crate::StorageRequestExpirations::<T>::mutate(expiration_tick, |items| {
+            <StorageRequestExpirations<T>>::mutate(expiration_tick, |items| {
                 let _ = items.try_push(file_key);
             });
 
             // Add the BSP being deleted to the storage request so incomplete storage request is created
             // After BSP removal, bucket still pending (MSP accepted), so request persists
-            crate::StorageRequestBsps::<T>::insert(
+            StorageRequestBsps::<T>::insert(
                 &file_key,
                 &bsp_id,
                 StorageRequestBspsMetadata::<T> {
@@ -3052,7 +3052,7 @@ mod benchmarks {
         // Ensure storage requests were cleaned up
         for file_key in file_keys_bounded.iter() {
             assert!(
-                !crate::StorageRequests::<T>::contains_key(file_key),
+                !StorageRequests::<T>::contains_key(file_key),
                 "StorageRequest should be removed after deletion"
             );
         }
