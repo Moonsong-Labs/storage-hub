@@ -1316,6 +1316,20 @@ where
         bucket_id: H256,
         reason: RejectedStorageRequestReason,
     ) -> anyhow::Result<()> {
+        info!(target: LOG_TARGET, "Handling rejected storage request for file key {:x} with bucket id {:x} and reason {:?}", file_key, bucket_id, reason);
+
+        self.storage_hub_handler
+            .blockchain
+            .set_file_key_status((*file_key).into(), FileKeyStatusUpdate::Rejected)
+            .await;
+
+        // Unregister the file
+        self.unregister_file(*file_key)
+            .await
+            .map_err(|e| anyhow!("Failed to unregister file: {:?}", e))?;
+
+        info!(target: LOG_TARGET, "Rejected storage request for file key {:x}", file_key);
+
         let call: Runtime::Call =
             pallet_file_system::Call::<Runtime>::msp_respond_storage_requests_multiple_buckets {
                 storage_request_msp_response: vec![StorageRequestMspBucketResponse {
@@ -1344,23 +1358,18 @@ where
                     Some("mspRespondStorageRequestsMultipleBuckets".to_string()),
                 ),
             )
-            .await?
+            .await
+            .map_err(|e| {
+                anyhow!(
+                    "Failed to submit msp respond storage requests multiple buckets: {:?}",
+                    e
+                )
+            })?
             .watch_for_success(&self.storage_hub_handler.blockchain)
-            .await?;
+            .await
+            .map_err(|e| anyhow!("Failed to watch for success: {:?}", e))?;
 
-        // Unregister the file
-        self.unregister_file(*file_key).await?;
-
-        // Mark the file key as rejected so it won't be retried
-        debug!(
-            target: LOG_TARGET,
-            "Marking file key {:?} as Rejected (handle_rejected_storage_request)",
-            file_key
-        );
-        self.storage_hub_handler
-            .blockchain
-            .set_file_key_status((*file_key).into(), FileKeyStatusUpdate::Rejected)
-            .await;
+        info!(target: LOG_TARGET, "Submitted mspRespondStorageRequestsMultipleBuckets for file key {:x}, with reject reason {:?}", file_key, reason);
 
         Ok(())
     }
