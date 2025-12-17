@@ -290,8 +290,8 @@ export class NetworkLauncher {
       );
     }
 
-    // Remove Prometheus and Grafana services if not enabled or not fullnet
-    if (!this.config.prometheus || this.type !== "fullnet") {
+    // Remove Prometheus and Grafana services if not enabled
+    if (!this.config.telemetry) {
       if (composeYaml.services["sh-prometheus"]) {
         delete composeYaml.services["sh-prometheus"];
       }
@@ -301,12 +301,19 @@ export class NetworkLauncher {
     }
 
     // Add --prometheus-external to nodes when prometheus is enabled
-    if (this.config.prometheus && this.type === "fullnet") {
-      composeYaml.services["sh-bsp"].command.push("--prometheus-external");
-      composeYaml.services["sh-user"].command.push("--prometheus-external");
-      composeYaml.services["sh-msp-1"].command.push("--prometheus-external");
-      composeYaml.services["sh-msp-2"].command.push("--prometheus-external");
-      // Add to fisherman and indexer if they exist
+    if (this.config.telemetry) {
+      if (composeYaml.services["sh-bsp"]) {
+        composeYaml.services["sh-bsp"].command.push("--prometheus-external");
+      }
+      if (composeYaml.services["sh-user"]) {
+        composeYaml.services["sh-user"].command.push("--prometheus-external");
+      }
+      if (composeYaml.services["sh-msp-1"]) {
+        composeYaml.services["sh-msp-1"].command.push("--prometheus-external");
+      }
+      if (composeYaml.services["sh-msp-2"]) {
+        composeYaml.services["sh-msp-2"].command.push("--prometheus-external");
+      }
       if (composeYaml.services["sh-fisherman"]) {
         composeYaml.services["sh-fisherman"].command.push("--prometheus-external");
       }
@@ -517,7 +524,7 @@ export class NetworkLauncher {
     }
 
     // Start Prometheus and Grafana if enabled
-    if (this.config.prometheus && this.type === "fullnet") {
+    if (this.config.telemetry) {
       await compose.upOne("sh-prometheus", {
         cwd,
         config: tmpFile,
@@ -1220,7 +1227,7 @@ export type NetLaunchConfig = {
   pendingTxDb?: boolean;
 
   /**
-   * If true, runs Prometheus server for metrics collection (fullnet only).
+   * If true, runs Prometheus server for metrics collection.
    */
-  prometheus?: boolean;
+  telemetry?: boolean;
 };
