@@ -185,7 +185,7 @@ where
         let managed_msp_id = match &self.maybe_managed_provider {
             Some(ManagedProvider::Msp(msp_handler)) => msp_handler.msp_id.clone(),
             _ => {
-                trace!(target: LOG_TARGET, "`msp_end_block_processing` called but node is not managing an MSP");
+                error!(target: LOG_TARGET, "`msp_end_block_processing` called but node is not managing an MSP");
                 return;
             }
         };
