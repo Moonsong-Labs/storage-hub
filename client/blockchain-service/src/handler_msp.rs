@@ -870,17 +870,10 @@ where
     /// ## Status Tracking
     ///
     /// The status tracking prevents duplicate processing:
-    /// - File keys with any status (`Processing`, `InBlock`, `Abandoned`) are skipped
+    /// - File keys with any status (`Processing`, `Abandoned`) are skipped
     /// - New file keys are marked as `Processing` when emitting the event
     /// - Tasks update statuses via commands as they process requests
     /// - Stale entries are cleaned up when file keys no longer appear in pending requests
-    ///
-    /// ## Reorg Detection
-    ///
-    /// This function detects reorgs by checking for `InBlock` file keys that still appear in
-    /// pending storage requests. A file key in `InBlock` status means its accept/reject tx was
-    /// included in a block. If that file key is still pending, the block was reorged out.
-    /// In this case, the file key is removed from statuses to enable automatic retry.
     ///
     /// ## Cleanup
     ///
@@ -890,7 +883,7 @@ where
         let current_block_hash = self.client.info().best_hash;
 
         // Query pending storage requests (not yet accepted by MSP)
-        let storage_requests = match self
+        let pending_storage_requests = match self
             .client
             .runtime_api()
             .pending_storage_requests_by_msp(current_block_hash, msp_id)
@@ -914,43 +907,10 @@ where
             };
 
             // Collect the set of pending file keys for cleanup check
-            let pending_file_keys: HashSet<FileKey> = storage_requests
+            let pending_file_keys: HashSet<FileKey> = pending_storage_requests
                 .iter()
                 .map(|(file_key, _)| (*file_key).into())
                 .collect();
-
-            // Reorg detection: Find InBlock file keys that are still in pending requests.
-            // If a file key is InBlock but still pending, the accept/reject tx was reorged out.
-            // Remove from statuses to enable automatic retry on this block.
-            let reorged_keys: Vec<_> = msp_handler
-                .file_key_statuses
-                .iter()
-                .filter_map(|(file_key, status)| {
-                    if matches!(status, FileKeyStatus::InBlock)
-                        && pending_file_keys.contains(file_key)
-                    {
-                        Some(*file_key)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-
-            if !reorged_keys.is_empty() {
-                warn!(
-                    target: LOG_TARGET,
-                    "🔄 Detected {} file key(s) with InBlock status still pending (reorged out), enabling retry",
-                    reorged_keys.len()
-                );
-                for file_key in reorged_keys {
-                    info!(
-                        target: LOG_TARGET,
-                        "Removing file key {:?} from statuses (reorged out, will retry)",
-                        file_key
-                    );
-                    msp_handler.file_key_statuses.remove(&file_key);
-                }
-            }
 
             // Clean up stale entries: remove file keys that are no longer in pending requests.
             // If a file key is not pending, its storage request lifecycle is complete and we
@@ -974,12 +934,12 @@ where
                 }
             }
 
-            storage_requests
+            pending_storage_requests
                 .into_iter()
                 .filter_map(|(file_key, sr)| {
                     let file_key_h256 = file_key.into();
 
-                    // Skip file keys that already have a status
+                    // Skip file keys that already have a status (i.e., Processing or Abandoned)
                     if let Some(status) = msp_handler.file_key_statuses.get(&file_key_h256) {
                         trace!(
                             target: LOG_TARGET,

@@ -818,7 +818,6 @@ impl<Runtime: StorageEnableRuntime> BspHandler<Runtime> {
 /// | Status        | Meaning                                    | Next Block Behavior                           |
 /// | ------------- | ------------------------------------------ | ----------------------------------------------|
 /// | `Processing`  | File key is in the pipeline                | **Skip** (already being handled)              |
-/// | `InBlock`     | Tx included in block                       | **Skip** OR **Retry** if reorg detected       |
 /// | `Abandoned`   | Failed with non-proof dispatch error       | **Skip** (permanent failure)                  |
 /// | *Not present* | New or retryable file key                  | **Process** (emit event, set to `Processing`) |
 ///
@@ -827,7 +826,6 @@ impl<Runtime: StorageEnableRuntime> BspHandler<Runtime> {
 /// File keys are **removed** from statuses to signal they should be re-processed:
 /// - **Proof errors**: Removed to retry with regenerated proofs
 /// - **Extrinsic submission timeouts**: Removed to retry (timeouts are transient)
-/// - **Reorgs**: `InBlock` file keys still in pending requests are removed (block was reorged out)
 /// - **Non-proof dispatch errors**: Marked as `Abandoned` (permanent failure, no retry)
 ///
 /// ## Lifecycle Completion
@@ -845,16 +843,6 @@ pub enum FileKeyStatus {
     /// Tasks cannot set this status directly—use [`FileKeyStatusUpdate`] instead.
     #[default]
     Processing,
-    /// File key's accept/reject transaction was included in a block.
-    ///
-    /// Set by tasks after the extrinsic reaches `InBlock` status. The blockchain service
-    /// monitors for reorgs: if an `InBlock` file key still appears in pending storage
-    /// requests, it means the block was reorged out and the file key will be removed
-    /// to enable automatic retry.
-    ///
-    /// Once the storage request lifecycle is complete (file key no longer appears in
-    /// pending storage requests), the status is automatically removed during cleanup.
-    InBlock,
     /// File key failed with a non-proof-related dispatch error (permanent failure).
     ///
     /// Set when the extrinsic is included in a block but fails with a dispatch error
@@ -876,8 +864,6 @@ pub enum FileKeyStatus {
 /// states, preventing accidental re-processing of already-handled requests.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileKeyStatusUpdate {
-    /// Transaction included in block.
-    InBlock,
     /// File key failed with a permanent error (non-proof dispatch error).
     Abandoned,
 }
@@ -885,7 +871,6 @@ pub enum FileKeyStatusUpdate {
 impl From<FileKeyStatusUpdate> for FileKeyStatus {
     fn from(status: FileKeyStatusUpdate) -> Self {
         match status {
-            FileKeyStatusUpdate::InBlock => FileKeyStatus::InBlock,
             FileKeyStatusUpdate::Abandoned => FileKeyStatus::Abandoned,
         }
     }

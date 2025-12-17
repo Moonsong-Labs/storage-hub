@@ -36,8 +36,7 @@
 //! │   ProcessMspRespondStoringRequest                                                │
 //! │   (batched extrinsic submission)                                                 │
 //! │          │                                                                       │
-//! │          ├─── InBlock ──────────► set_file_key_status(InBlock)                   │
-//! │          │                        (awaiting cleanup)                             │
+//! │          ├─── Success ─────────► status removed (cleanup on next block)          │
 //! │          │                                                                       │
 //! │          ├─── Proof Error ──────► remove_file_key_status ─┐                      │
 //! │          │    (transient, retryable)                      │                      │
@@ -54,11 +53,6 @@
 //! │                                                                                  │
 //! │   File key no longer in pending requests ──► status removed (cleanup)            │
 //! │   (storage request lifecycle complete: accepted, rejected, expired, etc.)        │
-//! │                                                                                  │
-//! │  ───────────────────────── Reorg Detection ─────────────────────────             │
-//! │                                                                                  │
-//! │   InBlock file key still in pending requests ──► remove_file_key_status          │
-//! │   (enables automatic retry on next block)                                        │
 //! └──────────────────────────────────────────────────────────────────────────────────┘
 //! ```
 //!
@@ -72,7 +66,6 @@
 //! | Status                        | Meaning                                    | Action in BlockchainService                          |  
 //! | ----------------------------- | ------------------------------------------ | -----------------------------------------------------|  
 //! | [`FileKeyStatus::Processing`] | File key is in the pipeline                | **Skip** (don't emit)                                |  
-//! | [`FileKeyStatus::InBlock`]    | Tx included in block                       | **Skip** (don't emit) OR **Retry** if reorg detected |  
 //! | [`FileKeyStatus::Abandoned`]  | Failed with non-proof dispatch error       | **Skip** (don't emit)                                |  
 //! | *Not present*                 | New or retryable file key                  | **Emit** (set status to `Processing`)                |  
 //!
@@ -93,10 +86,6 @@
 //!   File key is marked as `Abandoned` via [`FileKeyStatusUpdate`] command.
 //!   These are permanent failures not resolved by retrying, so the file key will be skipped.
 //!
-//! - **Reorgs** (block containing accept/reject tx is reorged out): The blockchain service
-//!   detects `InBlock` file keys that still appear in pending storage requests and removes
-//!   them from statuses. This enables automatic retry on the next block.
-//!
 //! ### Event Handlers
 //!
 //! - [`NewStorageRequest`]: Emitted by the [`BlockchainService`](shc_blockchain_service) only for
@@ -111,8 +100,8 @@
 //!
 //! - [`ProcessMspRespondStoringRequest`]: Processes queued accept/reject responses and submits
 //!   them in a single batched `msp_respond_storage_requests_multiple_buckets` extrinsic.
-//!   On success (InBlock), marks file keys as `InBlock`. Status cleanup happens automatically
-//!   when the file key no longer appears in pending storage requests.
+//!   Status cleanup happens automatically when the file key no longer appears in pending
+//!   storage requests.
 //!
 //! ### Lifecycle Cleanup
 //!
@@ -634,7 +623,7 @@ where
 
         // Handle extrinsic submission result
         // - If the extrinsic failed, we remove the file keys from statuses to enable automatic retry on the next block.
-        // - If the extrinsic succeeded, we mark the file keys as InBlock if there were no errors.
+        // - If the extrinsic succeeded, the file key statuses will be cleaned up when they no longer appear in pending storage requests.
         // - If the extrinsic succeeded but no events were emitted, we remove the file keys from statuses to enable automatic retry on the next block.
         match extrinsic_result {
             Err(e) => {
@@ -678,21 +667,6 @@ where
                 self.handle_missing_extrinsic_events(&all_file_keys).await;
             }
         }
-
-        // Mark all submitted file keys as InBlock since they were included in the extrinsic.
-        // Accepted files will be added to the Bucket's Forest Storage by the BlockchainService.
-        for file_key in &all_file_keys {
-            self.storage_hub_handler
-                .blockchain
-                .set_file_key_status((*file_key).into(), FileKeyStatusUpdate::InBlock)
-                .await;
-        }
-
-        info!(
-            target: LOG_TARGET,
-            "Marked {} file key(s) as InBlock",
-            all_file_keys.len()
-        );
 
         // Delete rejected files from file storage
         let mut fs = self.storage_hub_handler.file_storage.write().await;
@@ -1286,11 +1260,6 @@ where
         reason: RejectedStorageRequestReason,
     ) -> anyhow::Result<()> {
         info!(target: LOG_TARGET, "Handling rejected storage request for file key {:x} with bucket id {:x} and reason {:?}", file_key, bucket_id, reason);
-
-        self.storage_hub_handler
-            .blockchain
-            .set_file_key_status((*file_key).into(), FileKeyStatusUpdate::InBlock)
-            .await;
 
         // Unregister the file
         self.unregister_file(*file_key)
