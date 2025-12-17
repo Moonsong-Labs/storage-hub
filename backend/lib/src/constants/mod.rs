@@ -32,6 +32,9 @@ pub mod rpc {
     /// Default MSP callback URL
     pub const DEFAULT_MSP_CALLBACK_URL: &str = "http://localhost:8080";
 
+    /// Default URL for the MSP trusted file transfer server
+    pub const DEFAULT_MSP_TRUSTED_FILE_TRANSFER_SERVER_URL: &str = "http://localhost:7070";
+
     /// Timeout multiplier for simulating network delays in mocks
     pub const TIMEOUT_MULTIPLIER: u64 = 10;
 
