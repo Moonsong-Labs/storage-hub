@@ -149,22 +149,11 @@ await describeMspNet(
         "MSP confirmation should be false after reorg (accept was reverted)"
       );
 
-      // Step 6: Wait for MSP to detect the reorg and requeue the accept
-      // The MSP's handle_pending_storage_requests detects InBlock file keys
-      // that are still pending and removes them to enable retry
-      await waitFor({
-        lambda: async () => {
-          const txPool = await userApi.rpc.author.pendingExtrinsics();
-          return txPool.some((tx) => {
-            const decoded = userApi.createType("Extrinsic", tx);
-            return (
-              decoded.method.section === "fileSystem" &&
-              decoded.method.method === "mspRespondStorageRequestsMultipleBuckets"
-            );
-          });
-        },
-        delay: 500,
-        iterations: 60
+      // Step 6: Wait for transaction to be re-included in the tx pool after the reorg
+      await userApi.wait.waitForTxInPool({
+        module: "fileSystem",
+        method: "mspRespondStorageRequestsMultipleBuckets",
+        timeout: 30000
       });
 
       // Step 7: Seal the block and verify MSP successfully re-accepts

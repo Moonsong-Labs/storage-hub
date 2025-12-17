@@ -1417,8 +1417,8 @@ where
     /// - Proof errors: Removes file keys from statuses to enable automatic retry
     /// - Non-proof errors: Marks file keys as Abandoned (permanent failure)
     ///
-    /// Returns `Ok(None)` if no dispatch error was found (extrinsic succeeded),
-    /// or `Ok(Some(error))` if there was a dispatch error that should be returned to the caller.
+    /// Returns `Ok(())` after successfully handling the dispatch result (whether the
+    /// extrinsic succeeded or failed), or `Err(...)` if the module error could not be decoded.
     async fn handle_extrinsic_dispatch_result(
         &self,
         events: StorageHubEventsVec<Runtime>,
@@ -1529,7 +1529,7 @@ where
     /// to allow the system to re-evaluate them on the next block.
     async fn handle_missing_extrinsic_events(&self, file_keys: &[H256]) {
         for file_key in file_keys {
-            debug!(
+            warn!(
                 target: LOG_TARGET,
                 "Removing file key {:?} status (missing events)",
                 file_key
