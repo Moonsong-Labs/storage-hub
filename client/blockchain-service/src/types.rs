@@ -818,9 +818,7 @@ impl<Runtime: StorageEnableRuntime> BspHandler<Runtime> {
 /// | Status        | Meaning                                    | Next Block Behavior                           |
 /// | ------------- | ------------------------------------------ | ----------------------------------------------|
 /// | `Processing`  | File key is in the pipeline                | **Skip** (already being handled)              |
-/// | `InBlock`     | Tx included in block, awaiting finality    | **Skip** OR **Retry** if reorg detected       |
-/// | `Accepted`    | Finalized as accepted on-chain             | **Skip** (completed)                          |
-/// | `Rejected`    | Finalized as rejected on-chain             | **Skip** (completed)                          |
+/// | `InBlock`     | Tx included in block                       | **Skip** OR **Retry** if reorg detected       |
 /// | `Abandoned`   | Failed with non-proof dispatch error       | **Skip** (permanent failure)                  |
 /// | *Not present* | New or retryable file key                  | **Process** (emit event, set to `Processing`) |
 ///
@@ -831,6 +829,12 @@ impl<Runtime: StorageEnableRuntime> BspHandler<Runtime> {
 /// - **Extrinsic submission timeouts**: Removed to retry (timeouts are transient)
 /// - **Reorgs**: `InBlock` file keys still in pending requests are removed (block was reorged out)
 /// - **Non-proof dispatch errors**: Marked as `Abandoned` (permanent failure, no retry)
+///
+/// ## Lifecycle Completion
+///
+/// File keys are **removed** from statuses when their storage request lifecycle is complete
+/// (i.e., they no longer appear in pending storage requests). This cleanup happens automatically
+/// during block processing, regardless of the file key's current status.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FileKeyStatus {
     /// File key is currently being processed (in the pipeline).
@@ -841,24 +845,16 @@ pub enum FileKeyStatus {
     /// Tasks cannot set this status directly—use [`FileKeyStatusUpdate`] instead.
     #[default]
     Processing,
-    /// File key's accept/reject transaction was included in a block, awaiting finalization.
+    /// File key's accept/reject transaction was included in a block.
     ///
     /// Set by tasks after the extrinsic reaches `InBlock` status. The blockchain service
-    /// monitors for reorgs: if a `Submitted` file key still appears in pending storage
+    /// monitors for reorgs: if an `InBlock` file key still appears in pending storage
     /// requests, it means the block was reorged out and the file key will be removed
     /// to enable automatic retry.
     ///
-    /// Transitions to `Accepted` or `Rejected` when the corresponding finality event
-    /// (`MspAcceptedStorageRequest` or `StorageRequestRejected`) is received.
+    /// Once the storage request lifecycle is complete (file key no longer appears in
+    /// pending storage requests), the status is automatically removed during cleanup.
     InBlock,
-    /// File key was successfully accepted on-chain (finalized).
-    ///
-    /// Set when `MspAcceptedStorageRequest` finality event is received.
-    Accepted,
-    /// File key was explicitly rejected on-chain (finalized).
-    ///
-    /// Set when `StorageRequestRejected` finality event is received.
-    Rejected,
     /// File key failed with a non-proof-related dispatch error (permanent failure).
     ///
     /// Set when the extrinsic is included in a block but fails with a dispatch error
@@ -878,18 +874,10 @@ pub enum FileKeyStatus {
 ///
 /// This type-safe restriction ensures tasks can only transition file keys to appropriate
 /// states, preventing accidental re-processing of already-handled requests.
-///
-/// Note: `InBlock` is included here even though it's not truly "terminal" because
-/// tasks need to set it after extrinsic inclusion. The blockchain service handles
-/// the transition from `InBlock` to `Accepted`/`Rejected` on finality events.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileKeyStatusUpdate {
-    /// Transaction included in block, awaiting finalization.
+    /// Transaction included in block.
     InBlock,
-    /// File key was successfully accepted on-chain (finalized).
-    Accepted,
-    /// File key was explicitly rejected on-chain (finalized).
-    Rejected,
     /// File key failed with a permanent error (non-proof dispatch error).
     Abandoned,
 }
@@ -898,8 +886,6 @@ impl From<FileKeyStatusUpdate> for FileKeyStatus {
     fn from(status: FileKeyStatusUpdate) -> Self {
         match status {
             FileKeyStatusUpdate::InBlock => FileKeyStatus::InBlock,
-            FileKeyStatusUpdate::Accepted => FileKeyStatus::Accepted,
-            FileKeyStatusUpdate::Rejected => FileKeyStatus::Rejected,
             FileKeyStatusUpdate::Abandoned => FileKeyStatus::Abandoned,
         }
     }
