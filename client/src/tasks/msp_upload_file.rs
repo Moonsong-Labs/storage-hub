@@ -1107,14 +1107,13 @@ where
         }
 
         // Delete rejected files from file storage
-        let mut fs = self.storage_hub_handler.file_storage.write().await;
         for storage_request_msp_bucket_response in storage_request_msp_response {
             for RejectedStorageRequest { file_key, .. } in
                 &storage_request_msp_bucket_response.reject
             {
                 info!(target: LOG_TARGET, "Deleting rejected file {:x} from file storage", file_key);
-                let write_fs = self.storage_hub_handler.file_storage.write().await;
-                if let Err(e) = fs.delete_file(&file_key) {
+                let mut write_fs = self.storage_hub_handler.file_storage.write().await;
+                if let Err(e) = write_fs.delete_file(&file_key) {
                     error!(target: LOG_TARGET, "Failed to delete file {:x}: {:?}", file_key, e);
                 }
                 drop(write_fs);
