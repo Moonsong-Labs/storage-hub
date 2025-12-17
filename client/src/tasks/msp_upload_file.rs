@@ -579,7 +579,7 @@ where
         // Record histogram with status based on result
         observe_histogram!(
             handler: self.storage_hub_handler,
-            storage_request_seconds,
+            storage_request_setup_seconds,
             if result.is_ok() {
                 STATUS_SUCCESS
             } else {

@@ -98,84 +98,134 @@ impl MetricsLink {
 /// - Histograms: suffix `_seconds` or `_bytes`
 pub struct StorageHubMetrics {
     // === BSP Metrics ===
-    /// Total storage requests processed by BSP, labeled by status.
+    /// Total BSP storage request confirmations, labeled by status.
+    /// Tracks the full lifecycle from receiving NewStorageRequest through submitting ConfirmStoring extrinsic.
+    /// - `pending`: NewStorageRequest event received
+    /// - `success`: ConfirmStoring extrinsic submitted successfully
+    /// - `failure`: Any error during volunteer or confirmation process
     pub bsp_storage_requests_total: CounterVec<U64>,
 
-    /// Total proofs submitted by BSP, labeled by status.
+    /// Total proof submission attempts by BSP, labeled by status.
+    /// Tracks SubmitProof extrinsic submissions in response to challenges.
     pub bsp_proofs_submitted_total: CounterVec<U64>,
 
-    /// Total fees charged by BSP, labeled by status.
+    /// Total fee charge extrinsic submissions by BSP, labeled by status.
+    /// Tracks attempts to submit ChargePaymentStreams extrinsic for users with debt.
+    /// Note: Success means extrinsic was submitted, not necessarily that fees were collected.
     pub bsp_fees_charged_total: CounterVec<U64>,
 
-    /// Total files deleted by BSP, labeled by status.
+    /// Total file deletion events processed by BSP, labeled by status.
+    /// Tracks TrieRemoveMutation events where files are removed from BSP's forest storage.
     pub bsp_files_deleted_total: CounterVec<U64>,
 
-    /// Total bucket moves processed by BSP, labeled by status.
+    /// Total bucket move events processed by BSP, labeled by status.
+    /// Tracks MoveBucketRequested/Accepted/Rejected/Expired events.
+    /// - `pending`: MoveBucketRequested received
+    /// - `success`: MoveBucketAccepted processed
+    /// - `failure`: MoveBucketRejected or MoveBucketExpired processed
     pub bsp_bucket_moves_total: CounterVec<U64>,
 
-    /// Total download requests handled by BSP, labeled by status.
+    /// Total file download requests handled by BSP, labeled by status.
+    /// Tracks FileDownloadRequest events where BSP serves files to requesters.
     pub bsp_download_requests_total: CounterVec<U64>,
 
-    /// Total chunk uploads received and processed by BSP, labeled by status.
+    /// Total chunk upload batches received by BSP, labeled by status.
+    /// Tracks RemoteUploadRequest events (each event contains a batch of chunks).
+    /// Note: This counts batches, not individual chunks.
     pub bsp_upload_chunks_received_total: CounterVec<U64>,
 
-    /// BSP proof generation duration in seconds, labeled by status.
+    /// Time spent generating proofs for challenge responses, labeled by status.
+    /// Measures the duration of generate_key_proof operations.
     pub bsp_proof_generation_seconds: HistogramVec,
 
     // === MSP Metrics ===
-    /// Total storage requests processed by MSP, labeled by status.
+    /// Total MSP storage request responses, labeled by status.
+    /// Tracks the lifecycle from receiving NewStorageRequest through submitting RespondStorageRequest extrinsic.
+    /// - `pending`: NewStorageRequest event received
+    /// - `success`: RespondStorageRequest extrinsic submitted successfully
+    /// - `failure`: Any error during setup or response process
     pub msp_storage_requests_total: CounterVec<U64>,
 
-    /// Total files distributed by MSP, labeled by status.
+    /// Total file distribution attempts by MSP to BSPs, labeled by status.
+    /// Tracks DistributeFileToBsp events where MSP sends files to volunteered BSPs.
     pub msp_files_distributed_total: CounterVec<U64>,
 
-    /// Total files deleted by MSP, labeled by status.
+    /// Total file deletion events processed by MSP, labeled by status.
+    /// Tracks removal of files from MSP's file storage after forest mutations are finalized.
     pub msp_files_deleted_total: CounterVec<U64>,
 
-    /// Total buckets deleted by MSP, labeled by status.
+    /// Total bucket deletion events processed by MSP, labeled by status.
+    /// Tracks bucket deletions after move, stop storing, or insolvent user events.
     pub msp_buckets_deleted_total: CounterVec<U64>,
 
-    /// Total fees charged by MSP, labeled by status.
+    /// Total fee charge extrinsic submissions by MSP, labeled by status.
+    /// Tracks attempts to submit ChargePaymentStreams extrinsic for users with debt.
+    /// Note: Success means extrinsic was submitted, not necessarily that fees were collected.
     pub msp_fees_charged_total: CounterVec<U64>,
 
-    /// Total bucket moves processed by MSP, labeled by status.
+    /// Total bucket move events processed by MSP, labeled by status.
+    /// Tracks the bucket download process when taking over from another MSP.
+    /// - `pending`: MoveBucketRequested received
+    /// - `success`: All files downloaded and bucket move complete
+    /// - `failure`: Download failed or bucket move rejected
     pub msp_bucket_moves_total: CounterVec<U64>,
 
     /// Total bucket move retry attempts by MSP, labeled by status.
+    /// Tracks retry attempts for incomplete bucket downloads during MSP move.
     pub msp_bucket_move_retries_total: CounterVec<U64>,
 
-    /// Total forest verifications performed by MSP, labeled by status.
+    /// Total bucket forest verification runs by MSP, labeled by status.
+    /// Tracks periodic verification that local forest storage exists for all managed buckets.
     pub msp_forest_verifications_total: CounterVec<U64>,
 
-    /// MSP forest verification duration in seconds, labeled by status.
+    /// Time spent verifying all bucket forests exist, labeled by status.
+    /// Measures the duration of the periodic bucket forest verification task.
     pub msp_forest_verification_seconds: HistogramVec,
 
     // === SP Metrics ===
     /// Total slash extrinsic submissions by any SP, labeled by status.
+    /// Tracks attempts to submit slash extrinsics for slashable providers.
     pub sp_slash_submissions_total: CounterVec<U64>,
 
     // === General Metrics ===
-    /// Storage request processing duration in seconds, labeled by status.
-    pub storage_request_seconds: HistogramVec,
+    /// Time spent handling the initial NewStorageRequest event in seconds.
+    /// For BSP: Includes validation, waiting for volunteer tick eligibility, and sending volunteer extrinsic.
+    /// For MSP: Includes validation, capacity checks, and file storage setup.
+    /// Note: This does NOT include file transfer time or the actual accept/confirm response.
+    pub storage_request_setup_seconds: HistogramVec,
 
-    /// File transfer duration in seconds, labeled by status.
+    /// Time spent sending file chunks to a peer (outbound transfer), labeled by status.
+    /// Measures the duration of send_chunks operations used by MSP to distribute files to BSPs.
+    /// Note: This tracks outbound transfers, not receiving uploads.
     pub file_transfer_seconds: HistogramVec,
 
-    /// Total insolvent users processed, labeled by status.
+    /// Total insolvent user processing events, labeled by status.
+    /// Tracks UserWithoutFunds and FinalisedMspStopStoringBucketInsolventUser events.
+    /// Used by both BSP and MSP when handling users who can no longer pay.
     pub insolvent_users_processed_total: CounterVec<U64>,
 
-    /// Total batch deletions processed by fisherman, labeled by status.
+    /// Total batch deletion processing results by fisherman, labeled by status.
+    /// Tracks the outcome of processing batches of pending file deletions.
+    /// Success means all deletions in the batch were processed successfully.
     pub fisherman_batch_deletions_total: CounterVec<U64>,
 
     // === Download Metrics ===
-    /// Total bytes downloaded from peers, labeled by status.
+    /// Total bytes downloaded from peers (inbound), labeled by status.
+    /// Tracks bytes received during file downloads from other storage providers.
     pub bytes_downloaded_total: CounterVec<U64>,
 
-    /// Total chunks downloaded from peers, labeled by status.
+    /// Total chunk batches downloaded from peers, labeled by status.
+    /// Tracks the number of chunk batches successfully received during file downloads.
     pub chunks_downloaded_total: CounterVec<U64>,
 
-    /// File download duration in seconds, labeled by status.
+    /// Time spent downloading a complete file from peers, labeled by status.
+    /// Measures total duration from starting a file download to completion or failure.
     pub file_download_seconds: HistogramVec,
+
+    // === Upload Metrics ===
+    /// Total bytes received from upload requests (inbound), labeled by status.
+    /// Tracks bytes received when users or MSPs upload file chunks to this provider.
+    pub bytes_uploaded_total: CounterVec<U64>,
 }
 
 impl StorageHubMetrics {
@@ -187,7 +237,7 @@ impl StorageHubMetrics {
                 CounterVec::new(
                     Opts::new(
                         "storagehub_bsp_storage_requests_total",
-                        "Total number of storage requests processed by BSP",
+                        "BSP storage request confirmations (volunteer to confirm lifecycle)",
                     ),
                     &["status"],
                 )?,
@@ -198,7 +248,7 @@ impl StorageHubMetrics {
                 CounterVec::new(
                     Opts::new(
                         "storagehub_bsp_proofs_submitted_total",
-                        "Total number of proofs submitted by BSP",
+                        "BSP proof submission attempts in response to challenges",
                     ),
                     &["status"],
                 )?,
@@ -209,7 +259,7 @@ impl StorageHubMetrics {
                 CounterVec::new(
                     Opts::new(
                         "storagehub_bsp_fees_charged_total",
-                        "Total number of fee charges processed by BSP",
+                        "BSP fee charge extrinsic submissions",
                     ),
                     &["status"],
                 )?,
@@ -220,7 +270,7 @@ impl StorageHubMetrics {
                 CounterVec::new(
                     Opts::new(
                         "storagehub_bsp_files_deleted_total",
-                        "Total number of files deleted by BSP",
+                        "BSP file deletion events (TrieRemoveMutation)",
                     ),
                     &["status"],
                 )?,
@@ -231,7 +281,7 @@ impl StorageHubMetrics {
                 CounterVec::new(
                     Opts::new(
                         "storagehub_bsp_bucket_moves_total",
-                        "Total number of bucket moves processed by BSP",
+                        "BSP bucket move events (requested/accepted/rejected/expired)",
                     ),
                     &["status"],
                 )?,
@@ -242,7 +292,7 @@ impl StorageHubMetrics {
                 CounterVec::new(
                     Opts::new(
                         "storagehub_bsp_download_requests_total",
-                        "Total number of download requests handled by BSP",
+                        "BSP file download requests served to requesters",
                     ),
                     &["status"],
                 )?,
@@ -253,7 +303,7 @@ impl StorageHubMetrics {
                 CounterVec::new(
                     Opts::new(
                         "storagehub_bsp_upload_chunks_received_total",
-                        "Total number of chunk uploads received and processed by BSP",
+                        "BSP chunk upload batches received (per batch, not per chunk)",
                     ),
                     &["status"],
                 )?,
@@ -264,7 +314,7 @@ impl StorageHubMetrics {
                 HistogramVec::new(
                     HistogramOpts::new(
                         "storagehub_bsp_proof_generation_seconds",
-                        "Time spent generating proofs by BSP",
+                        "BSP proof generation duration for challenge responses",
                     )
                     .buckets(FAST_OP_BUCKETS.to_vec()),
                     &["status"],
@@ -277,7 +327,7 @@ impl StorageHubMetrics {
                 CounterVec::new(
                     Opts::new(
                         "storagehub_msp_storage_requests_total",
-                        "Total number of storage requests processed by MSP",
+                        "MSP storage request responses (setup to respond lifecycle)",
                     ),
                     &["status"],
                 )?,
@@ -288,7 +338,7 @@ impl StorageHubMetrics {
                 CounterVec::new(
                     Opts::new(
                         "storagehub_msp_files_distributed_total",
-                        "Total number of files distributed by MSP to BSPs",
+                        "MSP file distribution attempts to BSPs",
                     ),
                     &["status"],
                 )?,
@@ -299,7 +349,7 @@ impl StorageHubMetrics {
                 CounterVec::new(
                     Opts::new(
                         "storagehub_msp_files_deleted_total",
-                        "Total number of files deleted by MSP",
+                        "MSP file deletions from file storage",
                     ),
                     &["status"],
                 )?,
@@ -310,7 +360,7 @@ impl StorageHubMetrics {
                 CounterVec::new(
                     Opts::new(
                         "storagehub_msp_buckets_deleted_total",
-                        "Total number of buckets deleted by MSP",
+                        "MSP bucket deletions (move/stop-storing/insolvent events)",
                     ),
                     &["status"],
                 )?,
@@ -321,7 +371,7 @@ impl StorageHubMetrics {
                 CounterVec::new(
                     Opts::new(
                         "storagehub_msp_fees_charged_total",
-                        "Total number of fee charges processed by MSP",
+                        "MSP fee charge extrinsic submissions",
                     ),
                     &["status"],
                 )?,
@@ -332,7 +382,7 @@ impl StorageHubMetrics {
                 CounterVec::new(
                     Opts::new(
                         "storagehub_msp_bucket_moves_total",
-                        "Total number of bucket moves processed by MSP",
+                        "MSP bucket move downloads (taking over from another MSP)",
                     ),
                     &["status"],
                 )?,
@@ -343,7 +393,7 @@ impl StorageHubMetrics {
                 CounterVec::new(
                     Opts::new(
                         "storagehub_msp_bucket_move_retries_total",
-                        "Total number of bucket move retry attempts by MSP",
+                        "MSP bucket move download retry attempts",
                     ),
                     &["status"],
                 )?,
@@ -354,7 +404,7 @@ impl StorageHubMetrics {
                 CounterVec::new(
                     Opts::new(
                         "storagehub_msp_forest_verifications_total",
-                        "Total number of forest verifications performed by MSP",
+                        "MSP bucket forest verification runs",
                     ),
                     &["status"],
                 )?,
@@ -365,7 +415,7 @@ impl StorageHubMetrics {
                 HistogramVec::new(
                     HistogramOpts::new(
                         "storagehub_msp_forest_verification_seconds",
-                        "Time spent verifying forest storage by MSP",
+                        "MSP bucket forest verification duration",
                     )
                     .buckets(FAST_OP_BUCKETS.to_vec()),
                     &["status"],
@@ -378,7 +428,7 @@ impl StorageHubMetrics {
                 CounterVec::new(
                     Opts::new(
                         "storagehub_sp_slash_submissions_total",
-                        "Total number of slash extrinsic submissions by SP",
+                        "SP slash extrinsic submissions for slashable providers",
                     ),
                     &["status"],
                 )?,
@@ -386,11 +436,11 @@ impl StorageHubMetrics {
             )?,
 
             // General metrics
-            storage_request_seconds: register(
+            storage_request_setup_seconds: register(
                 HistogramVec::new(
                     HistogramOpts::new(
-                        "storagehub_storage_request_seconds",
-                        "Time spent processing storage requests",
+                        "storagehub_storage_request_setup_seconds",
+                        "Initial NewStorageRequest handling (validation, setup, not file transfer)",
                     )
                     .buckets(REQUEST_BUCKETS.to_vec()),
                     &["status"],
@@ -402,7 +452,7 @@ impl StorageHubMetrics {
                 HistogramVec::new(
                     HistogramOpts::new(
                         "storagehub_file_transfer_seconds",
-                        "Time spent transferring files",
+                        "Outbound file chunk transfer duration (sending to peers)",
                     )
                     .buckets(TRANSFER_BUCKETS.to_vec()),
                     &["status"],
@@ -414,7 +464,7 @@ impl StorageHubMetrics {
                 CounterVec::new(
                     Opts::new(
                         "storagehub_insolvent_users_processed_total",
-                        "Total number of insolvent users processed",
+                        "Insolvent user processing events (BSP and MSP)",
                     ),
                     &["status"],
                 )?,
@@ -425,7 +475,7 @@ impl StorageHubMetrics {
                 CounterVec::new(
                     Opts::new(
                         "storagehub_fisherman_batch_deletions_total",
-                        "Total number of batch deletions processed by fisherman",
+                        "Fisherman batch deletion processing results",
                     ),
                     &["status"],
                 )?,
@@ -437,7 +487,7 @@ impl StorageHubMetrics {
                 CounterVec::new(
                     Opts::new(
                         "storagehub_bytes_downloaded_total",
-                        "Total bytes downloaded from peers",
+                        "Bytes downloaded from peers (inbound)",
                     ),
                     &["status"],
                 )?,
@@ -448,7 +498,7 @@ impl StorageHubMetrics {
                 CounterVec::new(
                     Opts::new(
                         "storagehub_chunks_downloaded_total",
-                        "Total chunks downloaded from peers",
+                        "Chunk batches downloaded from peers",
                     ),
                     &["status"],
                 )?,
@@ -459,9 +509,21 @@ impl StorageHubMetrics {
                 HistogramVec::new(
                     HistogramOpts::new(
                         "storagehub_file_download_seconds",
-                        "Time spent downloading files from peers",
+                        "Complete file download duration from peers",
                     )
                     .buckets(TRANSFER_BUCKETS.to_vec()),
+                    &["status"],
+                )?,
+                registry,
+            )?,
+
+            // Upload metrics
+            bytes_uploaded_total: register(
+                CounterVec::new(
+                    Opts::new(
+                        "storagehub_bytes_uploaded_total",
+                        "Bytes received from upload requests (inbound)",
+                    ),
                     &["status"],
                 )?,
                 registry,
@@ -530,7 +592,7 @@ macro_rules! inc_counter_by {
 ///
 /// ```ignore
 /// // With handler (calls handler.metrics())
-/// observe_histogram!(handler: self.storage_hub_handler, storage_request_seconds, STATUS_SUCCESS, elapsed.as_secs_f64());
+/// observe_histogram!(handler: self.storage_hub_handler, storage_request_setup_seconds, STATUS_SUCCESS, elapsed.as_secs_f64());
 ///
 /// // With direct metrics reference (Option<&StorageHubMetrics>)
 /// observe_histogram!(metrics: self.metrics.as_ref(), file_download_seconds, STATUS_SUCCESS, elapsed.as_secs_f64());

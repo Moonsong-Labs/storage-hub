@@ -73,43 +73,43 @@ export const ALL_STORAGEHUB_METRICS: Record<string, MetricDefinition> = {
     name: "storagehub_bsp_storage_requests_total",
     type: "counter",
     labels: ["status"],
-    description: "BSP storage request processing"
+    description: "BSP storage request confirmations (volunteer to confirm lifecycle)"
   },
   bsp_proofs_submitted_total: {
     name: "storagehub_bsp_proofs_submitted_total",
     type: "counter",
     labels: ["status"],
-    description: "BSP proof submissions"
+    description: "BSP proof submission attempts in response to challenges"
   },
   bsp_fees_charged_total: {
     name: "storagehub_bsp_fees_charged_total",
     type: "counter",
     labels: ["status"],
-    description: "BSP fee charging events"
+    description: "BSP fee charge extrinsic submissions"
   },
   bsp_files_deleted_total: {
     name: "storagehub_bsp_files_deleted_total",
     type: "counter",
     labels: ["status"],
-    description: "BSP file deletion events"
+    description: "BSP file deletion events (TrieRemoveMutation)"
   },
   bsp_bucket_moves_total: {
     name: "storagehub_bsp_bucket_moves_total",
     type: "counter",
     labels: ["status"],
-    description: "BSP bucket move events"
+    description: "BSP bucket move events (requested/accepted/rejected/expired)"
   },
   bsp_download_requests_total: {
     name: "storagehub_bsp_download_requests_total",
     type: "counter",
     labels: ["status"],
-    description: "BSP download request handling"
+    description: "BSP file download requests served to requesters"
   },
   bsp_upload_chunks_received_total: {
     name: "storagehub_bsp_upload_chunks_received_total",
     type: "counter",
     labels: ["status"],
-    description: "BSP chunk upload processing"
+    description: "BSP chunk upload batches received (per batch, not per chunk)"
   },
 
   // MSP Counters
@@ -117,49 +117,49 @@ export const ALL_STORAGEHUB_METRICS: Record<string, MetricDefinition> = {
     name: "storagehub_msp_storage_requests_total",
     type: "counter",
     labels: ["status"],
-    description: "MSP storage request processing"
+    description: "MSP storage request responses (setup to respond lifecycle)"
   },
   msp_files_distributed_total: {
     name: "storagehub_msp_files_distributed_total",
     type: "counter",
     labels: ["status"],
-    description: "MSP file distribution events"
+    description: "MSP file distribution attempts to BSPs"
   },
   msp_files_deleted_total: {
     name: "storagehub_msp_files_deleted_total",
     type: "counter",
     labels: ["status"],
-    description: "MSP file deletion events"
+    description: "MSP file deletions from file storage"
   },
   msp_buckets_deleted_total: {
     name: "storagehub_msp_buckets_deleted_total",
     type: "counter",
     labels: ["status"],
-    description: "MSP bucket deletion events"
+    description: "MSP bucket deletions (move/stop-storing/insolvent events)"
   },
   msp_fees_charged_total: {
     name: "storagehub_msp_fees_charged_total",
     type: "counter",
     labels: ["status"],
-    description: "MSP fee charging events"
+    description: "MSP fee charge extrinsic submissions"
   },
   msp_bucket_moves_total: {
     name: "storagehub_msp_bucket_moves_total",
     type: "counter",
     labels: ["status"],
-    description: "MSP bucket move events"
+    description: "MSP bucket move downloads (taking over from another MSP)"
   },
   msp_bucket_move_retries_total: {
     name: "storagehub_msp_bucket_move_retries_total",
     type: "counter",
     labels: ["status"],
-    description: "MSP bucket move retry attempts"
+    description: "MSP bucket move download retry attempts"
   },
   msp_forest_verifications_total: {
     name: "storagehub_msp_forest_verifications_total",
     type: "counter",
     labels: ["status"],
-    description: "MSP forest verification events"
+    description: "MSP bucket forest verification runs"
   },
 
   // SP Counters
@@ -167,7 +167,7 @@ export const ALL_STORAGEHUB_METRICS: Record<string, MetricDefinition> = {
     name: "storagehub_sp_slash_submissions_total",
     type: "counter",
     labels: ["status"],
-    description: "SP slash extrinsic submissions"
+    description: "SP slash extrinsic submissions for slashable providers"
   },
 
   // Other Counters
@@ -175,13 +175,13 @@ export const ALL_STORAGEHUB_METRICS: Record<string, MetricDefinition> = {
     name: "storagehub_insolvent_users_processed_total",
     type: "counter",
     labels: ["status"],
-    description: "Insolvent user processing events"
+    description: "Insolvent user processing events (BSP and MSP)"
   },
   fisherman_batch_deletions_total: {
     name: "storagehub_fisherman_batch_deletions_total",
     type: "counter",
     labels: ["status"],
-    description: "Fisherman batch deletion events"
+    description: "Fisherman batch deletion processing results"
   },
 
   // Histograms
@@ -189,25 +189,25 @@ export const ALL_STORAGEHUB_METRICS: Record<string, MetricDefinition> = {
     name: "storagehub_bsp_proof_generation_seconds",
     type: "histogram",
     labels: ["status"],
-    description: "BSP proof generation duration"
+    description: "BSP proof generation duration for challenge responses"
   },
-  storage_request_seconds: {
-    name: "storagehub_storage_request_seconds",
+  storage_request_setup_seconds: {
+    name: "storagehub_storage_request_setup_seconds",
     type: "histogram",
     labels: ["status"],
-    description: "Storage request processing duration"
+    description: "Initial NewStorageRequest handling (validation, setup, not file transfer)"
   },
   file_transfer_seconds: {
     name: "storagehub_file_transfer_seconds",
     type: "histogram",
     labels: ["status"],
-    description: "File transfer duration"
+    description: "Outbound file chunk transfer duration (sending to peers)"
   },
   msp_forest_verification_seconds: {
     name: "storagehub_msp_forest_verification_seconds",
     type: "histogram",
     labels: ["status"],
-    description: "MSP forest verification duration"
+    description: "MSP bucket forest verification duration"
   },
 
   // Download Metrics
@@ -215,19 +215,27 @@ export const ALL_STORAGEHUB_METRICS: Record<string, MetricDefinition> = {
     name: "storagehub_bytes_downloaded_total",
     type: "counter",
     labels: ["status"],
-    description: "Total bytes downloaded from peers"
+    description: "Bytes downloaded from peers (inbound)"
   },
   chunks_downloaded_total: {
     name: "storagehub_chunks_downloaded_total",
     type: "counter",
     labels: ["status"],
-    description: "Total chunks downloaded from peers"
+    description: "Chunk batches downloaded from peers"
   },
   file_download_seconds: {
     name: "storagehub_file_download_seconds",
     type: "histogram",
     labels: ["status"],
-    description: "File download duration"
+    description: "Complete file download duration from peers"
+  },
+
+  // Upload Metrics
+  bytes_uploaded_total: {
+    name: "storagehub_bytes_uploaded_total",
+    type: "counter",
+    labels: ["status"],
+    description: "Bytes received from upload requests (inbound)"
   }
 };
 

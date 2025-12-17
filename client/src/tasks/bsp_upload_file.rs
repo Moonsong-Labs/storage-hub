@@ -190,8 +190,14 @@ where
         trace!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
 
         let file_complete = match self.handle_remote_upload_request_event(event.clone()).await {
-            Ok(complete) => {
-                // Increment metric for successfully received chunk upload
+            Ok((complete, bytes_processed)) => {
+                // Increment metrics for successfully received chunk upload and bytes uploaded
+                inc_counter_by!(
+                    handler: self.storage_hub_handler,
+                    bytes_uploaded_total,
+                    STATUS_SUCCESS,
+                    bytes_processed as u64
+                );
                 inc_counter!(
                     handler: self.storage_hub_handler,
                     bsp_upload_chunks_received_total,
@@ -556,7 +562,7 @@ where
         // Record histogram with status based on result
         observe_histogram!(
             handler: self.storage_hub_handler,
-            storage_request_seconds,
+            storage_request_setup_seconds,
             if result.is_ok() {
                 STATUS_SUCCESS
             } else {
@@ -904,11 +910,13 @@ where
 
     /// Handles the [`RemoteUploadRequest`] event.
     ///
-    /// Returns `true` if the file is complete, `false` if the file is incomplete.
+    /// Returns a tuple of (file_complete, bytes_processed) where:
+    /// - `file_complete` is `true` if the file is complete, `false` if incomplete.
+    /// - `bytes_processed` is the total number of bytes in the batch that was processed.
     async fn handle_remote_upload_request_event(
         &mut self,
         event: RemoteUploadRequest<Runtime>,
-    ) -> anyhow::Result<bool> {
+    ) -> anyhow::Result<(bool, usize)> {
         debug!(target: LOG_TARGET, "Handling remote upload request for file key {:x}", event.file_key);
 
         let file_key = event.file_key.into();
@@ -972,6 +980,9 @@ where
                 return Err(e);
             }
         };
+
+        // Calculate total batch size for metrics
+        let total_batch_bytes: usize = proven.iter().map(|chunk| chunk.data.len()).sum();
 
         let mut file_complete = false;
 
@@ -1074,7 +1085,7 @@ where
             }
         }
 
-        Ok(file_complete)
+        Ok((file_complete, total_batch_bytes))
     }
 
     async fn is_allowed(&self, event: &NewStorageRequest<Runtime>) -> anyhow::Result<bool> {
