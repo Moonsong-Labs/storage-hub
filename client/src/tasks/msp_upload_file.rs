@@ -37,7 +37,7 @@
 //! │   (batched extrinsic submission)                                                 │
 //! │          │                                                                       │
 //! │          ├─── InBlock ──────────► set_file_key_status(InBlock)                   │
-//! │          │                        (awaiting finalization)                        │
+//! │          │                        (awaiting cleanup)                             │
 //! │          │                                                                       │
 //! │          ├─── Proof Error ──────► remove_file_key_status ─┐                      │
 //! │          │    (transient, retryable)                      │                      │
@@ -50,10 +50,10 @@
 //! │          │                                                                       │
 //! │          └─── Non-proof Error ──► set_file_key_status(Abandoned)                 │
 //! │                                                                                  │
-//! │  ───────────────────────── Finality Events ─────────────────────────             │
+//! │  ───────────────────────── Lifecycle Cleanup ─────────────────────────           │
 //! │                                                                                  │
-//! │   MspAcceptedStorageRequest (finalized) ──► InBlock → Accepted                   │
-//! │   StorageRequestRejected (finalized) ────► InBlock → Rejected                    │
+//! │   File key no longer in pending requests ──► status removed (cleanup)            │
+//! │   (storage request lifecycle complete: accepted, rejected, expired, etc.)        │
 //! │                                                                                  │
 //! │  ───────────────────────── Reorg Detection ─────────────────────────             │
 //! │                                                                                  │
@@ -72,9 +72,7 @@
 //! | Status                        | Meaning                                    | Action in BlockchainService                          |  
 //! | ----------------------------- | ------------------------------------------ | -----------------------------------------------------|  
 //! | [`FileKeyStatus::Processing`] | File key is in the pipeline                | **Skip** (don't emit)                                |  
-//! | [`FileKeyStatus::InBlock`]    | Tx included in block, awaiting finality    | **Skip** (don't emit) OR **Retry** if reorg detected |  
-//! | [`FileKeyStatus::Accepted`]   | Finalized as accepted on-chain             | **Skip** (don't emit)                                |  
-//! | [`FileKeyStatus::Rejected`]   | Finalized as rejected on-chain             | **Skip** (don't emit)                                |  
+//! | [`FileKeyStatus::InBlock`]    | Tx included in block                       | **Skip** (don't emit) OR **Retry** if reorg detected |  
 //! | [`FileKeyStatus::Abandoned`]  | Failed with non-proof dispatch error       | **Skip** (don't emit)                                |  
 //! | *Not present*                 | New or retryable file key                  | **Emit** (set status to `Processing`)                |  
 //!
@@ -113,8 +111,14 @@
 //!
 //! - [`ProcessMspRespondStoringRequest`]: Processes queued accept/reject responses and submits
 //!   them in a single batched `msp_respond_storage_requests_multiple_buckets` extrinsic.
-//!   On success (InBlock), marks file keys as `Submitted`. The blockchain service then
-//!   monitors finality events to transition to `Accepted` or `Rejected`.
+//!   On success (InBlock), marks file keys as `InBlock`. Status cleanup happens automatically
+//!   when the file key no longer appears in pending storage requests.
+//!
+//! ### Lifecycle Cleanup
+//!
+//! When a file key's storage request lifecycle is complete (it no longer appears in pending
+//! storage requests), its status is automatically removed during block processing. This
+//! happens regardless of how the request was resolved (accepted, rejected, expired, etc.).
 
 use anyhow::anyhow;
 use std::{
@@ -630,7 +634,7 @@ where
 
         // Handle extrinsic submission result
         // - If the extrinsic failed, we remove the file keys from statuses to enable automatic retry on the next block.
-        // - If the extrinsic succeeded, we mark the file keys as Submitted if there were no errors.
+        // - If the extrinsic succeeded, we mark the file keys as InBlock if there were no errors.
         // - If the extrinsic succeeded but no events were emitted, we remove the file keys from statuses to enable automatic retry on the next block.
         match extrinsic_result {
             Err(e) => {
@@ -675,74 +679,33 @@ where
             }
         }
 
+        // Mark all submitted file keys as InBlock since they were included in the extrinsic.
         // Accepted files will be added to the Bucket's Forest Storage by the BlockchainService.
+        for file_key in &all_file_keys {
+            self.storage_hub_handler
+                .blockchain
+                .set_file_key_status((*file_key).into(), FileKeyStatusUpdate::InBlock)
+                .await;
+        }
+
+        info!(
+            target: LOG_TARGET,
+            "Marked {} file key(s) as InBlock",
+            all_file_keys.len()
+        );
+
+        // Delete rejected files from file storage
+        let mut fs = self.storage_hub_handler.file_storage.write().await;
         for storage_request_msp_bucket_response in storage_request_msp_response {
-            // Log accepted file keys
-            if let Some(ref accepted) = storage_request_msp_bucket_response.accept {
-                let accepted_file_keys: Vec<_> = accepted
-                    .file_keys_and_proofs
-                    .iter()
-                    .map(|fk| fk.file_key)
-                    .collect();
-
-                if !accepted_file_keys.is_empty() {
-                    info!(
-                        target: LOG_TARGET,
-                        "✅ Accepted {} file(s) for bucket {:?}: {:?}",
-                        accepted_file_keys.len(),
-                        storage_request_msp_bucket_response.bucket_id,
-                        accepted_file_keys
-                    );
+            for RejectedStorageRequest { file_key, .. } in
+                &storage_request_msp_bucket_response.reject
+            {
+                info!(target: LOG_TARGET, "Deleting rejected file {:x} from file storage", file_key);
+                let write_fs = self.storage_hub_handler.file_storage.write().await;
+                if let Err(e) = fs.delete_file(&file_key) {
+                    error!(target: LOG_TARGET, "Failed to delete file {:x}: {:?}", file_key, e);
                 }
-
-                for fk in &accepted.file_keys_and_proofs {
-                    info!(
-                        target: LOG_TARGET,
-                        "Marking file key {:?} as Submitted (awaiting finalization)",
-                        fk.file_key
-                    );
-                    self.storage_hub_handler
-                        .blockchain
-                        .set_file_key_status(fk.file_key.into(), FileKeyStatusUpdate::InBlock)
-                        .await;
-                }
-            }
-
-            // Log and delete rejected file keys
-            if !storage_request_msp_bucket_response.reject.is_empty() {
-                let rejected_file_keys: Vec<_> = storage_request_msp_bucket_response
-                    .reject
-                    .iter()
-                    .map(|r| (r.file_key, &r.reason))
-                    .collect();
-
-                info!(
-                    target: LOG_TARGET,
-                    "❌ Rejected {} file(s) for bucket {:?}: {:?}",
-                    rejected_file_keys.len(),
-                    storage_request_msp_bucket_response.bucket_id,
-                    rejected_file_keys
-                );
-
-                let mut fs = self.storage_hub_handler.file_storage.write().await;
-                for RejectedStorageRequest { file_key, reason } in
-                    &storage_request_msp_bucket_response.reject
-                {
-                    info!(
-                        target: LOG_TARGET,
-                        "Marking file key {:?} as Submitted (rejection awaiting finalization, reason: {:?})",
-                        file_key,
-                        reason
-                    );
-                    self.storage_hub_handler
-                        .blockchain
-                        .set_file_key_status((*file_key).into(), FileKeyStatusUpdate::InBlock)
-                        .await;
-
-                    if let Err(e) = fs.delete_file(&file_key) {
-                        error!(target: LOG_TARGET, "Failed to delete file {:x}: {:?}", file_key, e);
-                    }
-                }
+                drop(write_fs);
             }
         }
 
@@ -1326,7 +1289,7 @@ where
 
         self.storage_hub_handler
             .blockchain
-            .set_file_key_status((*file_key).into(), FileKeyStatusUpdate::Rejected)
+            .set_file_key_status((*file_key).into(), FileKeyStatusUpdate::InBlock)
             .await;
 
         // Unregister the file
@@ -1375,7 +1338,7 @@ where
             .await
             .map_err(|e| anyhow!("Failed to watch for success: {:?}", e))?;
 
-        info!(target: LOG_TARGET, "Submitted mspRespondStorageRequestsMultipleBuckets for file key {:x}, with reject reason {:?}", file_key, reason);
+        info!(target: LOG_TARGET, "Submitted mspRespondStorageRequestsMultipleBuckets extrinsic for file key {:x}, with reject reason {:?}", file_key, reason);
 
         Ok(())
     }

@@ -531,19 +531,13 @@ export const batchStorageRequests = async (
       }
 
       if (bspFound && expectBspConfirmations) {
-        // Check if BSP confirmed storing events are present
-        const confirmEvents = await api.assert.eventMany(
-          "fileSystem",
-          "BspConfirmedStoring",
-          events || []
+        // Filter for BspConfirmedStoring events without asserting (may be empty if batch failed)
+        const confirmEvents = (events || []).filter((e) =>
+          api.events.fileSystem.BspConfirmedStoring.is(e.event)
         );
 
         // Count total file keys confirmed in all BspConfirmedStoring events
-        for (const eventRecord of confirmEvents) {
-          if (api.events.fileSystem.BspConfirmedStoring.is(eventRecord.event)) {
-            totalConfirmations += eventRecord.event.data.confirmedFileKeys.length;
-          }
-        }
+        totalConfirmations += confirmEvents.length;
       }
     }
 

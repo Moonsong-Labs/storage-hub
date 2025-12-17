@@ -150,7 +150,7 @@ await describeMspNet(
       );
 
       // Step 6: Wait for MSP to detect the reorg and requeue the accept
-      // The MSP's handle_pending_storage_requests detects Submitted file keys
+      // The MSP's handle_pending_storage_requests detects InBlock file keys
       // that are still pending and removes them to enable retry
       await waitFor({
         lambda: async () => {
