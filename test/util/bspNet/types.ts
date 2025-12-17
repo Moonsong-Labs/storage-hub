@@ -157,46 +157,6 @@ export interface BspNetApi extends ApiPromise {
      */
     waitForScrape: () => Promise<void>;
     /**
-     * Wait for the Prometheus server to become ready.
-     */
-    waitForReady: () => Promise<void>;
-    /**
-     * Assert that a metric has incremented from an initial value.
-     */
-    assertMetricIncremented: (options: {
-      query: string;
-      initialValue: number;
-      message?: string;
-    }) => Promise<void>;
-    /**
-     * Assert that a metric is above a threshold.
-     */
-    assertMetricAbove: (options: {
-      query: string;
-      threshold: number;
-      message?: string;
-    }) => Promise<void>;
-    /**
-     * Assert that a metric equals an expected value.
-     */
-    assertMetricEquals: (options: {
-      query: string;
-      expected: number;
-      message?: string;
-    }) => Promise<void>;
-    /**
-     * All StorageHub metrics definitions.
-     */
-    metrics: Record<
-      string,
-      {
-        name: string;
-        type: "counter" | "gauge" | "histogram";
-        labels: string[];
-        description: string;
-      }
-    >;
-    /**
      * Default Prometheus URL for tests.
      */
     url: string;
@@ -345,7 +305,7 @@ export type BspNetConfig = {
   logLevel?: string;
 
   /**
-   * If true, runs Prometheus server for metrics collection (fullnet only).
+   * If true, runs Prometheus server for metrics collection.
    */
   telemetry?: boolean;
 };

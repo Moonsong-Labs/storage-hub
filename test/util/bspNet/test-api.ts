@@ -1208,40 +1208,6 @@ export class BspNetTestApi implements AsyncDisposable {
       waitForScrape: () => Prometheus.waitForMetricsScrape(),
 
       /**
-       * Wait for the Prometheus server to become ready (up to 60s).
-       */
-      waitForReady: () => Prometheus.waitForPrometheusReady(),
-
-      /**
-       * Assert that a metric has incremented from an initial value.
-       * Waits for Prometheus to scrape before checking.
-       * @param options - Query string, initial value, and optional message
-       */
-      assertMetricIncremented: (options: Prometheus.AssertMetricIncrementedOptions) =>
-        Prometheus.assertMetricIncremented(options),
-
-      /**
-       * Assert that a metric is above a threshold.
-       * Waits for Prometheus to scrape before checking.
-       * @param options - Query string, threshold, and optional message
-       */
-      assertMetricAbove: (options: Prometheus.AssertMetricAboveOptions) =>
-        Prometheus.assertMetricAbove(options),
-
-      /**
-       * Assert that a metric equals an expected value.
-       * Waits for Prometheus to scrape before checking.
-       * @param options - Query string, expected value, and optional message
-       */
-      assertMetricEquals: (options: Prometheus.AssertMetricEqualsOptions) =>
-        Prometheus.assertMetricEquals(options),
-
-      /**
-       * All StorageHub metrics definitions as defined in client/src/metrics.rs.
-       */
-      metrics: Prometheus.ALL_STORAGEHUB_METRICS,
-
-      /**
        * Default Prometheus URL for tests.
        */
       url: Prometheus.PROMETHEUS_URL
