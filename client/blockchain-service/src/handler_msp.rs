@@ -62,7 +62,7 @@ where
     /// Steps:
     /// 1. Catch up to Forest root changes in the Forests of the Buckets this MSP manages.
     pub(crate) async fn msp_init_block_processing<Block>(
-        &self,
+        &mut self,
         _block_hash: &Runtime::Hash,
         _block_number: &BlockNumber<Runtime>,
         tree_route: TreeRoute<Block>,
@@ -520,7 +520,7 @@ where
     }
 
     pub(crate) async fn msp_process_forest_root_changing_events(
-        &self,
+        &mut self,
         block_hash: &BlockHash,
         event: StorageEnableEvents<Runtime>,
         revert: bool,
@@ -920,6 +920,8 @@ where
     /// Stale entries (file keys no longer in pending requests) are removed regardless of status.
     /// If a file key is not pending, its storage request lifecycle is complete.
     fn handle_pending_storage_requests(&mut self, msp_id: MainStorageProviderId<Runtime>) {
+        info!(target: LOG_TARGET, "🔍 Checking for storage requests for this MSP");
+
         let current_block_hash = self.client.info().best_hash;
 
         // Query pending storage requests (not yet accepted by MSP)
