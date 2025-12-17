@@ -6,3 +6,7 @@
 --
 -- If you need to rollback, the safest approach is to restore from a database backup
 -- taken before this migration was applied.
+
+-- NOOP query required to not break the revertion
+
+SELECT 1;
