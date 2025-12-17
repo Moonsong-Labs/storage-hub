@@ -166,15 +166,20 @@ await describeMspNet(
 
       // Storage request duration histogram
       const storageReqCount = await userApi.prometheus.getMetricValue(
-        "storagehub_storage_request_seconds_count"
+        "storagehub_storage_request_setup_seconds_count"
       );
       const storageReqSum = await userApi.prometheus.getMetricValue(
-        "storagehub_storage_request_seconds_sum"
+        "storagehub_storage_request_setup_seconds_sum"
       );
       console.log(
-        `Storage request histogram - count: ${storageReqCount}, sum: ${storageReqSum.toFixed(3)}s`
+        `Storage request setup histogram - count: ${storageReqCount}, sum: ${storageReqSum.toFixed(
+          3
+        )}s`
       );
-      assert(storageReqCount > 0, "Expected storage_request_seconds to have recorded observations");
+      assert(
+        storageReqCount > 0,
+        "Expected storage_request_setup_seconds to have recorded observations"
+      );
       assert(storageReqSum >= 0, "Histogram sum should be non-negative");
       console.log(
         `  Average storage request time: ${(storageReqSum / storageReqCount).toFixed(3)} seconds`
