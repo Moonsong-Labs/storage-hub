@@ -444,29 +444,36 @@ where
             .map(|r| r.file_key.into())
             .collect();
 
+        if !file_keys_to_check.is_empty() {
+            warn!(target: LOG_TARGET, "No file keys to respond to in ProcessMspRespondStoringRequest. Responding to {} file keys.", file_keys_to_check.len());
+            return Ok(format!(
+                "No file keys to respond to in ProcessMspRespondStoringRequest. Responding to {} file keys.",
+                file_keys_to_check.len()
+            ));
+        }
+
         // Query pending storage requests for all file keys (both accepts and rejects).
         // The runtime API filters to only return requests that are:
         // 1. Assigned to this MSP
         // 2. Not yet responded to (msp.1 == false, meaning not yet accepted/confirmed)
         // Note: We let the blockchain service handle removing stale file keys from statuses.
-        let pending_file_keys: HashSet<H256> = if !file_keys_to_check.is_empty() {
-            self.storage_hub_handler
+        let pending_file_keys: HashSet<H256> = match self
+            .storage_hub_handler
                 .blockchain
-                .query_pending_storage_requests(Some(file_keys_to_check))
+            .query_pending_storage_requests(Some(file_keys_to_check.clone()))
                 .await
-                .unwrap_or_else(|e| {
-                    warn!(
-                        target: LOG_TARGET,
-                        "Failed to query storage requests: {:?}. Proceeding with all requests.",
-                        e
-                    );
-                    Vec::new()
-                })
+        {
+            Ok(requests) => requests
                 .into_iter()
                 .map(|r| H256::from_slice(r.file_key.as_ref()))
-                .collect()
-        } else {
-            HashSet::new()
+                .collect(),
+            Err(e) => {
+                warn!(target: LOG_TARGET, "Failed to query storage requests: {:?}. Proceeding with all requests.", e);
+                file_keys_to_check
+                    .into_iter()
+                    .map(|k| H256::from_slice(k.as_ref()))
+                    .collect::<HashSet<_>>()
+            }
         };
 
         let mut file_key_responses = HashMap::new();
@@ -474,14 +481,14 @@ where
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
 
         // Filter out requests that are do not have any pending storage requests.
-        let filtered_pending_file_keys = event
+        let filtered_responses = event
             .data
             .respond_storing_requests
             .iter()
             .filter(|r| pending_file_keys.contains(&r.file_key))
             .collect::<Vec<_>>();
 
-        for respond in filtered_pending_file_keys {
+        for respond in filtered_responses {
             info!(target: LOG_TARGET, "Processing response for file key {:x}", respond.file_key);
             let bucket_id = match read_file_storage.get_metadata(&respond.file_key) {
                 Ok(Some(metadata)) => H256::from_slice(metadata.bucket_id().as_ref()),
