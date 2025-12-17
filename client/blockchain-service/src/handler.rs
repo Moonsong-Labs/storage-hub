@@ -1361,9 +1361,11 @@ where
                             // Return the filtered pending storage requests.
                             sr
                         }
-                        Err(_) => {
-                            warn!(target: LOG_TARGET, "Failed to get pending storage requests");
-                            match callback.send(Ok(Vec::new())) {
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to get pending storage requests: {:?}", e);
+                            match callback
+                                .send(Err(anyhow!("Failed to get pending storage requests")))
+                            {
                                 Ok(_) => {}
                                 Err(e) => {
                                     error!(target: LOG_TARGET, "Failed to send empty result: {:?}", e);

@@ -32,6 +32,7 @@ use crate::tasks::{
 use super::{
     bsp_peer_manager::BspPeerManager,
     handler::{ProviderConfig, StorageHubHandler},
+    trusted_file_transfer,
     types::{
         BspForestStorageHandlerT, BspProvider, FishermanForestStorageHandlerT, FishermanRole,
         InMemoryStorageLayer, MspForestStorageHandlerT, MspProvider, NoStorageLayer,
@@ -70,6 +71,7 @@ where
     bsp_submit_proof_config: Option<BspSubmitProofConfig>,
     blockchain_service_config: Option<BlockchainServiceConfig<Runtime>>,
     peer_manager: Option<Arc<BspPeerManager>>,
+    trusted_file_transfer_server_config: Option<trusted_file_transfer::server::Config>,
 }
 
 /// Common components to build for any given configuration of [`ShRole`] and [`ShStorageLayer`].
@@ -98,6 +100,7 @@ where
             bsp_submit_proof_config: None,
             blockchain_service_config: None,
             peer_manager: None,
+            trusted_file_transfer_server_config: None,
         }
     }
 
@@ -193,6 +196,36 @@ where
 
         self.blockchain = Some(blockchain_service_handle);
         self
+    }
+
+    /// Spawn the trusted file transfer server if configured
+    ///
+    /// This should be called after `with_blockchain` is called.
+    pub async fn spawn_trusted_file_transfer_server(&self) {
+        if let Some(config) = self.trusted_file_transfer_server_config.clone() {
+            let file_storage = self.file_storage.clone().expect(
+                "File Storage not initialized. This should not happen as `with_blockchain` should be called after `setup_storage_layer`."
+            );
+
+            let blockchain = self.blockchain.clone().expect(
+                "Blockchain Service not initialized. `spawn_trusted_file_transfer_server` should be called after `with_blockchain`."
+            );
+
+            let file_transfer = self.file_transfer.clone().expect(
+                "File Transfer Service not initialized. `spawn_trusted_file_transfer_server` should be called after `with_file_transfer`."
+            );
+
+            if let Err(e) = trusted_file_transfer::server::spawn_server(
+                config,
+                file_storage,
+                blockchain,
+                file_transfer,
+            )
+            .await
+            {
+                panic!("Failed to spawn trusted file transfer server: {}", e);
+            }
+        }
     }
 
     /// Spawn the Fisherman Service.
@@ -331,6 +364,17 @@ where
         config: Option<BspSubmitProofOptions>,
     ) -> &mut Self {
         self.bsp_submit_proof_config = config.map(Into::into);
+        self
+    }
+
+    /// Configure the trusted file transfer HTTP server
+    ///
+    /// The server will be spawned after the blockchain service is initialized.
+    pub fn with_trusted_file_transfer_server(
+        &mut self,
+        config: trusted_file_transfer::server::Config,
+    ) -> &mut Self {
+        self.trusted_file_transfer_server_config = Some(config);
         self
     }
 

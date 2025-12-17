@@ -459,9 +459,9 @@ where
         // Note: We let the blockchain service handle removing stale file keys from statuses.
         let pending_file_keys: HashSet<H256> = match self
             .storage_hub_handler
-                .blockchain
+            .blockchain
             .query_pending_storage_requests(Some(file_keys_to_check.clone()))
-                .await
+            .await
         {
             Ok(requests) => requests
                 .into_iter()
