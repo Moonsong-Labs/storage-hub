@@ -10,7 +10,10 @@
 
 import {
   type Address,
+  type ContractFunctionArgs,
+  type ContractFunctionName,
   createPublicClient,
+  type EstimateContractGasParameters,
   type GetContractReturnType,
   getContract,
   hexToBytes,
@@ -81,9 +84,11 @@ export class StorageHubClient {
    * @param options - Gas overrides (explicit gas, multiplier, etc.)
    * @returns Estimated gas limit with safety multiplier applied
    */
-  private async estimateGas(
-    functionName: string,
-    args: readonly unknown[],
+  private async estimateGas<
+    TFunctionName extends ContractFunctionName<typeof filesystemAbi, "nonpayable" | "payable">
+  >(
+    functionName: TFunctionName,
+    args: ContractFunctionArgs<typeof filesystemAbi, "nonpayable" | "payable", TFunctionName>,
     options?: EvmWriteOptions
   ): Promise<bigint> {
     // User provided explicit gas limit
@@ -98,7 +103,7 @@ export class StorageHubClient {
       functionName,
       args,
       account: accountAddr
-    });
+    } as EstimateContractGasParameters<typeof filesystemAbi, TFunctionName>);
 
     const multiplier = options?.gasMultiplier ?? StorageHubClient.DEFAULT_GAS_MULTIPLIER;
     return gasEstimation * BigInt(Math.max(1, Math.floor(multiplier)));
