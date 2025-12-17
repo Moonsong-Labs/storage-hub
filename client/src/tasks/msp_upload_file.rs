@@ -401,298 +401,31 @@ where
             event.data.respond_storing_requests,
         );
 
-        let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
-            Some(tx) => tx,
-            None => {
-                let err_msg = "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. This is a critical bug. Please report it to the StorageHub team.";
-                error!(target: LOG_TARGET, err_msg);
-                return Err(anyhow!(err_msg));
-            }
-        };
-
-        let own_provider_id = self
-            .storage_hub_handler
-            .blockchain
-            .query_storage_provider_id(None)
-            .await?;
-
-        let own_msp_id = match own_provider_id {
-            Some(StorageProviderId::MainStorageProvider(id)) => id,
-            Some(StorageProviderId::BackupStorageProvider(_)) => {
-                return Err(anyhow!(
-                    "Current node account is a Backup Storage Provider. Expected a Main Storage Provider ID."
-                ));
-            }
-            None => {
-                return Err(anyhow!("Failed to get own MSP ID."));
-            }
-        };
-
-        // Collect all file keys (both accept and reject) to check if they're still pending to filter
-        // any stale file keys which no longer have a pending storage requests.
-        let file_keys_to_check: Vec<FileKey> = event
-            .data
-            .respond_storing_requests
-            .iter()
-            .map(|r| r.file_key.into())
-            .collect();
-
-        if file_keys_to_check.is_empty() {
-            warn!(target: LOG_TARGET, "No file keys to respond to in ProcessMspRespondStoringRequest. Responding to {} file keys.", file_keys_to_check.len());
-            return Ok(format!(
-                "No file keys to respond to in ProcessMspRespondStoringRequest. Responding to {} file keys.",
-                file_keys_to_check.len()
-            ));
-        }
-
-        // Query pending storage requests for all file keys (both accepts and rejects).
-        // The runtime API filters to only return requests that are:
-        // 1. Assigned to this MSP
-        // 2. Not yet responded to (msp.1 == false, meaning not yet accepted/confirmed)
-        // Note: We let the blockchain service handle removing stale file keys from statuses.
-        let pending_file_keys: HashSet<H256> = match self
-            .storage_hub_handler
-            .blockchain
-            .query_pending_storage_requests(Some(file_keys_to_check.clone()))
+        match self
+            .handle_process_msp_respond_storing_request_event(event.clone())
             .await
         {
-            Ok(requests) => requests
-                .into_iter()
-                .map(|r| H256::from_slice(r.file_key.as_ref()))
-                .collect(),
+            Ok(result) => Ok(format!(
+                "Handled ProcessMspRespondStoringRequest: {}",
+                result
+            )),
             Err(e) => {
-                warn!(target: LOG_TARGET, "Failed to query storage requests: {:?}. Proceeding with all requests.", e);
-                file_keys_to_check
-                    .into_iter()
-                    .map(|k| H256::from_slice(k.as_ref()))
-                    .collect::<HashSet<_>>()
-            }
-        };
+                error!(target: LOG_TARGET, "Failed to handle process msp respond storing request event: {:?}", e);
 
-        let mut file_key_responses = HashMap::new();
-
-        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-
-        // Filter out requests that are do not have any pending storage requests.
-        let filtered_responses = event
-            .data
-            .respond_storing_requests
-            .iter()
-            .filter(|r| pending_file_keys.contains(&r.file_key))
-            .collect::<Vec<_>>();
-
-        for respond in filtered_responses {
-            info!(target: LOG_TARGET, "Processing response for file key {:x}", respond.file_key);
-            let bucket_id = match read_file_storage.get_metadata(&respond.file_key) {
-                Ok(Some(metadata)) => H256::from_slice(metadata.bucket_id().as_ref()),
-                Ok(None) => {
-                    error!(target: LOG_TARGET, "File does not exist for key {:x}. Maybe we forgot to unregister before deleting?", respond.file_key);
-                    continue;
-                }
-                Err(e) => {
-                    error!(target: LOG_TARGET, "Failed to get file metadata: {:?}", e);
-                    continue;
-                }
-            };
-
-            let entry = file_key_responses
-                .entry(bucket_id)
-                .or_insert_with(|| (Vec::new(), Vec::new()));
-
-            match &respond.response {
-                MspRespondStorageRequest::Accept => {
-                    let chunks_to_prove = match self
-                        .storage_hub_handler
-                        .blockchain
-                        .query_msp_confirm_chunks_to_prove_for_file(own_msp_id, respond.file_key)
-                        .await
-                    {
-                        Ok(chunks) => chunks,
-                        Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to get chunks to prove: {:?}", e);
-                            continue;
-                        }
-                    };
-
-                    let proof = match read_file_storage
-                        .generate_proof(&respond.file_key, &HashSet::from_iter(chunks_to_prove))
-                    {
-                        Ok(p) => p,
-                        Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to generate proof: {:?}", e);
-                            continue;
-                        }
-                    };
-
-                    entry.0.push(FileKeyWithProof {
-                        file_key: respond.file_key,
-                        proof,
-                    });
-                }
-                MspRespondStorageRequest::Reject(reason) => {
-                    entry.1.push(RejectedStorageRequest {
-                        file_key: respond.file_key,
-                        reason: reason.clone(),
-                    });
-                }
-            }
-        }
-
-        drop(read_file_storage);
-
-        let mut storage_request_msp_response = Vec::new();
-
-        for (bucket_id, (accept, reject)) in file_key_responses.iter_mut() {
-            let fs = self
-                .storage_hub_handler
-                .forest_storage_handler
-                .get_or_create(&ForestStorageKey::from(bucket_id.as_ref().to_vec()))
-                .await;
-
-            let accept = if !accept.is_empty() {
-                let file_keys: Vec<_> = accept
-                    .iter()
-                    .map(|file_key_with_proof| file_key_with_proof.file_key)
-                    .collect();
-
-                let forest_proof = match fs.read().await.generate_proof(file_keys) {
-                    Ok(proof) => proof,
-                    Err(e) => {
-                        error!(target: LOG_TARGET, "Failed to generate non-inclusion forest proof: {:?}", e);
-                        continue;
-                    }
-                };
-
-                Some(StorageRequestMspAcceptedFileKeys {
-                    file_keys_and_proofs: accept.clone(),
-                    forest_proof: forest_proof.proof,
-                })
-            } else {
-                None
-            };
-
-            storage_request_msp_response.push(StorageRequestMspBucketResponse {
-                bucket_id: *bucket_id,
-                accept,
-                reject: reject.clone(),
-            });
-        }
-
-        let call: Runtime::Call =
-            pallet_file_system::Call::<Runtime>::msp_respond_storage_requests_multiple_buckets {
-                storage_request_msp_response: storage_request_msp_response.clone(),
-            }
-            .into();
-
-        // Submit the extrinsic with events so we can inspect the dispatch error if it fails.
-        let extrinsic_result = self
-            .storage_hub_handler
-            .blockchain
-            .submit_extrinsic_with_retry(
-                call,
-                SendExtrinsicOptions::new(
-                    Duration::from_secs(
-                        self.storage_hub_handler
-                            .provider_config
-                            .blockchain_service
-                            .extrinsic_retry_timeout,
-                    ),
-                    Some("fileSystem".to_string()),
-                    Some("mspRespondStorageRequestsMultipleBuckets".to_string()),
-                ),
-                RetryStrategy::default()
-                    .with_max_retries(self.config.max_try_count)
-                    .with_max_tip(self.config.max_tip.saturated_into())
-                    .retry_only_if_timeout(),
-                true,
-            )
-            .await;
-
-        // Pre collect all file keys from the storage request MSP response so we can update statuses or remove them from statuses.
-        let all_file_keys = storage_request_msp_response
-            .iter()
-            .flat_map(|r| {
-                let accepted_keys = r
-                    .accept
-                    .iter()
-                    .flat_map(|a| a.file_keys_and_proofs.iter().map(|fk| fk.file_key));
-                let rejected_keys = r.reject.iter().map(|rej| rej.file_key);
-                accepted_keys.chain(rejected_keys)
-            })
-            .collect::<Vec<_>>();
-
-        // Handle extrinsic submission result
-        // - If the extrinsic failed, we remove the file keys from statuses to enable automatic retry on the next block.
-        // - If the extrinsic succeeded, the file key statuses will be cleaned up when they no longer appear in pending storage requests.
-        // - If the extrinsic succeeded but no events were emitted, we remove the file keys from statuses to enable automatic retry on the next block.
-        match extrinsic_result {
-            Err(e) => {
-                error!(
-                    target: LOG_TARGET,
-                    "Extrinsic submission failed after exhausting retries, removing file keys from statuses for retry: {:?}",
-                    e
-                );
-
-                self.handle_extrinsic_submission_failure(&all_file_keys)
-                    .await;
-
-                // Release the forest root write lock before returning error
-                self.storage_hub_handler
-                    .blockchain
-                    .release_forest_root_write_lock(forest_root_write_tx)
-                    .await?;
-
-                return Err(e);
-            }
-            Ok(Some(events)) => {
-                if let Err(err) = self
-                    .handle_extrinsic_dispatch_result(events, &all_file_keys)
-                    .await
-                {
-                    error!(target: LOG_TARGET, "Failed to handle extrinsic dispatch result: {:?}", err);
-                    // Release the forest root write lock before returning error
+                // Remove all file keys from statuses for later retry
+                for request in event.data.respond_storing_requests.iter() {
                     self.storage_hub_handler
                         .blockchain
-                        .release_forest_root_write_lock(forest_root_write_tx)
-                        .await?;
-
-                    return Err(err);
+                        .remove_file_key_status(request.file_key.into())
+                        .await;
                 }
-            }
-            Ok(None) => {
-                error!(
-                    target: LOG_TARGET,
-                    "Expected events but got None - this should not happen. Removing file key statuses to allow re-evaluation on next block."
-                );
-                self.handle_missing_extrinsic_events(&all_file_keys).await;
+
+                Err(anyhow!(
+                    "Failed to handle process msp respond storing request event: {:?}",
+                    e
+                ))
             }
         }
-
-        // Delete rejected files from file storage
-        let mut fs = self.storage_hub_handler.file_storage.write().await;
-        for storage_request_msp_bucket_response in storage_request_msp_response {
-            for RejectedStorageRequest { file_key, .. } in
-                &storage_request_msp_bucket_response.reject
-            {
-                info!(target: LOG_TARGET, "Deleting rejected file {:x} from file storage", file_key);
-                let write_fs = self.storage_hub_handler.file_storage.write().await;
-                if let Err(e) = fs.delete_file(&file_key) {
-                    error!(target: LOG_TARGET, "Failed to delete file {:x}: {:?}", file_key, e);
-                }
-                drop(write_fs);
-            }
-        }
-
-        // Release the forest root write "lock" and finish the task.
-        self.storage_hub_handler
-            .blockchain
-            .release_forest_root_write_lock(forest_root_write_tx)
-            .await?;
-
-        Ok(format!(
-            "Processed ProcessMspRespondStoringRequest for MSP [{:x}]",
-            own_msp_id
-        ))
     }
 }
 
@@ -1100,6 +833,304 @@ where
                 Err(anyhow!(rejection.error_message))
             }
         }
+    }
+
+    async fn handle_process_msp_respond_storing_request_event(
+        &mut self,
+        event: ProcessMspRespondStoringRequest<Runtime>,
+    ) -> anyhow::Result<String> {
+        let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
+            Some(tx) => tx,
+            None => {
+                let err_msg = "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. This is a critical bug. Please report it to the StorageHub team.";
+                error!(target: LOG_TARGET, err_msg);
+                return Err(anyhow!(err_msg));
+            }
+        };
+
+        let own_provider_id = self
+            .storage_hub_handler
+            .blockchain
+            .query_storage_provider_id(None)
+            .await?;
+
+        let own_msp_id = match own_provider_id {
+            Some(StorageProviderId::MainStorageProvider(id)) => id,
+            Some(StorageProviderId::BackupStorageProvider(_)) => {
+                return Err(anyhow!(
+                    "Current node account is a Backup Storage Provider. Expected a Main Storage Provider ID."
+                ));
+            }
+            None => {
+                return Err(anyhow!("Failed to get own MSP ID."));
+            }
+        };
+
+        // Collect all file keys (both accept and reject) to check if they're still pending to filter
+        // any stale file keys which no longer have a pending storage requests.
+        let file_keys_to_check: Vec<FileKey> = event
+            .data
+            .respond_storing_requests
+            .iter()
+            .map(|r| r.file_key.into())
+            .collect();
+
+        if file_keys_to_check.is_empty() {
+            warn!(target: LOG_TARGET, "No file keys to respond to in ProcessMspRespondStoringRequest. Responding to {} file keys.", file_keys_to_check.len());
+            return Ok(format!(
+                "No file keys to respond to in ProcessMspRespondStoringRequest. Responding to {} file keys.",
+                file_keys_to_check.len()
+            ));
+        }
+
+        // Query pending storage requests for all file keys (both accepts and rejects).
+        // The runtime API filters to only return requests that are:
+        // 1. Assigned to this MSP
+        // 2. Not yet responded to (msp.1 == false, meaning not yet accepted/confirmed)
+        // Note: We let the blockchain service handle removing stale file keys from statuses.
+        let pending_file_keys: HashSet<H256> = match self
+            .storage_hub_handler
+            .blockchain
+            .query_pending_storage_requests(Some(file_keys_to_check.clone()))
+            .await
+        {
+            Ok(requests) => requests
+                .into_iter()
+                .map(|r| H256::from_slice(r.file_key.as_ref()))
+                .collect(),
+            Err(e) => {
+                warn!(target: LOG_TARGET, "Failed to query storage requests: {:?}. Proceeding with all requests.", e);
+                file_keys_to_check
+                    .into_iter()
+                    .map(|k| H256::from_slice(k.as_ref()))
+                    .collect::<HashSet<_>>()
+            }
+        };
+
+        let mut file_key_responses = HashMap::new();
+
+        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+
+        // Filter out requests that are do not have any pending storage requests.
+        let filtered_responses = event
+            .data
+            .respond_storing_requests
+            .iter()
+            .filter(|r| pending_file_keys.contains(&r.file_key))
+            .collect::<Vec<_>>();
+
+        for respond in filtered_responses {
+            info!(target: LOG_TARGET, "Processing response for file key {:x}", respond.file_key);
+            let bucket_id = match read_file_storage.get_metadata(&respond.file_key) {
+                Ok(Some(metadata)) => H256::from_slice(metadata.bucket_id().as_ref()),
+                Ok(None) => {
+                    error!(target: LOG_TARGET, "File does not exist for key {:x}. Maybe we forgot to unregister before deleting?", respond.file_key);
+                    continue;
+                }
+                Err(e) => {
+                    error!(target: LOG_TARGET, "Failed to get file metadata: {:?}", e);
+                    continue;
+                }
+            };
+
+            let entry = file_key_responses
+                .entry(bucket_id)
+                .or_insert_with(|| (Vec::new(), Vec::new()));
+
+            match &respond.response {
+                MspRespondStorageRequest::Accept => {
+                    let chunks_to_prove = match self
+                        .storage_hub_handler
+                        .blockchain
+                        .query_msp_confirm_chunks_to_prove_for_file(own_msp_id, respond.file_key)
+                        .await
+                    {
+                        Ok(chunks) => chunks,
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to get chunks to prove: {:?}", e);
+                            continue;
+                        }
+                    };
+
+                    let proof = match read_file_storage
+                        .generate_proof(&respond.file_key, &HashSet::from_iter(chunks_to_prove))
+                    {
+                        Ok(p) => p,
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to generate proof: {:?}", e);
+                            continue;
+                        }
+                    };
+
+                    entry.0.push(FileKeyWithProof {
+                        file_key: respond.file_key,
+                        proof,
+                    });
+                }
+                MspRespondStorageRequest::Reject(reason) => {
+                    entry.1.push(RejectedStorageRequest {
+                        file_key: respond.file_key,
+                        reason: reason.clone(),
+                    });
+                }
+            }
+        }
+
+        drop(read_file_storage);
+
+        let mut storage_request_msp_response = Vec::new();
+
+        for (bucket_id, (accept, reject)) in file_key_responses.iter_mut() {
+            let fs = self
+                .storage_hub_handler
+                .forest_storage_handler
+                .get_or_create(&ForestStorageKey::from(bucket_id.as_ref().to_vec()))
+                .await;
+
+            let accept = if !accept.is_empty() {
+                let file_keys: Vec<_> = accept
+                    .iter()
+                    .map(|file_key_with_proof| file_key_with_proof.file_key)
+                    .collect();
+
+                let forest_proof = match fs.read().await.generate_proof(file_keys) {
+                    Ok(proof) => proof,
+                    Err(e) => {
+                        error!(target: LOG_TARGET, "Failed to generate non-inclusion forest proof: {:?}", e);
+                        continue;
+                    }
+                };
+
+                Some(StorageRequestMspAcceptedFileKeys {
+                    file_keys_and_proofs: accept.clone(),
+                    forest_proof: forest_proof.proof,
+                })
+            } else {
+                None
+            };
+
+            storage_request_msp_response.push(StorageRequestMspBucketResponse {
+                bucket_id: *bucket_id,
+                accept,
+                reject: reject.clone(),
+            });
+        }
+
+        let call: Runtime::Call =
+            pallet_file_system::Call::<Runtime>::msp_respond_storage_requests_multiple_buckets {
+                storage_request_msp_response: storage_request_msp_response.clone(),
+            }
+            .into();
+
+        // Submit the extrinsic with events so we can inspect the dispatch error if it fails.
+        let extrinsic_result = self
+            .storage_hub_handler
+            .blockchain
+            .submit_extrinsic_with_retry(
+                call,
+                SendExtrinsicOptions::new(
+                    Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .blockchain_service
+                            .extrinsic_retry_timeout,
+                    ),
+                    Some("fileSystem".to_string()),
+                    Some("mspRespondStorageRequestsMultipleBuckets".to_string()),
+                ),
+                RetryStrategy::default()
+                    .with_max_retries(self.config.max_try_count)
+                    .with_max_tip(self.config.max_tip.saturated_into())
+                    .retry_only_if_timeout(),
+                true,
+            )
+            .await;
+
+        // Pre collect all file keys from the storage request MSP response so we can update statuses or remove them from statuses.
+        let all_file_keys = storage_request_msp_response
+            .iter()
+            .flat_map(|r| {
+                let accepted_keys = r
+                    .accept
+                    .iter()
+                    .flat_map(|a| a.file_keys_and_proofs.iter().map(|fk| fk.file_key));
+                let rejected_keys = r.reject.iter().map(|rej| rej.file_key);
+                accepted_keys.chain(rejected_keys)
+            })
+            .collect::<Vec<_>>();
+
+        // Handle extrinsic submission result
+        // - If the extrinsic failed, we remove the file keys from statuses to enable automatic retry on the next block.
+        // - If the extrinsic succeeded, the file key statuses will be cleaned up when they no longer appear in pending storage requests.
+        // - If the extrinsic succeeded but no events were emitted, we remove the file keys from statuses to enable automatic retry on the next block.
+        match extrinsic_result {
+            Err(e) => {
+                error!(
+                    target: LOG_TARGET,
+                    "Extrinsic submission failed after exhausting retries, removing file keys from statuses for retry: {:?}",
+                    e
+                );
+
+                self.handle_extrinsic_submission_failure(&all_file_keys)
+                    .await;
+
+                // Release the forest root write lock before returning error
+                self.storage_hub_handler
+                    .blockchain
+                    .release_forest_root_write_lock(forest_root_write_tx)
+                    .await?;
+
+                return Err(e);
+            }
+            Ok(Some(events)) => {
+                if let Err(err) = self
+                    .handle_extrinsic_dispatch_result(events, &all_file_keys)
+                    .await
+                {
+                    error!(target: LOG_TARGET, "Failed to handle extrinsic dispatch result: {:?}", err);
+                    // Release the forest root write lock before returning error
+                    self.storage_hub_handler
+                        .blockchain
+                        .release_forest_root_write_lock(forest_root_write_tx)
+                        .await?;
+
+                    return Err(err);
+                }
+            }
+            Ok(None) => {
+                error!(
+                    target: LOG_TARGET,
+                    "Expected events but got None - this should not happen. Removing file key statuses to allow re-evaluation on next block."
+                );
+                self.handle_missing_extrinsic_events(&all_file_keys).await;
+            }
+        }
+
+        // Delete rejected files from file storage
+        let mut fs = self.storage_hub_handler.file_storage.write().await;
+        for storage_request_msp_bucket_response in storage_request_msp_response {
+            for RejectedStorageRequest { file_key, .. } in
+                &storage_request_msp_bucket_response.reject
+            {
+                info!(target: LOG_TARGET, "Deleting rejected file {:x} from file storage", file_key);
+                let write_fs = self.storage_hub_handler.file_storage.write().await;
+                if let Err(e) = fs.delete_file(&file_key) {
+                    error!(target: LOG_TARGET, "Failed to delete file {:x}: {:?}", file_key, e);
+                }
+                drop(write_fs);
+            }
+        }
+
+        // Release the forest root write "lock" and finish the task.
+        self.storage_hub_handler
+            .blockchain
+            .release_forest_root_write_lock(forest_root_write_tx)
+            .await?;
+
+        Ok(format!(
+            "Processed ProcessMspRespondStoringRequest for MSP [{:x}]",
+            own_msp_id
+        ))
     }
 
     /// Processes chunks while holding a file storage write lock. Returns Ok(file_complete) on success,

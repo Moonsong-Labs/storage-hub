@@ -22,24 +22,27 @@ export const sendNewStorageRequest = async (
   mspId?: HexString,
   replicationTarget?: number | null
 ): Promise<FileMetadata> => {
-  const ownerHexString = u8aToHex(decodeAddress(ShConsts.NODE_INFOS.user.AddressId));
-  const { file_metadata: fileMetadata } = await api.rpc.storagehubclient.loadFileInStorage(
-    source,
-    location,
-    ownerHexString.slice(2),
-    bucketId
+  const ownerHexString = u8aToHex(
+    decodeAddress(ShConsts.NODE_INFOS.user.AddressId)
   );
+  const { file_metadata: fileMetadata } =
+    await api.rpc.storagehubclient.loadFileInStorage(
+      source,
+      location,
+      ownerHexString.slice(2),
+      bucketId
+    );
 
   const issueOwner = owner;
 
   let replicationTargetToUse: { Custom: number } | { Basic: null };
   if (replicationTarget) {
     replicationTargetToUse = {
-      Custom: replicationTarget
+      Custom: replicationTarget,
     };
   } else {
     replicationTargetToUse = {
-      Basic: null
+      Basic: null,
     };
   }
 
@@ -57,7 +60,10 @@ export const sendNewStorageRequest = async (
     issueOwner
   );
 
-  const accountId: AccountId32 = new GenericAccountId(api.registry, issueOwner.publicKey);
+  const accountId: AccountId32 = new GenericAccountId(
+    api.registry,
+    issueOwner.publicKey
+  );
 
   const newStorageRequestEvent = assertEventPresent(
     api,
@@ -77,7 +83,7 @@ export const sendNewStorageRequest = async (
     location: newStorageRequestEventDataBlob.location.toString(),
     owner: accountId.toString(),
     fingerprint: fileMetadata.fingerprint.toHex(),
-    fileSize: fileMetadata.file_size.toNumber()
+    fileSize: fileMetadata.file_size.toNumber(),
   };
 };
 
@@ -96,9 +102,10 @@ export const createBucketAndSendNewStorageRequest = async (
   const localOwner = owner;
 
   if (!localValuePropId) {
-    const valueProps = await api.call.storageProvidersApi.queryValuePropositionsForMsp(
-      mspId ?? ShConsts.DUMMY_MSP_ID
-    );
+    const valueProps =
+      await api.call.storageProvidersApi.queryValuePropositionsForMsp(
+        mspId ?? ShConsts.DUMMY_MSP_ID
+      );
     localValuePropId = valueProps[0].id.toHex() as HexString;
 
     if (!localValuePropId) {
@@ -114,26 +121,28 @@ export const createBucketAndSendNewStorageRequest = async (
     mspId ?? ShConsts.DUMMY_MSP_ID
   );
   const newBucketEventDataBlob =
-    api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+    api.events.fileSystem.NewBucket.is(newBucketEventEvent) &&
+    newBucketEventEvent.data;
 
   assert(newBucketEventDataBlob, "Event doesn't match Type");
 
   const ownerHexString = u8aToHex(decodeAddress(localOwner.address));
-  const { file_metadata: fileMetadata } = await api.rpc.storagehubclient.loadFileInStorage(
-    source,
-    location,
-    ownerHexString.slice(2),
-    newBucketEventDataBlob.bucketId
-  );
+  const { file_metadata: fileMetadata } =
+    await api.rpc.storagehubclient.loadFileInStorage(
+      source,
+      location,
+      ownerHexString.slice(2),
+      newBucketEventDataBlob.bucketId
+    );
 
   let replicationTargetToUse: { Custom: number } | { Basic: null };
   if (replicationTarget) {
     replicationTargetToUse = {
-      Custom: replicationTarget
+      Custom: replicationTarget,
     };
   } else {
     replicationTargetToUse = {
-      Basic: null
+      Basic: null,
     };
   }
   const issueStorageRequestResult = await sealBlock(
@@ -171,7 +180,7 @@ export const createBucketAndSendNewStorageRequest = async (
     location: newStorageRequestEventDataBlob.location.toString(),
     owner: newBucketEventDataBlob.who.toString(),
     fingerprint: fileMetadata.fingerprint.toHex(),
-    fileSize: fileMetadata.file_size.toNumber()
+    fileSize: fileMetadata.file_size.toNumber(),
   };
 };
 
@@ -185,9 +194,10 @@ export const createBucket = async (
   let localValuePropId = valuePropId;
 
   if (localValuePropId === undefined) {
-    const valueProps = await api.call.storageProvidersApi.queryValuePropositionsForMsp(
-      mspId ?? ShConsts.DUMMY_MSP_ID
-    );
+    const valueProps =
+      await api.call.storageProvidersApi.queryValuePropositionsForMsp(
+        mspId ?? ShConsts.DUMMY_MSP_ID
+      );
 
     localValuePropId = valueProps[0].id.toHex() as HexString;
   }
@@ -206,7 +216,12 @@ export const createBucket = async (
     ),
     owner
   );
-  const { event } = assertEventPresent(api, "fileSystem", "NewBucket", createBucketResult.events);
+  const { event } = assertEventPresent(
+    api,
+    "fileSystem",
+    "NewBucket",
+    createBucketResult.events
+  );
 
   return event;
 };
@@ -308,7 +323,7 @@ export const batchStorageRequests = async (
     finaliseBlock = true,
     bspApi,
     mspApi,
-    maxAttempts = 10
+    maxAttempts = 10,
   } = options;
 
   if (!owner) {
@@ -316,7 +331,9 @@ export const batchStorageRequests = async (
   }
 
   if (!bspApi && !mspApi) {
-    throw new Error("At least one of bspApi or mspApi must be provided for batchStorageRequests");
+    throw new Error(
+      "At least one of bspApi or mspApi must be provided for batchStorageRequests"
+    );
   }
 
   const localOwner = owner;
@@ -325,9 +342,10 @@ export const batchStorageRequests = async (
   // Get value proposition if not provided
   let valuePropId = providedValuePropId;
   if (!valuePropId) {
-    const valueProps = await api.call.storageProvidersApi.queryValuePropositionsForMsp(
-      mspId ?? ShConsts.DUMMY_MSP_ID
-    );
+    const valueProps =
+      await api.call.storageProvidersApi.queryValuePropositionsForMsp(
+        mspId ?? ShConsts.DUMMY_MSP_ID
+      );
     valuePropId = valueProps[0].id.toHex() as HexString;
     if (!valuePropId) {
       throw new Error("No value proposition found");
@@ -356,7 +374,9 @@ export const batchStorageRequests = async (
   for (const bucketName of uniqueBucketNames) {
     // Derive the bucket ID deterministically (same logic as runtime):
     // Hash(owner.encode() ++ bucket_name.encode())
-    const ownerEncoded = api.createType("AccountId32", localOwner.address).toU8a();
+    const ownerEncoded = api
+      .createType("AccountId32", localOwner.address)
+      .toU8a();
     const nameEncoded = api.createType("Bytes", bucketName).toU8a();
     const concat = new Uint8Array([...ownerEncoded, ...nameEncoded]);
     const bucketId = api.createType("H256", api.registry.hash(concat));
@@ -403,7 +423,10 @@ export const batchStorageRequests = async (
     if (typeof file.bucketIdOrName === "string") {
       // Use the bucket we just created (look up by name)
       const createdBucketId = bucketNameToIdMap.get(file.bucketIdOrName);
-      assert(createdBucketId, `Bucket ID not found for bucket name: ${file.bucketIdOrName}`);
+      assert(
+        createdBucketId,
+        `Bucket ID not found for bucket name: ${file.bucketIdOrName}`
+      );
       bucketId = createdBucketId;
     } else {
       // Use the provided bucket ID
@@ -412,7 +435,7 @@ export const batchStorageRequests = async (
 
     const {
       file_key,
-      file_metadata: { location, fingerprint, file_size }
+      file_metadata: { location, fingerprint, file_size },
     } = await api.rpc.storagehubclient.loadFileInStorage(
       file.source,
       file.destination,
@@ -427,7 +450,10 @@ export const batchStorageRequests = async (
     fileSizes.push(file_size.toNumber());
 
     let replicationTargetToUse: { Custom: number } | { Basic: null };
-    if (file.replicationTarget !== undefined && file.replicationTarget !== null) {
+    if (
+      file.replicationTarget !== undefined &&
+      file.replicationTarget !== null
+    ) {
       replicationTargetToUse = { Custom: file.replicationTarget };
     } else {
       replicationTargetToUse = { Basic: null };
@@ -447,14 +473,23 @@ export const batchStorageRequests = async (
   }
 
   // Seal all storage requests in a single block
-  await sealBlock(api, storageRequestTxs, localOwner, undefined, undefined, finaliseBlock);
+  await sealBlock(
+    api,
+    storageRequestTxs,
+    localOwner,
+    undefined,
+    undefined,
+    finaliseBlock
+  );
 
   // Wait for MSP to store all files (if mspApi is provided)
   if (mspApi) {
     for (const fileKey of fileKeys) {
       await waitFor({
         lambda: async () =>
-          (await mspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
+          (
+            await mspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)
+          ).isFileFound,
       });
     }
   }
@@ -507,7 +542,7 @@ export const batchStorageRequests = async (
         try {
           await api.wait.bspStored({
             sealBlock: false,
-            timeoutMs: 3000
+            timeoutMs: 3000,
           });
           bspFound = true;
         } catch (_error) {
@@ -517,7 +552,7 @@ export const batchStorageRequests = async (
 
       const { events } = await api.block.seal({
         signer: localOwner,
-        finaliseBlock: finaliseBlock
+        finaliseBlock: finaliseBlock,
       });
 
       if (mspFound && expectMspAcceptance) {
@@ -537,7 +572,12 @@ export const batchStorageRequests = async (
         );
 
         // Count total file keys confirmed in all BspConfirmedStoring events
-        totalConfirmations += confirmEvents.length;
+        for (const eventRecord of confirmEvents) {
+          if (api.events.fileSystem.BspConfirmedStoring.is(eventRecord.event)) {
+            totalConfirmations +=
+              eventRecord.event.data.confirmedFileKeys.length;
+          }
+        }
       }
     }
 
@@ -568,7 +608,8 @@ export const batchStorageRequests = async (
 
         // Check file IS in BSP forest and file storage (if bspApi is provided)
         if (bspApi) {
-          const bspForestResult = await bspApi.rpc.storagehubclient.isFileInForest(null, fileKey);
+          const bspForestResult =
+            await bspApi.rpc.storagehubclient.isFileInForest(null, fileKey);
           if (!bspForestResult.isTrue) {
             return false;
           }
@@ -582,10 +623,8 @@ export const batchStorageRequests = async (
 
         // Check file IS in MSP forest and file storage (if mspApi is provided)
         if (mspApi) {
-          const mspForestResult = await mspApi.rpc.storagehubclient.isFileInForest(
-            bucketId,
-            fileKey
-          );
+          const mspForestResult =
+            await mspApi.rpc.storagehubclient.isFileInForest(bucketId, fileKey);
           if (!mspForestResult.isTrue) {
             return false;
           }
@@ -598,7 +637,7 @@ export const batchStorageRequests = async (
         }
       }
       return true;
-    }
+    },
   });
 
   return {
@@ -606,6 +645,6 @@ export const batchStorageRequests = async (
     bucketIds,
     locations,
     fingerprints,
-    fileSizes
+    fileSizes,
   };
 };
