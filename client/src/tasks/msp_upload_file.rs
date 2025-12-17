@@ -444,7 +444,7 @@ where
             .map(|r| r.file_key.into())
             .collect();
 
-        if !file_keys_to_check.is_empty() {
+        if file_keys_to_check.is_empty() {
             warn!(target: LOG_TARGET, "No file keys to respond to in ProcessMspRespondStoringRequest. Responding to {} file keys.", file_keys_to_check.len());
             return Ok(format!(
                 "No file keys to respond to in ProcessMspRespondStoringRequest. Responding to {} file keys.",
