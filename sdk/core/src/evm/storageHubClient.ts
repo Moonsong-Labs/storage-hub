@@ -21,7 +21,7 @@ import {
   stringToHex,
   type WalletClient
 } from "viem";
-import { filesystemAbi } from "../abi/filesystem";
+import { filesystemAbi } from "../abi/FileSystem.abi";
 import type { FileInfo } from "../types";
 import type { EvmWriteOptions, StorageHubClientOptions } from "./types";
 import { FileOperation, type ReplicationLevel } from "./types";
