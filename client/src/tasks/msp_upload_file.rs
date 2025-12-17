@@ -449,37 +449,50 @@ where
         // 1. Assigned to this MSP
         // 2. Not yet responded to (msp.1 == false, meaning not yet accepted/confirmed)
         // Note: We let the blockchain service handle removing stale file keys from statuses.
-        let pending_file_keys: HashSet<H256> = if !file_keys_to_check.is_empty() {
+        //
+        // Returns None on failure, signaling to skip filtering and process all requests.
+        // All failure modes are transient (runtime API issues, channel failures), and
+        // proceeding with all requests is safe - the chain will reject responses for
+        // already-processed requests. This is a final check before submitting the extrinsic,
+        // in case storage requests were revoked or expired which are less likely to happen.
+        let pending_file_keys: Option<HashSet<H256>> = if !file_keys_to_check.is_empty() {
             self.storage_hub_handler
                 .blockchain
                 .query_pending_storage_requests(Some(file_keys_to_check))
                 .await
-                .unwrap_or_else(|e| {
+                .map(|results| {
+                    results
+                        .into_iter()
+                        .map(|r| H256::from_slice(r.file_key.as_ref()))
+                        .collect()
+                })
+                .map_err(|e| {
                     warn!(
                         target: LOG_TARGET,
                         "Failed to query storage requests: {:?}. Proceeding with all requests.",
                         e
                     );
-                    Vec::new()
                 })
-                .into_iter()
-                .map(|r| H256::from_slice(r.file_key.as_ref()))
-                .collect()
+                .ok()
         } else {
-            HashSet::new()
+            Some(HashSet::new())
         };
 
         let mut file_key_responses = HashMap::new();
 
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
 
-        // Filter out requests that are do not have any pending storage requests.
-        let filtered_pending_file_keys = event
-            .data
-            .respond_storing_requests
-            .iter()
-            .filter(|r| pending_file_keys.contains(&r.file_key))
-            .collect::<Vec<_>>();
+        // Filter out requests that do not have pending storage requests.
+        // If pending_file_keys is None (query failed), process all requests without filtering.
+        let filtered_pending_file_keys: Vec<_> = match &pending_file_keys {
+            Some(set) => event
+                .data
+                .respond_storing_requests
+                .iter()
+                .filter(|r| set.contains(&r.file_key))
+                .collect(),
+            None => event.data.respond_storing_requests.iter().collect(),
+        };
 
         for respond in filtered_pending_file_keys {
             info!(target: LOG_TARGET, "Processing response for file key {:x}", respond.file_key);
