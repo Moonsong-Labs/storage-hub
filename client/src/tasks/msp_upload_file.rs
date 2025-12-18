@@ -513,11 +513,13 @@ where
             .forest_storage_handler
             .get_or_create(&ForestStorageKey::from(event.bucket_id.as_ref().to_vec()))
             .await;
-        let read_fs = fs.read().await;
 
         // If we do not have the file already in forest storage, we must take into account the
         // available storage capacity.
-        let file_in_forest_storage = read_fs.contains_file_key(&file_key.into())?;
+        let file_in_forest_storage = {
+            let read_fs = fs.read().await;
+            read_fs.contains_file_key(&file_key.into())?
+        };
         if !file_in_forest_storage {
             info!(target: LOG_TARGET, "File key {:x} not found in forest storage. Checking available storage capacity.", file_key);
 
@@ -909,15 +911,36 @@ where
 
         let mut file_key_responses = HashMap::new();
 
-        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-
-        // Filter out requests that are do not have any pending storage requests.
+        // Filter out requests that do not have any pending storage requests.
         let filtered_responses = event
             .data
             .respond_storing_requests
             .iter()
             .filter(|r| pending_file_keys.contains(&r.file_key))
             .collect::<Vec<_>>();
+        // For accepted requests, prefetch the chunks to prove without holding any file storage locks.
+        let mut chunks_to_prove_by_file_key: HashMap<H256, Vec<_>> = HashMap::new();
+        for respond in &filtered_responses {
+            if let MspRespondStorageRequest::Accept = &respond.response {
+                let chunks_to_prove = match self
+                    .storage_hub_handler
+                    .blockchain
+                    .query_msp_confirm_chunks_to_prove_for_file(own_msp_id, respond.file_key)
+                    .await
+                {
+                    Ok(chunks) => chunks,
+                    Err(e) => {
+                        error!(target: LOG_TARGET, "Failed to get chunks to prove: {:?}", e);
+                        continue;
+                    }
+                };
+
+                chunks_to_prove_by_file_key.insert(respond.file_key, chunks_to_prove);
+            }
+        }
+
+        // Now acquire a file storage read lock only for metadata/proof generation, without any awaits.
+        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
 
         for respond in filtered_responses {
             info!(target: LOG_TARGET, "Processing response for file key {:x}", respond.file_key);
@@ -939,22 +962,20 @@ where
 
             match &respond.response {
                 MspRespondStorageRequest::Accept => {
-                    let chunks_to_prove = match self
-                        .storage_hub_handler
-                        .blockchain
-                        .query_msp_confirm_chunks_to_prove_for_file(own_msp_id, respond.file_key)
-                        .await
-                    {
-                        Ok(chunks) => chunks,
-                        Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to get chunks to prove: {:?}", e);
-                            continue;
-                        }
+                    let Some(chunks_to_prove) = chunks_to_prove_by_file_key.get(&respond.file_key)
+                    else {
+                        error!(
+                            target: LOG_TARGET,
+                            "Missing cached chunks_to_prove for accepted file key {:x}",
+                            respond.file_key
+                        );
+                        continue;
                     };
 
-                    let proof = match read_file_storage
-                        .generate_proof(&respond.file_key, &HashSet::from_iter(chunks_to_prove))
-                    {
+                    let proof = match read_file_storage.generate_proof(
+                        &respond.file_key,
+                        &HashSet::from_iter(chunks_to_prove.iter().cloned()),
+                    ) {
                         Ok(p) => p,
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to generate proof: {:?}", e);
