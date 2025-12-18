@@ -22,6 +22,12 @@ msp_database_url = "postgresql://postgres:postgres@storage-hub-sh-indexer-postgr
 node_key = "0x2e6e3670c96202a2d6f5a58b7ac9092c5a51e0250f324eec2111ca94f5e568be"
 # Path to keystores
 keystore_path = "./docker/dev-keystores"
+# Enable trusted file transfer server (default: false)
+trusted_file_transfer_server = true
+# Host address for trusted file transfer HTTP server (default: 127.0.0.1)
+trusted_file_transfer_server_host = "127.0.0.1"
+# Port for trusted file transfer HTTP server (default: 7070)
+trusted_file_transfer_server_port = 7070
 
 # Configuration for the MSP Charge Fees task
 [provider.msp_charge_fees]

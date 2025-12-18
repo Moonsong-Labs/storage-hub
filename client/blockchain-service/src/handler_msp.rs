@@ -150,7 +150,7 @@ where
     /// Steps:
     /// 1. Catch up to Forest root changes in the Forests of the Buckets this MSP manages.
     pub(crate) async fn msp_init_block_processing<Block>(
-        &self,
+        &mut self,
         _block_hash: &Runtime::Hash,
         _block_number: &BlockNumber<Runtime>,
         tree_route: TreeRoute<Block>,
@@ -535,7 +535,7 @@ where
     }
 
     pub(crate) async fn msp_process_forest_root_changing_events(
-        &self,
+        &mut self,
         block_hash: &BlockHash,
         event: StorageEnableEvents<Runtime>,
         revert: bool,
@@ -1037,7 +1037,7 @@ where
         block_hash: Runtime::Hash,
         msp_id: ProviderId<Runtime>,
     ) {
-        info!(target: LOG_TARGET, "Checking for storage requests for this MSP");
+        info!(target: LOG_TARGET, "🔍 Checking for storage requests for this MSP");
 
         let storage_requests = match self
             .client
@@ -1054,7 +1054,7 @@ where
 
         info!(
             target: LOG_TARGET,
-            "We have {} pending storage requests",
+            "🔍 We have {} pending storage requests",
             storage_requests.len()
         );
 
