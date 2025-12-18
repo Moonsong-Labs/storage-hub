@@ -63,11 +63,11 @@ where
         {
             Ok(Ok(buckets)) => buckets,
             Ok(Err(e)) => {
-                trace!(target: LOG_TARGET, "Failed to query buckets for MSP during sync: {:?}", e);
+                error!(target: LOG_TARGET, "Failed to query buckets for MSP during sync: {:?}", e);
                 return;
             }
             Err(e) => {
-                trace!(target: LOG_TARGET, "Runtime API error querying buckets for MSP during sync: {:?}", e);
+                error!(target: LOG_TARGET, "Runtime API error querying buckets for MSP during sync: {:?}", e);
                 return;
             }
         };
