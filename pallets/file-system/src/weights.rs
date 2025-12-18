@@ -920,7 +920,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `PaymentStreams::UsersWithoutFunds` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::StorageRequests` (r:10 w:10)
 	/// Proof: `FileSystem::StorageRequests` (`max_values`: None, `max_size`: Some(1247), added: 3722, mode: `MaxEncodedLen`)
-	/// Storage: `FileSystem::StorageRequestBsps` (r:20 w:10)
+	/// Storage: `FileSystem::StorageRequestBsps` (r:400 w:390)
 	/// Proof: `FileSystem::StorageRequestBsps` (`max_values`: None, `max_size`: Some(97), added: 2572, mode: `MaxEncodedLen`)
 	/// Storage: `Parameters::Parameters` (r:3 w:0)
 	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
@@ -945,17 +945,17 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// The range of component `n` is `[1, 10]`.
 	fn delete_files_bucket(n: u32, ) -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `2274 + n * (378 ±0)`
-		//  Estimated: `8523 + n * (5144 ±0)`
-		// Minimum execution time: 180_000_000 picoseconds.
-		Weight::from_parts(77_740_363, 8523)
-			// Standard Error: 350_613
-			.saturating_add(Weight::from_parts(112_025_027, 0).saturating_mul(n.into()))
+		//  Measured:  `2508 + n * (2500 ±0)`
+		//  Estimated: `8523 + n * (102880 ±0)`
+		// Minimum execution time: 394_000_000 picoseconds.
+		Weight::from_parts(407_000_000, 8523)
+			// Standard Error: 1_975_398
+			.saturating_add(Weight::from_parts(366_745_991, 0).saturating_mul(n.into()))
 			.saturating_add(T::DbWeight::get().reads(11_u64))
-			.saturating_add(T::DbWeight::get().reads((3_u64).saturating_mul(n.into())))
+			.saturating_add(T::DbWeight::get().reads((41_u64).saturating_mul(n.into())))
 			.saturating_add(T::DbWeight::get().writes(5_u64))
-			.saturating_add(T::DbWeight::get().writes((4_u64).saturating_mul(n.into())))
-			.saturating_add(Weight::from_parts(0, 5144).saturating_mul(n.into()))
+			.saturating_add(T::DbWeight::get().writes((42_u64).saturating_mul(n.into())))
+			.saturating_add(Weight::from_parts(0, 102880).saturating_mul(n.into()))
 	}
 	/// Storage: `PaymentStreams::UsersWithoutFunds` (r:1 w:0)
 	/// Proof: `PaymentStreams::UsersWithoutFunds` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
@@ -965,7 +965,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `Providers::Buckets` (`max_values`: None, `max_size`: Some(191), added: 2666, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::StorageRequests` (r:10 w:10)
 	/// Proof: `FileSystem::StorageRequests` (`max_values`: None, `max_size`: Some(1247), added: 3722, mode: `MaxEncodedLen`)
-	/// Storage: `FileSystem::StorageRequestBsps` (r:20 w:10)
+	/// Storage: `FileSystem::StorageRequestBsps` (r:400 w:390)
 	/// Proof: `FileSystem::StorageRequestBsps` (`max_values`: None, `max_size`: Some(97), added: 2572, mode: `MaxEncodedLen`)
 	/// Storage: `Parameters::Parameters` (r:6 w:0)
 	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
@@ -1002,17 +1002,17 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// The range of component `n` is `[1, 10]`.
 	fn delete_files_bsp(n: u32, ) -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `1838 + n * (378 ±0)`
-		//  Estimated: `16056 + n * (5144 ±0)`
-		// Minimum execution time: 311_000_000 picoseconds.
-		Weight::from_parts(192_877_706, 16056)
-			// Standard Error: 395_994
-			.saturating_add(Weight::from_parts(137_362_209, 0).saturating_mul(n.into()))
+		//  Measured:  `2574 + n * (2657 ±0)`
+		//  Estimated: `16056 + n * (102880 ±0)`
+		// Minimum execution time: 533_000_000 picoseconds.
+		Weight::from_parts(3_258_840, 16056)
+			// Standard Error: 1_928_768
+			.saturating_add(Weight::from_parts(482_515_370, 0).saturating_mul(n.into()))
 			.saturating_add(T::DbWeight::get().reads(26_u64))
-			.saturating_add(T::DbWeight::get().reads((3_u64).saturating_mul(n.into())))
+			.saturating_add(T::DbWeight::get().reads((41_u64).saturating_mul(n.into())))
 			.saturating_add(T::DbWeight::get().writes(7_u64))
-			.saturating_add(T::DbWeight::get().writes((4_u64).saturating_mul(n.into())))
-			.saturating_add(Weight::from_parts(0, 5144).saturating_mul(n.into()))
+			.saturating_add(T::DbWeight::get().writes((42_u64).saturating_mul(n.into())))
+			.saturating_add(Weight::from_parts(0, 102880).saturating_mul(n.into()))
 	}
 	/// Storage: `FileSystem::IncompleteStorageRequests` (r:10 w:10)
 	/// Proof: `FileSystem::IncompleteStorageRequests` (`max_values`: None, `max_size`: Some(1916), added: 4391, mode: `MaxEncodedLen`)
@@ -1953,7 +1953,7 @@ impl WeightInfo for () {
 	/// Proof: `PaymentStreams::UsersWithoutFunds` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::StorageRequests` (r:10 w:10)
 	/// Proof: `FileSystem::StorageRequests` (`max_values`: None, `max_size`: Some(1247), added: 3722, mode: `MaxEncodedLen`)
-	/// Storage: `FileSystem::StorageRequestBsps` (r:20 w:10)
+	/// Storage: `FileSystem::StorageRequestBsps` (r:400 w:390)
 	/// Proof: `FileSystem::StorageRequestBsps` (`max_values`: None, `max_size`: Some(97), added: 2572, mode: `MaxEncodedLen`)
 	/// Storage: `Parameters::Parameters` (r:3 w:0)
 	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
@@ -1978,17 +1978,17 @@ impl WeightInfo for () {
 	/// The range of component `n` is `[1, 10]`.
 	fn delete_files_bucket(n: u32, ) -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `2274 + n * (378 ±0)`
-		//  Estimated: `8523 + n * (5144 ±0)`
-		// Minimum execution time: 180_000_000 picoseconds.
-		Weight::from_parts(77_740_363, 8523)
-			// Standard Error: 350_613
-			.saturating_add(Weight::from_parts(112_025_027, 0).saturating_mul(n.into()))
+		//  Measured:  `2508 + n * (2500 ±0)`
+		//  Estimated: `8523 + n * (102880 ±0)`
+		// Minimum execution time: 394_000_000 picoseconds.
+		Weight::from_parts(407_000_000, 8523)
+			// Standard Error: 1_975_398
+			.saturating_add(Weight::from_parts(366_745_991, 0).saturating_mul(n.into()))
 			.saturating_add(RocksDbWeight::get().reads(11_u64))
-			.saturating_add(RocksDbWeight::get().reads((3_u64).saturating_mul(n.into())))
+			.saturating_add(RocksDbWeight::get().reads((41_u64).saturating_mul(n.into())))
 			.saturating_add(RocksDbWeight::get().writes(5_u64))
-			.saturating_add(RocksDbWeight::get().writes((4_u64).saturating_mul(n.into())))
-			.saturating_add(Weight::from_parts(0, 5144).saturating_mul(n.into()))
+			.saturating_add(RocksDbWeight::get().writes((42_u64).saturating_mul(n.into())))
+			.saturating_add(Weight::from_parts(0, 102880).saturating_mul(n.into()))
 	}
 	/// Storage: `PaymentStreams::UsersWithoutFunds` (r:1 w:0)
 	/// Proof: `PaymentStreams::UsersWithoutFunds` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
@@ -1998,7 +1998,7 @@ impl WeightInfo for () {
 	/// Proof: `Providers::Buckets` (`max_values`: None, `max_size`: Some(191), added: 2666, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::StorageRequests` (r:10 w:10)
 	/// Proof: `FileSystem::StorageRequests` (`max_values`: None, `max_size`: Some(1247), added: 3722, mode: `MaxEncodedLen`)
-	/// Storage: `FileSystem::StorageRequestBsps` (r:20 w:10)
+	/// Storage: `FileSystem::StorageRequestBsps` (r:400 w:390)
 	/// Proof: `FileSystem::StorageRequestBsps` (`max_values`: None, `max_size`: Some(97), added: 2572, mode: `MaxEncodedLen`)
 	/// Storage: `Parameters::Parameters` (r:6 w:0)
 	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
@@ -2035,17 +2035,17 @@ impl WeightInfo for () {
 	/// The range of component `n` is `[1, 10]`.
 	fn delete_files_bsp(n: u32, ) -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `1838 + n * (378 ±0)`
-		//  Estimated: `16056 + n * (5144 ±0)`
-		// Minimum execution time: 311_000_000 picoseconds.
-		Weight::from_parts(192_877_706, 16056)
-			// Standard Error: 395_994
-			.saturating_add(Weight::from_parts(137_362_209, 0).saturating_mul(n.into()))
+		//  Measured:  `2574 + n * (2657 ±0)`
+		//  Estimated: `16056 + n * (102880 ±0)`
+		// Minimum execution time: 533_000_000 picoseconds.
+		Weight::from_parts(3_258_840, 16056)
+			// Standard Error: 1_928_768
+			.saturating_add(Weight::from_parts(482_515_370, 0).saturating_mul(n.into()))
 			.saturating_add(RocksDbWeight::get().reads(26_u64))
-			.saturating_add(RocksDbWeight::get().reads((3_u64).saturating_mul(n.into())))
+			.saturating_add(RocksDbWeight::get().reads((41_u64).saturating_mul(n.into())))
 			.saturating_add(RocksDbWeight::get().writes(7_u64))
-			.saturating_add(RocksDbWeight::get().writes((4_u64).saturating_mul(n.into())))
-			.saturating_add(Weight::from_parts(0, 5144).saturating_mul(n.into()))
+			.saturating_add(RocksDbWeight::get().writes((42_u64).saturating_mul(n.into())))
+			.saturating_add(Weight::from_parts(0, 102880).saturating_mul(n.into()))
 	}
 	/// Storage: `FileSystem::IncompleteStorageRequests` (r:10 w:10)
 	/// Proof: `FileSystem::IncompleteStorageRequests` (`max_values`: None, `max_size`: Some(1916), added: 4391, mode: `MaxEncodedLen`)
