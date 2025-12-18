@@ -939,11 +939,13 @@ where
             }
         }
 
-        // Now acquire a file storage read lock only for metadata/proof generation, without any awaits.
-        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-
         for respond in filtered_responses {
             info!(target: LOG_TARGET, "Processing response for file key {:x}", respond.file_key);
+
+            // Acquire a file storage read lock only for metadata/proof generation,
+            // for each iteration of the loop, to avoid holding the lock for too long.
+            let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+
             let bucket_id = match read_file_storage.get_metadata(&respond.file_key) {
                 Ok(Some(metadata)) => H256::from_slice(metadata.bucket_id().as_ref()),
                 Ok(None) => {
@@ -996,8 +998,6 @@ where
                 }
             }
         }
-
-        drop(read_file_storage);
 
         let mut storage_request_msp_response = Vec::new();
 
