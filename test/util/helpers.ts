@@ -193,7 +193,7 @@ export const cleanupEnvironment = async (verbose = false) => {
   }
 
   if (postgresContainer) {
-    console.log("Stopping postgres container");
+    verbose && console.log("Stopping postgres container");
     promises.push(docker.getContainer(postgresContainer.Id).remove({ force: true }));
   } else {
     verbose && console.log("No postgres container found, skipping");

@@ -4,19 +4,24 @@ version = "0.2.3"
 edition = "2021"
 
 [dependencies]
+alloy-core = { version = "0.8", features = ["serde"] }
+alloy-signer = "0.8"
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
 axum-extra = { workspace = true }
 axum-jwt = { workspace = true }
+http = { workspace = true }
 base64 = { workspace = true }
 bigdecimal = { workspace = true }
+bytes = "1.9"
+cfg-if = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
+codec = { workspace = true }
 diesel = { workspace = true }
 diesel-async = { workspace = true }
 futures = { workspace = true }
-alloy-core = { version = "0.8", features = ["serde"] }
-alloy-signer = "0.8"
+frame-support = { workspace = true }
 headers = { workspace = true }
 hex = { workspace = true }
 hex-literal = { workspace = true }
@@ -24,6 +29,13 @@ jsonrpsee = { workspace = true, features = ["client", "ws-client"] }
 jsonwebtoken = { workspace = true }
 parking_lot = { workspace = true }
 rand = { workspace = true }
+reqwest = { version = "0.12", default-features = false, features = [
+	"rustls-tls",
+	"stream",
+] }
+rustls = { workspace = true }
+rustls-pemfile = { workspace = true }
+rustls-platform-verifier = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -35,20 +47,13 @@ tower-http = { workspace = true }
 tracing = { workspace = true }
 tracing-bunyan-formatter = { workspace = true }
 tracing-subscriber = { workspace = true }
-rustls = { workspace = true }
-rustls-platform-verifier = { workspace = true }
+trie-db = { workspace = true }
 tokio-postgres = { workspace = true }
 tokio-postgres-rustls = { workspace = true }
-rustls-pemfile = { workspace = true }
-reqwest = { version = "0.12", default-features = false, features = [
-	"rustls-tls",
-	"stream",
-] }
 uuid = { version = "1.18", features = ["v7"] }
 serde_with = "3.15.1"
 
 # Workspace dependencies
-codec = { workspace = true }
 sc-network = { workspace = true }
 sc-network-types = { workspace = true }
 shc-common = { workspace = true, default-features = true }
@@ -61,7 +66,12 @@ shp-types = { workspace = true }
 sp-core = { workspace = true }
 sp-runtime = { workspace = true }
 sp-trie = { workspace = true }
-trie-db = { workspace = true }
+pallet-storage-providers = { workspace = true, features = ["std"] }
+
+# Optional deps
+sh-solochain-evm-runtime = { workspace = true, features = [
+	"std",
+], optional = true }
 
 [dev-dependencies]
 alloy-signer = "0.8"
@@ -73,5 +83,8 @@ testcontainers = "0.24"
 testcontainers-modules = { version = "0.12", features = ["postgres"] }
 
 [features]
-default = []
-mocks = []
+default = ["solochain"]
+mocks = ["solochain"]
+
+# Runtime selection
+solochain = ["dep:sh-solochain-evm-runtime"]

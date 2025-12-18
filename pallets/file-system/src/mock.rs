@@ -24,13 +24,10 @@ use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
-    traits::{
-        BlakeTwo256, BlockNumberProvider, Convert, ConvertBack, IdentifyAccount, IdentityLookup,
-        Verify, Zero,
-    },
+    traits::{BlakeTwo256, Convert, ConvertBack, IdentifyAccount, IdentityLookup, Verify, Zero},
     BuildStorage, DispatchError, MultiSignature, Perbill, SaturatedConversion,
 };
-use sp_std::collections::btree_set::BTreeSet;
+use sp_std::collections::{btree_map::BTreeMap, btree_set::BTreeSet};
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 use sp_weights::FixedFee;
 use std::{
@@ -351,19 +348,6 @@ impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
     }
 }
 
-/// Mock implementation of the relay chain data provider, which should return the relay chain block
-/// that the previous parachain block was anchored to.
-pub struct MockRelaychainDataProvider;
-impl BlockNumberProvider for MockRelaychainDataProvider {
-    type BlockNumber = u32;
-    fn current_block_number() -> Self::BlockNumber {
-        frame_system::Pallet::<Test>::block_number()
-            .saturating_sub(1)
-            .try_into()
-            .unwrap()
-    }
-}
-
 type StorageDataUnit = u64;
 pub struct StorageDataUnitAndBalanceConverter;
 impl Convert<StorageDataUnit, Balance> for StorageDataUnitAndBalanceConverter {
@@ -573,7 +557,7 @@ where
         (
             MemoryDB<T::Hash>,
             Self::Key,
-            Vec<(Self::Key, Option<Vec<u8>>)>,
+            BTreeMap<Self::Key, TrieMutation>,
         ),
         DispatchError,
     > {
@@ -583,7 +567,7 @@ where
                 0 => *root,
                 _ => mutations.last().unwrap().0,
             },
-            Vec::new(),
+            BTreeMap::new(),
         ))
     }
 }

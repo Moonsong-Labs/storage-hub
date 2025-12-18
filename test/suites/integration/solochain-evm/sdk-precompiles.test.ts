@@ -22,8 +22,10 @@ import {
   type SqlClient,
   waitFor
 } from "../../../util";
+import type { StatsResponse } from "../../../util/backend/types";
 import { SH_EVM_SOLOCHAIN_CHAIN_ID } from "../../../util/evmNet/consts";
 import { ALITH_PRIVATE_KEY } from "../../../util/evmNet/keyring";
+import { fileURLToPath } from "node:url";
 
 await describeMspNet(
   "Solochain EVM SDK Precompiles Integration",
@@ -51,9 +53,6 @@ await describeMspNet(
     let storageRequestTxHash: `0x${string}`;
     let fileLocation: string;
     let mspClient: MspClient;
-    let sessionToken: string | undefined;
-    const sessionProvider = async () =>
-      sessionToken ? ({ token: sessionToken, user: { address: "" } } as const) : undefined;
 
     before(async () => {
       userApi = await createUserApi();
@@ -87,8 +86,9 @@ await describeMspNet(
       });
 
       // Set up the FileManager instance for the file to manipulate
-      const testFilePath = new URL("../../../../docker/resource/adolphus.jpg", import.meta.url)
-        .pathname;
+      const testFilePath = fileURLToPath(
+        new URL("../../../../docker/resource/adolphus.jpg", import.meta.url)
+      );
       const testFileSize = statSync(testFilePath).size;
       fileManager = new FileManager({
         size: testFileSize,
@@ -101,7 +101,8 @@ await describeMspNet(
       const mspBackendHttpConfig: HttpClientConfig = {
         baseUrl: "http://127.0.0.1:8080"
       };
-      mspClient = await MspClient.connect(mspBackendHttpConfig, sessionProvider);
+      // Create MspClient without session provider initially
+      mspClient = await MspClient.connect(mspBackendHttpConfig);
 
       // Wait for the backend to be ready
       await userApi.docker.waitForLog({
@@ -118,7 +119,9 @@ await describeMspNet(
       const siweDomain = "localhost:3000";
       const siweUri = "http://localhost:3000";
       const siweSession = await mspClient.auth.SIWE(walletClient, siweDomain, siweUri);
-      sessionToken = siweSession.token;
+
+      // Set the session provider after authentication
+      mspClient.setSessionProvider(async () => siweSession);
 
       assert(createIndexerApi, "Indexer API not available");
       indexerApi = await createIndexerApi();
@@ -148,6 +151,33 @@ await describeMspNet(
         profile.address,
         getAddress(account.address),
         "Profile address should be checksummed and match wallet address"
+      );
+    });
+
+    it("Should authenticate using SIWX (CAIP-122) flow", async () => {
+      // Create a new client without sessionProvider to test SIWX flow
+      const mspBackendHttpConfig: HttpClientConfig = {
+        baseUrl: "http://127.0.0.1:8080"
+      };
+      const siwxClient = await MspClient.connect(mspBackendHttpConfig);
+
+      // Authenticate using SIWX (CAIP-122) - no domain parameter needed
+      const siwxUri = "http://localhost:3000";
+      const siwxSession = await siwxClient.auth.SIWX(walletClient, siwxUri);
+
+      // Verify we got a session token
+      assert(siwxSession.token, "SIWX should return a session token");
+      assert(siwxSession.user, "SIWX should return user info");
+
+      // Update the client's sessionProvider with the new session
+      siwxClient.setSessionProvider(async () => siwxSession);
+
+      // Verify authentication works by fetching profile
+      const profile = await siwxClient.auth.getProfile();
+      strictEqual(
+        profile.address,
+        getAddress(account.address),
+        "SIWX profile address should match wallet address"
       );
     });
 
@@ -203,59 +233,55 @@ await describeMspNet(
     });
 
     it("Should get MSP stats via the SDK's MspClient", async () => {
-      const stats = await mspClient.info.getStats();
-      // TODO: Backend returns mocked stats (see backend/lib/src/services/msp.rs).
-      // When the backend serves real values, replace these fixed expectations
-      // with config-driven or dynamic assertions.
-      const expectedTotal = 1_099_511_627_776; // 1 TiB
-      const expectedUsed = 219_902_325_556;
-      const expectedAvailable = 879_609_302_220;
-      const expectedBuckets = 1024;
-      const expectedActiveUsers = 152;
-      const expectedLastCapacityChange = 123;
-      const expectedValuePropsAmount = 42;
+      // Get MSP info from chain to compare with backend stats
+      const mspId = userApi.shConsts.DUMMY_MSP_ID;
+      const mspInfoOption = await userApi.query.providers.mainStorageProviders(mspId);
+      assert(mspInfoOption.isSome, "MSP should exist on chain");
+      const mspInfo = mspInfoOption.unwrap();
 
+      // Get active users count via runtime API
+      const activeUsersList =
+        await userApi.call.paymentStreamsApi.getUsersOfPaymentStreamsOfProvider(mspId);
+      const activeUsersCount = activeUsersList.length;
+
+      // Get stats from backend via SDK
+      const stats = (await mspClient.info.getStats()) as StatsResponse;
+
+      // Verify capacity values match chain data
       strictEqual(
         stats.capacity.totalBytes,
-        expectedTotal,
-        "MSP total capacity should match backend mock value"
+        mspInfo.capacity.toString(),
+        "MSP total capacity should match on-chain data"
       );
       strictEqual(
         stats.capacity.usedBytes,
-        expectedUsed,
-        "MSP used capacity should match backend mock value"
+        mspInfo.capacityUsed.toString(),
+        "MSP used capacity should match on-chain data"
       );
       strictEqual(
         stats.capacity.availableBytes,
-        expectedAvailable,
-        "MSP available capacity should match backend mock value"
+        (mspInfo.capacity.toBigInt() - mspInfo.capacityUsed.toBigInt()).toString(),
+        "MSP available capacity should match calculated value (total - used)"
       );
       strictEqual(
         stats.bucketsAmount,
-        expectedBuckets,
-        "MSP buckets amount should match backend mock value"
+        mspInfo.amountOfBuckets.toString(),
+        "MSP buckets amount should match on-chain data"
       );
       strictEqual(
         stats.activeUsers,
-        expectedActiveUsers,
-        "MSP active users should match backend mock value"
+        activeUsersCount,
+        "MSP active users should match runtime API data"
       );
       strictEqual(
         stats.lastCapacityChange,
-        expectedLastCapacityChange,
-        "MSP last capacity change should match backend mock value"
+        mspInfo.lastCapacityChange.toString(),
+        "MSP last capacity change should match on-chain data"
       );
       strictEqual(
         stats.valuePropsAmount,
-        expectedValuePropsAmount,
-        "MSP value props amount should match backend mock value"
-      );
-
-      // Sanity check invariants
-      strictEqual(
-        stats.capacity.availableBytes + stats.capacity.usedBytes,
-        stats.capacity.totalBytes,
-        "available + used should equal total capacity"
+        mspInfo.amountOfValueProps.toString(),
+        "MSP value props amount should match on-chain data"
       );
     });
 

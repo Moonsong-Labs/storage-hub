@@ -48,7 +48,7 @@ use sp_runtime::{
     traits::{BlakeTwo256, Convert, ConvertBack, Verify},
     AccountId32, DispatchError, Perbill, SaturatedConversion,
 };
-use sp_std::collections::btree_set::BTreeSet;
+use sp_std::collections::{btree_map::BTreeMap, btree_set::BTreeSet};
 use sp_std::vec;
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 use sp_version::RuntimeVersion;
@@ -844,7 +844,7 @@ where
         (
             MemoryDB<T::Hash>,
             Self::Key,
-            Vec<(Self::Key, Option<Vec<u8>>)>,
+            BTreeMap<Self::Key, TrieMutation>,
         ),
         DispatchError,
     > {
@@ -854,7 +854,7 @@ where
                 0 => *root,
                 _ => mutations.last().unwrap().0,
             },
-            Vec::new(),
+            BTreeMap::new(),
         ))
     }
 }

@@ -14,15 +14,15 @@ use frame_system::{pallet_prelude::BlockNumberFor, EnsureRoot, EnsureSigned};
 use shp_file_metadata::{FileMetadata, Fingerprint};
 use shp_traits::{
     CommitRevealRandomnessInterface, CommitmentVerifier, MaybeDebug, ProofSubmittersInterface,
-    TrieMutation, TrieProofDeltaApplier,
+    TrieMutation, TrieProofDeltaApplier, TrieRemoveMutation,
 };
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
 use sp_runtime::{
-    traits::{BlakeTwo256, BlockNumberProvider, Convert, ConvertBack, IdentityLookup},
+    traits::{BlakeTwo256, Convert, ConvertBack, IdentityLookup},
     BuildStorage, DispatchError, Perbill, SaturatedConversion,
 };
-use sp_std::collections::btree_set::BTreeSet;
+use sp_std::collections::{btree_map::BTreeMap, btree_set::BTreeSet};
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -179,19 +179,6 @@ pub struct BlockNumberToBalance;
 impl Convert<BlockNumberFor<Test>, Balance> for BlockNumberToBalance {
     fn convert(block_number: BlockNumberFor<Test>) -> Balance {
         block_number.into() // In this converter we assume that the block number type is smaller in size than the balance type
-    }
-}
-
-/// Mock implementation of the relay chain data provider, which should return the relay chain block
-/// that the previous parachain block was anchored to.
-pub struct MockRelaychainDataProvider;
-impl BlockNumberProvider for MockRelaychainDataProvider {
-    type BlockNumber = u32;
-    fn current_block_number() -> Self::BlockNumber {
-        frame_system::Pallet::<Test>::block_number()
-            .saturating_sub(1)
-            .try_into()
-            .unwrap()
     }
 }
 
@@ -435,7 +422,7 @@ where
         (
             MemoryDB<T::Hash>,
             Self::Key,
-            Vec<(Self::Key, Option<Vec<u8>>)>,
+            BTreeMap<Self::Key, TrieMutation>,
         ),
         DispatchError,
     > {
@@ -443,45 +430,49 @@ where
 
         let db = MemoryDB::<T::Hash>::default();
 
-        let mutated_keys_and_values = mutations
-            .iter()
-            .map(|(key, mutation)| {
-                let value = match mutation {
-                    TrieMutation::Add(add_mutation) => Some(add_mutation.value.clone()),
-                    TrieMutation::Remove(_) => {
-                        let file_metadata: FileMetadata<
-                            { shp_constants::H_LENGTH },
-                            { shp_constants::FILE_CHUNK_SIZE },
-                            { shp_constants::FILE_SIZE_TO_CHALLENGES },
-                        > = match FileMetadata::new(
-                            1_u64.encode(),
-                            blake2_256(b"bucket").as_ref().to_vec(),
-                            b"path/to/file".to_vec(),
-                            1,
-                            Fingerprint::default().into(),
-                        ) {
-                            Ok(file_metadata) => file_metadata,
-                            Err(_) => {
-                                return Err(DispatchError::Other("Failed to create file metadata"))
-                            }
-                        };
+        let mut applied_mutations = BTreeMap::new();
 
-                        if key.as_ref() != [0; H_LENGTH] {
-                            Some(file_metadata.encode())
-                        } else {
-                            Some(vec![1, 2, 3, 4, 5, 6]) // We make it so the metadata is invalid for the empty key
+        for (key, mutation) in mutations {
+            match mutation {
+                TrieMutation::Add(add_mutation) => {
+                    applied_mutations.insert(*key, add_mutation.clone().into());
+                }
+                TrieMutation::Remove(_) => {
+                    let file_metadata: FileMetadata<
+                        { shp_constants::H_LENGTH },
+                        { shp_constants::FILE_CHUNK_SIZE },
+                        { shp_constants::FILE_SIZE_TO_CHALLENGES },
+                    > = match FileMetadata::new(
+                        1_u64.encode(),
+                        blake2_256(b"bucket").as_ref().to_vec(),
+                        b"path/to/file".to_vec(),
+                        1,
+                        Fingerprint::default().into(),
+                    ) {
+                        Ok(file_metadata) => file_metadata,
+                        Err(_) => {
+                            return Err(DispatchError::Other("Failed to create file metadata"))
                         }
-                    }
-                };
-                Ok((*key, value))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+                    };
 
-        let mutated_keys_and_values = mutated_keys_and_values;
+                    if key.as_ref() != [0; H_LENGTH] {
+                        applied_mutations.insert(
+                            *key,
+                            TrieRemoveMutation::with_value(file_metadata.encode()).into(),
+                        );
+                    } else {
+                        applied_mutations.insert(
+                            *key,
+                            TrieRemoveMutation::with_value(vec![1, 2, 3, 4, 5, 6]).into(),
+                        ); // We make it so the metadata is invalid for the empty key
+                    }
+                }
+            }
+        }
 
         // Return default db, the last key in mutations as the new root, and a
         // vector holding the supposedly mutated keys and values, so it is deterministic for testing.
-        Ok((db, last_key, mutated_keys_and_values))
+        Ok((db, last_key, applied_mutations))
     }
 }
 

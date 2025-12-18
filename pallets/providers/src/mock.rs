@@ -19,11 +19,11 @@ use shp_traits::{
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_runtime::{
-    traits::{BlakeTwo256, BlockNumberProvider, Convert, ConvertBack, IdentityLookup},
+    traits::{BlakeTwo256, Convert, ConvertBack, IdentityLookup},
     BuildStorage, DispatchError, Perbill, SaturatedConversion,
 };
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
@@ -127,20 +127,6 @@ pub struct TreasuryAccount;
 impl Get<AccountId> for TreasuryAccount {
     fn get() -> AccountId {
         1000
-    }
-}
-
-// Randomness pallet:
-/// Mock implementation of the relay chain data provider, which should return the relay chain block
-/// that the previous parachain block was anchored to.
-pub struct MockRelaychainDataProvider;
-impl BlockNumberProvider for MockRelaychainDataProvider {
-    type BlockNumber = u32;
-    fn current_block_number() -> Self::BlockNumber {
-        frame_system::Pallet::<Test>::block_number()
-            .saturating_sub(1)
-            .try_into()
-            .unwrap()
     }
 }
 
@@ -295,12 +281,12 @@ where
         (
             MemoryDB<T::Hash>,
             Self::Key,
-            Vec<(Self::Key, Option<Vec<u8>>)>,
+            BTreeMap<Self::Key, TrieMutation>,
         ),
         DispatchError,
     > {
         // Just return the root as is with no mutations
-        Ok((MemoryDB::<T::Hash>::default(), *root, Vec::new()))
+        Ok((MemoryDB::<T::Hash>::default(), *root, BTreeMap::new()))
     }
 }
 
