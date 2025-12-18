@@ -1439,6 +1439,15 @@ where
             return;
         }
 
+        // Skip sync blocks as they're handled entirely by `handle_sync_block_notification`.
+        // This prevents:
+        // 1. Double-processing of reorgs during sync (which would trigger unwanted events)
+        // 2. Premature triggering of `handle_initial_sync` during any reorgs during sync
+        // 3. Duplicate `register_best_block_and_check_reorg` calls
+        if notification.origin == sp_consensus::BlockOrigin::NetworkInitialSync {
+            return;
+        }
+
         // Check if this new imported block is the new best, and if it causes a reorg.
         let new_block_notification_kind = self.register_best_block_and_check_reorg(&notification);
 
@@ -1506,19 +1515,17 @@ where
     ///
     /// ## Reorg handling during sync
     ///
-    /// Substrate's notification behavior during initial sync:
-    /// - **Linear sync blocks**: Only `every_import_notification_stream` fires
-    /// - **Reorg during sync**: Both `every_import_notification_stream` and `block_import_notification_stream` fire
+    /// Reorgs during sync are handled entirely by this function.
+    /// This is important because:
+    /// 1. We don't want to trigger the full block import event processing during sync (as we would process unwanted events)
+    /// 2. We don't want to prematurely trigger `handle_initial_sync` during any reorgs during sync
+    /// 3. We still need to properly revert retracted blocks and apply enacted blocks via `forest_root_changes_catchup`
     ///
     /// When a reorg happens during sync:
-    /// 1. This handler receives the notification but skips it (reorg detection via `register_best_block_and_check_reorg`)
-    /// 2. `block_import_notification_stream` also fires (because `tree_route.is_some()` makes
-    ///    `should_notify_recent_block = true` in Substrate)
-    /// 3. The normal `process_block_import` flow gets executed
-    /// 4. `forest_root_changes_catchup(&tree_route)` properly reverts the retracted blocks' mutations
-    ///    and enacts the new blocks' mutations.
-    ///
-    /// This ensures reorgs are always handled correctly with proper mutation reversions, even during sync.
+    /// 1. This handler receives the notification and detects it as a reorg
+    /// 2. `process_sync_reorg` properly reverts the retracted blocks' mutations,
+    ///    enacts the new blocks' mutations and processes finality for them
+    /// 3. Updates the last processed block to the new best
     async fn handle_sync_block_notification(
         &mut self,
         notification: BlockImportNotification<OpaqueBlock>,
@@ -1541,45 +1548,26 @@ where
         // Check if this new imported block is the new best, and if it causes a reorg.
         let new_block_notification_kind = self.register_best_block_and_check_reorg(&notification);
 
-        // Only process new best blocks that are linear extensions (not reorgs or non-best blocks).
-        let block_info = match new_block_notification_kind {
-            NewBlockNotificationKind::NewBestBlock { new_best_block, .. } => new_best_block,
-            // Skip non-best blocks (uncle/stale blocks not on the canonical chain)
-            NewBlockNotificationKind::NewNonBestBlock(_) => return,
-            // Skip reorgs siknce they're handled by `block_import_notification_stream` which fires
-            // for reorgs even during sync, triggering proper forest_root_changes_catchup
-            NewBlockNotificationKind::Reorg { .. } => return,
-        };
-
-        let MinimalBlockInfo {
-            number: block_number,
-            hash: block_hash,
-        } = block_info;
-
-        info!(target: LOG_TARGET, "🔄 Processing initial sync block #{}: {:?}", block_number, block_hash);
-
-        // Ensure the provider ID is synced before processing mutations
-        self.sync_provider_id(&block_hash);
-
-        // Process mutations based on the provider type
-        match &self.maybe_managed_provider {
-            Some(ManagedProvider::Bsp(bsp_handler)) => {
-                let bsp_id = bsp_handler.bsp_id;
-                self.process_bsp_sync_mutations(&block_hash, bsp_id).await;
+        match new_block_notification_kind {
+            NewBlockNotificationKind::NewBestBlock { new_best_block, .. } => {
+                // Process the new best block as a linear chain extension
+                self.process_sync_block(&new_best_block.hash, new_best_block.number)
+                    .await;
             }
-            Some(ManagedProvider::Msp(msp_handler)) => {
-                let msp_id = msp_handler.msp_id;
-                self.process_msp_sync_mutations(&block_hash, msp_id).await;
+            NewBlockNotificationKind::NewNonBestBlock(_) => {
+                // Skip non-best blocks (uncle/stale blocks not on the canonical chain)
+                return;
             }
-            None => {}
+            NewBlockNotificationKind::Reorg {
+                new_best_block,
+                tree_route,
+                ..
+            } => {
+                // Process the reorg
+                self.process_sync_reorg(&tree_route, new_best_block.number)
+                    .await;
+            }
         }
-
-        // Check if this block is already finalized and process finality events if so
-        // This ensures file storage cleanup happens for finalized blocks during sync
-        self.process_finality_events_if_finalized(&block_hash, block_number);
-
-        // Update the last processed block number in persistent storage for tracking
-        self.update_last_processed_block(block_number);
     }
 
     /// Initialises the Blockchain Service with variables that should be checked and

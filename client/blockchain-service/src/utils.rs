@@ -2123,6 +2123,82 @@ where
         }
     }
 
+    /// Process a single block during sync.
+    ///
+    /// This is a helper function that encapsulates the common logic for processing
+    /// sync blocks during linear chain extensions. It:
+    /// 1. Syncs the provider ID
+    /// 2. Processes mutations based on the provider type (BSP or MSP)
+    /// 3. Checks for finality and processes finality events if the block is finalized
+    /// 4. Updates the last processed block number
+    ///
+    /// Note: For reorgs during sync, mutations are handled by `forest_root_changes_catchup`
+    /// instead, so this function should NOT be called for enacted blocks in a reorg. We instead
+    /// use `process_sync_reorg` for reorgs.
+    pub(crate) async fn process_sync_block(
+        &mut self,
+        block_hash: &Runtime::Hash,
+        block_number: BlockNumber<Runtime>,
+    ) {
+        info!(target: LOG_TARGET, "🔄 Processing initial sync block #{}: {:?}", block_number, block_hash);
+
+        // Ensure the provider ID is synced before processing mutations
+        self.sync_provider_id(block_hash);
+
+        // Process mutations based on the provider type
+        match &self.maybe_managed_provider {
+            Some(ManagedProvider::Bsp(bsp_handler)) => {
+                let bsp_id = bsp_handler.bsp_id;
+                self.process_bsp_sync_mutations(block_hash, bsp_id).await;
+            }
+            Some(ManagedProvider::Msp(msp_handler)) => {
+                let msp_id = msp_handler.msp_id;
+                self.process_msp_sync_mutations(block_hash, msp_id).await;
+            }
+            None => {}
+        }
+
+        // Check if this block is already finalized and process finality events if so
+        // This ensures file storage cleanup happens for finalized blocks during sync
+        self.process_finality_events_if_finalized(block_hash, block_number);
+
+        // Update the last processed block number in persistent storage for tracking
+        self.update_last_processed_block(block_number);
+    }
+
+    /// Process a reorg during sync.
+    ///
+    /// This handles reorgs that occur while the node is in initial sync mode.
+    /// Unlike `process_sync_block` which handles linear chain extensions, this function:
+    /// 1. Reverts mutations for retracted blocks (via `forest_root_changes_catchup`)
+    /// 2. Applies mutations for enacted blocks (via `forest_root_changes_catchup`)
+    /// 3. Processes finality events for all enacted blocks
+    /// 4. Updates the last processed block number
+    pub(crate) async fn process_sync_reorg(
+        &mut self,
+        tree_route: &TreeRoute<OpaqueBlock>,
+        new_best_block_number: BlockNumber<Runtime>,
+    ) {
+        info!(
+            target: LOG_TARGET,
+            "🔄 Processing reorg during sync: {} retracted, {} enacted",
+            tree_route.retracted().len(),
+            tree_route.enacted().len()
+        );
+
+        // Apply forest root changes for the reorg (revert retracted, apply enacted mutations)
+        self.forest_root_changes_catchup(tree_route).await;
+
+        // Process finality events for enacted blocks
+        for block in tree_route.enacted() {
+            let block_num: BlockNumber<Runtime> = block.number.saturated_into();
+            self.process_finality_events_if_finalized(&block.hash, block_num);
+        }
+
+        // Update the last processed block to the new best
+        self.update_last_processed_block(new_best_block_number);
+    }
+
     /// Process finality events for a given block.
     ///
     /// This retrieves the events from storage for the block and processes them:
