@@ -139,8 +139,9 @@ await describeMspNet(
       // Verify MSP accepted storage request event
       await userApi.assert.eventPresent("fileSystem", "MspAcceptedStorageRequest");
 
-      // Verify that the ProcessMspRespondStoringRequest event handler reached the end of the process
-      // signaling that it should have removed the file key from Processing status.
+      // Verify that the ProcessMspRespondStoringRequest event handler reached the end of the process.
+      // This means that `msp_upload_file` task has finished processing the storage request, and in
+      // processing this block, the Blockchain Service would have removed the file key from Processing status.
       await waitForLog({
         containerName: "storage-hub-sh-msp-1",
         searchString: "Processed ProcessMspRespondStoringRequest for MSP",
