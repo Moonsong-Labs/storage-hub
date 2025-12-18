@@ -81,7 +81,7 @@ where
                             .apply_forest_mutation(forest_key.clone(), &file_key, &mutation)
                             .await
                         {
-                            error!(target: LOG_TARGET, "Failed to apply mutation during sync: {:?}", e);
+                            error!(target: LOG_TARGET, "CRITICAL ❗❗ Failed to apply mutation during sync: {:?}", e);
                         }
                     }
                 }

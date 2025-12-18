@@ -52,7 +52,7 @@ use crate::{
         SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
     handler::LOG_TARGET,
-    state::{LastProcessedBlockCf, LastProcessedBlockNumberCf},
+    state::LastProcessedBlockCf,
     transaction_watchers::spawn_transaction_watcher,
     types::{
         BspHandler, Extrinsic, ManagedProvider, MinimalBlockInfo, MspHandler,
@@ -61,6 +61,10 @@ use crate::{
     },
     BlockchainService,
 };
+
+#[allow(deprecated)]
+// LastProcessedBlockNumberCf is deprecated but kept for backward compatibility
+use crate::state::LastProcessedBlockNumberCf;
 
 impl<FSH, Runtime> BlockchainService<FSH, Runtime>
 where

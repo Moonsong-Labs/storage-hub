@@ -63,11 +63,11 @@ where
         {
             Ok(Ok(buckets)) => buckets,
             Ok(Err(e)) => {
-                error!(target: LOG_TARGET, "Failed to query buckets for MSP during sync: {:?}", e);
+                error!(target: LOG_TARGET, "CRITICAL ❗❗ Failed to query buckets for MSP during sync. If this block {:?} had any mutations, this node will not be able to process them: {:?}", block_hash, e);
                 return;
             }
             Err(e) => {
-                error!(target: LOG_TARGET, "Runtime API error querying buckets for MSP during sync: {:?}", e);
+                error!(target: LOG_TARGET, "CRITICAL ❗❗ Runtime API error querying buckets for MSP during sync. If this block {:?} had any mutations, this node will not be able to process them: {:?}", block_hash, e);
                 return;
             }
         };
@@ -120,7 +120,7 @@ where
                             .apply_forest_mutation(forest_key.clone(), &file_key, &mutation)
                             .await
                         {
-                            error!(target: LOG_TARGET, "Failed to apply mutation during sync for bucket [{:?}]: {:?}", bucket_id, e);
+                            error!(target: LOG_TARGET, "CRITICAL ❗❗ Failed to apply mutation during sync for bucket [{:?}]: {:?}", bucket_id, e);
                         }
                     }
                 }
@@ -377,11 +377,11 @@ where
             self.client
                     .runtime_api()
                     .query_buckets_for_msp(*block_hash, &managed_msp_id)
-                    .inspect_err(|e| error!(target: LOG_TARGET, "Runtime API call failed while querying buckets for MSP [{:?}]: {:?}", managed_msp_id, e))
+                    .inspect_err(|e| error!(target: LOG_TARGET, "CRITICAL ❗❗ Runtime API call failed while querying buckets for MSP [{:?}]: {:?}", managed_msp_id, e))
                     .ok()
                     .and_then(|api_result| {
                         api_result
-                            .inspect_err(|e| error!(target: LOG_TARGET, "Runtime API error while querying buckets for MSP [{:?}]: {:?}", managed_msp_id, e))
+                            .inspect_err(|e| error!(target: LOG_TARGET, "CRITICAL ❗❗ Runtime API error while querying buckets for MSP [{:?}]: {:?}", managed_msp_id, e))
                             .ok()
                     });
 
