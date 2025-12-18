@@ -4,10 +4,10 @@ use crate::{
     types::{
         BalanceOf, BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionIdFor,
         FileKeyWithProof, FileLocation, FileMetadata, FileOperation, FileOperationIntention,
-        IncompleteStorageRequestMetadata, MoveBucketRequestMetadata, PeerIds, ProviderIdFor,
-        ReplicationTarget, StorageDataUnit, StorageRequestBspsMetadata, StorageRequestMetadata,
-        StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse, StorageRequestTtl,
-        ThresholdType, TickNumber, ValuePropId,
+        IncompleteStorageRequestMetadata, MoveBucketRequestMetadata, MspStorageRequestStatus,
+        PeerIds, ProviderIdFor, ReplicationTarget, StorageDataUnit, StorageRequestBspsMetadata,
+        StorageRequestMetadata, StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
+        StorageRequestTtl, ThresholdType, TickNumber, ValuePropId,
     },
     weights::WeightInfo,
     Config, Error, Event, IncompleteStorageRequests, NextAvailableStorageRequestExpirationTick,
@@ -2307,14 +2307,13 @@ mod request_storage {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -2463,14 +2462,13 @@ mod request_storage {
                         location: file_1_location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -2504,14 +2502,13 @@ mod request_storage {
                         location: file_2_location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -2639,14 +2636,13 @@ mod request_storage {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -3330,15 +3326,15 @@ mod msp_respond_storage_request {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(first_file_key)
                         .unwrap()
-                        .msp,
-                    Some((msp_id, true))
+                        .msp_status,
+                    MspStorageRequestStatus::AcceptedNewFile(msp_id)
                 );
 
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(second_file_key)
                         .unwrap()
-                        .msp,
-                    Some((msp_id, true))
+                        .msp_status,
+                    MspStorageRequestStatus::AcceptedNewFile(msp_id)
                 );
 
                 // Assert that the MSP used capacity has been updated.
@@ -3474,16 +3470,16 @@ mod msp_respond_storage_request {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(first_file_key)
                         .unwrap()
-                        .msp,
-                    Some((msp_id, true))
+                        .msp_status,
+                    MspStorageRequestStatus::AcceptedNewFile(msp_id)
                 );
 
                 // Assert that the storage was updated
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(second_file_key)
                         .unwrap()
-                        .msp,
-                    Some((msp_id, true))
+                        .msp_status,
+                    MspStorageRequestStatus::AcceptedNewFile(msp_id)
                 );
 
                 // Assert that the MSP used capacity has been updated.
@@ -3625,16 +3621,16 @@ mod msp_respond_storage_request {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(first_file_key)
                         .unwrap()
-                        .msp,
-                    Some((msp_id, true))
+                        .msp_status,
+                    MspStorageRequestStatus::AcceptedNewFile(msp_id)
                 );
 
                 // Assert that the storage was updated
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(second_file_key)
                         .unwrap()
-                        .msp,
-                    Some((msp_id, true))
+                        .msp_status,
+                    MspStorageRequestStatus::AcceptedNewFile(msp_id)
                 );
 
                 // Assert that the MSP used capacity has been updated.
@@ -4017,14 +4013,13 @@ mod msp_respond_storage_request {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: None,
+                        msp_status: MspStorageRequestStatus::None,
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: 100,
 						deposit_paid: 0,
-						msp_accepted_with_inclusion_proof: false,
                     },
                 );
 
@@ -4093,14 +4088,13 @@ mod msp_respond_storage_request {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: None,
+                        msp_status: MspStorageRequestStatus::None,
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: 100,
 						deposit_paid: 0,
-						msp_accepted_with_inclusion_proof: false,
                     },
                 );
 
@@ -4341,14 +4335,13 @@ mod msp_respond_storage_request {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((expected_msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(expected_msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: 100,
 						deposit_paid: 0,
-						msp_accepted_with_inclusion_proof: false,
                     },
                 );
 
@@ -4421,14 +4414,13 @@ mod msp_respond_storage_request {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: 100,
 						deposit_paid: 0,
-						msp_accepted_with_inclusion_proof: false,
                     },
                 );
 
@@ -5463,8 +5455,8 @@ mod bsp_confirm {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key)
                         .unwrap()
-                        .msp,
-                    Some((msp_id, true))
+                        .msp_status,
+                    MspStorageRequestStatus::AcceptedNewFile(msp_id)
                 );
 
                 // Calculate in how many ticks the BSP can volunteer for the file
@@ -5953,7 +5945,7 @@ mod bsp_confirm {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
@@ -5963,7 +5955,6 @@ mod bsp_confirm {
 						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 								),
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -6321,7 +6312,7 @@ mod bsp_confirm {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
@@ -6331,7 +6322,6 @@ mod bsp_confirm {
 						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 						),
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -6470,7 +6460,7 @@ mod bsp_confirm {
                         location: location.clone(),
                         fingerprint,
                         size: new_size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
@@ -6480,7 +6470,6 @@ mod bsp_confirm {
 						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 						),
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -6611,7 +6600,7 @@ mod bsp_confirm {
                 // Modify the storage request to simulate the MSP having accepted it.
                 file_system::StorageRequests::<Test>::mutate(file_key, |maybe_metadata| {
                     if let Some(metadata) = maybe_metadata {
-                        metadata.msp = Some((msp_id, true))
+                        metadata.msp_status = MspStorageRequestStatus::AcceptedNewFile(msp_id)
                     }
                 });
 
@@ -6893,7 +6882,7 @@ mod bsp_stop_storing {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
@@ -6903,7 +6892,6 @@ mod bsp_stop_storing {
 						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 						),
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -7046,7 +7034,7 @@ mod bsp_stop_storing {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
@@ -7056,7 +7044,6 @@ mod bsp_stop_storing {
 						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 						),
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -7202,7 +7189,7 @@ mod bsp_stop_storing {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
@@ -7212,7 +7199,6 @@ mod bsp_stop_storing {
 						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 						),
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -7450,14 +7436,13 @@ mod bsp_stop_storing {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -7497,14 +7482,13 @@ mod bsp_stop_storing {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -7664,14 +7648,13 @@ mod bsp_stop_storing {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -7717,14 +7700,13 @@ mod bsp_stop_storing {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -7865,14 +7847,13 @@ mod bsp_stop_storing {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -7929,14 +7910,13 @@ mod bsp_stop_storing {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -8145,14 +8125,13 @@ mod bsp_stop_storing {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
 						expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -8192,14 +8171,13 @@ mod bsp_stop_storing {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
 						expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -8415,14 +8393,13 @@ mod bsp_stop_storing {
                         location: first_file_location.clone(),
                         fingerprint: first_file_fingerprint,
                         size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
 						expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 				assert_eq!(
@@ -8434,14 +8411,13 @@ mod bsp_stop_storing {
                         location: second_file_location.clone(),
                         fingerprint: second_file_fingerprint,
                         size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
 						expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -8473,14 +8449,13 @@ mod bsp_stop_storing {
                         location: first_file_location.clone(),
                         fingerprint: first_file_fingerprint,
                         size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
 						expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -8696,14 +8671,13 @@ mod bsp_stop_storing {
                         location: location.clone(),
                         fingerprint: H256::zero(),
                         size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: Default::default(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -8821,14 +8795,13 @@ mod bsp_stop_storing {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: Default::default(),
                         bsps_required: current_bsps_required.checked_add(1).unwrap(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -8938,14 +8911,13 @@ mod bsp_stop_storing {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: None,
+                        msp_status: MspStorageRequestStatus::None,
                         user_peer_ids: Default::default(),
                         bsps_required: 1,
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -9533,14 +9505,13 @@ mod stop_storing_for_insolvent_user {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -9791,14 +9762,13 @@ mod stop_storing_for_insolvent_user {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, true)),
+                        msp_status: MspStorageRequestStatus::AcceptedNewFile(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -9980,14 +9950,13 @@ mod stop_storing_for_insolvent_user {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -10270,14 +10239,13 @@ mod stop_storing_for_insolvent_user {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -10540,14 +10508,13 @@ mod stop_storing_for_insolvent_user {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, false)),
+                        msp_status: MspStorageRequestStatus::Pending(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -10791,14 +10758,13 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, true)),
+                        msp_status: MspStorageRequestStatus::AcceptedNewFile(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -10995,14 +10961,13 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, true)),
+                        msp_status: MspStorageRequestStatus::AcceptedNewFile(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
-						msp_accepted_with_inclusion_proof: false,
                     })
                 );
 
@@ -11666,7 +11631,7 @@ mod msp_stop_storing_bucket {
                 // Verify both BSP and MSP have confirmed storing
                 let storage_request = StorageRequests::<Test>::get(&file_key).unwrap();
                 assert_eq!(storage_request.bsps_confirmed, 1);
-                assert_eq!(storage_request.msp, Some((msp_id, true)));
+                assert!(storage_request.msp_status.is_accepted());
 
                 // Owner revokes storage request
                 assert_ok!(FileSystem::revoke_storage_request(
@@ -12158,14 +12123,13 @@ mod request_file_deletion {
                     location: location.clone(),
                     fingerprint,
                     size,
-                    msp: None,
+                    msp_status: MspStorageRequestStatus::None,
                     user_peer_ids: peer_ids.clone(),
                     bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                     bsps_confirmed: 0,
                     bsps_volunteered: 0,
                     expires_at: current_tick + 100,
                     deposit_paid: 0,
-                    msp_accepted_with_inclusion_proof: false,
                 },
             );
 
@@ -13361,7 +13325,7 @@ mod delete_file_tests {
                 // Verify MSP has accepted
                 let storage_request = StorageRequests::<Test>::get(&file_key).unwrap();
                 assert!(
-                    matches!(storage_request.msp, Some((_, true))),
+                    storage_request.msp_status.is_accepted(),
                     "MSP should have accepted the storage request"
                 );
 
@@ -14468,7 +14432,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                 // Verify MSP has accepted storing (no BSPs confirmed)
                 let storage_request = StorageRequests::<Test>::get(&file_key).unwrap();
                 assert_eq!(storage_request.bsps_confirmed, 0);
-                assert_eq!(storage_request.msp, Some((msp_id, true)));
+                assert!(storage_request.msp_status.is_accepted());
 
                 // Verify incomplete storage request does not exist initially
                 assert!(
@@ -14590,7 +14554,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                 // Verify both BSP and MSP have confirmed storing
                 let storage_request = StorageRequests::<Test>::get(&file_key).unwrap();
                 assert_eq!(storage_request.bsps_confirmed, 1);
-                assert_eq!(storage_request.msp, Some((msp_id, true)));
+                assert!(storage_request.msp_status.is_accepted());
 
                 // Verify incomplete storage request does not exist initially
                 assert!(
@@ -14741,7 +14705,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                 // Verify both BSP and MSP have confirmed storing
                 let storage_request = StorageRequests::<Test>::get(&file_key).unwrap();
                 assert_eq!(storage_request.bsps_confirmed, 1);
-                assert_eq!(storage_request.msp, Some((msp_id, true)));
+                assert!(storage_request.msp_status.is_accepted());
 
                 // Verify incomplete storage request does not exist initially
                 assert!(
@@ -15225,7 +15189,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                 // Verify MSP accepted but no BSPs confirmed
                 let request_before_expiry = StorageRequests::<Test>::get(&file_key).unwrap();
                 assert_eq!(request_before_expiry.bsps_confirmed, 0, "No BSPs should be confirmed");
-                assert_eq!(request_before_expiry.msp, Some((msp_id, true)), "MSP should have accepted");
+                assert_eq!(request_before_expiry.msp_status, MspStorageRequestStatus::AcceptedNewFile(msp_id), "MSP should have accepted");
 
                 // Trigger storage request expiration: MSP accepted but no BSPs confirmed,
                 // We treat this as an fulfilled storage request.
@@ -15318,14 +15282,13 @@ mod delete_files_for_incomplete_storage_request_tests {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, true)), // MSP confirmed
+                        msp_status: MspStorageRequestStatus::AcceptedExistingFile(msp_id), // MSP confirmed with inclusion proof
                         user_peer_ids: PeerIds::<Test>::try_from(vec![]).unwrap(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: current_tick + 100,
                         deposit_paid: 0,
-                        msp_accepted_with_inclusion_proof: true, // MSP confirmed with inclusion proof
                     },
                 );
 
@@ -15426,8 +15389,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                 // Manually update storage request to simulate MSP confirming with non-inclusion proof
                 // (file was newly added to bucket)
 								let mut storage_request_metadata = StorageRequests::<Test>::get(&file_key).unwrap();
-								storage_request_metadata.msp = Some((msp_id, true));
-								storage_request_metadata.msp_accepted_with_inclusion_proof = false;
+								storage_request_metadata.msp_status = MspStorageRequestStatus::AcceptedNewFile(msp_id);
 								StorageRequests::<Test>::insert(file_key, storage_request_metadata);
 
                 // Delete the file from the BSP
@@ -15619,14 +15581,13 @@ mod delete_files_for_incomplete_storage_request_tests {
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: Some((msp_id, true)), // MSP confirmed
+                        msp_status: MspStorageRequestStatus::AcceptedExistingFile(msp_id), // MSP confirmed with inclusion proof
                         user_peer_ids: PeerIds::<Test>::try_from(vec![]).unwrap(),
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0, // NO BSPs confirmed
                         bsps_volunteered: 0,
                         expires_at: current_tick + 100,
                         deposit_paid: 0,
-                        msp_accepted_with_inclusion_proof: true, // MSP confirmed with inclusion proof
                     },
                 );
 

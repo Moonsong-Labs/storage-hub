@@ -47,10 +47,10 @@ use crate::{
         CollectionIdFor, ExpirationItem, FileDeletionRequest, FileKeyHasher, FileKeyWithProof,
         FileLocation, FileMetadata, FileOperation, FileOperationIntention, Fingerprint,
         ForestProof, IncompleteStorageRequestMetadata, MerkleHash, MoveBucketRequestMetadata,
-        MultiAddresses, PeerIds, PendingStopStoringRequest, ProviderIdFor, RejectedStorageRequest,
-        ReplicationTarget, ReplicationTargetType, StorageDataUnit, StorageRequestBspsMetadata,
-        StorageRequestMetadata, StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
-        StorageRequestMspResponse, TickNumber, ValuePropId,
+        MspStorageRequestStatus, MultiAddresses, PeerIds, PendingStopStoringRequest, ProviderIdFor,
+        RejectedStorageRequest, ReplicationTarget, ReplicationTargetType, StorageDataUnit,
+        StorageRequestBspsMetadata, StorageRequestMetadata, StorageRequestMspAcceptedFileKeys,
+        StorageRequestMspBucketResponse, StorageRequestMspResponse, TickNumber, ValuePropId,
     },
     weights::WeightInfo,
     BucketsWithStorageRequests, Error, Event, HoldReason, IncompleteStorageRequests, Pallet,
@@ -999,7 +999,7 @@ where
         );
 
         // If a MSP ID is provided, this storage request came from a user.
-        let msp = if let Some(ref msp_id) = msp_id {
+        let msp_status = if let Some(ref msp_id) = msp_id {
             // Check that the received Provider ID corresponds to a valid MSP.
             ensure!(
                 <T::Providers as ReadStorageProvidersInterface>::is_msp(msp_id),
@@ -1035,9 +1035,9 @@ where
                 Preservation::Preserve,
             )?;
 
-            Some((*msp_id, false))
+            MspStorageRequestStatus::Pending(*msp_id)
         } else {
-            None
+            MspStorageRequestStatus::None
         };
 
         // Compute the file key used throughout this file's lifespan.
@@ -1080,14 +1080,13 @@ where
             location: location.clone(),
             fingerprint,
             size,
-            msp,
+            msp_status,
             user_peer_ids: user_peer_ids.clone().unwrap_or_default(),
             bsps_required: replication_target,
             bsps_confirmed: zero,
             bsps_volunteered: zero,
             expires_at: expiration_tick,
             deposit_paid: deposit,
-            msp_accepted_with_inclusion_proof: false,
         };
 
         // Hold the required deposit from the user.
@@ -1611,19 +1610,18 @@ where
                 Error::<T>::MspNotStoringBucket
             );
 
-            // Check that the storage request has a MSP.
-            ensure!(
-                storage_request_metadata.msp.is_some(),
-                Error::<T>::RequestWithoutMsp
-            );
+            // Check that the storage request has a pending MSP.
+            let request_msp_id = match &storage_request_metadata.msp_status {
+                MspStorageRequestStatus::Pending(id) => *id,
+                MspStorageRequestStatus::None => return Err(Error::<T>::RequestWithoutMsp.into()),
+                MspStorageRequestStatus::AcceptedNewFile(_)
+                | MspStorageRequestStatus::AcceptedExistingFile(_) => {
+                    return Err(Error::<T>::MspAlreadyConfirmed.into())
+                }
+            };
 
-            let (request_msp_id, confirm_status) = storage_request_metadata.msp.unwrap();
-
-            // Check that the sender corresponds to the MSP in the storage request and that it hasn't yet confirmed storing the file.
+            // Check that the sender corresponds to the MSP in the storage request.
             ensure!(request_msp_id == msp_id, Error::<T>::NotSelectedMsp);
-
-            // Check that the MSP hasn't already confirmed storing the file.
-            ensure!(!confirm_status, Error::<T>::MspAlreadyConfirmed);
 
             // Check that the MSP still has enough available capacity to store the file.
             ensure!(
@@ -1698,11 +1696,13 @@ where
                     file_key: file_key_with_proof.file_key,
                 });
             } else {
-                // Set as confirmed the MSP in the storage request metadata.
-                storage_request_metadata.msp = Some((msp_id, true));
-
-                // Mark whether MSP confirmed with an inclusion proof
-                storage_request_metadata.msp_accepted_with_inclusion_proof = is_inclusion_proof;
+                // Set the MSP acceptance status in the storage request metadata.
+                // The status depends on whether the MSP accepted with an inclusion or non-inclusion forestproof.
+                storage_request_metadata.msp_status = if is_inclusion_proof {
+                    MspStorageRequestStatus::AcceptedExistingFile(msp_id)
+                } else {
+                    MspStorageRequestStatus::AcceptedNewFile(msp_id)
+                };
 
                 // Update storage request metadata.
                 <StorageRequests<T>>::set(
@@ -2127,11 +2127,10 @@ where
             );
 
             // Remove storage request if we reached the required number of BSPs and the MSP has accepted to store the file.
+            // If there's no MSP assigned to it, we treat it as accepted since BSP-only requests don't need MSP acceptance.
             if storage_request_metadata.bsps_confirmed == storage_request_metadata.bsps_required
-                && storage_request_metadata
-                    .msp
-                    .map(|(_, confirmed)| confirmed)
-                    .unwrap_or(true)
+                && (storage_request_metadata.msp_status.is_accepted()
+                    || !storage_request_metadata.msp_status.has_msp())
             {
                 // Cleanup all storage request related data.
                 Self::cleanup_storage_request(&file_key, &storage_request_metadata);
@@ -2261,12 +2260,10 @@ where
             Error::<T>::StorageRequestNotAuthorized
         );
 
-        // We check if there are any BSP or MSP that has already confirmed the storage request
-        // This means, either the confirmed BSPs count in not zero, or the msp is some, and the confirmed flag is true
+        // We check if there are any BSP or MSP that have already confirmed or accepted the storage request.
+        // This means, either the confirmed BSPs count is not zero, or the MSP has accepted.
         if !storage_request_metadata.bsps_confirmed.is_zero()
-            || storage_request_metadata
-                .msp
-                .is_some_and(|(_, confirmed)| confirmed)
+            || storage_request_metadata.msp_status.is_accepted()
         {
             // We create the incomplete storage request metadata and insert it into the incomplete storage requests
             let incomplete_storage_request_metadata: IncompleteStorageRequestMetadata<T> =
@@ -2937,27 +2934,17 @@ where
         msp_id: ProviderIdFor<T>,
     ) -> BTreeMap<MerkleHash<T>, StorageRequestMetadata<T>> {
         StorageRequests::<T>::iter()
-            .filter(|(_, metadata)| {
-                if let Some(msp) = metadata.msp {
-                    msp.0 == msp_id
-                } else {
-                    false
-                }
-            })
+            .filter(|(_, metadata)| metadata.msp_status.msp_id() == Some(msp_id))
             .collect()
     }
 
     pub fn pending_storage_requests_by_msp(
         msp_id: ProviderIdFor<T>,
     ) -> BTreeMap<MerkleHash<T>, StorageRequestMetadata<T>> {
-        // Get the storage requests for a specific MSP
+        // Get the storage requests for a specific MSP that are still pending response
         StorageRequests::<T>::iter()
             .filter(|(_, metadata)| {
-                if let Some(msp) = metadata.msp {
-                    msp.0 == msp_id && !msp.1
-                } else {
-                    false
-                }
+                metadata.msp_status.msp_id() == Some(msp_id) && metadata.msp_status.is_pending()
             })
             .collect()
     }
@@ -3362,7 +3349,8 @@ mod hooks {
     use crate::{
         pallet,
         types::{
-            IncompleteStorageRequestMetadata, MerkleHash, RejectedStorageRequestReason, TickNumber,
+            IncompleteStorageRequestMetadata, MerkleHash, MspStorageRequestStatus,
+            RejectedStorageRequestReason, TickNumber,
         },
         utils::BucketIdFor,
         weights::WeightInfo,
@@ -3543,8 +3531,10 @@ mod hooks {
                 .fold(0u32, |acc, _| acc.saturating_add(One::one()));
 
             match storage_request_metadata {
-                Some(storage_request_metadata) => match storage_request_metadata.msp {
-                    None | Some((_, true)) => {
+                Some(storage_request_metadata) => match &storage_request_metadata.msp_status {
+                    MspStorageRequestStatus::None
+                    | MspStorageRequestStatus::AcceptedNewFile(_)
+                    | MspStorageRequestStatus::AcceptedExistingFile(_) => {
                         // If the request was originated by a request to stop storing from a BSP for a file that had no
                         // storage request open, or if the MSP has already accepted storing the file (and the bucket and
                         // payment stream with the user still exists), treat the storage request as fulfilled with whatever
@@ -3562,7 +3552,7 @@ mod hooks {
                             ),
                         );
                     }
-                    Some((msp_id, false)) => {
+                    MspStorageRequestStatus::Pending(msp_id) => {
                         // If the MSP did not accept the file in time, treat the storage request as rejected.
                         if !storage_request_metadata.bsps_confirmed.is_zero() {
                             // There are BSPs that have confirmed storing the file, so we need to create an incomplete storage request metadata
@@ -3587,7 +3577,7 @@ mod hooks {
                         // If there are no BSPs the event is just informative.
                         Self::deposit_event(Event::StorageRequestRejected {
                             file_key,
-                            msp_id,
+                            msp_id: *msp_id,
                             bucket_id: storage_request_metadata.bucket_id,
                             reason: RejectedStorageRequestReason::RequestExpired,
                         });
