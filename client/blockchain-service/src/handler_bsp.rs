@@ -49,7 +49,7 @@ where
     /// before state pruning can occur. This ensures the local forest stays in sync with
     /// the on-chain state even when the node has been offline for a long period.
     pub(crate) async fn process_bsp_sync_mutations(
-        &self,
+        &mut self,
         block_hash: &Runtime::Hash,
         bsp_id: BackupStorageProviderId<Runtime>,
     ) {

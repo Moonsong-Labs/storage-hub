@@ -50,7 +50,7 @@ where
     /// This ensures the local bucket forests stay in sync with the on-chain state
     /// even when the node has been offline for a long period.
     pub(crate) async fn process_msp_sync_mutations(
-        &self,
+        &mut self,
         block_hash: &Runtime::Hash,
         msp_id: ProviderId<Runtime>,
     ) {

@@ -25,6 +25,7 @@ use shc_common::{
         get_provider_id_from_keystore, GetProviderIdError,
     },
     traits::{ExtensionOperations, KeyTypeOperations, StorageEnableRuntime},
+    typed_store::ProvidesTypedDbSingleAccess,
     types::{
         AccountId, BlockNumber, FileKey, Fingerprint, ForestRoot, MinimalExtension, OpaqueBlock,
         ProofsDealerProviderId, StorageEnableEvents, StorageHubClient, StorageProviderId,
@@ -51,6 +52,7 @@ use crate::{
         SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
     handler::LOG_TARGET,
+    state::LastProcessedBlockNumberCf,
     transaction_watchers::spawn_transaction_watcher,
     types::{
         BspHandler, Extrinsic, ManagedProvider, MinimalBlockInfo, MspHandler,
@@ -2076,5 +2078,255 @@ where
             }
             _ => {}
         }
+    }
+
+    /// Process finality events for a block if it has been finalized.
+    ///
+    /// This is used during catch-up and initial sync to emit finality events for blocks
+    /// that are already finalized, ensuring file storage cleanup happens correctly.
+    /// The check compares the block number against the current finalized block number
+    /// from the client.
+    ///
+    /// Additionally updates `last_finalised_block_processed` to track finality progress
+    /// during sync.
+    pub(crate) fn process_finality_events_if_finalized(
+        &mut self,
+        block_hash: &Runtime::Hash,
+        block_number: BlockNumber<Runtime>,
+    ) {
+        // Get the current finalized block number from the client
+        let finalized_number: BlockNumber<Runtime> =
+            self.client.info().finalized_number.saturated_into();
+
+        // Only process if this block is finalized
+        if block_number > finalized_number {
+            return;
+        }
+
+        info!(
+            target: LOG_TARGET,
+            "📦 Processing finality events for already-finalized block #{} during sync",
+            block_number
+        );
+
+        self.process_finality_events(block_hash);
+
+        // Update last_finalised_block_processed if this block is more recent
+        if block_number > self.last_finalised_block_processed.number {
+            self.last_finalised_block_processed = MinimalBlockInfo {
+                number: block_number,
+                hash: *block_hash,
+            };
+        }
+    }
+
+    /// Process finality events for a given block.
+    ///
+    /// This retrieves the events from storage for the block and processes them:
+    /// - Common finality events applicable to all provider types
+    /// - Provider-specific finality events (BSP or MSP)
+    ///
+    /// This is called both from `handle_finality_notification` for real-time finality
+    /// and from `process_finality_events_if_finalized` during catch-up/sync.
+    pub(crate) fn process_finality_events(&self, block_hash: &Runtime::Hash) {
+        match get_events_at_block::<Runtime>(&self.client, block_hash) {
+            Ok(block_events) => {
+                for ev in block_events {
+                    // Process the events applicable regardless of whether this node is managing a BSP or an MSP.
+                    self.process_common_finality_events(ev.event.clone().into());
+
+                    // Process Provider-specific events.
+                    match &self.maybe_managed_provider {
+                        Some(ManagedProvider::Bsp(_)) => {
+                            self.bsp_process_finality_events(block_hash, ev.event.clone().into());
+                        }
+                        Some(ManagedProvider::Msp(_)) => {
+                            self.msp_process_finality_events(block_hash, ev.event.clone().into());
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Err(e) => {
+                // TODO: This can happen for older blocks where state has been pruned, or if
+                // we're parsing a block authored with an older version of the runtime
+                // using a node that has a newer version of the runtime. Consider using runtime APIs
+                // for getting old data of previous blocks, and this just for current blocks.
+                error!(
+                        target: LOG_TARGET,
+                        "Failed to get events for block {:?}: {:?}",
+                        block_hash, e
+                );
+            }
+        }
+    }
+
+    /// Catch up on any blocks that were imported to the database but not processed.
+    ///
+    /// This handles race conditions during shutdown where the Substrate client database commits a block write
+    /// before our handlers fully processed it. On restart, we compare `last_processed_block`
+    /// (from persistent storage) with the database's `best_block` and process any gap.
+    ///
+    /// This function also initializes `self.best_block` to the client's actual best block,
+    /// ensuring we start from the correct position regardless of whether there are missed blocks.
+    pub(crate) async fn catch_up_missed_blocks(&mut self) {
+        // Get the best block saved in the node's Substrate client database
+        let chain_info = self.client.info();
+        let best_number: BlockNumber<Runtime> = chain_info.best_number.saturated_into();
+        let best_hash = chain_info.best_hash;
+
+        // Initialize self.best_block to match the client's actual state
+        self.best_block = MinimalBlockInfo {
+            number: best_number,
+            hash: best_hash,
+        };
+
+        // Get the last processed block saved in the node's persistent storage
+        let Some(last_processed_number) = self.get_last_processed_block() else {
+            // If there's no `last_processed_block` in persistent storage, it means this is the first startup of the node, which
+            // means there's nothing to catch up on.
+            info!(target: LOG_TARGET, "No last processed block found in persistent storage. Skipping startup catch up.");
+            return;
+        };
+
+        // If the best block is not greater than the last processed block, there's nothing to catch up on
+        if best_number <= last_processed_number {
+            info!(
+                target: LOG_TARGET,
+                "No missed blocks to catch up (last_processed={}, best={})",
+                last_processed_number, best_number
+            );
+            return;
+        }
+
+        // If the best block is greater than the last processed block, there are missed blocks to catch up on
+        info!(
+            target: LOG_TARGET,
+            "🔄 Catching up missed blocks from #{} to #{}",
+            last_processed_number, best_number
+        );
+
+        // Get the hash of the last processed block
+        let last_processed_hash = match self.client.hash(last_processed_number.saturated_into()) {
+            Ok(Some(hash)) => hash,
+            Ok(None) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "Could not find hash for last processed block #{}. Skipping startup catchup.",
+                    last_processed_number
+                );
+                return;
+            }
+            Err(e) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "Failed to get hash for last processed block #{}: {:?}. Skipping startup catchup.",
+                    last_processed_number, e
+                );
+                return;
+            }
+        };
+
+        // Build the tree route from the last processed block to the best block
+        let tree_route = match sp_blockchain::tree_route(
+            self.client.as_ref(),
+            last_processed_hash,
+            best_hash,
+        ) {
+            Ok(route) => route,
+            Err(e) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "Failed to build tree route for startup catchup: {:?}. Block may have been pruned.",
+                    e
+                );
+                return;
+            }
+        };
+
+        let enacted_count = tree_route.enacted().len();
+
+        // Get the finalized block number before catching up
+        let finalized_number: BlockNumber<Runtime> = chain_info.finalized_number.saturated_into();
+
+        // Process mutations for each enacted block
+        for block in tree_route.enacted() {
+            info!(target: LOG_TARGET, "⏩ Processing startup catch up block #{}: {:?}", block.number, block.hash);
+            // Sync the provider ID for this block (in case it changed)
+            self.sync_provider_id(&block.hash);
+
+            // Process mutations based on provider type
+            match &self.maybe_managed_provider {
+                Some(ManagedProvider::Bsp(bsp_handler)) => {
+                    let bsp_id = bsp_handler.bsp_id;
+                    self.process_bsp_sync_mutations(&block.hash, bsp_id).await;
+                }
+                Some(ManagedProvider::Msp(msp_handler)) => {
+                    let msp_id = msp_handler.msp_id;
+                    self.process_msp_sync_mutations(&block.hash, msp_id).await;
+                }
+                None => {}
+            }
+
+            // If this block is finalized, also process finality events for file storage cleanup
+            let block_num: BlockNumber<Runtime> = block.number.saturated_into();
+            self.process_finality_events_if_finalized(&block.hash, block_num);
+        }
+
+        // Update the local best block and last processed block to reflect the catch up
+        self.best_block = MinimalBlockInfo {
+            number: best_number,
+            hash: best_hash,
+        };
+        self.update_last_processed_block(best_number);
+
+        // Update last_finalised_block_processed based on how far we've caught up
+        // If best_number <= finalized_number, all caught-up blocks are finalized
+        if best_number <= finalized_number {
+            self.last_finalised_block_processed = MinimalBlockInfo {
+                number: best_number,
+                hash: best_hash,
+            };
+        } else {
+            // Only some blocks are finalized, update to the finalized block
+            if let Ok(Some(finalized_hash)) = self.client.hash(finalized_number.saturated_into()) {
+                self.last_finalised_block_processed = MinimalBlockInfo {
+                    number: finalized_number,
+                    hash: finalized_hash,
+                };
+            }
+        }
+
+        info!(
+            target: LOG_TARGET,
+            "✅ Startup catchup complete. Processed {} missed block(s).",
+            enacted_count
+        );
+    }
+
+    /// Update the last processed block number in persistent storage.
+    ///
+    /// This value is used on startup to detect and process any blocks that were imported
+    /// to the database but not fully processed (e.g., due to race conditions during shutdown).
+    pub(crate) fn update_last_processed_block(&self, block_number: BlockNumber<Runtime>) {
+        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+        state_store_context
+            .access_value(&LastProcessedBlockNumberCf::<Runtime> {
+                phantom: Default::default(),
+            })
+            .write(&block_number);
+        state_store_context.commit();
+    }
+
+    /// Read the last processed block number from persistent storage.
+    ///
+    /// Returns `None` if no block has been processed yet (first run).
+    pub(crate) fn get_last_processed_block(&self) -> Option<BlockNumber<Runtime>> {
+        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+        state_store_context
+            .access_value(&LastProcessedBlockNumberCf::<Runtime> {
+                phantom: Default::default(),
+            })
+            .read()
     }
 }
