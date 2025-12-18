@@ -2082,13 +2082,16 @@ where
 
     /// Process finality events for a block if it has been finalized.
     ///
-    /// This is used during catch-up and initial sync to emit finality events for blocks
-    /// that are already finalized, ensuring file storage cleanup happens correctly.
-    /// The check compares the block number against the current finalized block number
-    /// from the client.
+    /// This is used during catch-up and initial sync to eagerly process finality for
+    /// blocks that are already finalized, ensuring file storage cleanup happens correctly
+    /// before state might be pruned.
     ///
-    /// Additionally updates `last_finalised_block_processed` to track finality progress
-    /// during sync.
+    /// Updates `last_finalised_block_processed` to track finality progress. This is used by
+    /// `handle_finality_notification` to avoid double-processing blocks that were already
+    /// handled here during sync.
+    ///
+    /// Note: For blocks imported before they're finalized, finality processing is handled
+    /// by `handle_finality_notification` when the finality justification eventually arrives.
     pub(crate) fn process_finality_events_if_finalized(
         &mut self,
         block_hash: &Runtime::Hash,
@@ -2193,7 +2196,7 @@ where
         if best_number <= last_processed_number {
             info!(
                 target: LOG_TARGET,
-                "No missed blocks to catch up (last_processed={}, best={})",
+                "☑️ No missed blocks to catch up (last_processed={}, best={})",
                 last_processed_number, best_number
             );
             return;

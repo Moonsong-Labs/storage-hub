@@ -1745,7 +1745,7 @@ where
         notification: FinalityNotification<OpaqueBlock>,
     ) {
         let block_hash = notification.hash;
-        let block_number = *notification.header.number();
+        let block_number: BlockNumber<Runtime> = (*notification.header.number()).saturated_into();
 
         // If the node is running in maintenance mode, we don't process finality notifications.
         if self.maintenance_mode {
@@ -1753,18 +1753,69 @@ where
             return;
         }
 
+        // Skip if this finalized block was already processed.
+        // This can happen during sync when both `handle_sync_block_notification` (via
+        // `process_finality_events_if_finalized`) and this handler process the same block.
+        // Finality notifications fire even during sync, but we may have
+        // already processed some blocks eagerly based on `client.info().finalized_number`.
+        if block_number <= self.last_finalised_block_processed.number {
+            trace!(
+                target: LOG_TARGET,
+                "📨 Finality notification #{} already processed (last_finalised={}), skipping",
+                block_number,
+                self.last_finalised_block_processed.number
+            );
+            return;
+        }
+
         info!(target: LOG_TARGET, "📨 Finality notification #{}: {:?}", block_number, block_hash);
 
         // Process finality events for all implicitly finalized blocks in tree_route.
-        // tree_route contains all blocks from (old_finalized, new_finalized), i.e., the blocks
+        // tree_route contains all blocks from (old_finalized, new_finalized_parent), i.e., the blocks
         // that were implicitly finalized when jumping from the old finalized to the new one.
+        // The tree_route does not include the latest finalised block itself.
+        //
+        // We filter out blocks that were already processed to avoid double-processing.
+        // This can happen when blocks were processed eagerly during sync via
+        // `process_finality_events_if_finalized`, but the finality gadget's internal finalized state
+        // was behind our `last_finalised_block_processed`.
         if !notification.tree_route.is_empty() {
             info!(
                 target: LOG_TARGET,
                 "📦 Processing finality events for {} implicitly finalized blocks",
                 notification.tree_route.len()
             );
+
+            let last_processed = self.last_finalised_block_processed.number;
+
             for intermediate_hash in notification.tree_route.iter() {
+                // Get the block number for this hash to check if we already processed it
+                let intermediate_number: BlockNumber<Runtime> =
+                    match self.client.number(*intermediate_hash) {
+                        Ok(Some(num)) => num.saturated_into(),
+                        Ok(None) => {
+                            warn!(
+                                target: LOG_TARGET,
+                                "Could not find block number for hash {:?} in tree_route, skipping",
+                                intermediate_hash
+                            );
+                            continue;
+                        }
+                        Err(e) => {
+                            warn!(
+                                target: LOG_TARGET,
+                                "Error getting block number for hash {:?}: {:?}, skipping",
+                                intermediate_hash, e
+                            );
+                            continue;
+                        }
+                    };
+
+                // Skip if already processed
+                if intermediate_number <= last_processed {
+                    continue;
+                }
+
                 self.process_finality_events(intermediate_hash);
             }
         }
