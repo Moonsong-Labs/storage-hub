@@ -17,7 +17,7 @@ use sp_runtime::{
     },
     BoundedVec, DispatchError,
 };
-use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
+use sp_std::{collections::btree_map::BTreeMap, collections::btree_set::BTreeSet, vec::Vec};
 
 #[cfg(feature = "std")]
 pub trait MaybeDebug: Debug {}
@@ -964,6 +964,10 @@ impl TrieRemoveMutation {
             maybe_value: Some(value),
         }
     }
+
+    pub fn with_maybe_value(maybe_value: Option<Vec<u8>>) -> Self {
+        Self { maybe_value }
+    }
 }
 
 impl Into<TrieMutation> for TrieRemoveMutation {
@@ -991,7 +995,7 @@ pub trait TrieProofDeltaApplier<H: sp_core::Hasher> {
         (
             sp_trie::MemoryDB<H>,
             Self::Key,
-            Vec<(Self::Key, Option<Vec<u8>>)>,
+            BTreeMap<Self::Key, TrieMutation>,
         ),
         DispatchError,
     >;
