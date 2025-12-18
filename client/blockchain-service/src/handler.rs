@@ -1718,8 +1718,7 @@ where
                 ..
             } => {
                 // Process the reorg
-                self.process_sync_reorg(&tree_route, new_best_block.number)
-                    .await;
+                self.process_sync_reorg(&tree_route, new_best_block).await;
             }
         }
     }
@@ -1874,7 +1873,10 @@ where
             }
         }
 
-        self.update_last_processed_block(*block_number);
+        self.update_last_processed_block_info(MinimalBlockInfo {
+            number: *block_number,
+            hash: *block_hash,
+        });
     }
 
     /// Handle a finality notification.
