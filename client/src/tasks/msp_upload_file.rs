@@ -335,11 +335,10 @@ where
                 );
                 error!(target: LOG_TARGET, "Failed to handle new storage request: {:?}", reason);
 
-                // Attempt to handle rejection on-chain so user knows
                 self.handle_rejected_storage_request(
                     &file_key,
                     bucket_id,
-                    // TODO: Ideally get a more granular error variant
+                    // TODO: Receive actual reason error variant from internal call to `handle_new_storage_request_event`
                     RejectedStorageRequestReason::InternalError,
                 )
                 .await
@@ -1065,19 +1064,6 @@ where
             });
         }
 
-        // Count total requests being responded to for metrics tracking.
-        let responded_requests_count: u64 = storage_request_msp_response
-            .iter()
-            .map(|r| {
-                let accepts = r
-                    .accept
-                    .as_ref()
-                    .map_or(0, |a| a.file_keys_and_proofs.len());
-                let rejects = r.reject.len();
-                (accepts.saturating_add(rejects)) as u64
-            })
-            .sum();
-
         let call: Runtime::Call =
             pallet_file_system::Call::<Runtime>::msp_respond_storage_requests_multiple_buckets {
                 storage_request_msp_response: storage_request_msp_response.clone(),
@@ -1108,27 +1094,6 @@ where
             )
             .await;
 
-        match &extrinsic_result {
-            Ok(_) => {
-                // Increment metric for successfully responded storage requests
-                inc_counter_by!(
-                    handler: self.storage_hub_handler,
-                    msp_storage_requests_total,
-                    STATUS_SUCCESS,
-                    responded_requests_count
-                );
-            }
-            Err(_) => {
-                // Increment metric for failed storage request responses
-                inc_counter_by!(
-                    handler: self.storage_hub_handler,
-                    msp_storage_requests_total,
-                    STATUS_FAILURE,
-                    responded_requests_count
-                );
-            }
-        }
-
         // Pre collect all file keys from the storage request MSP response so we can update statuses or remove them from statuses.
         let all_file_keys = storage_request_msp_response
             .iter()
@@ -1152,6 +1117,14 @@ where
                     target: LOG_TARGET,
                     "Extrinsic submission failed after exhausting retries, removing file keys from statuses for retry: {:?}",
                     e
+                );
+
+                // Increment metric for failed storage request responses
+                inc_counter_by!(
+                    handler: self.storage_hub_handler,
+                    msp_storage_requests_total,
+                    STATUS_FAILURE,
+                    all_file_keys.len() as u64
                 );
 
                 self.handle_extrinsic_submission_failure(&all_file_keys)
@@ -1185,6 +1158,15 @@ where
                     target: LOG_TARGET,
                     "Expected events but got None - this should not happen. Removing file key statuses to allow re-evaluation on next block."
                 );
+
+                // Increment metric for failed storage request responses (missing events is a failure)
+                inc_counter_by!(
+                    handler: self.storage_hub_handler,
+                    msp_storage_requests_total,
+                    STATUS_FAILURE,
+                    all_file_keys.len() as u64
+                );
+
                 self.handle_missing_extrinsic_events(&all_file_keys).await;
             }
         }
@@ -1529,8 +1511,23 @@ where
 
         let Some(dispatch_error) = maybe_dispatch_error else {
             // No dispatch error found, extrinsic succeeded
+            // Increment metric for successfully responded storage requests
+            inc_counter_by!(
+                handler: self.storage_hub_handler,
+                msp_storage_requests_total,
+                STATUS_SUCCESS,
+                file_keys.len() as u64
+            );
             return Ok(());
         };
+
+        // Dispatch error found, increment failure metric
+        inc_counter_by!(
+            handler: self.storage_hub_handler,
+            msp_storage_requests_total,
+            STATUS_FAILURE,
+            file_keys.len() as u64
+        );
 
         // Convert dispatch error to known StorageHub errors
         let error: Option<StorageEnableErrors<Runtime>> = match dispatch_error {
