@@ -1,5 +1,5 @@
-import assert from "node:assert";
-import { describeBspNet, type EnrichedBspApi, shUser, waitFor } from "../../../util";
+import assert, { strictEqual } from "node:assert";
+import { describeBspNet, type EnrichedBspApi, type FileMetadata, waitFor } from "../../../util";
 
 await describeBspNet(
   "BSPNet: Prometheus metrics ingestion",
@@ -10,6 +10,12 @@ await describeBspNet(
   ({ before, createUserApi, createBspApi, it }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
+
+    const source = "res/whatsup.jpg";
+    const location = "test/prometheus-bspnet-1.jpg";
+    const bucketName = "prometheus-bspnet-bucket";
+
+    let fileMetadata: FileMetadata;
 
     before(async () => {
       userApi = await createUserApi();
@@ -32,9 +38,17 @@ await describeBspNet(
       });
     });
 
+    it("Network launches and can be queried", async () => {
+      const userNodePeerId = await userApi.rpc.system.localPeerId();
+      strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
+
+      const bspNodePeerId = await bspApi.rpc.system.localPeerId();
+      strictEqual(bspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.bsp.expectedPeerId);
+    });
+
     it("Prometheus server is accessible and scraping BSPNet nodes", async () => {
       const response = await fetch(`${userApi.prometheus.url}/-/ready`);
-      assert.strictEqual(response.ok, true, "Prometheus server should be ready");
+      strictEqual(response.ok, true, "Prometheus server should be ready");
 
       const targets = await userApi.prometheus.getTargets();
       const healthyTargets = targets.data.activeTargets.filter((t) => t.health === "up");
@@ -70,39 +84,28 @@ await describeBspNet(
       );
       console.log(`Initial BSP storage requests: ${initialBspRequests}`);
 
-      // Create storage requests
-      const source = "res/whatsup.jpg";
-      const location = "test/prometheus-bspnet-1.jpg";
-      const bucketName = "prometheus-bspnet-bucket";
-
-      await userApi.file.createBucketAndSendNewStorageRequest(
+      // Create bucket and issue storage request
+      fileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(
         source,
         location,
         bucketName,
         null,
-        shUser,
+        null,
         null,
         1
       );
 
-      // Wait for BSP to volunteer and store the file
+      // Wait for BSP volunteer transaction to be in the transaction pool and seal block
       await userApi.wait.bspVolunteer();
-      await userApi.wait.bspStored();
 
-      // Verify file is stored in BSP
-      const fileKey = (
-        await userApi.rpc.storagehubclient.loadFileInStorage(
-          source,
-          location,
-          userApi.shConsts.NODE_INFOS.user.AddressId,
-          userApi.shConsts.DUMMY_MSP_ID
-        )
-      ).file_metadata.file_key;
-
+      // Wait for the BSP to receive the file and store it in its file storage
       await waitFor({
         lambda: async () =>
-          (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
+          (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileMetadata.fileKey)).isFileFound
       });
+
+      // Wait for BSP to confirm storing the file
+      await userApi.wait.bspStored();
 
       // Wait for Prometheus to scrape the updated metrics
       await userApi.prometheus.waitForScrape();
@@ -149,7 +152,7 @@ await describeBspNet(
       // Query all storagehub metrics and log them for visibility
       const result = await userApi.prometheus.query('{__name__=~"storagehub_.*"}');
 
-      assert.strictEqual(result.status, "success", "Failed to query StorageHub metrics");
+      strictEqual(result.status, "success", "Failed to query StorageHub metrics");
 
       // Group metrics by type
       const counters: string[] = [];
@@ -192,7 +195,7 @@ await describeBspNet(
         }
       }
 
-      assert.strictEqual(bspSumResult.status, "success", "Aggregation query should succeed");
+      strictEqual(bspSumResult.status, "success", "Aggregation query should succeed");
     });
   }
 );
