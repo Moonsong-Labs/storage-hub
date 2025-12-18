@@ -2207,7 +2207,7 @@ where
     ///
     /// This is called both from `handle_finality_notification` for real-time finality
     /// and from `process_finality_events_if_finalized` during catch-up/sync.
-    pub(crate) fn process_finality_events(&self, block_hash: &Runtime::Hash) {
+    pub(crate) fn process_finality_events(&mut self, block_hash: &Runtime::Hash) {
         match get_events_at_block::<Runtime>(&self.client, block_hash) {
             Ok(block_events) => {
                 for ev in block_events {

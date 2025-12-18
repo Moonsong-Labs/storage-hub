@@ -143,7 +143,7 @@ where
         self.verify_msp_bucket_roots(&block_hash, &msp_id).await;
 
         // Emit pending storage requests
-        self.handle_pending_storage_requests(block_hash, msp_id);
+        self.handle_pending_storage_requests(&block_hash, msp_id);
     }
 
     /// Initialises the block processing flow for a MSP.
@@ -280,7 +280,7 @@ where
         };
 
         // Monitor for new pending storage requests
-        self.handle_pending_storage_requests(managed_msp_id.clone());
+        self.handle_pending_storage_requests(block_hash, managed_msp_id.clone());
 
         // Distribute files to BSPs
         self.spawn_distribute_file_to_bsps_tasks(block_hash, managed_msp_id);
@@ -1080,14 +1080,14 @@ where
     /// If a file key is not pending, its storage request lifecycle is complete.
     fn handle_pending_storage_requests(
         &mut self,
-        current_block_hash: Runtime::Hash,
+        current_block_hash: &Runtime::Hash,
         msp_id: MainStorageProviderId<Runtime>,
     ) {
         // Query pending storage requests (not yet accepted by MSP)
         let pending_storage_requests = match self
             .client
             .runtime_api()
-            .pending_storage_requests_by_msp(current_block_hash, msp_id)
+            .pending_storage_requests_by_msp(*current_block_hash, msp_id)
         {
             Ok(sr) => sr,
             Err(e) => {
