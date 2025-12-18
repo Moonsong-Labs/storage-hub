@@ -867,6 +867,9 @@ export default {
             IncompleteStorageRequest: {
                 fileKey: 'H256',
             },
+            IncompleteStorageRequestCleanedUp: {
+                fileKey: 'H256',
+            },
             AcceptedBspVolunteer: {
                 _alias: {
                     size_: 'size',
@@ -937,13 +940,6 @@ export default {
                 oldRoot: 'H256',
                 newRoot: 'H256',
             },
-<<<<<<< HEAD
-            IncompleteStorageRequest: {
-                fileKey: 'H256',
-            },
-            IncompleteStorageRequestCleanedUp: {
-                fileKey: 'H256'
-=======
             UsedCapacityShouldBeZero: {
                 actualUsedCapacity: 'u64',
             },
@@ -952,7 +948,6 @@ export default {
                 owner: 'AccountId20',
                 amountToReturn: 'u128',
                 error: 'SpRuntimeDispatchError'
->>>>>>> main
             }
         }
     },
@@ -3088,8 +3083,7 @@ export default {
         location: 'Bytes',
         fingerprint: 'H256',
         size_: 'u64',
-        msp: 'Option<(H256,bool)>',
-        mspAcceptedWithInclusionProof: 'bool',
+        mspStatus: 'PalletFileSystemMspStorageRequestStatus',
         userPeerIds: 'Vec<Bytes>',
         bspsRequired: 'u32',
         bspsConfirmed: 'u32',
@@ -3097,13 +3091,24 @@ export default {
         depositPaid: 'u128'
     },
     /**
-     * Lookup350: pallet_file_system::types::StorageRequestBspsMetadata<T>
+     * Lookup348: pallet_file_system::types::MspStorageRequestStatus<T>
+     **/
+    PalletFileSystemMspStorageRequestStatus: {
+        _enum: {
+            None: 'Null',
+            Pending: 'H256',
+            AcceptedNewFile: 'H256',
+            AcceptedExistingFile: 'H256'
+        }
+    },
+    /**
+     * Lookup349: pallet_file_system::types::StorageRequestBspsMetadata<T>
      **/
     PalletFileSystemStorageRequestBspsMetadata: {
         confirmed: 'bool'
     },
     /**
-     * Lookup352: pallet_file_system::types::PendingFileDeletionRequest<T>
+     * Lookup351: pallet_file_system::types::PendingFileDeletionRequest<T>
      **/
     PalletFileSystemPendingFileDeletionRequest: {
         user: 'AccountId20',
@@ -3114,7 +3119,7 @@ export default {
         queuePriorityChallenge: 'bool'
     },
     /**
-     * Lookup354: pallet_file_system::types::PendingStopStoringRequest<T>
+     * Lookup353: pallet_file_system::types::PendingStopStoringRequest<T>
      **/
     PalletFileSystemPendingStopStoringRequest: {
         tickWhenRequested: 'u32',
@@ -3122,7 +3127,7 @@ export default {
         fileSize: 'u64'
     },
     /**
-     * Lookup355: pallet_file_system::types::MoveBucketRequestMetadata<T>
+     * Lookup354: pallet_file_system::types::MoveBucketRequestMetadata<T>
      **/
     PalletFileSystemMoveBucketRequestMetadata: {
         requester: 'AccountId20',
@@ -3130,7 +3135,7 @@ export default {
         newValuePropId: 'H256'
     },
     /**
-     * Lookup356: pallet_file_system::types::IncompleteStorageRequestMetadata<T>
+     * Lookup355: pallet_file_system::types::IncompleteStorageRequestMetadata<T>
      **/
     PalletFileSystemIncompleteStorageRequestMetadata: {
         owner: 'AccountId20',
@@ -3142,26 +3147,26 @@ export default {
         pendingBucketRemoval: 'bool'
     },
     /**
-     * Lookup358: pallet_file_system::pallet::Error<T>
+     * Lookup357: pallet_file_system::pallet::Error<T>
      **/
     PalletFileSystemError: {
         _enum: ['NotABsp', 'NotAMsp', 'NotASp', 'StorageRequestAlreadyRegistered', 'StorageRequestNotFound', 'StorageRequestExists', 'StorageRequestNotAuthorized', 'StorageRequestBspsRequiredFulfilled', 'TooManyStorageRequestResponses', 'IncompleteStorageRequestNotFound', 'ReplicationTargetCannotBeZero', 'ReplicationTargetExceedsMaximum', 'BspNotVolunteered', 'BspNotConfirmed', 'BspAlreadyConfirmed', 'BspAlreadyVolunteered', 'BspNotEligibleToVolunteer', 'InsufficientAvailableCapacity', 'NoFileKeysToConfirm', 'MspNotStoringBucket', 'NotSelectedMsp', 'MspAlreadyConfirmed', 'RequestWithoutMsp', 'MspAlreadyStoringBucket', 'BucketNotFound', 'BucketNotEmpty', 'NotBucketOwner', 'BucketIsBeingMoved', 'InvalidBucketIdFileKeyPair', 'ValuePropositionNotAvailable', 'CollectionNotFound', 'MoveBucketRequestNotFound', 'InvalidFileKeyMetadata', 'FileSizeCannotBeZero', 'ProviderNotStoringFile', 'FileHasActiveStorageRequest', 'FileHasIncompleteStorageRequest', 'BatchFileDeletionMustContainSingleBucket', 'DuplicateFileKeyInBatchFileDeletion', 'NoFileKeysToDelete', 'FailedToPushFileKeyToBucketDeletionVector', 'FailedToPushUserToBspDeletionVector', 'FailedToPushFileKeyToBspDeletionVector', 'PendingStopStoringRequestNotFound', 'MinWaitForStopStoringNotReached', 'PendingStopStoringRequestAlreadyExists', 'ExpectedNonInclusionProof', 'ExpectedInclusionProof', 'FixedRatePaymentStreamNotFound', 'DynamicRatePaymentStreamNotFound', 'OperationNotAllowedWithInsolventUser', 'UserNotInsolvent', 'OperationNotAllowedForInsolventProvider', 'InvalidSignature', 'InvalidProviderID', 'InvalidSignedOperation', 'NoGlobalReputationWeightSet', 'NoBspReputationWeightSet', 'CannotHoldDeposit', 'MaxTickNumberReached', 'ThresholdArithmeticError', 'RootNotUpdated', 'ImpossibleFailedToGetValue', 'FailedToQueryEarliestFileVolunteerTick', 'FailedToGetOwnerAccount', 'FailedToGetPaymentAccount', 'FailedToComputeFileKey', 'FailedToCreateFileMetadata', 'FileMetadataProcessingQueueFull']
     },
     /**
-     * Lookup360: pallet_proofs_dealer::types::ProofSubmissionRecord<T>
+     * Lookup359: pallet_proofs_dealer::types::ProofSubmissionRecord<T>
      **/
     PalletProofsDealerProofSubmissionRecord: {
         lastTickProven: 'u32',
         nextTickToSubmitProofFor: 'u32'
     },
     /**
-     * Lookup367: pallet_proofs_dealer::pallet::Error<T>
+     * Lookup366: pallet_proofs_dealer::pallet::Error<T>
      **/
     PalletProofsDealerError: {
         _enum: ['NotProvider', 'ChallengesQueueOverflow', 'PriorityChallengesQueueOverflow', 'FeeChargeFailed', 'EmptyKeyProofs', 'ProviderRootNotFound', 'ZeroRoot', 'NoRecordOfLastSubmittedProof', 'ProviderStakeNotFound', 'ZeroStake', 'StakeCouldNotBeConverted', 'ChallengesTickNotReached', 'ChallengesTickTooOld', 'ChallengesTickTooLate', 'SeedNotFound', 'CheckpointChallengesNotFound', 'ForestProofVerificationFailed', 'IncorrectNumberOfKeyProofs', 'KeyProofNotFound', 'KeyProofVerificationFailed', 'FailedToApplyDelta', 'UnexpectedNumberOfRemoveMutations', 'FailedToUpdateProviderAfterKeyRemoval', 'TooManyValidProofSubmitters']
     },
     /**
-     * Lookup369: pallet_payment_streams::types::FixedRatePaymentStream<T>
+     * Lookup368: pallet_payment_streams::types::FixedRatePaymentStream<T>
      **/
     PalletPaymentStreamsFixedRatePaymentStream: {
         rate: 'u128',
@@ -3170,7 +3175,7 @@ export default {
         outOfFundsTick: 'Option<u32>'
     },
     /**
-     * Lookup370: pallet_payment_streams::types::DynamicRatePaymentStream<T>
+     * Lookup369: pallet_payment_streams::types::DynamicRatePaymentStream<T>
      **/
     PalletPaymentStreamsDynamicRatePaymentStream: {
         amountProvided: 'u64',
@@ -3179,26 +3184,26 @@ export default {
         outOfFundsTick: 'Option<u32>'
     },
     /**
-     * Lookup371: pallet_payment_streams::types::ProviderLastChargeableInfo<T>
+     * Lookup370: pallet_payment_streams::types::ProviderLastChargeableInfo<T>
      **/
     PalletPaymentStreamsProviderLastChargeableInfo: {
         lastChargeableTick: 'u32',
         priceIndex: 'u128'
     },
     /**
-     * Lookup372: pallet_payment_streams::pallet::Error<T>
+     * Lookup371: pallet_payment_streams::pallet::Error<T>
      **/
     PalletPaymentStreamsError: {
         _enum: ['PaymentStreamAlreadyExists', 'PaymentStreamNotFound', 'NotAProvider', 'ProviderInconsistencyError', 'CannotHoldDeposit', 'UpdateRateToSameRate', 'UpdateAmountToSameAmount', 'RateCantBeZero', 'AmountProvidedCantBeZero', 'LastChargedGreaterThanLastChargeable', 'InvalidLastChargeableBlockNumber', 'InvalidLastChargeablePriceIndex', 'ChargeOverflow', 'UserWithoutFunds', 'UserNotFlaggedAsWithoutFunds', 'CooldownPeriodNotPassed', 'UserHasRemainingDebt', 'ProviderInsolvent']
     },
     /**
-     * Lookup373: pallet_bucket_nfts::pallet::Error<T>
+     * Lookup372: pallet_bucket_nfts::pallet::Error<T>
      **/
     PalletBucketNftsError: {
         _enum: ['BucketIsNotPrivate', 'NotBucketOwner', 'NoCorrespondingCollection', 'ConvertBytesToBoundedVec']
     },
     /**
-     * Lookup374: pallet_nfts::types::CollectionDetails<fp_account::AccountId20, DepositBalance>
+     * Lookup373: pallet_nfts::types::CollectionDetails<fp_account::AccountId20, DepositBalance>
      **/
     PalletNftsCollectionDetails: {
         owner: 'AccountId20',
@@ -3209,13 +3214,13 @@ export default {
         attributes: 'u32'
     },
     /**
-     * Lookup379: pallet_nfts::types::CollectionRole
+     * Lookup378: pallet_nfts::types::CollectionRole
      **/
     PalletNftsCollectionRole: {
         _enum: ['__Unused0', 'Issuer', 'Freezer', '__Unused3', 'Admin']
     },
     /**
-     * Lookup380: pallet_nfts::types::ItemDetails<fp_account::AccountId20, pallet_nfts::types::ItemDeposit<DepositBalance, fp_account::AccountId20>, bounded_collections::bounded_btree_map::BoundedBTreeMap<fp_account::AccountId20, Option<T>, S>>
+     * Lookup379: pallet_nfts::types::ItemDetails<fp_account::AccountId20, pallet_nfts::types::ItemDeposit<DepositBalance, fp_account::AccountId20>, bounded_collections::bounded_btree_map::BoundedBTreeMap<fp_account::AccountId20, Option<T>, S>>
      **/
     PalletNftsItemDetails: {
         owner: 'AccountId20',
@@ -3223,42 +3228,42 @@ export default {
         deposit: 'PalletNftsItemDeposit'
     },
     /**
-     * Lookup381: pallet_nfts::types::ItemDeposit<DepositBalance, fp_account::AccountId20>
+     * Lookup380: pallet_nfts::types::ItemDeposit<DepositBalance, fp_account::AccountId20>
      **/
     PalletNftsItemDeposit: {
         account: 'AccountId20',
         amount: 'u128'
     },
     /**
-     * Lookup386: pallet_nfts::types::CollectionMetadata<Deposit, StringLimit>
+     * Lookup385: pallet_nfts::types::CollectionMetadata<Deposit, StringLimit>
      **/
     PalletNftsCollectionMetadata: {
         deposit: 'u128',
         data: 'Bytes'
     },
     /**
-     * Lookup387: pallet_nfts::types::ItemMetadata<pallet_nfts::types::ItemMetadataDeposit<DepositBalance, fp_account::AccountId20>, StringLimit>
+     * Lookup386: pallet_nfts::types::ItemMetadata<pallet_nfts::types::ItemMetadataDeposit<DepositBalance, fp_account::AccountId20>, StringLimit>
      **/
     PalletNftsItemMetadata: {
         deposit: 'PalletNftsItemMetadataDeposit',
         data: 'Bytes'
     },
     /**
-     * Lookup388: pallet_nfts::types::ItemMetadataDeposit<DepositBalance, fp_account::AccountId20>
+     * Lookup387: pallet_nfts::types::ItemMetadataDeposit<DepositBalance, fp_account::AccountId20>
      **/
     PalletNftsItemMetadataDeposit: {
         account: 'Option<AccountId20>',
         amount: 'u128'
     },
     /**
-     * Lookup391: pallet_nfts::types::AttributeDeposit<DepositBalance, fp_account::AccountId20>
+     * Lookup390: pallet_nfts::types::AttributeDeposit<DepositBalance, fp_account::AccountId20>
      **/
     PalletNftsAttributeDeposit: {
         account: 'Option<AccountId20>',
         amount: 'u128'
     },
     /**
-     * Lookup395: pallet_nfts::types::PendingSwap<CollectionId, ItemId, pallet_nfts::types::PriceWithDirection<Amount>, Deadline>
+     * Lookup394: pallet_nfts::types::PendingSwap<CollectionId, ItemId, pallet_nfts::types::PriceWithDirection<Amount>, Deadline>
      **/
     PalletNftsPendingSwap: {
         desiredCollection: 'u32',
@@ -3267,59 +3272,59 @@ export default {
         deadline: 'u32'
     },
     /**
-     * Lookup397: pallet_nfts::types::PalletFeature
+     * Lookup396: pallet_nfts::types::PalletFeature
      **/
     PalletNftsPalletFeature: {
         _enum: ['__Unused0', 'Trading', 'Attributes', '__Unused3', 'Approvals', '__Unused5', '__Unused6', '__Unused7', 'Swaps']
     },
     /**
-     * Lookup398: pallet_nfts::pallet::Error<T, I>
+     * Lookup397: pallet_nfts::pallet::Error<T, I>
      **/
     PalletNftsError: {
         _enum: ['NoPermission', 'UnknownCollection', 'AlreadyExists', 'ApprovalExpired', 'WrongOwner', 'BadWitness', 'CollectionIdInUse', 'ItemsNonTransferable', 'NotDelegate', 'WrongDelegate', 'Unapproved', 'Unaccepted', 'ItemLocked', 'LockedItemAttributes', 'LockedCollectionAttributes', 'LockedItemMetadata', 'LockedCollectionMetadata', 'MaxSupplyReached', 'MaxSupplyLocked', 'MaxSupplyTooSmall', 'UnknownItem', 'UnknownSwap', 'MetadataNotFound', 'AttributeNotFound', 'NotForSale', 'BidTooLow', 'ReachedApprovalLimit', 'DeadlineExpired', 'WrongDuration', 'MethodDisabled', 'WrongSetting', 'InconsistentItemConfig', 'NoConfig', 'RolesNotCleared', 'MintNotStarted', 'MintEnded', 'AlreadyClaimed', 'IncorrectData', 'WrongOrigin', 'WrongSignature', 'IncorrectMetadata', 'MaxAttributesLimitReached', 'WrongNamespace', 'CollectionNotEmpty', 'WitnessRequired']
     },
     /**
-     * Lookup401: frame_system::extensions::check_non_zero_sender::CheckNonZeroSender<T>
+     * Lookup400: frame_system::extensions::check_non_zero_sender::CheckNonZeroSender<T>
      **/
     FrameSystemExtensionsCheckNonZeroSender: 'Null',
     /**
-     * Lookup402: frame_system::extensions::check_spec_version::CheckSpecVersion<T>
+     * Lookup401: frame_system::extensions::check_spec_version::CheckSpecVersion<T>
      **/
     FrameSystemExtensionsCheckSpecVersion: 'Null',
     /**
-     * Lookup403: frame_system::extensions::check_tx_version::CheckTxVersion<T>
+     * Lookup402: frame_system::extensions::check_tx_version::CheckTxVersion<T>
      **/
     FrameSystemExtensionsCheckTxVersion: 'Null',
     /**
-     * Lookup404: frame_system::extensions::check_genesis::CheckGenesis<T>
+     * Lookup403: frame_system::extensions::check_genesis::CheckGenesis<T>
      **/
     FrameSystemExtensionsCheckGenesis: 'Null',
     /**
-     * Lookup407: frame_system::extensions::check_nonce::CheckNonce<T>
+     * Lookup406: frame_system::extensions::check_nonce::CheckNonce<T>
      **/
     FrameSystemExtensionsCheckNonce: 'Compact<u32>',
     /**
-     * Lookup408: frame_system::extensions::check_weight::CheckWeight<T>
+     * Lookup407: frame_system::extensions::check_weight::CheckWeight<T>
      **/
     FrameSystemExtensionsCheckWeight: 'Null',
     /**
-     * Lookup409: pallet_transaction_payment::ChargeTransactionPayment<T>
+     * Lookup408: pallet_transaction_payment::ChargeTransactionPayment<T>
      **/
     PalletTransactionPaymentChargeTransactionPayment: 'Compact<u128>',
     /**
-     * Lookup410: frame_metadata_hash_extension::CheckMetadataHash<T>
+     * Lookup409: frame_metadata_hash_extension::CheckMetadataHash<T>
      **/
     FrameMetadataHashExtensionCheckMetadataHash: {
         mode: 'FrameMetadataHashExtensionMode'
     },
     /**
-     * Lookup411: frame_metadata_hash_extension::Mode
+     * Lookup410: frame_metadata_hash_extension::Mode
      **/
     FrameMetadataHashExtensionMode: {
         _enum: ['Disabled', 'Enabled']
     },
     /**
-     * Lookup413: sh_solochain_evm_runtime::Runtime
+     * Lookup412: sh_solochain_evm_runtime::Runtime
      **/
     ShSolochainEvmRuntimeRuntime: 'Null'
 };
