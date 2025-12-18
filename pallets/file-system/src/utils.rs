@@ -1498,7 +1498,10 @@ where
             )
             .map_err(|_| Error::<T>::FailedToComputeFileKey)?;
 
-            ensure!(computed_file_key == *file_key, Error::<T>::FileKeyMismatch);
+            ensure!(
+                computed_file_key == *file_key,
+                Error::<T>::InvalidFileKeyMetadata
+            );
 
             // Verify the provider is in the pending removals
             if let Some(bsp_id) = bsp_id {
