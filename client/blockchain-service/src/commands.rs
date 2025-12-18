@@ -197,6 +197,17 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     QueryPendingStorageRequests {
         maybe_file_keys: Option<Vec<FileKey>>,
     },
+    /// Query pending BSP confirm storage requests.
+    ///
+    /// Takes a list of file keys and returns only those where the BSP has volunteered
+    /// but not yet confirmed storing.
+    ///
+    /// Internall calls the runtime API `query_pending_bsp_confirm_storage_requests` which filters out:
+    /// - File keys where the BSP has already confirmed storing
+    /// - File keys where the BSP is not a volunteer
+    /// - File keys where the storage request doesn't exist
+    #[command(success_type = Vec<FileKey>)]
+    QueryPendingBspConfirmStorageRequests { file_keys: Vec<FileKey> },
     /// Set the terminal status of a file key in the MSP upload pipeline.
     ///
     /// Used by tasks to update the status of a file key after processing.

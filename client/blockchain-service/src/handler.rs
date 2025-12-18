@@ -16,6 +16,7 @@ use sc_transaction_pool_api::TransactionStatus;
 use shc_common::traits::StorageEnableRuntime;
 use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_blockchain::TreeRoute;
+use sp_core::H256;
 use sp_keystore::KeystorePtr;
 use sp_runtime::{traits::Header, SaturatedConversion, Saturating};
 
@@ -39,7 +40,7 @@ use shc_blockchain_service_db::{leadership::LeadershipClient, store::PendingTxSt
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
-    types::{AccountId, BlockNumber, OpaqueBlock, StorageHubClient, TickNumber},
+    types::{AccountId, BlockNumber, FileKey, OpaqueBlock, StorageHubClient, TickNumber},
 };
 use shc_forest_manager::traits::ForestStorageHandler;
 
@@ -1350,7 +1351,7 @@ where
                             if let Some(file_keys) = maybe_file_keys {
                                 let file_keys_set: HashSet<_> = file_keys
                                     .into_iter()
-                                    .map(|k| sp_core::H256::from_slice(k.as_ref()))
+                                    .map(|k| H256::from_slice(k.as_ref()))
                                     .collect();
 
                                 // From the pending storage requests for this MSP, only keep the ones that
@@ -1393,6 +1394,67 @@ where
                         Ok(_) => {}
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send pending storage requests: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueryPendingBspConfirmStorageRequests {
+                    file_keys,
+                    callback,
+                } => {
+                    let managed_bsp_id = match &self.maybe_managed_provider {
+                        Some(ManagedProvider::Bsp(bsp_handler)) => bsp_handler.bsp_id.clone(),
+                        _ => {
+                            error!(target: LOG_TARGET, "`QueryPendingBspConfirmStorageRequests` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
+                            match callback.send(Err(anyhow!("Node is not managing a BSP"))) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!(target: LOG_TARGET, "Failed to send error: {:?}", e);
+                                }
+                            }
+                            return;
+                        }
+                    };
+
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let file_keys = file_keys
+                        .iter()
+                        .map(|k| H256::from_slice(k.as_ref()))
+                        .collect();
+
+                    // Query the runtime API to filter file keys to only those pending confirmation
+                    let pending_file_keys = match self
+                        .client
+                        .runtime_api()
+                        .query_pending_bsp_confirm_storage_requests(
+                            current_block_hash,
+                            managed_bsp_id,
+                            file_keys,
+                        ) {
+                        Ok(keys) => keys,
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to query pending BSP confirm storage requests: {:?}", e);
+                            match callback.send(Err(anyhow!(
+                                "Failed to query pending BSP confirm storage requests"
+                            ))) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!(target: LOG_TARGET, "Failed to send error: {:?}", e);
+                                }
+                            }
+                            return;
+                        }
+                    };
+
+                    let result: Vec<FileKey> = pending_file_keys
+                        .into_iter()
+                        .map(|k| k.as_ref().into())
+                        .collect();
+
+                    match callback.send(Ok(result)) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send pending BSP confirm storage requests: {:?}", e);
                         }
                     }
                 }

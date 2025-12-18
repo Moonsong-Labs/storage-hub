@@ -1,18 +1,17 @@
 use std::{
-    collections::{HashMap, HashSet},
-    future::Future,
-    pin::Pin,
-    str::FromStr,
-    sync::Arc,
-    time::Duration,
+    collections::HashSet, future::Future, pin::Pin, str::FromStr, sync::Arc, time::Duration,
 };
 
 use anyhow::anyhow;
 use frame_support::BoundedVec;
 use pallet_file_system_runtime_api::QueryBspConfirmChunksToProveForFileError;
+use pallet_proofs_dealer;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
-use sp_runtime::traits::{CheckedAdd, CheckedSub, Hash, SaturatedConversion, Zero};
+use sp_runtime::{
+    traits::{CheckedAdd, CheckedSub, Hash, SaturatedConversion, Zero},
+    DispatchError,
+};
 
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
@@ -22,11 +21,13 @@ use shc_blockchain_service::{
     types::{ConfirmStoringRequest, RetryStrategy, SendExtrinsicOptions, WatchTransactionError},
 };
 use shc_common::{
+    blockchain_utils::decode_module_error,
     consts::CURRENT_FOREST_KEY,
     traits::StorageEnableRuntime,
     types::{
-        FileKey, FileKeyWithProof, FileMetadata, HashT, ProviderId, StorageProofsMerkleTrieLayout,
-        StorageProviderId, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
+        FileKey, FileKeyWithProof, FileMetadata, HashT, ProviderId, StorageEnableErrors,
+        StorageEnableEvents, StorageHubEventsVec, StorageProofsMerkleTrieLayout, StorageProviderId,
+        BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
     },
 };
 use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
@@ -287,9 +288,51 @@ where
         };
         let current_forest_key = ForestStorageKey::from(CURRENT_FOREST_KEY.to_vec());
 
+        // Filter out already-confirmed or stale (i.e. fulfilled, revoked or expired) storage requests.
+        // This avoids expensive proof generation since the runtime API `query_bsp_confirm_chunks_to_prove_for_file` does
+        // not return an error for already-confirmed.
+        let file_keys: Vec<FileKey> = event
+            .data
+            .confirm_storing_requests
+            .iter()
+            .map(|req| req.file_key.as_ref().into())
+            .collect();
+
+        let pending_file_keys_set: HashSet<FileKey> = self
+            .storage_hub_handler
+            .blockchain
+            .query_pending_bsp_confirm_storage_requests(file_keys)
+            .await?
+            .into_iter()
+            .collect();
+
+        // Filter confirm_storing_requests to only those still pending confirmation
+        let confirm_storing_requests: Vec<_> = event
+            .data
+            .confirm_storing_requests
+            .iter()
+            .filter(|req| {
+                let file_key: FileKey = req.file_key.as_ref().into();
+                pending_file_keys_set.contains(&file_key)
+            })
+            .cloned()
+            .collect();
+
+        if confirm_storing_requests.is_empty() {
+            // Release the forest root write lock before returning.
+            self.storage_hub_handler
+                .blockchain
+                .release_forest_root_write_lock(forest_root_write_tx)
+                .await?;
+            return Ok(
+                "Skipped ProcessConfirmStoringRequest: no more requests to confirm after filtering"
+                    .to_string(),
+            );
+        }
+
         // Query runtime for the chunks to prove for the file.
         let mut confirm_storing_requests_with_chunks_to_prove = Vec::new();
-        for confirm_storing_request in event.data.confirm_storing_requests.iter() {
+        for confirm_storing_request in confirm_storing_requests.iter() {
             match self
                 .storage_hub_handler
                 .blockchain
@@ -338,9 +381,10 @@ where
         }
 
         // Generate the proof for the files and get metadatas.
+        // Also track the original ConfirmStoringRequest for each file key so we can re-queue on proof errors.
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
         let mut file_keys_and_proofs = Vec::new();
-        let mut file_metadatas = HashMap::new();
+        let mut file_key_to_request = Vec::new();
         for (confirm_storing_request, chunks_to_prove) in
             confirm_storing_requests_with_chunks_to_prove.into_iter()
         {
@@ -351,12 +395,12 @@ where
                 ),
                 read_file_storage.get_metadata(&confirm_storing_request.file_key),
             ) {
-                (Ok(proof), Ok(Some(metadata))) => {
+                (Ok(proof), _) => {
                     file_keys_and_proofs.push(FileKeyWithProof {
                         file_key: confirm_storing_request.file_key,
                         proof,
                     });
-                    file_metadatas.insert(confirm_storing_request.file_key, metadata);
+                    file_key_to_request.push(confirm_storing_request.clone());
                 }
                 _ => {
                     let mut confirm_storing_request = confirm_storing_request.clone();
@@ -409,9 +453,10 @@ where
                 })?,
             }.into();
 
-        // Send the confirmation transaction and wait for it to be included in the block and
-        // continue only if it is successful.
-        self.storage_hub_handler
+        // Send the confirmation transaction and wait for it to be included in the block.
+        // We request events so we can check for proof errors and re-queue on failure.
+        let extrinsic_result = self
+            .storage_hub_handler
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
@@ -431,14 +476,60 @@ where
                     .retry_only_if_timeout(),
                 true,
             )
-            .await
-            .map_err(|e| {
-                anyhow!(
+            .await;
+
+        // Handle extrinsic submission result.
+        // - If the extrinsic failed to submit, we re-queue the file keys for later retry.
+        // - If the extrinsic succeeded, we check for proof errors and re-queue if needed.
+        // - If the extrinsic succeeded but no events were emitted, we re-queue for safety.
+        match extrinsic_result {
+            Err(e) => {
+                error!(
+                    target: LOG_TARGET,
+                    "Extrinsic submission failed after exhausting retries, re-queuing file keys for retry: {:?}",
+                    e
+                );
+
+                self.requeue_confirm_storing_requests(&file_key_to_request)
+                    .await;
+
+                // Release the forest root write lock before returning error
+                self.storage_hub_handler
+                    .blockchain
+                    .release_forest_root_write_lock(forest_root_write_tx)
+                    .await?;
+
+                return Err(anyhow!(
                     "Failed to confirm file after {} retries: {:?}",
                     self.config.max_try_count,
                     e
-                )
-            })?;
+                ));
+            }
+            Ok(Some(events)) => {
+                if let Err(err) = self
+                    .handle_confirm_storing_extrinsic_result(events, &file_key_to_request)
+                    .await
+                {
+                    error!(target: LOG_TARGET, "Failed to handle extrinsic dispatch result: {:?}", err);
+
+                    // Release the forest root write lock before returning error
+                    self.storage_hub_handler
+                        .blockchain
+                        .release_forest_root_write_lock(forest_root_write_tx)
+                        .await?;
+
+                    return Err(err);
+                }
+            }
+            Ok(None) => {
+                error!(
+                    target: LOG_TARGET,
+                    "Expected events but got None - this should not happen. Re-queuing file keys for safety."
+                );
+                self.requeue_confirm_storing_requests(&file_key_to_request)
+                    .await;
+            }
+        }
 
         // Release the forest root write "lock" and finish the task.
         self.storage_hub_handler
@@ -1161,5 +1252,132 @@ where
             );
         }
         drop(write_file_storage);
+    }
+
+    /// Re-queues confirm storing requests for retry.
+    ///
+    /// Used when extrinsic submission fails or proof errors are detected.
+    /// These are transient errors that should be retried until the storage request
+    /// expires or is revoked. The try count is NOT incremented because we could
+    /// keep retrying them as they are still valid file keys to retry until
+    /// the storage request is stale.
+    async fn requeue_confirm_storing_requests(
+        &self,
+        file_key_to_request: &Vec<ConfirmStoringRequest<Runtime>>,
+    ) {
+        for request in file_key_to_request.iter() {
+            info!(
+                target: LOG_TARGET,
+                "Re-queuing file {:?} for retry (transient error)",
+                request.file_key
+            );
+
+            if let Err(e) = self
+                .storage_hub_handler
+                .blockchain
+                .queue_confirm_bsp_request(request.clone())
+                .await
+            {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to re-queue confirm storing request for file {:?}: {:?}",
+                    request.file_key,
+                    e
+                );
+            }
+        }
+    }
+
+    /// Handles the extrinsic dispatch result by checking for proof errors.
+    ///
+    /// Checks for dispatch errors in the events and handles them appropriately:
+    /// - Proof errors (`ForestProofVerificationFailed`, `FailedToApplyDelta`): Re-queues file keys
+    ///   for automatic retry.
+    /// - Non-proof errors: Drops the requests as they are permanent failures.
+    ///
+    /// Returns `Ok(())` after successfully handling the dispatch result (whether the
+    /// extrinsic succeeded or failed), or `Err(...)` if the module error could not be decoded.
+    async fn handle_confirm_storing_extrinsic_result(
+        &self,
+        events: StorageHubEventsVec<Runtime>,
+        file_key_to_request: &Vec<ConfirmStoringRequest<Runtime>>,
+    ) -> anyhow::Result<()> {
+        // Check if the extrinsic succeeded or failed by looking for an ExtrinsicFailed event
+        let maybe_dispatch_error = events.iter().find_map(|event_record| {
+            if let StorageEnableEvents::System(frame_system::Event::ExtrinsicFailed {
+                dispatch_error,
+                ..
+            }) = event_record.event.clone().into()
+            {
+                // Found an ExtrinsicFailed event, return the dispatch error
+                Some(dispatch_error)
+            } else {
+                // No ExtrinsicFailed event found, continue searching
+                None
+            }
+        });
+
+        let Some(dispatch_error) = maybe_dispatch_error else {
+            // No dispatch error found, extrinsic succeeded
+            info!(target: LOG_TARGET, "Confirm storing extrinsic succeeded");
+            return Ok(());
+        };
+
+        // Convert dispatch error to known StorageHub errors
+        let error: Option<StorageEnableErrors<Runtime>> = match dispatch_error {
+            DispatchError::Module(module_error) => {
+                match decode_module_error::<Runtime>(module_error) {
+                    Ok(decoded) => Some(decoded),
+                    Err(e) => {
+                        error!(
+                            target: LOG_TARGET,
+                            "Failed to decode module error: {:?}",
+                            e
+                        );
+                        return Err(anyhow!("Failed to decode module error: {:?}", e));
+                    }
+                }
+            }
+            _ => {
+                warn!(
+                    target: LOG_TARGET,
+                    "Treating non-module error as non-proof error: {:?}",
+                    dispatch_error
+                );
+                None
+            }
+        };
+
+        let is_proof_error = matches!(
+            error,
+            Some(StorageEnableErrors::ProofsDealer(
+                pallet_proofs_dealer::Error::ForestProofVerificationFailed
+                    | pallet_proofs_dealer::Error::FailedToApplyDelta
+            ))
+        );
+
+        if is_proof_error {
+            // Re-queue file keys for automatic retry.
+            // The next the file keys are processed, they will regenerate proofs with the updated forest root.
+            warn!(
+                target: LOG_TARGET,
+                "Proof-related error detected, re-queuing file keys for retry: {:?}",
+                dispatch_error
+            );
+
+            self.requeue_confirm_storing_requests(file_key_to_request)
+                .await;
+        } else {
+            // Non-proof errors are permanent failures that won't be resolved by retrying
+            // (e.g., invalid parameters, authorization errors, inconsistent runtime state).
+            // We drop these requests.
+            warn!(
+                target: LOG_TARGET,
+                "Non-proof dispatch error, dropping requests: {:?}",
+                error
+            );
+        }
+
+        Ok(())
     }
 }
