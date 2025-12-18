@@ -1216,7 +1216,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     // the MSP accepted the storage request with an inclusion proof, because in that scenario
                     // the fisherman does not delete the file from the bucket.
                     if let Some(msp_id) = bucket.msp_id {
-                        MspFile::delete_by_file_id(conn, msp_id, file_record.id).await.map_err(|e| {
+                        MspFile::delete_latest_by_file_key(conn, msp_id, file_key.as_ref()).await.map_err(|e| {
                             IndexBlockError::EventIndexingDatabaseError {
                                 database_error: e,
                                 block_number: block_number.saturated_into(),
