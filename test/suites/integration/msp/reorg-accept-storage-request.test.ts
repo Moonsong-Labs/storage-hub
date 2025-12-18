@@ -1,7 +1,7 @@
 import assert, { strictEqual } from "node:assert";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
-import { describeMspNet, type EnrichedBspApi, shUser, waitFor } from "../../../util";
+import { describeMspNet, type EnrichedBspApi, shUser, waitFor, waitForLog } from "../../../util";
 
 /**
  * MSP Storage Request Accept Reorg Integration Test
@@ -139,6 +139,14 @@ await describeMspNet(
       // Verify MSP accepted storage request event
       await userApi.assert.eventPresent("fileSystem", "MspAcceptedStorageRequest");
 
+      // Verify that the ProcessMspRespondStoringRequest event handler reached the end of the process
+      // signaling that it should have removed the file key from Processing status.
+      await waitForLog({
+        containerName: "storage-hub-sh-msp-1",
+        searchString: "Processed ProcessMspRespondStoringRequest for MSP",
+        timeout: 10000
+      });
+
       // ===== STEP 4: Trigger reorg by finalizing a block from forkPoint =====
       // This reorgs out the MSP accept block
       // The MSP's accept transaction goes back to the tx pool
@@ -274,9 +282,8 @@ await describeMspNet(
       );
 
       // ===== STEP 7: Wait for MSP to retry and succeed =====
-      // The MSP's original watch_transaction should detect the failure and remove the file key from Processing status.
-      // The MSP should re-emit the storage request (since it's still pending) and submit a fresh accept with the
-      // correct proof.
+      // The MSP's original msp accept transaction (in step 3) removed the file key from Processing status so the MSP should retry the storage request since it is found
+      // again in the pending storage requests and is not in the file key statuses.
 
       // Wait for MSP to submit a fresh accept to the tx pool
       await userApi.wait.mspResponseInTxPool();
