@@ -1401,6 +1401,7 @@ import type {
   LoadFileInStorageResult,
   MainStorageProviderId,
   MerklePatriciaRoot,
+  MspStorageRequestStatus,
   Multiaddresses,
   ProviderId,
   QueryAvailableStorageCapacityError,
@@ -2137,6 +2138,7 @@ declare module "@polkadot/types/types/registry" {
     MomentOf: MomentOf;
     MoreAttestations: MoreAttestations;
     MortalEra: MortalEra;
+    MspStorageRequestStatus: MspStorageRequestStatus;
     MultiAddress: MultiAddress;
     Multiaddresses: Multiaddresses;
     MultiAsset: MultiAsset;

@@ -80,6 +80,14 @@ export const SHARED_TYPES = {
         reputation_weight: "ReputationWeightType",
         sign_up_block: "BlockNumber"
     },
+    MspStorageRequestStatus: {
+        _enum: {
+            None: "Null",
+            Pending: "ProviderId",
+            AcceptedNewFile: "ProviderId",
+            AcceptedExistingFile: "ProviderId"
+        }
+    },
     StorageRequestMetadata: {
         requested_at: "BlockNumber",
         expires_at: "BlockNumber",
@@ -88,8 +96,8 @@ export const SHARED_TYPES = {
         location: "Vec<u8>",
         fingerprint: "[u8; 32]",
         file_size: "StorageDataUnit",
-        msp: "Option<(ProviderId, bool)>",
-        user_peer_ids: "Vec<ProviderId>",
+        msp_status: "MspStorageRequestStatus",
+        user_peer_ids: "Vec<Bytes>",
         bsps_required: "u32",
         bsps_confirmed: "u32",
         bsps_volunteered: "u32",

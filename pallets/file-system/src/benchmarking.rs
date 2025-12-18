@@ -677,7 +677,7 @@ mod benchmarks {
                     location: location.clone(),
                     fingerprint,
                     size,
-                    msp: Some((msp_id, false)),
+                    msp_status: MspStorageRequestStatus::Pending(msp_id),
                     user_peer_ids: Default::default(),
                     bsps_required: T::StandardReplicationTarget::get(),
                     bsps_confirmed: ReplicationTargetType::<T>::one(), // One BSP confirmed means the logic to enqueue a priority challenge is executed
@@ -753,7 +753,7 @@ mod benchmarks {
                     location: location.clone().try_into().unwrap(),
                     fingerprint: fingerprint.into(),
                     size,
-                    msp: Some((msp_id, false)),
+                    msp_status: MspStorageRequestStatus::Pending(msp_id),
                     user_peer_ids: Default::default(),
                     bsps_required: T::StandardReplicationTarget::get(),
                     bsps_confirmed: T::StandardReplicationTarget::get(), // All BSPs confirmed means the logic to delete the storage request is executed
@@ -1081,7 +1081,7 @@ mod benchmarks {
 				location: location.clone().try_into().unwrap(),
 				fingerprint: fingerprint.into(),
 				size,
-				msp: Some((msp_id, true)), // MSP accepted means the logic to delete the storage request is executed
+				msp_status: MspStorageRequestStatus::AcceptedNewFile(msp_id), // MSP accepted means the logic to delete the storage request is executed
 				user_peer_ids: Default::default(),
 				bsps_required: T::StandardReplicationTarget::get(),
 				bsps_confirmed: T::StandardReplicationTarget::get().saturating_sub(ReplicationTargetType::<T>::one()), // All BSPs confirmed minus one means the logic to delete the storage request is executed
@@ -2044,7 +2044,8 @@ mod benchmarks {
 
         // Simulate the MSP accepting the storage request
         StorageRequests::<T>::mutate(file_key, |storage_request| {
-            storage_request.as_mut().unwrap().msp = Some((msp_id, true));
+            storage_request.as_mut().unwrap().msp_status =
+                MspStorageRequestStatus::AcceptedNewFile(msp_id);
         });
 
         // Add n BSPs to the StorageRequestBsps mapping since that's the one that is drained in the benchmarked function
@@ -2159,9 +2160,9 @@ mod benchmarks {
         )
         .unwrap();
 
-        // Simulate the MSP rejecting the storage request
+        // Simulate the MSP rejecting the storage request (keeping it in Pending state)
         StorageRequests::<T>::mutate(file_key, |storage_request| {
-            storage_request.as_mut().unwrap().msp = Some((msp_id, false));
+            storage_request.as_mut().unwrap().msp_status = MspStorageRequestStatus::Pending(msp_id);
         });
 
         // Add n BSPs to the StorageRequestBsps mapping since that's the one that is drained in the benchmarked function
