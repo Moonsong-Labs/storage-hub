@@ -101,6 +101,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             pallet_file_system::Event::StorageRequestRevoked { .. } => true,
             pallet_file_system::Event::StorageRequestRejected { .. } => true,
             pallet_file_system::Event::IncompleteStorageRequest { .. } => true,
+            pallet_file_system::Event::IncompleteStorageRequestCleanedUp { .. } => true,
             // BSP volunteer and confirmation events
             pallet_file_system::Event::AcceptedBspVolunteer { .. } => true,
             pallet_file_system::Event::BspConfirmedStoring { .. } => true,
@@ -119,6 +120,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             // System and error events
             pallet_file_system::Event::UsedCapacityShouldBeZero { .. } => true,
             pallet_file_system::Event::FailedToReleaseStorageRequestCreationDeposit { .. } => true,
+
             pallet_file_system::Event::__Ignore(_, _) => true,
         };
 

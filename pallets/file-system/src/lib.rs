@@ -654,6 +654,14 @@ pub mod pallet {
         /// This is important for fisherman nodes to listen and react to, to delete
         /// the file key from the BSPs and/or Bucket storing that file from their forest.
         IncompleteStorageRequest { file_key: MerkleHash<T> },
+        /// Notifies that an incomplete storage request has been fully cleaned up.
+        ///
+        /// This event is emitted in two scenarios:
+        /// 1. When an incomplete storage request is created but there are no providers to clean
+        ///    (e.g., MSP confirmed with inclusion proof and no BSPs confirmed).
+        /// 2. When the file has been removed from all providers and the incomplete storage
+        ///    request entry is removed from storage.
+        IncompleteStorageRequestCleanedUp { file_key: MerkleHash<T> },
 
         // BSP volunteer and confirmation events
         /// Notifies that a BSP has been accepted to store a given file.
