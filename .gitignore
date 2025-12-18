@@ -50,3 +50,6 @@ config.toml
 .cursorindexingignore
 .specstory/
 .claude/
+
+# MCP configuration
+.mcp.json

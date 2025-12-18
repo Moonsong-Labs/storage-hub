@@ -26,7 +26,6 @@ import type {
   FrameSupportMessagesProcessMessageError,
   FrameSupportTokensMiscBalanceStatus,
   FrameSystemDispatchEventInfo,
-  PalletFileSystemEitherAccountIdOrMspId,
   PalletFileSystemFileOperationIntention,
   PalletFileSystemRejectedStorageRequestReason,
   PalletNftsAttributeNamespace,
@@ -489,45 +488,6 @@ declare module "@polkadot/api-base/types/events" {
         { who: AccountId32; bucketId: H256; collectionId: Option<u32>; private: bool }
       >;
       /**
-       * Failed to decrease MSP's used capacity for expired file deletion request
-       **/
-      FailedToDecreaseMspUsedCapacity: AugmentedEvent<
-        ApiType,
-        [
-          user: AccountId32,
-          mspId: H256,
-          fileKey: H256,
-          fileSize: u64,
-          error: SpRuntimeDispatchError
-        ],
-        {
-          user: AccountId32;
-          mspId: H256;
-          fileKey: H256;
-          fileSize: u64;
-          error: SpRuntimeDispatchError;
-        }
-      >;
-      /**
-       * Failed to get the MSP owner of the bucket for an expired file deletion request
-       * This is different from the bucket not having a MSP, which is allowed and won't error
-       **/
-      FailedToGetMspOfBucket: AugmentedEvent<
-        ApiType,
-        [bucketId: H256, error: SpRuntimeDispatchError],
-        { bucketId: H256; error: SpRuntimeDispatchError }
-      >;
-      /**
-       * Notifies that a priority challenge with a trie remove mutation failed to be queued in the `on_idle` hook.
-       * This can happen if the priority challenge queue is full, and the failed challenge should be manually
-       * queued at a later time.
-       **/
-      FailedToQueuePriorityChallenge: AugmentedEvent<
-        ApiType,
-        [fileKey: H256, error: SpRuntimeDispatchError],
-        { fileKey: H256; error: SpRuntimeDispatchError }
-      >;
-      /**
        * Event to notify if, in the `on_idle` hook when cleaning up an expired storage request,
        * the return of that storage request's deposit to the user failed.
        **/
@@ -535,49 +495,6 @@ declare module "@polkadot/api-base/types/events" {
         ApiType,
         [fileKey: H256, owner: AccountId32, amountToReturn: u128, error: SpRuntimeDispatchError],
         { fileKey: H256; owner: AccountId32; amountToReturn: u128; error: SpRuntimeDispatchError }
-      >;
-      /**
-       * Event to notify if, in the `on_idle` hook when cleaning up an expired storage request,
-       * the transfer of a part of that storage request's deposit to one of the volunteered BSPs failed.
-       **/
-      FailedToTransferDepositFundsToBsp: AugmentedEvent<
-        ApiType,
-        [
-          fileKey: H256,
-          owner: AccountId32,
-          bspId: H256,
-          amountToTransfer: u128,
-          error: SpRuntimeDispatchError
-        ],
-        {
-          fileKey: H256;
-          owner: AccountId32;
-          bspId: H256;
-          amountToTransfer: u128;
-          error: SpRuntimeDispatchError;
-        }
-      >;
-      /**
-       * Notifies that a file will be deleted.
-       **/
-      FileDeletionRequest: AugmentedEvent<
-        ApiType,
-        [
-          user: AccountId32,
-          fileKey: H256,
-          fileSize: u64,
-          bucketId: H256,
-          mspId: H256,
-          proofOfInclusion: bool
-        ],
-        {
-          user: AccountId32;
-          fileKey: H256;
-          fileSize: u64;
-          bucketId: H256;
-          mspId: H256;
-          proofOfInclusion: bool;
-        }
       >;
       /**
        * Notifies that a file deletion has been requested.
@@ -719,36 +636,6 @@ declare module "@polkadot/api-base/types/events" {
           size_: u64;
           peerIds: Vec<Bytes>;
           expiresAt: u32;
-        }
-      >;
-      /**
-       * Notifies that a file key has been queued for a priority challenge for file deletion.
-       **/
-      PriorityChallengeForFileDeletionQueued: AugmentedEvent<
-        ApiType,
-        [issuer: PalletFileSystemEitherAccountIdOrMspId, fileKey: H256],
-        { issuer: PalletFileSystemEitherAccountIdOrMspId; fileKey: H256 }
-      >;
-      /**
-       * Notifies that a proof has been submitted for a pending file deletion request.
-       **/
-      ProofSubmittedForPendingFileDeletionRequest: AugmentedEvent<
-        ApiType,
-        [
-          user: AccountId32,
-          fileKey: H256,
-          fileSize: u64,
-          bucketId: H256,
-          mspId: H256,
-          proofOfInclusion: bool
-        ],
-        {
-          user: AccountId32;
-          fileKey: H256;
-          fileSize: u64;
-          bucketId: H256;
-          mspId: H256;
-          proofOfInclusion: bool;
         }
       >;
       /**

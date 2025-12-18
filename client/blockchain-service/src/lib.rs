@@ -21,7 +21,10 @@ use capacity_manager::{CapacityConfig, CapacityRequestQueue};
 use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 use shc_common::types::StorageHubClient;
 
-pub use self::handler::BlockchainService;
+pub use self::{
+    handler::BlockchainService,
+    types::{FileKeyStatus, FileKeyStatusUpdate},
+};
 
 pub async fn spawn_blockchain_service<FSH, Runtime>(
     task_spawner: &TaskSpawner,
