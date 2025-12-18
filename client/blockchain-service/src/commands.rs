@@ -33,13 +33,14 @@ use shc_forest_manager::traits::ForestStorageHandler;
 
 use crate::{
     capacity_manager::CapacityRequestData,
+    events::NewStorageRequest,
     handler::BlockchainService,
     transaction_manager::wait_for_transaction_status,
     types::{
-        ConfirmStoringRequest, Extrinsic, ExtrinsicResult, FileDeletionRequest, MinimalBlockInfo,
-        RespondStorageRequest, RetryStrategy, SendExtrinsicOptions, StatusToWait,
-        StopStoringForInsolventUserRequest, SubmitProofRequest, SubmittedExtrinsicInfo,
-        WatchTransactionError,
+        ConfirmStoringRequest, Extrinsic, ExtrinsicResult, FileDeletionRequest,
+        FileKeyStatusUpdate, MinimalBlockInfo, RespondStorageRequest, RetryStrategy,
+        SendExtrinsicOptions, StatusToWait, StopStoringForInsolventUserRequest, SubmitProofRequest,
+        SubmittedExtrinsicInfo, WatchTransactionError,
     },
 };
 
@@ -106,6 +107,7 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     QueueConfirmBspRequest {
         request: ConfirmStoringRequest<Runtime>,
     },
+    #[command(mode = "FireAndForget")]
     QueueMspRespondStorageRequest {
         request: RespondStorageRequest<Runtime>,
     },
@@ -188,6 +190,32 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     },
     #[command(success_type = Vec<BucketId<Runtime>>)]
     QueryBucketsForMsp { msp_id: ProviderId<Runtime> },
+    /// Query pending storage requests for the MSP.
+    /// If `file_keys` is provided, only query those specific storage requests from storage.
+    /// If `file_keys` is None, returns all pending storage requests via runtime API.
+    #[command(success_type = Vec<NewStorageRequest<Runtime>>)]
+    QueryPendingStorageRequests {
+        maybe_file_keys: Option<Vec<FileKey>>,
+    },
+    /// Set the terminal status of a file key in the MSP upload pipeline.
+    ///
+    /// Used by tasks to update the status of a file key after processing.
+    /// Only terminal statuses are allowed—`Processing` is set exclusively by the
+    /// blockchain service when emitting [`NewStorageRequest`] events.
+    ///
+    /// See [`FileKeyStatusUpdate`] for available statuses.
+    #[command(mode = "FireAndForget")]
+    SetFileKeyStatus {
+        file_key: FileKey,
+        status: FileKeyStatusUpdate,
+    },
+    /// Remove a file key from the status tracking.
+    ///
+    /// Used by tasks to enable retry on the next block cycle:
+    /// - After proof errors (to retry with regenerated proofs)
+    /// - After extrinsic submission failures (may be transient)
+    #[command(mode = "FireAndForget")]
+    RemoveFileKeyStatus { file_key: FileKey },
 }
 
 /// Interface for interacting with the BlockchainService actor.

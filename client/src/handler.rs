@@ -295,12 +295,16 @@ where
     fn start_msp_tasks(&self) {
         log::info!("Starting MSP tasks");
 
-        // MspUploadFileTask is triggered by a NewStorageRequest event which registers the user's peer address for
-        // an upcoming RemoteUploadRequest events, which happens when the user connects to the MSP and submits chunks of the file,
-        // along with a proof of storage, which is then queued to batch accept many storage requests at once.
-        // Finally once the ProcessMspRespondStoringRequest event is emitted, the MSP will respond to the user with a confirmation.
+        // MspUploadFileTask handles the file upload flow for MSPs:
+        // - NewStorageRequest events are emitted by the blockchain service for each pending storage request.
+        //   The blockchain service filters by file_key_statuses (in MspHandler) to skip already-processing
+        //   requests, then the handler triggers per-file capacity management and registers the user's peer
+        //   address for upcoming RemoteUploadRequest events.
+        // - RemoteUploadRequest events happen when the user connects to the MSP and submits chunks of the file,
+        //   along with a proof of storage, which is then queued to accept the storage request.
+        // - ProcessMspRespondStoringRequest is emitted when the MSP should respond with a confirmation.
 
-        // RemoteUploadRequest comes from FileTransferService and requires a separate service parameter
+        // Subscribe to FileTransferService events
         subscribe_actor_event_map!(
             service: &self.file_transfer,
             spawner: &self.task_spawner,
@@ -311,17 +315,17 @@ where
                 RetryBucketMoveDownload => MspRetryBucketMoveTask,
             ]
         );
-
+        // Subscribe to BlockchainService events
         subscribe_actor_event_map!(
             service: &self.blockchain,
             spawner: &self.task_spawner,
             context: self.clone(),
             critical: true,
             [
-                FinalisedBucketMovedAway<Runtime> => MspDeleteBucketTask,
-                FinalisedMspStoppedStoringBucket<Runtime> => MspDeleteBucketTask,
                 NewStorageRequest<Runtime> => MspUploadFileTask,
                 ProcessMspRespondStoringRequest<Runtime> => MspUploadFileTask,
+                FinalisedBucketMovedAway<Runtime> => MspDeleteBucketTask,
+                FinalisedMspStoppedStoringBucket<Runtime> => MspDeleteBucketTask,
                 MoveBucketRequestedForMsp<Runtime> => MspRespondMoveBucketTask,
                 StartMovedBucketDownload<Runtime> => MspRespondMoveBucketTask,
                 // MspStopStoringInsolventUserTask handles events for deleting buckets owned by users that have become insolvent.

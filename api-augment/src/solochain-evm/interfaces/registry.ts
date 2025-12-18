@@ -81,7 +81,6 @@ import type {
   PalletEvmEvent,
   PalletFileSystemBucketMoveRequestResponse,
   PalletFileSystemCall,
-  PalletFileSystemEitherAccountIdOrMspId,
   PalletFileSystemError,
   PalletFileSystemEvent,
   PalletFileSystemFileDeletionRequest,
@@ -332,7 +331,6 @@ declare module "@polkadot/types/types/registry" {
     PalletEvmEvent: PalletEvmEvent;
     PalletFileSystemBucketMoveRequestResponse: PalletFileSystemBucketMoveRequestResponse;
     PalletFileSystemCall: PalletFileSystemCall;
-    PalletFileSystemEitherAccountIdOrMspId: PalletFileSystemEitherAccountIdOrMspId;
     PalletFileSystemError: PalletFileSystemError;
     PalletFileSystemEvent: PalletFileSystemEvent;
     PalletFileSystemFileDeletionRequest: PalletFileSystemFileDeletionRequest;
