@@ -1231,12 +1231,12 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                         );
                     }
 
-                    // Try to delete the file record if it has no BSP or MSP associations, which at this point it shouldn't
-                    File::delete_record_if_no_associations(conn, file_record.id).await.
+                    // Try to delete the latest file record if it has no BSP or MSP associations, which at this point it shouldn't
+                    File::delete_latest_by_file_key(conn, file_key.as_ref()).await.
                     map_err(|e| IndexBlockError::EventIndexingDatabaseError {
                         database_error: e,
                         block_number: block_number.saturated_into(),
-                        event_name: "IncompleteStorageRequestCleanedUp (delete file record if no associations)"
+                        event_name: "IncompleteStorageRequestCleanedUp (delete latest file record by file key)"
                             .to_string(),
                     })?;
                 }
