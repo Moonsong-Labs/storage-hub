@@ -140,10 +140,10 @@ pub struct StorageHubMetrics {
 
     // === MSP Metrics ===
     /// Total MSP storage request responses, labeled by status.
-    /// Tracks the lifecycle from receiving NewStorageRequest through submitting RespondStorageRequest extrinsic.
+    /// Tracks the lifecycle from receiving NewStorageRequest through confirmed on-chain dispatch.
     /// - `pending`: NewStorageRequest event received
-    /// - `success`: RespondStorageRequest extrinsic submitted successfully
-    /// - `failure`: Any error during setup or response process
+    /// - `success`: RespondStorageRequest extrinsic confirmed on-chain without dispatch errors
+    /// - `failure`: Extrinsic submission failed, events missing, or dispatch error found
     pub msp_storage_requests_total: CounterVec<U64>,
 
     /// Total file distribution attempts by MSP to BSPs, labeled by status.
@@ -327,7 +327,7 @@ impl StorageHubMetrics {
                 CounterVec::new(
                     Opts::new(
                         "storagehub_msp_storage_requests_total",
-                        "MSP storage request responses (setup to respond lifecycle)",
+                        "MSP storage request responses (confirmed on-chain dispatch results)",
                     ),
                     &["status"],
                 )?,
