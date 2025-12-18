@@ -35,44 +35,42 @@ where
     ) -> Result<(), IndexBlockError> {
         match event {
             StorageEnableEvents::FileSystem(fs_event) => match fs_event {
-                pallet_file_system::Event::NewStorageRequest { .. } => {
-                    trace!(target: LOG_TARGET, "Indexing NewStorageRequest event");
-                    self.index_file_system_event(
-                        conn,
-                        fs_event,
-                        block_hash,
-                        block_number,
-                        evm_tx_hash,
-                    )
-                    .await?
-                }
-                pallet_file_system::Event::StorageRequestRevoked { .. }
-                | pallet_file_system::Event::SpStopStoringInsolventUser { .. } => {
-                    trace!(target: LOG_TARGET, "Indexing file deletion event");
-                    self.index_file_system_event(
-                        conn,
-                        fs_event,
-                        block_hash,
-                        block_number,
-                        evm_tx_hash,
-                    )
-                    .await?
-                }
-                pallet_file_system::Event::BspConfirmedStoring { .. }
-                | pallet_file_system::Event::BspConfirmStoppedStoring { .. } => {
-                    trace!(target: LOG_TARGET, "Indexing BSP-file association event");
-                    self.index_file_system_event(
-                        conn,
-                        fs_event,
-                        block_hash,
-                        block_number,
-                        evm_tx_hash,
-                    )
-                    .await?
-                }
+                // Bucket lifecycle events
                 pallet_file_system::Event::NewBucket { .. }
                 | pallet_file_system::Event::BucketDeleted { .. } => {
                     trace!(target: LOG_TARGET, "Indexing bucket event");
+                    self.index_file_system_event(
+                        conn,
+                        fs_event,
+                        block_hash,
+                        block_number,
+                        evm_tx_hash,
+                    )
+                    .await?
+                }
+
+                // Move bucket events
+                pallet_file_system::Event::MoveBucketAccepted {
+                    bucket_id,
+                    old_msp_id,
+                    new_msp_id,
+                    value_prop_id,
+                } => {
+                    trace!(target: LOG_TARGET, "Indexing move bucket accepted event for bucket ID: {}, old MSP ID: {:?}, new MSP ID: {:?}, value prop ID: {:?}",
+                        bucket_id, old_msp_id, new_msp_id, value_prop_id);
+                    self.index_file_system_event(
+                        conn,
+                        fs_event,
+                        block_hash,
+                        block_number,
+                        evm_tx_hash,
+                    )
+                    .await?
+                }
+
+                // Storage request lifecycle events
+                pallet_file_system::Event::NewStorageRequest { .. } => {
+                    trace!(target: LOG_TARGET, "Indexing NewStorageRequest event");
                     self.index_file_system_event(
                         conn,
                         fs_event,
@@ -94,18 +92,6 @@ where
                     )
                     .await?
                 }
-                pallet_file_system::Event::MspStopStoringBucketInsolventUser { .. }
-                | pallet_file_system::Event::MspStoppedStoringBucket { .. } => {
-                    trace!(target: LOG_TARGET, "Indexing MSP bucket removal event");
-                    self.index_file_system_event(
-                        conn,
-                        fs_event,
-                        block_hash,
-                        block_number,
-                        evm_tx_hash,
-                    )
-                    .await?
-                }
                 pallet_file_system::Event::StorageRequestExpired { file_key } => {
                     trace!(target: LOG_TARGET, "Indexing expired storage request event for file key: {:?}", file_key);
                     self.index_file_system_event(
@@ -117,14 +103,108 @@ where
                     )
                     .await?
                 }
-                pallet_file_system::Event::MoveBucketAccepted {
-                    bucket_id,
-                    old_msp_id,
-                    new_msp_id,
-                    value_prop_id,
+                pallet_file_system::Event::StorageRequestRevoked { .. } => {
+                    trace!(target: LOG_TARGET, "Indexing storage request revoked event");
+                    self.index_file_system_event(
+                        conn,
+                        fs_event,
+                        block_hash,
+                        block_number,
+                        evm_tx_hash,
+                    )
+                    .await?
+                }
+                pallet_file_system::Event::IncompleteStorageRequest { file_key } => {
+                    trace!(target: LOG_TARGET, "Indexing incomplete storage request event for file key: {:?}", file_key);
+                    self.index_file_system_event(
+                        conn,
+                        fs_event,
+                        block_hash,
+                        block_number,
+                        evm_tx_hash,
+                    )
+                    .await?
+                }
+                pallet_file_system::Event::IncompleteStorageRequestCleanedUp { file_key } => {
+                    trace!(target: LOG_TARGET, "Indexing incomplete storage request cleaned up event for file key: {:?}", file_key);
+                    self.index_file_system_event(
+                        conn,
+                        fs_event,
+                        block_hash,
+                        block_number,
+                        evm_tx_hash,
+                    )
+                    .await?
+                }
+
+                // BSP volunteer and confirmation events
+                pallet_file_system::Event::BspConfirmedStoring { .. } => {
+                    trace!(target: LOG_TARGET, "Indexing BSP confirmed storing event");
+                    self.index_file_system_event(
+                        conn,
+                        fs_event,
+                        block_hash,
+                        block_number,
+                        evm_tx_hash,
+                    )
+                    .await?
+                }
+
+                // Stop storing events
+                pallet_file_system::Event::BspConfirmStoppedStoring { .. } => {
+                    trace!(target: LOG_TARGET, "Indexing BSP confirm stopped storing event");
+                    self.index_file_system_event(
+                        conn,
+                        fs_event,
+                        block_hash,
+                        block_number,
+                        evm_tx_hash,
+                    )
+                    .await?
+                }
+                pallet_file_system::Event::MspStoppedStoringBucket { .. } => {
+                    trace!(target: LOG_TARGET, "Indexing MSP stopped storing bucket event");
+                    self.index_file_system_event(
+                        conn,
+                        fs_event,
+                        block_hash,
+                        block_number,
+                        evm_tx_hash,
+                    )
+                    .await?
+                }
+
+                // Insolvent user events
+                pallet_file_system::Event::SpStopStoringInsolventUser { .. } => {
+                    trace!(target: LOG_TARGET, "Indexing SP stop storing insolvent user event");
+                    self.index_file_system_event(
+                        conn,
+                        fs_event,
+                        block_hash,
+                        block_number,
+                        evm_tx_hash,
+                    )
+                    .await?
+                }
+                pallet_file_system::Event::MspStopStoringBucketInsolventUser { .. } => {
+                    trace!(target: LOG_TARGET, "Indexing MSP stop storing bucket insolvent user event");
+                    self.index_file_system_event(
+                        conn,
+                        fs_event,
+                        block_hash,
+                        block_number,
+                        evm_tx_hash,
+                    )
+                    .await?
+                }
+
+                // File deletion events
+                pallet_file_system::Event::FileDeletionRequested {
+                    signed_delete_intention,
+                    signature: _,
                 } => {
-                    trace!(target: LOG_TARGET, "Indexing move bucket accepted event for bucket ID: {}, old MSP ID: {:?}, new MSP ID: {:?}, value prop ID: {:?}",
-                        bucket_id, old_msp_id, new_msp_id, value_prop_id);
+                    trace!(target: LOG_TARGET, "Indexing file deletion requested event for file key: {:?}",
+                        signed_delete_intention.file_key);
                     self.index_file_system_event(
                         conn,
                         fs_event,
@@ -171,65 +251,21 @@ where
                     )
                     .await?
                 }
-                pallet_file_system::Event::FileDeletionRequested {
-                    signed_delete_intention,
-                    signature: _,
-                } => {
-                    trace!(target: LOG_TARGET, "Indexing file deletion requested event for file key: {:?}",
-                        signed_delete_intention.file_key);
-                    self.index_file_system_event(
-                        conn,
-                        fs_event,
-                        block_hash,
-                        block_number,
-                        evm_tx_hash,
-                    )
-                    .await?
-                }
-                pallet_file_system::Event::IncompleteStorageRequest { file_key } => {
-                    trace!(target: LOG_TARGET, "Indexing incomplete storage request event for file key: {:?}", file_key);
-                    self.index_file_system_event(
-                        conn,
-                        fs_event,
-                        block_hash,
-                        block_number,
-                        evm_tx_hash,
-                    )
-                    .await?
-                }
-                pallet_file_system::Event::IncompleteStorageRequestCleanedUp { file_key } => {
-                    trace!(target: LOG_TARGET, "Indexing incomplete storage request cleaned up event for file key: {:?}", file_key);
-                    self.index_file_system_event(
-                        conn,
-                        fs_event,
-                        block_hash,
-                        block_number,
-                        evm_tx_hash,
-                    )
-                    .await?
-                }
+
+                // Ignored events
                 pallet_file_system::Event::BucketPrivacyUpdated { .. }
-                | pallet_file_system::Event::MoveBucketRequested { .. }
                 | pallet_file_system::Event::NewCollectionAndAssociation { .. }
-                | pallet_file_system::Event::AcceptedBspVolunteer { .. }
-                | pallet_file_system::Event::StorageRequestRejected { .. }
-                | pallet_file_system::Event::BspRequestedToStopStoring { .. }
-                | pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. }
-                | pallet_file_system::Event::FailedToQueuePriorityChallenge { .. }
-                | pallet_file_system::Event::FileDeletionRequest { .. }
-                | pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest {
-                    ..
-                }
-                | pallet_file_system::Event::BspChallengeCycleInitialised { .. }
+                | pallet_file_system::Event::MoveBucketRequested { .. }
                 | pallet_file_system::Event::MoveBucketRequestExpired { .. }
                 | pallet_file_system::Event::MoveBucketRejected { .. }
-                | pallet_file_system::Event::FailedToGetMspOfBucket { .. }
-                | pallet_file_system::Event::FailedToDecreaseMspUsedCapacity { .. }
+                | pallet_file_system::Event::StorageRequestRejected { .. }
+                | pallet_file_system::Event::AcceptedBspVolunteer { .. }
+                | pallet_file_system::Event::BspChallengeCycleInitialised { .. }
+                | pallet_file_system::Event::BspRequestedToStopStoring { .. }
                 | pallet_file_system::Event::UsedCapacityShouldBeZero { .. }
                 | pallet_file_system::Event::FailedToReleaseStorageRequestCreationDeposit {
                     ..
                 }
-                | pallet_file_system::Event::FailedToTransferDepositFundsToBsp { .. }
                 | pallet_file_system::Event::__Ignore(_, _) => {
                     trace!(target: LOG_TARGET, "Ignoring non-essential FileSystem event in fishing mode");
                 }

@@ -255,6 +255,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         evm_tx_hash: Option<H256>,
     ) -> Result<(), IndexBlockError> {
         match event {
+            // Bucket lifecycle events
             pallet_file_system::Event::NewBucket {
                 who,
                 msp_id,
@@ -293,6 +294,44 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     event_name: "NewBucket (create bucket)".to_string(),
                 })?;
             }
+            pallet_file_system::Event::BucketDeleted {
+                who: _,
+                bucket_id,
+                maybe_collection_id: _,
+            } => {
+                Bucket::delete(conn, bucket_id.as_ref().to_vec())
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "BucketDeleted (delete bucket)".to_string(),
+                    })?;
+            }
+            pallet_file_system::Event::BucketPrivacyUpdated {
+                who,
+                bucket_id,
+                collection_id,
+                private,
+            } => {
+                Bucket::update_privacy(
+                    conn,
+                    who.to_string(),
+                    bucket_id.as_ref().to_vec(),
+                    collection_id.map(|id| id.to_string()),
+                    *private,
+                )
+                .await
+                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                    database_error: e,
+                    block_number: block_number.saturated_into(),
+                    event_name: "BucketPrivacyUpdated".to_string(),
+                })?;
+            }
+            pallet_file_system::Event::NewCollectionAndAssociation { .. } => {}
+
+            // Move bucket events
+            pallet_file_system::Event::MoveBucketRequested { .. } => {}
+            pallet_file_system::Event::MoveBucketRequestExpired { .. } => {}
             pallet_file_system::Event::MoveBucketAccepted {
                 old_msp_id,
                 new_msp_id,
@@ -350,174 +389,9 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                         event_name: "MoveBucketAccepted (update bucket MSP reference)".to_string(),
                     })?;
             }
-            pallet_file_system::Event::BucketPrivacyUpdated {
-                who,
-                bucket_id,
-                collection_id,
-                private,
-            } => {
-                Bucket::update_privacy(
-                    conn,
-                    who.to_string(),
-                    bucket_id.as_ref().to_vec(),
-                    collection_id.map(|id| id.to_string()),
-                    *private,
-                )
-                .await
-                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                    database_error: e,
-                    block_number: block_number.saturated_into(),
-                    event_name: "BucketPrivacyUpdated".to_string(),
-                })?;
-            }
-            pallet_file_system::Event::BspConfirmStoppedStoring {
-                bsp_id,
-                file_key,
-                new_root,
-            } => {
-                Bsp::update_merkle_root(
-                    conn,
-                    OnchainBspId::from(*bsp_id),
-                    new_root.as_ref().to_vec(),
-                )
-                .await
-                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                    database_error: e,
-                    block_number: block_number.saturated_into(),
-                    event_name: "BspConfirmStoppedStoring (update BSP merkle root)".to_string(),
-                })?;
-                BspFile::delete_for_bsp(conn, file_key.as_ref(), OnchainBspId::from(*bsp_id))
-                    .await
-                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                        database_error: e,
-                        block_number: block_number.saturated_into(),
-                        event_name: "BspConfirmStoppedStoring (delete BSP-file associations)"
-                            .to_string(),
-                    })?;
-            }
-            pallet_file_system::Event::BspConfirmedStoring {
-                who: _,
-                bsp_id,
-                confirmed_file_keys,
-                skipped_file_keys: _,
-                new_root,
-            } => {
-                Bsp::update_merkle_root(
-                    conn,
-                    OnchainBspId::from(*bsp_id),
-                    new_root.as_ref().to_vec(),
-                )
-                .await
-                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                    database_error: e,
-                    block_number: block_number.saturated_into(),
-                    event_name: "BspConfirmedStoring (update BSP merkle root)".to_string(),
-                })?;
+            pallet_file_system::Event::MoveBucketRejected { .. } => {}
 
-                let bsp = Bsp::get_by_onchain_bsp_id(conn, OnchainBspId::from(*bsp_id))
-                    .await
-                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                        database_error: e,
-                        block_number: block_number.saturated_into(),
-                        event_name: "BspConfirmedStoring (get BSP)".to_string(),
-                    })?;
-                for (file_key, file_metadata) in confirmed_file_keys {
-                    // There can be multiple file records for a given file key if there were multiple
-                    // storage requests for the same file key. We get the latest one created, which
-                    // has to be the one that was confirmed, given that there can't be two storage
-                    // requests for the same file key at the same time.
-                    let file = match File::get_latest_by_file_key(conn, file_key.as_ref().to_vec())
-                        .await
-                    {
-                        Ok(file) => file,
-                        Err(diesel::result::Error::NotFound) => {
-                            // This can happen if the file was completely deleted from the DB (so all BSP and MSP associations were deleted)
-                            // but a storage request was still present on-chain so a BSP confirmed storing it.
-                            log::info!(
-                                target: LOG_TARGET,
-                                "File record not found for file_key {:?} during BspConfirmedStoring. \
-                                Recreating from event metadata (recovery).",
-                                file_key
-                            );
-
-                            // Recreate the file record from the metadata in the event
-                            let bucket = Bucket::get_by_onchain_bucket_id(
-                                conn,
-                                file_metadata.bucket_id().to_vec(),
-                            )
-                            .await
-                            .map_err(|e| {
-                                IndexBlockError::EventIndexingDatabaseError {
-                                    database_error: e,
-                                    block_number: block_number.saturated_into(),
-                                    event_name: "BspConfirmedStoring (get bucket)".to_string(),
-                                }
-                            })?;
-
-                            let size: u64 = file_metadata.file_size();
-                            let size: i64 = size.saturated_into();
-
-                            let block_hash_bytes = block_hash.as_bytes().to_vec();
-                            let tx_hash_bytes = evm_tx_hash.map(|h| h.as_bytes().to_vec());
-
-                            // Check if this file key is already present in the bucket of the MSP
-                            // In this scenario, this will always return false, since there's no other file record
-                            // in the DB, but it's still good practice to check it.
-                            let is_in_bucket =
-                                File::is_file_key_in_bucket(conn, file_key.as_ref().to_vec())
-                                    .await
-                                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                                        database_error: e,
-                                        block_number: block_number.saturated_into(),
-                                        event_name:
-                                            "BspConfirmedStoring (check if file key is in bucket)"
-                                                .to_string(),
-                                    })?;
-
-                            // Create file with Requested step since we will change it to Stored when the storage request is fulfilled
-                            File::create(
-                                conn,
-                                file_metadata.owner().clone(),
-                                file_key.as_ref().to_vec(),
-                                bucket.id,
-                                file_metadata.bucket_id().clone(),
-                                file_metadata.location().clone(),
-                                file_metadata.fingerprint().as_ref().to_vec(),
-                                size,
-                                FileStorageRequestStep::Requested,
-                                vec![], // No peer_ids available from confirmation event
-                                block_hash_bytes,
-                                tx_hash_bytes,
-                                is_in_bucket,
-                            )
-                            .await
-                            .map_err(|e| {
-                                IndexBlockError::EventIndexingDatabaseError {
-                                    database_error: e,
-                                    block_number: block_number.saturated_into(),
-                                    event_name: "BspConfirmedStoring (create file)".to_string(),
-                                }
-                            })?
-                        }
-                        Err(e) => {
-                            return Err(IndexBlockError::EventIndexingDatabaseError {
-                                database_error: e,
-                                block_number: block_number.saturated_into(),
-                                event_name: "BspConfirmedStoring (get file)".to_string(),
-                            })
-                        }
-                    };
-
-                    BspFile::create(conn, bsp.id, file.id).await.map_err(|e| {
-                        IndexBlockError::EventIndexingDatabaseError {
-                            database_error: e,
-                            block_number: block_number.saturated_into(),
-                            event_name: "BspConfirmedStoring (create BSP-file association)"
-                                .to_string(),
-                        }
-                    })?;
-                }
-            }
+            // Storage request lifecycle events
             pallet_file_system::Event::NewStorageRequest {
                 who,
                 file_key,
@@ -602,9 +476,114 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     event_name: "NewStorageRequest (create file step)".to_string(),
                 })?;
             }
-            pallet_file_system::Event::MoveBucketRequested { .. } => {}
-            pallet_file_system::Event::NewCollectionAndAssociation { .. } => {}
-            pallet_file_system::Event::AcceptedBspVolunteer { .. } => {}
+            pallet_file_system::Event::MspAcceptedStorageRequest {
+                file_key,
+                file_metadata,
+            } => {
+                // There can be multiple file records for a given file key if there were multiple
+                // storage requests for the same file key. We get the latest one created, which
+                // has to be the one that was accepted, given that there can't be two storage
+                // requests for the same file key at the same time.
+                let file = match File::get_latest_by_file_key(conn, file_key.as_ref().to_vec())
+                    .await
+                {
+                    Ok(file) => file,
+                    Err(diesel::result::Error::NotFound) => {
+                        // This can happen if the file was completely deleted from the DB (so all BSP and MSP associations were deleted)
+                        // but a storage request was still present on-chain so the MSP accepted it.
+                        log::info!(
+                            target: LOG_TARGET,
+                            "File record not found for file_key {:?} during MspAcceptedStorageRequest. \
+                            Recreating from event metadata (recovery).",
+                            file_key
+                        );
+
+                        // Recreate the file record from the metadata in the event
+                        let bucket = Bucket::get_by_onchain_bucket_id(
+                            conn,
+                            file_metadata.bucket_id().to_vec(),
+                        )
+                        .await
+                        .map_err(|e| {
+                            IndexBlockError::EventIndexingDatabaseError {
+                                database_error: e,
+                                block_number: block_number.saturated_into(),
+                                event_name: "MspAcceptedStorageRequest (get bucket)".to_string(),
+                            }
+                        })?;
+
+                        let size: u64 = file_metadata.file_size();
+                        let size: i64 = size.saturated_into();
+
+                        let block_hash_bytes = block_hash.as_bytes().to_vec();
+                        let tx_hash_bytes = evm_tx_hash.map(|h| h.as_bytes().to_vec());
+
+                        // Check if this file key is already present in the bucket of the MSP
+                        // In this scenario, this will always return false, since there's no other file record
+                        // in the DB, but it's still a good practice to check it.
+                        let is_in_bucket =
+                            File::is_file_key_in_bucket(conn, file_key.as_ref().to_vec())
+                                .await
+                                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                                    database_error: e,
+                                    block_number: block_number.saturated_into(),
+                                    event_name:
+                                        "MspAcceptedStorageRequest (check if file key is in bucket)"
+                                            .to_string(),
+                                })?;
+
+                        // Create file with Requested step since we will change it to Stored when the storage request is fulfilled
+                        File::create(
+                            conn,
+                            file_metadata.owner().clone(),
+                            file_key.as_ref().to_vec(),
+                            bucket.id,
+                            file_metadata.bucket_id().clone(),
+                            file_metadata.location().clone(),
+                            file_metadata.fingerprint().as_ref().to_vec(),
+                            size,
+                            FileStorageRequestStep::Requested,
+                            vec![], // No peer_ids available from acceptance event
+                            block_hash_bytes,
+                            tx_hash_bytes,
+                            is_in_bucket,
+                        )
+                        .await
+                        .map_err(|e| {
+                            IndexBlockError::EventIndexingDatabaseError {
+                                database_error: e,
+                                block_number: block_number.saturated_into(),
+                                event_name: "MspAcceptedStorageRequest (create file)".to_string(),
+                            }
+                        })?
+                    }
+                    Err(e) => {
+                        return Err(IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name: "MspAcceptedStorageRequest (get file)".to_string(),
+                        })
+                    }
+                };
+
+                let bucket = Bucket::get_by_onchain_bucket_id(conn, file.onchain_bucket_id.clone())
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "MspAcceptedStorageRequest (get bucket)".to_string(),
+                    })?;
+                if let Some(msp_id) = bucket.msp_id {
+                    MspFile::create(conn, msp_id, file.id).await.map_err(|e| {
+                        IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name: "MspAcceptedStorageRequest (create MSP-file association)"
+                                .to_string(),
+                        }
+                    })?;
+                }
+            }
             pallet_file_system::Event::StorageRequestFulfilled { file_key } => {
                 File::update_step(
                     conn,
@@ -685,437 +664,10 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     })?;
                 // If the file has storage, the `IncompleteStorageRequest` event will handle it
             }
-            pallet_file_system::Event::MspAcceptedStorageRequest {
-                file_key,
-                file_metadata,
-            } => {
-                // There can be multiple file records for a given file key if there were multiple
-                // storage requests for the same file key. We get the latest one created, which
-                // has to be the one that was accepted, given that there can't be two storage
-                // requests for the same file key at the same time.
-                let file = match File::get_latest_by_file_key(conn, file_key.as_ref().to_vec())
-                    .await
-                {
-                    Ok(file) => file,
-                    Err(diesel::result::Error::NotFound) => {
-                        // This can happen if the file was completely deleted from the DB (so all BSP and MSP associations were deleted)
-                        // but a storage request was still present on-chain so the MSP accepted it.
-                        log::info!(
-                            target: LOG_TARGET,
-                            "File record not found for file_key {:?} during MspAcceptedStorageRequest. \
-                            Recreating from event metadata (recovery).",
-                            file_key
-                        );
-
-                        // Recreate the file record from the metadata in the event
-                        let bucket = Bucket::get_by_onchain_bucket_id(
-                            conn,
-                            file_metadata.bucket_id().to_vec(),
-                        )
-                        .await
-                        .map_err(|e| {
-                            IndexBlockError::EventIndexingDatabaseError {
-                                database_error: e,
-                                block_number: block_number.saturated_into(),
-                                event_name: "MspAcceptedStorageRequest (get bucket)".to_string(),
-                            }
-                        })?;
-
-                        let size: u64 = file_metadata.file_size();
-                        let size: i64 = size.saturated_into();
-
-                        let block_hash_bytes = block_hash.as_bytes().to_vec();
-                        let tx_hash_bytes = evm_tx_hash.map(|h| h.as_bytes().to_vec());
-
-                        // We are processing a MSP confirmation, so the file must be in the bucket's forest.
-                        let is_in_bucket = true;
-
-                        // Create file with Requested step since we will change it to Stored when the storage request is fulfilled
-                        File::create(
-                            conn,
-                            file_metadata.owner().clone(),
-                            file_key.as_ref().to_vec(),
-                            bucket.id,
-                            file_metadata.bucket_id().clone(),
-                            file_metadata.location().clone(),
-                            file_metadata.fingerprint().as_ref().to_vec(),
-                            size,
-                            FileStorageRequestStep::Requested,
-                            vec![], // No peer_ids available from acceptance event
-                            block_hash_bytes,
-                            tx_hash_bytes,
-                            is_in_bucket,
-                        )
-                        .await
-                        .map_err(|e| {
-                            IndexBlockError::EventIndexingDatabaseError {
-                                database_error: e,
-                                block_number: block_number.saturated_into(),
-                                event_name: "MspAcceptedStorageRequest (create file)".to_string(),
-                            }
-                        })?
-                    }
-                    Err(e) => {
-                        return Err(IndexBlockError::EventIndexingDatabaseError {
-                            database_error: e,
-                            block_number: block_number.saturated_into(),
-                            event_name: "MspAcceptedStorageRequest (get file)".to_string(),
-                        })
-                    }
-                };
-
-                let bucket = Bucket::get_by_onchain_bucket_id(conn, file.onchain_bucket_id.clone())
-                    .await
-                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                        database_error: e,
-                        block_number: block_number.saturated_into(),
-                        event_name: "MspAcceptedStorageRequest (get bucket)".to_string(),
-                    })?;
-                if let Some(msp_id) = bucket.msp_id {
-                    MspFile::create(conn, msp_id, file.id).await.map_err(|e| {
-                        IndexBlockError::EventIndexingDatabaseError {
-                            database_error: e,
-                            block_number: block_number.saturated_into(),
-                            event_name: "MspAcceptedStorageRequest (create MSP-file association)"
-                                .to_string(),
-                        }
-                    })?;
-                }
-            }
-            pallet_file_system::Event::BspRequestedToStopStoring { .. } => {}
-            pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. } => {}
-            pallet_file_system::Event::MspStopStoringBucketInsolventUser {
-                msp_id,
-                owner: _,
-                bucket_id,
-            } => {
-                let msp = Msp::get_by_onchain_msp_id(conn, OnchainMspId::from(*msp_id))
-                    .await
-                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                        database_error: e,
-                        block_number: block_number.saturated_into(),
-                        event_name: "MspStopStoringBucketInsolventUser (get MSP)".to_string(),
-                    })?;
-
-                // Get all files in this bucket before deleting associations
-                let files = File::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec())
-                    .await
-                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                        database_error: e,
-                        block_number: block_number.saturated_into(),
-                        event_name: "MspStopStoringBucketInsolventUser (get files)".to_string(),
-                    })?;
-
-                // Delete the MSP-file associations for all files in the bucket
-                MspFile::delete_by_bucket(conn, bucket_id.as_ref(), msp.id)
-                    .await
-                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                        database_error: e,
-                        block_number: block_number.saturated_into(),
-                        event_name:
-                            "MspStopStoringBucketInsolventUser (delete MSP-file associations)"
-                                .to_string(),
-                    })?;
-
-                // Mark all files as no longer in the bucket and clean up orphaned files.
-                for file in files {
-                    File::update_bucket_membership(conn, &file.file_key, bucket_id.as_ref(), false)
-                        .await
-                        .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                            database_error: e,
-                            block_number: block_number.saturated_into(),
-                            event_name:
-                                "MspStopStoringBucketInsolventUser (update file bucket membership)"
-                                    .to_string(),
-                        })?;
-                    File::delete_if_orphaned(conn, &file.file_key)
-                        .await
-                        .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                            database_error: e,
-                            block_number: block_number.saturated_into(),
-                            event_name:
-                                "MspStopStoringBucketInsolventUser (delete file if orphaned)"
-                                    .to_string(),
-                        })?;
-                }
-
-                // Unset the MSP from the bucket to reflect on-chain state
-                Bucket::unset_msp(conn, bucket_id.as_ref().to_vec())
-                    .await
-                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                        database_error: e,
-                        block_number: block_number.saturated_into(),
-                        event_name:
-                            "MspStopStoringBucketInsolventUser (unset bucket MSP reference)"
-                                .to_string(),
-                    })?;
-
-                // Try to delete the bucket if no files reference it anymore.
-                // If files still exist (e.g. BSPs are still storing them), the bucket
-                // record is kept and will be cleaned up when the last file is deleted.
-                Bucket::delete_if_orphaned(conn, bucket_id.as_ref().to_vec())
-                    .await
-                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                        database_error: e,
-                        block_number: block_number.saturated_into(),
-                        event_name: "MspStopStoringBucketInsolventUser (delete bucket if orphaned)"
-                            .to_string(),
-                    })?;
-            }
-            pallet_file_system::Event::SpStopStoringInsolventUser {
-                sp_id,
-                file_key,
-                owner: _,
-                location: _,
-                new_root: _,
-            } => {
-                // Get the file's bucket ID before any deletions in case we have to clean up the bucket afterwards
-                let file_record = File::get_latest_by_file_key(conn, file_key.as_ref().to_vec())
-                    .await
-                    .ok();
-                let onchain_bucket_id = file_record.map(|f| f.onchain_bucket_id);
-
-                // This event can be emitted by either a BSP or MSP stopping storage for an insolvent user.
-                // We need to check which type of provider it is and handle accordingly.
-                let bsp_result = Bsp::get_by_onchain_bsp_id(conn, OnchainBspId::from(*sp_id)).await;
-
-                // If it's a BSP, delete the BSP-file association
-                if bsp_result.is_ok() {
-                    BspFile::delete_for_bsp(conn, file_key, OnchainBspId::from(*sp_id))
-                        .await
-                        .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                            database_error: e,
-                            block_number: block_number.saturated_into(),
-                            event_name: "SpStopStoringInsolventUser (delete BSP-file associations)"
-                                .to_string(),
-                        })?;
-                } else {
-                    // It's an MSP, delete the MSP-file association
-                    MspFile::delete(conn, file_key.as_ref(), OnchainMspId::from(*sp_id))
-                        .await
-                        .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                            database_error: e,
-                            block_number: block_number.saturated_into(),
-                            event_name: "SpStopStoringInsolventUser (delete MSP-file associations)"
-                                .to_string(),
-                        })?;
-                }
-
-                // Clean up the file if it has no remaining associations
-                File::delete_if_orphaned(conn, file_key.as_ref())
-                    .await
-                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                        database_error: e,
-                        block_number: block_number.saturated_into(),
-                        event_name: "SpStopStoringInsolventUser (delete file if orphaned)"
-                            .to_string(),
-                    })?;
-
-                // If the file was deleted and belonged to a bucket that was deleted on-chain
-                // try to clean up the bucket as well
-                if let Some(bucket_id) = onchain_bucket_id {
-                    // Only attempt bucket cleanup if the bucket has no MSP, as this means
-                    // the MSP has already deleted the bucket.
-                    if let Ok(bucket) =
-                        Bucket::get_by_onchain_bucket_id(conn, bucket_id.clone()).await
-                    {
-                        if bucket.msp_id.is_none() {
-                            Bucket::delete_if_orphaned(conn, bucket_id)
-                                .await
-                                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                                    database_error: e,
-                                    block_number: block_number.saturated_into(),
-                                    event_name:
-                                        "SpStopStoringInsolventUser (delete bucket if orphaned)"
-                                            .to_string(),
-                                })?;
-                        }
-                    }
-                }
-            }
-            pallet_file_system::Event::FailedToQueuePriorityChallenge { .. } => {}
-            pallet_file_system::Event::FileDeletionRequest { .. } => {}
-            pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest { .. } => {}
-            pallet_file_system::Event::BspChallengeCycleInitialised { .. } => {}
-            pallet_file_system::Event::MoveBucketRequestExpired { .. } => {}
-            pallet_file_system::Event::MoveBucketRejected { .. } => {}
-            pallet_file_system::Event::MspStoppedStoringBucket {
-                msp_id,
-                owner: _,
-                bucket_id,
-            } => {
-                // In this scenario, there's no need to update the `is_in_bucket` field of the files in the bucket,
-                // since the bucket still exists and is still storing the files (according to its on-chain forest root).
-
-                // Delete the MSP-file associations for all files in the bucket
-                let msp = Msp::get_by_onchain_msp_id(conn, OnchainMspId::from(*msp_id))
-                    .await
-                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                        database_error: e,
-                        block_number: block_number.saturated_into(),
-                        event_name: "MspStoppedStoringBucket (get MSP)".to_string(),
-                    })?;
-                MspFile::delete_by_bucket(conn, bucket_id.as_ref(), msp.id)
-                    .await
-                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                        database_error: e,
-                        block_number: block_number.saturated_into(),
-                        event_name: "MspStoppedStoringBucket (delete MSP-file associations)"
-                            .to_string(),
-                    })?;
-
-                // Unset the MSP from the bucket to reflect on-chain state
-                Bucket::unset_msp(conn, bucket_id.as_ref().to_vec())
-                    .await
-                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                        database_error: e,
-                        block_number: block_number.saturated_into(),
-                        event_name: "MspStoppedStoringBucket (unset bucket MSP reference)"
-                            .to_string(),
-                    })?;
-            }
-            pallet_file_system::Event::BucketDeleted {
-                who: _,
-                bucket_id,
-                maybe_collection_id: _,
-            } => {
-                // Delete the bucket from the database. This should not fail as no files should be associated with it,
-                // since to be able to be deleted on-chain the bucket must have been empty.
-                Bucket::delete(conn, bucket_id.as_ref().to_vec())
-                    .await
-                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                        database_error: e,
-                        block_number: block_number.saturated_into(),
-                        event_name: "BucketDeleted (delete bucket)".to_string(),
-                    })?;
-            }
-            pallet_file_system::Event::FileDeletionRequested {
-                signed_delete_intention,
-                signature,
-            } => {
-                // Mark the file for deletion with the user signed deletion intention.
-                let file_key = &signed_delete_intention.file_key;
-                let signature_bytes = signature.encode();
-                File::update_deletion_status(
-                    conn,
-                    file_key.as_ref(),
-                    FileDeletionStatus::InProgress,
-                    Some(signature_bytes),
-                )
-                .await
-                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                    database_error: e,
-                    block_number: block_number.saturated_into(),
-                    event_name: "FileDeletionRequested (update file deletion status)".to_string(),
-                })?;
-            }
-            pallet_file_system::Event::FailedToGetMspOfBucket { .. } => {}
-            pallet_file_system::Event::FailedToDecreaseMspUsedCapacity { .. } => {}
-            pallet_file_system::Event::UsedCapacityShouldBeZero { .. } => {
-                // In the future we should monitor for this to detect eventual bugs in the pallets
-            }
-            pallet_file_system::Event::FailedToReleaseStorageRequestCreationDeposit { .. } => {
-                // In the future we should monitor for this to detect eventual bugs in the pallets
-            }
-            pallet_file_system::Event::FailedToTransferDepositFundsToBsp { .. } => {
-                // In the future we should monitor for this to detect eventual bugs in the pallets
-            }
-            pallet_file_system::Event::BucketFileDeletionsCompleted {
-                user: _,
-                file_keys,
-                bucket_id,
-                msp_id: maybe_msp_id,
-                old_root: _,
-                new_root,
-            } => {
-                // Delete MSP-file associations for all files in the batch
-                if let Some(msp_id) = maybe_msp_id {
-                    for file_key in file_keys.iter() {
-                        MspFile::delete(conn, file_key.as_ref(), OnchainMspId::from(*msp_id))
-                            .await
-                            .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                                database_error: e,
-                                block_number: block_number.saturated_into(),
-                                event_name:
-                                    "BucketFileDeletionsCompleted (delete MSP-file associations)"
-                                        .to_string(),
-                            })?;
-                    }
-                }
-
-                // Check if files should be deleted (no more associations)
-                for file_key in file_keys.iter() {
-                    File::delete_if_orphaned(conn, file_key.as_ref())
-                        .await
-                        .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                            database_error: e,
-                            block_number: block_number.saturated_into(),
-                            event_name: "BucketFileDeletionsCompleted (delete file if orphaned)"
-                                .to_string(),
-                        })?;
-                }
-
-                // Update bucket merkle root
-                Bucket::update_merkle_root(
-                    conn,
-                    bucket_id.as_ref().to_vec(),
-                    new_root.as_ref().to_vec(),
-                )
-                .await
-                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                    database_error: e,
-                    block_number: block_number.saturated_into(),
-                    event_name: "BucketFileDeletionsCompleted (update bucket merkle root)"
-                        .to_string(),
-                })?;
-            }
-            pallet_file_system::Event::BspFileDeletionsCompleted {
-                users: _,
-                file_keys,
-                bsp_id,
-                old_root: _,
-                new_root,
-            } => {
-                // Delete BSP-file associations for all files in the batch
-                for file_key in file_keys.iter() {
-                    BspFile::delete_for_bsp(conn, file_key.as_ref(), OnchainBspId::from(*bsp_id))
-                        .await
-                        .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                            database_error: e,
-                            block_number: block_number.saturated_into(),
-                            event_name: "BspFileDeletionsCompleted (delete BSP-file associations)"
-                                .to_string(),
-                        })?;
-                }
-
-                // Check if files should be deleted (no more associations)
-                for file_key in file_keys.iter() {
-                    File::delete_if_orphaned(conn, file_key.as_ref())
-                        .await
-                        .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                            database_error: e,
-                            block_number: block_number.saturated_into(),
-                            event_name: "BspFileDeletionsCompleted (delete file if orphaned)"
-                                .to_string(),
-                        })?;
-                }
-
-                // Update BSP merkle root
-                Bsp::update_merkle_root(
-                    conn,
-                    OnchainBspId::from(*bsp_id),
-                    new_root.as_ref().to_vec(),
-                )
-                .await
-                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
-                    database_error: e,
-                    block_number: block_number.saturated_into(),
-                    event_name: "BspFileDeletionsCompleted (update BSP merkle root)".to_string(),
-                })?;
-            }
             // This event covers all scenarios where a storage request was unfulfilled while there were BSPs and/or the MSP who have confirmed to store the file
             // and necessitates a fisherman to delete this file.
             pallet_file_system::Event::IncompleteStorageRequest { file_key } => {
+                // Check if file is in bucket or has BSP associations
                 // There can be multiple file records for a given file key if there were multiple
                 // storage requests for the same file key. We get the latest one created, which
                 // has to be the incomplete one, given that there can't be two storage
@@ -1241,6 +793,471 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     })?;
                 }
             }
+
+            // BSP volunteer and confirmation events
+            pallet_file_system::Event::AcceptedBspVolunteer { .. } => {}
+            pallet_file_system::Event::BspConfirmedStoring {
+                who: _,
+                bsp_id,
+                confirmed_file_keys,
+                skipped_file_keys: _,
+                new_root,
+            } => {
+                Bsp::update_merkle_root(
+                    conn,
+                    OnchainBspId::from(*bsp_id),
+                    new_root.as_ref().to_vec(),
+                )
+                .await
+                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                    database_error: e,
+                    block_number: block_number.saturated_into(),
+                    event_name: "BspConfirmedStoring (update BSP merkle root)".to_string(),
+                })?;
+
+                let bsp = Bsp::get_by_onchain_bsp_id(conn, OnchainBspId::from(*bsp_id))
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "BspConfirmedStoring (get BSP)".to_string(),
+                    })?;
+                for (file_key, file_metadata) in confirmed_file_keys {
+                    // There can be multiple file records for a given file key if there were multiple
+                    // storage requests for the same file key. We get the latest one created, which
+                    // has to be the one that was confirmed, given that there can't be two storage
+                    // requests for the same file key at the same time.
+                    let file = match File::get_latest_by_file_key(conn, file_key.as_ref().to_vec())
+                        .await
+                    {
+                        Ok(file) => file,
+                        Err(diesel::result::Error::NotFound) => {
+                            // This can happen if the file was completely deleted from the DB (so all BSP and MSP associations were deleted)
+                            // but a storage request was still present on-chain so a BSP confirmed storing it.
+                            log::info!(
+                                target: LOG_TARGET,
+                                "File record not found for file_key {:?} during BspConfirmedStoring. \
+                                Recreating from event metadata (recovery).",
+                                file_key
+                            );
+
+                            // Recreate the file record from the metadata in the event
+                            let bucket = Bucket::get_by_onchain_bucket_id(
+                                conn,
+                                file_metadata.bucket_id().to_vec(),
+                            )
+                            .await
+                            .map_err(|e| {
+                                IndexBlockError::EventIndexingDatabaseError {
+                                    database_error: e,
+                                    block_number: block_number.saturated_into(),
+                                    event_name: "BspConfirmedStoring (get bucket)".to_string(),
+                                }
+                            })?;
+
+                            let size: u64 = file_metadata.file_size();
+                            let size: i64 = size.saturated_into();
+
+                            let block_hash_bytes = block_hash.as_bytes().to_vec();
+                            let tx_hash_bytes = evm_tx_hash.map(|h| h.as_bytes().to_vec());
+
+                            // Check if this file key is already present in the bucket of the MSP
+                            // In this scenario, this will always return false, since there's no other file record
+                            // in the DB, but it's still good practice to check it.
+                            let is_in_bucket =
+                                File::is_file_key_in_bucket(conn, file_key.as_ref().to_vec())
+                                    .await
+                                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                                        database_error: e,
+                                        block_number: block_number.saturated_into(),
+                                        event_name:
+                                            "BspConfirmedStoring (check if file key is in bucket)"
+                                                .to_string(),
+                                    })?;
+
+                            // Create file with Requested step since we will change it to Stored when the storage request is fulfilled
+                            File::create(
+                                conn,
+                                file_metadata.owner().clone(),
+                                file_key.as_ref().to_vec(),
+                                bucket.id,
+                                file_metadata.bucket_id().clone(),
+                                file_metadata.location().clone(),
+                                file_metadata.fingerprint().as_ref().to_vec(),
+                                size,
+                                FileStorageRequestStep::Requested,
+                                vec![], // No peer_ids available from confirmation event
+                                block_hash_bytes,
+                                tx_hash_bytes,
+                                is_in_bucket,
+                            )
+                            .await
+                            .map_err(|e| {
+                                IndexBlockError::EventIndexingDatabaseError {
+                                    database_error: e,
+                                    block_number: block_number.saturated_into(),
+                                    event_name: "BspConfirmedStoring (create file)".to_string(),
+                                }
+                            })?
+                        }
+                        Err(e) => {
+                            return Err(IndexBlockError::EventIndexingDatabaseError {
+                                database_error: e,
+                                block_number: block_number.saturated_into(),
+                                event_name: "BspConfirmedStoring (get file)".to_string(),
+                            })
+                        }
+                    };
+
+                    BspFile::create(conn, bsp.id, file.id).await.map_err(|e| {
+                        IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name: "BspConfirmedStoring (create BSP-file association)"
+                                .to_string(),
+                        }
+                    })?;
+                }
+            }
+            pallet_file_system::Event::BspChallengeCycleInitialised { .. } => {}
+
+            // Stop storing events
+            pallet_file_system::Event::BspRequestedToStopStoring { .. } => {}
+            pallet_file_system::Event::BspConfirmStoppedStoring {
+                bsp_id,
+                file_key,
+                new_root,
+            } => {
+                Bsp::update_merkle_root(
+                    conn,
+                    OnchainBspId::from(*bsp_id),
+                    new_root.as_ref().to_vec(),
+                )
+                .await
+                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                    database_error: e,
+                    block_number: block_number.saturated_into(),
+                    event_name: "BspConfirmStoppedStoring (update BSP merkle root)".to_string(),
+                })?;
+                BspFile::delete_for_bsp(conn, file_key.as_ref(), OnchainBspId::from(*bsp_id))
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "BspConfirmStoppedStoring (delete BSP-file associations)"
+                            .to_string(),
+                    })?;
+            }
+            pallet_file_system::Event::MspStoppedStoringBucket {
+                msp_id,
+                owner: _,
+                bucket_id,
+            } => {
+                // In this scenario, there's no need to update the `is_in_bucket` field of the files in the bucket,
+                // since the bucket still exists and is still storing the files (according to its on-chain forest root).
+
+                // Delete the MSP-file associations for all files in the bucket
+                let msp = Msp::get_by_onchain_msp_id(conn, OnchainMspId::from(*msp_id))
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "MspStoppedStoringBucket (get MSP)".to_string(),
+                    })?;
+                MspFile::delete_by_bucket(conn, bucket_id.as_ref(), msp.id)
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "MspStoppedStoringBucket (delete MSP-file associations)"
+                            .to_string(),
+                    })?;
+
+                // Unset the MSP from the bucket to reflect on-chain state
+                Bucket::unset_msp(conn, bucket_id.as_ref().to_vec())
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "MspStoppedStoringBucket (unset bucket MSP reference)"
+                            .to_string(),
+                    })?;
+            }
+
+            // Insolvent user events
+            pallet_file_system::Event::SpStopStoringInsolventUser {
+                sp_id,
+                file_key,
+                owner: _,
+                location: _,
+                new_root: _,
+            } => {
+                // Get the file's bucket ID before any deletions in case we have to clean up the bucket afterwards
+                let file_record = File::get_latest_by_file_key(conn, file_key.as_ref().to_vec())
+                    .await
+                    .ok();
+                let onchain_bucket_id = file_record.map(|f| f.onchain_bucket_id);
+
+                // This event can be emitted by either a BSP or MSP stopping storage for an insolvent user.
+                // We need to check which type of provider it is and handle accordingly.
+                let bsp_result = Bsp::get_by_onchain_bsp_id(conn, OnchainBspId::from(*sp_id)).await;
+
+                // If it's a BSP, delete the BSP-file association
+                if bsp_result.is_ok() {
+                    BspFile::delete_for_bsp(conn, file_key, OnchainBspId::from(*sp_id))
+                        .await
+                        .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name: "SpStopStoringInsolventUser (delete BSP-file associations)"
+                                .to_string(),
+                        })?;
+                } else {
+                    // It's an MSP, delete the MSP-file association
+                    MspFile::delete(conn, file_key.as_ref(), OnchainMspId::from(*sp_id))
+                        .await
+                        .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name: "SpStopStoringInsolventUser (delete MSP-file associations)"
+                                .to_string(),
+                        })?;
+                }
+
+                // Clean up the file if it has no remaining associations
+                File::delete_if_orphaned(conn, file_key.as_ref())
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "SpStopStoringInsolventUser (delete file if orphaned)"
+                            .to_string(),
+                    })?;
+
+                // If the file was deleted and belonged to a bucket that was deleted on-chain
+                // try to clean up the bucket as well
+                if let Some(bucket_id) = onchain_bucket_id {
+                    // Only attempt bucket cleanup if the bucket has no MSP, as this means
+                    // the MSP has already deleted the bucket.
+                    if let Ok(bucket) =
+                        Bucket::get_by_onchain_bucket_id(conn, bucket_id.clone()).await
+                    {
+                        if bucket.msp_id.is_none() {
+                            Bucket::delete_if_orphaned(conn, bucket_id)
+                                .await
+                                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                                    database_error: e,
+                                    block_number: block_number.saturated_into(),
+                                    event_name:
+                                        "SpStopStoringInsolventUser (delete bucket if orphaned)"
+                                            .to_string(),
+                                })?;
+                        }
+                    }
+                }
+            }
+            pallet_file_system::Event::MspStopStoringBucketInsolventUser {
+                msp_id,
+                owner: _,
+                bucket_id,
+            } => {
+                let msp = Msp::get_by_onchain_msp_id(conn, OnchainMspId::from(*msp_id))
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "MspStopStoringBucketInsolventUser (get MSP)".to_string(),
+                    })?;
+
+                // Get all files in this bucket before deleting associations
+                let files = File::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec())
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "MspStopStoringBucketInsolventUser (get files)".to_string(),
+                    })?;
+
+                // Delete the MSP-file associations for all files in the bucket
+                MspFile::delete_by_bucket(conn, bucket_id.as_ref(), msp.id)
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name:
+                            "MspStopStoringBucketInsolventUser (delete MSP-file associations)"
+                                .to_string(),
+                    })?;
+
+                // Mark all files as no longer in the bucket and clean up orphaned files.
+                for file in files {
+                    File::update_bucket_membership(conn, &file.file_key, bucket_id.as_ref(), false)
+                        .await
+                        .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name:
+                                "MspStopStoringBucketInsolventUser (update file bucket membership)"
+                                    .to_string(),
+                        })?;
+                    File::delete_if_orphaned(conn, &file.file_key)
+                        .await
+                        .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name:
+                                "MspStopStoringBucketInsolventUser (delete file if orphaned)"
+                                    .to_string(),
+                        })?;
+                }
+
+                // Unset the MSP from the bucket to reflect on-chain state
+                Bucket::unset_msp(conn, bucket_id.as_ref().to_vec())
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name:
+                            "MspStopStoringBucketInsolventUser (unset bucket MSP reference)"
+                                .to_string(),
+                    })?;
+
+                // Try to delete the bucket if no files reference it anymore.
+                // If files still exist (e.g. BSPs are still storing them), the bucket
+                // record is kept and will be cleaned up when the last file is deleted.
+                Bucket::delete_if_orphaned(conn, bucket_id.as_ref().to_vec())
+                    .await
+                    .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "MspStopStoringBucketInsolventUser (delete bucket if orphaned)"
+                            .to_string(),
+                    })?;
+            }
+
+            // File deletion events
+            pallet_file_system::Event::FileDeletionRequested {
+                signed_delete_intention,
+                signature,
+            } => {
+                // Mark the file for deletion with the user signed deletion intention.
+                let file_key = &signed_delete_intention.file_key;
+                let signature_bytes = signature.encode();
+                File::update_deletion_status(
+                    conn,
+                    file_key.as_ref(),
+                    FileDeletionStatus::InProgress,
+                    Some(signature_bytes),
+                )
+                .await
+                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                    database_error: e,
+                    block_number: block_number.saturated_into(),
+                    event_name: "FileDeletionRequested (update file deletion status)".to_string(),
+                })?;
+            }
+            pallet_file_system::Event::BucketFileDeletionsCompleted {
+                user: _,
+                file_keys,
+                bucket_id,
+                msp_id: maybe_msp_id,
+                old_root: _,
+                new_root,
+            } => {
+                // Delete MSP-file associations for all files in the batch
+                if let Some(msp_id) = maybe_msp_id {
+                    for file_key in file_keys.iter() {
+                        MspFile::delete(conn, file_key.as_ref(), OnchainMspId::from(*msp_id))
+                            .await
+                            .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                                database_error: e,
+                                block_number: block_number.saturated_into(),
+                                event_name:
+                                    "BucketFileDeletionsCompleted (delete MSP-file associations)"
+                                        .to_string(),
+                            })?;
+                    }
+                }
+
+                // Check if files should be deleted (no more associations)
+                for file_key in file_keys.iter() {
+                    File::delete_if_orphaned(conn, file_key.as_ref())
+                        .await
+                        .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name: "BucketFileDeletionsCompleted (delete file if orphaned)"
+                                .to_string(),
+                        })?;
+                }
+
+                // Update bucket merkle root
+                Bucket::update_merkle_root(
+                    conn,
+                    bucket_id.as_ref().to_vec(),
+                    new_root.as_ref().to_vec(),
+                )
+                .await
+                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                    database_error: e,
+                    block_number: block_number.saturated_into(),
+                    event_name: "BucketFileDeletionsCompleted (update bucket merkle root)"
+                        .to_string(),
+                })?;
+            }
+            pallet_file_system::Event::BspFileDeletionsCompleted {
+                users: _,
+                file_keys,
+                bsp_id,
+                old_root: _,
+                new_root,
+            } => {
+                // Delete BSP-file associations for all files in the batch
+                for file_key in file_keys.iter() {
+                    BspFile::delete_for_bsp(conn, file_key.as_ref(), OnchainBspId::from(*bsp_id))
+                        .await
+                        .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name: "BspFileDeletionsCompleted (delete BSP-file associations)"
+                                .to_string(),
+                        })?;
+                }
+
+                // Check if files should be deleted (no more associations)
+                for file_key in file_keys.iter() {
+                    File::delete_if_orphaned(conn, file_key.as_ref())
+                        .await
+                        .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name: "BspFileDeletionsCompleted (delete file if orphaned)"
+                                .to_string(),
+                        })?;
+                }
+
+                // Update BSP merkle root
+                Bsp::update_merkle_root(
+                    conn,
+                    OnchainBspId::from(*bsp_id),
+                    new_root.as_ref().to_vec(),
+                )
+                .await
+                .map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                    database_error: e,
+                    block_number: block_number.saturated_into(),
+                    event_name: "BspFileDeletionsCompleted (update BSP merkle root)".to_string(),
+                })?;
+            }
+
+            // System and error events
+            pallet_file_system::Event::UsedCapacityShouldBeZero { .. } => {
+                // In the future we should monitor for this to detect eventual bugs in the pallets
+            }
+            pallet_file_system::Event::FailedToReleaseStorageRequestCreationDeposit { .. } => {
+                // In the future we should monitor for this to detect eventual bugs in the pallets
+            }
+
             pallet_file_system::Event::__Ignore(_, _) => {}
         }
         Ok(())

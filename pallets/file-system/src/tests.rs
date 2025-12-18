@@ -16159,7 +16159,7 @@ mod delete_files_for_incomplete_storage_request_tests {
                         Some(bsp_id),
                         forest_proof,
                     ),
-                    Error::<Test>::FileKeyMismatch
+                    Error::<Test>::InvalidFileKeyMetadata
                 );
             });
         }
