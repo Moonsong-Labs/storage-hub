@@ -2044,7 +2044,8 @@ mod benchmarks {
 
         // Simulate the MSP accepting the storage request
         StorageRequests::<T>::mutate(file_key, |storage_request| {
-            storage_request.as_mut().unwrap().msp_status = MspStorageRequestStatus::AcceptedNewFile(msp_id);
+            storage_request.as_mut().unwrap().msp_status =
+                MspStorageRequestStatus::AcceptedNewFile(msp_id);
         });
 
         // Add n BSPs to the StorageRequestBsps mapping since that's the one that is drained in the benchmarked function
