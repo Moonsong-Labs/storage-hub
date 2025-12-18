@@ -13,8 +13,7 @@ use shc_common::{
 };
 
 use crate::types::{
-    ConfirmStoringRequest, FileDeletionRequest, RespondStorageRequest,
-    StopStoringForInsolventUserRequest,
+    ConfirmStoringRequest, FileDeletionRequest, StopStoringForInsolventUserRequest,
 };
 
 /// Last processed block number.
@@ -121,63 +120,6 @@ impl PendingConfirmStoringRequestRightIndexName {
     pub const NAME: &'static str = "pending_confirm_storing_request_right_index";
 }
 
-/// Pending respond storage requests.
-pub struct PendingMspRespondStorageRequestCf<Runtime: StorageEnableRuntime> {
-    pub(crate) phantom: std::marker::PhantomData<Runtime>,
-}
-impl<Runtime: StorageEnableRuntime> ScaleEncodedCf for PendingMspRespondStorageRequestCf<Runtime> {
-    type Key = u64;
-    type Value = RespondStorageRequest<Runtime>;
-
-    const SCALE_ENCODED_NAME: &'static str = PendingMspRespondStorageRequestName::NAME;
-}
-
-impl<Runtime: StorageEnableRuntime> Default for PendingMspRespondStorageRequestCf<Runtime> {
-    fn default() -> Self {
-        Self {
-            phantom: std::marker::PhantomData,
-        }
-    }
-}
-
-/// Non-generic name holder for the `PendingMspRespondStorageRequest` column family
-pub struct PendingMspRespondStorageRequestName;
-impl PendingMspRespondStorageRequestName {
-    pub const NAME: &'static str = "pending_msp_respond_storage_request";
-}
-
-/// Pending respond storage requests left side (inclusive) index for the [`PendingMspRespondStorageRequestCf`] CF.
-#[derive(Default)]
-pub struct PendingMspRespondStorageRequestLeftIndexCf;
-impl SingleScaleEncodedValueCf for PendingMspRespondStorageRequestLeftIndexCf {
-    type Value = u64;
-
-    const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
-        PendingMspRespondStorageRequestLeftIndexName::NAME;
-}
-
-/// Non-generic name holder for the `PendingMspRespondStorageRequestLeftIndex` column family
-pub struct PendingMspRespondStorageRequestLeftIndexName;
-impl PendingMspRespondStorageRequestLeftIndexName {
-    pub const NAME: &'static str = "pending_msp_respond_storage_request_left_index";
-}
-
-/// Pending respond storage requests right side (exclusive) index for the [`PendingMspRespondStorageRequestCf`] CF.
-#[derive(Default)]
-pub struct PendingMspRespondStorageRequestRightIndexCf;
-impl SingleScaleEncodedValueCf for PendingMspRespondStorageRequestRightIndexCf {
-    type Value = u64;
-
-    const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
-        PendingMspRespondStorageRequestRightIndexName::NAME;
-}
-
-/// Non-generic name holder for the `PendingMspRespondStorageRequestRightIndex` column family
-pub struct PendingMspRespondStorageRequestRightIndexName;
-impl PendingMspRespondStorageRequestRightIndexName {
-    pub const NAME: &'static str = "pending_msp_respond_storage_request_right_index";
-}
-
 /// Pending submit proof requests left side (inclusive) index for the [`PendingStopStoringForInsolventUserRequestCf`] CF.
 #[derive(Default)]
 pub struct PendingStopStoringForInsolventUserRequestLeftIndexCf;
@@ -265,20 +207,108 @@ impl FileDeletionRequestRightIndexName {
     pub const NAME: &'static str = "pending_file_deletion_request_right_index";
 }
 
+// Deprecated column families - kept for backward compatibility with existing RocksDB databases.
+// The functionality has been replaced with in-memory queueing in `MspHandler`.
+#[allow(deprecated, dead_code)]
+mod deprecated_cfs {
+    use super::*;
+
+    /// Pending respond storage requests.
+    ///
+    /// # Deprecated
+    /// This column family is deprecated and no longer used.
+    /// It is kept for backward compatibility with existing RocksDB databases.
+    /// The functionality has been replaced with in-memory queueing in `MspHandler`.
+    #[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
+    pub struct PendingMspRespondStorageRequestCf<Runtime: StorageEnableRuntime> {
+        pub(crate) phantom: std::marker::PhantomData<Runtime>,
+    }
+    impl<Runtime: StorageEnableRuntime> ScaleEncodedCf for PendingMspRespondStorageRequestCf<Runtime> {
+        type Key = u64;
+        type Value = crate::types::RespondStorageRequest<Runtime>;
+
+        const SCALE_ENCODED_NAME: &'static str = PendingMspRespondStorageRequestName::NAME;
+    }
+
+    impl<Runtime: StorageEnableRuntime> Default for PendingMspRespondStorageRequestCf<Runtime> {
+        fn default() -> Self {
+            Self {
+                phantom: std::marker::PhantomData,
+            }
+        }
+    }
+
+    /// Non-generic name holder for the `PendingMspRespondStorageRequest` column family
+    #[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
+    pub struct PendingMspRespondStorageRequestName;
+    impl PendingMspRespondStorageRequestName {
+        pub const NAME: &'static str = "pending_msp_respond_storage_request";
+    }
+
+    /// Pending respond storage requests left side (inclusive) index for the [`PendingMspRespondStorageRequestCf`] CF.
+    ///
+    /// # Deprecated
+    /// This column family is deprecated and no longer used.
+    /// It is kept for backward compatibility with existing RocksDB databases.
+    #[derive(Default)]
+    #[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
+    pub struct PendingMspRespondStorageRequestLeftIndexCf;
+    impl SingleScaleEncodedValueCf for PendingMspRespondStorageRequestLeftIndexCf {
+        type Value = u64;
+
+        const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
+            PendingMspRespondStorageRequestLeftIndexName::NAME;
+    }
+
+    /// Non-generic name holder for the `PendingMspRespondStorageRequestLeftIndex` column family
+    #[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
+    pub struct PendingMspRespondStorageRequestLeftIndexName;
+    impl PendingMspRespondStorageRequestLeftIndexName {
+        pub const NAME: &'static str = "pending_msp_respond_storage_request_left_index";
+    }
+
+    /// Pending respond storage requests right side (exclusive) index for the [`PendingMspRespondStorageRequestCf`] CF.
+    ///
+    /// # Deprecated
+    /// This column family is deprecated and no longer used.
+    /// It is kept for backward compatibility with existing RocksDB databases.
+    #[derive(Default)]
+    #[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
+    pub struct PendingMspRespondStorageRequestRightIndexCf;
+    impl SingleScaleEncodedValueCf for PendingMspRespondStorageRequestRightIndexCf {
+        type Value = u64;
+
+        const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
+            PendingMspRespondStorageRequestRightIndexName::NAME;
+    }
+
+    /// Non-generic name holder for the `PendingMspRespondStorageRequestRightIndex` column family
+    #[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
+    pub struct PendingMspRespondStorageRequestRightIndexName;
+    impl PendingMspRespondStorageRequestRightIndexName {
+        pub const NAME: &'static str = "pending_msp_respond_storage_request_right_index";
+    }
+}
+
+use deprecated_cfs::*;
+
+// Deprecated column families are included for backward compatibility with existing RocksDB databases
+#[allow(deprecated)]
 const ALL_COLUMN_FAMILIES: [&str; 13] = [
     LastProcessedBlockNumberName::NAME,
     PendingConfirmStoringRequestLeftIndexName::NAME,
     PendingConfirmStoringRequestRightIndexName::NAME,
     PendingConfirmStoringRequestName::NAME,
-    PendingMspRespondStorageRequestLeftIndexName::NAME,
-    PendingMspRespondStorageRequestRightIndexName::NAME,
-    PendingMspRespondStorageRequestName::NAME,
     PendingStopStoringForInsolventUserRequestLeftIndexName::NAME,
     PendingStopStoringForInsolventUserRequestRightIndexName::NAME,
     PendingStopStoringForInsolventUserRequestName::NAME,
     FileDeletionRequestLeftIndexName::NAME,
     FileDeletionRequestRightIndexName::NAME,
     FileDeletionRequestName::NAME,
+    // Deprecated column families - kept for backward compatibility with existing RocksDB databases
+    PendingMspRespondStorageRequestLeftIndexName::NAME,
+    PendingMspRespondStorageRequestRightIndexName::NAME,
+    PendingMspRespondStorageRequestName::NAME,
 ];
 
 /// A persistent blockchain service state store.
@@ -337,15 +367,6 @@ impl<'a> BlockchainServiceStateStoreRwContext<'a> {
         &'a self,
     ) -> PendingConfirmStoringRequestDequeAPI<'a, Runtime> {
         PendingConfirmStoringRequestDequeAPI {
-            phantom: std::marker::PhantomData,
-            db_context: &self.db_context,
-        }
-    }
-
-    pub fn pending_msp_respond_storage_request_deque<Runtime: StorageEnableRuntime>(
-        &'a self,
-    ) -> PendingMspRespondStorageRequestDequeAPI<'a, Runtime> {
-        PendingMspRespondStorageRequestDequeAPI {
             phantom: std::marker::PhantomData,
             db_context: &self.db_context,
         }
@@ -415,35 +436,6 @@ impl<'a, Runtime: StorageEnableRuntime> CFDequeAPI
     type LeftIndexCF = PendingConfirmStoringRequestLeftIndexCf;
     type RightIndexCF = PendingConfirmStoringRequestRightIndexCf;
     type DataCF = PendingConfirmStoringRequestCf<Runtime>;
-}
-
-pub struct PendingMspRespondStorageRequestDequeAPI<'a, Runtime: StorageEnableRuntime> {
-    db_context: &'a TypedDbContext<'a, TypedRocksDB, BufferedWriteSupport<'a, TypedRocksDB>>,
-    pub(crate) phantom: std::marker::PhantomData<Runtime>,
-}
-
-impl<'a, Runtime: StorageEnableRuntime> ProvidesDbContext
-    for PendingMspRespondStorageRequestDequeAPI<'a, Runtime>
-{
-    fn db_context(
-        &self,
-    ) -> &TypedDbContext<'_, TypedRocksDB, BufferedWriteSupport<'_, TypedRocksDB>> {
-        &self.db_context
-    }
-}
-
-impl<'a, Runtime: StorageEnableRuntime> ProvidesTypedDbSingleAccess
-    for PendingMspRespondStorageRequestDequeAPI<'a, Runtime>
-{
-}
-
-impl<'a, Runtime: StorageEnableRuntime> CFDequeAPI
-    for PendingMspRespondStorageRequestDequeAPI<'a, Runtime>
-{
-    type Value = RespondStorageRequest<Runtime>;
-    type LeftIndexCF = PendingMspRespondStorageRequestLeftIndexCf;
-    type RightIndexCF = PendingMspRespondStorageRequestRightIndexCf;
-    type DataCF = PendingMspRespondStorageRequestCf<Runtime>;
 }
 
 pub struct PendingStopStoringForInsolventUserRequestDequeAPI<'a, Runtime: StorageEnableRuntime> {

@@ -1,6 +1,10 @@
 use anyhow::anyhow;
 use futures::prelude::*;
-use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashSet},
+    path::PathBuf,
+    sync::Arc,
+};
 
 use sc_client_api::{
     BlockImportNotification, BlockchainEvents, FinalityNotification, HeaderBackend,
@@ -42,7 +46,7 @@ use shc_forest_manager::traits::ForestStorageHandler;
 use crate::{
     capacity_manager::{CapacityRequest, CapacityRequestQueue},
     commands::BlockchainServiceCommand,
-    events::BlockchainServiceEventBusProvider,
+    events::{BlockchainServiceEventBusProvider, NewStorageRequest},
     state::{BlockchainServiceStateStore, LastProcessedBlockNumberCf},
     transaction_manager::{TransactionManager, TransactionManagerConfig},
     types::{
@@ -945,19 +949,51 @@ where
                     }
                     }
                 }
-                BlockchainServiceCommand::QueueMspRespondStorageRequest { request, callback } => {
-                    let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                    state_store_context
-                        .pending_msp_respond_storage_request_deque()
-                        .push_back(request);
-                    state_store_context.commit();
-                    // We check right away if we can process the request so we don't waste time.
-                    self.msp_assign_forest_root_write_lock();
-                    match callback.send(Ok(())) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                BlockchainServiceCommand::QueueMspRespondStorageRequest { request } => {
+                    if let Some(ManagedProvider::Msp(msp_handler)) =
+                        &mut self.maybe_managed_provider
+                    {
+                        let file_key = request.file_key;
+
+                        trace!(
+                            target: LOG_TARGET,
+                            "QueueMspRespondStorageRequest received for file key {:?}",
+                            file_key
+                        );
+
+                        // Check if file key is already pending (O(1) deduplication).
+                        // `insert` returns true if the key was not present (i.e., we should queue).
+                        if msp_handler
+                            .pending_respond_storage_request_file_keys
+                            .insert(file_key)
+                        {
+                            msp_handler
+                                .pending_respond_storage_requests
+                                .push_back(request);
+
+                            trace!(
+                                target: LOG_TARGET,
+                                "File key {:?} added to pending queue (size: {})",
+                                file_key,
+                                msp_handler.pending_respond_storage_requests.len()
+                            );
+
+                            // We check right away if we can process the request so we don't waste time.
+                            self.msp_assign_forest_root_write_lock();
+                        } else {
+                            warn!(
+                                target: LOG_TARGET,
+                                "File key {:?} already pending, skipping",
+                                file_key
+                            );
                         }
+                    } else {
+                        // Log the invariant violation but don't fail - this is fire-and-forget
+                        error!(
+                            target: LOG_TARGET,
+                            "QueueMspRespondStorageRequest received while not managing an MSP. \
+                             This is an invariant violation - please report to StorageHub team."
+                        );
                     }
                 }
                 BlockchainServiceCommand::QueueSubmitProofRequest { request, callback } => {
@@ -1281,6 +1317,124 @@ where
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send back buckets for MSP: {:?}", e);
                         }
+                    }
+                }
+                BlockchainServiceCommand::QueryPendingStorageRequests {
+                    maybe_file_keys,
+                    callback,
+                } => {
+                    let managed_msp_id = match &self.maybe_managed_provider {
+                        Some(ManagedProvider::Msp(msp_handler)) => msp_handler.msp_id.clone(),
+                        _ => {
+                            error!(target: LOG_TARGET, "`QueryPendingStorageRequests` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
+                            match callback.send(Err(anyhow!("Node is not managing an MSP"))) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!(target: LOG_TARGET, "Failed to send error: {:?}", e);
+                                }
+                            }
+                            return;
+                        }
+                    };
+
+                    let current_block_hash = self.client.info().best_hash;
+
+                    // Query pending storage requests (not yet accepted by MSP)
+                    let storage_requests = match self
+                        .client
+                        .runtime_api()
+                        .pending_storage_requests_by_msp(current_block_hash, managed_msp_id)
+                    {
+                        Ok(mut sr) => {
+                            // If specific file keys provided, filter to only those keys
+                            if let Some(file_keys) = maybe_file_keys {
+                                let file_keys_set: HashSet<_> = file_keys
+                                    .into_iter()
+                                    .map(|k| sp_core::H256::from_slice(k.as_ref()))
+                                    .collect();
+
+                                // From the pending storage requests for this MSP, only keep the ones that
+                                // are in the provided file keys.
+                                sr.retain(|file_key, _| file_keys_set.contains(file_key));
+                            }
+
+                            // Return the filtered pending storage requests.
+                            sr
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to get pending storage requests: {:?}", e);
+                            match callback
+                                .send(Err(anyhow!("Failed to get pending storage requests")))
+                            {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!(target: LOG_TARGET, "Failed to send empty result: {:?}", e);
+                                }
+                            }
+                            return;
+                        }
+                    };
+
+                    let new_storage_requests: Vec<NewStorageRequest<Runtime>> = storage_requests
+                        .into_iter()
+                        .map(|(file_key, sr)| NewStorageRequest {
+                            who: sr.owner,
+                            file_key: file_key.into(),
+                            bucket_id: sr.bucket_id,
+                            location: sr.location,
+                            fingerprint: sr.fingerprint.as_ref().into(),
+                            size: sr.size,
+                            user_peer_ids: sr.user_peer_ids,
+                            expires_at: sr.expires_at,
+                        })
+                        .collect();
+
+                    match callback.send(Ok(new_storage_requests)) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send pending storage requests: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::SetFileKeyStatus { file_key, status } => {
+                    if let Some(ManagedProvider::Msp(msp_handler)) =
+                        &mut self.maybe_managed_provider
+                    {
+                        info!(
+                            target: LOG_TARGET,
+                            "Setting file key {:?} status to {:?}",
+                            file_key,
+                            status
+                        );
+                        msp_handler
+                            .file_key_statuses
+                            .insert(file_key, status.into());
+                    } else {
+                        // Fire-and-forget command, just log the invariant violation
+                        error!(
+                            target: LOG_TARGET,
+                            "SetFileKeyStatus received while not managing an MSP. \
+                             This is an invariant violation - please report to StorageHub team."
+                        );
+                    }
+                }
+                BlockchainServiceCommand::RemoveFileKeyStatus { file_key } => {
+                    if let Some(ManagedProvider::Msp(msp_handler)) =
+                        &mut self.maybe_managed_provider
+                    {
+                        info!(
+                            target: LOG_TARGET,
+                            "Removing file key {:?} from statuses (enabling retry)",
+                            file_key
+                        );
+                        msp_handler.file_key_statuses.remove(&file_key);
+                    } else {
+                        // Fire-and-forget command, just log the invariant violation
+                        error!(
+                            target: LOG_TARGET,
+                            "RemoveFileKeyStatus received while not managing an MSP. \
+                             This is an invariant violation - please report to StorageHub team."
+                        );
                     }
                 }
                 BlockchainServiceCommand::ReleaseForestRootWriteLock {

@@ -1,7 +1,7 @@
 use log::{debug, info, warn};
 use std::{
     cmp::{min, Ordering},
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
     future::Future,
     pin::Pin,
     time::Duration,
@@ -503,12 +503,14 @@ impl RetryStrategy {
         self
     }
 
-    /// Sets [`Self::should_retry`] to retry only if the extrinsic times out.
+    /// Sets [`Self::should_retry`] to retry only if the extrinsic submission times out.
     ///
-    /// This means that the extrinsic will not be sent again if, for example, it
-    /// is included in a block but it fails.
+    /// This is the recommended retry strategy for extrinsic submissions where the extrinsic
+    /// itself is idempotent or safe to retry. Timeouts ([`WatchTransactionError::Timeout`])
+    /// are transient errors that may be resolved by retrying (e.g., network congestion,
+    /// collator unavailability).
     ///
-    /// See [`WatchTransactionError`] for other possible errors.
+    /// See [`WatchTransactionError`] for the full list of possible errors.
     pub fn retry_only_if_timeout(mut self) -> Self {
         self.should_retry = Some(Box::new(|error| {
             Box::pin(async move {
@@ -563,8 +565,16 @@ pub enum StatusToWait {
     Finalized,
 }
 
+/// Errors that can occur while watching a transaction's lifecycle.
+///
+/// These errors are used by the retry mechanism in [`RetryStrategy`] to determine
+/// whether to retry an extrinsic submission. By default, all errors cause a retry
+/// (up to `max_retries`).
 #[derive(thiserror::Error, Debug, Clone)]
 pub enum WatchTransactionError {
+    /// The transaction was not included in a block within the timeout period.
+    ///
+    /// This is a transient error that may be resolved by retrying.
     #[error("Timeout waiting for transaction to be included in a block")]
     Timeout,
     #[error("Transaction not found in the manager")]
@@ -799,6 +809,73 @@ impl<Runtime: StorageEnableRuntime> BspHandler<Runtime> {
         }
     }
 }
+/// Status of a file key in the MSP upload pipeline.
+///
+/// Used to track processing state, prevent duplicate processing, and enable automatic retries.
+///
+/// ## Status Transitions
+///
+/// | Status        | Meaning                                    | Next Block Behavior                           |
+/// | ------------- | ------------------------------------------ | ----------------------------------------------|
+/// | `Processing`  | File key is in the pipeline                | **Skip** (already being handled)              |
+/// | `Abandoned`   | Failed with non-proof dispatch error       | **Skip** (permanent failure)                  |
+/// | *Not present* | New or retryable file key                  | **Process** (emit event, set to `Processing`) |
+///
+/// ## Retry Mechanism
+///
+/// File keys are **removed** from statuses to signal they should be re-processed:
+/// - **Proof errors**: Removed to retry with regenerated proofs
+/// - **Extrinsic submission timeouts**: Removed to retry (timeouts are transient)
+/// - **Non-proof dispatch errors**: Marked as `Abandoned` (permanent failure, no retry)
+///
+/// ## Lifecycle Completion
+///
+/// File keys are **removed** from statuses when their storage request lifecycle is complete
+/// (i.e., they no longer appear in pending storage requests). This cleanup happens automatically
+/// during block processing, regardless of the file key's current status.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FileKeyStatus {
+    /// File key is currently being processed (in the pipeline).
+    ///
+    /// Set **only** by the blockchain service when emitting a
+    /// [`NewStorageRequest`](crate::events::NewStorageRequest) event for the file key.
+    ///
+    /// Tasks cannot set this status directly—use [`FileKeyStatusUpdate`] instead.
+    #[default]
+    Processing,
+    /// File key failed with a non-proof-related dispatch error (permanent failure).
+    ///
+    /// Set when the extrinsic is included in a block but fails with a dispatch error
+    /// that is NOT proof-related (e.g., authorization failures, invalid parameters,
+    /// inconsistent runtime state). These are permanent failures not resolved by retrying.
+    ///
+    /// **Note:** Proof errors and extrinsic submission failures (timeout after retries)
+    /// do NOT set this status—instead, they **remove** the file key from statuses to
+    /// enable automatic retry on the next block.
+    Abandoned,
+}
+
+/// Task-settable status for a file key, used via [`SetFileKeyStatus`](crate::commands::BlockchainServiceCommand::SetFileKeyStatus).
+///
+/// This is a subset of [`FileKeyStatus`] that excludes `Processing`, which is only
+/// set by the blockchain service when emitting [`NewStorageRequest`](crate::events::NewStorageRequest) events.
+///
+/// This type-safe restriction ensures tasks can only transition file keys to appropriate
+/// states, preventing accidental re-processing of already-handled requests.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileKeyStatusUpdate {
+    /// File key failed with a permanent error (non-proof dispatch error).
+    Abandoned,
+}
+
+impl From<FileKeyStatusUpdate> for FileKeyStatus {
+    fn from(status: FileKeyStatusUpdate) -> Self {
+        match status {
+            FileKeyStatusUpdate::Abandoned => FileKeyStatus::Abandoned,
+        }
+    }
+}
+
 /// A struct that holds the information to handle an MSP.
 ///
 /// This struct implements all the needed logic to manage MSP specific functionality.
@@ -827,6 +904,17 @@ pub struct MspHandler<Runtime: StorageEnableRuntime> {
     /// This is used to keep track of the BSPs for which there are tasks currently distributing the file,
     /// and the BSPs for which the file has been confirmed to be stored.
     pub(crate) files_to_distribute: HashMap<FileKey, FileDistributionInfo<Runtime>>,
+    /// Tracks the processing status of each file key in the upload pipeline.
+    ///
+    /// Used to prevent duplicate processing and enable retries for failed requests.
+    /// The blockchain service checks this before emitting [`NewStorageRequest`] events,
+    /// and tasks update it via commands as they process requests.
+    pub(crate) file_key_statuses: HashMap<FileKey, FileKeyStatus>,
+    /// In-memory FIFO queue for pending MSP respond storage requests.
+    pub(crate) pending_respond_storage_requests: VecDeque<RespondStorageRequest<Runtime>>,
+    /// HashSet tracking file keys currently in the pending respond storage request queue.
+    /// Used for O(1) deduplication when queueing new requests.
+    pub(crate) pending_respond_storage_request_file_keys: HashSet<MerkleTrieHash<Runtime>>,
 }
 
 impl<Runtime: StorageEnableRuntime> MspHandler<Runtime> {
@@ -836,6 +924,9 @@ impl<Runtime: StorageEnableRuntime> MspHandler<Runtime> {
             forest_root_write_lock: None,
             forest_root_snapshots: BTreeMap::new(),
             files_to_distribute: HashMap::new(),
+            file_key_statuses: HashMap::new(),
+            pending_respond_storage_requests: VecDeque::new(),
+            pending_respond_storage_request_file_keys: HashSet::new(),
         }
     }
 }

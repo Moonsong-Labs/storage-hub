@@ -271,6 +271,6 @@ where
             *file_key,
             MspRespondStorageRequest::Accept,
         ))
-        .await?;
+        .await;
     Ok(())
 }
