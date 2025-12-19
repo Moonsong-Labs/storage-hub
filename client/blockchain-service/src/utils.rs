@@ -2193,6 +2193,9 @@ where
             tree_route.enacted().len()
         );
 
+        // Ensure the provider ID is synced before processing mutations
+        self.sync_provider_id(&new_best_block.hash);
+
         // Apply forest root changes for the reorg (revert retracted, apply enacted mutations)
         self.forest_root_changes_catchup(tree_route).await;
 
@@ -2331,6 +2334,9 @@ where
 
         // Get the finalized block number before catching up
         let finalized_number: BlockNumber<Runtime> = chain_info.finalized_number.saturated_into();
+
+        // Ensure the provider ID is synced before processing mutations
+        self.sync_provider_id(&best_hash);
 
         // Apply Forest root changes for the entire tree route.
         self.forest_root_changes_catchup(&tree_route).await;
