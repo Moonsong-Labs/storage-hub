@@ -163,10 +163,6 @@ declare module "@polkadot/api-base/types/errors" {
     };
     fileSystem: {
       /**
-       * BSP did not succeed threshold check.
-       **/
-      AboveThreshold: AugmentedError<ApiType>;
-      /**
        * Batch file deletion must contain files from a single bucket only.
        **/
       BatchFileDeletionMustContainSingleBucket: AugmentedError<ApiType>;
@@ -175,17 +171,9 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       BspAlreadyConfirmed: AugmentedError<ApiType>;
       /**
-       * BSP is already a data server for the move bucket request.
-       **/
-      BspAlreadyDataServer: AugmentedError<ApiType>;
-      /**
        * BSP already volunteered to store the given file.
        **/
       BspAlreadyVolunteered: AugmentedError<ApiType>;
-      /**
-       * Too many registered data servers for the move bucket request.
-       **/
-      BspDataServersExceeded: AugmentedError<ApiType>;
       /**
        * BSP has not confirmed storing the given file.
        **/
@@ -203,10 +191,6 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       BucketIsBeingMoved: AugmentedError<ApiType>;
       /**
-       * Bucket is not private. Call `update_bucket_privacy` to make it private.
-       **/
-      BucketIsNotPrivate: AugmentedError<ApiType>;
-      /**
        * Bucket is not empty.
        **/
       BucketNotEmpty: AugmentedError<ApiType>;
@@ -222,10 +206,6 @@ declare module "@polkadot/api-base/types/errors" {
        * Collection ID was not found.
        **/
       CollectionNotFound: AugmentedError<ApiType>;
-      /**
-       * Divided by 0
-       **/
-      DividedByZero: AugmentedError<ApiType>;
       /**
        * Duplicate file key detected within the same batch deletion request.
        **/
@@ -251,18 +231,6 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       FailedToCreateFileMetadata: AugmentedError<ApiType>;
       /**
-       * Failed to decode threshold.
-       **/
-      FailedToDecodeThreshold: AugmentedError<ApiType>;
-      /**
-       * Failed to encode BSP id as slice.
-       **/
-      FailedToEncodeBsp: AugmentedError<ApiType>;
-      /**
-       * Failed to encode fingerprint as slice.
-       **/
-      FailedToEncodeFingerprint: AugmentedError<ApiType>;
-      /**
        * Failed to get owner account of ID of provider
        **/
       FailedToGetOwnerAccount: AugmentedError<ApiType>;
@@ -287,10 +255,6 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       FailedToQueryEarliestFileVolunteerTick: AugmentedError<ApiType>;
       /**
-       * Failed to convert to primitive type.
-       **/
-      FailedTypeConversion: AugmentedError<ApiType>;
-      /**
        * File has an active storage request and as such is not eligible for deletion.
        * The user should use the `revoke_storage_request` extrinsic to revoke it first.
        **/
@@ -299,18 +263,6 @@ declare module "@polkadot/api-base/types/errors" {
        * File has an `IncompleteStorageRequest` associated with it and as such is not eligible for a new storage request
        **/
       FileHasIncompleteStorageRequest: AugmentedError<ApiType>;
-      /**
-       * File key already pending deletion.
-       **/
-      FileKeyAlreadyPendingDeletion: AugmentedError<ApiType>;
-      /**
-       * File key computed from metadata doesn't match the provided file key.
-       **/
-      FileKeyMismatch: AugmentedError<ApiType>;
-      /**
-       * File key not found in pending deletion requests.
-       **/
-      FileKeyNotPendingDeletion: AugmentedError<ApiType>;
       /**
        * The bounded vector that holds file metadata to process it is full but there's still more to process.
        **/
@@ -324,10 +276,6 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       FixedRatePaymentStreamNotFound: AugmentedError<ApiType>;
       /**
-       * Forest proof verification failed.
-       **/
-      ForestProofVerificationFailed: AugmentedError<ApiType>;
-      /**
        * Failed to get value when just checked it existed.
        **/
       ImpossibleFailedToGetValue: AugmentedError<ApiType>;
@@ -335,10 +283,6 @@ declare module "@polkadot/api-base/types/errors" {
        * Incomplete storage request not found.
        **/
       IncompleteStorageRequestNotFound: AugmentedError<ApiType>;
-      /**
-       * Key already exists in mapping when it should not.
-       **/
-      InconsistentStateKeyAlreadyExists: AugmentedError<ApiType>;
       /**
        * SP does not have enough storage capacity to store the file.
        **/
@@ -364,22 +308,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       InvalidSignedOperation: AugmentedError<ApiType>;
       /**
-       * Maximum threshold cannot be zero.
-       **/
-      MaximumThresholdCannotBeZero: AugmentedError<ApiType>;
-      /**
-       * Max replication target cannot be smaller than default replication target.
-       **/
-      MaxReplicationTargetSmallerThanDefault: AugmentedError<ApiType>;
-      /**
        * Error created in 2024. If you see this, you are well beyond the singularity and should
        * probably stop using this pallet.
        **/
       MaxTickNumberReached: AugmentedError<ApiType>;
-      /**
-       * Max number of user pending deletion requests reached.
-       **/
-      MaxUserPendingDeletionRequestsReached: AugmentedError<ApiType>;
       /**
        * Minimum amount of blocks between the request opening and being able to confirm it not reached.
        **/
@@ -417,10 +349,6 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       NoGlobalReputationWeightSet: AugmentedError<ApiType>;
       /**
-       * Privacy update results in no change
-       **/
-      NoPrivacyChange: AugmentedError<ApiType>;
-      /**
        * Account is not a BSP.
        **/
       NotABsp: AugmentedError<ApiType>;
@@ -437,10 +365,6 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       NotBucketOwner: AugmentedError<ApiType>;
       /**
-       * Unauthorized operation, signer does not own the file.
-       **/
-      NotFileOwner: AugmentedError<ApiType>;
-      /**
        * The MSP is trying to confirm to store a file from a storage request is not the one selected to store it.
        **/
       NotSelectedMsp: AugmentedError<ApiType>;
@@ -448,10 +372,6 @@ declare module "@polkadot/api-base/types/errors" {
        * Operations not allowed for insolvent provider
        **/
       OperationNotAllowedForInsolventProvider: AugmentedError<ApiType>;
-      /**
-       * Operations not allowed while bucket is not being stored by an MSP
-       **/
-      OperationNotAllowedWhileBucketIsNotStoredByMsp: AugmentedError<ApiType>;
       /**
        * Certain operations (such as issuing new storage requests) are not allowed when interacting with insolvent users.
        **/
@@ -468,10 +388,6 @@ declare module "@polkadot/api-base/types/errors" {
        * Provider is not storing the file.
        **/
       ProviderNotStoringFile: AugmentedError<ApiType>;
-      /**
-       * Root of the provider not found.
-       **/
-      ProviderRootNotFound: AugmentedError<ApiType>;
       /**
        * Replication target cannot be zero.
        **/
@@ -501,10 +417,6 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       StorageRequestExists: AugmentedError<ApiType>;
       /**
-       * No slot available found in ticks to insert storage request expiration time.
-       **/
-      StorageRequestExpiredNoSlotAvailable: AugmentedError<ApiType>;
-      /**
        * Not authorized to delete the storage request.
        **/
       StorageRequestNotAuthorized: AugmentedError<ApiType>;
@@ -513,33 +425,13 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       StorageRequestNotFound: AugmentedError<ApiType>;
       /**
-       * Operation not allowed while the storage request is not being revoked.
-       **/
-      StorageRequestNotRevoked: AugmentedError<ApiType>;
-      /**
        * Arithmetic error in threshold calculation.
        **/
       ThresholdArithmeticError: AugmentedError<ApiType>;
       /**
-       * BSPs assignment threshold cannot be below asymptote.
-       **/
-      ThresholdBelowAsymptote: AugmentedError<ApiType>;
-      /**
-       * Tick range to maximum threshold cannot be zero.
-       **/
-      TickRangeToMaximumThresholdCannotBeZero: AugmentedError<ApiType>;
-      /**
-       * Too many batch responses to process.
-       **/
-      TooManyBatchResponses: AugmentedError<ApiType>;
-      /**
        * Too many storage request responses.
        **/
       TooManyStorageRequestResponses: AugmentedError<ApiType>;
-      /**
-       * Number of removed BSPs volunteered from storage request prefix did not match the expected number.
-       **/
-      UnexpectedNumberOfRemovedVolunteeredBsps: AugmentedError<ApiType>;
       /**
        * A SP tried to stop storing files from a user that was supposedly insolvent, but the user is not insolvent.
        **/
