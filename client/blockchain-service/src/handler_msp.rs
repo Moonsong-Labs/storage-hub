@@ -260,25 +260,6 @@ where
                 }
             }
             StorageEnableEvents::FileSystem(
-                pallet_file_system::Event::MspAcceptedStorageRequest {
-                    file_key,
-                    file_metadata: _,
-                },
-            ) => {
-                // Finalize accepted storage request: transition from Submitted to Accepted
-                let file_key: FileKey = file_key.into();
-                if let Some(ManagedProvider::Msp(msp_handler)) = &mut self.maybe_managed_provider {
-                    debug!(
-                        target: LOG_TARGET,
-                        "✅ Finalized file key {:?} as Accepted",
-                        file_key
-                    );
-                    msp_handler
-                        .file_key_statuses
-                        .insert(file_key, FileKeyStatus::Accepted);
-                }
-            }
-            StorageEnableEvents::FileSystem(
                 pallet_file_system::Event::StorageRequestRejected {
                     file_key,
                     msp_id,

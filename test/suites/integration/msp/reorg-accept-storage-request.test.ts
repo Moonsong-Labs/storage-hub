@@ -1,13 +1,7 @@
 import assert, { strictEqual } from "node:assert";
 import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
-import {
-  describeMspNet,
-  type EnrichedBspApi,
-  shUser,
-  waitFor,
-  waitForLog,
-} from "../../../util";
+import { describeMspNet, type EnrichedBspApi, shUser, waitFor, waitForLog } from "../../../util";
 
 /**
  * MSP Storage Request Accept Reorg Integration Test
@@ -35,7 +29,7 @@ await describeMspNet(
   {
     networkConfig: "standard",
     // Short retry timeout (5 seconds) so MSP retries quickly after failures
-    extrinsicRetryTimeout: 5,
+    extrinsicRetryTimeout: 5
   },
   ({ before, createMsp1Api, createUserApi, createBspApi, it }) => {
     let userApi: EnrichedBspApi;
@@ -52,28 +46,17 @@ await describeMspNet(
 
     it("Network launches and can be queried", async () => {
       const userNodePeerId = await userApi.rpc.system.localPeerId();
-      strictEqual(
-        userNodePeerId.toString(),
-        userApi.shConsts.NODE_INFOS.user.expectedPeerId
-      );
+      strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
 
       const mspNodePeerId = await mspApi.rpc.system.localPeerId();
-      strictEqual(
-        mspNodePeerId.toString(),
-        userApi.shConsts.NODE_INFOS.msp1.expectedPeerId
-      );
+      strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp1.expectedPeerId);
     });
 
     it("MSP retries accept after reorg with proof error due to file deletion", async () => {
       const mspId = userApi.shConsts.DUMMY_MSP_ID;
-      const valueProps =
-        await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
-          mspId
-        );
+      const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
       const valuePropId = valueProps[0].id;
-      const ownerHex = u8aToHex(
-        decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)
-      ).slice(2);
+      const ownerHex = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
 
       // ===== STEP 1: Create first storage request =====
       const file1Result = await userApi.file.batchStorageRequests({
@@ -82,14 +65,14 @@ await describeMspNet(
             source: "res/smile.jpg",
             destination: "test/reorg-test-file-1.txt",
             bucketIdOrName: "reorg-test-bucket",
-            replicationTarget: 1, // Immediately fulfilled (MSP + 1 BSP)
-          },
+            replicationTarget: 1 // Immediately fulfilled (MSP + 1 BSP)
+          }
         ],
         mspId,
         valuePropId,
         owner: shUser,
         bspApi,
-        mspApi,
+        mspApi
       });
 
       const file1Key = file1Result.fileKeys[0];
@@ -97,19 +80,17 @@ await describeMspNet(
 
       // Generate forest proof for file 1 deletion NOW (before MSP accepts file 2)
       // This ensures the proof only contains file 1, matching on-chain state after reorg
-      const bucketInclusionProof =
-        await mspApi.rpc.storagehubclient.generateForestProof(bucketId, [
-          file1Key,
-        ]);
+      const bucketInclusionProof = await mspApi.rpc.storagehubclient.generateForestProof(bucketId, [
+        file1Key
+      ]);
 
       // ===== STEP 2: Issue second storage request (FINALIZED) =====
-      const { file_metadata: file2Metadata } =
-        await userApi.rpc.storagehubclient.loadFileInStorage(
-          "res/adolphus.jpg",
-          "test/reorg-test-file-2.txt",
-          ownerHex,
-          bucketId
-        );
+      const { file_metadata: file2Metadata } = await userApi.rpc.storagehubclient.loadFileInStorage(
+        "res/adolphus.jpg",
+        "test/reorg-test-file-2.txt",
+        ownerHex,
+        bucketId
+      );
 
       await userApi.block.seal({
         calls: [
@@ -121,10 +102,10 @@ await describeMspNet(
             mspId,
             [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
             { Basic: null }
-          ),
+          )
         ],
         signer: shUser,
-        finaliseBlock: true,
+        finaliseBlock: true
       });
 
       const { event: storageRequestEvent2 } = await userApi.assert.eventPresent(
@@ -144,9 +125,7 @@ await describeMspNet(
       // Wait for MSP to receive second file
       await waitFor({
         lambda: async () =>
-          (
-            await mspApi.rpc.storagehubclient.isFileInFileStorage(file2Key)
-          ).isFileFound,
+          (await mspApi.rpc.storagehubclient.isFileInFileStorage(file2Key)).isFileFound
       });
 
       // Wait for MSP's accept response in tx pool
@@ -154,14 +133,11 @@ await describeMspNet(
 
       // Seal block WITHOUT finalizing - includes MSP accept for second file
       await userApi.block.seal({
-        finaliseBlock: false,
+        finaliseBlock: false
       });
 
       // Verify MSP accepted storage request event
-      await userApi.assert.eventPresent(
-        "fileSystem",
-        "MspAcceptedStorageRequest"
-      );
+      await userApi.assert.eventPresent("fileSystem", "MspAcceptedStorageRequest");
 
       // Verify that the ProcessMspRespondStoringRequest event handler reached the end of the process.
       // This means that `msp_upload_file` task has finished processing the storage request, and in
@@ -169,7 +145,7 @@ await describeMspNet(
       await waitForLog({
         containerName: "storage-hub-sh-msp-1",
         searchString: "Processed ProcessMspRespondStoringRequest for MSP",
-        timeout: 10000,
+        timeout: 10000
       });
 
       // ===== STEP 4: Trigger reorg by finalizing a block from forkPoint =====
@@ -179,7 +155,7 @@ await describeMspNet(
       // First seal an empty block from forkPoint to create a competing chain
       await userApi.block.seal({
         parentHash: forkPointHash.toString(),
-        finaliseBlock: true, // Finalizing triggers the reorg
+        finaliseBlock: true // Finalizing triggers the reorg
       });
 
       // Wait for MSP to process the reorg
@@ -187,7 +163,7 @@ await describeMspNet(
       await userApi.wait.waitForTxInPool({
         module: "fileSystem",
         method: "mspRespondStorageRequestsMultipleBuckets",
-        timeout: 10000,
+        timeout: 10000
       });
 
       // ===== STEP 5: Submit both deletion txs with HIGH TIP =====
@@ -196,7 +172,7 @@ await describeMspNet(
 
       const fileOperationIntention = {
         fileKey: file1Key,
-        operation: { Delete: null },
+        operation: { Delete: null }
       };
 
       const intentionCodec = userApi.createType(
@@ -206,13 +182,11 @@ await describeMspNet(
       const intentionPayload = intentionCodec.toU8a();
       const rawSignature = shUser.sign(intentionPayload);
       const userSignature = userApi.createType("MultiSignature", {
-        Sr25519: rawSignature,
+        Sr25519: rawSignature
       });
 
       // Get current nonce for proper sequencing
-      const currentNonce = (
-        await userApi.rpc.system.accountNextIndex(shUser.address)
-      ).toNumber();
+      const currentNonce = (await userApi.rpc.system.accountNextIndex(shUser.address)).toNumber();
 
       // Submit requestDeleteFile with very high tip (executes first)
       const requestDeleteTx = userApi.tx.fileSystem.requestDeleteFile(
@@ -225,7 +199,7 @@ await describeMspNet(
       );
       await requestDeleteTx.signAndSend(shUser, {
         nonce: currentNonce,
-        tip: 2_000_000_000_000n, // Very high tip
+        tip: 2_000_000_000_000n // Very high tip
       });
 
       // Submit deleteFiles with high tip (executes second)
@@ -236,7 +210,7 @@ await describeMspNet(
         bucketId,
         location: file1Result.locations[0],
         size: file1Result.fileSizes[0],
-        fingerprint: file1Result.fingerprints[0],
+        fingerprint: file1Result.fingerprints[0]
       };
 
       const deleteFilesTx = userApi.tx.fileSystem.deleteFiles(
@@ -246,7 +220,7 @@ await describeMspNet(
       );
       await deleteFilesTx.signAndSend(shUser, {
         nonce: currentNonce + 1,
-        tip: 1_000_000_000_000n, // High tip (less than requestDelete)
+        tip: 1_000_000_000_000n // High tip (less than requestDelete)
       });
 
       // Verify both deletion txs are in pool
@@ -254,29 +228,25 @@ await describeMspNet(
         module: "fileSystem",
         method: "requestDeleteFile",
         checkTxPool: true,
-        timeout: 5000,
+        timeout: 5000
       });
       await userApi.assert.extrinsicPresent({
         module: "fileSystem",
         method: "deleteFiles",
-        checkTxPool: true,
+        checkTxPool: true
       });
       // MSP accept should still be in pool from after reorg
       await userApi.assert.extrinsicPresent({
         module: "fileSystem",
         method: "mspRespondStorageRequestsMultipleBuckets",
-        checkTxPool: true,
+        checkTxPool: true
       });
 
       // ===== STEP 6: Seal block - all 3 txs execute with proper ordering =====
       const blockResult = await userApi.block.seal();
 
       // Verify deletion requested
-      await userApi.assert.eventPresent(
-        "fileSystem",
-        "FileDeletionRequested",
-        blockResult.events
-      );
+      await userApi.assert.eventPresent("fileSystem", "FileDeletionRequested", blockResult.events);
 
       // Verify deletion succeeded
       await userApi.assert.eventPresent(
@@ -292,8 +262,8 @@ await describeMspNet(
         ({ event }) =>
           userApi.events.system.ExtrinsicFailed.is(event) &&
           event.data.dispatchError.isModule &&
-          userApi.registry.findMetaError(event.data.dispatchError.asModule)
-            .method === "ForestProofVerificationFailed"
+          userApi.registry.findMetaError(event.data.dispatchError.asModule).method ===
+            "ForestProofVerificationFailed"
       );
       assert(
         mspAcceptFailedEvent,
@@ -306,9 +276,7 @@ await describeMspNet(
       const pendingStorageRequests =
         await userApi.call.fileSystemApi.pendingStorageRequestsByMsp(mspId);
       const pendingArray = Array.from(pendingStorageRequests);
-      const file2IsPending = pendingArray.some(
-        ([fileKey]) => fileKey.toHex() === file2Key
-      );
+      const file2IsPending = pendingArray.some(([fileKey]) => fileKey.toHex() === file2Key);
       assert(
         file2IsPending,
         "File 2 storage request should still be pending after MSP accept failed"
@@ -325,31 +293,21 @@ await describeMspNet(
       await userApi.block.seal();
 
       // Verify MSP accepted storage request event
-      await userApi.assert.eventPresent(
-        "fileSystem",
-        "MspAcceptedStorageRequest"
-      );
+      await userApi.assert.eventPresent("fileSystem", "MspAcceptedStorageRequest");
 
       // Verify file 2 is in MSP's forest
       await waitFor({
         lambda: async () => {
-          const isFileInForest =
-            await mspApi.rpc.storagehubclient.isFileInForest(
-              bucketId,
-              file2Key
-            );
+          const isFileInForest = await mspApi.rpc.storagehubclient.isFileInForest(
+            bucketId,
+            file2Key
+          );
           return isFileInForest.isTrue;
-        },
+        }
       });
 
-      const isFileInForest = await mspApi.rpc.storagehubclient.isFileInForest(
-        bucketId,
-        file2Key
-      );
-      assert(
-        isFileInForest.isTrue,
-        "File 2 should be in MSP's forest after successful retry"
-      );
+      const isFileInForest = await mspApi.rpc.storagehubclient.isFileInForest(bucketId, file2Key);
+      assert(isFileInForest.isTrue, "File 2 should be in MSP's forest after successful retry");
     });
   }
 );
