@@ -1339,17 +1339,6 @@ where
 
         info!(target: LOG_TARGET, "Submitted mspRespondStorageRequestsMultipleBuckets extrinsic for file key {:x}, with reject reason {:?}", file_key, reason);
 
-        // Mark the file key as rejected so it won't be retried
-        debug!(
-            target: LOG_TARGET,
-            "Marking file key {:?} as Rejected (handle_rejected_storage_request)",
-            file_key
-        );
-        self.storage_hub_handler
-            .blockchain
-            .set_file_key_status((*file_key).into(), FileKeyStatusUpdate::Rejected)
-            .await;
-
         Ok(())
     }
 
