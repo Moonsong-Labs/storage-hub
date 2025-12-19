@@ -152,7 +152,7 @@ export class StorageHubClient {
     fileKey: `0x${string}`,
     operation: FileOperation
   ): Promise<{
-    signedIntention: readonly [`0x${string}`, number];
+    intention: { fileKey: `0x${string}`; operation: number };
     signature: `0x${string}`;
   }> {
     const fileKeyBytes = hexToBytes(fileKey);
@@ -171,7 +171,7 @@ export class StorageHubClient {
     });
 
     return {
-      signedIntention: [fileKey, operation],
+      intention: { fileKey, operation },
       signature
     };
   }
@@ -442,7 +442,7 @@ export class StorageHubClient {
    * @returns Transaction hash
    */
   async requestDeleteFile(fileInfo: FileInfo, options?: EvmWriteOptions): Promise<`0x${string}`> {
-    const { signedIntention, signature } = await this.signIntention(
+    const { intention, signature } = await this.signIntention(
       fileInfo.fileKey,
       FileOperation.Delete
     );
@@ -452,7 +452,7 @@ export class StorageHubClient {
       "File location"
     );
     const args = [
-      signedIntention,
+      intention,
       signature,
       fileInfo.bucketId,
       locationHex,
