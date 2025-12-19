@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use shc_common::{
     traits::StorageEnableRuntime,
     typed_store::{
-        BufferedWriteSupport, CFDequeAPI, ProvidesDbContext, ProvidesTypedDbAccess,
+        BufferedWriteSupport, CFDequeAPI, DatabaseError, ProvidesDbContext, ProvidesTypedDbAccess,
         ProvidesTypedDbSingleAccess, ScaleEncodedCf, SingleScaleEncodedValueCf, TypedDbContext,
         TypedRocksDB,
     },
@@ -265,23 +265,22 @@ pub struct BlockchainServiceStateStore {
 }
 
 impl BlockchainServiceStateStore {
-    pub fn new(root_path: PathBuf) -> Self {
+    pub fn new(root_path: PathBuf) -> Result<Self, DatabaseError> {
         let mut path = root_path;
         path.push("storagehub/blockchain_service/");
 
         let db_path_str = path.to_str().expect("Failed to convert path to string");
         info!("Blockchain service state store path: {}", db_path_str);
-        std::fs::create_dir_all(db_path_str).expect("Failed to create directory");
+        std::fs::create_dir_all(db_path_str)?;
 
         // Open database with migrations.
         let rocks = TypedRocksDB::open_with_migrations(
             db_path_str,
             &CURRENT_COLUMN_FAMILIES,
             blockchain_service_migrations(),
-        )
-        .expect("Failed to open blockchain service state store database");
+        )?;
 
-        BlockchainServiceStateStore { rocks }
+        Ok(BlockchainServiceStateStore { rocks })
     }
 
     /// Starts a read/buffered-write interaction with the DB through per-CF type-safe APIs.

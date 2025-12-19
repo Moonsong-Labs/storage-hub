@@ -127,6 +127,7 @@
 //! 4. **Abstraction**: Higher-level data structures hide RocksDB complexity
 //! 5. **Flexibility**: Easy to add new column families or data structures
 
+use crate::rocksdb::{default_db_options, open_db, open_db_with_migrations, MigrationRunner};
 use codec::{Decode, Encode};
 use rocksdb::{
     AsColumnFamilyRef, ColumnFamily, DBPinnableSlice, Direction, IteratorMode, ReadOptions,
@@ -139,9 +140,8 @@ use std::{
     ops::RangeBounds,
 };
 
-use crate::migrations::{
-    default_db_options, open_db, open_db_with_migrations, MigrationError, MigrationRunner,
-};
+// Re-export DatabaseError for convenience
+pub use crate::rocksdb::DatabaseError;
 
 /// Defines how types are encoded to and decoded from bytes for storage in RocksDB.
 ///
@@ -743,7 +743,7 @@ impl TypedRocksDB {
     /// const CURRENT_CFS: &[&str] = &["cf1", "cf2", "cf3"];
     /// let db = TypedRocksDB::open("/path/to/db", CURRENT_CFS)?;
     /// ```
-    pub fn open(path: &str, current_column_families: &[&str]) -> Result<Self, MigrationError> {
+    pub fn open(path: &str, current_column_families: &[&str]) -> Result<Self, DatabaseError> {
         let opts = default_db_options();
         let db = open_db(&opts, path, current_column_families)?;
         Ok(Self { db })
@@ -773,7 +773,7 @@ impl TypedRocksDB {
         path: &str,
         current_column_families: &[&str],
         migrations: impl Into<MigrationRunner>,
-    ) -> Result<Self, MigrationError> {
+    ) -> Result<Self, DatabaseError> {
         let opts = default_db_options();
         let db = open_db_with_migrations(&opts, path, current_column_families, migrations)?;
         Ok(Self { db })
@@ -2159,7 +2159,7 @@ mod tests {
     /// the typed context API.
     mod typed_rocks_db_open_tests {
         use super::*;
-        use crate::migrations::Migration;
+        use crate::rocksdb::Migration;
 
         // Define a simple CF for testing
         struct TestDataCf;

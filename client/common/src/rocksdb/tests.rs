@@ -10,6 +10,7 @@
 //! - Store-specific migration scenarios
 
 use super::*;
+use rocksdb::{ColumnFamilyDescriptor, Options, DB};
 use tempfile::TempDir;
 
 /// Tests for the `merge_column_families` function.
@@ -324,7 +325,7 @@ mod database_tests {
         assert!(db.cf_handle(SCHEMA_VERSION_CF).is_some());
 
         let version = MigrationRunner::read_schema_version(&db).unwrap();
-        assert_eq!(version, 0); // No migrations, version stays at 0
+        assert_eq!(version, Some(0)); // No migrations, version stays at 0
     }
 
     #[test]
@@ -342,7 +343,7 @@ mod database_tests {
         assert!(db.cf_handle(SCHEMA_VERSION_CF).is_some());
 
         let version = MigrationRunner::read_schema_version(&db).unwrap();
-        assert_eq!(version, 1); // V1 migration applied
+        assert_eq!(version, Some(1)); // V1 migration applied
     }
 
     #[test]
@@ -374,7 +375,7 @@ mod database_tests {
         {
             let db = open_db_with_migrations(&opts, path, &current_cfs, migrations).unwrap();
             let version = MigrationRunner::read_schema_version(&db).unwrap();
-            assert_eq!(version, 1);
+            assert_eq!(version, Some(1));
         }
 
         // Open again - migrations should not run again
@@ -382,7 +383,7 @@ mod database_tests {
             let migrations = test_migrations::v1_migrations();
             let db = open_db_with_migrations(&opts, path, &current_cfs, migrations).unwrap();
             let version = MigrationRunner::read_schema_version(&db).unwrap();
-            assert_eq!(version, 1);
+            assert_eq!(version, Some(1));
         }
     }
 
@@ -483,7 +484,7 @@ mod database_tests {
 
         let cf = db.cf_handle("clean_cf").unwrap();
         assert_eq!(&db.get_cf(&cf, b"key").unwrap().unwrap()[..], b"value");
-        assert_eq!(MigrationRunner::read_schema_version(&db).unwrap(), 1);
+        assert_eq!(MigrationRunner::read_schema_version(&db).unwrap(), Some(1));
     }
 
     #[test]
@@ -543,7 +544,7 @@ mod database_tests {
         let db = open_db_with_migrations(&opts, path, &["my_cf"], migrations).unwrap();
 
         assert!(db.cf_handle(SCHEMA_VERSION_CF).is_some());
-        assert_eq!(MigrationRunner::read_schema_version(&db).unwrap(), 1);
+        assert_eq!(MigrationRunner::read_schema_version(&db).unwrap(), Some(1));
     }
 
     #[test]
@@ -579,6 +580,144 @@ mod database_tests {
         let result = runner.run_pending(&mut db);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 0);
+    }
+
+    #[test]
+    fn open_db_rejects_database_with_higher_schema_version() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path().to_str().unwrap();
+
+        // First, create a database with migrations (schema version 1)
+        {
+            let opts = default_db_options();
+            let current_cfs = vec!["test_cf"];
+            let migrations = test_migrations::v1_migrations();
+            let db = open_db_with_migrations(&opts, path, &current_cfs, migrations).unwrap();
+            assert_eq!(MigrationRunner::read_schema_version(&db).unwrap(), Some(1));
+        }
+
+        // Now try to open with open_db() (no migrations) - should fail with CannotDowngrade
+        {
+            let opts = default_db_options();
+            let result = open_db(&opts, path, &["test_cf"]);
+
+            assert!(result.is_err());
+            match result {
+                Err(MigrationError::CannotDowngrade { current, target }) => {
+                    assert_eq!(current, 1);
+                    assert_eq!(target, 0);
+                }
+                _ => panic!("Expected CannotDowngrade error, got {:?}", result),
+            }
+        }
+    }
+
+    #[test]
+    fn open_db_succeeds_for_fresh_database() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path().to_str().unwrap();
+
+        // Fresh database should work fine
+        let opts = default_db_options();
+        let db = open_db(&opts, path, &["test_cf"]).unwrap();
+
+        assert_eq!(MigrationRunner::read_schema_version(&db).unwrap(), Some(0));
+        assert!(db.cf_handle("test_cf").is_some());
+    }
+
+    #[test]
+    fn open_db_succeeds_for_existing_version_0_database() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path().to_str().unwrap();
+
+        // Create a database with open_db (version 0)
+        {
+            let opts = default_db_options();
+            let _db = open_db(&opts, path, &["test_cf"]).unwrap();
+        }
+
+        // Opening again with open_db should succeed
+        {
+            let opts = default_db_options();
+            let db = open_db(&opts, path, &["test_cf"]).unwrap();
+            assert_eq!(MigrationRunner::read_schema_version(&db).unwrap(), Some(0));
+        }
+    }
+
+    #[test]
+    fn detects_corrupted_directory_with_artifacts_but_no_current() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path();
+        let path_str = path.to_str().unwrap();
+
+        // Create RocksDB artifacts without a CURRENT file (simulating corruption)
+        std::fs::write(path.join("000001.sst"), b"fake sst data").unwrap();
+        std::fs::write(path.join("MANIFEST-000001"), b"fake manifest").unwrap();
+
+        // Try to open - should fail with InvalidColumnFamilyConfig
+        let opts = default_db_options();
+        let result = open_db(&opts, path_str, &["test_cf"]);
+
+        assert!(result.is_err());
+        match result {
+            Err(MigrationError::InvalidColumnFamilyConfig(msg)) => {
+                assert!(msg.contains("RocksDB artifacts"));
+                assert!(msg.contains("no CURRENT file"));
+            }
+            _ => panic!("Expected InvalidColumnFamilyConfig error, got {:?}", result),
+        }
+    }
+
+    #[test]
+    fn detects_corrupted_directory_with_log_files() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path();
+        let path_str = path.to_str().unwrap();
+
+        // Create only a .log file (another RocksDB artifact)
+        std::fs::write(path.join("000001.log"), b"fake wal log").unwrap();
+
+        // Try to open - should fail
+        let opts = default_db_options();
+        let result = open_db(&opts, path_str, &["test_cf"]);
+
+        assert!(result.is_err());
+        assert!(matches!(
+            result,
+            Err(MigrationError::InvalidColumnFamilyConfig(_))
+        ));
+    }
+
+    #[test]
+    fn allows_empty_directory_without_current_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path();
+        let path_str = path.to_str().unwrap();
+
+        // Empty directory - should be treated as new database
+        let opts = default_db_options();
+        let db = open_db(&opts, path_str, &["test_cf"]).unwrap();
+
+        assert!(db.cf_handle("test_cf").is_some());
+        assert_eq!(MigrationRunner::read_schema_version(&db).unwrap(), Some(0));
+    }
+
+    #[test]
+    fn allows_directory_with_non_rocksdb_files() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path();
+        let path_str = path.to_str().unwrap();
+
+        // Create non-RocksDB files (these should be ignored)
+        std::fs::write(path.join("readme.txt"), b"some readme").unwrap();
+        std::fs::write(path.join("data.json"), b"{}").unwrap();
+        std::fs::create_dir(path.join("subdir")).unwrap();
+
+        // Should be treated as new database
+        let opts = default_db_options();
+        let db = open_db(&opts, path_str, &["test_cf"]).unwrap();
+
+        assert!(db.cf_handle("test_cf").is_some());
     }
 }
 
@@ -705,7 +844,8 @@ mod multi_version_tests {
                 }
             }
 
-            assert_eq!(MigrationRunner::read_schema_version(&db).unwrap(), 0);
+            // No version written yet - should be None
+            assert_eq!(MigrationRunner::read_schema_version(&db).unwrap(), None);
         }
 
         // Run all migrations
@@ -725,7 +865,7 @@ mod multi_version_tests {
             let final_version = runner.run_pending(&mut db).unwrap();
 
             assert_eq!(final_version, 3);
-            assert_eq!(MigrationRunner::read_schema_version(&db).unwrap(), 3);
+            assert_eq!(MigrationRunner::read_schema_version(&db).unwrap(), Some(3));
 
             let cf = db.cf_handle("current_cf").unwrap();
             assert_eq!(
@@ -833,7 +973,7 @@ mod multi_version_tests {
 
             let mut db = DB::open_cf_descriptors(&opts, path, cf_descriptors).unwrap();
 
-            assert_eq!(MigrationRunner::read_schema_version(&db).unwrap(), 1);
+            assert_eq!(MigrationRunner::read_schema_version(&db).unwrap(), Some(1));
 
             let runner = MigrationRunner::from(all_migrations);
             let final_version = runner.run_pending(&mut db).unwrap();
@@ -925,7 +1065,7 @@ mod downgrade_tests {
         assert!(result.is_ok());
         assert_eq!(
             MigrationRunner::read_schema_version(&result.unwrap()).unwrap(),
-            current_version
+            Some(current_version)
         );
     }
 }
@@ -998,7 +1138,7 @@ mod store_simulation_tests {
                 assert!(db.cf_handle(cf_name).is_none());
             }
 
-            assert_eq!(MigrationRunner::read_schema_version(&db).unwrap(), 1);
+            assert_eq!(MigrationRunner::read_schema_version(&db).unwrap(), Some(1));
         }
     }
 
@@ -1065,7 +1205,7 @@ mod store_simulation_tests {
         let cf = db.cf_handle("last_processed_block_number").unwrap();
         assert_eq!(&db.get_cf(&cf, b"block").unwrap().unwrap()[..], b"12345");
 
-        assert_eq!(MigrationRunner::read_schema_version(&db).unwrap(), 1);
+        assert_eq!(MigrationRunner::read_schema_version(&db).unwrap(), Some(1));
     }
 
     #[test]
@@ -1093,7 +1233,7 @@ mod store_simulation_tests {
         let migrations = test_migrations::v1_migrations();
         let db = open_db_with_migrations(&opts, path, &["current_cf"], migrations).unwrap();
 
-        assert_eq!(MigrationRunner::read_schema_version(&db).unwrap(), 1);
+        assert_eq!(MigrationRunner::read_schema_version(&db).unwrap(), Some(1));
     }
 }
 
@@ -1216,7 +1356,7 @@ mod cleanup_resilience_tests {
         // Schema version should still be at latest
         assert_eq!(
             MigrationRunner::read_schema_version(&db).unwrap(),
-            latest_version
+            Some(latest_version)
         );
     }
 }
