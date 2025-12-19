@@ -1636,7 +1636,7 @@ where
     /// all blocks in [`TreeRoute::route`] are "enacted" blocks.
     /// For reorgs, `tree_route` should be one such that [`TreeRoute::pivot`] is not 0, therefore
     /// some blocks in [`TreeRoute::route`] are "retracted" blocks and some are "enacted" blocks.
-    pub(crate) async fn forest_root_changes_catchup<Block>(&self, tree_route: &TreeRoute<Block>)
+    pub(crate) async fn forest_root_changes_catchup<Block>(&mut self, tree_route: &TreeRoute<Block>)
     where
         Block: BlockT<Hash = Runtime::Hash>,
     {
@@ -1699,7 +1699,7 @@ where
     /// Two kinds of events are handled:
     /// 1. [`pallet_proofs_dealer::Event::MutationsAppliedForProvider`]: for mutations applied to a BSP.
     /// 2. [`pallet_proofs_dealer::Event::MutationsApplied`]: for mutations applied to the Buckets of an MSP.
-    async fn apply_forest_root_changes<Block>(&self, block: &HashAndNumber<Block>, revert: bool)
+    async fn apply_forest_root_changes<Block>(&mut self, block: &HashAndNumber<Block>, revert: bool)
     where
         Block: BlockT<Hash = Runtime::Hash>,
     {
@@ -1750,8 +1750,9 @@ where
     /// Forest root will be verified against the `new_root` Forest root.
     ///
     /// Changes are applied to the Forest in `self.forest_storage_handler.get(forest_key)`.
+    /// A new Forest storage instance is created if it does not exist.
     pub(crate) async fn apply_forest_mutations_and_verify_root(
-        &self,
+        &mut self,
         forest_key: Vec<u8>,
         mutations: &[(Runtime::Hash, TrieMutation)],
         revert: bool,
@@ -1791,7 +1792,7 @@ where
         let fs = match self.forest_storage_handler.get(&forest_key.into()).await {
             Some(fs) => fs,
             None => {
-                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to get Forest Storage.");
+                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to get Forest Storage. If it didn't exist before, it should have been created when applying the mutation.");
                 return Err(anyhow!("Failed to get Forest Storage."));
             }
         };
@@ -1825,18 +1826,28 @@ where
     /// [`FileMetadata`] and insert it into the Forest.
     /// If `mutation` is a [`TrieRemoveMutation`], it will remove the file with the key `file_key` from the Forest.
     ///
-    /// Changes are applied to the Forest in `self.forest_storage_handler.get(forest_key)`.
+    /// Changes are applied to the Forest in `self.forest_storage_handler.get(forest_key)`. A new Forest storage
+    /// instance is created if it does not exist.
     async fn apply_forest_mutation(
-        &self,
+        &mut self,
         forest_key: Vec<u8>,
         file_key: &Runtime::Hash,
         mutation: &TrieMutation,
     ) -> Result<()> {
-        let fs = self
-            .forest_storage_handler
-            .get(&forest_key.into())
-            .await
-            .ok_or_else(|| anyhow!("CRITICAL❗️❗️ Failed to get forest storage."))?;
+        // Lazily create the Forest storage if it does not yet exist.
+        // MSP Follower nodes do not create the Forests in the tasks when there is a new
+        // storage request, because they do not handle these events. So this is useful for them.
+        let forest_key = forest_key.into();
+        let fs = if let Some(existing) = self.forest_storage_handler.get(&forest_key).await {
+            existing
+        } else {
+            info!(
+                target: LOG_TARGET,
+                "Forest storage for key [{:?}] not found while applying mutation; creating new instance",
+                forest_key
+            );
+            self.forest_storage_handler.create(&forest_key).await
+        };
 
         // Write lock is released when exiting the scope of this `match` statement.
         match mutation {

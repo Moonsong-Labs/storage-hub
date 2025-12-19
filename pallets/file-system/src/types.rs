@@ -50,10 +50,14 @@ pub struct StorageRequestMetadata<T: Config> {
     /// This is also used to verify that the data sent by the user matches the size specified here.
     pub size: StorageDataUnit<T>,
 
-    /// MSP who is requested to store the data, and if it has already confirmed that it is storing it.
+    /// MSP assignment status for this storage request.
     ///
-    /// This is optional in the event when a storage request is created solely to replicate data to other BSPs and an MSP is already storing the data.
-    pub msp: Option<(ProviderIdFor<T>, bool)>,
+    /// Tracks the MSP relationship with this storage request:
+    /// - `None`: No MSP assigned (e.g., BSP redundancy recovery)
+    /// - `Pending(msp_id)`: MSP assigned but hasn't accepted the storage request yet
+    /// - `AcceptedNewFile(msp_id)`: MSP accepted the storage request with a non-inclusion forest proof (new file)
+    /// - `AcceptedExistingFile(msp_id)`: MSP accepted the storage request with an inclusion forest proof (file existed)
+    pub msp_status: MspStorageRequestStatus<T>,
 
     /// Peer Ids of the user who requested the storage.
     ///
@@ -94,6 +98,84 @@ impl<T: Config> StorageRequestMetadata<T> {
             self.fingerprint.as_ref().into(),
         )
         .map_err(|_| Error::<T>::FailedToCreateFileMetadata.into())
+    }
+}
+
+/// Represents the MSP assignment status for a storage request.
+///
+/// This enum captures all possible states of the MSP relationship with a storage request:
+/// - `None`: No MSP is assigned (e.g., BSP redundancy recovery requests)
+/// - `Pending`: An MSP is assigned but hasn't accepted the storage request yet
+/// - `AcceptedNewFile`: The MSP has accepted the storage request with a non-inclusion forest proof,
+///   which means the file was newly added to the bucket.
+/// - `AcceptedExistingFile`: The MSP accepted the storage request with an inclusion forest proof,
+///   which means the file already existed in the bucket from a previous storage request.
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub enum MspStorageRequestStatus<T: Config> {
+    /// No MSP is assigned to this storage request.
+    /// This happens when a BSP stops storing a file and we issue a new storage request for it for redundancy recovery.
+    None,
+    /// An MSP is assigned but has not yet accepted the storage request.
+    Pending(ProviderIdFor<T>),
+    /// The MSP has accepted the storage request with a non-inclusion forest proof.
+    /// This means the file was newly added to the bucket.
+    AcceptedNewFile(ProviderIdFor<T>),
+    /// The MSP has accepted the storage request with an inclusion forest proof.
+    /// This means the file already existed in the bucket from a previous storage request.
+    AcceptedExistingFile(ProviderIdFor<T>),
+}
+
+impl<T: Config> Debug for MspStorageRequestStatus<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            MspStorageRequestStatus::None => write!(f, "MspStorageRequestStatus::None"),
+            MspStorageRequestStatus::Pending(id) => {
+                write!(f, "MspStorageRequestStatus::Pending({:?})", id)
+            }
+            MspStorageRequestStatus::AcceptedNewFile(id) => {
+                write!(f, "MspStorageRequestStatus::AcceptedNewFile({:?})", id)
+            }
+            MspStorageRequestStatus::AcceptedExistingFile(id) => {
+                write!(f, "MspStorageRequestStatus::AcceptedExistingFile({:?})", id)
+            }
+        }
+    }
+}
+
+impl<T: Config> MspStorageRequestStatus<T> {
+    /// Returns the MSP ID if one is assigned to the storage request.
+    pub fn msp_id(&self) -> Option<ProviderIdFor<T>> {
+        match self {
+            MspStorageRequestStatus::None => Option::None,
+            MspStorageRequestStatus::Pending(id)
+            | MspStorageRequestStatus::AcceptedNewFile(id)
+            | MspStorageRequestStatus::AcceptedExistingFile(id) => Option::Some(*id),
+        }
+    }
+
+    /// Returns true if an MSP is assigned to the storage request.
+    pub fn has_msp(&self) -> bool {
+        !matches!(self, MspStorageRequestStatus::None)
+    }
+
+    /// Returns true if the MSP has accepted the storage request (with either proof type).
+    pub fn is_accepted(&self) -> bool {
+        matches!(
+            self,
+            MspStorageRequestStatus::AcceptedNewFile(_)
+                | MspStorageRequestStatus::AcceptedExistingFile(_)
+        )
+    }
+
+    /// Returns true if the MSP accepted the storage request with an inclusion forest proof.
+    pub fn accepted_with_inclusion_proof(&self) -> bool {
+        matches!(self, MspStorageRequestStatus::AcceptedExistingFile(_))
+    }
+
+    /// Returns true if this storage request has not yet been answered by its MSP.
+    pub fn is_pending(&self) -> bool {
+        matches!(self, MspStorageRequestStatus::Pending(_))
     }
 }
 
@@ -527,8 +609,14 @@ impl<T: Config> From<(&StorageRequestMetadata<T>, &MerkleHash<T>)>
             }
         }
 
-        // Check if MSP has accepted the storage request since this would require a fisherman to delete the file from the bucket to update its forest root back.
-        let pending_bucket_removal = matches!(storage_request.msp, Some((_, true)));
+        // Check if the MSP has accepted the storage request with a non-inclusion forest proof, as
+        // this means the file is new and we should mark it for bucket removal.
+        // If the MSP accepted the storage request with an inclusion forest proof, the file already
+        // existed in the bucket from a previous storage request, so we should not mark it for bucket removal.
+        let pending_bucket_removal = matches!(
+            storage_request.msp_status,
+            MspStorageRequestStatus::AcceptedNewFile(_)
+        );
 
         let bounded_bsps = BoundedVec::truncate_from(confirmed_bsps);
 

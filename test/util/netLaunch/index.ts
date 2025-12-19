@@ -386,7 +386,7 @@ export class NetworkLauncher extends BaseNetworkContext {
 
       // Run external migrations when indexer enabled
       // (MSPs and standalone indexer auto-migrate themselves)
-      await this.runMigrations();
+      await this.runMigrations(verbose);
     }
 
     await compose.upOne("sh-bsp", {
@@ -399,15 +399,17 @@ export class NetworkLauncher extends BaseNetworkContext {
       this.config.noisy ? "toxiproxy" : ShConsts.NODE_INFOS.bsp.containerName
     );
 
-    if (verbose && this.config.noisy) {
-      console.log(`toxiproxy IP: ${bspIp}`);
-    } else {
-      console.log(`sh-bsp IP: ${bspIp}`);
+    if (verbose) {
+      if (this.config.noisy) {
+        console.log(`toxiproxy IP: ${bspIp}`);
+      } else {
+        console.log(`sh-bsp IP: ${bspIp}`);
+      }
     }
 
     const bspPeerId = await getContainerPeerId(
       `http://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`,
-      true
+      false
     );
     verbose && console.log(`sh-bsp Peer ID: ${bspPeerId}`);
 
@@ -559,7 +561,7 @@ export class NetworkLauncher extends BaseNetworkContext {
     this.tempFiles = [];
   }
 
-  private async runMigrations() {
+  private async runMigrations(verbose = false) {
     // Migrations are needed when indexer is enabled
     assert(this.config.indexer, "Indexer must be enabled to run migrations");
 
@@ -596,7 +598,7 @@ export class NetworkLauncher extends BaseNetworkContext {
       const diesel = spawn("diesel", ["migration", "run"], {
         cwd,
         env,
-        stdio: "inherit"
+        stdio: verbose ? "inherit" : "ignore"
       });
 
       diesel.on("close", (code) => {
@@ -861,12 +863,19 @@ export class NetworkLauncher extends BaseNetworkContext {
     | { bspTwoRpcPort: number; bspThreeRpcPort: number; fileMetadata: FileMetadata }
     | undefined
   > {
-    console.log("\n=== Launching network config ===");
-    console.table({ config });
+    // Render config as a vertical key/value table so it fits typical console widths
+    // instead of a single very wide row.
+    const configTable = Object.entries(config).map(([key, value]) => ({
+      option: key,
+      value: typeof value === "bigint" ? value.toString() : value
+    }));
+    console.table(configTable);
+    const verbose = process.env.SH_TEST_VERBOSE === "1";
+
     const launchedNetwork = await new NetworkLauncher(type, config)
       .loadComposeFile()
       .populateEntities()
-      .startNetwork();
+      .startNetwork(verbose);
 
     await using bspApi = await launchedNetwork.getApi("sh-bsp");
 
@@ -878,7 +887,9 @@ export class NetworkLauncher extends BaseNetworkContext {
     });
 
     const userPeerId = await launchedNetwork.getPeerId("sh-user");
-    console.log(`sh-user Peer ID: ${userPeerId}`);
+    if (verbose) {
+      console.log(`sh-user Peer ID: ${userPeerId}`);
+    }
 
     const bspContainerName = launchedNetwork.composeYaml.services["sh-bsp"].container_name;
     assert(bspContainerName, "BSP container name not found in compose file");
@@ -936,7 +947,9 @@ export class NetworkLauncher extends BaseNetworkContext {
           mspId,
           `Service ${service} not msp-1/2, either add to hardcoded list or make this dynamic`
         );
-        console.log(`Adding msp ${service} with address ${multiAddressMsp} and id ${mspId}`);
+        if (verbose) {
+          console.log(`Adding msp ${service} with address ${multiAddressMsp} and id ${mspId}`);
+        }
         await launchedNetwork.setupMsp(userApi, mspAddress, multiAddressMsp, mspId);
       }
     }
