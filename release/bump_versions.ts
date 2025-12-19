@@ -1,25 +1,30 @@
 #!/usr/bin/env bun
 
 /**
- * Bump Rust crate versions for a given family so that:
- *   crate_version >= target_version (semver, x.y.z)
+ * Bump versions for a given family so that:
+ *   current_version >= target_version (semver, x.y.z)
  *
  * - Reads configuration from release/versions.json
- * - Discovers Cargo.toml files under the configured roots
- * - Updates only the [package] version field (not dependencies)
+ * - For npm families: discovers package.json files under the configured roots
+ *   and updates only the "version" field (not dependency ranges)
+ * - For Rust families: discovers Cargo.toml files under the configured roots
+ *   and updates only the [package] version field (not dependencies)
  *
  * Usage examples:
- *   bun release/bump_rust_versions.ts
- *   bun release/bump_rust_versions.ts --family core_rust
- *   bun release/bump_rust_versions.ts --family core_rust --version 0.3.0
- *   bun release/bump_rust_versions.ts --dry-run
+ *   bun release/bump_npm_versions.ts --family core_rust
+ *   bun release/bump_npm_versions.ts --family sdk
+ *   bun release/bump_npm_versions.ts --family types_bundle
+ *   bun release/bump_npm_versions.ts --family api_augment
+ *   bun release/bump_npm_versions.ts --family sdk --version 0.4.0
+ *   bun release/bump_npm_versions.ts --family sdk --dry-run
+ *   bun release/bump_npm_versions.ts --dry-run
  */
 
 import * as fs from "node:fs";
 import * as path from "node:path";
 
 interface CliArgs {
-  family: string;
+  family: string | null;
   versionOverride: string | null;
   dryRun: boolean;
   help?: boolean;
@@ -39,12 +44,6 @@ interface ManifestWithPath {
   data: VersionsManifest;
 }
 
-interface PackageVersionInfo {
-  value: string;
-  indexInFile: number;
-  length: number;
-}
-
 interface ParsedSemver {
   major: number;
   minor: number;
@@ -52,27 +51,34 @@ interface ParsedSemver {
   pre: string | null;
 }
 
+interface PackageVersionInfo {
+  value: string;
+  indexInFile: number;
+  length: number;
+}
+
 function printHelp(): void {
   console.log(
     [
-      "Usage: bun release/bump_rust_versions.ts [options]",
+      "Usage: bun release/bump_npm_versions.ts [options]",
       "",
       "Options:",
-      "  --family <name>    Version family to use from release/versions.json (default: core_rust)",
+      "  --family <name>    Version family to use from release/versions.json (e.g. core_rust, sdk, types_bundle, api_augment)",
       "  --version <x.y.z>  Override target version for the chosen family",
       "  --dry-run          Show planned changes without modifying files",
       "  --help             Show this help message",
       "",
       "Behaviour:",
-      "  - Only updates [package] version fields in Cargo.toml files.",
-      "  - Skips crates whose version is already greater than or equal to the target."
+      '  - For npm families: updates the top-level "version" field in package.json files.',
+      "  - For Rust families: updates the [package] version field in Cargo.toml files.",
+      "  - Skips entries whose version is already greater than or equal to the target."
     ].join("\n")
   );
 }
 
 function parseArgs(argv: string[]): CliArgs {
   const args: CliArgs = {
-    family: "core_rust",
+    family: null,
     versionOverride: null,
     dryRun: false
   };
@@ -211,6 +217,46 @@ function compareSemver(a: string, b: string): number {
   return 0;
 }
 
+function findPackageJsonFiles(rootDir: string, roots: string[]): string[] {
+  const results: string[] = [];
+
+  /**
+   * Recursively walk a directory and collect package.json paths.
+   */
+  function walk(currentDir: string): void {
+    const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const entryPath = path.join(currentDir, entry.name);
+
+      if (entry.isDirectory()) {
+        const base = entry.name;
+        // Skip common heavy or irrelevant directories.
+        if (base === "node_modules" || base === ".git" || base === "dist") {
+          // eslint-disable-next-line no-continue
+          continue;
+        }
+        walk(entryPath);
+      } else if (entry.isFile() && entry.name === "package.json") {
+        results.push(entryPath);
+      }
+    }
+  }
+
+  for (const relRoot of roots) {
+    const absRoot = path.resolve(rootDir, relRoot);
+    if (fs.existsSync(absRoot) && fs.statSync(absRoot).isDirectory()) {
+      walk(absRoot);
+    } else if (fs.existsSync(absRoot) && fs.statSync(absRoot).isFile()) {
+      if (path.basename(absRoot) === "package.json") {
+        results.push(absRoot);
+      }
+    }
+  }
+
+  // De-duplicate and sort for stable output.
+  return Array.from(new Set(results)).sort();
+}
+
 function findCargoTomlFiles(rootDir: string, roots: string[]): string[] {
   const results: string[] = [];
 
@@ -257,7 +303,7 @@ function findCargoTomlFiles(rootDir: string, roots: string[]): string[] {
  *   - Find the [package] section
  *   - Find the first 'version = "..."' line after it, before the next '[' section header
  */
-function extractPackageVersion(tomlContent: string): PackageVersionInfo | null {
+function extractCargoPackageVersion(tomlContent: string): PackageVersionInfo | null {
   const packageSectionIndex = tomlContent.indexOf("[package]");
   if (packageSectionIndex === -1) {
     return null;
@@ -299,31 +345,110 @@ function updateCargoTomlVersion(
   return `${before}${newLine}${after}`;
 }
 
-function main(): void {
-  const args = parseArgs(process.argv);
-  if (args.help) {
-    printHelp();
+function bumpNpmFamily(
+  repoRoot: string,
+  manifest: ManifestWithPath,
+  familyName: string,
+  targetVersion: string,
+  args: CliArgs
+): void {
+  const familyConfig = getFamilyConfig(manifest, familyName);
+
+  console.log("");
+  console.log("----------------------------------------------");
+  console.log(` Family: ${familyName} (npm)`);
+  console.log(` Target version: ${targetVersion}`);
+  console.log(` Mode: ${args.dryRun ? "DRY-RUN" : "APPLY"}`);
+  console.log("----------------------------------------------");
+
+  const packageFiles = findPackageJsonFiles(repoRoot, familyConfig.roots);
+  if (packageFiles.length === 0) {
+    console.warn(`No package.json files found for the configured roots of family '${familyName}'.`);
     return;
   }
 
-  const repoRoot = path.resolve(__dirname, "..");
-  const manifest = loadManifest(repoRoot);
-  const familyConfig = getFamilyConfig(manifest, args.family);
+  let updatedCount = 0;
+  let skippedCount = 0;
 
-  const targetVersion = args.versionOverride || familyConfig.version;
-  if (!targetVersion) {
-    throw new Error(
-      `No target version specified. Either set 'version' for family '${args.family}' in ${manifest.path} or pass --version.`
-    );
+  for (const pkgPath of packageFiles) {
+    const raw = fs.readFileSync(pkgPath, "utf8");
+    let pkg: any;
+    try {
+      pkg = JSON.parse(raw);
+    } catch (e) {
+      const err = e as Error;
+      console.error(`Failed to parse JSON in ${pkgPath}: ${err.message}`);
+      // Keep going but ensure a non-zero exit code.
+      process.exitCode = 1;
+      // eslint-disable-next-line no-continue
+      continue;
+    }
+
+    const currentVersion = pkg.version;
+    if (typeof currentVersion !== "string") {
+      skippedCount += 1;
+      // eslint-disable-next-line no-continue
+      continue;
+    }
+
+    let cmp: number;
+    try {
+      cmp = compareSemver(currentVersion, targetVersion);
+    } catch (e) {
+      const err = e as Error;
+      console.error(`Error parsing version in ${pkgPath}: ${err.message}`);
+      // Keep going but ensure a non-zero exit code.
+      process.exitCode = 1;
+      // eslint-disable-next-line no-continue
+      continue;
+    }
+
+    if (cmp >= 0) {
+      skippedCount += 1;
+      // eslint-disable-next-line no-continue
+      continue;
+    }
+
+    pkg.version = targetVersion;
+    const prefix = args.dryRun ? "[DRY-RUN]" : "[UPDATE]";
+    console.log(`${prefix} ${pkgPath}\n        ${currentVersion} -> ${targetVersion}`);
+
+    if (!args.dryRun) {
+      fs.writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`, "utf8");
+    }
+
+    updatedCount += 1;
   }
 
-  // Validate target version early.
-  parseSemver(targetVersion);
+  console.log("");
+  console.log(` Summary for family '${familyName}':`);
+  console.log(`   Target version: ${targetVersion}`);
+  console.log(`   package.json files scanned: ${packageFiles.length}`);
+  console.log(`   Updated: ${updatedCount}`);
+  console.log(`   Skipped (already >= target or no version field): ${skippedCount}`);
 
-  console.log(
-    `Bumping Rust crate versions for family '${args.family}' to at least ${targetVersion} ` +
-      `(dryRun=${args.dryRun ? "true" : "false"})`
-  );
+  if (args.dryRun && updatedCount === 0) {
+    console.log("No changes would be made with the current configuration and target version.");
+  }
+  console.log("----------------------------------------------");
+  console.log("");
+}
+
+function bumpRustFamily(
+  repoRoot: string,
+  manifest: ManifestWithPath,
+  familyName: string,
+  targetVersion: string,
+  args: CliArgs
+): void {
+  const familyConfig = getFamilyConfig(manifest, familyName);
+
+  console.log("");
+  console.log("----------------------------------------------");
+  console.log(` Family: ${familyName} (Rust)`);
+  console.log(` Target version: ${targetVersion}`);
+  console.log(` Mode: ${args.dryRun ? "DRY-RUN" : "APPLY"}`);
+  console.log("----------------------------------------------");
 
   const cargoFiles = findCargoTomlFiles(repoRoot, familyConfig.roots);
   if (cargoFiles.length === 0) {
@@ -336,7 +461,7 @@ function main(): void {
 
   for (const cargoPath of cargoFiles) {
     const content = fs.readFileSync(cargoPath, "utf8");
-    const versionInfo = extractPackageVersion(content);
+    const versionInfo = extractCargoPackageVersion(content);
     if (!versionInfo) {
       // Probably a workspace-only Cargo.toml; skip it quietly.
       skippedCount += 1;
@@ -365,9 +490,8 @@ function main(): void {
 
     // Perform the bump.
     const newContent = updateCargoTomlVersion(content, versionInfo, targetVersion);
-    console.log(
-      `${args.dryRun ? "[DRY-RUN] " : ""}Updated ${cargoPath}: ${currentVersion} -> ${targetVersion}`
-    );
+    const prefix = args.dryRun ? "[DRY-RUN]" : "[UPDATE]";
+    console.log(`${prefix} ${cargoPath}\n        ${currentVersion} -> ${targetVersion}`);
 
     if (!args.dryRun) {
       fs.writeFileSync(cargoPath, newContent, "utf8");
@@ -377,14 +501,69 @@ function main(): void {
   }
 
   console.log("");
-  console.log(`Summary for family '${args.family}':`);
-  console.log(`  Target version: ${targetVersion}`);
-  console.log(`  Cargo.toml files scanned: ${cargoFiles.length}`);
-  console.log(`  Updated: ${updatedCount}`);
-  console.log(`  Skipped (already >= target or no [package] version): ${skippedCount}`);
+  console.log(` Summary for family '${familyName}':`);
+  console.log(`   Target version: ${targetVersion}`);
+  console.log(`   Cargo.toml files scanned: ${cargoFiles.length}`);
+  console.log(`   Updated: ${updatedCount}`);
+  console.log(`   Skipped (already >= target or no [package] version): ${skippedCount}`);
 
   if (args.dryRun && updatedCount === 0) {
     console.log("No changes would be made with the current configuration and target version.");
+  }
+  console.log("----------------------------------------------");
+  console.log("");
+}
+
+function main(): void {
+  const args = parseArgs(process.argv);
+  if (args.help) {
+    printHelp();
+    return;
+  }
+
+  const repoRoot = path.resolve(__dirname, "..");
+  const manifest = loadManifest(repoRoot);
+  const allFamilies = Object.keys(manifest.data.families);
+
+  // If no family is specified, we run for all families defined in the manifest.
+  const defaultFamilies = allFamilies;
+  const familiesToRun = args.family !== null ? [args.family] : defaultFamilies;
+
+  if (familiesToRun.length === 0) {
+    console.warn("No families found in manifest to operate on.");
+    return;
+  }
+
+  if (args.family === null && args.versionOverride) {
+    throw new Error(
+      "Cannot use --version without specifying --family when operating on multiple families."
+    );
+  }
+
+  console.log("==============================================");
+  console.log(" version bump");
+  console.log(` Mode: ${args.dryRun ? "DRY-RUN (no files will be changed)" : "APPLY"}`);
+  console.log(` Families: ${familiesToRun.join(", ")}`);
+  console.log("==============================================");
+
+  for (const familyName of familiesToRun) {
+    const familyConfig = getFamilyConfig(manifest, familyName);
+    const targetVersion = args.versionOverride || familyConfig.version;
+
+    if (!targetVersion) {
+      throw new Error(
+        `No target version specified. Either set 'version' for family '${familyName}' in ${manifest.path} or pass --version.`
+      );
+    }
+
+    // Validate target version early.
+    parseSemver(targetVersion);
+
+    if (familyName === "core_rust") {
+      bumpRustFamily(repoRoot, manifest, familyName, targetVersion, args);
+    } else {
+      bumpNpmFamily(repoRoot, manifest, familyName, targetVersion, args);
+    }
   }
 }
 
