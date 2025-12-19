@@ -242,11 +242,8 @@ impl FileDeletionRequestRightIndexName {
 }
 
 /// Current column families used by the blockchain service state store.
-///
-/// Note: Deprecated column families are NOT listed here. They are automatically
-/// discovered via `DB::list_cf()` when opening the database, and then removed
-/// by the migration system.
-const CURRENT_COLUMN_FAMILIES: [&str; 10] = [
+#[allow(deprecated)]
+const CURRENT_COLUMN_FAMILIES: [&str; 11] = [
     LastProcessedBlockName::NAME,
     PendingConfirmStoringRequestLeftIndexName::NAME,
     PendingConfirmStoringRequestRightIndexName::NAME,
@@ -257,6 +254,8 @@ const CURRENT_COLUMN_FAMILIES: [&str; 10] = [
     FileDeletionRequestLeftIndexName::NAME,
     FileDeletionRequestRightIndexName::NAME,
     FileDeletionRequestName::NAME,
+    // Deprecated column families - kept for backward compatibility with existing RocksDB databases
+    LastProcessedBlockNumberName::NAME,
 ];
 
 /// A persistent blockchain service state store.
