@@ -240,11 +240,7 @@ impl BlockchainServiceStateStore {
         info!("Blockchain service state store path: {}", db_path_str);
         std::fs::create_dir_all(db_path_str).expect("Failed to create directory");
 
-        // Use the migration system to open the database.
-        // This will:
-        // 1. Discover any existing column families in the database (including deprecated ones)
-        // 2. Open the database with all existing + current CFs
-        // 3. Run pending migrations to drop deprecated column families
+        // Open database with migrations.
         let rocks = TypedRocksDB::open_with_migrations(
             db_path_str,
             &CURRENT_COLUMN_FAMILIES,

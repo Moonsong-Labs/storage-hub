@@ -135,10 +135,6 @@ impl FileMetadataName {
 }
 
 /// Current column families used by the download state store.
-///
-/// Note: Deprecated column families are NOT listed here. They are automatically
-/// discovered via `DB::list_cf()` when opening the database, and then removed
-/// by the migration system.
 const CURRENT_COLUMN_FAMILIES: &[&str] = &[
     MissingChunksCompositeName::NAME,
     FileMetadataName::NAME,

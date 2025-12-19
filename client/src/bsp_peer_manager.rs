@@ -64,10 +64,6 @@ impl SingleScaleEncodedValueCf for LastUpdateTimeCf {
 }
 
 /// Current column families used by the BSP peer manager store.
-///
-/// Note: Deprecated column families are NOT listed here. They are automatically
-/// discovered via `DB::list_cf()` when opening the database, and then removed
-/// by the migration system.
 const CURRENT_COLUMN_FAMILIES: [&str; 3] =
     [PeerIdCf::NAME, PeerFileKeyCf::NAME, LastUpdateTimeCf::NAME];
 
