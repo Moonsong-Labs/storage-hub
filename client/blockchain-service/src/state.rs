@@ -206,94 +206,12 @@ impl FileDeletionRequestRightIndexName {
     pub const NAME: &'static str = "pending_file_deletion_request_right_index";
 }
 
-// Deprecated column families - kept for backward compatibility with existing RocksDB databases.
-// The functionality has been replaced with in-memory queueing in `MspHandler`.
-#[allow(deprecated, dead_code)]
-mod deprecated_cfs {
-    use super::*;
-
-    /// Pending respond storage requests.
-    ///
-    /// # Deprecated
-    /// This column family is deprecated and no longer used.
-    /// It is kept for backward compatibility with existing RocksDB databases.
-    /// The functionality has been replaced with in-memory queueing in `MspHandler`.
-    #[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
-    pub struct PendingMspRespondStorageRequestCf<Runtime: StorageEnableRuntime> {
-        pub(crate) phantom: std::marker::PhantomData<Runtime>,
-    }
-    impl<Runtime: StorageEnableRuntime> ScaleEncodedCf for PendingMspRespondStorageRequestCf<Runtime> {
-        type Key = u64;
-        type Value = crate::types::RespondStorageRequest<Runtime>;
-
-        const SCALE_ENCODED_NAME: &'static str = PendingMspRespondStorageRequestName::NAME;
-    }
-
-    impl<Runtime: StorageEnableRuntime> Default for PendingMspRespondStorageRequestCf<Runtime> {
-        fn default() -> Self {
-            Self {
-                phantom: std::marker::PhantomData,
-            }
-        }
-    }
-
-    /// Non-generic name holder for the `PendingMspRespondStorageRequest` column family
-    #[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
-    pub struct PendingMspRespondStorageRequestName;
-    impl PendingMspRespondStorageRequestName {
-        pub const NAME: &'static str = "pending_msp_respond_storage_request";
-    }
-
-    /// Pending respond storage requests left side (inclusive) index for the [`PendingMspRespondStorageRequestCf`] CF.
-    ///
-    /// # Deprecated
-    /// This column family is deprecated and no longer used.
-    /// It is kept for backward compatibility with existing RocksDB databases.
-    #[derive(Default)]
-    #[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
-    pub struct PendingMspRespondStorageRequestLeftIndexCf;
-    impl SingleScaleEncodedValueCf for PendingMspRespondStorageRequestLeftIndexCf {
-        type Value = u64;
-
-        const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
-            PendingMspRespondStorageRequestLeftIndexName::NAME;
-    }
-
-    /// Non-generic name holder for the `PendingMspRespondStorageRequestLeftIndex` column family
-    #[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
-    pub struct PendingMspRespondStorageRequestLeftIndexName;
-    impl PendingMspRespondStorageRequestLeftIndexName {
-        pub const NAME: &'static str = "pending_msp_respond_storage_request_left_index";
-    }
-
-    /// Pending respond storage requests right side (exclusive) index for the [`PendingMspRespondStorageRequestCf`] CF.
-    ///
-    /// # Deprecated
-    /// This column family is deprecated and no longer used.
-    /// It is kept for backward compatibility with existing RocksDB databases.
-    #[derive(Default)]
-    #[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
-    pub struct PendingMspRespondStorageRequestRightIndexCf;
-    impl SingleScaleEncodedValueCf for PendingMspRespondStorageRequestRightIndexCf {
-        type Value = u64;
-
-        const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
-            PendingMspRespondStorageRequestRightIndexName::NAME;
-    }
-
-    /// Non-generic name holder for the `PendingMspRespondStorageRequestRightIndex` column family
-    #[deprecated(note = "Replaced with in-memory queueing. Kept for backward compatibility.")]
-    pub struct PendingMspRespondStorageRequestRightIndexName;
-    impl PendingMspRespondStorageRequestRightIndexName {
-        pub const NAME: &'static str = "pending_msp_respond_storage_request_right_index";
-    }
-}
-
-use deprecated_cfs::*;
-
-// Deprecated column families are included for backward compatibility with existing RocksDB databases
-#[allow(deprecated)]
-const ALL_COLUMN_FAMILIES: [&str; 13] = [
+/// Current column families used by the blockchain service state store.
+///
+/// Note: Deprecated column families are NOT listed here. They are automatically
+/// discovered via `DB::list_cf()` when opening the database, and then removed
+/// by the migration system.
+const CURRENT_COLUMN_FAMILIES: [&str; 10] = [
     LastProcessedBlockNumberName::NAME,
     PendingConfirmStoringRequestLeftIndexName::NAME,
     PendingConfirmStoringRequestRightIndexName::NAME,
@@ -304,10 +222,6 @@ const ALL_COLUMN_FAMILIES: [&str; 13] = [
     FileDeletionRequestLeftIndexName::NAME,
     FileDeletionRequestRightIndexName::NAME,
     FileDeletionRequestName::NAME,
-    // Deprecated column families - kept for backward compatibility with existing RocksDB databases
-    PendingMspRespondStorageRequestLeftIndexName::NAME,
-    PendingMspRespondStorageRequestRightIndexName::NAME,
-    PendingMspRespondStorageRequestName::NAME,
 ];
 
 /// A persistent blockchain service state store.
