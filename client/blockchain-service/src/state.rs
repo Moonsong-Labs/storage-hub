@@ -13,13 +13,45 @@ use shc_common::{
 
 use crate::{
     migrations::blockchain_service_migrations,
-    types::{ConfirmStoringRequest, FileDeletionRequest, StopStoringForInsolventUserRequest},
+    types::{
+        ConfirmStoringRequest, FileDeletionRequest, MinimalBlockInfo,
+        StopStoringForInsolventUserRequest,
+    },
 };
 
-/// Last processed block number.
+/// Last processed block (both number and hash).
+///
+/// This stores the full block info so we can query the actual last processed block and
+/// not the block found in the canonical chain, which allows us to detect reorgs.
+/// For now, this is used to correctly detect reorgs during startup catchup,
+/// as the previous logic (storing only the block number) could cause silent corruption
+/// if a reorg happened while the node was offline.
+pub struct LastProcessedBlockCf<Runtime: StorageEnableRuntime> {
+    pub(crate) phantom: std::marker::PhantomData<Runtime>,
+}
+impl<Runtime: StorageEnableRuntime> SingleScaleEncodedValueCf for LastProcessedBlockCf<Runtime> {
+    type Value = MinimalBlockInfo<Runtime>;
+
+    const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str = LastProcessedBlockName::NAME;
+}
+
+/// Non-generic name holder for the `LastProcessedBlock` column family
+pub struct LastProcessedBlockName;
+impl LastProcessedBlockName {
+    pub const NAME: &'static str = "last_processed_block";
+}
+
+/// Last processed block number (deprecated, kept for backward compatibility).
+///
+/// # Deprecated
+/// This column family is deprecated. Use `LastProcessedBlockCf` instead which stores
+/// both block number and hash. Kept for backward compatibility to read from old databases
+/// and to allow nodes to seamlessly upgrade to the new format.
+#[deprecated(note = "Use LastProcessedBlockCf instead. Kept for reading from old databases.")]
 pub struct LastProcessedBlockNumberCf<Runtime: StorageEnableRuntime> {
     pub(crate) phantom: std::marker::PhantomData<Runtime>,
 }
+#[allow(deprecated)]
 impl<Runtime: StorageEnableRuntime> SingleScaleEncodedValueCf
     for LastProcessedBlockNumberCf<Runtime>
 {
@@ -28,8 +60,10 @@ impl<Runtime: StorageEnableRuntime> SingleScaleEncodedValueCf
     const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str = LastProcessedBlockNumberName::NAME;
 }
 
-/// Non-generic name holder for the `LastProcessedBlockNumber` column family
+/// Non-generic name holder for the `LastProcessedBlockNumber` column family (deprecated)
+#[deprecated(note = "Use LastProcessedBlockName instead. Kept for reading from old databases.")]
 pub struct LastProcessedBlockNumberName;
+#[allow(deprecated)]
 impl LastProcessedBlockNumberName {
     pub const NAME: &'static str = "last_processed_block_number";
 }
@@ -213,7 +247,7 @@ impl FileDeletionRequestRightIndexName {
 /// discovered via `DB::list_cf()` when opening the database, and then removed
 /// by the migration system.
 const CURRENT_COLUMN_FAMILIES: [&str; 10] = [
-    LastProcessedBlockNumberName::NAME,
+    LastProcessedBlockName::NAME,
     PendingConfirmStoringRequestLeftIndexName::NAME,
     PendingConfirmStoringRequestRightIndexName::NAME,
     PendingConfirmStoringRequestName::NAME,

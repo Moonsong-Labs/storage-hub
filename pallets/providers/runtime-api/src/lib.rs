@@ -6,7 +6,7 @@ use sp_runtime::RuntimeDebug;
 
 sp_api::decl_runtime_apis! {
     #[api_version(1)]
-    pub trait StorageProvidersApi<BlockNumber, BspId, BspInfo, MspId, AccountId, ProviderId, StorageProviderId, StorageDataUnit, Balance, BucketId, Multiaddresses, ValuePropositionWithId>
+    pub trait StorageProvidersApi<BlockNumber, BspId, BspInfo, MspId, AccountId, ProviderId, StorageProviderId, StorageDataUnit, Balance, BucketId, Multiaddresses, ValuePropositionWithId, MerkleHash>
     where
         BlockNumber: Codec,
         BspId: Codec,
@@ -20,6 +20,7 @@ sp_api::decl_runtime_apis! {
         BucketId: Codec,
         Multiaddresses: Codec,
         ValuePropositionWithId: Codec,
+        MerkleHash: Codec,
     {
         fn get_bsp_info(bsp_id: &BspId) -> Result<BspInfo, GetBspInfoError>;
         fn get_storage_provider_id(who: &AccountId) -> Option<StorageProviderId>;
@@ -35,6 +36,7 @@ sp_api::decl_runtime_apis! {
         fn can_delete_provider(provider_id: &ProviderId) -> bool;
         fn query_buckets_for_msp(msp_id: &MspId) -> Result<sp_runtime::Vec<BucketId>, QueryBucketsForMspError>;
         fn query_buckets_of_user_stored_by_msp(msp_id: &ProviderId, user: &AccountId) -> Result<sp_runtime::Vec<BucketId>, QueryBucketsOfUserStoredByMspError>;
+        fn query_bucket_root(bucket_id: &BucketId) -> Result<MerkleHash, QueryBucketRootError>;
     }
 }
 
@@ -98,5 +100,12 @@ pub enum QueryBucketsForMspError {
 #[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
 pub enum QueryBucketsOfUserStoredByMspError {
     NotAnMsp,
+    InternalError,
+}
+
+/// Error type for the `query_bucket_root` runtime API call.
+#[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
+pub enum QueryBucketRootError {
+    BucketNotFound,
     InternalError,
 }

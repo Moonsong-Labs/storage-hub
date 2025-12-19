@@ -55,8 +55,7 @@ await describeMspNet(
       // Simulate indexer falling behind by pausing its container while blockchain continues
       await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.indexer.containerName);
 
-      // Produce enough blocks (7) to exceed sync_mode_min_blocks_behind threshold (5)
-      // This ensures the indexer will enter sync mode rather than processing blocks individually
+      // Produce enough blocks to ensure the indexer will enter sync mode rather than processing blocks individually
       const buckets: string[] = [];
       for (let i = 0; i < 7; i++) {
         const bucketName = `test-bucket-sync-${i}`;
