@@ -39,7 +39,7 @@ use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_blockchain_service_db::{leadership::LeadershipClient, store::PendingTxStore};
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
-    typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
+    typed_store::CFDequeAPI,
     types::{AccountId, BlockNumber, FileKey, OpaqueBlock, StorageHubClient, TickNumber},
 };
 use shc_forest_manager::traits::ForestStorageHandler;
