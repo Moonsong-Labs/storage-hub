@@ -2540,7 +2540,7 @@ mod benchmarks {
                 location: location.clone(),
                 fingerprint: fingerprint.into(),
                 size,
-                msp: Some((msp_id, true)), // MSP accepted triggers incomplete storage request creation
+                msp_status: MspStorageRequestStatus::AcceptedNewFile(msp_id), // MSP accepted triggers incomplete storage request creation
                 user_peer_ids: Default::default(),
                 bsps_required: max_replication_target,
                 bsps_confirmed: max_replication_target,
@@ -2888,7 +2888,7 @@ mod benchmarks {
                 location: location.clone(),
                 fingerprint: fingerprint.into(),
                 size,
-                msp: Some((msp_id, true)), // MSP accepted triggers incomplete storage request creation
+                msp_status: MspStorageRequestStatus::AcceptedNewFile(msp_id), // MSP accepted triggers incomplete storage request creation
                 user_peer_ids: Default::default(),
                 bsps_required: max_replication_target,
                 bsps_confirmed: max_replication_target,
