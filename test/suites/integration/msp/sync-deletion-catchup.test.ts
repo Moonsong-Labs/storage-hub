@@ -3,30 +3,51 @@ import {
   describeMspNet,
   type EnrichedBspApi,
   type FileMetadata,
+  getContainerPeerId,
   type SqlClient,
   shUser,
-  waitFor,
-  getContainerPeerId
+  waitFor
 } from "../../../util";
 
 /**
- * Tests that MSP and BSP correctly apply file deletion mutations that occurred while they were offline.
+ * Tests that MSP and BSP correctly handle sync scenarios:
+ * 1. File deletion mutations that occurred while they were offline
+ * 2. Reorgs that occurred while they were offline
  *
  * When a provider restarts after missing enough blocks, it should enter sync mode,
  * which should detect any forest mutations (including file deletions) that happened in the missed blocks
  * and apply them to their local forest storage, as well as detect finality events for mutations to
  * clean up their file storage.
  *
- * Test flow:
+ * Test flow for file deletion mutations:
  * 1. Create an initial storage request, MSP accepts, BSP confirms
  * 2. Pause MSP, request file deletion, advance blocks until the fisherman completes deletion
  * 3. Advance enough blocks to trigger initial sync when MSP restarts
  * 4. Restart MSP and verify it correctly syncs the deletion mutation
  * 5. Create another storage request, verify MSP accepts and BSP confirms (proves MSP is functional)
  * 6. Repeat steps 2-5 for BSP to verify BSP initial sync handles deletions correctly
+ *
+ * The reorg tests validate that sync correctly handles reorgs by:
+ *  - Detecting that the saved block hash doesn't match the current canonical chain
+ *  - Properly reverting mutations from retracted blocks
+ *  - Applying mutations from newly enacted blocks
+ *
+ * Test flow for reorgs:
+ * 1. Save fork point (finalized block) before any mutations
+ * 2. Seal a deletion block (N) WITHOUT finalizing, MSP/BSP processes and removes file from forest
+ * 3. Pause MSP/BSP immediately after it processes the deletion
+ * 4. Seal another block (N+1) that MSP/BSP doesn't see
+ * 5. Create reorg by sealing from fork point with finalizeBlock: true
+ *    - This reorgs out blocks N and N+1, replacing them with N' (no deletion)
+ * 6. Drop deletion txs from tx pool to prevent re-inclusion
+ * 7. Advance blocks to trigger initial sync when MSP/BSP restarts
+ * 8. Restart MSP/BSP and verify:
+ *    - MSP/BSP enters sync mode and detects reorg (saved hash doesn't match canonical)
+ *    - Reverts the deletion mutation (file should be back in forest)
+ *    - Local bucket/BSP forest root matches on-chain root
  */
 await describeMspNet(
-  "Provider sync catches up file deletions that occurred while offline",
+  "Provider sync catches up file deletions and reorgs that occurred while offline",
   {
     initialised: false,
     indexer: true,
@@ -108,6 +129,10 @@ await describeMspNet(
       const bspNodePeerId = await bspApi.rpc.system.localPeerId();
       strictEqual(bspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.bsp.expectedPeerId);
     });
+
+    // ==================== FILE DELETION TESTS ====================
+    // These tests verify that MSP and BSP correctly handle file deletion mutations
+    // that occurred while they were offline.
 
     it("MSP and BSP accept first storage request", async () => {
       const source = "res/smile.jpg";
@@ -634,6 +659,390 @@ await describeMspNet(
         expectedBspRoot,
         "BSP local forest root should match on-chain root"
       );
+    });
+
+    // ==================== REORG TESTS ====================
+    // These tests verify that providers correctly handle reorgs during sync.
+    // A reorg can occur while a provider is offline, and upon restart,
+    // the provider must detect the reorg and properly revert/apply mutations.
+
+    it("MSP processes deletion, reorg reverts it while MSP offline, MSP correctly reverts deletion on sync", async () => {
+      // Use existing file3 which is in the MSP's forest
+      // Save fork point BEFORE the deletion
+      const forkPointHash = await userApi.rpc.chain.getFinalizedHead();
+
+      // Generate forest proof for deletion
+      const bucketInclusionProof = await newMspApi.rpc.storagehubclient.generateForestProof(
+        file3.bucketId,
+        [file3.fileKey]
+      );
+
+      // Request file deletion
+      const fileOperationIntention = {
+        fileKey: file3.fileKey,
+        operation: { Delete: null }
+      };
+
+      const intentionCodec = userApi.createType(
+        "PalletFileSystemFileOperationIntention",
+        fileOperationIntention
+      );
+      const intentionPayload = intentionCodec.toU8a();
+      const rawSignature = shUser.sign(intentionPayload);
+      const userSignature = userApi.createType("MultiSignature", { Sr25519: rawSignature });
+
+      const deletionRequest = {
+        fileOwner: shUser.address,
+        signedIntention: fileOperationIntention,
+        signature: userSignature,
+        bucketId: file3.bucketId,
+        location: file3.location,
+        size: file3.fileSize,
+        fingerprint: file3.fingerprint
+      };
+
+      // Seal deletion block (N) WITHOUT finalizing
+      const { events: deletionEvents } = await userApi.block.seal({
+        calls: [
+          userApi.tx.fileSystem.requestDeleteFile(
+            fileOperationIntention,
+            userSignature,
+            file3.bucketId,
+            file3.location,
+            file3.fileSize,
+            file3.fingerprint
+          ),
+          userApi.tx.fileSystem.deleteFiles(
+            [deletionRequest],
+            null,
+            bucketInclusionProof.toString()
+          )
+        ],
+        signer: shUser,
+        finaliseBlock: false
+      });
+
+      await userApi.assert.eventPresent("fileSystem", "FileDeletionRequested", deletionEvents);
+      await userApi.assert.eventPresent(
+        "fileSystem",
+        "BucketFileDeletionsCompleted",
+        deletionEvents
+      );
+
+      // Wait for MSP to process the deletion
+      await waitFor({
+        lambda: async () => {
+          const inMspForest = await newMspApi.rpc.storagehubclient.isFileInForest(
+            file3.bucketId,
+            file3.fileKey
+          );
+          return !inMspForest.isTrue;
+        },
+        iterations: 30,
+        delay: 500
+      });
+
+      // Pause MSP immediately after processing
+      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.msp1.containerName);
+
+      // Seal another block (N+1) that MSP doesn't see
+      await userApi.block.seal({ finaliseBlock: false });
+
+      // Create reorg by sealing from fork point
+      await userApi.block.seal({
+        parentHash: forkPointHash.toString(),
+        finaliseBlock: true
+      });
+
+      // Drop deletion txs if they went back to pool
+      try {
+        await userApi.node.dropTxn({ module: "fileSystem", method: "requestDeleteFile" });
+      } catch {
+        // Transaction not in pool
+      }
+      try {
+        await userApi.node.dropTxn({ module: "fileSystem", method: "deleteFiles" });
+      } catch {
+        // Transaction not in pool
+      }
+
+      // Advance blocks to trigger initial sync
+      await userApi.block.skip(10);
+
+      // Disconnect and restart MSP
+      await newMspApi.disconnect();
+      await userApi.docker.restartContainer({
+        containerName: userApi.shConsts.NODE_INFOS.msp1.containerName
+      });
+
+      await getContainerPeerId(`http://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`, true);
+      await userApi.docker.waitForLog({
+        containerName: userApi.shConsts.NODE_INFOS.msp1.containerName,
+        searchString: "💤 Idle",
+        timeout: 30000,
+        tail: 50
+      });
+
+      newMspApi = await createApi(`ws://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`);
+
+      await userApi.docker.waitForLog({
+        searchString: "🥱 Handling coming out of sync mode",
+        containerName: userApi.shConsts.NODE_INFOS.msp1.containerName,
+        timeout: 30000
+      });
+
+      await userApi.wait.nodeCatchUpToChainTip(newMspApi);
+      await userApi.block.seal({ finaliseBlock: true });
+
+      const finalisedBlockHash = await userApi.rpc.chain.getFinalizedHead();
+      await newMspApi.wait.blockImported(finalisedBlockHash.toString());
+      await newMspApi.block.finaliseBlock(finalisedBlockHash.toString());
+
+      // File should be back in MSP forest (deletion was reverted by reorg)
+      await waitFor({
+        lambda: async () => {
+          const inMspForest = await newMspApi.rpc.storagehubclient.isFileInForest(
+            file3.bucketId,
+            file3.fileKey
+          );
+          return inMspForest.isTrue;
+        },
+        iterations: 30,
+        delay: 500
+      });
+
+      // Verify bucket root matches on-chain
+      const bucketOnChain = await userApi.query.providers.buckets(file3.bucketId);
+      assert(bucketOnChain.isSome, "Bucket should exist on-chain after reorg");
+      const expectedBucketRoot = bucketOnChain.unwrap().root.toString();
+      const localBucketRoot = await newMspApi.rpc.storagehubclient.getForestRoot(file3.bucketId);
+      strictEqual(
+        localBucketRoot.toString(),
+        expectedBucketRoot,
+        "MSP bucket root should match on-chain after reorg sync"
+      );
+    });
+
+    it("BSP processes deletion, reorg reverts it while BSP offline, BSP correctly reverts deletion on sync", async () => {
+      // Use existing file3 which is in the BSP's forest
+      // First verify file3 is in BSP forest
+      await waitFor({
+        lambda: async () => {
+          const inBspForest = await newBspApi.rpc.storagehubclient.isFileInForest(
+            null,
+            file3.fileKey
+          );
+          return inBspForest.isTrue;
+        }
+      });
+
+      // Save fork point BEFORE the deletion
+      const forkPointHash = await userApi.rpc.chain.getFinalizedHead();
+
+      // Generate forest proof for BSP deletion
+      const bspInclusionProof = await newBspApi.rpc.storagehubclient.generateForestProof(null, [
+        file3.fileKey
+      ]);
+
+      // Request file deletion from BSP
+      const fileOperationIntention = {
+        fileKey: file3.fileKey,
+        operation: { Delete: null }
+      };
+
+      const intentionCodec = userApi.createType(
+        "PalletFileSystemFileOperationIntention",
+        fileOperationIntention
+      );
+      const intentionPayload = intentionCodec.toU8a();
+      const rawSignature = shUser.sign(intentionPayload);
+      const userSignature = userApi.createType("MultiSignature", { Sr25519: rawSignature });
+
+      const deletionRequest = {
+        fileOwner: shUser.address,
+        signedIntention: fileOperationIntention,
+        signature: userSignature,
+        bucketId: file3.bucketId,
+        location: file3.location,
+        size: file3.fileSize,
+        fingerprint: file3.fingerprint
+      };
+
+      // Seal deletion block (N) WITHOUT finalizing - delete from BSP only
+      const { events: deletionEvents } = await userApi.block.seal({
+        calls: [
+          userApi.tx.fileSystem.requestDeleteFile(
+            fileOperationIntention,
+            userSignature,
+            file3.bucketId,
+            file3.location,
+            file3.fileSize,
+            file3.fingerprint
+          ),
+          userApi.tx.fileSystem.deleteFiles(
+            [deletionRequest],
+            userApi.shConsts.DUMMY_BSP_ID, // BSP ID - makes this a BSP deletion
+            bspInclusionProof.toString() // Forest inclusion proof
+          )
+        ],
+        signer: shUser,
+        finaliseBlock: false
+      });
+
+      await userApi.assert.eventPresent("fileSystem", "FileDeletionRequested", deletionEvents);
+      await userApi.assert.eventPresent("fileSystem", "BspFileDeletionsCompleted", deletionEvents);
+
+      // Wait for BSP to process the deletion
+      await waitFor({
+        lambda: async () => {
+          const inBspForest = await newBspApi.rpc.storagehubclient.isFileInForest(
+            null,
+            file3.fileKey
+          );
+          return !inBspForest.isTrue;
+        },
+        iterations: 30,
+        delay: 500
+      });
+
+      // Pause BSP immediately after processing
+      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.bsp.containerName);
+
+      // Seal another block (N+1) that BSP doesn't see
+      await userApi.block.seal({ finaliseBlock: false });
+
+      // Create reorg by sealing from fork point
+      await userApi.block.seal({
+        parentHash: forkPointHash.toString(),
+        finaliseBlock: true
+      });
+
+      // Drop deletion txs if they went back to pool
+      try {
+        await userApi.node.dropTxn({ module: "fileSystem", method: "requestDeleteFile" });
+      } catch {
+        // Transaction not in pool
+      }
+      try {
+        await userApi.node.dropTxn({ module: "fileSystem", method: "deleteFiles" });
+      } catch {
+        // Transaction not in pool
+      }
+
+      // Advance blocks to trigger initial sync
+      await userApi.block.skip(10);
+
+      // Disconnect and restart BSP
+      await newBspApi.disconnect();
+      await userApi.docker.restartContainer({
+        containerName: userApi.shConsts.NODE_INFOS.bsp.containerName
+      });
+
+      await getContainerPeerId(`http://127.0.0.1:${userApi.shConsts.NODE_INFOS.bsp.port}`, true);
+      await userApi.docker.waitForLog({
+        containerName: userApi.shConsts.NODE_INFOS.bsp.containerName,
+        searchString: "💤 Idle",
+        timeout: 30000,
+        tail: 50
+      });
+
+      newBspApi = await createApi(`ws://127.0.0.1:${userApi.shConsts.NODE_INFOS.bsp.port}`);
+
+      await userApi.docker.waitForLog({
+        searchString: "🥱 Handling coming out of sync mode",
+        containerName: userApi.shConsts.NODE_INFOS.bsp.containerName,
+        timeout: 30000
+      });
+
+      await userApi.wait.nodeCatchUpToChainTip(newBspApi);
+      await userApi.block.seal({ finaliseBlock: true });
+
+      const finalisedBlockHash = await userApi.rpc.chain.getFinalizedHead();
+      await newBspApi.wait.blockImported(finalisedBlockHash.toString());
+      await newBspApi.block.finaliseBlock(finalisedBlockHash.toString());
+
+      // File should be back in BSP forest (deletion was reverted by reorg)
+      await waitFor({
+        lambda: async () => {
+          const inBspForest = await newBspApi.rpc.storagehubclient.isFileInForest(
+            null,
+            file3.fileKey
+          );
+          return inBspForest.isTrue;
+        },
+        iterations: 30,
+        delay: 500
+      });
+
+      // Verify BSP root matches on-chain
+      const bspId = userApi.shConsts.DUMMY_BSP_ID;
+      const bspOnChain = await userApi.query.providers.backupStorageProviders(bspId);
+      assert(bspOnChain.isSome, "BSP should exist on-chain after reorg");
+      const expectedBspRoot = bspOnChain.unwrap().root.toString();
+      const localBspRoot = await newBspApi.rpc.storagehubclient.getForestRoot(null);
+      strictEqual(
+        localBspRoot.toString(),
+        expectedBspRoot,
+        "BSP forest root should match on-chain after reorg sync"
+      );
+    });
+
+    it("Final verification after reorg tests: providers are functional", async () => {
+      // Create a new file to verify both providers work after reorg handling
+      const source = "res/whatsup.jpg";
+      const destination = "test/after-reorg-tests.jpg";
+      const bucketIdH256 = userApi.createType("H256", file1.bucketId);
+
+      const fileAfterReorg = await userApi.file.newStorageRequest(
+        source,
+        destination,
+        bucketIdH256,
+        undefined,
+        undefined,
+        1
+      );
+
+      await newMspApi.wait.fileStorageComplete(fileAfterReorg.fileKey);
+      await userApi.wait.mspResponseInTxPool();
+      await userApi.wait.bspVolunteerInTxPool(1);
+      await userApi.block.seal();
+
+      await newBspApi.wait.fileStorageComplete(fileAfterReorg.fileKey);
+      await userApi.wait.bspStored({ expectedExts: 1, sealBlock: true });
+
+      // Verify file is in both MSP and BSP forests
+      await waitFor({
+        lambda: async () => {
+          const inMspForest = await newMspApi.rpc.storagehubclient.isFileInForest(
+            fileAfterReorg.bucketId,
+            fileAfterReorg.fileKey
+          );
+          return inMspForest.isTrue;
+        }
+      });
+
+      await waitFor({
+        lambda: async () => {
+          const inBspForest = await newBspApi.rpc.storagehubclient.isFileInForest(
+            null,
+            fileAfterReorg.fileKey
+          );
+          return inBspForest.isTrue;
+        }
+      });
+
+      // Final root verification
+      const bucketOnChain = await userApi.query.providers.buckets(file1.bucketId);
+      const expectedBucketRoot = bucketOnChain.unwrap().root.toString();
+      const localBucketRoot = await newMspApi.rpc.storagehubclient.getForestRoot(file1.bucketId);
+      strictEqual(localBucketRoot.toString(), expectedBucketRoot, "MSP bucket root matches");
+
+      const bspOnChain = await userApi.query.providers.backupStorageProviders(
+        userApi.shConsts.DUMMY_BSP_ID
+      );
+      const expectedBspRoot = bspOnChain.unwrap().root.toString();
+      const localBspRoot = await newBspApi.rpc.storagehubclient.getForestRoot(null);
+      strictEqual(localBspRoot.toString(), expectedBspRoot, "BSP forest root matches");
     });
   }
 );
