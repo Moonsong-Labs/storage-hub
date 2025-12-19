@@ -1364,7 +1364,6 @@ where
 
         if is_proof_error {
             // Re-queue file keys for automatic retry.
-            // The next the file keys are processed, they will regenerate proofs with the updated forest root.
             warn!(
                 target: LOG_TARGET,
                 "Proof-related error detected, re-queuing file keys for retry: {:?}",
