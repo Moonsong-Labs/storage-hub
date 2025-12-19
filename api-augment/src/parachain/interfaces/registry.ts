@@ -71,7 +71,6 @@ import type {
   PalletCollatorSelectionEvent,
   PalletFileSystemBucketMoveRequestResponse,
   PalletFileSystemCall,
-  PalletFileSystemEitherAccountIdOrMspId,
   PalletFileSystemError,
   PalletFileSystemEvent,
   PalletFileSystemFileDeletionRequest,
@@ -81,6 +80,7 @@ import type {
   PalletFileSystemHoldReason,
   PalletFileSystemIncompleteStorageRequestMetadata,
   PalletFileSystemMoveBucketRequestMetadata,
+  PalletFileSystemMspStorageRequestStatus,
   PalletFileSystemPendingFileDeletionRequest,
   PalletFileSystemPendingStopStoringRequest,
   PalletFileSystemRejectedStorageRequest,
@@ -381,7 +381,6 @@ declare module "@polkadot/types/types/registry" {
     PalletCollatorSelectionEvent: PalletCollatorSelectionEvent;
     PalletFileSystemBucketMoveRequestResponse: PalletFileSystemBucketMoveRequestResponse;
     PalletFileSystemCall: PalletFileSystemCall;
-    PalletFileSystemEitherAccountIdOrMspId: PalletFileSystemEitherAccountIdOrMspId;
     PalletFileSystemError: PalletFileSystemError;
     PalletFileSystemEvent: PalletFileSystemEvent;
     PalletFileSystemFileDeletionRequest: PalletFileSystemFileDeletionRequest;
@@ -391,6 +390,7 @@ declare module "@polkadot/types/types/registry" {
     PalletFileSystemHoldReason: PalletFileSystemHoldReason;
     PalletFileSystemIncompleteStorageRequestMetadata: PalletFileSystemIncompleteStorageRequestMetadata;
     PalletFileSystemMoveBucketRequestMetadata: PalletFileSystemMoveBucketRequestMetadata;
+    PalletFileSystemMspStorageRequestStatus: PalletFileSystemMspStorageRequestStatus;
     PalletFileSystemPendingFileDeletionRequest: PalletFileSystemPendingFileDeletionRequest;
     PalletFileSystemPendingStopStoringRequest: PalletFileSystemPendingStopStoringRequest;
     PalletFileSystemRejectedStorageRequest: PalletFileSystemRejectedStorageRequest;

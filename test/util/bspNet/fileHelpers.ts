@@ -308,7 +308,7 @@ export const batchStorageRequests = async (
     finaliseBlock = true,
     bspApi,
     mspApi,
-    maxAttempts = 5
+    maxAttempts = 10
   } = options;
 
   if (!owner) {
@@ -479,9 +479,10 @@ export const batchStorageRequests = async (
   const expectMspAcceptance = mspApi !== undefined;
   const expectBspConfirmations = bspApi !== undefined;
 
+  let attempt = 0;
   if (expectMspAcceptance || expectBspConfirmations) {
     for (
-      let attempt = 0;
+      attempt = 0;
       attempt < maxAttempts &&
       ((expectMspAcceptance && totalAcceptance < fileKeys.length) ||
         (expectBspConfirmations && totalConfirmations < fileKeys.length));
@@ -493,21 +494,25 @@ export const batchStorageRequests = async (
       let mspFound = false;
       let bspFound = false;
 
-      if (expectMspAcceptance) {
+      if (expectMspAcceptance && totalAcceptance < fileKeys.length) {
         try {
           await api.wait.mspResponseInTxPool(1);
           mspFound = true;
-        } catch {}
+        } catch (_error) {
+          // MSP response not in tx pool yet, will retry
+        }
       }
 
-      if (expectBspConfirmations) {
+      if (expectBspConfirmations && totalConfirmations < fileKeys.length) {
         try {
           await api.wait.bspStored({
             sealBlock: false,
             timeoutMs: 3000
           });
           bspFound = true;
-        } catch {}
+        } catch (_error) {
+          // BSP stored not in tx pool yet, will retry
+        }
       }
 
       const { events } = await api.block.seal({
@@ -516,10 +521,9 @@ export const batchStorageRequests = async (
       });
 
       if (mspFound && expectMspAcceptance) {
-        const acceptEvents = await api.assert.eventMany(
-          "fileSystem",
-          "MspAcceptedStorageRequest",
-          events
+        // Filter for MspAcceptedStorageRequest events without asserting (may be empty if batch failed)
+        const acceptEvents = (events || []).filter((e) =>
+          api.events.fileSystem.MspAcceptedStorageRequest.is(e.event)
         );
 
         // Count total MspAcceptedStorageRequest events
@@ -527,11 +531,9 @@ export const batchStorageRequests = async (
       }
 
       if (bspFound && expectBspConfirmations) {
-        // Check if BSP confirmed storing events are present
-        const confirmEvents = await api.assert.eventMany(
-          "fileSystem",
-          "BspConfirmedStoring",
-          events
+        // Filter for BspConfirmedStoring events without asserting (may be empty if batch failed)
+        const confirmEvents = (events || []).filter((e) =>
+          api.events.fileSystem.BspConfirmedStoring.is(e.event)
         );
 
         // Count total file keys confirmed in all BspConfirmedStoring events
@@ -547,7 +549,7 @@ export const batchStorageRequests = async (
       assert.strictEqual(
         totalAcceptance,
         fileKeys.length,
-        `Expected ${fileKeys.length} MSP acceptance, but got ${totalAcceptance}`
+        `Expected ${fileKeys.length} MSP acceptance, but got ${totalAcceptance}. Check logs above for ExtrinsicFailed events which may indicate why MSP transactions failed.`
       );
     }
 
@@ -555,7 +557,7 @@ export const batchStorageRequests = async (
       assert.strictEqual(
         totalConfirmations,
         fileKeys.length,
-        `Expected ${fileKeys.length} BSP confirmations, but got ${totalConfirmations}`
+        `Expected ${fileKeys.length} BSP confirmations, but got ${totalConfirmations}. Check logs above for ExtrinsicFailed events which may indicate why BSP transactions failed.`
       );
     }
   }
