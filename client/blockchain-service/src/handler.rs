@@ -48,7 +48,7 @@ use crate::{
     capacity_manager::{CapacityRequest, CapacityRequestQueue},
     commands::BlockchainServiceCommand,
     events::{BlockchainServiceEventBusProvider, NewStorageRequest},
-    state::{BlockchainServiceStateStore, LastProcessedBlockNumberCf},
+    state::BlockchainServiceStateStore,
     transaction_manager::{TransactionManager, TransactionManagerConfig},
     types::{
         FileDistributionInfo, ManagedProvider, MinimalBlockInfo, MultiInstancesNodeRole,
@@ -116,6 +116,27 @@ where
     pub(crate) capacity_manager: Option<CapacityRequestQueue<Runtime>>,
     /// Whether the node is running in maintenance mode.
     pub(crate) maintenance_mode: bool,
+    /// Tracks whether the node has caught up with the chain and completed initial sync tasks.
+    ///
+    /// This flag starts as `false` and is set to `true` after the first block is processed
+    /// via `handle_block_import_notification`. This is the natural "sync completed" signal
+    /// because `handle_block_import_notification` only fires for `NetworkBroadcast` blocks
+    /// (i.e., live blocks after sync is complete), not for `NetworkInitialSync` blocks.
+    ///
+    /// This flag is also reset to `false` whenever a `NetworkInitialSync` block is
+    /// received, indicating the node has fallen behind and needs to re-sync. This ensures
+    /// `handle_initial_sync` runs again after catching up, even if the node wasn't restarted.
+    ///
+    /// This covers all scenarios:
+    /// - Cold start when already synced: First block triggers initial sync
+    /// - Cold start needing sync: All sync blocks processed, then the first post-sync block triggers initial sync
+    /// - Node falling behind (without restart): Sync blocks reset the flag, then post-sync block triggers initial sync
+    ///
+    /// When `false`, the first `handle_block_import_notification` call will trigger
+    /// `handle_initial_sync` to perform provider-specific initialization tasks:
+    /// - MSP: Verify bucket forest roots, emit pending storage requests
+    /// - BSP: Verify forest root, catch up on proof submissions
+    pub(crate) caught_up: bool,
     /// Transaction manager for tracking pending transactions and managing nonces.
     pub(crate) transaction_manager:
         TransactionManager<Runtime::Hash, Runtime::Call, BlockNumber<Runtime>>,
@@ -144,21 +165,10 @@ where
 {
     /// Extrinsic retry timeout in seconds.
     pub extrinsic_retry_timeout: u64,
-    /// The minimum number of blocks behind the current best block to consider the node out of sync.
-    ///
-    /// This triggers a catch-up of proofs and Forest root changes in the blockchain service, before
-    /// continuing to process incoming events.
-    pub sync_mode_min_blocks_behind: BlockNumber<Runtime>,
 
     /// On blocks that are multiples of this number, the blockchain service will trigger the catch
     /// up of proofs (see [`BlockchainService::proof_submission_catch_up`]).
     pub check_for_pending_proofs_period: BlockNumber<Runtime>,
-
-    /// The maximum number of blocks from the past that will be processed for catching up the root
-    /// changes (see [`BlockchainService::forest_root_changes_catchup`]). This constant determines
-    /// the maximum size of the `tree_route` in the [`NewBlockNotificationKind::NewBestBlock`] enum
-    /// variant.
-    pub max_blocks_behind_to_catch_up_root_changes: BlockNumber<Runtime>,
 
     /// The peer ID of this node.
     pub peer_id: Option<PeerId>,
@@ -179,9 +189,7 @@ where
     fn default() -> Self {
         Self {
             extrinsic_retry_timeout: 30,
-            sync_mode_min_blocks_behind: 5u32.into(),
             check_for_pending_proofs_period: 4u32.into(),
-            max_blocks_behind_to_catch_up_root_changes: 10u32.into(),
             peer_id: None,
             enable_msp_distribute_files: false,
             pending_db_url: None,
@@ -211,6 +219,7 @@ where
 {
     Command(BlockchainServiceCommand<Runtime>),
     BlockImportNotification(BlockImportNotification<OpaqueBlock>),
+    SyncBlockNotification(BlockImportNotification<OpaqueBlock>),
     FinalityNotification(FinalityNotification<OpaqueBlock>),
     TxStatusUpdate(
         (
@@ -276,12 +285,23 @@ where
             }
         }
 
+        // Catch up on any blocks that were imported but not processed
+        self.actor.catch_up_missed_blocks().await;
+
         // Import notification stream to be notified of new blocks.
         // The behaviour of this stream is:
         // 1. While the node is syncing to the tip of the chain (initial sync, i.e. it just started
         // or got behind due to connectivity issues), it will only notify us of re-orgs.
         // 2. Once the node is synced, it will notify us of every new block.
         let block_import_notification_stream = self.actor.client.import_notification_stream();
+
+        // Every block notification stream.
+        // Fires for all blocks including sync blocks, which is its main purpose here:
+        // - We use it to process mutations during initial sync before state is pruned.
+        // - We only process linear chain extensions, not reorgs. This is because, as mentioned, that's handled
+        // by the `block_import_notification_stream` above.
+        // - After the initial sync period, this notification stream is just ignored.
+        let every_block_notification_stream = self.actor.client.every_import_notification_stream();
 
         // Finality notification stream to be notified of blocks being finalised.
         let finality_notification_stream = self.actor.client.finality_notification_stream();
@@ -301,6 +321,9 @@ where
             block_import_notification_stream
                 .map(|n| MergedEventLoopMessage::<Runtime>::BlockImportNotification(n))
                 .boxed(),
+            every_block_notification_stream
+                .map(|n| MergedEventLoopMessage::<Runtime>::SyncBlockNotification(n))
+                .boxed(),
             finality_notification_stream
                 .map(|n| MergedEventLoopMessage::<Runtime>::FinalityNotification(n))
                 .boxed(),
@@ -318,6 +341,11 @@ where
                 MergedEventLoopMessage::BlockImportNotification(notification) => {
                     self.actor
                         .handle_block_import_notification(notification)
+                        .await;
+                }
+                MergedEventLoopMessage::SyncBlockNotification(notification) => {
+                    self.actor
+                        .handle_sync_block_notification(notification)
                         .await;
                 }
                 MergedEventLoopMessage::FinalityNotification(notification) => {
@@ -1604,6 +1632,7 @@ where
             notify_period,
             capacity_manager: capacity_request_queue,
             maintenance_mode,
+            caught_up: false,
             transaction_manager: TransactionManager::new(TransactionManagerConfig::default()),
             // Temporary sender, will be replaced by the event loop during startup
             tx_status_sender: {
@@ -1626,7 +1655,14 @@ where
             return;
         }
 
-        let last_block_processed = self.best_block;
+        // Skip sync blocks as they're handled entirely by `handle_sync_block_notification`.
+        // This prevents:
+        // 1. Double-processing of reorgs during sync (which would trigger unwanted events)
+        // 2. Premature triggering of `handle_initial_sync` during any reorgs during sync
+        // 3. Duplicate `register_best_block_and_check_reorg` calls
+        if notification.origin == sp_consensus::BlockOrigin::NetworkInitialSync {
+            return;
+        }
 
         // Check if this new imported block is the new best, and if it causes a reorg.
         let new_block_notification_kind = self.register_best_block_and_check_reorg(&notification);
@@ -1656,18 +1692,97 @@ where
         // Get provider IDs linked to keys in this node's keystore and update the nonce.
         self.init_block_processing(&block_hash);
 
-        // If this is the first block import notification, we might need to catch up.
-        // Check if we just came out of syncing mode.
-        // We use saturating_sub because in a reorg, there is a potential scenario where the last
-        // block processed is higher than the current block number.
-        let sync_mode_min_blocks_behind = self.config.sync_mode_min_blocks_behind;
-        if block_number.saturating_sub(last_block_processed.number) > sync_mode_min_blocks_behind {
+        // Trigger initial sync tasks on the first block import notification after startup/recovery
+        // or after the node fell behind and re-synced.
+        if !self.caught_up {
             self.handle_initial_sync(notification).await;
+            self.caught_up = true;
         }
 
         let block_number = block_number.saturated_into();
         self.process_block_import(&block_hash, &block_number, tree_route)
             .await;
+    }
+
+    /// Handle block notifications during network initial sync.
+    ///
+    /// This function is called for every imported block (via `every_import_notification_stream`),
+    /// but only processes mutation events during initial sync to keep the local forest in sync
+    /// before state pruning can occur.
+    ///
+    /// ## Why we need this
+    ///
+    /// During initial sync, `block_import_notification_stream` (the normal notification stream)
+    /// only fires for reorgs, not for linear chain extensions. This means if we relied solely
+    /// on that stream, we'd miss processing mutations for the vast majority of sync blocks.
+    /// By the time we come out of sync mode, those blocks' state may have been pruned, and we
+    /// would end up with a provider who's forest is out of sync with the on-chain state and who
+    /// has no way of recovering other than manually applying the required changes to the forest.
+    ///
+    /// ## Sync handling approach
+    ///
+    /// Substrate uses `MAJOR_SYNC_BLOCKS = 5` to determine when a node is "major syncing":
+    /// - **6+ blocks behind**: `BlockOrigin::NetworkInitialSync` → handled by this function
+    /// - **≤5 blocks behind**: `BlockOrigin::NetworkBroadcast` → handled by normal flow
+    ///
+    /// This creates a natural hybrid approach:
+    /// 1. If the node requires heavy sync (6+ blocks behind): Process only mutations block-by-block
+    /// 2. If the node is already near the chain tip (≤5 blocks behind): Normal flow with full event processing
+    ///
+    /// ## Reorg handling during sync
+    ///
+    /// Reorgs during sync are handled entirely by this function.
+    /// This is important because:
+    /// 1. We don't want to trigger the full block import event processing during sync (as we would process unwanted events)
+    /// 2. We don't want to prematurely trigger `handle_initial_sync` during any reorgs during sync
+    /// 3. We still need to properly revert retracted blocks and apply enacted blocks via `forest_root_changes_catchup`
+    ///
+    /// When a reorg happens during sync:
+    /// 1. This handler receives the notification and detects it as a reorg
+    /// 2. `process_sync_reorg` properly reverts the retracted blocks' mutations,
+    ///    enacts the new blocks' mutations and processes finality for them
+    /// 3. Updates the last processed block to the new best
+    async fn handle_sync_block_notification(
+        &mut self,
+        notification: BlockImportNotification<OpaqueBlock>,
+    ) {
+        // Only process during initial sync
+        if notification.origin != sp_consensus::BlockOrigin::NetworkInitialSync {
+            return;
+        }
+
+        // Reset the caught_up flag since we're receiving sync blocks, indicating the node
+        // has fallen behind. This ensures handle_initial_sync runs again after catching up.
+        if self.caught_up {
+            info!(
+                target: LOG_TARGET,
+                "🔄 Node fell behind chain tip, resetting caught_up flag to re-run initial sync after catching up"
+            );
+            self.caught_up = false;
+        }
+
+        // Check if this new imported block is the new best, and if it causes a reorg.
+        let new_block_notification_kind = self.register_best_block_and_check_reorg(&notification);
+
+        match new_block_notification_kind {
+            NewBlockNotificationKind::NewBestBlock { new_best_block, .. } => {
+                // Process the new best block as a linear chain extension
+                self.process_sync_block(&new_best_block.hash, new_best_block.number)
+                    .await;
+            }
+            NewBlockNotificationKind::NewNonBestBlock(_) => {
+                // Skip non-best blocks (uncle/stale blocks not on the canonical chain)
+                return;
+            }
+            NewBlockNotificationKind::Reorg {
+                new_best_block,
+                tree_route,
+                ..
+            } => {
+                // Process the reorg
+                self.process_sync_reorg(&tree_route, new_best_block).await;
+            }
+        }
     }
 
     /// Initialises the Blockchain Service with variables that should be checked and
@@ -1688,20 +1803,24 @@ where
     }
 
     /// Handle the situation after the node comes out of syncing mode (i.e. hasn't processed many of the last blocks).
+    ///
+    /// At this point, mutations have already been applied during sync via the
+    /// `every_import_notification_stream` handler, so we only need to perform provider-specific initialization tasks.
     async fn handle_initial_sync(&mut self, notification: BlockImportNotification<OpaqueBlock>) {
         let block_hash = notification.hash;
-        let block_number = *notification.header.number();
+        let block_number: BlockNumber<Runtime> = (*notification.header.number()).into();
 
-        // If this is the first block import notification, we might need to catch up.
         info!(target: LOG_TARGET, "🥱 Handling coming out of sync mode (synced to #{}: {})", block_number, block_hash);
 
-        // Initialise the Provider.
+        // Perform provider-specific initialization
         match &self.maybe_managed_provider {
-            Some(ManagedProvider::Bsp(_)) => {
-                self.bsp_initial_sync();
+            Some(ManagedProvider::Bsp(bsp_handler)) => {
+                let bsp_id = bsp_handler.bsp_id;
+                self.bsp_initial_sync(block_hash, bsp_id).await;
             }
             Some(ManagedProvider::Msp(msp_handler)) => {
-                self.msp_initial_sync(block_hash, msp_handler.msp_id);
+                let msp_id = msp_handler.msp_id;
+                self.msp_initial_sync(block_hash, msp_id).await;
             }
             None => {
                 warn!(target: LOG_TARGET, "No Provider ID found. This node is not managing a Provider.");
@@ -1816,22 +1935,23 @@ where
             }
         }
 
-        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-        state_store_context
-            .access_value(&LastProcessedBlockNumberCf::<Runtime> {
-                phantom: Default::default(),
-            })
-            .write(block_number);
-        state_store_context.commit();
+        self.update_last_processed_block_info(MinimalBlockInfo {
+            number: *block_number,
+            hash: *block_hash,
+        });
     }
 
     /// Handle a finality notification.
+    ///
+    /// This processes finality events for the finalized block and all implicitly finalized blocks
+    /// in the `tree_route`. This is important for scenarios where finality jumps multiple blocks
+    /// at once (e.g., after a node restart, network partition recovery or solved finality staleness).
     async fn handle_finality_notification(
         &mut self,
         notification: FinalityNotification<OpaqueBlock>,
     ) {
         let block_hash = notification.hash;
-        let block_number = *notification.header.number();
+        let block_number: BlockNumber<Runtime> = (*notification.header.number()).saturated_into();
 
         // If the node is running in maintenance mode, we don't process finality notifications.
         if self.maintenance_mode {
@@ -1839,35 +1959,75 @@ where
             return;
         }
 
-        info!(target: LOG_TARGET, "📨 Finality notification #{}: {}", block_number, block_hash);
+        // Skip if this finalized block was already processed.
+        // This can happen during sync when both `handle_sync_block_notification` (via
+        // `process_finality_events_if_finalized`) and this handler process the same block.
+        // Finality notifications fire even during sync, but we may have
+        // already processed some blocks eagerly based on `client.info().finalized_number`.
+        if block_number <= self.last_finalised_block_processed.number {
+            trace!(
+                target: LOG_TARGET,
+                "📨 Finality notification #{} already processed (last_finalised={}), skipping",
+                block_number,
+                self.last_finalised_block_processed.number
+            );
+            return;
+        }
 
-        // Get events from storage.
-        match get_events_at_block::<Runtime>(&self.client, &block_hash) {
-            Ok(block_events) => {
-                for ev in block_events {
-                    // Process the events applicable regardless of whether this node is managing a BSP or an MSP.
-                    self.process_common_finality_events(ev.event.clone().into());
+        info!(target: LOG_TARGET, "📨 Finality notification #{}: {:?}", block_number, block_hash);
 
-                    // Process Provider-specific events.
-                    match &self.maybe_managed_provider {
-                        Some(ManagedProvider::Bsp(_)) => {
-                            self.bsp_process_finality_events(&block_hash, ev.event.clone().into());
+        // Process finality events for all implicitly finalized blocks in tree_route.
+        // tree_route contains all blocks from (old_finalized, new_finalized_parent), i.e., the blocks
+        // that were implicitly finalized when jumping from the old finalized to the new one.
+        // The tree_route does not include the latest finalised block itself.
+        //
+        // We filter out blocks that were already processed to avoid double-processing.
+        // This can happen when blocks were processed eagerly during sync via
+        // `process_finality_events_if_finalized`, but the finality gadget's internal finalized state
+        // was behind our `last_finalised_block_processed`.
+        if !notification.tree_route.is_empty() {
+            info!(
+                target: LOG_TARGET,
+                "📦 Processing finality events for {} implicitly finalized blocks",
+                notification.tree_route.len()
+            );
+
+            let last_processed = self.last_finalised_block_processed.number;
+
+            for intermediate_hash in notification.tree_route.iter() {
+                // Get the block number for this hash to check if we already processed it
+                let intermediate_number: BlockNumber<Runtime> =
+                    match self.client.number(*intermediate_hash) {
+                        Ok(Some(num)) => num.saturated_into(),
+                        Ok(None) => {
+                            warn!(
+                                target: LOG_TARGET,
+                                "Could not find block number for hash {:?} in tree_route, skipping",
+                                intermediate_hash
+                            );
+                            continue;
                         }
-                        Some(ManagedProvider::Msp(_)) => {
-                            self.msp_process_finality_events(&block_hash, ev.event.clone().into());
+                        Err(e) => {
+                            warn!(
+                                target: LOG_TARGET,
+                                "Error getting block number for hash {:?}: {:?}, skipping",
+                                intermediate_hash, e
+                            );
+                            continue;
                         }
-                        _ => {}
-                    }
+                    };
+
+                // Skip if already processed
+                if intermediate_number <= last_processed {
+                    continue;
                 }
-            }
-            Err(e) => {
-                // TODO: Handle case where the storage cannot be decoded.
-                // TODO: This would happen if we're parsing a block authored with an older version of the runtime, using
-                // TODO: a node that has a newer version of the runtime, therefore the EventsVec type is different.
-                // TODO: Consider using runtime APIs for getting old data of previous blocks, and this just for current blocks.
-                error!(target: LOG_TARGET, "Failed to get events storage element: {:?}", e);
+
+                self.process_finality_events(intermediate_hash);
             }
         }
+
+        // Process finality events for the newly finalized block itself
+        self.process_finality_events(&block_hash);
 
         // Cleanup the pending transaction store for the last finalised block processed.
         // Transactions with a nonce below the on-chain nonce of this block are finalised.
