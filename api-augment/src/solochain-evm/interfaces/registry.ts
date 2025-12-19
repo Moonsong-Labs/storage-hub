@@ -90,6 +90,7 @@ import type {
   PalletFileSystemHoldReason,
   PalletFileSystemIncompleteStorageRequestMetadata,
   PalletFileSystemMoveBucketRequestMetadata,
+  PalletFileSystemMspStorageRequestStatus,
   PalletFileSystemPendingFileDeletionRequest,
   PalletFileSystemPendingStopStoringRequest,
   PalletFileSystemRejectedStorageRequest,
@@ -340,6 +341,7 @@ declare module "@polkadot/types/types/registry" {
     PalletFileSystemHoldReason: PalletFileSystemHoldReason;
     PalletFileSystemIncompleteStorageRequestMetadata: PalletFileSystemIncompleteStorageRequestMetadata;
     PalletFileSystemMoveBucketRequestMetadata: PalletFileSystemMoveBucketRequestMetadata;
+    PalletFileSystemMspStorageRequestStatus: PalletFileSystemMspStorageRequestStatus;
     PalletFileSystemPendingFileDeletionRequest: PalletFileSystemPendingFileDeletionRequest;
     PalletFileSystemPendingStopStoringRequest: PalletFileSystemPendingStopStoringRequest;
     PalletFileSystemRejectedStorageRequest: PalletFileSystemRejectedStorageRequest;

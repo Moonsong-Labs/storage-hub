@@ -729,15 +729,8 @@ where
                 .filter(|(_, storage_request)| {
                     // We already know that the values in this map are storage requests that
                     // this MSP is assigned to, we just have to check that it has already accepted
-                    // the storage request, which is indicated by the second element of the tuple.
-                    // See [`shc_common::types::StorageRequestMetadata`] for more details.
-                    let msp_accepted = if let Some(msp) = storage_request.msp {
-                        msp.1
-                    } else {
-                        false
-                    };
-
-                    if !msp_accepted {
+                    // the storage request. See [`shc_common::types::StorageRequestMetadata`] for more details.
+                    if !storage_request.msp_status.is_accepted() {
                         // Return early if the MSP has not accepted the storage request.
                         return false;
                     }

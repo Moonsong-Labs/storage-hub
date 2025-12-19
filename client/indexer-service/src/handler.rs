@@ -733,6 +733,66 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     }
                 }
             }
+            // This event is emitted when an incomplete storage request has been fully cleaned up,
+            // i.e. when no more providers are pending removal.
+            //
+            // We need to delete the MSP-file association and the file record for this incomplete
+            // storage request, as there's no further cleanup needed on-chain.
+            pallet_file_system::Event::IncompleteStorageRequestCleanedUp { file_key } => {
+                // Get the latest file record for this file key
+                // We are sure this is the correct file record that we need to clean up as an `IncompleteStorageRequest`
+                // is always associated with the latest storage request, and no other storage request can be issued while
+                // this one is still incomplete.
+                let file_record = File::get_latest_by_file_key(conn, file_key.as_ref().to_vec())
+                    .await
+                    .ok();
+
+                if let Some(file_record) = file_record {
+                    // Get the bucket to find the MSP
+                    let bucket = Bucket::get_by_onchain_bucket_id(
+                        conn,
+                        file_record.onchain_bucket_id.clone(),
+                    )
+                    .await
+                    .map_err(|e| {
+                        IndexBlockError::EventIndexingDatabaseError {
+                            database_error: e,
+                            block_number: block_number.saturated_into(),
+                            event_name: "IncompleteStorageRequestCleanedUp (get bucket)"
+                                .to_string(),
+                        }
+                    })?;
+
+                    // Delete the MSP-file association if this file is associated with an MSP
+                    // We have to do this as this association might have not been cleared before if
+                    // the MSP accepted the storage request with an inclusion proof, because in that scenario
+                    // the fisherman does not delete the file from the bucket.
+                    if let Some(msp_id) = bucket.msp_id {
+                        MspFile::delete_latest_by_file_key(conn, msp_id, file_key.as_ref()).await.map_err(|e| {
+                            IndexBlockError::EventIndexingDatabaseError {
+                                database_error: e,
+                                block_number: block_number.saturated_into(),
+                                event_name: "IncompleteStorageRequestCleanedUp (delete MSP-file association)"
+                                    .to_string(),
+                            }
+                        })?;
+                        log::debug!(
+                            "Deleted MSP-file association for incomplete storage request file {:?} (id: {:?})",
+                            file_key,
+                            file_record.id
+                        );
+                    }
+
+                    // Try to delete the latest file record if it has no BSP or MSP associations, which at this point it shouldn't
+                    File::delete_latest_by_file_key(conn, file_key.as_ref()).await.
+                    map_err(|e| IndexBlockError::EventIndexingDatabaseError {
+                        database_error: e,
+                        block_number: block_number.saturated_into(),
+                        event_name: "IncompleteStorageRequestCleanedUp (delete latest file record by file key)"
+                            .to_string(),
+                    })?;
+                }
+            }
 
             // BSP volunteer and confirmation events
             pallet_file_system::Event::AcceptedBspVolunteer { .. } => {}
