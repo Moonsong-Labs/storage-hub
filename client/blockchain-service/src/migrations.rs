@@ -1,9 +1,9 @@
-//! Version 1 Migration
+//! Blockchain Service Database Migrations
 //!
-//! This migration removes the deprecated MSP respond storage request column families.
-//! These column families were replaced with in-memory queueing in `MspHandler`.
+//! This module contains store-specific migrations for the BlockchainServiceStateStore.
+//! Each migration drops deprecated column families when upgrading the database schema.
 
-use super::Migration;
+use shc_common::migrations::Migration;
 
 /// Version 1 migration that removes deprecated MSP respond storage request column families.
 ///
@@ -19,9 +19,9 @@ use super::Migration;
 ///
 /// The functionality has been replaced with in-memory queueing in `MspHandler`,
 /// eliminating the need for persistent storage of these requests.
-pub struct V1Migration;
+pub struct BlockchainServiceV1Migration;
 
-impl Migration for V1Migration {
+impl Migration for BlockchainServiceV1Migration {
     fn version(&self) -> u32 {
         1
     }
@@ -39,19 +39,27 @@ impl Migration for V1Migration {
     }
 }
 
+/// Returns all migrations for the BlockchainServiceStateStore.
+///
+/// Migrations are returned in order of their version numbers.
+/// Each migration drops deprecated column families from previous schema versions.
+pub fn blockchain_service_migrations() -> Vec<Box<dyn Migration>> {
+    vec![Box::new(BlockchainServiceV1Migration)]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_v1_migration_version() {
-        let migration = V1Migration;
+        let migration = BlockchainServiceV1Migration;
         assert_eq!(migration.version(), 1);
     }
 
     #[test]
     fn test_v1_migration_deprecated_cfs() {
-        let migration = V1Migration;
+        let migration = BlockchainServiceV1Migration;
         let cfs = migration.deprecated_column_families();
         assert_eq!(cfs.len(), 3);
         assert!(cfs.contains(&"pending_msp_respond_storage_request"));
@@ -61,9 +69,16 @@ mod tests {
 
     #[test]
     fn test_v1_migration_description() {
-        let migration = V1Migration;
+        let migration = BlockchainServiceV1Migration;
         let desc = migration.description();
         assert!(!desc.is_empty());
         assert!(desc.contains("MSP"));
+    }
+
+    #[test]
+    fn test_blockchain_service_migrations_order() {
+        let migrations = blockchain_service_migrations();
+        assert_eq!(migrations.len(), 1);
+        assert_eq!(migrations[0].version(), 1);
     }
 }

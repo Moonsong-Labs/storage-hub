@@ -11,8 +11,9 @@ use shc_common::{
     types::BlockNumber,
 };
 
-use crate::types::{
-    ConfirmStoringRequest, FileDeletionRequest, StopStoringForInsolventUserRequest,
+use crate::{
+    migrations::blockchain_service_migrations,
+    types::{ConfirmStoringRequest, FileDeletionRequest, StopStoringForInsolventUserRequest},
 };
 
 /// Last processed block number.
@@ -244,8 +245,12 @@ impl BlockchainServiceStateStore {
         // 1. Discover any existing column families in the database (including deprecated ones)
         // 2. Open the database with all existing + current CFs
         // 3. Run pending migrations to drop deprecated column families
-        let rocks = TypedRocksDB::open(db_path_str, &CURRENT_COLUMN_FAMILIES)
-            .expect("Failed to open blockchain service state store database");
+        let rocks = TypedRocksDB::open_with_migrations(
+            db_path_str,
+            &CURRENT_COLUMN_FAMILIES,
+            blockchain_service_migrations(),
+        )
+        .expect("Failed to open blockchain service state store database");
 
         BlockchainServiceStateStore { rocks }
     }

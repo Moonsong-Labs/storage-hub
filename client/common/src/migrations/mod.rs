@@ -20,20 +20,22 @@
 //!
 //! ## Usage
 //!
-//! ### Adding New Migrations
+//! ### Defining Store-Specific Migrations
 //!
-//! When deprecating column families in a new release:
+//! Each store defines its own migrations. When deprecating column families in a new release:
 //!
-//! 1. Create a new version module (e.g., `v2.rs`) with a migration struct
-//! 2. Implement the [`Migration`] trait for your struct
-//! 3. Register the migration in [`MigrationRunner::all_migrations()`]
+//! 1. Create a migrations module in your store's crate (e.g., `migrations.rs`)
+//! 2. Implement the [`Migration`] trait for your migration struct
+//! 3. Create a function that returns a vector of migrations for your store
 //!
 //! ```ignore
-//! // migrations/v2.rs
-//! pub struct V2Migration;
+//! // my_store/src/migrations.rs
+//! use shc_common::migrations::Migration;
 //!
-//! impl Migration for V2Migration {
-//!     fn version(&self) -> u32 { 2 }
+//! pub struct MyStoreV1Migration;
+//!
+//! impl Migration for MyStoreV1Migration {
+//!     fn version(&self) -> u32 { 1 }
 //!
 //!     fn deprecated_column_families(&self) -> &'static [&'static str] {
 //!         &["old_cf_name_1", "old_cf_name_2"]
@@ -43,25 +45,31 @@
 //!         "Remove legacy storage request column families"
 //!     }
 //! }
+//!
+//! pub fn my_store_migrations() -> Vec<Box<dyn Migration>> {
+//!     vec![Box::new(MyStoreV1Migration)]
+//! }
 //! ```
 //!
 //! ### Opening a Database with Migrations
 //!
 //! ```ignore
-//! use shc_common::migrations::{MigrationRunner, open_db_with_migrations};
+//! use shc_common::typed_store::TypedRocksDB;
 //!
 //! // Define your current column families (without deprecated ones)
 //! const CURRENT_CFS: &[&str] = &["cf1", "cf2", "cf3"];
 //!
-//! let db = open_db_with_migrations(&db_opts, &path, CURRENT_CFS)?;
+//! // With migrations
+//! let db = TypedRocksDB::open_with_migrations(&path, &CURRENT_CFS, my_store_migrations())?;
+//!
+//! // Without migrations
+//! let db = TypedRocksDB::open(&path, &CURRENT_CFS)?;
 //! ```
 use log::{debug, info};
 use rocksdb::{ColumnFamilyDescriptor, Options, DB};
 use std::collections::HashSet;
 use std::path::Path;
 use thiserror::Error;
-
-pub mod v1;
 
 #[cfg(test)]
 mod tests;
@@ -131,30 +139,41 @@ pub trait Migration: Send + Sync {
 
 /// The migration runner handles discovering existing column families,
 /// opening the database with all necessary CFs, and running pending migrations.
-pub struct MigrationRunner;
+///
+/// Migrations are automatically sorted by version.
+///
+/// ```ignore
+/// let runner = MigrationRunner::from(my_store_migrations());
+/// ```
+pub struct MigrationRunner {
+    migrations: Vec<Box<dyn Migration>>,
+}
+
+/// Create a MigrationRunner from a vector of migrations.
+impl From<Vec<Box<dyn Migration>>> for MigrationRunner {
+    fn from(mut migrations: Vec<Box<dyn Migration>>) -> Self {
+        // Sort migrations by version to ensure correct execution order
+        migrations.sort_by_key(|m| m.version());
+        Self { migrations }
+    }
+}
 
 impl MigrationRunner {
-    /// Returns all registered migrations in version order.
+    /// Create a new MigrationRunner with the given migrations.
     ///
-    /// When adding new migrations, register them here by adding a new
-    /// `Box::new(YourMigration)` to the vector.
-    pub fn all_migrations() -> Vec<Box<dyn Migration>> {
-        let mut migrations: Vec<Box<dyn Migration>> = vec![Box::new(v1::V1Migration)];
-
-        // Sort by version to ensure correct order
+    /// Migrations are automatically sorted by version to ensure correct execution order.
+    pub fn new(mut migrations: Vec<Box<dyn Migration>>) -> Self {
+        // Sort migrations by version to ensure correct execution order
         migrations.sort_by_key(|m| m.version());
-        migrations
+        Self { migrations }
     }
 
     /// Get the latest migration version.
-    pub fn latest_version() -> u32 {
-        Self::all_migrations()
-            .last()
-            .map(|m| m.version())
-            .unwrap_or(0)
+    pub fn latest_version(&self) -> u32 {
+        self.migrations.last().map(|m| m.version()).unwrap_or(0)
     }
 
-    /// Returns a set of all deprecated column family names across all registered migrations.
+    /// Returns a set of all deprecated column family names across all migrations.
     ///
     /// This aggregates deprecated CF names from **all** migrations, regardless of version.
     /// Once a name appears in any migration's `deprecated_column_families()`, it is
@@ -166,8 +185,8 @@ impl MigrationRunner {
     ///
     /// See [`Migration::deprecated_column_families()`] for more details on why deprecated
     /// names can never be reused.
-    pub fn all_deprecated_column_families() -> HashSet<&'static str> {
-        Self::all_migrations()
+    pub fn all_deprecated_column_families(&self) -> HashSet<&'static str> {
+        self.migrations
             .iter()
             .flat_map(|m| m.deprecated_column_families().iter().copied())
             .collect()
@@ -177,20 +196,18 @@ impl MigrationRunner {
     ///
     /// This function checks for:
     /// 1. Duplicate version numbers
-    /// 2. Version numbers starting from 1
-    /// 3. No gaps in version sequence (optional, based on strict mode)
+    /// 2. Version numbers starting from 1 (if migrations are not empty)
+    /// 3. No gaps in version sequence
     ///
     /// Returns `Ok(())` if all validations pass, or an error describing the issue.
-    pub fn validate_migration_order() -> Result<(), MigrationError> {
-        let migrations = Self::all_migrations();
-
-        if migrations.is_empty() {
+    pub fn validate_order(&self) -> Result<(), MigrationError> {
+        if self.migrations.is_empty() {
             return Ok(());
         }
 
         // Check for duplicates
         let mut seen_versions = HashSet::new();
-        for migration in &migrations {
+        for migration in &self.migrations {
             if !seen_versions.insert(migration.version()) {
                 return Err(MigrationError::MigrationFailed {
                     version: migration.version(),
@@ -200,7 +217,7 @@ impl MigrationRunner {
         }
 
         // Check that versions start from 1
-        if migrations.first().map(|m| m.version()) != Some(1) {
+        if self.migrations.first().map(|m| m.version()) != Some(1) {
             return Err(MigrationError::MigrationFailed {
                 version: 0,
                 reason: "Migrations must start from version 1".to_string(),
@@ -208,7 +225,7 @@ impl MigrationRunner {
         }
 
         // Check for gaps in version sequence
-        for (i, migration) in migrations.iter().enumerate() {
+        for (i, migration) in self.migrations.iter().enumerate() {
             let expected_version = (i + 1) as u32;
             if migration.version() != expected_version {
                 return Err(MigrationError::MigrationFailed {
@@ -284,12 +301,12 @@ impl MigrationRunner {
     /// Returns `MigrationError::CannotDowngrade` if the database was created with a newer
     /// version of the software than the current code supports. This prevents data corruption
     /// from running older code against a newer database schema.
-    pub fn run_pending(db: &mut DB) -> Result<u32, MigrationError> {
+    pub fn run_pending(&self, db: &mut DB) -> Result<u32, MigrationError> {
         // Validate migration configuration before running
-        Self::validate_migration_order()?;
+        self.validate_order()?;
 
         let current_version = Self::read_schema_version(db)?;
-        let latest_version = Self::latest_version();
+        let latest_version = self.latest_version();
 
         // Check for downgrade attempt
         if current_version > latest_version {
@@ -298,8 +315,6 @@ impl MigrationRunner {
                 target: latest_version,
             });
         }
-
-        let migrations = Self::all_migrations();
 
         // Drop straggler deprecated CFs from already-applied migrations.
         //
@@ -322,7 +337,11 @@ impl MigrationRunner {
         // - Schema version already at latest but deprecated CFs still present
         //
         // See: https://github.com/facebook/rocksdb/wiki/column-families
-        for migration in migrations.iter().filter(|m| m.version() <= current_version) {
+        for migration in self
+            .migrations
+            .iter()
+            .filter(|m| m.version() <= current_version)
+        {
             for cf_name in migration.deprecated_column_families() {
                 if db.cf_handle(cf_name).is_some() {
                     info!(
@@ -343,7 +362,8 @@ impl MigrationRunner {
         }
 
         // Apply migrations that haven't been applied yet
-        let pending: Vec<_> = migrations
+        let pending: Vec<_> = self
+            .migrations
             .iter()
             .filter(|m| m.version() > current_version)
             .collect();
@@ -436,12 +456,15 @@ pub fn merge_column_families<'a>(
 ///
 /// This function checks that:
 /// 1. `current_schema_cfs` does not contain the reserved `__schema_version__` CF
-/// 2. `current_schema_cfs` does not contain any deprecated CF names from registered migrations
+/// 2. `current_schema_cfs` does not contain any deprecated CF names from the provided migrations
 ///
 /// # Errors
 ///
 /// Returns `MigrationError::InvalidColumnFamilyConfig` if validation fails.
-fn validate_current_schema_cfs(current_schema_cfs: &[&str]) -> Result<(), MigrationError> {
+fn validate_current_schema_cfs(
+    current_schema_cfs: &[&str],
+    runner: &MigrationRunner,
+) -> Result<(), MigrationError> {
     // Check for reserved schema version CF
     if current_schema_cfs.contains(&SCHEMA_VERSION_CF) {
         return Err(MigrationError::InvalidColumnFamilyConfig(format!(
@@ -451,7 +474,7 @@ fn validate_current_schema_cfs(current_schema_cfs: &[&str]) -> Result<(), Migrat
     }
 
     // Check for deprecated CF names (permanently reserved and cannot be reused)
-    let all_deprecated = MigrationRunner::all_deprecated_column_families();
+    let all_deprecated = runner.all_deprecated_column_families();
     for cf_name in current_schema_cfs {
         if all_deprecated.contains(cf_name) {
             return Err(MigrationError::InvalidColumnFamilyConfig(format!(
@@ -464,6 +487,48 @@ fn validate_current_schema_cfs(current_schema_cfs: &[&str]) -> Result<(), Migrat
     }
 
     Ok(())
+}
+
+/// Opens a RocksDB database without migrations.
+///
+/// Use this for stores that don't need migration support.
+///
+/// # Schema Version Behavior
+///
+/// This function creates the `__schema_version__` column family and writes version 0.
+/// Since migrations must start at version 1, this ensures:
+///
+/// - The database format is consistent with migration-enabled databases
+/// - If you later switch to [`open_db_with_migrations`], all migrations will run
+///
+/// # Arguments
+///
+/// * `opts` - RocksDB options for opening the database
+/// * `path` - Path to the database directory
+/// * `current_schema_cfs` - The column families defined in the current schema
+///
+/// # Returns
+///
+/// The opened database.
+pub fn open_db(
+    opts: &Options,
+    path: &str,
+    current_schema_cfs: &[&str],
+) -> Result<DB, MigrationError> {
+    // Validate that schema version CF is not in current schema
+    if current_schema_cfs.contains(&SCHEMA_VERSION_CF) {
+        return Err(MigrationError::InvalidColumnFamilyConfig(format!(
+            "Column family '{}' is reserved for internal use by the migration system",
+            SCHEMA_VERSION_CF
+        )));
+    }
+
+    let db = open_db_internal(opts, path, current_schema_cfs)?;
+
+    // Write version 0 for consistency (migrations must start at version 1)
+    MigrationRunner::write_schema_version(&db, 0)?;
+
+    Ok(db)
 }
 
 /// Opens a RocksDB database with automatic migration support.
@@ -481,6 +546,7 @@ fn validate_current_schema_cfs(current_schema_cfs: &[&str]) -> Result<(), Migrat
 /// * `opts` - RocksDB options for opening the database
 /// * `path` - Path to the database directory
 /// * `current_schema_cfs` - The column families defined in the current schema (without deprecated CFs)
+/// * `migrations` - The store-specific migrations
 ///
 /// # Returns
 ///
@@ -497,10 +563,30 @@ pub fn open_db_with_migrations(
     opts: &Options,
     path: &str,
     current_schema_cfs: &[&str],
+    migrations: impl Into<MigrationRunner>,
 ) -> Result<DB, MigrationError> {
-    // Validate current schema CFs before proceeding
-    validate_current_schema_cfs(current_schema_cfs)?;
+    let runner = migrations.into();
 
+    // Validate current schema CFs before proceeding
+    validate_current_schema_cfs(current_schema_cfs, &runner)?;
+
+    // Open the database
+    let mut db = open_db_internal(opts, path, current_schema_cfs)?;
+
+    // Run pending migrations
+    runner.run_pending(&mut db)?;
+
+    Ok(db)
+}
+
+/// Internal function that handles the core database opening logic.
+///
+/// This is shared by both `open_db` and `open_db_with_migrations`.
+fn open_db_internal(
+    opts: &Options,
+    path: &str,
+    current_schema_cfs: &[&str],
+) -> Result<DB, MigrationError> {
     // Check if this is an existing database by looking for the CURRENT file.
     // RocksDB always creates a CURRENT file that points to the current manifest.
     // If CURRENT exists, this is an existing database and list_cf must succeed.
@@ -531,10 +617,7 @@ pub fn open_db_with_migrations(
         .collect();
 
     // Open the database with all column families
-    let mut db = DB::open_cf_descriptors(opts, path, cf_descriptors)?;
-
-    // Run pending migrations
-    MigrationRunner::run_pending(&mut db)?;
+    let db = DB::open_cf_descriptors(opts, path, cf_descriptors)?;
 
     Ok(db)
 }

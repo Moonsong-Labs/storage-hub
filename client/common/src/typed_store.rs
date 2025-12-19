@@ -139,7 +139,7 @@ use std::{
     ops::RangeBounds,
 };
 
-use crate::migrations::{default_db_options, open_db_with_migrations, MigrationError};
+use crate::migrations::{default_db_options, open_db, open_db_with_migrations, MigrationError, MigrationRunner};
 
 /// Defines how types are encoded to and decoded from bytes for storage in RocksDB.
 ///
@@ -717,6 +717,36 @@ pub struct TypedRocksDB {
 }
 
 impl TypedRocksDB {
+    /// Opens a RocksDB database without migrations.
+    ///
+    /// Use this for stores that don't need migration support.
+    ///
+    /// # Schema Version Behavior
+    ///
+    /// This method creates the `__schema_version__` column family and writes version 0.
+    /// Since migrations must start at version 1, this ensures:
+    ///
+    /// - The database format is consistent with migration-enabled databases
+    /// - If you later switch to [`open_with_migrations`](Self::open_with_migrations),
+    ///   all migrations will run
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path to the database directory
+    /// * `current_column_families` - The column families defined in the current schema
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// const CURRENT_CFS: &[&str] = &["cf1", "cf2", "cf3"];
+    /// let db = TypedRocksDB::open("/path/to/db", CURRENT_CFS)?;
+    /// ```
+    pub fn open(path: &str, current_column_families: &[&str]) -> Result<Self, MigrationError> {
+        let opts = default_db_options();
+        let db = open_db(&opts, path, current_column_families)?;
+        Ok(Self { db })
+    }
+
     /// Opens a RocksDB database with migration support.
     ///
     /// This method:
@@ -729,16 +759,21 @@ impl TypedRocksDB {
     /// * `path` - Path to the database directory
     /// * `current_column_families` - The column families defined in the current schema
     ///   (deprecated column families should NOT be included here)
+    /// * `migrations` - The store-specific migrations to apply
     ///
     /// # Example
     ///
     /// ```ignore
     /// const CURRENT_CFS: &[&str] = &["cf1", "cf2", "cf3"];
-    /// let db = TypedRocksDB::open("/path/to/db", CURRENT_CFS)?;
+    /// let db = TypedRocksDB::open_with_migrations("/path/to/db", CURRENT_CFS, my_store_migrations())?;
     /// ```
-    pub fn open(path: &str, current_column_families: &[&str]) -> Result<Self, MigrationError> {
+    pub fn open_with_migrations(
+        path: &str,
+        current_column_families: &[&str],
+        migrations: impl Into<MigrationRunner>,
+    ) -> Result<Self, MigrationError> {
         let opts = default_db_options();
-        let db = open_db_with_migrations(&opts, path, current_column_families)?;
+        let db = open_db_with_migrations(&opts, path, current_column_families, migrations)?;
         Ok(Self { db })
     }
 }
@@ -2115,16 +2150,16 @@ mod tests {
         assert_eq!(keys.len(), 50); // Only odd-numbered keys remain
     }
 
-    /// Tests for `TypedRocksDB` migration integration.
+    /// Tests for `TypedRocksDB` with `TypedDbContext`.
     ///
-    /// These tests verify that `TypedRocksDB::open()` correctly integrates with
-    /// the migration system, handling deprecated column families and downgrade prevention.
+    /// These tests verify that `TypedRocksDB::open()` works correctly with
+    /// the typed context API. Migration-specific tests are in the migrations module.
     mod typed_rocks_db_migration_tests {
         use super::*;
 
         #[test]
         fn used_with_context() {
-            // Test that TypedRocksDB works correctly with TypedDbContext after migration
+            // Test that TypedRocksDB works correctly with TypedDbContext
             let temp_dir = tempdir().unwrap();
             let path = temp_dir.path().to_str().unwrap();
 
@@ -2144,27 +2179,23 @@ mod tests {
 
             let current_cfs = &[TestDataCf::SCALE_ENCODED_NAME];
 
-            // Create database with deprecated CFs
+            // Create initial database
             {
                 let mut opts = Options::default();
                 opts.create_if_missing(true);
                 opts.create_missing_column_families(true);
 
-                let mut cf_descriptors =
-                    vec![ColumnFamilyDescriptor::new("default", Options::default())];
-                cf_descriptors.push(ColumnFamilyDescriptor::new(
-                    TestDataCf::SCALE_ENCODED_NAME,
-                    Options::default(),
-                ));
-                cf_descriptors.push(ColumnFamilyDescriptor::new(
-                    "pending_msp_respond_storage_request",
-                    Options::default(),
-                ));
+                let cf_descriptors = vec![
+                    ColumnFamilyDescriptor::new("default", Options::default()),
+                    ColumnFamilyDescriptor::new(
+                        TestDataCf::SCALE_ENCODED_NAME,
+                        Options::default(),
+                    ),
+                ];
 
                 let _db = DB::open_cf_descriptors(&opts, path, cf_descriptors).unwrap();
             }
 
-            // Open with TypedRocksDB and use with context
             let typed_db = TypedRocksDB::open(path, current_cfs).unwrap();
 
             // Create a context and use the typed API
@@ -2180,12 +2211,6 @@ mod tests {
             // Read back
             let value = context.cf(&TestDataCf).get(&42u32);
             assert_eq!(value, Some("hello world".to_string()));
-
-            // Verify deprecated CF is gone
-            assert!(typed_db
-                .db
-                .cf_handle("pending_msp_respond_storage_request")
-                .is_none());
         }
     }
 }
