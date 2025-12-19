@@ -20,6 +20,7 @@ use shc_common::{
     typed_store::CFDequeAPI,
     types::{
         BackupStorageProviderId, BlockNumber, MaxBatchConfirmStorageRequests, StorageEnableEvents,
+        TrieMutation,
     },
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -76,7 +77,15 @@ where
                     debug!(target: LOG_TARGET, "Applying {} mutations during sync for BSP [{:?}]", mutations.len(), bsp_id);
                     let forest_key = CURRENT_FOREST_KEY.to_vec();
                     for (file_key, mutation) in mutations {
-                        info!(target: LOG_TARGET, "🔧 Applying mutation {:?} for file key {:?}", mutation, file_key);
+                        let mutation_type = match &mutation {
+                            TrieMutation::Add(_) => "Add",
+                            TrieMutation::Remove(_) => "Remove",
+                        };
+                        info!(
+                            target: LOG_TARGET,
+                            "🔧 Applying mutation [{}] for file key [{:?}] in BSP [{:?}]",
+                            mutation_type, file_key, bsp_id
+                        );
                         if let Err(e) = self
                             .apply_forest_mutation(forest_key.clone(), &file_key, &mutation)
                             .await
@@ -491,6 +500,22 @@ where
 
                 debug!(target: LOG_TARGET, "Applying on-chain Forest root mutations to BSP [{:?}]", provider_id);
                 debug!(target: LOG_TARGET, "Mutations: {:?}", mutations);
+
+                // Log mutations at info level during catchup/sync for better visibility
+                if !self.caught_up {
+                    let action = if revert { "Reverting" } else { "Applying" };
+                    for (file_key, mutation) in &mutations {
+                        let mutation_type = match mutation {
+                            TrieMutation::Add(_) => "Add",
+                            TrieMutation::Remove(_) => "Remove",
+                        };
+                        info!(
+                            target: LOG_TARGET,
+                            "🔧 {} mutation [{}] for file key [{:?}] in BSP [{:?}]",
+                            action, mutation_type, file_key, provider_id
+                        );
+                    }
+                }
 
                 // Apply forest root changes to the BSP's Forest Storage.
                 // At this point, we only apply the mutation of this file and its metadata to the Forest of this BSP,
