@@ -1,6 +1,6 @@
-use log::{debug, error, info, trace};
+use log::{debug, error, info, trace, warn};
 use shc_common::traits::StorageEnableRuntime;
-use std::sync::Arc;
+use std::{sync::Arc, u32};
 use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
 use sc_client_api::HeaderBackend;
@@ -12,13 +12,18 @@ use sp_runtime::traits::{Block as BlockT, Zero};
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetChallengeSeedError, ProofsDealerApi,
 };
+use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use shc_actors_framework::actor::Actor;
 use shc_common::{
+    blockchain_utils::get_events_at_block,
     consts::CURRENT_FOREST_KEY,
     typed_store::CFDequeAPI,
-    types::{BlockNumber, MaxBatchConfirmStorageRequests, StorageEnableEvents},
+    types::{
+        BackupStorageProviderId, BlockNumber, MaxBatchConfirmStorageRequests, StorageEnableEvents,
+        TrieMutation,
+    },
 };
-use shc_forest_manager::traits::ForestStorageHandler;
+use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
 use crate::{
     events::{
@@ -39,14 +44,76 @@ where
     FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
+    /// Process mutation events during network initial sync.
+    ///
+    /// This is called for each sync block to apply `MutationsAppliedForProvider` events
+    /// before state pruning can occur. This ensures the local forest stays in sync with
+    /// the on-chain state even when the node has been offline for a long period.
+    pub(crate) async fn process_bsp_sync_mutations(
+        &mut self,
+        block_hash: &Runtime::Hash,
+        bsp_id: BackupStorageProviderId<Runtime>,
+    ) {
+        // Get all events for the block
+        let events = match get_events_at_block::<Runtime>(&self.client, block_hash) {
+            Ok(events) => events,
+            Err(e) => {
+                warn!(target: LOG_TARGET, "Failed to get events during sync: {:?}", e);
+                return;
+            }
+        };
+
+        // Apply any mutations in the block that are relevant to this BSP
+        for ev in events {
+            if let StorageEnableEvents::ProofsDealer(
+                pallet_proofs_dealer::Event::MutationsAppliedForProvider {
+                    provider_id,
+                    mutations,
+                    ..
+                },
+            ) = ev.event.into()
+            {
+                if provider_id == bsp_id {
+                    debug!(target: LOG_TARGET, "Applying {} mutations during sync for BSP [{:?}]", mutations.len(), bsp_id);
+                    let forest_key = CURRENT_FOREST_KEY.to_vec();
+                    for (file_key, mutation) in mutations {
+                        let mutation_type = match &mutation {
+                            TrieMutation::Add(_) => "Add",
+                            TrieMutation::Remove(_) => "Remove",
+                        };
+                        info!(
+                            target: LOG_TARGET,
+                            "🔧 Applying mutation [{}] for file key [{:?}] in BSP [{:?}]",
+                            mutation_type, file_key, bsp_id
+                        );
+                        if let Err(e) = self
+                            .apply_forest_mutation(forest_key.clone(), &file_key, &mutation)
+                            .await
+                        {
+                            error!(target: LOG_TARGET, "CRITICAL ❗❗ Failed to apply mutation during sync: {:?}", e);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /// Handles the initial sync of a BSP, after coming out of syncing mode.
     ///
-    /// Steps:
-    /// 1. Catch up to the latest proof submissions that were missed due to a node restart.
-    pub(crate) fn bsp_initial_sync(&self) {
-        self.proof_submission_catch_up(&self.client.info().best_hash);
-        // TODO: Send events to check that this node has a Forest Storage for the BSP that it manages.
-        // TODO: Catch up to Forest root writes in the BSP Forest.
+    /// At this point, mutations have already been applied during sync via
+    /// `process_bsp_sync_mutations`, so we:
+    /// 1. Verify the local forest root matches the on-chain root
+    /// 2. Catch up on proof submissions
+    pub(crate) async fn bsp_initial_sync(
+        &self,
+        block_hash: Runtime::Hash,
+        bsp_id: BackupStorageProviderId<Runtime>,
+    ) {
+        // Verify that the local forest root matches the on-chain root
+        self.verify_bsp_forest_root(&block_hash, &bsp_id).await;
+
+        // Catch up on proof submissions
+        self.proof_submission_catch_up(&block_hash);
     }
 
     /// Initialises the block processing flow for a BSP.
@@ -434,6 +501,22 @@ where
                 debug!(target: LOG_TARGET, "Applying on-chain Forest root mutations to BSP [{:?}]", provider_id);
                 debug!(target: LOG_TARGET, "Mutations: {:?}", mutations);
 
+                // Log mutations at info level during catchup/sync for better visibility
+                if !self.caught_up {
+                    let action = if revert { "Reverting" } else { "Applying" };
+                    for (file_key, mutation) in &mutations {
+                        let mutation_type = match mutation {
+                            TrieMutation::Add(_) => "Add",
+                            TrieMutation::Remove(_) => "Remove",
+                        };
+                        info!(
+                            target: LOG_TARGET,
+                            "🔧 {} mutation [{}] for file key [{:?}] in BSP [{:?}]",
+                            action, mutation_type, file_key, provider_id
+                        );
+                    }
+                }
+
                 // Apply forest root changes to the BSP's Forest Storage.
                 // At this point, we only apply the mutation of this file and its metadata to the Forest of this BSP,
                 // and not to the File Storage.
@@ -459,6 +542,58 @@ where
                 info!(target: LOG_TARGET, "🌳 New local Forest root matches the one in the block for BSP [{:?}]", provider_id);
             }
             _ => {}
+        }
+    }
+
+    /// Verifies that the local BSP forest root matches the on-chain root.
+    ///
+    /// This is a sanity check after coming out of sync to ensure mutations were
+    /// correctly applied during the sync process.
+    async fn verify_bsp_forest_root(
+        &self,
+        block_hash: &Runtime::Hash,
+        bsp_id: &BackupStorageProviderId<Runtime>,
+    ) {
+        // Get the local forest root
+        let local_root = match self
+            .forest_storage_handler
+            .get(&CURRENT_FOREST_KEY.to_vec().into())
+            .await
+        {
+            Some(fs) => fs.read().await.root(),
+            None => {
+                warn!(target: LOG_TARGET, "BSP forest storage not found during initial sync verification");
+                return;
+            }
+        };
+
+        // Get the on-chain root from runtime API
+        let onchain_root = match self.client.runtime_api().get_bsp_info(*block_hash, bsp_id) {
+            Ok(Ok(bsp_info)) => bsp_info.root,
+            Ok(Err(e)) => {
+                error!(target: LOG_TARGET, "Failed to get BSP info from runtime: {:?}", e);
+                return;
+            }
+            Err(e) => {
+                error!(target: LOG_TARGET, "Runtime API call failed for get_bsp_info: {:?}", e);
+                return;
+            }
+        };
+
+        // Compare roots
+        if local_root != onchain_root {
+            error!(
+                    target: LOG_TARGET,
+                    "❌ CRITICAL: BSP forest root mismatch after sync! Local: {:?}, On-chain: {:?}. \
+                     This BSP may fail to generate valid proofs.",
+                    local_root, onchain_root
+            );
+        } else {
+            info!(
+                    target: LOG_TARGET,
+                    "✅ BSP forest root verified after sync. Root: {:?}",
+                    local_root
+            );
         }
     }
 
