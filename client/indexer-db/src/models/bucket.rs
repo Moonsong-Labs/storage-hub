@@ -1,9 +1,10 @@
 use bigdecimal::BigDecimal;
 use chrono::NaiveDateTime;
-use diesel::{dsl::sum, prelude::*};
+use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
 use crate::{
+    models::File,
     schema::{bucket, file},
     DbConnection,
 };
@@ -173,21 +174,6 @@ impl Bucket {
         Ok(buckets)
     }
 
-    /// Calculate the total size of all files in a bucket
-    pub async fn calculate_size<'a>(
-        conn: &mut DbConnection<'a>,
-        bucket_id: i64,
-    ) -> Result<BigDecimal, diesel::result::Error> {
-        let total_size: Option<BigDecimal> = file::table
-            .filter(file::bucket_id.eq(bucket_id))
-            .select(sum(file::size))
-            .first(conn)
-            .await?;
-
-        // Return BigDecimal directly, defaulting to zero if None
-        Ok(total_size.unwrap_or_else(|| BigDecimal::from(0)))
-    }
-
     /// Increment file count and update total size
     pub async fn increment_file_count_and_size<'a>(
         conn: &mut DbConnection<'a>,
@@ -221,6 +207,42 @@ impl Bucket {
             ))
             .execute(conn)
             .await?;
+        Ok(())
+    }
+
+    /// Sync the stored file_count and total_size by calculating from actual files.
+    ///
+    /// This recalculates both values from the files table and updates the stored values.
+    /// Only counts unique files (by file_key) since the same file can appear multiple times.
+    /// TODO: create an RPC to call this function and update the bucket stats.
+    pub async fn sync_stats<'a>(
+        conn: &mut DbConnection<'a>,
+        onchain_bucket_id: Vec<u8>,
+    ) -> Result<(), diesel::result::Error> {
+        // Get unique files by file_key that are currently in the bucket
+        let unique_files: Vec<File> = file::table
+            .filter(file::onchain_bucket_id.eq(onchain_bucket_id.clone()))
+            .filter(file::is_in_bucket.eq(true))
+            .distinct_on(file::file_key)
+            .select(File::as_select())
+            .load(conn)
+            .await?;
+
+        let count = unique_files.len() as i64;
+        let total_size: BigDecimal = unique_files
+            .iter()
+            .map(|file| BigDecimal::from(file.size))
+            .sum();
+
+        diesel::update(bucket::table)
+            .filter(bucket::onchain_bucket_id.eq(onchain_bucket_id))
+            .set((
+                bucket::file_count.eq(count),
+                bucket::total_size.eq(total_size),
+            ))
+            .execute(conn)
+            .await?;
+
         Ok(())
     }
 

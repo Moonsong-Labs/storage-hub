@@ -5,7 +5,6 @@ import type {
   Bytes,
   Enum,
   Null,
-  Option,
   Struct,
   U8aFixed,
   Vec,
@@ -13,7 +12,6 @@ import type {
   u32,
   u64
 } from "@polkadot/types-codec";
-import type { ITuple } from "@polkadot/types-codec/types";
 import type { AccountId, BalanceOf, BlockNumber, H256 } from "@polkadot/types/interfaces/runtime";
 
 /** @name AddFilesToForestStorageResult */
@@ -204,6 +202,18 @@ export interface MainStorageProviderId extends H256 {}
 /** @name MerklePatriciaRoot */
 export interface MerklePatriciaRoot extends H256 {}
 
+/** @name MspStorageRequestStatus */
+export interface MspStorageRequestStatus extends Enum {
+  readonly isNone: boolean;
+  readonly isPending: boolean;
+  readonly asPending: ProviderId;
+  readonly isAcceptedNewFile: boolean;
+  readonly asAcceptedNewFile: ProviderId;
+  readonly isAcceptedExistingFile: boolean;
+  readonly asAcceptedExistingFile: ProviderId;
+  readonly type: "None" | "Pending" | "AcceptedNewFile" | "AcceptedExistingFile";
+}
+
 /** @name Multiaddresses */
 export interface Multiaddresses extends Vec<Bytes> {}
 
@@ -377,8 +387,8 @@ export interface StorageRequestMetadata extends Struct {
   readonly location: Bytes;
   readonly fingerprint: U8aFixed;
   readonly file_size: StorageDataUnit;
-  readonly msp: Option<ITuple<[ProviderId, bool]>>;
-  readonly user_peer_ids: Vec<ProviderId>;
+  readonly msp_status: MspStorageRequestStatus;
+  readonly user_peer_ids: Vec<Bytes>;
   readonly bsps_required: u32;
   readonly bsps_confirmed: u32;
   readonly bsps_volunteered: u32;

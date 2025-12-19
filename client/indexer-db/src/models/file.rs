@@ -411,6 +411,61 @@ impl File {
         Ok(())
     }
 
+    /// Delete the latest file record for a file key if it has no BSP or MSP associations.
+    ///
+    /// This differs from `delete_if_orphaned` in two key ways:
+    /// - It only deletes the most recently created file record, not all records for a file key
+    /// - It does not check if the file is in the bucket forest, only if this file record has any
+    ///   BSP or MSP associations
+    ///  
+    /// The purpose of this is to allow us to delete a file record that corresponds to an `IncompleteStorageRequest`
+    /// that has already been fully cleaned up on-chain. We can't use `delete_if_orphaned` because:
+    /// - We only want to delete the specific file record associated with the incomplete storage request,
+    ///   which is always the latest one since no other storage request can be issued while there's an incomplete one.
+    /// - If there was a previous storage request for the same file key, `is_in_bucket` would be true but we still
+    ///   want to delete the file record, so checking that flag wouldn't work.
+    /// - We want to make sure we only delete the file record if it has no MSP associations, and since we can't
+    ///   use `is_in_bucket`, we use `has_msp_associations` instead.
+    pub async fn delete_latest_by_file_key<'a>(
+        conn: &mut DbConnection<'a>,
+        file_key: impl AsRef<[u8]>,
+    ) -> Result<(), diesel::result::Error> {
+        let file_key = file_key.as_ref();
+
+        // Get the latest file record for this file key
+        let file_record = match Self::get_latest_by_file_key(conn, file_key).await {
+            Ok(record) => record,
+            Err(diesel::result::Error::NotFound) => {
+                log::debug!(
+                    "No file record found for file key {:?}, nothing to delete",
+                    file_key
+                );
+                return Ok(());
+            }
+            Err(e) => return Err(e),
+        };
+
+        // Check if the file record has any BSP or MSP associations
+        let has_bsp = Self::has_bsp_associations(conn, file_record.id).await?;
+        let has_msp = Self::has_msp_associations(conn, file_record.id).await?;
+
+        // If it doesn't, delete it
+        if !has_bsp && !has_msp {
+            Self::delete(conn, file_record.id).await?;
+            log::debug!(
+                "Deleted file record with id: {:?} that has no BSP or MSP associations",
+                file_record.id
+            );
+        } else {
+            log::debug!(
+                "File record with id: {:?} still has BSP or MSP associations, keeping it",
+                file_record.id
+            );
+        }
+
+        Ok(())
+    }
+
     pub async fn get_by_bucket_id<'a>(
         conn: &mut DbConnection<'a>,
         bucket_id: i64,

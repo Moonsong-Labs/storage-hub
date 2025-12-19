@@ -85,6 +85,51 @@ impl MspFile {
         Ok(())
     }
 
+    /// Deletes MSP-file association for the latest file record of the given file key and MSP.
+    ///
+    /// This is specifically used for cleaning up incomplete storage requests, where the latest
+    /// file record is always the one associated with the incomplete request (since no other
+    /// storage request can be issued while there's an incomplete one pending).
+    pub async fn delete_latest_by_file_key<'a>(
+        conn: &mut DbConnection<'a>,
+        msp_id: i64,
+        file_key: impl AsRef<[u8]>,
+    ) -> Result<(), diesel::result::Error> {
+        let file_key = file_key.as_ref();
+
+        // Get the latest file record for this file key
+        let file_id: Option<i64> = file::table
+            .filter(file::file_key.eq(file_key))
+            .order(file::created_at.desc())
+            .select(file::id)
+            .first(conn)
+            .await
+            .optional()?;
+
+        let Some(file_id) = file_id else {
+            log::debug!(
+                "No file record found for file_key {:?}, nothing to delete",
+                file_key
+            );
+            return Ok(());
+        };
+
+        let deleted_count = diesel::delete(msp_file::table)
+            .filter(msp_file::file_id.eq(file_id))
+            .filter(msp_file::msp_id.eq(msp_id))
+            .execute(conn)
+            .await?;
+
+        log::debug!(
+            "Deleted {} MSP-file association for file_id: {} and MSP: {}",
+            deleted_count,
+            file_id,
+            msp_id
+        );
+
+        Ok(())
+    }
+
     pub async fn delete_by_bucket<'a>(
         conn: &mut DbConnection<'a>,
         bucket_id: &[u8],

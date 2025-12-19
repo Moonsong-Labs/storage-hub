@@ -62,7 +62,7 @@ where
     /// Steps:
     /// 1. Catch up to Forest root changes in the Forests of the Buckets this MSP manages.
     pub(crate) async fn msp_init_block_processing<Block>(
-        &self,
+        &mut self,
         _block_hash: &Runtime::Hash,
         _block_number: &BlockNumber<Runtime>,
         tree_route: TreeRoute<Block>,
@@ -185,7 +185,7 @@ where
         let managed_msp_id = match &self.maybe_managed_provider {
             Some(ManagedProvider::Msp(msp_handler)) => msp_handler.msp_id.clone(),
             _ => {
-                trace!(target: LOG_TARGET, "`msp_end_block_processing` called but node is not managing an MSP");
+                error!(target: LOG_TARGET, "`msp_end_block_processing` called but node is not managing an MSP");
                 return;
             }
         };
@@ -288,21 +288,6 @@ where
             ) => {
                 // Process either InternalError or RequestExpire if this provider is managing the bucket.
                 if msp_id == managed_msp_id {
-                    // Finalize rejected storage request: transition from Submitted to Rejected
-                    let file_key_h256: FileKey = file_key.into();
-                    if let Some(ManagedProvider::Msp(msp_handler)) =
-                        &mut self.maybe_managed_provider
-                    {
-                        debug!(
-                            target: LOG_TARGET,
-                            "❌ Finalized file key {:?} as Rejected",
-                            file_key_h256
-                        );
-                        msp_handler
-                            .file_key_statuses
-                            .insert(file_key_h256, FileKeyStatus::Rejected);
-                    }
-
                     self.emit(FinalisedStorageRequestRejected {
                         file_key: file_key.into(),
                         provider_id: msp_id.into(),
@@ -444,6 +429,7 @@ where
             Some(ManagedProvider::Msp(msp_handler)) => msp_handler,
             _ => {
                 // If there's no MSP being managed, there's no point in checking for pending requests.
+                error!(target: LOG_TARGET, "`msp_assign_forest_root_write_lock` called but node is not managing an MSP");
                 return;
             }
         };
@@ -520,7 +506,7 @@ where
     }
 
     pub(crate) async fn msp_process_forest_root_changing_events(
-        &self,
+        &mut self,
         block_hash: &BlockHash,
         event: StorageEnableEvents<Runtime>,
         revert: bool,
@@ -762,15 +748,8 @@ where
                 .filter(|(_, storage_request)| {
                     // We already know that the values in this map are storage requests that
                     // this MSP is assigned to, we just have to check that it has already accepted
-                    // the storage request, which is indicated by the second element of the tuple.
-                    // See [`shc_common::types::StorageRequestMetadata`] for more details.
-                    let msp_accepted = if let Some(msp) = storage_request.msp {
-                        msp.1
-                    } else {
-                        false
-                    };
-
-                    if !msp_accepted {
+                    // the storage request. See [`shc_common::types::StorageRequestMetadata`] for more details.
+                    if !storage_request.msp_status.is_accepted() {
                         // Return early if the MSP has not accepted the storage request.
                         return false;
                     }
@@ -903,17 +882,10 @@ where
     /// ## Status Tracking
     ///
     /// The status tracking prevents duplicate processing:
-    /// - File keys with any status (`Processing`, `Submitted`, `Accepted`, `Rejected`, `Abandoned`) are skipped
+    /// - File keys with any status (`Processing`, `Abandoned`) are skipped
     /// - New file keys are marked as `Processing` when emitting the event
     /// - Tasks update statuses via commands as they process requests
-    /// - The blockchain service transitions `Submitted` → `Accepted`/`Rejected` on finality events
-    ///
-    /// ## Reorg Detection
-    ///
-    /// This function detects reorgs by checking for `Submitted` file keys that still appear in
-    /// pending storage requests. A file key in `Submitted` status means its accept/reject tx was
-    /// included in a block. If that file key is still pending, the block was reorged out.
-    /// In this case, the file key is removed from statuses to enable automatic retry.
+    /// - Stale entries are cleaned up when file keys no longer appear in pending requests
     ///
     /// ## Cleanup
     ///
@@ -923,7 +895,7 @@ where
         let current_block_hash = self.client.info().best_hash;
 
         // Query pending storage requests (not yet accepted by MSP)
-        let storage_requests = match self
+        let pending_storage_requests = match self
             .client
             .runtime_api()
             .pending_storage_requests_by_msp(current_block_hash, msp_id)
@@ -940,47 +912,17 @@ where
         let requests_to_emit: Vec<_> = {
             let msp_handler = match &mut self.maybe_managed_provider {
                 Some(ManagedProvider::Msp(msp_handler)) => msp_handler,
-                _ => return,
+                _ => {
+                    error!(target: LOG_TARGET, "`handle_pending_storage_requests` called but node is not managing an MSP");
+                    return;
+                }
             };
 
             // Collect the set of pending file keys for cleanup check
-            let pending_file_keys: HashSet<FileKey> = storage_requests
+            let pending_file_keys: HashSet<FileKey> = pending_storage_requests
                 .iter()
                 .map(|(file_key, _)| (*file_key).into())
                 .collect();
-
-            // Reorg detection: Find Submitted file keys that are still in pending requests.
-            // If a file key is Submitted but still pending, the accept/reject tx was reorged out.
-            // Remove from statuses to enable automatic retry on this block.
-            let reorged_keys: Vec<_> = msp_handler
-                .file_key_statuses
-                .iter()
-                .filter_map(|(file_key, status)| {
-                    if matches!(status, FileKeyStatus::InBlock)
-                        && pending_file_keys.contains(file_key)
-                    {
-                        Some(*file_key)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-
-            if !reorged_keys.is_empty() {
-                warn!(
-                    target: LOG_TARGET,
-                    "🔄 Detected {} file key(s) with InBlock status still pending (reorged out), enabling retry",
-                    reorged_keys.len()
-                );
-                for file_key in reorged_keys {
-                    debug!(
-                        target: LOG_TARGET,
-                        "Removing file key {:?} from statuses (reorged out, will retry)",
-                        file_key
-                    );
-                    msp_handler.file_key_statuses.remove(&file_key);
-                }
-            }
 
             // Clean up stale entries: remove file keys that are no longer in pending requests.
             // If a file key is not pending, its storage request lifecycle is complete and we
@@ -1004,12 +946,12 @@ where
                 }
             }
 
-            storage_requests
+            pending_storage_requests
                 .into_iter()
                 .filter_map(|(file_key, sr)| {
                     let file_key_h256 = file_key.into();
 
-                    // Skip file keys that already have a status
+                    // Skip file keys that already have a status (i.e., Processing or Abandoned)
                     if let Some(status) = msp_handler.file_key_statuses.get(&file_key_h256) {
                         trace!(
                             target: LOG_TARGET,
@@ -1045,7 +987,7 @@ where
             return;
         }
 
-        debug!(
+        info!(
             target: LOG_TARGET,
             "Emitting {} NewStorageRequest events (filtered from pending requests)",
             requests_to_emit.len()

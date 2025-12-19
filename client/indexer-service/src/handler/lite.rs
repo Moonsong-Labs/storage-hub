@@ -83,41 +83,44 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
     ) -> Result<(), IndexBlockError> {
         // In lite mode without MSP filtering, index all events
         let should_index = match event {
+            // Bucket lifecycle events
             pallet_file_system::Event::NewBucket { .. } => true,
+            pallet_file_system::Event::BucketDeleted { .. } => true,
+            pallet_file_system::Event::BucketPrivacyUpdated { .. } => true,
+            pallet_file_system::Event::NewCollectionAndAssociation { .. } => true,
+            // Move bucket events
+            pallet_file_system::Event::MoveBucketRequested { .. } => true,
+            pallet_file_system::Event::MoveBucketRequestExpired { .. } => true,
             pallet_file_system::Event::MoveBucketAccepted { .. } => true,
+            pallet_file_system::Event::MoveBucketRejected { .. } => true,
+            // Storage request lifecycle events
             pallet_file_system::Event::NewStorageRequest { .. } => true,
+            pallet_file_system::Event::MspAcceptedStorageRequest { .. } => true,
             pallet_file_system::Event::StorageRequestFulfilled { .. } => true,
             pallet_file_system::Event::StorageRequestExpired { .. } => true,
             pallet_file_system::Event::StorageRequestRevoked { .. } => true,
-            pallet_file_system::Event::BucketPrivacyUpdated { .. } => true,
-            pallet_file_system::Event::BucketDeleted { .. } => true,
-            pallet_file_system::Event::MoveBucketRequested { .. } => true,
-            pallet_file_system::Event::MoveBucketRejected { .. } => true,
-            pallet_file_system::Event::MspStoppedStoringBucket { .. } => true,
-            pallet_file_system::Event::MspStopStoringBucketInsolventUser { .. } => true,
-            pallet_file_system::Event::FileDeletionRequest { .. } => true,
-            pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest { .. } => true,
-            pallet_file_system::Event::MoveBucketRequestExpired { .. } => true,
-            pallet_file_system::Event::MspAcceptedStorageRequest { .. } => true,
             pallet_file_system::Event::StorageRequestRejected { .. } => true,
-            pallet_file_system::Event::NewCollectionAndAssociation { .. } => true,
+            pallet_file_system::Event::IncompleteStorageRequest { .. } => true,
+            pallet_file_system::Event::IncompleteStorageRequestCleanedUp { .. } => true,
+            // BSP volunteer and confirmation events
             pallet_file_system::Event::AcceptedBspVolunteer { .. } => true,
+            pallet_file_system::Event::BspConfirmedStoring { .. } => true,
+            pallet_file_system::Event::BspChallengeCycleInitialised { .. } => true,
+            // Stop storing events
             pallet_file_system::Event::BspRequestedToStopStoring { .. } => true,
             pallet_file_system::Event::BspConfirmStoppedStoring { .. } => true,
-            pallet_file_system::Event::BspConfirmedStoring { .. } => true,
-            pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. } => true,
+            pallet_file_system::Event::MspStoppedStoringBucket { .. } => true,
+            // Insolvent user events
             pallet_file_system::Event::SpStopStoringInsolventUser { .. } => true,
-            pallet_file_system::Event::FailedToQueuePriorityChallenge { .. } => true,
-            pallet_file_system::Event::BspChallengeCycleInitialised { .. } => true,
-            pallet_file_system::Event::FailedToGetMspOfBucket { .. } => true,
-            pallet_file_system::Event::FailedToDecreaseMspUsedCapacity { .. } => true,
-            pallet_file_system::Event::UsedCapacityShouldBeZero { .. } => true,
-            pallet_file_system::Event::FailedToReleaseStorageRequestCreationDeposit { .. } => true,
-            pallet_file_system::Event::FailedToTransferDepositFundsToBsp { .. } => true,
+            pallet_file_system::Event::MspStopStoringBucketInsolventUser { .. } => true,
+            // File deletion events
             pallet_file_system::Event::FileDeletionRequested { .. } => true,
             pallet_file_system::Event::BucketFileDeletionsCompleted { .. } => true,
             pallet_file_system::Event::BspFileDeletionsCompleted { .. } => true,
-            pallet_file_system::Event::IncompleteStorageRequest { .. } => true,
+            // System and error events
+            pallet_file_system::Event::UsedCapacityShouldBeZero { .. } => true,
+            pallet_file_system::Event::FailedToReleaseStorageRequestCreationDeposit { .. } => true,
+
             pallet_file_system::Event::__Ignore(_, _) => true,
         };
 

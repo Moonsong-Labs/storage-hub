@@ -1320,7 +1320,7 @@ where
                     }
                 }
                 BlockchainServiceCommand::QueryPendingStorageRequests {
-                    file_keys,
+                    maybe_file_keys,
                     callback,
                 } => {
                     let managed_msp_id = match &self.maybe_managed_provider {
@@ -1347,18 +1347,25 @@ where
                     {
                         Ok(mut sr) => {
                             // If specific file keys provided, filter to only those keys
-                            if let Some(keys) = file_keys {
-                                let key_set: HashSet<_> = keys
+                            if let Some(file_keys) = maybe_file_keys {
+                                let file_keys_set: HashSet<_> = file_keys
                                     .into_iter()
                                     .map(|k| sp_core::H256::from_slice(k.as_ref()))
                                     .collect();
-                                sr.retain(|file_key, _| key_set.contains(file_key));
+
+                                // From the pending storage requests for this MSP, only keep the ones that
+                                // are in the provided file keys.
+                                sr.retain(|file_key, _| file_keys_set.contains(file_key));
                             }
+
+                            // Return the filtered pending storage requests.
                             sr
                         }
-                        Err(_) => {
-                            warn!(target: LOG_TARGET, "Failed to get pending storage requests");
-                            match callback.send(Ok(Vec::new())) {
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to get pending storage requests: {:?}", e);
+                            match callback
+                                .send(Err(anyhow!("Failed to get pending storage requests")))
+                            {
                                 Ok(_) => {}
                                 Err(e) => {
                                     error!(target: LOG_TARGET, "Failed to send empty result: {:?}", e);
