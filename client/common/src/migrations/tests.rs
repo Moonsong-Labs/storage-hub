@@ -100,7 +100,10 @@ mod migration_runner_tests {
 
         // Validate that migrations are sorted correctly
         let result = runner.validate_order();
-        assert!(result.is_ok(), "Migrations should be auto-sorted and pass validation");
+        assert!(
+            result.is_ok(),
+            "Migrations should be auto-sorted and pass validation"
+        );
         assert_eq!(runner.latest_version(), 3);
     }
 }
@@ -658,7 +661,6 @@ mod test_migrations {
     }
 }
 
-
 /// Tests for multi-version migration scenarios.
 mod multi_version_tests {
     use super::test_migrations::*;
@@ -983,8 +985,7 @@ mod store_simulation_tests {
         {
             let opts = default_db_options();
             let migrations = test_migrations::v1_migrations();
-            let db =
-                open_db_with_migrations(&opts, path, &current_store_cfs, migrations).unwrap();
+            let db = open_db_with_migrations(&opts, path, &current_store_cfs, migrations).unwrap();
 
             let cf = db.cf_handle("last_processed_block_number").unwrap();
             let value = db.get_cf(&cf, b"value").unwrap();
