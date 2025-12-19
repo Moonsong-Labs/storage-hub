@@ -20,14 +20,6 @@ mod v1 {
 
     /// Version 1 migration that removes deprecated MSP respond storage request column families.
     ///
-    /// ## Deprecated Column Families
-    ///
-    /// The following column families are removed by this migration:
-    ///
-    /// - `pending_msp_respond_storage_request`: Stored pending respond storage requests
-    /// - `pending_msp_respond_storage_request_left_index`: Left index for the deque
-    /// - `pending_msp_respond_storage_request_right_index`: Right index for the deque
-    ///
     /// ## Reason for Deprecation
     ///
     /// The functionality has been replaced with in-memory queueing in `MspHandler`,

@@ -71,6 +71,8 @@ use rocksdb::DB;
 use std::collections::HashSet;
 use thiserror::Error;
 
+const LOG_TARGET: &str = "rocksdb-migrations";
+
 /// The name of the column family used to store the schema version.
 /// This is a reserved name and should not be used for application data.
 pub const SCHEMA_VERSION_CF: &str = "__schema_version__";
@@ -338,8 +340,6 @@ impl MigrationRunner {
         // - Partial migration failures (crash mid-migration)
         // - Manual DB tampering that recreated deprecated CFs
         // - Schema version already at latest but deprecated CFs still present
-        //
-        // See: https://github.com/facebook/rocksdb/wiki/column-families
         for migration in self
             .migrations
             .iter()
@@ -348,6 +348,7 @@ impl MigrationRunner {
             for cf_name in migration.deprecated_column_families() {
                 if db.cf_handle(cf_name).is_some() {
                     info!(
+                        target: LOG_TARGET,
                         "Cleanup pass (v{}): dropping straggler column family '{}'",
                         migration.version(),
                         cf_name
@@ -373,6 +374,7 @@ impl MigrationRunner {
 
         if pending.is_empty() {
             debug!(
+                target: LOG_TARGET,
                 "No pending migrations. Current schema version: {}",
                 current_version
             );
@@ -380,6 +382,7 @@ impl MigrationRunner {
         }
 
         info!(
+            target: LOG_TARGET,
             "Running {} pending migration(s) from version {} to {}",
             pending.len(),
             current_version,
@@ -393,6 +396,7 @@ impl MigrationRunner {
 
         for migration in pending {
             info!(
+                target: LOG_TARGET,
                 "Applying migration v{}: {}",
                 migration.version(),
                 migration.description()
@@ -401,14 +405,14 @@ impl MigrationRunner {
             // Drop this migration's deprecated column families
             for cf_name in migration.deprecated_column_families() {
                 if db.cf_handle(cf_name).is_some() {
-                    info!("  Dropping column family: {}", cf_name);
+                    info!(target: LOG_TARGET, "  Dropping column family: {}", cf_name);
                     db.drop_cf(cf_name)
                         .map_err(|e| MigrationError::MigrationFailed {
                             version: migration.version(),
                             reason: format!("Failed to drop column family '{}': {}", cf_name, e),
                         })?;
                 } else {
-                    debug!("  Column family '{}' does not exist, skipping", cf_name);
+                    debug!(target: LOG_TARGET, "  Column family '{}' does not exist, skipping", cf_name);
                 }
             }
 
@@ -416,10 +420,11 @@ impl MigrationRunner {
             Self::write_schema_version(db, migration.version())?;
             applied_version = migration.version();
 
-            info!("Migration v{} completed successfully", migration.version());
+            info!(target: LOG_TARGET, "Migration v{} completed successfully", migration.version());
         }
 
         info!(
+            target: LOG_TARGET,
             "All migrations completed. Schema version: {}",
             applied_version
         );

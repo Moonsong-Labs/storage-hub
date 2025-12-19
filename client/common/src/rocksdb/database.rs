@@ -11,6 +11,8 @@ use thiserror::Error;
 
 use super::migrations::{MigrationError, MigrationRunner, SCHEMA_VERSION_CF};
 
+const LOG_TARGET: &str = "rocksdb-migrations";
+
 /// Top-level errors that can occur when opening or operating on a database.
 ///
 /// This is the primary error type returned by [`open_db`] and [`open_db_with_migrations`].
@@ -81,25 +83,18 @@ pub fn merge_column_families<'a>(
 /// * `opts` - RocksDB options for opening the database
 /// * `path` - Path to the database directory
 /// * `current_schema_cfs` - The column families defined in the current schema
-///
-/// # Returns
-///
-/// The opened database.
-///
-/// # Errors
-///
-/// - [`MigrationError::CannotDowngrade`] if the database has schema version > 0
 pub fn open_db(
     opts: &Options,
     path: &str,
     current_schema_cfs: &[&str],
-) -> Result<DB, MigrationError> {
+) -> Result<DB, DatabaseError> {
     // Validate that schema version CF is not in current schema
     if current_schema_cfs.contains(&SCHEMA_VERSION_CF) {
         return Err(MigrationError::InvalidColumnFamilyConfig(format!(
             "Column family '{}' is reserved for internal use by the migration system",
             SCHEMA_VERSION_CF
-        )));
+        ))
+        .into());
     }
 
     let db = open_db_internal(opts, path, current_schema_cfs)?;
@@ -120,7 +115,8 @@ pub fn open_db(
             return Err(MigrationError::CannotDowngrade {
                 current: current_version,
                 target: 0,
-            });
+            }
+            .into());
         }
     }
 
@@ -143,18 +139,6 @@ pub fn open_db(
 /// * `path` - Path to the database directory
 /// * `current_schema_cfs` - The column families defined in the current schema (without deprecated CFs)
 /// * `migrations` - The store-specific migrations
-///
-/// # Returns
-///
-/// The opened database after running all pending migrations.
-///
-/// # Errors
-///
-/// Returns `MigrationError::InvalidColumnFamilyConfig` if `current_schema_cfs` contains
-/// reserved or deprecated CF names.
-///
-/// Returns `MigrationError::RocksDb` if the database exists but cannot be read
-/// (e.g., corruption, permission issues, etc.).
 pub fn open_db_with_migrations(
     opts: &Options,
     path: &str,
@@ -253,7 +237,7 @@ fn open_db_internal(
     let existing_cfs = if current_file.exists() {
         // CURRENT file exists - this is an existing database
         // Any error from list_cf is a real error (corruption, permissions, etc.)
-        debug!("CURRENT file found, listing existing column families");
+        debug!(target: LOG_TARGET, "CURRENT file found, listing existing column families");
         DB::list_cf(opts, path)?
     } else if db_path.exists() && has_rocksdb_artifacts(db_path) {
         // Directory exists with RocksDB artifacts but no CURRENT file - likely corruption
@@ -265,14 +249,14 @@ fn open_db_internal(
         )));
     } else {
         // No CURRENT file and no artifacts - this is a new database
-        debug!("No CURRENT file found, treating as new database");
+        debug!(target: LOG_TARGET, "No CURRENT file found, treating as new database");
         vec![]
     };
 
     // Merge existing CFs with current schema CFs
     let all_cfs = merge_column_families(&existing_cfs, current_schema_cfs);
 
-    debug!("Opening database with column families: {:?}", all_cfs);
+    debug!(target: LOG_TARGET, "Opening database with column families: {:?}", all_cfs);
 
     // Create column family descriptors
     let cf_descriptors: Vec<ColumnFamilyDescriptor> = all_cfs

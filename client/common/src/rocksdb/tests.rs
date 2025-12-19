@@ -359,7 +359,10 @@ mod database_tests {
         let opts = default_db_options();
         let result = open_db(&opts, path.to_str().unwrap(), &["test_cf"]);
 
-        assert!(matches!(result, Err(MigrationError::RocksDb(_))));
+        assert!(matches!(
+            result,
+            Err(DatabaseError::Migration(MigrationError::RocksDb(_)))
+        ));
     }
 
     #[test]
@@ -603,7 +606,10 @@ mod database_tests {
 
             assert!(result.is_err());
             match result {
-                Err(MigrationError::CannotDowngrade { current, target }) => {
+                Err(DatabaseError::Migration(MigrationError::CannotDowngrade {
+                    current,
+                    target,
+                })) => {
                     assert_eq!(current, 1);
                     assert_eq!(target, 0);
                 }
@@ -660,7 +666,7 @@ mod database_tests {
 
         assert!(result.is_err());
         match result {
-            Err(MigrationError::InvalidColumnFamilyConfig(msg)) => {
+            Err(DatabaseError::Migration(MigrationError::InvalidColumnFamilyConfig(msg))) => {
                 assert!(msg.contains("RocksDB artifacts"));
                 assert!(msg.contains("no CURRENT file"));
             }
@@ -684,7 +690,9 @@ mod database_tests {
         assert!(result.is_err());
         assert!(matches!(
             result,
-            Err(MigrationError::InvalidColumnFamilyConfig(_))
+            Err(DatabaseError::Migration(
+                MigrationError::InvalidColumnFamilyConfig(_)
+            ))
         ));
     }
 
@@ -1281,7 +1289,7 @@ mod cf_guardrail_tests {
 
         assert!(result.is_err());
         match result {
-            Err(MigrationError::InvalidColumnFamilyConfig(msg)) => {
+            Err(DatabaseError::Migration(MigrationError::InvalidColumnFamilyConfig(msg))) => {
                 assert!(msg.contains(SCHEMA_VERSION_CF));
                 assert!(msg.contains("reserved"));
             }
