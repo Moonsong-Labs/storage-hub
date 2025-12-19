@@ -11,13 +11,13 @@
  *   and updates only the [package] version field (not dependencies)
  *
  * Usage examples:
- *   bun release/bump_npm_versions.ts --family core_rust
- *   bun release/bump_npm_versions.ts --family sdk
- *   bun release/bump_npm_versions.ts --family types_bundle
- *   bun release/bump_npm_versions.ts --family api_augment
- *   bun release/bump_npm_versions.ts --family sdk --version 0.4.0
- *   bun release/bump_npm_versions.ts --family sdk --dry-run
- *   bun release/bump_npm_versions.ts --dry-run
+ *   bun release/bump_versions.ts --family core_rust
+ *   bun release/bump_versions.ts --family sdk
+ *   bun release/bump_versions.ts --family types_bundle
+ *   bun release/bump_versions.ts --family api_augment
+ *   bun release/bump_versions.ts --family sdk --version 0.4.0
+ *   bun release/bump_versions.ts --family sdk --dry-run
+ *   bun release/bump_versions.ts --dry-run
  */
 
 import * as fs from "node:fs";
@@ -387,6 +387,7 @@ function bumpNpmFamily(
     const currentVersion = pkg.version;
     if (typeof currentVersion !== "string") {
       skippedCount += 1;
+      console.log(`[SKIP]  ${pkgPath}: (no version field, target ${targetVersion})`);
       // eslint-disable-next-line no-continue
       continue;
     }
@@ -405,13 +406,14 @@ function bumpNpmFamily(
 
     if (cmp >= 0) {
       skippedCount += 1;
+      console.log(`[SKIP]  ${pkgPath}: ${currentVersion} (>= target ${targetVersion})`);
       // eslint-disable-next-line no-continue
       continue;
     }
 
     pkg.version = targetVersion;
     const prefix = args.dryRun ? "[DRY-RUN]" : "[UPDATE]";
-    console.log(`${prefix} ${pkgPath}\n        ${currentVersion} -> ${targetVersion}`);
+    console.log(`${prefix} ${pkgPath}: ${currentVersion} -> ${targetVersion}`);
 
     if (!args.dryRun) {
       fs.writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`, "utf8");
@@ -465,6 +467,7 @@ function bumpRustFamily(
     if (!versionInfo) {
       // Probably a workspace-only Cargo.toml; skip it quietly.
       skippedCount += 1;
+      console.log(`[SKIP]  ${cargoPath}: (no [package] version, target ${targetVersion})`);
       // eslint-disable-next-line no-continue
       continue;
     }
@@ -484,6 +487,7 @@ function bumpRustFamily(
 
     if (cmp >= 0) {
       skippedCount += 1;
+      console.log(`[SKIP]  ${cargoPath}: ${currentVersion} (>= target ${targetVersion})`);
       // eslint-disable-next-line no-continue
       continue;
     }
@@ -491,7 +495,7 @@ function bumpRustFamily(
     // Perform the bump.
     const newContent = updateCargoTomlVersion(content, versionInfo, targetVersion);
     const prefix = args.dryRun ? "[DRY-RUN]" : "[UPDATE]";
-    console.log(`${prefix} ${cargoPath}\n        ${currentVersion} -> ${targetVersion}`);
+    console.log(`${prefix} ${cargoPath}: ${currentVersion} -> ${targetVersion}`);
 
     if (!args.dryRun) {
       fs.writeFileSync(cargoPath, newContent, "utf8");
