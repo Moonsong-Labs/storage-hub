@@ -106,50 +106,11 @@ mod migration_runner_tests {
 }
 
 /// Tests for migration validation logic.
+///
+/// These tests verify that `MigrationRunner::validate_order()` correctly
+/// detects invalid migration configurations.
 mod validation_tests {
     use super::*;
-
-    /// Helper to test with custom migrations
-    fn validate_custom_migrations(
-        migrations: Vec<Box<dyn Migration>>,
-    ) -> Result<(), MigrationError> {
-        if migrations.is_empty() {
-            return Ok(());
-        }
-
-        let mut seen_versions = HashSet::new();
-        for migration in &migrations {
-            if !seen_versions.insert(migration.version()) {
-                return Err(MigrationError::MigrationFailed {
-                    version: migration.version(),
-                    reason: format!("Duplicate migration version: {}", migration.version()),
-                });
-            }
-        }
-
-        if migrations.first().map(|m| m.version()) != Some(1) {
-            return Err(MigrationError::MigrationFailed {
-                version: 0,
-                reason: "Migrations must start from version 1".to_string(),
-            });
-        }
-
-        for (i, migration) in migrations.iter().enumerate() {
-            let expected_version = (i + 1) as u32;
-            if migration.version() != expected_version {
-                return Err(MigrationError::MigrationFailed {
-                    version: migration.version(),
-                    reason: format!(
-                        "Gap in migration sequence: expected version {}, found {}",
-                        expected_version,
-                        migration.version()
-                    ),
-                });
-            }
-        }
-
-        Ok(())
-    }
 
     #[test]
     fn detects_duplicate_versions() {
@@ -181,8 +142,9 @@ mod validation_tests {
 
         let migrations: Vec<Box<dyn Migration>> =
             vec![Box::new(DuplicateV1A), Box::new(DuplicateV1B)];
+        let runner = MigrationRunner::from(migrations);
 
-        let result = validate_custom_migrations(migrations);
+        let result = runner.validate_order();
         assert!(result.is_err());
         match result {
             Err(MigrationError::MigrationFailed { version, reason }) => {
@@ -221,10 +183,11 @@ mod validation_tests {
             }
         }
 
-        let mut migrations: Vec<Box<dyn Migration>> = vec![Box::new(GapV1), Box::new(GapV3)];
-        migrations.sort_by_key(|m| m.version());
+        // MigrationRunner::from auto-sorts by version
+        let migrations: Vec<Box<dyn Migration>> = vec![Box::new(GapV1), Box::new(GapV3)];
+        let runner = MigrationRunner::from(migrations);
 
-        let result = validate_custom_migrations(migrations);
+        let result = runner.validate_order();
         assert!(result.is_err());
         match result {
             Err(MigrationError::MigrationFailed { reason, .. }) => {
@@ -250,8 +213,9 @@ mod validation_tests {
         }
 
         let migrations: Vec<Box<dyn Migration>> = vec![Box::new(NonOneStartV2)];
+        let runner = MigrationRunner::from(migrations);
 
-        let result = validate_custom_migrations(migrations);
+        let result = runner.validate_order();
         assert!(result.is_err());
         match result {
             Err(MigrationError::MigrationFailed { reason, .. }) => {
@@ -694,49 +658,6 @@ mod test_migrations {
     }
 }
 
-/// Helper function to run migrations with a custom migration list.
-fn run_migrations_with_list(
-    db: &mut DB,
-    migrations: Vec<Box<dyn Migration>>,
-) -> Result<u32, MigrationError> {
-    let current_version = MigrationRunner::read_schema_version(db)?;
-    let latest_version = migrations.last().map(|m| m.version()).unwrap_or(0);
-
-    if current_version > latest_version {
-        return Err(MigrationError::CannotDowngrade {
-            current: current_version,
-            target: latest_version,
-        });
-    }
-
-    let pending: Vec<_> = migrations
-        .iter()
-        .filter(|m| m.version() > current_version)
-        .collect();
-
-    if pending.is_empty() {
-        return Ok(current_version);
-    }
-
-    let mut applied_version = current_version;
-
-    for migration in pending {
-        for cf_name in migration.deprecated_column_families() {
-            if db.cf_handle(cf_name).is_some() {
-                db.drop_cf(cf_name)
-                    .map_err(|e| MigrationError::MigrationFailed {
-                        version: migration.version(),
-                        reason: format!("Failed to drop column family '{}': {}", cf_name, e),
-                    })?;
-            }
-        }
-
-        MigrationRunner::write_schema_version(db, migration.version())?;
-        applied_version = migration.version();
-    }
-
-    Ok(applied_version)
-}
 
 /// Tests for multi-version migration scenarios.
 mod multi_version_tests {
@@ -798,7 +719,8 @@ mod multi_version_tests {
 
             // Re-create the migrations list since we can't clone Box<dyn Migration>
             let all_migrations = all_test_migrations();
-            let final_version = run_migrations_with_list(&mut db, all_migrations).unwrap();
+            let runner = MigrationRunner::from(all_migrations);
+            let final_version = runner.run_pending(&mut db).unwrap();
 
             assert_eq!(final_version, 3);
             assert_eq!(MigrationRunner::read_schema_version(&db).unwrap(), 3);
@@ -864,7 +786,8 @@ mod multi_version_tests {
                 .collect();
 
             let mut db = DB::open_cf_descriptors(&opts, path, cf_descriptors).unwrap();
-            let final_version = run_migrations_with_list(&mut db, all_migrations).unwrap();
+            let runner = MigrationRunner::from(all_migrations);
+            let final_version = runner.run_pending(&mut db).unwrap();
 
             assert_eq!(final_version, 3);
             assert!(db.cf_handle("test_deprecated_v1_cf_a").is_none());
@@ -910,7 +833,8 @@ mod multi_version_tests {
 
             assert_eq!(MigrationRunner::read_schema_version(&db).unwrap(), 1);
 
-            let final_version = run_migrations_with_list(&mut db, all_migrations).unwrap();
+            let runner = MigrationRunner::from(all_migrations);
+            let final_version = runner.run_pending(&mut db).unwrap();
 
             assert_eq!(final_version, 3);
             assert!(db.cf_handle("test_deprecated_v2_cf").is_none());
