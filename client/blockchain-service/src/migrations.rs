@@ -24,7 +24,7 @@ mod v1 {
     ///
     /// The functionality has been replaced with in-memory queueing in `MspHandler`,
     /// eliminating the need for persistent storage of these requests.
-    pub struct BlockchainServiceV1Migration;
+    pub(crate) struct BlockchainServiceV1Migration;
 
     impl Migration for BlockchainServiceV1Migration {
         fn version(&self) -> u32 {
