@@ -38,8 +38,7 @@ use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use crate::{
     handler::StorageHubHandler,
     inc_counter_by,
-    metrics::{STATUS_FAILURE, STATUS_SUCCESS},
-    observe_histogram,
+    metrics::STATUS_SUCCESS,
     types::{BspForestStorageHandlerT, ForestStorageKey, ShNodeType},
 };
 
@@ -428,8 +427,7 @@ where
 
         // Send the confirmation transaction and wait for it to be included in the block and
         // continue only if it is successful.
-        let submit_result = self
-            .storage_hub_handler
+        self.storage_hub_handler
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
@@ -449,15 +447,14 @@ where
                     .retry_only_if_timeout(),
                 true,
             )
-            .await;
-
-        submit_result.map_err(|e| {
-            anyhow!(
-                "Failed to confirm file after {} retries: {:?}",
-                self.config.max_try_count,
-                e
-            )
-        })?;
+            .await
+            .map_err(|e| {
+                anyhow!(
+                    "Failed to confirm file after {} retries: {:?}",
+                    self.config.max_try_count,
+                    e
+                )
+            })?;
 
         // Release the forest root write "lock" and finish the task.
         self.storage_hub_handler
@@ -479,28 +476,6 @@ where
     Runtime: StorageEnableRuntime,
 {
     async fn handle_new_storage_request_event(
-        &mut self,
-        event: NewStorageRequest<Runtime>,
-    ) -> anyhow::Result<()> {
-        let start_time = std::time::Instant::now();
-
-        let result = self.handle_new_storage_request_inner(event).await;
-
-        observe_histogram!(
-            handler: self.storage_hub_handler,
-            storage_request_setup_seconds,
-            if result.is_ok() {
-                STATUS_SUCCESS
-            } else {
-                STATUS_FAILURE
-            },
-            start_time.elapsed().as_secs_f64()
-        );
-
-        result
-    }
-
-    async fn handle_new_storage_request_inner(
         &mut self,
         event: NewStorageRequest<Runtime>,
     ) -> anyhow::Result<()> {
@@ -1096,7 +1071,7 @@ where
 
         drop(read_file_storage);
 
-        Ok(true)
+        return Ok(true);
     }
 
     /// Function to determine if a volunteer request should be retried,
@@ -1175,7 +1150,7 @@ where
             return false;
         }
 
-        true
+        return true;
     }
 
     async fn unvolunteer_file(&self, file_key: Runtime::Hash) {

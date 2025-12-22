@@ -194,11 +194,6 @@ pub struct StorageHubMetrics {
     pub bsp_proof_generation_seconds: HistogramVec,
 
     // === General Metrics ===
-    /// Time spent handling the initial NewStorageRequest event in seconds.
-    /// For BSP: Includes validation, waiting for volunteer tick eligibility, and sending volunteer extrinsic.
-    /// For MSP: Includes validation, capacity checks, and file storage setup.
-    /// Note: This does NOT include file transfer time or the actual accept/confirm response.
-    pub storage_request_setup_seconds: HistogramVec,
     /// Time spent sending file chunks to a peer (outbound transfer), labeled by status.
     /// Measures the duration of send_chunks operations used by MSP to distribute files to BSPs.
     /// Note: This tracks outbound transfers, not receiving uploads.
@@ -303,17 +298,6 @@ impl StorageHubMetrics {
                 registry,
             )?,
             // General metrics
-            storage_request_setup_seconds: register(
-                HistogramVec::new(
-                    HistogramOpts::new(
-                        "storagehub_storage_request_setup_seconds",
-                        "Initial NewStorageRequest handling (validation, setup, not file transfer)",
-                    )
-                    .buckets(REQUEST_BUCKETS.to_vec()),
-                    &["status"],
-                )?,
-                registry,
-            )?,
             file_transfer_seconds: register(
                 HistogramVec::new(
                     HistogramOpts::new(

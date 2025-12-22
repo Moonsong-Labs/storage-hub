@@ -154,8 +154,6 @@ use shp_file_metadata::{Chunk, ChunkId, Leaf};
 
 use crate::{
     handler::StorageHubHandler,
-    metrics::{STATUS_FAILURE, STATUS_SUCCESS},
-    observe_histogram,
     types::{ForestStorageKey, MspForestStorageHandlerT, ShNodeType},
 };
 
@@ -292,30 +290,15 @@ where
             event.fingerprint
         );
 
-        let start_time = std::time::Instant::now();
-
         let bucket_id = H256::from_slice(event.bucket_id.as_ref());
         let file_key = H256::from_slice(event.file_key.as_ref());
 
         let result = self.handle_new_storage_request_event(event).await;
         match result {
-            Ok(()) => {
-                observe_histogram!(
-                    handler: self.storage_hub_handler,
-                    storage_request_setup_seconds,
-                    if result.is_ok() {
-                        STATUS_SUCCESS
-                    } else {
-                        STATUS_FAILURE
-                    },
-                    start_time.elapsed().as_secs_f64()
-                );
-
-                Ok(format!(
-                    "Handled NewStorageRequest for file_key [{:x}]",
-                    file_key
-                ))
-            }
+            Ok(()) => Ok(format!(
+                "Handled NewStorageRequest for file_key [{:x}]",
+                file_key
+            )),
             Err(reason) => {
                 error!(target: LOG_TARGET, "Failed to handle new storage request: {:?}", reason);
 
@@ -328,10 +311,10 @@ where
                 .await
                 .map_err(|e| anyhow!("Failed to handle rejected storage request: {:?}", e))?;
 
-                Err(anyhow!(
+                return Err(anyhow!(
                     "Failed to handle new storage request: {:?}",
                     reason
-                ))
+                ));
             }
         }
     }
@@ -1140,7 +1123,6 @@ where
                     target: LOG_TARGET,
                     "Expected events but got None - this should not happen. Removing file key statuses to allow re-evaluation on next block."
                 );
-
                 self.handle_missing_extrinsic_events(&all_file_keys).await;
             }
         }
@@ -1395,14 +1377,8 @@ where
         // Delete the file from the file storage.
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
 
-        if let Err(e) = write_file_storage.delete_file(&file_key) {
-            warn!(
-                target: LOG_TARGET,
-                "Failed to delete file {:x} from file storage: {:?}",
-                file_key,
-                e
-            );
-        }
+        // TODO: Handle error
+        let _ = write_file_storage.delete_file(&file_key);
 
         Ok(())
     }

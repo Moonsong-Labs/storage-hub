@@ -164,27 +164,6 @@ await describeMspNet(
     it("Histogram metrics are populated after storage operations", async () => {
       // After the previous test ran storage requests, check histogram metrics
 
-      // Storage request duration histogram
-      const storageReqCount = await userApi.prometheus.getMetricValue(
-        "storagehub_storage_request_setup_seconds_count"
-      );
-      const storageReqSum = await userApi.prometheus.getMetricValue(
-        "storagehub_storage_request_setup_seconds_sum"
-      );
-      console.log(
-        `Storage request setup histogram - count: ${storageReqCount}, sum: ${storageReqSum.toFixed(
-          3
-        )}s`
-      );
-      assert(
-        storageReqCount > 0,
-        "Expected storage_request_setup_seconds to have recorded observations"
-      );
-      assert(storageReqSum >= 0, "Histogram sum should be non-negative");
-      console.log(
-        `  Average storage request time: ${(storageReqSum / storageReqCount).toFixed(3)} seconds`
-      );
-
       // File transfer duration histogram
       // Note: file_transfer_seconds is only recorded when send_chunks() is called for peer-to-peer
       // transfers. Direct uploads via batchStorageRequests may not trigger this metric.

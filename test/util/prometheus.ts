@@ -191,12 +191,6 @@ export const ALL_STORAGEHUB_METRICS: Record<string, MetricDefinition> = {
     labels: ["status"],
     description: "BSP proof generation duration for challenge responses"
   },
-  storage_request_setup_seconds: {
-    name: "storagehub_storage_request_setup_seconds",
-    type: "histogram",
-    labels: ["status"],
-    description: "Initial NewStorageRequest handling (validation, setup, not file transfer)"
-  },
   file_transfer_seconds: {
     name: "storagehub_file_transfer_seconds",
     type: "histogram",
