@@ -165,6 +165,44 @@ await describeMspNet(
     it("Histogram metrics are populated after storage operations", async () => {
       // After the previous test ran storage requests, check histogram metrics
 
+      // Event handler duration histogram - check metrics for events that occurred during the test
+      // These events should have been triggered by the batch file uploads:
+      // - new_storage_request: Initial storage request handling (BSP and MSP)
+      // - remote_upload_request: File chunk uploads from user to MSP/BSP
+      // - process_confirm_storing_request: BSP confirm storage processing
+      // - process_msp_respond_storing_request: MSP respond to storage request
+
+      const eventsToCheck = [
+        "new_storage_request",
+        "remote_upload_request",
+        "process_confirm_storing_request",
+        "process_msp_respond_storing_request"
+      ];
+
+      let totalEventCount = 0;
+      console.log("Event handler histograms:");
+
+      for (const event of eventsToCheck) {
+        const count = await userApi.prometheus.getMetricValue(
+          `storagehub_event_handler_seconds_count{event="${event}"}`
+        );
+        const sum = await userApi.prometheus.getMetricValue(
+          `storagehub_event_handler_seconds_sum{event="${event}"}`
+        );
+        if (count > 0) {
+          totalEventCount += count;
+          console.log(
+            `  ${event}: count=${count}, sum=${sum.toFixed(3)}s, avg=${(sum / count).toFixed(3)}s`
+          );
+        }
+      }
+
+      assert(
+        totalEventCount > 0,
+        "Expected event_handler_seconds to have recorded observations for at least one event type"
+      );
+      console.log(`Total event handler observations: ${totalEventCount}`);
+
       // File transfer duration histogram
       // Note: file_transfer_seconds is only recorded when send_chunks() is called for peer-to-peer
       // transfers. Direct uploads via batchStorageRequests may not trigger this metric.
