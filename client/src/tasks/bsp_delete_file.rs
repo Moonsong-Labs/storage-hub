@@ -96,12 +96,14 @@ where
         // Remove the file from the File Storage.
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
         write_file_storage.delete_file(file_key).map_err(|e| {
-            error!(target: LOG_TARGET, "Failed to remove file from File Storage after it was removed from the Forest. \nError: {:?}", e);
-            anyhow!(
-                "Failed to delete file from File Storage after it was removed from the Forest: {:?}",
-                e
-            )
-        })
+			error!(target: LOG_TARGET, "Failed to remove file from File Storage after it was removed from the Forest. \\nError: {:?}", e);
+			anyhow!(
+					"Failed to delete file from File Storage after it was removed from the Forest: {:?}",
+					e
+			)
+		})?;
+
+        Ok(())
     }
 }
 
@@ -193,7 +195,6 @@ where
             "Processing finalised mutations applied for provider [{:x}]",
             event.provider_id
         );
-
         debug!(target: LOG_TARGET, "Mutations to apply: {:?}", event.mutations);
 
         for mutation in event.mutations {
