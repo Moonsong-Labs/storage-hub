@@ -68,14 +68,25 @@ await describeMspNet(
     it("Storage request metrics increment after batch file uploads", async () => {
       // Get initial metric values (using centralized event handler metrics)
       // The event label is derived from the event type name: NewStorageRequest -> new_storage_request
-      const initialMspRequests = await userApi.prometheus.getMetricValue(
-        'storagehub_event_handler_total{event="new_storage_request",job="storagehub-msp-1"}'
+      // Check both pending (event received) and success (handler completed) status labels
+      const initialMspPending = await userApi.prometheus.getMetricValue(
+        'storagehub_event_handler_total{event="new_storage_request",status="pending",job="storagehub-msp-1"}'
       );
-      const initialBspRequests = await userApi.prometheus.getMetricValue(
-        'storagehub_event_handler_total{event="new_storage_request",job="storagehub-bsp"}'
+      const initialMspSuccess = await userApi.prometheus.getMetricValue(
+        'storagehub_event_handler_total{event="new_storage_request",status="success",job="storagehub-msp-1"}'
       );
-      console.log(`Initial MSP storage requests: ${initialMspRequests}`);
-      console.log(`Initial BSP storage requests: ${initialBspRequests}`);
+      const initialBspPending = await userApi.prometheus.getMetricValue(
+        'storagehub_event_handler_total{event="new_storage_request",status="pending",job="storagehub-bsp"}'
+      );
+      const initialBspSuccess = await userApi.prometheus.getMetricValue(
+        'storagehub_event_handler_total{event="new_storage_request",status="success",job="storagehub-bsp"}'
+      );
+      console.log(
+        `Initial MSP storage requests - pending: ${initialMspPending}, success: ${initialMspSuccess}`
+      );
+      console.log(
+        `Initial BSP storage requests - pending: ${initialBspPending}, success: ${initialBspSuccess}`
+      );
 
       // Get MSP value proposition for batch storage requests
       const mspId = userApi.shConsts.DUMMY_MSP_ID;
@@ -141,24 +152,53 @@ await describeMspNet(
       // Wait for Prometheus to scrape the updated metrics
       await userApi.prometheus.waitForScrape();
 
-      // Check that metrics have incremented
-      const finalMspRequests = await userApi.prometheus.getMetricValue(
-        'storagehub_event_handler_total{event="new_storage_request",job="storagehub-msp-1"}'
+      // Check that metrics have incremented for both pending and success
+      const finalMspPending = await userApi.prometheus.getMetricValue(
+        'storagehub_event_handler_total{event="new_storage_request",status="pending",job="storagehub-msp-1"}'
       );
-      const finalBspRequests = await userApi.prometheus.getMetricValue(
-        'storagehub_event_handler_total{event="new_storage_request",job="storagehub-bsp"}'
+      const finalMspSuccess = await userApi.prometheus.getMetricValue(
+        'storagehub_event_handler_total{event="new_storage_request",status="success",job="storagehub-msp-1"}'
       );
-      console.log(`Final MSP storage requests: ${finalMspRequests}`);
-      console.log(`Final BSP storage requests: ${finalBspRequests}`);
+      const finalBspPending = await userApi.prometheus.getMetricValue(
+        'storagehub_event_handler_total{event="new_storage_request",status="pending",job="storagehub-bsp"}'
+      );
+      const finalBspSuccess = await userApi.prometheus.getMetricValue(
+        'storagehub_event_handler_total{event="new_storage_request",status="success",job="storagehub-bsp"}'
+      );
+      console.log(
+        `Final MSP storage requests - pending: ${finalMspPending}, success: ${finalMspSuccess}`
+      );
+      console.log(
+        `Final BSP storage requests - pending: ${finalBspPending}, success: ${finalBspSuccess}`
+      );
 
       // Metrics should have increased after processing 4 storage requests
+      // Both pending and success should increment for successful handlers
       assert(
-        finalMspRequests > initialMspRequests || finalMspRequests >= 4,
-        `Expected MSP storage requests to increment, got ${finalMspRequests}`
+        finalMspPending > initialMspPending,
+        `Expected MSP pending to increment, got ${finalMspPending}`
       );
       assert(
-        finalBspRequests > initialBspRequests || finalBspRequests >= 4,
-        `Expected BSP storage requests to increment, got ${finalBspRequests}`
+        finalMspSuccess > initialMspSuccess,
+        `Expected MSP success to increment, got ${finalMspSuccess}`
+      );
+      assert(
+        finalBspPending > initialBspPending,
+        `Expected BSP pending to increment, got ${finalBspPending}`
+      );
+      assert(
+        finalBspSuccess > initialBspSuccess,
+        `Expected BSP success to increment, got ${finalBspSuccess}`
+      );
+
+      // Verify pending >= success (every success was first pending)
+      assert(
+        finalMspPending >= finalMspSuccess,
+        `MSP pending (${finalMspPending}) should be >= success (${finalMspSuccess})`
+      );
+      assert(
+        finalBspPending >= finalBspSuccess,
+        `BSP pending (${finalBspPending}) should be >= success (${finalBspSuccess})`
       );
     });
 
