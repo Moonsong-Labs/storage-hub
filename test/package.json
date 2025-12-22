@@ -8,6 +8,8 @@
     "node": "23.x.x"
   },
   "scripts": {
+    "debug:block-walk": "pnpm tsx scripts/debug-block-walk.ts",
+    "debug:block-walk:parallel": "pnpm tsx scripts/debug-block-walk-parallel.ts",
     "bundle-types": "cd ../types-bundle && pnpm i && pnpm build && pnpm fmt:fix && cd ../test",
     "typegen": "pnpm bundle-types && cd ../api-augment && pnpm scrape && pnpm generate:all && pnpm build && pnpm fmt:fix; cd ../test",
     "fmt": "biome format .",
