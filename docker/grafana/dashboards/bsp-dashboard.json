@@ -47,7 +47,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(storagehub_event_handler_total)",
+          "expr": "sum(storagehub_event_handler_total{role=\"bsp\"})",
           "legendFormat": "Total",
           "refId": "A"
         }
@@ -86,7 +86,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(storagehub_event_handler_total{status=\"success\"})",
+          "expr": "sum(storagehub_event_handler_total{role=\"bsp\",status=\"success\"})",
           "legendFormat": "Success",
           "refId": "A"
         }
@@ -125,7 +125,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(storagehub_event_handler_total{status=\"failure\"})",
+          "expr": "sum(storagehub_event_handler_total{role=\"bsp\",status=\"failure\"})",
           "legendFormat": "Failures",
           "refId": "A"
         }
@@ -164,7 +164,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(storagehub_event_handler_total{status=\"pending\"})",
+          "expr": "sum(storagehub_event_handler_total{role=\"bsp\",status=\"pending\"})",
           "legendFormat": "Pending",
           "refId": "A"
         }
@@ -211,7 +211,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(storagehub_event_handler_total{status=\"success\"}) / sum(storagehub_event_handler_total{status=~\"success|failure\"}) * 100",
+          "expr": "sum(storagehub_event_handler_total{role=\"bsp\",status=\"success\"}) / sum(storagehub_event_handler_total{role=\"bsp\",status=~\"success|failure\"}) * 100",
           "legendFormat": "Overall Success Rate",
           "refId": "A"
         }
@@ -290,55 +290,55 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"new_storage_request\",status=\"success\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"new_storage_request\",status=\"success\"}[1m])",
           "legendFormat": "new_storage_request (success)",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"new_storage_request\",status=\"failure\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"new_storage_request\",status=\"failure\"}[1m])",
           "legendFormat": "new_storage_request (failure)",
           "refId": "B"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"new_storage_request\",status=\"pending\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"new_storage_request\",status=\"pending\"}[1m])",
           "legendFormat": "new_storage_request (pending)",
           "refId": "C"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"process_confirm_storing_request\",status=\"success\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"process_confirm_storing_request\",status=\"success\"}[1m])",
           "legendFormat": "process_confirm_storing_request (success)",
           "refId": "D"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"process_confirm_storing_request\",status=\"failure\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"process_confirm_storing_request\",status=\"failure\"}[1m])",
           "legendFormat": "process_confirm_storing_request (failure)",
           "refId": "E"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"process_confirm_storing_request\",status=\"pending\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"process_confirm_storing_request\",status=\"pending\"}[1m])",
           "legendFormat": "process_confirm_storing_request (pending)",
           "refId": "F"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"remote_upload_request\",status=\"success\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"remote_upload_request\",status=\"success\"}[1m])",
           "legendFormat": "remote_upload_request (success)",
           "refId": "G"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"remote_upload_request\",status=\"failure\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"remote_upload_request\",status=\"failure\"}[1m])",
           "legendFormat": "remote_upload_request (failure)",
           "refId": "H"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"remote_upload_request\",status=\"pending\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"remote_upload_request\",status=\"pending\"}[1m])",
           "legendFormat": "remote_upload_request (pending)",
           "refId": "I"
         }
@@ -396,13 +396,13 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.50, sum(rate(storagehub_event_handler_seconds_bucket{event=~\"new_storage_request|process_confirm_storing_request|remote_upload_request\"}[5m])) by (le, event))",
+          "expr": "histogram_quantile(0.50, sum(rate(storagehub_event_handler_seconds_bucket{role=\"bsp\",event=~\"new_storage_request|process_confirm_storing_request|remote_upload_request\"}[5m])) by (le, event))",
           "legendFormat": "{{event}} p50",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.95, sum(rate(storagehub_event_handler_seconds_bucket{event=~\"new_storage_request|process_confirm_storing_request|remote_upload_request\"}[5m])) by (le, event))",
+          "expr": "histogram_quantile(0.95, sum(rate(storagehub_event_handler_seconds_bucket{role=\"bsp\",event=~\"new_storage_request|process_confirm_storing_request|remote_upload_request\"}[5m])) by (le, event))",
           "legendFormat": "{{event}} p95",
           "refId": "B"
         }
@@ -481,37 +481,37 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"multiple_new_challenge_seeds\",status=\"success\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"multiple_new_challenge_seeds\",status=\"success\"}[1m])",
           "legendFormat": "multiple_new_challenge_seeds (success)",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"multiple_new_challenge_seeds\",status=\"failure\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"multiple_new_challenge_seeds\",status=\"failure\"}[1m])",
           "legendFormat": "multiple_new_challenge_seeds (failure)",
           "refId": "B"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"multiple_new_challenge_seeds\",status=\"pending\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"multiple_new_challenge_seeds\",status=\"pending\"}[1m])",
           "legendFormat": "multiple_new_challenge_seeds (pending)",
           "refId": "C"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"process_submit_proof_request\",status=\"success\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"process_submit_proof_request\",status=\"success\"}[1m])",
           "legendFormat": "process_submit_proof_request (success)",
           "refId": "D"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"process_submit_proof_request\",status=\"failure\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"process_submit_proof_request\",status=\"failure\"}[1m])",
           "legendFormat": "process_submit_proof_request (failure)",
           "refId": "E"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"process_submit_proof_request\",status=\"pending\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"process_submit_proof_request\",status=\"pending\"}[1m])",
           "legendFormat": "process_submit_proof_request (pending)",
           "refId": "F"
         }
@@ -569,19 +569,19 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.50, sum(rate(storagehub_bsp_proof_generation_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(storagehub_bsp_proof_generation_seconds_bucket{role=\"bsp\"}[5m])) by (le))",
           "legendFormat": "Proof Generation p50",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.95, sum(rate(storagehub_bsp_proof_generation_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(storagehub_bsp_proof_generation_seconds_bucket{role=\"bsp\"}[5m])) by (le))",
           "legendFormat": "Proof Generation p95",
           "refId": "B"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.99, sum(rate(storagehub_bsp_proof_generation_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(storagehub_bsp_proof_generation_seconds_bucket{role=\"bsp\"}[5m])) by (le))",
           "legendFormat": "Proof Generation p99",
           "refId": "C"
         }
@@ -660,19 +660,19 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"remote_download_request\",status=\"success\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"remote_download_request\",status=\"success\"}[1m])",
           "legendFormat": "remote_download_request (success)",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"remote_download_request\",status=\"failure\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"remote_download_request\",status=\"failure\"}[1m])",
           "legendFormat": "remote_download_request (failure)",
           "refId": "B"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"remote_download_request\",status=\"pending\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"remote_download_request\",status=\"pending\"}[1m])",
           "legendFormat": "remote_download_request (pending)",
           "refId": "C"
         }
@@ -751,49 +751,49 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"last_chargeable_info_updated\",status=\"success\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"last_chargeable_info_updated\",status=\"success\"}[1m])",
           "legendFormat": "last_chargeable_info_updated (success)",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"last_chargeable_info_updated\",status=\"failure\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"last_chargeable_info_updated\",status=\"failure\"}[1m])",
           "legendFormat": "last_chargeable_info_updated (failure)",
           "refId": "B"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"process_stop_storing_for_insolvent_user_request\",status=\"success\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"process_stop_storing_for_insolvent_user_request\",status=\"success\"}[1m])",
           "legendFormat": "process_stop_storing_for_insolvent_user_request (success)",
           "refId": "C"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"process_stop_storing_for_insolvent_user_request\",status=\"failure\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"process_stop_storing_for_insolvent_user_request\",status=\"failure\"}[1m])",
           "legendFormat": "process_stop_storing_for_insolvent_user_request (failure)",
           "refId": "D"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"user_without_funds\",status=\"success\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"user_without_funds\",status=\"success\"}[1m])",
           "legendFormat": "user_without_funds (success)",
           "refId": "E"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"user_without_funds\",status=\"failure\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"user_without_funds\",status=\"failure\"}[1m])",
           "legendFormat": "user_without_funds (failure)",
           "refId": "F"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"sp_stop_storing_insolvent_user\",status=\"success\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"sp_stop_storing_insolvent_user\",status=\"success\"}[1m])",
           "legendFormat": "sp_stop_storing_insolvent_user (success)",
           "refId": "G"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"sp_stop_storing_insolvent_user\",status=\"failure\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"sp_stop_storing_insolvent_user\",status=\"failure\"}[1m])",
           "legendFormat": "sp_stop_storing_insolvent_user (failure)",
           "refId": "H"
         }
@@ -872,25 +872,25 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"finalised_bsp_confirm_stopped_storing\",status=\"success\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"finalised_bsp_confirm_stopped_storing\",status=\"success\"}[1m])",
           "legendFormat": "finalised_bsp_confirm_stopped_storing (success)",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"finalised_bsp_confirm_stopped_storing\",status=\"failure\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"finalised_bsp_confirm_stopped_storing\",status=\"failure\"}[1m])",
           "legendFormat": "finalised_bsp_confirm_stopped_storing (failure)",
           "refId": "B"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"finalised_trie_remove_mutations_applied_for_bsp\",status=\"success\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"finalised_trie_remove_mutations_applied_for_bsp\",status=\"success\"}[1m])",
           "legendFormat": "finalised_trie_remove_mutations_applied_for_bsp (success)",
           "refId": "C"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"finalised_trie_remove_mutations_applied_for_bsp\",status=\"failure\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"finalised_trie_remove_mutations_applied_for_bsp\",status=\"failure\"}[1m])",
           "legendFormat": "finalised_trie_remove_mutations_applied_for_bsp (failure)",
           "refId": "D"
         }
@@ -969,55 +969,55 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"move_bucket_requested\",status=\"success\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"move_bucket_requested\",status=\"success\"}[1m])",
           "legendFormat": "move_bucket_requested (success)",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"move_bucket_requested\",status=\"failure\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"move_bucket_requested\",status=\"failure\"}[1m])",
           "legendFormat": "move_bucket_requested (failure)",
           "refId": "B"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"move_bucket_requested\",status=\"pending\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"move_bucket_requested\",status=\"pending\"}[1m])",
           "legendFormat": "move_bucket_requested (pending)",
           "refId": "C"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"move_bucket_accepted\",status=\"success\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"move_bucket_accepted\",status=\"success\"}[1m])",
           "legendFormat": "move_bucket_accepted (success)",
           "refId": "D"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"move_bucket_accepted\",status=\"failure\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"move_bucket_accepted\",status=\"failure\"}[1m])",
           "legendFormat": "move_bucket_accepted (failure)",
           "refId": "E"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"move_bucket_rejected\",status=\"success\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"move_bucket_rejected\",status=\"success\"}[1m])",
           "legendFormat": "move_bucket_rejected (success)",
           "refId": "F"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"move_bucket_rejected\",status=\"failure\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"move_bucket_rejected\",status=\"failure\"}[1m])",
           "legendFormat": "move_bucket_rejected (failure)",
           "refId": "G"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"move_bucket_expired\",status=\"success\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"move_bucket_expired\",status=\"success\"}[1m])",
           "legendFormat": "move_bucket_expired (success)",
           "refId": "H"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_event_handler_total{event=\"move_bucket_expired\",status=\"failure\"}[1m])",
+          "expr": "increase(storagehub_event_handler_total{role=\"bsp\",event=\"move_bucket_expired\",status=\"failure\"}[1m])",
           "legendFormat": "move_bucket_expired (failure)",
           "refId": "I"
         }
@@ -1093,7 +1093,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(storagehub_bytes_uploaded_total{status=\"success\"}[5m])",
+          "expr": "rate(storagehub_bytes_uploaded_total{role=\"bsp\",status=\"success\"}[5m])",
           "legendFormat": "Uploaded",
           "refId": "A"
         }
@@ -1133,13 +1133,365 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(storagehub_bytes_uploaded_total{status=\"success\"})",
+          "expr": "sum(storagehub_bytes_uploaded_total{role=\"bsp\",status=\"success\"})",
           "legendFormat": "Total",
           "refId": "A"
         }
       ],
       "title": "Total Bytes Uploaded",
       "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 68 },
+      "id": 800,
+      "panels": [],
+      "title": "Resource Usage",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          },
+          "unit": "percent",
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Process CPU" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "System CPU" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 69 },
+      "id": 801,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "storagehub_process_cpu_usage_percent{role=\"bsp\"}",
+          "legendFormat": "Process CPU ({{job}})",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "storagehub_system_cpu_usage_percent{role=\"bsp\"}",
+          "legendFormat": "System CPU ({{job}})",
+          "refId": "B"
+        }
+      ],
+      "title": "CPU Usage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          },
+          "unit": "bytes"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Process RSS" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "System Used" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "System Available" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "System Total" },
+            "properties": [
+              { "id": "color", "value": { "fixedColor": "purple", "mode": "fixed" } },
+              { "id": "custom.lineStyle", "value": { "dash": [10, 10], "fill": "dash" } }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 69 },
+      "id": 802,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "storagehub_process_memory_rss_bytes{role=\"bsp\"}",
+          "legendFormat": "Process RSS ({{job}})",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "avg(storagehub_system_memory_used_bytes{role=\"bsp\"})",
+          "legendFormat": "System Used",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "avg(storagehub_system_memory_available_bytes{role=\"bsp\"})",
+          "legendFormat": "System Available",
+          "refId": "C"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "avg(storagehub_system_memory_total_bytes{role=\"bsp\"})",
+          "legendFormat": "System Total",
+          "refId": "D"
+        }
+      ],
+      "title": "Memory Usage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "orange", "value": 75 },
+              { "color": "red", "value": 90 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 77 },
+      "id": 803,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "avg(storagehub_process_cpu_usage_percent{role=\"bsp\"})",
+          "legendFormat": "Process CPU",
+          "refId": "A"
+        }
+      ],
+      "title": "Process CPU (avg)",
+      "type": "gauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "orange", "value": 75 },
+              { "color": "red", "value": 90 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 77 },
+      "id": 804,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "avg(storagehub_system_cpu_usage_percent{role=\"bsp\"})",
+          "legendFormat": "System CPU",
+          "refId": "A"
+        }
+      ],
+      "title": "System CPU (avg)",
+      "type": "gauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "blue", "value": null }]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 77 },
+      "id": 805,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(storagehub_process_memory_rss_bytes{role=\"bsp\"})",
+          "legendFormat": "Process RSS",
+          "refId": "A"
+        }
+      ],
+      "title": "Process Memory (total)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "percentage",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "orange", "value": 75 },
+              { "color": "red", "value": 90 }
+            ]
+          },
+          "max": 100,
+          "min": 0,
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 77 },
+      "id": 806,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "avg(storagehub_system_memory_used_bytes{role=\"bsp\"} / storagehub_system_memory_total_bytes{role=\"bsp\"} * 100)",
+          "legendFormat": "System Memory",
+          "refId": "A"
+        }
+      ],
+      "title": "System Memory Usage",
+      "type": "gauge"
     }
   ],
   "refresh": "5s",
