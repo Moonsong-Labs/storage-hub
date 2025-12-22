@@ -100,7 +100,7 @@ pub trait EventHandler<E: EventBusMessage>: Clone + Send + 'static {
 pub struct EventBusListener<
     T: EventBusMessage,
     E: EventHandler<T>,
-    M: LifecycleMetricRecorder = NoMetricRecorder,
+    M: LifecycleMetricRecorder = NoOpMetricRecorder,
 > {
     spawner: TaskSpawner,
     receiver: broadcast::Receiver<T>,
@@ -192,21 +192,17 @@ impl<T: EventBusMessage, E: EventHandler<T> + Send + 'static, M: LifecycleMetric
 /// Implemented in downstream crates with concrete metrics.
 pub trait LifecycleMetricRecorder: Clone + Send + Sync + 'static {
     /// Record that an event was received and handler is starting (pending state)
-    fn record_pending(&self);
+    fn record_pending(&self) {}
 
     /// Record that the handler completed successfully, with duration in seconds
-    fn record_success(&self, duration_secs: f64);
+    fn record_success(&self, _duration_secs: f64) {}
 
     /// Record that the handler failed, with duration in seconds
-    fn record_failure(&self, duration_secs: f64);
+    fn record_failure(&self, _duration_secs: f64) {}
 }
 
 /// No-op implementation when metrics are disabled or not specified.
 #[derive(Clone, Default)]
-pub struct NoMetricRecorder;
+pub struct NoOpMetricRecorder;
 
-impl LifecycleMetricRecorder for NoMetricRecorder {
-    fn record_pending(&self) {}
-    fn record_success(&self, _duration_secs: f64) {}
-    fn record_failure(&self, _duration_secs: f64) {}
-}
+impl LifecycleMetricRecorder for NoOpMetricRecorder {}

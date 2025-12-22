@@ -665,9 +665,9 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
     let critical = args.critical.map_or(false, |lit| lit.value);
     let critical_lit = syn::LitBool::new(critical, Span::call_site());
 
-    // Use the provided metric recorder or default to NoMetricRecorder
+    // Use the provided metric recorder or default to NoOpMetricRecorder
     let metric_recorder = args.metric_recorder.map_or_else(
-        || quote! { ::shc_actors_framework::event_bus::NoMetricRecorder },
+        || quote! { ::shc_actors_framework::event_bus::NoOpMetricRecorder },
         |expr| quote! { #expr },
     );
 
@@ -906,7 +906,7 @@ pub fn subscribe_actor_event_map(input: TokenStream) -> TokenStream {
             .as_ref()
             .unwrap_or(&default_critical);
 
-        // Generate metric recorder - either EventMetricRecorder or NoMetricRecorder
+        // Generate metric recorder - either EventMetricRecorder or NoOpMetricRecorder
         let metric_recorder_expr = if let Some(metrics_expr) = &args.metrics {
             let event_name = to_snake_case(&extract_base_type_name(event_type));
             quote! {
@@ -916,7 +916,7 @@ pub fn subscribe_actor_event_map(input: TokenStream) -> TokenStream {
                 )
             }
         } else {
-            quote! { ::shc_actors_framework::event_bus::NoMetricRecorder }
+            quote! { ::shc_actors_framework::event_bus::NoOpMetricRecorder }
         };
 
         quote! {
