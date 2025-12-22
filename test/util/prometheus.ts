@@ -68,143 +68,75 @@ export interface MetricDefinition {
  * exposed by StorageHub nodes.
  */
 export const ALL_STORAGEHUB_METRICS: Record<string, MetricDefinition> = {
-  // BSP Counters
-  bsp_storage_requests_total: {
-    name: "storagehub_bsp_storage_requests_total",
-    type: "counter",
-    labels: ["status"],
-    description: "BSP storage request confirmations (volunteer to confirm lifecycle)"
+  // === System Resource Metrics (Gauges) ===
+  system_cpu_usage_percent: {
+    name: "storagehub_system_cpu_usage_percent",
+    type: "gauge",
+    labels: [],
+    description: "Current system-wide CPU usage percentage (0-100)"
   },
-  bsp_proofs_submitted_total: {
-    name: "storagehub_bsp_proofs_submitted_total",
-    type: "counter",
-    labels: ["status"],
-    description: "BSP proof submission attempts in response to challenges"
+  system_memory_total_bytes: {
+    name: "storagehub_system_memory_total_bytes",
+    type: "gauge",
+    labels: [],
+    description: "Total system memory in bytes"
   },
-  bsp_fees_charged_total: {
-    name: "storagehub_bsp_fees_charged_total",
-    type: "counter",
-    labels: ["status"],
-    description: "BSP fee charge extrinsic submissions"
+  system_memory_used_bytes: {
+    name: "storagehub_system_memory_used_bytes",
+    type: "gauge",
+    labels: [],
+    description: "Used system memory in bytes"
   },
-  bsp_files_deleted_total: {
-    name: "storagehub_bsp_files_deleted_total",
-    type: "counter",
-    labels: ["status"],
-    description: "BSP file deletion events (TrieRemoveMutation)"
+  system_memory_available_bytes: {
+    name: "storagehub_system_memory_available_bytes",
+    type: "gauge",
+    labels: [],
+    description: "Available system memory in bytes"
   },
-  bsp_bucket_moves_total: {
-    name: "storagehub_bsp_bucket_moves_total",
-    type: "counter",
-    labels: ["status"],
-    description: "BSP bucket move events (requested/accepted/rejected/expired)"
+  process_cpu_usage_percent: {
+    name: "storagehub_process_cpu_usage_percent",
+    type: "gauge",
+    labels: [],
+    description: "Current process CPU usage percentage"
   },
-  bsp_download_requests_total: {
-    name: "storagehub_bsp_download_requests_total",
-    type: "counter",
-    labels: ["status"],
-    description: "BSP file download requests served to requesters"
-  },
-  bsp_upload_chunks_received_total: {
-    name: "storagehub_bsp_upload_chunks_received_total",
-    type: "counter",
-    labels: ["status"],
-    description: "BSP chunk upload batches received (per batch, not per chunk)"
+  process_memory_rss_bytes: {
+    name: "storagehub_process_memory_rss_bytes",
+    type: "gauge",
+    labels: [],
+    description: "Current process resident set size (RSS) in bytes"
   },
 
-  // MSP Counters
-  msp_storage_requests_total: {
-    name: "storagehub_msp_storage_requests_total",
+  // === Event Handler Lifecycle Metrics ===
+  event_handler_total: {
+    name: "storagehub_event_handler_total",
     type: "counter",
-    labels: ["status"],
-    description: "MSP storage request responses (setup to respond lifecycle)"
+    labels: ["event", "status"],
+    description: "Event handler invocations by event type and status (pending/success/failure)"
   },
-  msp_files_distributed_total: {
-    name: "storagehub_msp_files_distributed_total",
-    type: "counter",
-    labels: ["status"],
-    description: "MSP file distribution attempts to BSPs"
-  },
-  msp_files_deleted_total: {
-    name: "storagehub_msp_files_deleted_total",
-    type: "counter",
-    labels: ["status"],
-    description: "MSP file deletions from file storage"
-  },
-  msp_buckets_deleted_total: {
-    name: "storagehub_msp_buckets_deleted_total",
-    type: "counter",
-    labels: ["status"],
-    description: "MSP bucket deletions (move/stop-storing/insolvent events)"
-  },
-  msp_fees_charged_total: {
-    name: "storagehub_msp_fees_charged_total",
-    type: "counter",
-    labels: ["status"],
-    description: "MSP fee charge extrinsic submissions"
-  },
-  msp_bucket_moves_total: {
-    name: "storagehub_msp_bucket_moves_total",
-    type: "counter",
-    labels: ["status"],
-    description: "MSP bucket move downloads (taking over from another MSP)"
-  },
-  msp_bucket_move_retries_total: {
-    name: "storagehub_msp_bucket_move_retries_total",
-    type: "counter",
-    labels: ["status"],
-    description: "MSP bucket move download retry attempts"
-  },
-  msp_forest_verifications_total: {
-    name: "storagehub_msp_forest_verifications_total",
-    type: "counter",
-    labels: ["status"],
-    description: "MSP bucket forest verification runs"
+  event_handler_seconds: {
+    name: "storagehub_event_handler_seconds",
+    type: "histogram",
+    labels: ["event", "status"],
+    description: "Event handler processing duration by event type and status"
   },
 
-  // SP Counters
-  sp_slash_submissions_total: {
-    name: "storagehub_sp_slash_submissions_total",
-    type: "counter",
-    labels: ["status"],
-    description: "SP slash extrinsic submissions for slashable providers"
-  },
-
-  // Other Counters
-  insolvent_users_processed_total: {
-    name: "storagehub_insolvent_users_processed_total",
-    type: "counter",
-    labels: ["status"],
-    description: "Insolvent user processing events (BSP and MSP)"
-  },
-  fisherman_batch_deletions_total: {
-    name: "storagehub_fisherman_batch_deletions_total",
-    type: "counter",
-    labels: ["status"],
-    description: "Fisherman batch deletion processing results"
-  },
-
-  // Histograms
+  // === BSP Metrics ===
   bsp_proof_generation_seconds: {
     name: "storagehub_bsp_proof_generation_seconds",
     type: "histogram",
     labels: ["status"],
     description: "BSP proof generation duration for challenge responses"
   },
+
+  // === General Metrics ===
   file_transfer_seconds: {
     name: "storagehub_file_transfer_seconds",
     type: "histogram",
     labels: ["status"],
     description: "Outbound file chunk transfer duration (sending to peers)"
   },
-  msp_forest_verification_seconds: {
-    name: "storagehub_msp_forest_verification_seconds",
-    type: "histogram",
-    labels: ["status"],
-    description: "MSP bucket forest verification duration"
-  },
 
-  // Download Metrics
+  // === Download Metrics ===
   bytes_downloaded_total: {
     name: "storagehub_bytes_downloaded_total",
     type: "counter",
@@ -224,7 +156,7 @@ export const ALL_STORAGEHUB_METRICS: Record<string, MetricDefinition> = {
     description: "Complete file download duration from peers"
   },
 
-  // Upload Metrics
+  // === Upload Metrics ===
   bytes_uploaded_total: {
     name: "storagehub_bytes_uploaded_total",
     type: "counter",
