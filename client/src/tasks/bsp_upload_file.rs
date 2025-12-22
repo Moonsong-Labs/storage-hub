@@ -178,7 +178,6 @@ where
 
         let file_complete = match self.handle_remote_upload_request_event(event.clone()).await {
             Ok((complete, bytes_processed)) => {
-                // Increment metric for bytes uploaded
                 inc_counter_by!(
                     handler: self.storage_hub_handler,
                     bytes_uploaded_total,
@@ -477,13 +476,10 @@ where
         &mut self,
         event: NewStorageRequest<Runtime>,
     ) -> anyhow::Result<()> {
-        // Track storage request processing timing for metrics.
         let start_time = std::time::Instant::now();
 
-        // Wrap the main logic to track success/failure
         let result = self.handle_new_storage_request_inner(event).await;
 
-        // Record histogram with status based on result
         observe_histogram!(
             handler: self.storage_hub_handler,
             storage_request_setup_seconds,

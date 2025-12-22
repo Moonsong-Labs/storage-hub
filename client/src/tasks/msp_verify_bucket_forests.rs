@@ -97,7 +97,6 @@ where
             return Ok("Skipped VerifyMspBucketForests: no buckets managed by MSP".to_string());
         }
 
-        // Start timing the verification process
         let start_time = std::time::Instant::now();
         let mut missing_forests = false;
 
@@ -127,10 +126,8 @@ where
             }
         }
 
-        // Record metrics based on verification result
         let elapsed = start_time.elapsed();
         if missing_forests {
-            // Record duration with failure status
             observe_histogram!(
                 handler: self.storage_hub_handler,
                 msp_forest_verification_seconds,
@@ -142,7 +139,6 @@ where
             ));
         }
 
-        // Record duration with success status
         observe_histogram!(
             handler: self.storage_hub_handler,
             msp_forest_verification_seconds,

@@ -153,7 +153,6 @@ where
             );
         } else {
             // If file key is not in Forest, we can now safely remove it from the File Storage.
-            // Metrics are recorded inside remove_file_from_file_storage.
             self.remove_file_from_file_storage(&event.file_key.into())
                 .await?;
         }

@@ -501,15 +501,12 @@ where
         seed: RandomnessOutput<Runtime>,
         provider_id: ProofsDealerProviderId<Runtime>,
     ) -> anyhow::Result<KeyProof<Runtime>> {
-        // Track proof generation timing for metrics.
         let start_time = std::time::Instant::now();
 
-        // Execute proof generation and track timing for both success and failure.
         let result = self
             .generate_key_proof_inner(file_key, seed, provider_id)
             .await;
 
-        // Record proof generation timing with appropriate status.
         observe_histogram!(
             handler: self.storage_hub_handler,
             bsp_proof_generation_seconds,

@@ -292,7 +292,6 @@ where
             event.fingerprint
         );
 
-        // Track storage request processing timing for metrics.
         let start_time = std::time::Instant::now();
 
         let bucket_id = H256::from_slice(event.bucket_id.as_ref());
@@ -301,7 +300,6 @@ where
         let result = self.handle_new_storage_request_event(event).await;
         match result {
             Ok(()) => {
-                // Record histogram with status based on result
                 observe_histogram!(
                     handler: self.storage_hub_handler,
                     storage_request_setup_seconds,
