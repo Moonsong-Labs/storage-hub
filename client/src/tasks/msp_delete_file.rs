@@ -100,7 +100,6 @@ where
             "Processing finalised bucket mutations applied for bucket [{:?}]",
             event.bucket_id
         );
-
         debug!(target: LOG_TARGET, "Mutations to apply: {:?}", event.mutations);
 
         for mutation in event.mutations {

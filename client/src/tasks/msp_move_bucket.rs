@@ -237,7 +237,6 @@ where
                 );
             }
             Err(crate::file_download_manager::BucketDownloadError::AlreadyBeingDownloaded(_)) => {
-                // Don't count as failure - it's already being handled by another task
                 info!(
                     target: LOG_TARGET,
                     "Bucket {:?} is already being downloaded by another task", event.bucket_id

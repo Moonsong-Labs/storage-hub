@@ -65,13 +65,12 @@ where
             provider,
         );
 
-        match self.handle_slashable_provider_event(event).await {
-            Ok(()) => Ok(format!(
-                "Handled SlashableProvider event for provider [{:x}]",
-                provider
-            )),
-            Err(e) => Err(e),
-        }
+        self.handle_slashable_provider_event(event).await?;
+
+        Ok(format!(
+            "Handled SlashableProvider event for provider [{:x}]",
+            provider
+        ))
     }
 }
 

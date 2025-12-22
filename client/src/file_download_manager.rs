@@ -50,7 +50,7 @@ const RANDOM_PEERS_TO_SELECT: usize = 3;
 const MAX_CONCURRENT_BUCKET_DOWNLOADS: usize = 2;
 
 /// Configuration for file download limits and parallelism settings.
-#[derive(Clone, Copy)]
+#[derive(Copy)]
 pub struct FileDownloadLimits {
     /// Maximum number of files to download in parallel
     pub max_concurrent_file_downloads: usize,
@@ -81,6 +81,21 @@ impl Default for FileDownloadLimits {
             best_peers_to_select: BEST_PEERS_TO_SELECT,
             random_peers_to_select: RANDOM_PEERS_TO_SELECT,
             max_concurrent_bucket_downloads: MAX_CONCURRENT_BUCKET_DOWNLOADS,
+        }
+    }
+}
+
+impl Clone for FileDownloadLimits {
+    fn clone(&self) -> Self {
+        Self {
+            max_concurrent_file_downloads: self.max_concurrent_file_downloads,
+            max_concurrent_chunks_per_file: self.max_concurrent_chunks_per_file,
+            max_chunks_per_request: self.max_chunks_per_request,
+            chunk_request_peer_retry_attempts: self.chunk_request_peer_retry_attempts,
+            download_retry_attempts: self.download_retry_attempts,
+            best_peers_to_select: self.best_peers_to_select,
+            random_peers_to_select: self.random_peers_to_select,
+            max_concurrent_bucket_downloads: self.max_concurrent_bucket_downloads,
         }
     }
 }

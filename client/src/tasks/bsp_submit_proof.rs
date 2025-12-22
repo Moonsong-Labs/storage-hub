@@ -317,8 +317,7 @@ where
         };
 
         // Attempt to submit the extrinsic with retries and tip increase.
-        let submit_result = self
-            .storage_hub_handler
+        self.storage_hub_handler
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
@@ -338,18 +337,13 @@ where
                     .with_should_retry(Some(Box::new(should_retry))),
                 false,
             )
-            .await;
-
-        match &submit_result {
-            Ok(_) => {
-                trace!(target: LOG_TARGET, "Proof submitted successfully");
-            }
-            Err(e) => {
+            .await
+            .map_err(|e| {
                 error!(target: LOG_TARGET, "❌ Failed to submit proof due to: {}", e);
-            }
-        }
+                anyhow!("Failed to submit proof due to: {}", e)
+            })?;
 
-        submit_result.map_err(|e| anyhow!("Failed to submit proof due to: {}", e))?;
+        trace!(target: LOG_TARGET, "Proof submitted successfully");
 
         // Release the forest root write "lock" and finish the task.
         self.storage_hub_handler

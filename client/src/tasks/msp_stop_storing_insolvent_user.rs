@@ -245,15 +245,15 @@ where
         let mut file_storage_write = file_storage.write().await;
 
         // Delete all files in the bucket from the file storage.
-        if let Err(e) = file_storage_write.delete_files_with_prefix(
-            &event
-                .bucket_id
-                .as_ref()
-                .try_into()
-                .map_err(|_| anyhow!("Invalid bucket id"))?,
-        ) {
-            return Err(anyhow!("Failed to delete files with prefix: {:?}", e));
-        }
+        file_storage_write
+            .delete_files_with_prefix(
+                &event
+                    .bucket_id
+                    .as_ref()
+                    .try_into()
+                    .map_err(|_| anyhow!("Invalid bucket id"))?,
+            )
+            .map_err(|e| anyhow!("Failed to delete files with prefix: {:?}", e))?;
 
         // Release the write-lock on the file storage.
         drop(file_storage_write);
