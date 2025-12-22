@@ -906,18 +906,16 @@ pub fn subscribe_actor_event_map(input: TokenStream) -> TokenStream {
             .as_ref()
             .unwrap_or(&default_critical);
 
-        // Generate metric recorder - either EventMetricRecorder or NoOpMetricRecorder
-        let metric_recorder_expr = if let Some(metrics_expr) = &args.metrics {
+        // Only generate metric_recorder parameter when metrics are provided
+        let metric_recorder_tokens = args.metrics.as_ref().map(|metrics_expr| {
             let event_name = to_snake_case(&extract_base_type_name(event_type));
             quote! {
-                crate::metrics::EventMetricRecorder::new(
+                metric_recorder: crate::metrics::EventMetricRecorder::new(
                     #metrics_expr.clone(),
                     #event_name,
-                )
+                ),
             }
-        } else {
-            quote! { ::shc_actors_framework::event_bus::NoOpMetricRecorder }
-        };
+        });
 
         quote! {
             subscribe_actor_event!(
@@ -927,7 +925,7 @@ pub fn subscribe_actor_event_map(input: TokenStream) -> TokenStream {
                 spawner: #spawner,
                 context: #context,
                 critical: #critical,
-                metric_recorder: #metric_recorder_expr,
+                #metric_recorder_tokens
             );
         }
     });
