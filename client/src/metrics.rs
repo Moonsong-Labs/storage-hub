@@ -115,11 +115,6 @@ pub struct StorageHubMetrics {
     /// Measures the duration of generate_key_proof operations.
     pub bsp_proof_generation_seconds: HistogramVec,
 
-    // === MSP Metrics ===
-    /// Time spent verifying all bucket forests exist, labeled by status.
-    /// Measures the duration of the periodic bucket forest verification task.
-    pub msp_forest_verification_seconds: HistogramVec,
-
     // === General Metrics ===
     /// Time spent handling the initial NewStorageRequest event in seconds.
     /// For BSP: Includes validation, waiting for volunteer tick eligibility, and sending volunteer extrinsic.
@@ -185,19 +180,6 @@ impl StorageHubMetrics {
                     HistogramOpts::new(
                         "storagehub_bsp_proof_generation_seconds",
                         "BSP proof generation duration for challenge responses",
-                    )
-                    .buckets(FAST_OP_BUCKETS.to_vec()),
-                    &["status"],
-                )?,
-                registry,
-            )?,
-
-            // MSP metrics
-            msp_forest_verification_seconds: register(
-                HistogramVec::new(
-                    HistogramOpts::new(
-                        "storagehub_msp_forest_verification_seconds",
-                        "MSP bucket forest verification duration",
                     )
                     .buckets(FAST_OP_BUCKETS.to_vec()),
                     &["status"],
