@@ -908,7 +908,17 @@ pub fn subscribe_actor_event_map(input: TokenStream) -> TokenStream {
 
         // Only generate metric_recorder parameter when metrics are provided
         let metric_recorder_tokens = args.metrics.as_ref().map(|metrics_expr| {
-            let event_name = to_snake_case(&extract_base_type_name(event_type));
+            // Extract base type name, stripping any generics (e.g., NewStorageRequest<Runtime> -> NewStorageRequest)
+            let base_type_name = match event_type {
+                syn::Type::Path(type_path) => type_path
+                    .path
+                    .segments
+                    .last()
+                    .map(|seg| seg.ident.to_string())
+                    .unwrap_or_else(|| event_type.to_token_stream().to_string()),
+                _ => event_type.to_token_stream().to_string(),
+            };
+            let event_name = to_snake_case(&base_type_name);
             quote! {
                 metric_recorder: crate::metrics::EventMetricRecorder::new(
                     #metrics_expr.clone(),
@@ -952,22 +962,6 @@ fn to_snake_case(s: &str) -> String {
         }
     }
     result
-}
-
-/// Extracts the base type name from a type, stripping any generics.
-/// For example: `NewStorageRequest<Runtime>` -> `NewStorageRequest`
-fn extract_base_type_name(ty: &syn::Type) -> String {
-    match ty {
-        syn::Type::Path(type_path) => {
-            // Get the last segment's identifier (ignoring generics)
-            if let Some(segment) = type_path.path.segments.last() {
-                segment.ident.to_string()
-            } else {
-                ty.to_token_stream().to_string()
-            }
-        }
-        _ => ty.to_token_stream().to_string(),
-    }
 }
 
 /// Parser for the `#[actor_command(...)]` attribute macro
