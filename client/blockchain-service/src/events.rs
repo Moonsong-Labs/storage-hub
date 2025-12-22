@@ -385,14 +385,6 @@ pub struct DistributeFileToBsp<Runtime: StorageEnableRuntime> {
     pub bsp_id: BackupStorageProviderId<Runtime>,
 }
 
-/// Event emitted to verify that local MSP forests exist for all buckets managed by this MSP.
-///
-/// A handler of this event should query the runtime for buckets managed by this MSP and
-/// check that each bucket has a corresponding local forest storage instance.
-#[derive(Debug, Clone, ActorEvent)]
-#[actor(actor = "blockchain_service")]
-pub struct VerifyMspBucketForests {}
-
 /// The event bus provider for the BlockchainService actor.
 ///
 /// It holds the event buses for the different events that the BlockchainService actor
