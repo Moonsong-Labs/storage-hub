@@ -721,12 +721,12 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
 /// # Examples
 ///
 /// ```ignore
-/// // Basic usage with multiple event-task mappings and automatic metrics
+/// // Basic usage with multiple event-task mappings
 /// subscribe_actor_event_map!(
 ///     service: &self.blockchain,
 ///     spawner: &self.task_spawner,
 ///     context: self.clone(),
-///     metrics: self.metrics.clone(),  // Enables automatic lifecycle metrics
+///     metrics: self.metrics.clone(),
 ///     critical: true,
 ///     [
 ///         // Override critical for specific mapping
@@ -906,36 +906,29 @@ pub fn subscribe_actor_event_map(input: TokenStream) -> TokenStream {
             .as_ref()
             .unwrap_or(&default_critical);
 
-        // Generate metric recorder if metrics are provided
-        if let Some(metrics_expr) = &args.metrics {
-            // Extract base type name and convert to snake_case for metric label
+        // Generate metric recorder - either EventMetricRecorder or NoMetricRecorder
+        let metric_recorder_expr = if let Some(metrics_expr) = &args.metrics {
             let event_name = to_snake_case(&extract_base_type_name(event_type));
-
             quote! {
-                subscribe_actor_event!(
-                    event: #event_type,
-                    task: #task_type,
-                    service: #service,
-                    spawner: #spawner,
-                    context: #context,
-                    critical: #critical,
-                    metric_recorder: crate::metrics::EventMetricRecorder::new(
-                        #metrics_expr.clone(),
-                        #event_name,
-                    ),
-                );
+                crate::metrics::EventMetricRecorder::new(
+                    #metrics_expr.clone(),
+                    #event_name,
+                )
             }
         } else {
-            quote! {
-                subscribe_actor_event!(
-                    event: #event_type,
-                    task: #task_type,
-                    service: #service,
-                    spawner: #spawner,
-                    context: #context,
-                    critical: #critical,
-                );
-            }
+            quote! { ::shc_actors_framework::event_bus::NoMetricRecorder }
+        };
+
+        quote! {
+            subscribe_actor_event!(
+                event: #event_type,
+                task: #task_type,
+                service: #service,
+                spawner: #spawner,
+                context: #context,
+                critical: #critical,
+                metric_recorder: #metric_recorder_expr,
+            );
         }
     });
 
