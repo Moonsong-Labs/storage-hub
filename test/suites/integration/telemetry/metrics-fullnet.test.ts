@@ -66,12 +66,12 @@ await describeMspNet(
     });
 
     it("Storage request metrics increment after batch file uploads", async () => {
-      // Get initial metric values
+      // Get initial metric values (using centralized event handler metrics)
       const initialMspRequests = await userApi.prometheus.getMetricValue(
-        'storagehub_msp_storage_requests_total{job="storagehub-msp-1"}'
+        'storagehub_event_handler_total{handler="msp_upload_file_task",job="storagehub-msp-1"}'
       );
       const initialBspRequests = await userApi.prometheus.getMetricValue(
-        'storagehub_bsp_storage_requests_total{job="storagehub-bsp"}'
+        'storagehub_event_handler_total{handler="bsp_upload_file_task",job="storagehub-bsp"}'
       );
       console.log(`Initial MSP storage requests: ${initialMspRequests}`);
       console.log(`Initial BSP storage requests: ${initialBspRequests}`);
@@ -142,10 +142,10 @@ await describeMspNet(
 
       // Check that metrics have incremented
       const finalMspRequests = await userApi.prometheus.getMetricValue(
-        'storagehub_msp_storage_requests_total{job="storagehub-msp-1"}'
+        'storagehub_event_handler_total{handler="msp_upload_file_task",job="storagehub-msp-1"}'
       );
       const finalBspRequests = await userApi.prometheus.getMetricValue(
-        'storagehub_bsp_storage_requests_total{job="storagehub-bsp"}'
+        'storagehub_event_handler_total{handler="bsp_upload_file_task",job="storagehub-bsp"}'
       );
       console.log(`Final MSP storage requests: ${finalMspRequests}`);
       console.log(`Final BSP storage requests: ${finalBspRequests}`);
@@ -242,12 +242,12 @@ await describeMspNet(
     });
 
     it("Prometheus can aggregate metrics across nodes", async () => {
-      // Test aggregation query summing storage requests across all nodes
+      // Test aggregation query summing event handler metrics across all nodes
       const sumResult = await userApi.prometheus.query(
-        "sum(storagehub_msp_storage_requests_total) by (status)"
+        'sum(storagehub_event_handler_total{handler="msp_upload_file_task"}) by (status)'
       );
       const bspSumResult = await userApi.prometheus.query(
-        "sum(storagehub_bsp_storage_requests_total) by (status)"
+        'sum(storagehub_event_handler_total{handler="bsp_upload_file_task"}) by (status)'
       );
 
       console.log("\nAggregated metrics:");

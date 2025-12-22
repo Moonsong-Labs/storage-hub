@@ -276,6 +276,7 @@ where
             service: &self.blockchain,
             spawner: &self.task_spawner,
             context: self.clone(),
+            metrics: self.metrics.clone(),
             critical: true,
             [
                 // Override critical for NewStorageRequest to make it non-critical
@@ -309,6 +310,7 @@ where
             service: &self.file_transfer,
             spawner: &self.task_spawner,
             context: self.clone(),
+            metrics: self.metrics.clone(),
             critical: false,
             [
                 RemoteUploadRequest<Runtime> => MspUploadFileTask,
@@ -320,6 +322,7 @@ where
             service: &self.blockchain,
             spawner: &self.task_spawner,
             context: self.clone(),
+            metrics: self.metrics.clone(),
             critical: true,
             [
                 NewStorageRequest<Runtime> => MspUploadFileTask,
@@ -375,6 +378,7 @@ where
             service: &self.blockchain,
             spawner: &self.task_spawner,
             context: self.clone(),
+            metrics: self.metrics.clone(),
             critical: true,
             [
                 NewStorageRequest<Runtime> => BspUploadFileTask,
@@ -414,6 +418,7 @@ where
             service: &self.file_transfer,
             spawner: &self.task_spawner,
             context: self.clone(),
+            metrics: self.metrics.clone(),
             critical: false,
             [
                 RemoteDownloadRequest<Runtime> => BspDownloadFileTask,
@@ -442,6 +447,7 @@ where
             service: fisherman,
             spawner: &self.task_spawner,
             context: self.clone(),
+            metrics: self.metrics.clone(),
             critical: true,
             [
                 // This task processes batched file deletions (for user deletion requests and incomplete storage requests) after every configured interval (`fisherman_batch_interval_seconds`) of time.

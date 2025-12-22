@@ -20,8 +20,6 @@ use sp_runtime::traits::SaturatedConversion;
 
 use crate::{
     handler::StorageHubHandler,
-    inc_counter,
-    metrics::{STATUS_FAILURE, STATUS_SUCCESS},
     types::{BspForestStorageHandlerT, ForestStorageKey, ShNodeType},
 };
 
@@ -151,21 +149,9 @@ where
 
             match charging_result {
                 Ok(submitted_transaction) => {
-                    // Increment metric for successful fee charge
-                    inc_counter!(
-                        handler: self.storage_hub_handler,
-                        bsp_fees_charged_total,
-                        STATUS_SUCCESS
-                    );
                     info!(target: LOG_TARGET, "Submitted extrinsic to charge users with debt: {}", submitted_transaction.hash);
                 }
                 Err(e) => {
-                    // Increment metric for failed fee charge
-                    inc_counter!(
-                        handler: self.storage_hub_handler,
-                        bsp_fees_charged_total,
-                        STATUS_FAILURE
-                    );
                     error!(target: LOG_TARGET, "Failed to send extrinsic to charge users with debt: {}", e);
                 }
             }
@@ -203,14 +189,7 @@ where
             .forest_storage_handler
             .get(&current_forest_key)
             .await
-            .ok_or_else(|| {
-                inc_counter!(
-                    handler: self.storage_hub_handler,
-                    insolvent_users_processed_total,
-                    STATUS_FAILURE
-                );
-                anyhow!("Failed to get forest storage.")
-            })?;
+            .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
         let user_files = fs
             .read()
@@ -228,13 +207,6 @@ where
                     StopStoringForInsolventUserRequest::new(insolvent_user.clone()),
                 )
                 .await?;
-
-            // Increment metric for successful insolvent user processing
-            inc_counter!(
-                handler: self.storage_hub_handler,
-                insolvent_users_processed_total,
-                STATUS_SUCCESS
-            );
         }
 
         Ok(format!(
@@ -273,14 +245,7 @@ where
             .forest_storage_handler
             .get(&current_forest_key)
             .await
-            .ok_or_else(|| {
-                inc_counter!(
-                    handler: self.storage_hub_handler,
-                    insolvent_users_processed_total,
-                    STATUS_FAILURE
-                );
-                anyhow!("Failed to get forest storage.")
-            })?;
+            .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
         let user_files = fs
             .read()
@@ -335,11 +300,6 @@ where
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
             Some(tx) => tx,
             None => {
-                inc_counter!(
-                    handler: self.storage_hub_handler,
-                    insolvent_users_processed_total,
-                    STATUS_FAILURE
-                );
                 error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. This is a critical bug. Please report it to the StorageHub team.");
                 return Err(anyhow!(
                     "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken!"
@@ -356,14 +316,7 @@ where
             .forest_storage_handler
             .get(&current_forest_key)
             .await
-            .ok_or_else(|| {
-                inc_counter!(
-                    handler: self.storage_hub_handler,
-                    insolvent_users_processed_total,
-                    STATUS_FAILURE
-                );
-                anyhow!("Failed to get forest storage.")
-            })?;
+            .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
         // Get all the files that belong to the insolvent user, delete the first one.
         let user_files = fs

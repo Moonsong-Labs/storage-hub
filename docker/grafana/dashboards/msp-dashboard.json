@@ -29,7 +29,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
       "id": 2,
       "options": {
         "colorMode": "value",
@@ -47,12 +47,129 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(storagehub_msp_storage_requests_total)",
+          "expr": "sum(storagehub_event_handler_total)",
           "legendFormat": "Total",
           "refId": "A"
         }
       ],
-      "title": "Total Storage Requests",
+      "title": "Total Events Handled",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(storagehub_event_handler_total{status=\"success\"})",
+          "legendFormat": "Success",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Successful",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "red", "value": null }]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(storagehub_event_handler_total{status=\"failure\"})",
+          "legendFormat": "Failures",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Failed",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "orange", "value": null }]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+      "id": 5,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(storagehub_event_handler_total{status=\"pending\"})",
+          "legendFormat": "Pending",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Pending",
       "type": "stat"
     },
     {
@@ -78,8 +195,8 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
-      "id": 3,
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 1 },
+      "id": 6,
       "options": {
         "orientation": "auto",
         "reduceOptions": {
@@ -94,114 +211,20 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(storagehub_msp_storage_requests_total{status=\"success\"}) / sum(storagehub_msp_storage_requests_total) * 100",
-          "legendFormat": "Success Rate",
+          "expr": "sum(storagehub_event_handler_total{status=\"success\"}) / sum(storagehub_event_handler_total{status=~\"success|failure\"}) * 100",
+          "legendFormat": "Overall Success Rate",
           "refId": "A"
         }
       ],
-      "title": "Storage Success Rate",
-      "type": "gauge"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "max": 100,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 50 },
-              { "color": "yellow", "value": 75 },
-              { "color": "green", "value": 90 }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
-      "id": 4,
-      "options": {
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(storagehub_msp_files_distributed_total{status=\"success\"}) / sum(storagehub_msp_files_distributed_total) * 100",
-          "legendFormat": "Success Rate",
-          "refId": "A"
-        }
-      ],
-      "title": "Distribution Success Rate",
-      "type": "gauge"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "max": 100,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 50 },
-              { "color": "yellow", "value": 75 },
-              { "color": "green", "value": 90 }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
-      "id": 5,
-      "options": {
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(storagehub_msp_bucket_moves_total{status=\"success\"}) / sum(storagehub_msp_bucket_moves_total) * 100",
-          "legendFormat": "Success Rate",
-          "refId": "A"
-        }
-      ],
-      "title": "Bucket Moves Success Rate",
+      "title": "Overall Success Rate",
       "type": "gauge"
     },
     {
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
-      "id": 6,
+      "id": 100,
       "panels": [],
-      "title": "Storage Operations",
+      "title": "MspUploadFileTask (new_storage_request, process_msp_respond_storing_request, remote_upload_request)",
       "type": "row"
     },
     {
@@ -213,914 +236,11 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [{ "color": "green", "value": null }]
-          },
-          "unit": "reqps"
-        },
-        "overrides": [
-          {
-            "matcher": { "id": "byName", "options": "Success" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "green", "mode": "fixed" }
-              }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "Failure" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "red", "mode": "fixed" }
-              }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "Pending" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "orange", "mode": "fixed" }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 6 },
-      "id": 7,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(storagehub_msp_storage_requests_total{status=\"success\"}[5m])",
-          "legendFormat": "Success",
-          "refId": "A"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(storagehub_msp_storage_requests_total{status=\"failure\"}[5m])",
-          "legendFormat": "Failure",
-          "refId": "B"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(storagehub_msp_storage_requests_total{status=\"pending\"}[5m])",
-          "legendFormat": "Pending",
-          "refId": "C"
-        }
-      ],
-      "title": "Storage Requests Over Time",
-      "type": "timeseries"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [{ "color": "green", "value": null }]
-          },
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 6 },
-      "id": 8,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.50, sum(rate(storagehub_storage_request_setup_seconds_bucket[5m])) by (le))",
-          "legendFormat": "p50",
-          "refId": "A"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.95, sum(rate(storagehub_storage_request_setup_seconds_bucket[5m])) by (le))",
-          "legendFormat": "p95",
-          "refId": "B"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.99, sum(rate(storagehub_storage_request_setup_seconds_bucket[5m])) by (le))",
-          "legendFormat": "p99",
-          "refId": "C"
-        }
-      ],
-      "title": "Storage Request Setup Duration",
-      "type": "timeseries"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [{ "color": "green", "value": null }]
-          },
-          "unit": "short"
-        },
-        "overrides": [
-          {
-            "matcher": { "id": "byName", "options": "Success" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "green", "mode": "fixed" }
-              }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "Failure" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "red", "mode": "fixed" }
-              }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "Pending" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "orange", "mode": "fixed" }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 6 },
-      "id": 9,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_msp_storage_requests_total{status=\"success\"}[1h])",
-          "legendFormat": "Success",
-          "refId": "A"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_msp_storage_requests_total{status=\"failure\"}[1h])",
-          "legendFormat": "Failure",
-          "refId": "B"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_msp_storage_requests_total{status=\"pending\"}[1h])",
-          "legendFormat": "Pending",
-          "refId": "C"
-        }
-      ],
-      "title": "Storage Requests (Last Hour Increase)",
-      "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
-      "id": 10,
-      "panels": [],
-      "title": "File Distribution",
-      "type": "row"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [{ "color": "green", "value": null }]
-          },
-          "unit": "reqps"
-        },
-        "overrides": [
-          {
-            "matcher": { "id": "byName", "options": "Success" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "green", "mode": "fixed" }
-              }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "Failure" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "red", "mode": "fixed" }
-              }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "Pending" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "orange", "mode": "fixed" }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 15 },
-      "id": 11,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(storagehub_msp_files_distributed_total{status=\"success\"}[5m])",
-          "legendFormat": "Success",
-          "refId": "A"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(storagehub_msp_files_distributed_total{status=\"failure\"}[5m])",
-          "legendFormat": "Failure",
-          "refId": "B"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(storagehub_msp_files_distributed_total{status=\"pending\"}[5m])",
-          "legendFormat": "Pending",
-          "refId": "C"
-        }
-      ],
-      "title": "Files Distributed Over Time",
-      "type": "timeseries"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [{ "color": "green", "value": null }]
-          },
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 15 },
-      "id": 12,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.50, sum(rate(storagehub_file_transfer_seconds_bucket[5m])) by (le))",
-          "legendFormat": "p50",
-          "refId": "A"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.95, sum(rate(storagehub_file_transfer_seconds_bucket[5m])) by (le))",
-          "legendFormat": "p95",
-          "refId": "B"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.99, sum(rate(storagehub_file_transfer_seconds_bucket[5m])) by (le))",
-          "legendFormat": "p99",
-          "refId": "C"
-        }
-      ],
-      "title": "File Transfer Duration",
-      "type": "timeseries"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [{ "color": "green", "value": null }]
-          },
-          "unit": "short"
-        },
-        "overrides": [
-          {
-            "matcher": { "id": "byName", "options": "Success" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "green", "mode": "fixed" }
-              }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "Failure" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "red", "mode": "fixed" }
-              }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "Pending" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "orange", "mode": "fixed" }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 15 },
-      "id": 13,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_msp_files_distributed_total{status=\"success\"}[1h])",
-          "legendFormat": "Success",
-          "refId": "A"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_msp_files_distributed_total{status=\"failure\"}[1h])",
-          "legendFormat": "Failure",
-          "refId": "B"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_msp_files_distributed_total{status=\"pending\"}[1h])",
-          "legendFormat": "Pending",
-          "refId": "C"
-        }
-      ],
-      "title": "Files Distributed (Last Hour Increase)",
-      "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
-      "id": 14,
-      "panels": [],
-      "title": "Deletions & Moves",
-      "type": "row"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [{ "color": "green", "value": null }]
-          },
-          "unit": "reqps"
-        },
-        "overrides": [
-          {
-            "matcher": { "id": "byName", "options": "Success" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "green", "mode": "fixed" }
-              }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "Failure" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "red", "mode": "fixed" }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 24 },
-      "id": 15,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(storagehub_msp_files_deleted_total{status=\"success\"}[5m])",
-          "legendFormat": "Success",
-          "refId": "A"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(storagehub_msp_files_deleted_total{status=\"failure\"}[5m])",
-          "legendFormat": "Failure",
-          "refId": "B"
-        }
-      ],
-      "title": "Files Deleted Over Time",
-      "type": "timeseries"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [{ "color": "green", "value": null }]
-          },
-          "unit": "reqps"
-        },
-        "overrides": [
-          {
-            "matcher": { "id": "byName", "options": "Success" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "green", "mode": "fixed" }
-              }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "Failure" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "red", "mode": "fixed" }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 24 },
-      "id": 16,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(storagehub_msp_buckets_deleted_total{status=\"success\"}[5m])",
-          "legendFormat": "Success",
-          "refId": "A"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(storagehub_msp_buckets_deleted_total{status=\"failure\"}[5m])",
-          "legendFormat": "Failure",
-          "refId": "B"
-        }
-      ],
-      "title": "Buckets Deleted Over Time",
-      "type": "timeseries"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [{ "color": "green", "value": null }]
-          },
-          "unit": "reqps"
-        },
-        "overrides": [
-          {
-            "matcher": { "id": "byName", "options": "Success" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "green", "mode": "fixed" }
-              }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "Failure" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "red", "mode": "fixed" }
-              }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "Pending" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "orange", "mode": "fixed" }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 24 },
-      "id": 17,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(storagehub_msp_bucket_moves_total{status=\"success\"}[5m])",
-          "legendFormat": "Success",
-          "refId": "A"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(storagehub_msp_bucket_moves_total{status=\"failure\"}[5m])",
-          "legendFormat": "Failure",
-          "refId": "B"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(storagehub_msp_bucket_moves_total{status=\"pending\"}[5m])",
-          "legendFormat": "Pending",
-          "refId": "C"
-        }
-      ],
-      "title": "Bucket Moves Over Time",
-      "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 },
-      "id": 18,
-      "panels": [],
-      "title": "Fees",
-      "type": "row"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [{ "color": "green", "value": null }]
-          },
-          "unit": "reqps"
-        },
-        "overrides": [
-          {
-            "matcher": { "id": "byName", "options": "Success" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "green", "mode": "fixed" }
-              }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "Failure" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "red", "mode": "fixed" }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 33 },
-      "id": 19,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(storagehub_msp_fees_charged_total{status=\"success\"}[5m])",
-          "legendFormat": "Success",
-          "refId": "A"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(storagehub_msp_fees_charged_total{status=\"failure\"}[5m])",
-          "legendFormat": "Failure",
-          "refId": "B"
-        }
-      ],
-      "title": "Fees Charged Over Time",
-      "type": "timeseries"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "Events",
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "bars",
-            "fillOpacity": 100,
+            "fillOpacity": 80,
             "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
             "insertNulls": false,
@@ -1128,9 +248,9 @@
             "lineWidth": 1,
             "pointSize": 5,
             "scaleDistribution": { "type": "linear" },
-            "showPoints": "auto",
+            "showPoints": "never",
             "spanNulls": false,
-            "stacking": { "group": "A", "mode": "normal" },
+            "stacking": { "group": "A", "mode": "none" },
             "thresholdsStyle": { "mode": "off" }
           },
           "mappings": [],
@@ -1142,121 +262,24 @@
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "Success" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "green", "mode": "fixed" }
-              }
-            ]
+            "matcher": { "id": "byRegexp", "options": ".*success.*" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
           },
           {
-            "matcher": { "id": "byName", "options": "Failure" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "red", "mode": "fixed" }
-              }
-            ]
+            "matcher": { "id": "byRegexp", "options": ".*failure.*" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": ".*pending.*" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }]
           }
         ]
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 33 },
-      "id": 20,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "id": 101,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_msp_fees_charged_total{status=\"success\"}[1h])",
-          "legendFormat": "Success",
-          "refId": "A"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_msp_fees_charged_total{status=\"failure\"}[1h])",
-          "legendFormat": "Failure",
-          "refId": "B"
-        }
-      ],
-      "title": "Fees Charged (Last Hour - Stacked)",
-      "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 41 },
-      "id": 21,
-      "panels": [],
-      "title": "Forest Verification & Retries",
-      "type": "row"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [{ "color": "green", "value": null }]
-          },
-          "unit": "reqps"
-        },
-        "overrides": [
-          {
-            "matcher": { "id": "byName", "options": "Success" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "green", "mode": "fixed" }
-              }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "Failure" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "red", "mode": "fixed" }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 42 },
-      "id": 22,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
+          "calcs": ["sum", "last"],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -1267,18 +290,60 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(storagehub_msp_forest_verifications_total{status=\"success\"}[5m])",
-          "legendFormat": "Success",
+          "expr": "increase(storagehub_event_handler_total{event=\"new_storage_request\",status=\"success\"}[1m])",
+          "legendFormat": "new_storage_request (success)",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(storagehub_msp_forest_verifications_total{status=\"failure\"}[5m])",
-          "legendFormat": "Failure",
+          "expr": "increase(storagehub_event_handler_total{event=\"new_storage_request\",status=\"failure\"}[1m])",
+          "legendFormat": "new_storage_request (failure)",
           "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"new_storage_request\",status=\"pending\"}[1m])",
+          "legendFormat": "new_storage_request (pending)",
+          "refId": "C"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"process_msp_respond_storing_request\",status=\"success\"}[1m])",
+          "legendFormat": "process_msp_respond_storing_request (success)",
+          "refId": "D"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"process_msp_respond_storing_request\",status=\"failure\"}[1m])",
+          "legendFormat": "process_msp_respond_storing_request (failure)",
+          "refId": "E"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"process_msp_respond_storing_request\",status=\"pending\"}[1m])",
+          "legendFormat": "process_msp_respond_storing_request (pending)",
+          "refId": "F"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"remote_upload_request\",status=\"success\"}[1m])",
+          "legendFormat": "remote_upload_request (success)",
+          "refId": "G"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"remote_upload_request\",status=\"failure\"}[1m])",
+          "legendFormat": "remote_upload_request (failure)",
+          "refId": "H"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"remote_upload_request\",status=\"pending\"}[1m])",
+          "legendFormat": "remote_upload_request (pending)",
+          "refId": "I"
         }
       ],
-      "title": "Forest Verifications Over Time",
+      "title": "Upload Events (per minute)",
       "type": "timeseries"
     },
     {
@@ -1316,8 +381,8 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 42 },
-      "id": 23,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "id": 102,
       "options": {
         "legend": {
           "calcs": ["mean", "max"],
@@ -1331,25 +396,27 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.50, sum(rate(storagehub_msp_forest_verification_seconds_bucket[5m])) by (le))",
-          "legendFormat": "p50",
+          "expr": "histogram_quantile(0.50, sum(rate(storagehub_event_handler_seconds_bucket{event=~\"new_storage_request|process_msp_respond_storing_request|remote_upload_request\"}[5m])) by (le, event))",
+          "legendFormat": "{{event}} p50",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.95, sum(rate(storagehub_msp_forest_verification_seconds_bucket[5m])) by (le))",
-          "legendFormat": "p95",
+          "expr": "histogram_quantile(0.95, sum(rate(storagehub_event_handler_seconds_bucket{event=~\"new_storage_request|process_msp_respond_storing_request|remote_upload_request\"}[5m])) by (le, event))",
+          "legendFormat": "{{event}} p95",
           "refId": "B"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.99, sum(rate(storagehub_msp_forest_verification_seconds_bucket[5m])) by (le))",
-          "legendFormat": "p99",
-          "refId": "C"
         }
       ],
-      "title": "Forest Verification Duration",
+      "title": "Upload Handler Duration",
       "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "id": 200,
+      "panels": [],
+      "title": "MspDistributeFileTask (distribute_file_to_bsp)",
+      "type": "row"
     },
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
@@ -1360,19 +427,19 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "Events",
             "axisPlacement": "auto",
             "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
+            "drawStyle": "bars",
+            "fillOpacity": 80,
             "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
             "insertNulls": false,
             "lineInterpolation": "linear",
-            "lineWidth": 2,
+            "lineWidth": 1,
             "pointSize": 5,
             "scaleDistribution": { "type": "linear" },
-            "showPoints": "auto",
+            "showPoints": "never",
             "spanNulls": false,
             "stacking": { "group": "A", "mode": "none" },
             "thresholdsStyle": { "mode": "off" }
@@ -1382,34 +449,28 @@
             "mode": "absolute",
             "steps": [{ "color": "green", "value": null }]
           },
-          "unit": "reqps"
+          "unit": "short"
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "Success" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "green", "mode": "fixed" }
-              }
-            ]
+            "matcher": { "id": "byRegexp", "options": ".*success.*" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
           },
           {
-            "matcher": { "id": "byName", "options": "Failure" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "red", "mode": "fixed" }
-              }
-            ]
+            "matcher": { "id": "byRegexp", "options": ".*failure.*" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": ".*pending.*" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }]
           }
         ]
       },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 42 },
-      "id": 24,
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 15 },
+      "id": 201,
       "options": {
         "legend": {
-          "calcs": ["mean", "max"],
+          "calcs": ["sum", "last"],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -1420,18 +481,655 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(storagehub_msp_bucket_move_retries_total{status=\"success\"}[5m])",
-          "legendFormat": "Success",
+          "expr": "increase(storagehub_event_handler_total{event=\"distribute_file_to_bsp\",status=\"success\"}[1m])",
+          "legendFormat": "distribute_file_to_bsp (success)",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(storagehub_msp_bucket_move_retries_total{status=\"failure\"}[5m])",
-          "legendFormat": "Failure",
+          "expr": "increase(storagehub_event_handler_total{event=\"distribute_file_to_bsp\",status=\"failure\"}[1m])",
+          "legendFormat": "distribute_file_to_bsp (failure)",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"distribute_file_to_bsp\",status=\"pending\"}[1m])",
+          "legendFormat": "distribute_file_to_bsp (pending)",
+          "refId": "C"
+        }
+      ],
+      "title": "Distribute Events (per minute)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
+      "id": 300,
+      "panels": [],
+      "title": "MspRespondMoveBucketTask (move_bucket_requested_for_msp, start_moved_bucket_download)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Events",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": ".*success.*" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": ".*failure.*" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": ".*pending.*" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+      "id": 301,
+      "options": {
+        "legend": {
+          "calcs": ["sum", "last"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"move_bucket_requested_for_msp\",status=\"success\"}[1m])",
+          "legendFormat": "move_bucket_requested_for_msp (success)",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"move_bucket_requested_for_msp\",status=\"failure\"}[1m])",
+          "legendFormat": "move_bucket_requested_for_msp (failure)",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"move_bucket_requested_for_msp\",status=\"pending\"}[1m])",
+          "legendFormat": "move_bucket_requested_for_msp (pending)",
+          "refId": "C"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"start_moved_bucket_download\",status=\"success\"}[1m])",
+          "legendFormat": "start_moved_bucket_download (success)",
+          "refId": "D"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"start_moved_bucket_download\",status=\"failure\"}[1m])",
+          "legendFormat": "start_moved_bucket_download (failure)",
+          "refId": "E"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"start_moved_bucket_download\",status=\"pending\"}[1m])",
+          "legendFormat": "start_moved_bucket_download (pending)",
+          "refId": "F"
+        }
+      ],
+      "title": "Move Bucket Events (per minute)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 },
+      "id": 400,
+      "panels": [],
+      "title": "MspDeleteBucketTask (finalised_bucket_moved_away, finalised_msp_stopped_storing_bucket)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Events",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": ".*success.*" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": ".*failure.*" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 33 },
+      "id": 401,
+      "options": {
+        "legend": {
+          "calcs": ["sum", "last"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"finalised_bucket_moved_away\",status=\"success\"}[1m])",
+          "legendFormat": "finalised_bucket_moved_away (success)",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"finalised_bucket_moved_away\",status=\"failure\"}[1m])",
+          "legendFormat": "finalised_bucket_moved_away (failure)",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"finalised_msp_stopped_storing_bucket\",status=\"success\"}[1m])",
+          "legendFormat": "finalised_msp_stopped_storing_bucket (success)",
+          "refId": "C"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"finalised_msp_stopped_storing_bucket\",status=\"failure\"}[1m])",
+          "legendFormat": "finalised_msp_stopped_storing_bucket (failure)",
+          "refId": "D"
+        }
+      ],
+      "title": "Delete Bucket Events (per minute)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 41 },
+      "id": 500,
+      "panels": [],
+      "title": "MspDeleteFileTask (finalised_bucket_mutations_applied, finalised_storage_request_rejected)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Events",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": ".*success.*" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": ".*failure.*" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 42 },
+      "id": 501,
+      "options": {
+        "legend": {
+          "calcs": ["sum", "last"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"finalised_bucket_mutations_applied\",status=\"success\"}[1m])",
+          "legendFormat": "finalised_bucket_mutations_applied (success)",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"finalised_bucket_mutations_applied\",status=\"failure\"}[1m])",
+          "legendFormat": "finalised_bucket_mutations_applied (failure)",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"finalised_storage_request_rejected\",status=\"success\"}[1m])",
+          "legendFormat": "finalised_storage_request_rejected (success)",
+          "refId": "C"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"finalised_storage_request_rejected\",status=\"failure\"}[1m])",
+          "legendFormat": "finalised_storage_request_rejected (failure)",
+          "refId": "D"
+        }
+      ],
+      "title": "Delete File Events (per minute)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 50 },
+      "id": 600,
+      "panels": [],
+      "title": "MspStopStoringInsolventUserTask (user_without_funds, finalised_msp_stop_storing_bucket_insolvent_user)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Events",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": ".*success.*" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": ".*failure.*" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 51 },
+      "id": 601,
+      "options": {
+        "legend": {
+          "calcs": ["sum", "last"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"user_without_funds\",status=\"success\"}[1m])",
+          "legendFormat": "user_without_funds (success)",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"user_without_funds\",status=\"failure\"}[1m])",
+          "legendFormat": "user_without_funds (failure)",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"finalised_msp_stop_storing_bucket_insolvent_user\",status=\"success\"}[1m])",
+          "legendFormat": "finalised_msp_stop_storing_bucket_insolvent_user (success)",
+          "refId": "C"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"finalised_msp_stop_storing_bucket_insolvent_user\",status=\"failure\"}[1m])",
+          "legendFormat": "finalised_msp_stop_storing_bucket_insolvent_user (failure)",
+          "refId": "D"
+        }
+      ],
+      "title": "Insolvent User Events (per minute)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 59 },
+      "id": 700,
+      "panels": [],
+      "title": "MspChargeFeesTask (notify_period)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Events",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": ".*success.*" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": ".*failure.*" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 60 },
+      "id": 701,
+      "options": {
+        "legend": {
+          "calcs": ["sum", "last"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"notify_period\",status=\"success\"}[1m])",
+          "legendFormat": "notify_period (success)",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"notify_period\",status=\"failure\"}[1m])",
+          "legendFormat": "notify_period (failure)",
           "refId": "B"
         }
       ],
-      "title": "Bucket Move Retries Over Time",
+      "title": "Charge Fees Events (per minute)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 68 },
+      "id": 800,
+      "panels": [],
+      "title": "MspVerifyBucketForestsTask (verify_msp_bucket_forests)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Events",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": ".*success.*" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": ".*failure.*" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 69 },
+      "id": 801,
+      "options": {
+        "legend": {
+          "calcs": ["sum", "last"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"verify_msp_bucket_forests\",status=\"success\"}[1m])",
+          "legendFormat": "verify_msp_bucket_forests (success)",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"verify_msp_bucket_forests\",status=\"failure\"}[1m])",
+          "legendFormat": "verify_msp_bucket_forests (failure)",
+          "refId": "B"
+        }
+      ],
+      "title": "Forest Verification Events (per minute)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 77 },
+      "id": 900,
+      "panels": [],
+      "title": "MspRetryBucketMoveTask (retry_bucket_move_download)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Events",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": ".*success.*" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": ".*failure.*" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 78 },
+      "id": 901,
+      "options": {
+        "legend": {
+          "calcs": ["sum", "last"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"retry_bucket_move_download\",status=\"success\"}[1m])",
+          "legendFormat": "retry_bucket_move_download (success)",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"retry_bucket_move_download\",status=\"failure\"}[1m])",
+          "legendFormat": "retry_bucket_move_download (failure)",
+          "refId": "B"
+        }
+      ],
+      "title": "Retry Bucket Move Events (per minute)",
       "type": "timeseries"
     }
   ],

@@ -26,8 +26,6 @@ use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
 use crate::{
     handler::StorageHubHandler,
-    inc_counter,
-    metrics::{STATUS_FAILURE, STATUS_PENDING, STATUS_SUCCESS},
     types::{ForestStorageKey, MspForestStorageHandlerT, ShNodeType},
 };
 
@@ -120,20 +118,7 @@ where
             event.bucket_id,
         );
 
-        // Increment metric for bucket moves
-        inc_counter!(
-            handler: self.storage_hub_handler,
-            msp_bucket_moves_total,
-            STATUS_PENDING
-        );
-
         if let Err(error) = self.handle_move_bucket_request(event.clone()).await {
-            // Increment metric for failed bucket moves
-            inc_counter!(
-                handler: self.storage_hub_handler,
-                msp_bucket_moves_total,
-                STATUS_FAILURE
-            );
             // TODO: Based on the error, we should persist the bucket move request and retry later.
             error!(
                 target: LOG_TARGET,
@@ -183,11 +168,6 @@ where
             if let Some(indexer_db_pool) = self.storage_hub_handler.indexer_db_pool.clone() {
                 indexer_db_pool
             } else {
-                inc_counter!(
-                    handler: self.storage_hub_handler,
-                    msp_bucket_moves_total,
-                    STATUS_FAILURE
-                );
                 return Err(anyhow!(
                     "Indexer is disabled but a StartMovedBucketDownload event was received"
                 ));
@@ -202,12 +182,6 @@ where
         .await?;
 
         if files.is_empty() {
-            // No files to download is a valid success
-            inc_counter!(
-                handler: self.storage_hub_handler,
-                msp_bucket_moves_total,
-                STATUS_SUCCESS
-            );
             info!(
                 target: LOG_TARGET,
                 "No files to download for bucket {:?}", event.bucket_id
@@ -257,11 +231,6 @@ where
 
         match download_result {
             Ok(()) => {
-                inc_counter!(
-                    handler: self.storage_hub_handler,
-                    msp_bucket_moves_total,
-                    STATUS_SUCCESS
-                );
                 info!(
                     target: LOG_TARGET,
                     "Successfully downloaded bucket {:?}", event.bucket_id
@@ -275,11 +244,6 @@ where
                 );
             }
             Err(crate::file_download_manager::BucketDownloadError::DownloadFailed(e)) => {
-                inc_counter!(
-                    handler: self.storage_hub_handler,
-                    msp_bucket_moves_total,
-                    STATUS_FAILURE
-                );
                 error!(
                     target: LOG_TARGET,
                     "Failed to download bucket {:?}: {:?}", event.bucket_id, e

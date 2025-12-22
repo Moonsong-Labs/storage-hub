@@ -9,12 +9,7 @@ use shc_blockchain_service::{
 };
 use shc_common::traits::StorageEnableRuntime;
 
-use crate::{
-    handler::StorageHubHandler,
-    inc_counter,
-    metrics::{STATUS_FAILURE, STATUS_SUCCESS},
-    types::ShNodeType,
-};
+use crate::{handler::StorageHubHandler, types::ShNodeType};
 
 const LOG_TARGET: &str = "slash-provider-task";
 
@@ -71,27 +66,11 @@ where
         );
 
         match self.handle_slashable_provider_event(event).await {
-            Ok(()) => {
-                // Increment metric for successful slash submission
-                inc_counter!(
-                    handler: self.storage_hub_handler,
-                    sp_slash_submissions_total,
-                    STATUS_SUCCESS
-                );
-                Ok(format!(
-                    "Handled SlashableProvider event for provider [{:x}]",
-                    provider
-                ))
-            }
-            Err(e) => {
-                // Increment metric for failed slash submission
-                inc_counter!(
-                    handler: self.storage_hub_handler,
-                    sp_slash_submissions_total,
-                    STATUS_FAILURE
-                );
-                Err(e)
-            }
+            Ok(()) => Ok(format!(
+                "Handled SlashableProvider event for provider [{:x}]",
+                provider
+            )),
+            Err(e) => Err(e),
         }
     }
 }

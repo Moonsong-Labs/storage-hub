@@ -8,7 +8,6 @@ use shc_forest_manager::traits::ForestStorageHandler;
 
 use crate::{
     handler::StorageHubHandler,
-    inc_counter,
     metrics::{STATUS_FAILURE, STATUS_SUCCESS},
     observe_histogram,
     types::{ForestStorageKey, MspForestStorageHandlerT, ShNodeType},
@@ -131,12 +130,7 @@ where
         // Record metrics based on verification result
         let elapsed = start_time.elapsed();
         if missing_forests {
-            // Increment failure counter and record duration with failure status
-            inc_counter!(
-                handler: self.storage_hub_handler,
-                msp_forest_verifications_total,
-                STATUS_FAILURE
-            );
+            // Record duration with failure status
             observe_histogram!(
                 handler: self.storage_hub_handler,
                 msp_forest_verification_seconds,
@@ -148,12 +142,7 @@ where
             ));
         }
 
-        // Increment success counter and record duration with success status
-        inc_counter!(
-            handler: self.storage_hub_handler,
-            msp_forest_verifications_total,
-            STATUS_SUCCESS
-        );
+        // Record duration with success status
         observe_histogram!(
             handler: self.storage_hub_handler,
             msp_forest_verification_seconds,

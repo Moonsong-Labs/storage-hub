@@ -9,8 +9,6 @@ use shc_forest_manager::traits::ForestStorageHandler;
 
 use crate::{
     handler::StorageHubHandler,
-    inc_counter,
-    metrics::{STATUS_FAILURE, STATUS_SUCCESS},
     types::{ForestStorageKey, MspForestStorageHandlerT, ShNodeType},
 };
 
@@ -83,12 +81,6 @@ where
         );
 
         if let Err(e) = self.delete_bucket(&event.bucket_id).await {
-            // Increment metric for failed bucket deletion
-            inc_counter!(
-                handler: self.storage_hub_handler,
-                msp_buckets_deleted_total,
-                STATUS_FAILURE
-            );
             error!(
                 target: LOG_TARGET,
                 "Failed to delete bucket {:?} after move: {:?}",
@@ -97,13 +89,6 @@ where
             );
             return Err(e);
         }
-
-        // Increment metric for successful bucket deletion
-        inc_counter!(
-            handler: self.storage_hub_handler,
-            msp_buckets_deleted_total,
-            STATUS_SUCCESS
-        );
 
         Ok(format!(
             "MSP: successfully deleted bucket [{:x}] after move",
@@ -131,12 +116,6 @@ where
         );
 
         if let Err(e) = self.delete_bucket(&event.bucket_id).await {
-            // Increment metric for failed bucket deletion
-            inc_counter!(
-                handler: self.storage_hub_handler,
-                msp_buckets_deleted_total,
-                STATUS_FAILURE
-            );
             error!(
                 target: LOG_TARGET,
                 "Failed to delete bucket {:?} after stop storing: {:?}",
@@ -145,13 +124,6 @@ where
             );
             return Err(e);
         }
-
-        // Increment metric for successful bucket deletion
-        inc_counter!(
-            handler: self.storage_hub_handler,
-            msp_buckets_deleted_total,
-            STATUS_SUCCESS
-        );
 
         Ok(format!(
             "MSP: successfully deleted bucket [{:x}] after stop storing",

@@ -9,12 +9,13 @@
 //! ```ignore
 //! // In tasks, access metrics through the handler:
 //! if let Some(m) = self.storage_hub_handler.metrics() {
-//!     m.bsp_storage_requests_total.with_label_values(&["success"]).inc();
+//!     m.bytes_uploaded_total.with_label_values(&["success"]).inc();
 //! }
 //! ```
 
 use std::sync::Arc;
 
+use shc_actors_framework::event_bus::LifecycleMetricRecorder;
 use substrate_prometheus_endpoint::{
     register, CounterVec, HistogramOpts, HistogramVec, Opts, PrometheusError, Registry, U64,
 };
@@ -97,95 +98,27 @@ impl MetricsLink {
 /// - Counters: suffix `_total`
 /// - Histograms: suffix `_seconds` or `_bytes`
 pub struct StorageHubMetrics {
+    // === Event Handler Lifecycle Metrics ===
+    /// Total event handler invocations, labeled by event type and status.
+    /// Automatically recorded by the event bus for all registered handlers.
+    /// - `pending`: Event received and handler starting
+    /// - `success`: Handler completed successfully
+    /// - `failure`: Handler returned an error
+    pub event_handler_total: CounterVec<U64>,
+
+    /// Event handler processing duration, labeled by event type and status.
+    /// Automatically recorded by the event bus on handler completion.
+    pub event_handler_seconds: HistogramVec,
+
     // === BSP Metrics ===
-    /// Total BSP storage request confirmations, labeled by status.
-    /// Tracks the full lifecycle from receiving NewStorageRequest through submitting ConfirmStoring extrinsic.
-    /// - `pending`: NewStorageRequest event received
-    /// - `success`: ConfirmStoring extrinsic submitted successfully
-    /// - `failure`: Any error during volunteer or confirmation process
-    pub bsp_storage_requests_total: CounterVec<U64>,
-
-    /// Total proof submission attempts by BSP, labeled by status.
-    /// Tracks SubmitProof extrinsic submissions in response to challenges.
-    pub bsp_proofs_submitted_total: CounterVec<U64>,
-
-    /// Total fee charge extrinsic submissions by BSP, labeled by status.
-    /// Tracks attempts to submit ChargePaymentStreams extrinsic for users with debt.
-    /// Note: Success means extrinsic was submitted, not necessarily that fees were collected.
-    pub bsp_fees_charged_total: CounterVec<U64>,
-
-    /// Total file deletion events processed by BSP, labeled by status.
-    /// Tracks TrieRemoveMutation events where files are removed from BSP's forest storage.
-    pub bsp_files_deleted_total: CounterVec<U64>,
-
-    /// Total bucket move events processed by BSP, labeled by status.
-    /// Tracks MoveBucketRequested/Accepted/Rejected/Expired events.
-    /// - `pending`: MoveBucketRequested received
-    /// - `success`: MoveBucketAccepted processed
-    /// - `failure`: MoveBucketRejected or MoveBucketExpired processed
-    pub bsp_bucket_moves_total: CounterVec<U64>,
-
-    /// Total file download requests handled by BSP, labeled by status.
-    /// Tracks FileDownloadRequest events where BSP serves files to requesters.
-    pub bsp_download_requests_total: CounterVec<U64>,
-
-    /// Total chunk upload batches received by BSP, labeled by status.
-    /// Tracks RemoteUploadRequest events (each event contains a batch of chunks).
-    /// Note: This counts batches, not individual chunks.
-    pub bsp_upload_chunks_received_total: CounterVec<U64>,
-
     /// Time spent generating proofs for challenge responses, labeled by status.
     /// Measures the duration of generate_key_proof operations.
     pub bsp_proof_generation_seconds: HistogramVec,
 
     // === MSP Metrics ===
-    /// Total MSP storage request responses, labeled by status.
-    /// Tracks the lifecycle from receiving NewStorageRequest through confirmed on-chain dispatch.
-    /// - `pending`: NewStorageRequest event received
-    /// - `success`: RespondStorageRequest extrinsic confirmed on-chain without dispatch errors
-    /// - `failure`: Extrinsic submission failed, events missing, or dispatch error found
-    pub msp_storage_requests_total: CounterVec<U64>,
-
-    /// Total file distribution attempts by MSP to BSPs, labeled by status.
-    /// Tracks DistributeFileToBsp events where MSP sends files to volunteered BSPs.
-    pub msp_files_distributed_total: CounterVec<U64>,
-
-    /// Total file deletion events processed by MSP, labeled by status.
-    /// Tracks removal of files from MSP's file storage after forest mutations are finalized.
-    pub msp_files_deleted_total: CounterVec<U64>,
-
-    /// Total bucket deletion events processed by MSP, labeled by status.
-    /// Tracks bucket deletions after move, stop storing, or insolvent user events.
-    pub msp_buckets_deleted_total: CounterVec<U64>,
-
-    /// Total fee charge extrinsic submissions by MSP, labeled by status.
-    /// Tracks attempts to submit ChargePaymentStreams extrinsic for users with debt.
-    /// Note: Success means extrinsic was submitted, not necessarily that fees were collected.
-    pub msp_fees_charged_total: CounterVec<U64>,
-
-    /// Total bucket move events processed by MSP, labeled by status.
-    /// Tracks the bucket download process when taking over from another MSP.
-    /// - `pending`: MoveBucketRequested received
-    /// - `success`: All files downloaded and bucket move complete
-    /// - `failure`: Download failed or bucket move rejected
-    pub msp_bucket_moves_total: CounterVec<U64>,
-
-    /// Total bucket move retry attempts by MSP, labeled by status.
-    /// Tracks retry attempts for incomplete bucket downloads during MSP move.
-    pub msp_bucket_move_retries_total: CounterVec<U64>,
-
-    /// Total bucket forest verification runs by MSP, labeled by status.
-    /// Tracks periodic verification that local forest storage exists for all managed buckets.
-    pub msp_forest_verifications_total: CounterVec<U64>,
-
     /// Time spent verifying all bucket forests exist, labeled by status.
     /// Measures the duration of the periodic bucket forest verification task.
     pub msp_forest_verification_seconds: HistogramVec,
-
-    // === SP Metrics ===
-    /// Total slash extrinsic submissions by any SP, labeled by status.
-    /// Tracks attempts to submit slash extrinsics for slashable providers.
-    pub sp_slash_submissions_total: CounterVec<U64>,
 
     // === General Metrics ===
     /// Time spent handling the initial NewStorageRequest event in seconds.
@@ -198,16 +131,6 @@ pub struct StorageHubMetrics {
     /// Measures the duration of send_chunks operations used by MSP to distribute files to BSPs.
     /// Note: This tracks outbound transfers, not receiving uploads.
     pub file_transfer_seconds: HistogramVec,
-
-    /// Total insolvent user processing events, labeled by status.
-    /// Tracks UserWithoutFunds and FinalisedMspStopStoringBucketInsolventUser events.
-    /// Used by both BSP and MSP when handling users who can no longer pay.
-    pub insolvent_users_processed_total: CounterVec<U64>,
-
-    /// Total batch deletion processing results by fisherman, labeled by status.
-    /// Tracks the outcome of processing batches of pending file deletions.
-    /// Success means all deletions in the batch were processed successfully.
-    pub fisherman_batch_deletions_total: CounterVec<U64>,
 
     // === Download Metrics ===
     /// Total bytes downloaded from peers (inbound), labeled by status.
@@ -232,84 +155,31 @@ impl StorageHubMetrics {
     /// Registers all metrics with the given Prometheus [`Registry`].
     pub fn register(registry: &Registry) -> Result<Self, PrometheusError> {
         Ok(Self {
+            // Event handler lifecycle metrics
+            event_handler_total: register(
+                CounterVec::new(
+                    Opts::new(
+                        "storagehub_event_handler_total",
+                        "Event handler invocations by event type and status",
+                    ),
+                    &["event", "status"],
+                )?,
+                registry,
+            )?,
+
+            event_handler_seconds: register(
+                HistogramVec::new(
+                    HistogramOpts::new(
+                        "storagehub_event_handler_seconds",
+                        "Event handler processing duration by event type and status",
+                    )
+                    .buckets(REQUEST_BUCKETS.to_vec()),
+                    &["event", "status"],
+                )?,
+                registry,
+            )?,
+
             // BSP metrics
-            bsp_storage_requests_total: register(
-                CounterVec::new(
-                    Opts::new(
-                        "storagehub_bsp_storage_requests_total",
-                        "BSP storage request confirmations (volunteer to confirm lifecycle)",
-                    ),
-                    &["status"],
-                )?,
-                registry,
-            )?,
-
-            bsp_proofs_submitted_total: register(
-                CounterVec::new(
-                    Opts::new(
-                        "storagehub_bsp_proofs_submitted_total",
-                        "BSP proof submission attempts in response to challenges",
-                    ),
-                    &["status"],
-                )?,
-                registry,
-            )?,
-
-            bsp_fees_charged_total: register(
-                CounterVec::new(
-                    Opts::new(
-                        "storagehub_bsp_fees_charged_total",
-                        "BSP fee charge extrinsic submissions",
-                    ),
-                    &["status"],
-                )?,
-                registry,
-            )?,
-
-            bsp_files_deleted_total: register(
-                CounterVec::new(
-                    Opts::new(
-                        "storagehub_bsp_files_deleted_total",
-                        "BSP file deletion events (TrieRemoveMutation)",
-                    ),
-                    &["status"],
-                )?,
-                registry,
-            )?,
-
-            bsp_bucket_moves_total: register(
-                CounterVec::new(
-                    Opts::new(
-                        "storagehub_bsp_bucket_moves_total",
-                        "BSP bucket move events (requested/accepted/rejected/expired)",
-                    ),
-                    &["status"],
-                )?,
-                registry,
-            )?,
-
-            bsp_download_requests_total: register(
-                CounterVec::new(
-                    Opts::new(
-                        "storagehub_bsp_download_requests_total",
-                        "BSP file download requests served to requesters",
-                    ),
-                    &["status"],
-                )?,
-                registry,
-            )?,
-
-            bsp_upload_chunks_received_total: register(
-                CounterVec::new(
-                    Opts::new(
-                        "storagehub_bsp_upload_chunks_received_total",
-                        "BSP chunk upload batches received (per batch, not per chunk)",
-                    ),
-                    &["status"],
-                )?,
-                registry,
-            )?,
-
             bsp_proof_generation_seconds: register(
                 HistogramVec::new(
                     HistogramOpts::new(
@@ -323,94 +193,6 @@ impl StorageHubMetrics {
             )?,
 
             // MSP metrics
-            msp_storage_requests_total: register(
-                CounterVec::new(
-                    Opts::new(
-                        "storagehub_msp_storage_requests_total",
-                        "MSP storage request responses (confirmed on-chain dispatch results)",
-                    ),
-                    &["status"],
-                )?,
-                registry,
-            )?,
-
-            msp_files_distributed_total: register(
-                CounterVec::new(
-                    Opts::new(
-                        "storagehub_msp_files_distributed_total",
-                        "MSP file distribution attempts to BSPs",
-                    ),
-                    &["status"],
-                )?,
-                registry,
-            )?,
-
-            msp_files_deleted_total: register(
-                CounterVec::new(
-                    Opts::new(
-                        "storagehub_msp_files_deleted_total",
-                        "MSP file deletions from file storage",
-                    ),
-                    &["status"],
-                )?,
-                registry,
-            )?,
-
-            msp_buckets_deleted_total: register(
-                CounterVec::new(
-                    Opts::new(
-                        "storagehub_msp_buckets_deleted_total",
-                        "MSP bucket deletions (move/stop-storing/insolvent events)",
-                    ),
-                    &["status"],
-                )?,
-                registry,
-            )?,
-
-            msp_fees_charged_total: register(
-                CounterVec::new(
-                    Opts::new(
-                        "storagehub_msp_fees_charged_total",
-                        "MSP fee charge extrinsic submissions",
-                    ),
-                    &["status"],
-                )?,
-                registry,
-            )?,
-
-            msp_bucket_moves_total: register(
-                CounterVec::new(
-                    Opts::new(
-                        "storagehub_msp_bucket_moves_total",
-                        "MSP bucket move downloads (taking over from another MSP)",
-                    ),
-                    &["status"],
-                )?,
-                registry,
-            )?,
-
-            msp_bucket_move_retries_total: register(
-                CounterVec::new(
-                    Opts::new(
-                        "storagehub_msp_bucket_move_retries_total",
-                        "MSP bucket move download retry attempts",
-                    ),
-                    &["status"],
-                )?,
-                registry,
-            )?,
-
-            msp_forest_verifications_total: register(
-                CounterVec::new(
-                    Opts::new(
-                        "storagehub_msp_forest_verifications_total",
-                        "MSP bucket forest verification runs",
-                    ),
-                    &["status"],
-                )?,
-                registry,
-            )?,
-
             msp_forest_verification_seconds: register(
                 HistogramVec::new(
                     HistogramOpts::new(
@@ -418,18 +200,6 @@ impl StorageHubMetrics {
                         "MSP bucket forest verification duration",
                     )
                     .buckets(FAST_OP_BUCKETS.to_vec()),
-                    &["status"],
-                )?,
-                registry,
-            )?,
-
-            // SP metrics
-            sp_slash_submissions_total: register(
-                CounterVec::new(
-                    Opts::new(
-                        "storagehub_sp_slash_submissions_total",
-                        "SP slash extrinsic submissions for slashable providers",
-                    ),
                     &["status"],
                 )?,
                 registry,
@@ -455,28 +225,6 @@ impl StorageHubMetrics {
                         "Outbound file chunk transfer duration (sending to peers)",
                     )
                     .buckets(TRANSFER_BUCKETS.to_vec()),
-                    &["status"],
-                )?,
-                registry,
-            )?,
-
-            insolvent_users_processed_total: register(
-                CounterVec::new(
-                    Opts::new(
-                        "storagehub_insolvent_users_processed_total",
-                        "Insolvent user processing events (BSP and MSP)",
-                    ),
-                    &["status"],
-                )?,
-                registry,
-            )?,
-
-            fisherman_batch_deletions_total: register(
-                CounterVec::new(
-                    Opts::new(
-                        "storagehub_fisherman_batch_deletions_total",
-                        "Fisherman batch deletion processing results",
-                    ),
                     &["status"],
                 )?,
                 registry,
@@ -532,13 +280,81 @@ impl StorageHubMetrics {
     }
 }
 
+/// Records event handler lifecycle metrics (pending/success/failure) with timing.
+///
+/// This struct implements [`LifecycleMetricRecorder`] and is used by the event bus
+/// to automatically track handler invocations. Event names are derived from type
+/// names (converted to snake_case) at subscription time.
+///
+/// # Example
+///
+/// ```ignore
+/// // Created automatically by subscribe_actor_event_map! macro
+/// let recorder = EventMetricRecorder::new(
+///     metrics.clone(),
+///     "new_storage_request",  // auto-derived from NewStorageRequest
+/// );
+/// ```
+#[derive(Clone)]
+pub struct EventMetricRecorder {
+    metrics: MetricsLink,
+    event_name: &'static str,
+}
+
+impl EventMetricRecorder {
+    /// Creates a new [`EventMetricRecorder`] with the given labels.
+    ///
+    /// # Arguments
+    ///
+    /// * `metrics` - The metrics link (can be disabled)
+    /// * `event_name` - The event type name in snake_case (e.g., "new_storage_request")
+    pub fn new(metrics: MetricsLink, event_name: &'static str) -> Self {
+        Self {
+            metrics,
+            event_name,
+        }
+    }
+}
+
+impl LifecycleMetricRecorder for EventMetricRecorder {
+    fn record_pending(&self) {
+        if let Some(m) = self.metrics.as_ref() {
+            m.event_handler_total
+                .with_label_values(&[self.event_name, STATUS_PENDING])
+                .inc();
+        }
+    }
+
+    fn record_success(&self, duration_secs: f64) {
+        if let Some(m) = self.metrics.as_ref() {
+            m.event_handler_total
+                .with_label_values(&[self.event_name, STATUS_SUCCESS])
+                .inc();
+            m.event_handler_seconds
+                .with_label_values(&[self.event_name, STATUS_SUCCESS])
+                .observe(duration_secs);
+        }
+    }
+
+    fn record_failure(&self, duration_secs: f64) {
+        if let Some(m) = self.metrics.as_ref() {
+            m.event_handler_total
+                .with_label_values(&[self.event_name, STATUS_FAILURE])
+                .inc();
+            m.event_handler_seconds
+                .with_label_values(&[self.event_name, STATUS_FAILURE])
+                .observe(duration_secs);
+        }
+    }
+}
+
 /// Increments a counter metric if metrics are enabled.
 ///
 /// # Example
 ///
 /// ```ignore
 /// // With handler (calls handler.metrics())
-/// inc_counter!(handler: self.storage_hub_handler, bsp_storage_requests_total, STATUS_SUCCESS);
+/// inc_counter!(handler: self.storage_hub_handler, bytes_downloaded_total, STATUS_SUCCESS);
 ///
 /// // With direct metrics reference (Option<&StorageHubMetrics>)
 /// inc_counter!(metrics: self.metrics.as_ref(), bytes_downloaded_total, STATUS_SUCCESS);
@@ -565,7 +381,7 @@ macro_rules! inc_counter {
 ///
 /// ```ignore
 /// // With handler (calls handler.metrics())
-/// inc_counter_by!(handler: self.storage_hub_handler, bsp_storage_requests_total, STATUS_SUCCESS, 5);
+/// inc_counter_by!(handler: self.storage_hub_handler, bytes_uploaded_total, STATUS_SUCCESS, 1024);
 ///
 /// // With direct metrics reference (Option<&StorageHubMetrics>)
 /// inc_counter_by!(metrics: self.metrics.as_ref(), bytes_downloaded_total, STATUS_SUCCESS, 1024);

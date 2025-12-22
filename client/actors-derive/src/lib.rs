@@ -181,6 +181,7 @@ struct SubscribeActorEventArgs {
     context: Option<syn::Expr>,
     critical: Option<syn::LitBool>,
     task_instance: Option<syn::Expr>,
+    metric_recorder: Option<syn::Expr>,
 }
 
 impl Default for SubscribeActorEventArgs {
@@ -193,6 +194,7 @@ impl Default for SubscribeActorEventArgs {
             context: None,
             critical: None,
             task_instance: None,
+            metric_recorder: None,
         }
     }
 }
@@ -228,6 +230,8 @@ impl Parse for SubscribeActorEventArgs {
                 args.context = Some(input.parse()?);
             } else if key == "critical" {
                 args.critical = Some(input.parse()?);
+            } else if key == "metric_recorder" {
+                args.metric_recorder = Some(input.parse()?);
             } else {
                 return Err(syn::Error::new(
                     key.span(),
@@ -661,12 +665,18 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
     let critical = args.critical.map_or(false, |lit| lit.value);
     let critical_lit = syn::LitBool::new(critical, Span::call_site());
 
+    // Use the provided metric recorder or default to NoMetricRecorder
+    let metric_recorder = args.metric_recorder.map_or_else(
+        || quote! { ::shc_actors_framework::event_bus::NoMetricRecorder },
+        |expr| quote! { #expr },
+    );
+
     // If a task instance is provided, use it
     // Otherwise, create a new task using the task type and context
     let result = if let Some(task) = args.task_instance {
         quote! {{
-            let event_bus_listener: ::shc_actors_framework::event_bus::EventBusListener<#event_type, _> =
-                #task.subscribe_to(#task_spawner, #service, #critical_lit);
+            let event_bus_listener: ::shc_actors_framework::event_bus::EventBusListener<#event_type, _, _> =
+                #task.subscribe_to(#task_spawner, #service, #critical_lit, #metric_recorder);
             event_bus_listener.start();
         }}
     } else {
@@ -675,8 +685,8 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
         if let Some(context) = args.context {
             quote! {{
                 let task = #task_type::new(#context.clone());
-                let event_bus_listener: ::shc_actors_framework::event_bus::EventBusListener<#event_type, _> =
-                    task.subscribe_to(#task_spawner, #service, #critical_lit);
+                let event_bus_listener: ::shc_actors_framework::event_bus::EventBusListener<#event_type, _, _> =
+                    task.subscribe_to(#task_spawner, #service, #critical_lit, #metric_recorder);
                 event_bus_listener.start();
             }}
         } else {
@@ -702,6 +712,7 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
 /// - `service`: The service that provides the event bus (required)
 /// - `spawner`: The task spawner for spawning event handlers (required)
 /// - `context`: The context to create new tasks (required)
+/// - `metrics`: Optional MetricsLink for automatic lifecycle metrics (pending/success/failure + timing)
 /// - `critical`: Default critical value for all mappings (optional, defaults to false)
 /// - An array of mappings, where each mapping is either:
 ///   - `EventType => TaskType`: Uses default critical value
@@ -710,11 +721,12 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
 /// # Examples
 ///
 /// ```ignore
-/// // Basic usage with multiple event-task mappings
+/// // Basic usage with multiple event-task mappings and automatic metrics
 /// subscribe_actor_event_map!(
 ///     service: &self.blockchain,
 ///     spawner: &self.task_spawner,
 ///     context: self.clone(),
+///     metrics: self.metrics.clone(),  // Enables automatic lifecycle metrics
 ///     critical: true,
 ///     [
 ///         // Override critical for specific mapping
@@ -725,12 +737,16 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
 ///     ]
 /// );
 /// ```
+///
+/// When `metrics` is provided, the macro auto-generates an `EventMetricRecorder` for each mapping
+/// with the `event` label derived from the event type name (converted to snake_case).
 #[proc_macro]
 pub fn subscribe_actor_event_map(input: TokenStream) -> TokenStream {
     struct ActorEventMapArgs {
         service: syn::Expr,
         spawner: syn::Expr,
         context: syn::Expr,
+        metrics: Option<syn::Expr>,
         critical: Option<syn::LitBool>,
         mappings: Vec<EventTaskMapping>,
     }
@@ -746,6 +762,7 @@ pub fn subscribe_actor_event_map(input: TokenStream) -> TokenStream {
             let mut service = None;
             let mut spawner = None;
             let mut context = None;
+            let mut metrics = None;
             let mut critical = None;
             let mut mappings = Vec::new();
 
@@ -760,6 +777,8 @@ pub fn subscribe_actor_event_map(input: TokenStream) -> TokenStream {
                     spawner = Some(input.parse()?);
                 } else if key == "context" {
                     context = Some(input.parse()?);
+                } else if key == "metrics" {
+                    metrics = Some(input.parse()?);
                 } else if key == "critical" {
                     critical = Some(input.parse()?);
                 } else {
@@ -859,6 +878,7 @@ pub fn subscribe_actor_event_map(input: TokenStream) -> TokenStream {
                 service,
                 spawner,
                 context,
+                metrics,
                 critical,
                 mappings,
             })
@@ -886,15 +906,36 @@ pub fn subscribe_actor_event_map(input: TokenStream) -> TokenStream {
             .as_ref()
             .unwrap_or(&default_critical);
 
-        quote! {
-            subscribe_actor_event!(
-                event: #event_type,
-                task: #task_type,
-                service: #service,
-                spawner: #spawner,
-                context: #context,
-                critical: #critical,
-            );
+        // Generate metric recorder if metrics are provided
+        if let Some(metrics_expr) = &args.metrics {
+            // Extract base type name and convert to snake_case for metric label
+            let event_name = to_snake_case(&extract_base_type_name(event_type));
+
+            quote! {
+                subscribe_actor_event!(
+                    event: #event_type,
+                    task: #task_type,
+                    service: #service,
+                    spawner: #spawner,
+                    context: #context,
+                    critical: #critical,
+                    metric_recorder: crate::metrics::EventMetricRecorder::new(
+                        #metrics_expr.clone(),
+                        #event_name,
+                    ),
+                );
+            }
+        } else {
+            quote! {
+                subscribe_actor_event!(
+                    event: #event_type,
+                    task: #task_type,
+                    service: #service,
+                    spawner: #spawner,
+                    context: #context,
+                    critical: #critical,
+                );
+            }
         }
     });
 
@@ -920,6 +961,22 @@ fn to_snake_case(s: &str) -> String {
         }
     }
     result
+}
+
+/// Extracts the base type name from a type, stripping any generics.
+/// For example: `NewStorageRequest<Runtime>` -> `NewStorageRequest`
+fn extract_base_type_name(ty: &syn::Type) -> String {
+    match ty {
+        syn::Type::Path(type_path) => {
+            // Get the last segment's identifier (ignoring generics)
+            if let Some(segment) = type_path.path.segments.last() {
+                segment.ident.to_string()
+            } else {
+                ty.to_token_stream().to_string()
+            }
+        }
+        _ => ty.to_token_stream().to_string(),
+    }
 }
 
 /// Parser for the `#[actor_command(...)]` attribute macro

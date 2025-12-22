@@ -26,8 +26,7 @@ use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
 use crate::{
     handler::StorageHubHandler,
-    inc_counter,
-    metrics::{STATUS_FAILURE, STATUS_PENDING, STATUS_SUCCESS},
+    metrics::{STATUS_FAILURE, STATUS_SUCCESS},
     observe_histogram,
     types::{BspForestStorageHandlerT, ForestStorageKey, ShNodeType},
 };
@@ -174,13 +173,6 @@ where
             event.data
         );
 
-        // Increment metric for proofs submitted
-        inc_counter!(
-            handler: self.storage_hub_handler,
-            bsp_proofs_submitted_total,
-            STATUS_PENDING
-        );
-
         if event.data.forest_challenges.is_empty() && event.data.checkpoint_challenges.is_empty() {
             warn!(target: LOG_TARGET, "No challenges to respond to. Skipping proof submission.");
             return Ok(
@@ -193,11 +185,6 @@ where
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
             Some(tx) => tx,
             None => {
-                inc_counter!(
-                    handler: self.storage_hub_handler,
-                    bsp_proofs_submitted_total,
-                    STATUS_FAILURE
-                );
                 error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. This is a critical bug. Please report it to the StorageHub team.");
                 return Err(anyhow!(
                     "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken!"
@@ -220,14 +207,7 @@ where
                 .forest_storage_handler
                 .get(&current_forest_key)
                 .await
-                .ok_or_else(|| {
-                    inc_counter!(
-                        handler: self.storage_hub_handler,
-                        bsp_proofs_submitted_total,
-                        STATUS_FAILURE
-                    );
-                    anyhow!("CRITICAL❗️❗️ Failed to get forest storage.")
-                })?;
+                .ok_or_else(|| anyhow!("CRITICAL❗️❗️ Failed to get forest storage."))?;
 
             let p = fs
                 .read()
@@ -313,14 +293,7 @@ where
                 .forest_storage_handler
                 .get(&current_forest_key)
                 .await
-                .ok_or_else(|| {
-                    inc_counter!(
-                        handler: self.storage_hub_handler,
-                        bsp_proofs_submitted_total,
-                        STATUS_FAILURE
-                    );
-                    anyhow!("CRITICAL❗️❗️ Failed to get forest storage.")
-                })?;
+                .ok_or_else(|| anyhow!("CRITICAL❗️❗️ Failed to get forest storage."))?;
             let root = fs.read().await.root();
             root
         };
@@ -369,21 +342,9 @@ where
 
         match &submit_result {
             Ok(_) => {
-                // Increment metric for successful proof submission
-                inc_counter!(
-                    handler: self.storage_hub_handler,
-                    bsp_proofs_submitted_total,
-                    STATUS_SUCCESS
-                );
                 trace!(target: LOG_TARGET, "Proof submitted successfully");
             }
             Err(e) => {
-                // Increment metric for failed proof submission
-                inc_counter!(
-                    handler: self.storage_hub_handler,
-                    bsp_proofs_submitted_total,
-                    STATUS_FAILURE
-                );
                 error!(target: LOG_TARGET, "❌ Failed to submit proof due to: {}", e);
             }
         }

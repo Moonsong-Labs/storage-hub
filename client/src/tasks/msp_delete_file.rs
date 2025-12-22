@@ -13,8 +13,6 @@ use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
 use crate::{
     handler::StorageHubHandler,
-    inc_counter,
-    metrics::{STATUS_FAILURE, STATUS_SUCCESS},
     types::{MspForestStorageHandlerT, ShNodeType},
 };
 
@@ -123,11 +121,6 @@ where
                 .get(&bucket_forest_key.into())
                 .await
                 .ok_or_else(|| {
-                    inc_counter!(
-                        handler: self.storage_hub_handler,
-                        msp_files_deleted_total,
-                        STATUS_FAILURE
-                    );
                     anyhow!(
                         "CRITICAL❗️❗️ Failed to get forest storage for bucket [{:?}].",
                         event.bucket_id
@@ -143,21 +136,7 @@ where
                 );
             } else {
                 // If file key is not in Forest, we can now safely remove it from the File Storage.
-                match self.remove_file_from_file_storage(&file_key.into()).await {
-                    Ok(_) => inc_counter!(
-                        handler: self.storage_hub_handler,
-                        msp_files_deleted_total,
-                        STATUS_SUCCESS
-                    ),
-                    Err(e) => {
-                        inc_counter!(
-                            handler: self.storage_hub_handler,
-                            msp_files_deleted_total,
-                            STATUS_FAILURE
-                        );
-                        return Err(e);
-                    }
-                }
+                self.remove_file_from_file_storage(&file_key.into()).await?;
             }
         }
 
@@ -195,11 +174,6 @@ where
             .get(&bucket_forest_key.into())
             .await
             .ok_or_else(|| {
-                inc_counter!(
-                    handler: self.storage_hub_handler,
-                    msp_files_deleted_total,
-                    STATUS_FAILURE
-                );
                 anyhow!(
                     "CRITICAL❗️❗️ Failed to get forest storage for bucket [{:?}].",
                     event.bucket_id
@@ -225,11 +199,6 @@ where
             read_file_storage
                 .get_metadata(&event.file_key.into())
                 .map_err(|e| {
-                    inc_counter!(
-                        handler: self.storage_hub_handler,
-                        msp_files_deleted_total,
-                        STATUS_FAILURE
-                    );
                     error!(target: LOG_TARGET, "Failed to get file metadata from File Storage: {:?}", e);
                     anyhow!("Failed to get file metadata from File Storage: {:?}", e)
                 })?
@@ -238,24 +207,8 @@ where
 
         if is_in_file_storage {
             // If file is present in File Storage and not in Forest, remove it from File Storage.
-            match self
-                .remove_file_from_file_storage(&event.file_key.into())
-                .await
-            {
-                Ok(_) => inc_counter!(
-                    handler: self.storage_hub_handler,
-                    msp_files_deleted_total,
-                    STATUS_SUCCESS
-                ),
-                Err(e) => {
-                    inc_counter!(
-                        handler: self.storage_hub_handler,
-                        msp_files_deleted_total,
-                        STATUS_FAILURE
-                    );
-                    return Err(e);
-                }
-            }
+            self.remove_file_from_file_storage(&event.file_key.into())
+                .await?;
         } else {
             debug!(
                 target: LOG_TARGET,

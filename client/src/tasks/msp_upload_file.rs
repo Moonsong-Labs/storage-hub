@@ -154,8 +154,7 @@ use shp_file_metadata::{Chunk, ChunkId, Leaf};
 
 use crate::{
     handler::StorageHubHandler,
-    inc_counter, inc_counter_by,
-    metrics::{STATUS_FAILURE, STATUS_PENDING, STATUS_SUCCESS},
+    metrics::{STATUS_FAILURE, STATUS_SUCCESS},
     observe_histogram,
     types::{ForestStorageKey, MspForestStorageHandlerT, ShNodeType},
 };
@@ -296,13 +295,6 @@ where
         // Track storage request processing timing for metrics.
         let start_time = std::time::Instant::now();
 
-        // Increment metric for new storage request
-        inc_counter!(
-            handler: self.storage_hub_handler,
-            msp_storage_requests_total,
-            STATUS_PENDING
-        );
-
         let bucket_id = H256::from_slice(event.bucket_id.as_ref());
         let file_key = H256::from_slice(event.file_key.as_ref());
 
@@ -327,12 +319,6 @@ where
                 ))
             }
             Err(reason) => {
-                // Increment metric for failed storage request
-                inc_counter!(
-                    handler: self.storage_hub_handler,
-                    msp_storage_requests_total,
-                    STATUS_FAILURE
-                );
                 error!(target: LOG_TARGET, "Failed to handle new storage request: {:?}", reason);
 
                 self.handle_rejected_storage_request(
@@ -875,11 +861,6 @@ where
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
             Some(tx) => tx,
             None => {
-                inc_counter!(
-                    handler: self.storage_hub_handler,
-                    msp_storage_requests_total,
-                    STATUS_FAILURE
-                );
                 let err_msg = "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. This is a critical bug. Please report it to the StorageHub team.";
                 error!(target: LOG_TARGET, err_msg);
                 return Err(anyhow!(err_msg));
@@ -895,21 +876,11 @@ where
         let own_msp_id = match own_provider_id {
             Some(StorageProviderId::MainStorageProvider(id)) => id,
             Some(StorageProviderId::BackupStorageProvider(_)) => {
-                inc_counter!(
-                    handler: self.storage_hub_handler,
-                    msp_storage_requests_total,
-                    STATUS_FAILURE
-                );
                 return Err(anyhow!(
                     "Current node account is a Backup Storage Provider. Expected a Main Storage Provider ID."
                 ));
             }
             None => {
-                inc_counter!(
-                    handler: self.storage_hub_handler,
-                    msp_storage_requests_total,
-                    STATUS_FAILURE
-                );
                 return Err(anyhow!("Failed to get own MSP ID."));
             }
         };
@@ -1119,14 +1090,6 @@ where
                     e
                 );
 
-                // Increment metric for failed storage request responses
-                inc_counter_by!(
-                    handler: self.storage_hub_handler,
-                    msp_storage_requests_total,
-                    STATUS_FAILURE,
-                    all_file_keys.len() as u64
-                );
-
                 self.handle_extrinsic_submission_failure(&all_file_keys)
                     .await;
 
@@ -1157,14 +1120,6 @@ where
                 error!(
                     target: LOG_TARGET,
                     "Expected events but got None - this should not happen. Removing file key statuses to allow re-evaluation on next block."
-                );
-
-                // Increment metric for failed storage request responses (missing events is a failure)
-                inc_counter_by!(
-                    handler: self.storage_hub_handler,
-                    msp_storage_requests_total,
-                    STATUS_FAILURE,
-                    all_file_keys.len() as u64
                 );
 
                 self.handle_missing_extrinsic_events(&all_file_keys).await;
@@ -1511,23 +1466,8 @@ where
 
         let Some(dispatch_error) = maybe_dispatch_error else {
             // No dispatch error found, extrinsic succeeded
-            // Increment metric for successfully responded storage requests
-            inc_counter_by!(
-                handler: self.storage_hub_handler,
-                msp_storage_requests_total,
-                STATUS_SUCCESS,
-                file_keys.len() as u64
-            );
             return Ok(());
         };
-
-        // Dispatch error found, increment failure metric
-        inc_counter_by!(
-            handler: self.storage_hub_handler,
-            msp_storage_requests_total,
-            STATUS_FAILURE,
-            file_keys.len() as u64
-        );
 
         // Convert dispatch error to known StorageHub errors
         let error: Option<StorageEnableErrors<Runtime>> = match dispatch_error {

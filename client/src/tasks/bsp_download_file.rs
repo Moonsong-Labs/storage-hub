@@ -8,8 +8,6 @@ use shc_file_transfer_service::{
 
 use crate::{
     handler::StorageHubHandler,
-    inc_counter,
-    metrics::{STATUS_FAILURE, STATUS_SUCCESS},
     types::{BspForestStorageHandlerT, ShNodeType},
 };
 
@@ -66,28 +64,7 @@ where
     ) -> anyhow::Result<String> {
         trace!(target: LOG_TARGET, "Received remote download request with id {:?} for file {:?}", event.request_id, event.file_key);
 
-        // Process the download request and track success/failure with metrics.
-        let result = self.handle_download_inner(event).await;
-
-        // Record metric based on result.
-        match &result {
-            Ok(_) => {
-                inc_counter!(
-                    handler: self.storage_hub_handler,
-                    bsp_download_requests_total,
-                    STATUS_SUCCESS
-                );
-            }
-            Err(_) => {
-                inc_counter!(
-                    handler: self.storage_hub_handler,
-                    bsp_download_requests_total,
-                    STATUS_FAILURE
-                );
-            }
-        }
-
-        result
+        self.handle_download_inner(event).await
     }
 }
 

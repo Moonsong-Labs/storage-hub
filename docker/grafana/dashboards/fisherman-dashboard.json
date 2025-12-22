@@ -29,7 +29,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
       "id": 2,
       "options": {
         "colorMode": "value",
@@ -47,12 +47,129 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(storagehub_fisherman_batch_deletions_total)",
+          "expr": "sum(storagehub_event_handler_total{event=\"batch_file_deletions\"})",
           "legendFormat": "Total",
           "refId": "A"
         }
       ],
       "title": "Total Batch Deletions",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(storagehub_event_handler_total{event=\"batch_file_deletions\",status=\"success\"})",
+          "legendFormat": "Success",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Successful",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "red", "value": null }]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(storagehub_event_handler_total{event=\"batch_file_deletions\",status=\"failure\"})",
+          "legendFormat": "Failures",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Failed",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "orange", "value": null }]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+      "id": 5,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(storagehub_event_handler_total{event=\"batch_file_deletions\",status=\"pending\"})",
+          "legendFormat": "Pending",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Pending",
       "type": "stat"
     },
     {
@@ -78,8 +195,8 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
-      "id": 3,
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 1 },
+      "id": 6,
       "options": {
         "orientation": "auto",
         "reduceOptions": {
@@ -94,98 +211,20 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(storagehub_fisherman_batch_deletions_total{status=\"success\"}) / sum(storagehub_fisherman_batch_deletions_total) * 100",
+          "expr": "sum(storagehub_event_handler_total{event=\"batch_file_deletions\",status=\"success\"}) / sum(storagehub_event_handler_total{event=\"batch_file_deletions\",status=~\"success|failure\"}) * 100",
           "legendFormat": "Success Rate",
           "refId": "A"
         }
       ],
-      "title": "Batch Deletion Success Rate",
+      "title": "Success Rate",
       "type": "gauge"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [{ "color": "green", "value": null }]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
-      "id": 4,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "storagehub_fisherman_batch_deletions_total{status=\"success\"}",
-          "legendFormat": "Success",
-          "refId": "A"
-        }
-      ],
-      "title": "Successful Deletions",
-      "type": "stat"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [{ "color": "red", "value": null }]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
-      "id": 5,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "storagehub_fisherman_batch_deletions_total{status=\"failure\"}",
-          "legendFormat": "Failure",
-          "refId": "A"
-        }
-      ],
-      "title": "Failed Deletions",
-      "type": "stat"
     },
     {
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
-      "id": 6,
+      "id": 100,
       "panels": [],
-      "title": "Batch Deletions Over Time",
+      "title": "FishermanProcessBatchDeletionsTask (batch_file_deletions)",
       "type": "row"
     },
     {
@@ -197,102 +236,19 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "Events",
             "axisPlacement": "auto",
             "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
+            "drawStyle": "bars",
+            "fillOpacity": 80,
             "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
             "insertNulls": false,
             "lineInterpolation": "linear",
-            "lineWidth": 2,
+            "lineWidth": 1,
             "pointSize": 5,
             "scaleDistribution": { "type": "linear" },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [{ "color": "green", "value": null }]
-          },
-          "unit": "reqps"
-        },
-        "overrides": [
-          {
-            "matcher": { "id": "byName", "options": "Success" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "green", "mode": "fixed" }
-              }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "Failure" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "red", "mode": "fixed" }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
-      "id": 7,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(storagehub_fisherman_batch_deletions_total{status=\"success\"}[5m])",
-          "legendFormat": "Success",
-          "refId": "A"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(storagehub_fisherman_batch_deletions_total{status=\"failure\"}[5m])",
-          "legendFormat": "Failure",
-          "refId": "B"
-        }
-      ],
-      "title": "Batch Deletions Rate Over Time",
-      "type": "timeseries"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "auto",
+            "showPoints": "never",
             "spanNulls": false,
             "stacking": { "group": "A", "mode": "none" },
             "thresholdsStyle": { "mode": "off" }
@@ -306,27 +262,91 @@
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "Success" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "green", "mode": "fixed" }
-              }
-            ]
+            "matcher": { "id": "byRegexp", "options": ".*success.*" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
           },
           {
-            "matcher": { "id": "byName", "options": "Failure" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "red", "mode": "fixed" }
-              }
-            ]
+            "matcher": { "id": "byRegexp", "options": ".*failure.*" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": ".*pending.*" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }]
           }
         ]
       },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "id": 101,
+      "options": {
+        "legend": {
+          "calcs": ["sum", "last"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"batch_file_deletions\",status=\"success\"}[1m])",
+          "legendFormat": "batch_file_deletions (success)",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"batch_file_deletions\",status=\"failure\"}[1m])",
+          "legendFormat": "batch_file_deletions (failure)",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"batch_file_deletions\",status=\"pending\"}[1m])",
+          "legendFormat": "batch_file_deletions (pending)",
+          "refId": "C"
+        }
+      ],
+      "title": "Batch Deletion Events (per minute)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
-      "id": 8,
+      "id": 102,
       "options": {
         "legend": {
           "calcs": ["mean", "max"],
@@ -340,26 +360,32 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_fisherman_batch_deletions_total{status=\"success\"}[1h])",
-          "legendFormat": "Success",
+          "expr": "histogram_quantile(0.50, sum(rate(storagehub_event_handler_seconds_bucket{event=\"batch_file_deletions\"}[5m])) by (le))",
+          "legendFormat": "p50",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_fisherman_batch_deletions_total{status=\"failure\"}[1h])",
-          "legendFormat": "Failure",
+          "expr": "histogram_quantile(0.95, sum(rate(storagehub_event_handler_seconds_bucket{event=\"batch_file_deletions\"}[5m])) by (le))",
+          "legendFormat": "p95",
           "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "histogram_quantile(0.99, sum(rate(storagehub_event_handler_seconds_bucket{event=\"batch_file_deletions\"}[5m])) by (le))",
+          "legendFormat": "p99",
+          "refId": "C"
         }
       ],
-      "title": "Batch Deletions (Last Hour Increase)",
+      "title": "Batch Deletion Handler Duration",
       "type": "timeseries"
     },
     {
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
-      "id": 9,
+      "id": 200,
       "panels": [],
-      "title": "Distribution Analysis",
+      "title": "Status Distribution",
       "type": "row"
     },
     {
@@ -390,11 +416,20 @@
                 "value": { "fixedColor": "red", "mode": "fixed" }
               }
             ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "pending" },
+            "properties": [
+              {
+                "id": "color",
+                "value": { "fixedColor": "orange", "mode": "fixed" }
+              }
+            ]
           }
         ]
       },
-      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 15 },
-      "id": 10,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "id": 201,
       "options": {
         "displayLabels": ["name", "percent"],
         "legend": {
@@ -415,7 +450,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "storagehub_fisherman_batch_deletions_total",
+          "expr": "storagehub_event_handler_total{event=\"batch_file_deletions\"}",
           "legendFormat": "{{status}}",
           "refId": "A"
         }
@@ -432,11 +467,11 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "Events",
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "bars",
-            "fillOpacity": 100,
+            "fillOpacity": 80,
             "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
             "insertNulls": false,
@@ -444,7 +479,7 @@
             "lineWidth": 1,
             "pointSize": 5,
             "scaleDistribution": { "type": "linear" },
-            "showPoints": "auto",
+            "showPoints": "never",
             "spanNulls": false,
             "stacking": { "group": "A", "mode": "normal" },
             "thresholdsStyle": { "mode": "off" }
@@ -458,31 +493,25 @@
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "success" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "green", "mode": "fixed" }
-              }
-            ]
+            "matcher": { "id": "byName", "options": "Success" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
           },
           {
-            "matcher": { "id": "byName", "options": "failure" },
-            "properties": [
-              {
-                "id": "color",
-                "value": { "fixedColor": "red", "mode": "fixed" }
-              }
-            ]
+            "matcher": { "id": "byName", "options": "Failure" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Pending" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }]
           }
         ]
       },
-      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 15 },
-      "id": 11,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+      "id": 202,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": ["sum", "last"],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -492,12 +521,24 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "increase(storagehub_fisherman_batch_deletions_total[1h])",
-          "legendFormat": "{{status}}",
+          "expr": "increase(storagehub_event_handler_total{event=\"batch_file_deletions\",status=\"success\"}[5m])",
+          "legendFormat": "Success",
           "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"batch_file_deletions\",status=\"failure\"}[5m])",
+          "legendFormat": "Failure",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "increase(storagehub_event_handler_total{event=\"batch_file_deletions\",status=\"pending\"}[5m])",
+          "legendFormat": "Pending",
+          "refId": "C"
         }
       ],
-      "title": "Batch Deletions Stacked (Last Hour)",
+      "title": "Status Over Time (Stacked, 5min buckets)",
       "type": "timeseries"
     }
   ],
