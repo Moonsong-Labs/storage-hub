@@ -218,7 +218,7 @@ impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
         &self,
         file_key: H256,
         proven_chunk: Proven<ChunkId, Chunk>,
-        file_storage: &mut FS,
+        file_storage: Arc<RwLock<FS>>,
     ) -> Result<()>
     where
         FS: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
@@ -230,10 +230,14 @@ impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
                 let chunk_data = leaf.data;
                 let chunk_idx = chunk_id.as_u64();
 
-                // Chunk size has already been validated in process_chunk_download_response
-                file_storage
-                    .write_chunk(&file_key, &chunk_id, &chunk_data)
-                    .map_err(|error| anyhow!("Failed to write chunk {}: {:?}", chunk_idx, error))?;
+                {
+                    let mut file_storage_guard = file_storage.write().await;
+                    file_storage_guard
+                        .write_chunk(&file_key, &chunk_id, &chunk_data)
+                        .map_err(|error| {
+                            anyhow!("Failed to write chunk {}: {:?}", chunk_idx, error)
+                        })?;
+                }
 
                 // Mark chunk as downloaded in persistent state
                 let context = self.download_state_store.open_rw_context();
@@ -302,7 +306,7 @@ impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
         peer_id: PeerId,
         download_request: RemoteDownloadDataResponse,
         start_time: std::time::Instant,
-        file_storage: &mut FS,
+        file_storage: Arc<RwLock<FS>>,
     ) -> Result<bool>
     where
         FS: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
@@ -362,7 +366,7 @@ impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
                 continue;
             }
 
-            self.process_proven_chunk(file_key, proven_chunk, file_storage)
+            self.process_proven_chunk(file_key, proven_chunk, Arc::clone(&file_storage))
                 .await?;
             processed_chunks += 1;
         }
@@ -392,7 +396,7 @@ impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
         chunk_batch: &HashSet<ChunkId>,
         bucket: &BucketId<Runtime>,
         file_transfer: &FT,
-        file_storage: &mut FS,
+        file_storage: Arc<RwLock<FS>>,
     ) -> Result<bool>
     where
         FT: FileTransferServiceCommandInterface<Runtime>
@@ -433,7 +437,7 @@ impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
                             peer_id,
                             response,
                             start_time,
-                            file_storage,
+                            Arc::clone(&file_storage),
                         )
                         .await;
                 }
@@ -581,20 +585,19 @@ impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
 
                     // Try each selected peer
                     for peer_id in peers {
-                        let download_result = {
-                            let mut file_storage_guard = file_storage.write().await;
-                            manager
-                                .try_download_chunk_batch(
-                                    peer_id,
-                                    file_key,
-                                    &file_metadata,
-                                    &chunk_batch,
-                                    &bucket,
-                                    &file_transfer,
-                                    &mut *file_storage_guard,
-                                )
-                                .await
-                        };
+                        // Note: file_storage lock is acquired internally by process_proven_chunk
+                        // for each chunk write, keeping lock duration minimal during network I/O
+                        let download_result = manager
+                            .try_download_chunk_batch(
+                                peer_id,
+                                file_key,
+                                &file_metadata,
+                                &chunk_batch,
+                                &bucket,
+                                &file_transfer,
+                                Arc::clone(&file_storage),
+                            )
+                            .await;
 
                         match download_result {
                             Ok(_) => return Ok(()),
