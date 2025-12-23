@@ -649,7 +649,7 @@ where
                 )
                 .map_err(|e| anyhow!("Failed to insert file in file storage: {:?}", e))?;
         } else {
-            // If the file is in file storage, we can skip the file transfer and accept the storage request directly, provided that we have the entire file in file storage.
+            // If the file is in file storage, we can skip the file transfer,
             // and proceed to accepting the storage request directly, provided that we have the entire file in file storage.
             info!(target: LOG_TARGET, "File key {:?} found in file storage. No need to receive the file from the user.", file_key);
 
@@ -681,9 +681,6 @@ where
                 debug!(target: LOG_TARGET, "File key {:x} is not complete in file storage. Need to receive the file from the user.", file_key);
             }
         }
-
-        // If the file is in file storage, we can skip the file transfer,
-        // and proceed to accepting the storage request directly, provided that we have the entire file in file storage.
 
         // Register the file for upload in the file transfer service.
         // Even though we could already have the entire file in file storage, we
