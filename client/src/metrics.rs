@@ -13,8 +13,6 @@
 //! }
 //! ```
 
-use std::sync::Arc;
-
 use shc_actors_framework::event_bus::LifecycleMetricRecorder;
 use substrate_prometheus_endpoint::{
     register, CounterVec, Gauge, HistogramOpts, HistogramVec, Opts, PrometheusError, Registry, U64,
@@ -61,7 +59,7 @@ pub const STATUS_PENDING: &str = "pending";
 /// The default value has metrics disabled (`None`). Use [`MetricsLink::new`] with
 /// a [`Registry`] to enable metrics collection.
 #[derive(Clone, Default)]
-pub struct MetricsLink(Arc<Option<StorageHubMetrics>>);
+pub struct MetricsLink(Option<StorageHubMetrics>);
 
 impl MetricsLink {
     /// Creates a new [`MetricsLink`] from an optional [`Registry`].
@@ -74,7 +72,7 @@ impl MetricsLink {
             Some(r) => match StorageHubMetrics::register(r) {
                 Ok(metrics) => {
                     log::info!(target: LOG_TARGET, "StorageHub Prometheus metrics registered successfully");
-                    let metrics_link = Self(Arc::new(Some(metrics)));
+                    let metrics_link = Self(Some(metrics));
 
                     // Spawn background task to collect system metrics
                     metrics_link.spawn_system_metrics_collector();
@@ -83,12 +81,12 @@ impl MetricsLink {
                 }
                 Err(e) => {
                     log::error!(target: LOG_TARGET, "Failed to register StorageHub Prometheus metrics: {}", e);
-                    Self(Arc::new(None))
+                    Self(None)
                 }
             },
             None => {
                 log::warn!(target: LOG_TARGET, "No Prometheus registry provided, StorageHub metrics disabled");
-                Self(Arc::new(None))
+                Self(None)
             }
         }
     }
@@ -96,7 +94,7 @@ impl MetricsLink {
     /// Returns a reference to the metrics if available.
     #[must_use]
     pub fn as_ref(&self) -> Option<&StorageHubMetrics> {
-        (*self.0).as_ref()
+        self.0.as_ref()
     }
 
     /// Spawns a background task that collects system metrics (CPU, memory) every 5 seconds.
@@ -161,6 +159,7 @@ impl MetricsLink {
 /// - Prefix: `storagehub_`
 /// - Counters: suffix `_total`
 /// - Histograms: suffix `_seconds` or `_bytes`
+#[derive(Clone)]
 pub struct StorageHubMetrics {
     // === System Resource Metrics ===
     /// Current system-wide CPU usage percentage (0-100).
