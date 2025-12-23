@@ -252,9 +252,7 @@ mod tests {
     use sp_keyring::sr25519::Keyring;
 
     /// Helper to create a v0 storage request metadata for testing.
-    fn create_v0_metadata(
-        msp: Option<(H256, bool)>,
-    ) -> v0::StorageRequestMetadataV0<Test> {
+    fn create_v0_metadata(msp: Option<(H256, bool)>) -> v0::StorageRequestMetadataV0<Test> {
         v0::StorageRequestMetadataV0 {
             requested_at: 1,
             expires_at: 100,
@@ -414,10 +412,7 @@ mod tests {
             assert_eq!(new_1.msp_status, MspStorageRequestStatus::None);
 
             let new_2 = crate::StorageRequests::<Test>::get(file_key_2).unwrap();
-            assert_eq!(
-                new_2.msp_status,
-                MspStorageRequestStatus::Pending(msp_id_1)
-            );
+            assert_eq!(new_2.msp_status, MspStorageRequestStatus::Pending(msp_id_1));
 
             let new_3 = crate::StorageRequests::<Test>::get(file_key_3).unwrap();
             assert_eq!(
@@ -475,4 +470,3 @@ mod tests {
         });
     }
 }
-
