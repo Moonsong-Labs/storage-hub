@@ -585,8 +585,6 @@ impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
 
                     // Try each selected peer
                     for peer_id in peers {
-                        // Note: file_storage lock is acquired internally by process_proven_chunk
-                        // for each chunk write, keeping lock duration minimal during network I/O
                         let download_result = manager
                             .try_download_chunk_batch(
                                 peer_id,
