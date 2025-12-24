@@ -1304,13 +1304,13 @@ where
                     if is_current_transaction {
                         debug!(
                             target: LOG_TARGET,
-                            "✓ Transaction with nonce {} (hash: {:?}) was finalized. Removing from tracking.",
+                            "✓ Transaction with nonce {} (hash: {:?}) was finalised. Removing from tracking.",
                             nonce, tx_hash
                         );
                     } else {
                         warn!(
                             target: LOG_TARGET,
-                            "⚠️ Old transaction with nonce {} (hash: {:?}) was finalized, but we have a different transaction ({:?}) in manager. \
+                            "⚠️ Old transaction with nonce {} (hash: {:?}) was finalised, but we have a different transaction ({:?}) in manager. \
                                 Removing newer transaction as nonce is now consumed.",
                             nonce, tx_hash, self.transaction_manager.pending.get(&nonce).map(|tx| tx.hash)
                         );
@@ -2084,35 +2084,35 @@ where
         }
     }
 
-    /// Process finality events for a block if it has been finalized.
+    /// Process finality events for a block if it has been finalised.
     ///
     /// This is used during catch-up and initial sync to eagerly process finality for
-    /// blocks that are already finalized, ensuring file storage cleanup happens correctly
+    /// blocks that are already finalised, ensuring file storage cleanup happens correctly
     /// before state might be pruned.
     ///
     /// Updates `last_finalised_block_processed` to track finality progress. This is used by
     /// `handle_finality_notification` to avoid double-processing blocks that were already
     /// handled here during sync.
     ///
-    /// Note: For blocks imported before they're finalized, finality processing is handled
+    /// Note: For blocks imported before they're finalised, finality processing is handled
     /// by `handle_finality_notification` when the finality justification eventually arrives.
-    pub(crate) fn process_finality_events_if_finalized(
+    pub(crate) fn process_finality_events_if_finalised(
         &mut self,
         block_hash: &Runtime::Hash,
         block_number: BlockNumber<Runtime>,
     ) {
-        // Get the current finalized block number from the client
-        let finalized_number: BlockNumber<Runtime> =
+        // Get the current finalised block number from the client
+        let finalised_number: BlockNumber<Runtime> =
             self.client.info().finalized_number.saturated_into();
 
-        // Only process if this block is finalized
-        if block_number > finalized_number {
+        // Only process if this block is finalised
+        if block_number > finalised_number {
             return;
         }
 
         info!(
             target: LOG_TARGET,
-            "📦 Processing finality events for already-finalized block #{} during sync",
+            "📦 Processing finality events for already-finalised block #{} during sync",
             block_number
         );
 
@@ -2133,7 +2133,7 @@ where
     /// sync blocks during linear chain extensions. It:
     /// 1. Syncs the provider ID
     /// 2. Processes mutations based on the provider type (BSP or MSP)
-    /// 3. Checks for finality and processes finality events if the block is finalized
+    /// 3. Checks for finality and processes finality events if the block is finalised
     /// 4. Updates the last processed block info
     ///
     /// Note: For reorgs during sync, mutations are handled by `forest_root_changes_catchup`
@@ -2162,9 +2162,9 @@ where
             None => {}
         }
 
-        // Check if this block is already finalized and process finality events if so
-        // This ensures file storage cleanup happens for finalized blocks during sync
-        self.process_finality_events_if_finalized(block_hash, block_number);
+        // Check if this block is already finalised and process finality events if so
+        // This ensures file storage cleanup happens for finalised blocks during sync
+        self.process_finality_events_if_finalised(block_hash, block_number);
 
         // Update the last processed block in persistent storage for tracking
         self.update_last_processed_block_info(MinimalBlockInfo {
@@ -2204,7 +2204,7 @@ where
         // Process finality events for enacted blocks
         for block in tree_route.enacted() {
             let block_num: BlockNumber<Runtime> = block.number.saturated_into();
-            self.process_finality_events_if_finalized(&block.hash, block_num);
+            self.process_finality_events_if_finalised(&block.hash, block_num);
         }
 
         // Update the last processed block to the new best
@@ -2220,7 +2220,7 @@ where
     /// - Provider-specific finality events (BSP or MSP)
     ///
     /// This is called both from `handle_finality_notification` for real-time finality
-    /// and from `process_finality_events_if_finalized` during catch-up/sync.
+    /// and from `process_finality_events_if_finalised` during catch-up/sync.
     pub(crate) fn process_finality_events(&mut self, block_hash: &Runtime::Hash) {
         match get_events_at_block::<Runtime>(&self.client, block_hash) {
             Ok(block_events) => {
@@ -2336,8 +2336,8 @@ where
             );
         }
 
-        // Get the finalized block number before catching up
-        let finalized_number: BlockNumber<Runtime> = chain_info.finalized_number.saturated_into();
+        // Get the finalised block number before catching up
+        let finalised_number: BlockNumber<Runtime> = chain_info.finalized_number.saturated_into();
 
         // Ensure the provider ID is synced before processing mutations
         self.sync_provider_id(&best_hash);
@@ -2345,11 +2345,11 @@ where
         // Apply Forest root changes for the entire tree route.
         self.forest_root_changes_catchup(&tree_route).await;
 
-        // Process finality events for enacted blocks that are finalized.
+        // Process finality events for enacted blocks that are finalised.
         // We don't process finality for retracted blocks since they're no longer canonical.
         for block in tree_route.enacted() {
             let block_num: BlockNumber<Runtime> = block.number.saturated_into();
-            self.process_finality_events_if_finalized(&block.hash, block_num);
+            self.process_finality_events_if_finalised(&block.hash, block_num);
         }
 
         // Update the local best block and last processed block to reflect the catch up
@@ -2360,18 +2360,18 @@ where
         self.update_last_processed_block_info(self.best_block);
 
         // Update last_finalised_block_processed based on how far we've caught up
-        // If best_number <= finalized_number, all caught-up blocks are finalized
-        if best_number <= finalized_number {
+        // If best_number <= finalised_number, all caught-up blocks are finalised
+        if best_number <= finalised_number {
             self.last_finalised_block_processed = MinimalBlockInfo {
                 number: best_number,
                 hash: best_hash,
             };
         } else {
-            // Only some blocks are finalized, update to the finalized block
-            if let Ok(Some(finalized_hash)) = self.client.hash(finalized_number.saturated_into()) {
+            // Only some blocks are finalised, update to the finalised block
+            if let Ok(Some(finalised_hash)) = self.client.hash(finalised_number.saturated_into()) {
                 self.last_finalised_block_processed = MinimalBlockInfo {
-                    number: finalized_number,
-                    hash: finalized_hash,
+                    number: finalised_number,
+                    hash: finalised_hash,
                 };
             }
         }

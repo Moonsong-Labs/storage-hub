@@ -1883,7 +1883,7 @@ where
 
     /// Handle a finality notification.
     ///
-    /// This processes finality events for the finalized block and all implicitly finalized blocks
+    /// This processes finality events for the finalised block and all implicitly finalised blocks
     /// in the `tree_route`. This is important for scenarios where finality jumps multiple blocks
     /// at once (e.g., after a node restart, network partition recovery or solved finality staleness).
     async fn handle_finality_notification(
@@ -1899,9 +1899,9 @@ where
             return;
         }
 
-        // Skip if this finalized block was already processed.
+        // Skip if this finalised block was already processed.
         // This can happen during sync when both `handle_sync_block_notification` (via
-        // `process_finality_events_if_finalized`) and this handler process the same block.
+        // `process_finality_events_if_finalised`) and this handler process the same block.
         // Finality notifications fire even during sync, but we may have
         // already processed some blocks eagerly based on `client.info().finalized_number`.
         if block_number <= self.last_finalised_block_processed.number {
@@ -1916,19 +1916,19 @@ where
 
         info!(target: LOG_TARGET, "📩 Finality notification #{}: {:x}", block_number, block_hash);
 
-        // Process finality events for all implicitly finalized blocks in tree_route.
-        // tree_route contains all blocks from (old_finalized, new_finalized_parent), i.e., the blocks
-        // that were implicitly finalized when jumping from the old finalized to the new one.
+        // Process finality events for all implicitly finalised blocks in tree_route.
+        // tree_route contains all blocks from (old_finalised, new_finalised_parent), i.e., the blocks
+        // that were implicitly finalised when jumping from the old finalised to the new one.
         // The tree_route does not include the latest finalised block itself.
         //
         // We filter out blocks that were already processed to avoid double-processing.
         // This can happen when blocks were processed eagerly during sync via
-        // `process_finality_events_if_finalized`, but the finality gadget's internal finalized state
+        // `process_finality_events_if_finalised`, but the finality gadget's internal finalised state
         // was behind our `last_finalised_block_processed`.
         if !notification.tree_route.is_empty() {
             info!(
                 target: LOG_TARGET,
-                "📦 Processing finality events for {} implicitly finalized blocks",
+                "📦 Processing finality events for {} implicitly finalised blocks",
                 notification.tree_route.len()
             );
 
@@ -1966,7 +1966,7 @@ where
             }
         }
 
-        // Process finality events for the newly finalized block itself
+        // Process finality events for the newly finalised block itself
         self.process_finality_events(&block_hash);
 
         // Cleanup the pending transaction store for the last finalised block processed.
