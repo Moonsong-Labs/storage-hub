@@ -542,6 +542,18 @@ pub mod pallet {
     pub type IncompleteStorageRequests<T: Config> =
         StorageMap<_, Blake2_128Concat, MerkleHash<T>, IncompleteStorageRequestMetadata<T>>;
 
+    /// Bitmask controlling which user operations are currently paused.
+    ///
+    /// When a particular bit is set in this mask, the corresponding user operation in this pallet
+    /// is considered paused and should fail with [`Error::UserOperationPaused`].
+    ///
+    /// By default this is initialised to [`UserOperationPauseFlags::NONE`], meaning no operations
+    /// are paused. Governance (for example via sudo) can update it using the
+    /// `set_user_operation_pause_flags` extrinsic.
+    #[pallet::storage]
+    pub type UserOperationPauseFlagsStorage<T: Config> =
+        StorageValue<_, UserOperationPauseFlags, ValueQuery>;
+
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
@@ -764,6 +776,11 @@ pub mod pallet {
             amount_to_return: BalanceOf<T>,
             error: DispatchError,
         },
+        /// Notifies that the user operation pause flags have been updated.
+        UserOperationPauseFlagsUpdated {
+            old: UserOperationPauseFlags,
+            new: UserOperationPauseFlags,
+        },
     }
 
     // Errors inform users that something went wrong.
@@ -944,6 +961,8 @@ pub mod pallet {
         FailedToCreateFileMetadata,
         /// The bounded vector that holds file metadata to process it is full but there's still more to process.
         FileMetadataProcessingQueueFull,
+        /// Operation is currently paused by governance.
+        UserOperationPaused,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -1578,6 +1597,32 @@ pub mod pallet {
             let _caller = ensure_signed(origin)?;
 
             Self::do_delete_files_for_incomplete_storage_request(file_keys, bsp_id, forest_proof)?;
+
+            Ok(())
+        }
+
+        /// Set the pause flags that control which user operations are currently allowed.
+        ///
+        /// This extrinsic can only be called by `Root` (for example via `pallet-sudo` or governance).
+        /// Passing [`UserOperationPauseFlags::NONE`] unpauses all operations, while setting one or more
+        /// bits in the flags pauses the corresponding user operations.
+        ///
+        /// This call replaces the entire bitmask in storage with the provided value.
+        #[pallet::call_index(19)]
+        #[pallet::weight(Weight::zero())]
+        pub fn set_user_operation_pause_flags(
+            origin: OriginFor<T>,
+            new_flags: UserOperationPauseFlags,
+        ) -> DispatchResult {
+            ensure_root(origin)?;
+
+            let old = UserOperationPauseFlagsStorage::<T>::get();
+            UserOperationPauseFlagsStorage::<T>::set(new_flags);
+
+            Self::deposit_event(Event::UserOperationPauseFlagsUpdated {
+                old,
+                new: new_flags,
+            });
 
             Ok(())
         }
