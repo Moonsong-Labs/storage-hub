@@ -172,10 +172,11 @@ where
     async fn handle_event(&mut self, event: NewStorageRequest<Runtime>) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
-            "Registering user peer for file_key {:x}, location 0x{}, fingerprint {:x}",
+            "Registering user peer for file_key {:x}, location [{}], fingerprint {:x}, bucket_id {:x}",
             event.file_key,
-            hex::encode(event.location.as_slice()),
-            event.fingerprint
+            String::from_utf8_lossy(event.location.as_slice()),
+            event.fingerprint,
+            event.bucket_id
         );
 
         let file_key = event.file_key;

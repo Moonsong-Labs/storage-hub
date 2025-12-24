@@ -1435,7 +1435,7 @@ where
             hash: block_hash,
         } = block_info;
 
-        info!(target: LOG_TARGET, "📥 Block import notification (#{}): {}", block_number, block_hash);
+        info!(target: LOG_TARGET, "📬 Block import notification (#{}): {}", block_number, block_hash);
 
         // Get provider IDs linked to keys in this node's keystore and update the nonce.
         self.init_block_processing(&block_hash);
@@ -1452,6 +1452,8 @@ where
         let block_number = block_number.saturated_into();
         self.process_block_import(&block_hash, &block_number, tree_route)
             .await;
+
+        info!(target: LOG_TARGET, "📭 Block import notification (#{}): {} processed successfully", block_number, block_hash);
     }
 
     /// Initialises the Blockchain Service with variables that should be checked and
@@ -1623,7 +1625,7 @@ where
             return;
         }
 
-        info!(target: LOG_TARGET, "📨 Finality notification #{}: {}", block_number, block_hash);
+        info!(target: LOG_TARGET, "📩 Finality notification #{}: {:x}", block_number, block_hash);
 
         // Get events from storage.
         match get_events_at_block::<Runtime>(&self.client, &block_hash) {
@@ -1667,5 +1669,7 @@ where
             number: block_number.saturated_into(),
             hash: block_hash,
         };
+
+        info!(target: LOG_TARGET, "📨 Finality notification #{}: {:x} processed successfully", block_number, block_hash);
     }
 }
