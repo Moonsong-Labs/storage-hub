@@ -1625,7 +1625,7 @@ where
             hash: block_hash,
         } = block_info;
 
-        info!(target: LOG_TARGET, "📥 Block import notification (#{}): {}", block_number, block_hash);
+        info!(target: LOG_TARGET, "📬 Block import notification (#{}): {}", block_number, block_hash);
 
         // Get provider IDs linked to keys in this node's keystore and update the nonce.
         self.init_block_processing(&block_hash);
@@ -1640,6 +1640,8 @@ where
         let block_number = block_number.saturated_into();
         self.process_block_import(&block_hash, &block_number, tree_route)
             .await;
+
+        info!(target: LOG_TARGET, "📭 Block import notification (#{}): {} processed successfully", block_number, block_hash);
     }
 
     /// Handle block notifications during network initial sync.
@@ -1905,14 +1907,14 @@ where
         if block_number <= self.last_finalised_block_processed.number {
             trace!(
                 target: LOG_TARGET,
-                "📨 Finality notification #{} already processed (last_finalised={}), skipping",
+                "🔁 Finality notification #{} already processed (last_finalised={}), skipping",
                 block_number,
                 self.last_finalised_block_processed.number
             );
             return;
         }
 
-        info!(target: LOG_TARGET, "📨 Finality notification #{}: {:?}", block_number, block_hash);
+        info!(target: LOG_TARGET, "📩 Finality notification #{}: {:x}", block_number, block_hash);
 
         // Process finality events for all implicitly finalized blocks in tree_route.
         // tree_route contains all blocks from (old_finalized, new_finalized_parent), i.e., the blocks
@@ -1981,5 +1983,7 @@ where
             number: block_number.saturated_into(),
             hash: block_hash,
         };
+
+        info!(target: LOG_TARGET, "📨 Finality notification #{}: {:x} processed successfully", block_number, block_hash);
     }
 }

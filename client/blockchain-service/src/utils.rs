@@ -2144,7 +2144,7 @@ where
         block_hash: &Runtime::Hash,
         block_number: BlockNumber<Runtime>,
     ) {
-        info!(target: LOG_TARGET, "🔄 Processing initial sync block #{}: {:?}", block_number, block_hash);
+        info!(target: LOG_TARGET, "🛫 Processing initial sync block #{}: {:x}", block_number, block_hash);
 
         // Ensure the provider ID is synced before processing mutations
         self.sync_provider_id(block_hash);
@@ -2171,6 +2171,8 @@ where
             number: block_number,
             hash: *block_hash,
         });
+
+        info!(target: LOG_TARGET, "🛬 Initial sync block #{}: {:x} processed successfully", block_number, block_hash);
     }
 
     /// Process a reorg during sync.
@@ -2188,7 +2190,7 @@ where
     ) {
         info!(
             target: LOG_TARGET,
-            "🔄 Processing reorg during sync: {} retracted, {} enacted",
+            "🔀 Processing reorg during sync: {} retracted, {} enacted",
             tree_route.retracted().len(),
             tree_route.enacted().len()
         );
@@ -2207,6 +2209,8 @@ where
 
         // Update the last processed block to the new best
         self.update_last_processed_block_info(new_best_block);
+
+        info!(target: LOG_TARGET, "🔀 Reorg during sync: {} retracted, {} enacted processed successfully", tree_route.retracted().len(), tree_route.enacted().len());
     }
 
     /// Process finality events for a given block.
