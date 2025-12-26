@@ -1,18 +1,34 @@
-#!/usr/bin/env tsx
+#!/usr/bin/env bun
 /**
- * Block-walking debug script (parallel version).
+ * Find `fileSystem.BucketFileDeletionsCompleted` events over a block range and dump them to JSON.
  *
- * This is intentionally a copy of `debug-block-walk.ts` with a parallelized scanning loop
- * so we can experiment with performance characteristics without changing the original.
+ * This script scans blocks from `INITIAL_BLOCK` to `FINAL_BLOCK` (inclusive), checks if the
+ * `fileSystem.BucketFileDeletionsCompleted` event exists in each block, and if so, records:
+ *   - blockNumber
+ *   - bucketId
+ *   - fileKeys[]
  *
- * Usage:
- *   pnpm --dir test debug:block-walk:parallel -- <initialBlock> <finalBlock> <wsEndpoint> <outputJsonPath>
+ * The output file is a JSON array. If the file already exists, new entries are appended to the
+ * existing array (the file is re-written with the combined array; it is not deleted).
  *
- * Or via env:
- *   INITIAL_BLOCK=... FINAL_BLOCK=... WS_ENDPOINT=... OUTPUT_JSON=./out.json pnpm --dir test debug:block-walk:parallel
+ * How to run (from the repository root):
+ *   - Basic usage (positional args):
+ *       bun scripts/find_file_deletions.ts \
+ *         <initialBlock> <finalBlock> <wsEndpoint> <outputJsonPath>
  *
- * Optional env:
- *   CONCURRENCY=10  (default: 8)
+ *   - Using env vars:
+ *       INITIAL_BLOCK=738513 FINAL_BLOCK=738900 \
+ *       WS_ENDPOINT=wss://services.datahaven-testnet.network/testnet \
+ *       OUTPUT_JSON=./bucket_file_deletions.json \
+ *       bun scripts/find_file_deletions.ts
+ *
+ * Environment:
+ *   - INITIAL_BLOCK: start block number (non-negative integer)
+ *   - FINAL_BLOCK: end block number (non-negative integer)
+ *   - WS_ENDPOINT / WSS_ENDPOINT: websocket endpoint (ws://... or wss://...)
+ *   - OUTPUT_JSON / OUTPUT_PATH: path to output JSON file
+ *   - CONCURRENCY: optional, number of parallel workers (default: 8)
+ *   - FLUSH_EVERY_BLOCKS: optional, how often to flush JSON/progress (default: 250)
  *
  * Notes:
  * - `@storagehub/api-augment` MUST be the first import to properly augment types.
