@@ -622,13 +622,14 @@ where
             debug!(target: LOG_TARGET, "File key {:x} found in forest storage.", file_key);
         }
 
-        let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
-
         // Create file in file storage if it is not present so we can write uploaded chunks as soon as possible.
-        let file_in_file_storage = write_file_storage
-            .get_metadata(&file_key.into())
-            .map_err(|e| anyhow!("Failed to get metadata from file storage: {:?}", e))?
-            .is_some();
+        let file_in_file_storage = {
+            let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+            read_file_storage
+                .get_metadata(&file_key.into())
+                .map_err(|e| anyhow!("Failed to get metadata from file storage: {:?}", e))?
+                .is_some()
+        };
 
         debug!(
             target: LOG_TARGET,
@@ -639,6 +640,7 @@ where
         );
 
         if !file_in_file_storage {
+            let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
             debug!(target: LOG_TARGET, "File key {:x} not found in file storage. Inserting file.", file_key);
             write_file_storage
                 .insert_file(
@@ -647,12 +649,8 @@ where
                 )
                 .map_err(|e| anyhow!("Failed to insert file in file storage: {:?}", e))?;
         } else {
-            debug!(target: LOG_TARGET, "File key {:x} found in file storage.", file_key);
-        }
-
-        // If the file is in file storage, we can skip the file transfer,
-        // and proceed to accepting the storage request directly, provided that we have the entire file in file storage.
-        if file_in_file_storage {
+            // If the file is in file storage, we can skip the file transfer,
+            // and proceed to accepting the storage request directly, provided that we have the entire file in file storage.
             info!(target: LOG_TARGET, "File key {:?} found in file storage. No need to receive the file from the user.", file_key);
 
             // Do not skip the file key even if it is in forest storage since not responding to the storage request or rejecting it would result in the file key being deleted from the network entirely.
@@ -660,13 +658,15 @@ where
                 info!(target: LOG_TARGET, "File key {:?} found in forest storage when storage request is open. The storage request is most likely opened to increase replication amongst BSPs, but still requires the MSP to accept the request.", file_key);
             }
 
-            // Check if the file is complete in file storage.
-            let file_complete = match write_file_storage.is_file_complete(&file_key.into()) {
-                Ok(is_complete) => is_complete,
-                Err(e) => {
-                    warn!(target: LOG_TARGET, "Failed to check if file is complete. The file key {:x} is in a bad state with error: {:?}", file_key, e);
-                    warn!(target: LOG_TARGET, "Assuming the file is not complete.");
-                    false
+            let file_complete = {
+                let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+                match read_file_storage.is_file_complete(&file_key.into()) {
+                    Ok(is_complete) => is_complete,
+                    Err(e) => {
+                        warn!(target: LOG_TARGET, "Failed to check if file is complete. The file key {:x} is in a bad state with error: {:?}", file_key, e);
+                        warn!(target: LOG_TARGET, "Assuming the file is not complete.");
+                        false
+                    }
                 }
             };
 
@@ -680,9 +680,7 @@ where
             } else {
                 debug!(target: LOG_TARGET, "File key {:x} is not complete in file storage. Need to receive the file from the user.", file_key);
             }
-        };
-
-        drop(write_file_storage);
+        }
 
         // Register the file for upload in the file transfer service.
         // Even though we could already have the entire file in file storage, we
