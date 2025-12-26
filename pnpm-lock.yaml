@@ -45,6 +45,21 @@ importers:
         specifier: ^5.9.2
         version: 5.9.2
 
+  scripts:
+    dependencies:
+      '@polkadot/api':
+        specifier: ^16.4.7
+        version: 16.4.7
+      '@polkadot/types':
+        specifier: ^16.4.7
+        version: 16.4.7
+      '@storagehub/api-augment':
+        specifier: workspace:*
+        version: link:../api-augment
+      '@storagehub/types-bundle':
+        specifier: workspace:*
+        version: link:../types-bundle
+
   sdk:
     devDependencies:
       '@biomejs/biome':
