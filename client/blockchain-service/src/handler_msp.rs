@@ -486,6 +486,8 @@ where
                     return;
                 };
 
+                info!(target: LOG_TARGET, "🪾 Applying mutations to bucket [0x{:x}]", bucket_id);
+
                 // Apply forest root changes to the Bucket's Forest Storage.
                 // At this point, we only apply the mutation of this file and its metadata to the Forest of this Bucket,
                 // and not to the File Storage.
