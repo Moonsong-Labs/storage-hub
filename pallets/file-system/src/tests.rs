@@ -583,7 +583,7 @@ mod pause_ensures_tests {
         new_test_ext().execute_with(|| {
             let alice = Keyring::Alice.to_account_id();
             let msp = Keyring::Charlie.to_account_id();
-            let (bucket_id, file_key, location, size, fingerprint, msp_id, value_prop_id) =
+            let (bucket_id, file_key, location, size, fingerprint, _msp_id, _value_prop_id) =
                 setup_file_in_msp_bucket(&alice, &msp);
 
             // Pause executing file deletions.
