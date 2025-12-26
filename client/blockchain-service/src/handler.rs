@@ -985,7 +985,7 @@ where
 
                         trace!(
                             target: LOG_TARGET,
-                            "QueueMspRespondStorageRequest received for file key {:?}",
+                            "QueueMspRespondStorageRequest received for file key [{:x}]",
                             file_key
                         );
 
@@ -1001,7 +1001,7 @@ where
 
                             trace!(
                                 target: LOG_TARGET,
-                                "File key {:?} added to pending queue (size: {})",
+                                "File key [{:x}] added to pending queue (size: {})",
                                 file_key,
                                 msp_handler.pending_respond_storage_requests.len()
                             );
@@ -1011,7 +1011,7 @@ where
                         } else {
                             warn!(
                                 target: LOG_TARGET,
-                                "File key {:?} already pending, skipping",
+                                "File key [{:x}] already pending, skipping",
                                 file_key
                             );
                         }
@@ -1261,9 +1261,9 @@ where
                         // Register BSP as one for which the file is being distributed already.
                         // Error if the BSP is already registered.
                         if !entry.bsps_distributing.insert(bsp_id) {
-                            error!(target: LOG_TARGET, "BSP {:?} is already registered as distributing file {:?}", bsp_id, file_key);
+                            error!(target: LOG_TARGET, "BSP {:?} is already registered as distributing file [{:x}]", bsp_id, file_key);
                             match callback.send(Err(anyhow!(
-                                "BSP {:?} is already registered as distributing file {:?}",
+                                "BSP {:?} is already registered as distributing file [{:x}]",
                                 bsp_id,
                                 file_key
                             ))) {
@@ -1430,7 +1430,7 @@ where
                     {
                         info!(
                             target: LOG_TARGET,
-                            "Setting file key {:?} status to {:?}",
+                            "Setting file key [{:x}] status to {:?}",
                             file_key,
                             status
                         );
@@ -1452,7 +1452,7 @@ where
                     {
                         info!(
                             target: LOG_TARGET,
-                            "Removing file key {:?} from statuses (enabling retry)",
+                            "Removing file key [{:x}] from statuses (enabling retry)",
                             file_key
                         );
                         msp_handler.file_key_statuses.remove(&file_key);
