@@ -569,14 +569,14 @@ where
                 Ok(false) => {
                     warn!(
                         target: LOG_TARGET,
-                        "🎣 File key {:?} not found in forest after catch-up, skipping deletion",
+                        "🎣 File key [{:x}] not found in forest after catch-up, skipping deletion",
                         file_key
                     );
                 }
                 Err(e) => {
                     error!(
                         target: LOG_TARGET,
-                        "🎣 Error checking file key {:?} in forest: {:?}, skipping",
+                        "🎣 Error checking file key [{:x}] in forest: {:?}, skipping",
                         file_key,
                         e
                     );

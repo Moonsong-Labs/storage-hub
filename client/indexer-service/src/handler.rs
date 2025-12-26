@@ -435,7 +435,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                             // but a storage request was still present on-chain so a BSP confirmed storing it.
                             log::info!(
                                 target: LOG_TARGET,
-                                "File record not found for file_key {:?} during BspConfirmedStoring. \
+                                "File record not found for file_key [{:x}] during BspConfirmedStoring. \
                                 Recreating from event metadata (recovery).",
                                 file_key
                             );
@@ -1175,7 +1175,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                             }
                         })?;
                         log::debug!(
-                            "Incomplete storage request for file key {:?} and id {:?} is not being stored, deleted immediately",
+                            "Incomplete storage request for file key [{:x}] and id {:?} is not being stored, deleted immediately",
                             file_key, file_record.id,
                         );
                     }

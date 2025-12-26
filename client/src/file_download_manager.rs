@@ -582,6 +582,7 @@ impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
                     // Try each selected peer
                     for peer_id in peers {
                         let download_result = {
+                            // TODO: REDUCE SCOPE OF THIS LOCK
                             let mut file_storage_guard = file_storage.write().await;
                             manager
                                 .try_download_chunk_batch(
@@ -734,12 +735,12 @@ impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
         if self.is_bucket_download_in_progress(&bucket_id) {
             info!(
                 target: LOG_TARGET,
-                "Resuming download of bucket {:?}", bucket_id
+                "Resuming download of bucket [0x{:x}]", bucket_id
             );
         } else {
             info!(
                 target: LOG_TARGET,
-                "Starting new download of bucket {:?}", bucket_id
+                "Starting new download of bucket [0x{:x}]", bucket_id
             );
             self.mark_bucket_download_started(&bucket_id);
         }
@@ -755,7 +756,7 @@ impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
 
         info!(
             target: LOG_TARGET,
-            "Downloading {} files for bucket {:?}", file_metadatas.len(), bucket_id
+            "Downloading {} files for bucket [0x{:x}]", file_metadatas.len(), bucket_id
         );
 
         // Try to download all files in the bucket
@@ -815,7 +816,7 @@ impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
 
                 info!(
                     target: LOG_TARGET,
-                    "Completed download of bucket {:?}", bucket_id
+                    "Completed download of bucket [0x{:x}]", bucket_id
                 );
                 Ok(())
             }

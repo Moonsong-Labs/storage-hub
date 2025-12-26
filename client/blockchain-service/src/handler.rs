@@ -1197,9 +1197,9 @@ where
                         // Register BSP as one for which the file is being distributed already.
                         // Error if the BSP is already registered.
                         if !entry.bsps_distributing.insert(bsp_id) {
-                            error!(target: LOG_TARGET, "BSP {:?} is already registered as distributing file {:?}", bsp_id, file_key);
+                            error!(target: LOG_TARGET, "BSP {:?} is already registered as distributing file [{:x}]", bsp_id, file_key);
                             match callback.send(Err(anyhow!(
-                                "BSP {:?} is already registered as distributing file {:?}",
+                                "BSP {:?} is already registered as distributing file [{:x}]",
                                 bsp_id,
                                 file_key
                             ))) {

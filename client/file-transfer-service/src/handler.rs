@@ -424,7 +424,7 @@ impl<Runtime: StorageEnableRuntime> Actor for FileTransferService<Runtime> {
                     callback,
                 } => {
                     if !self.peer_file_allow_list.insert((peer_id, file_key)) {
-                        trace!(target: LOG_TARGET, "File already registered for peer id {} and file key {:?}", peer_id, file_key);
+                        trace!(target: LOG_TARGET, "File already registered for peer id {} and file key [{:x}]", peer_id, file_key);
                     }
 
                     self.peers_by_file
@@ -474,7 +474,7 @@ impl<Runtime: StorageEnableRuntime> Actor for FileTransferService<Runtime> {
                     bucket_id,
                     callback,
                 } => {
-                    info!(target: LOG_TARGET, "Registering new bucket peer {:?} for bucket {:?}", peer_id, bucket_id);
+                    info!(target: LOG_TARGET, "Registering new bucket peer {:?} for bucket [0x{:x}]", peer_id, bucket_id);
                     let result = match self.peer_bucket_allow_list.insert((peer_id, bucket_id)) {
                         true => Ok(()),
                         false => Err(RequestError::BucketAlreadyRegisteredForPeer),
@@ -706,7 +706,7 @@ impl<Runtime: StorageEnableRuntime> FileTransferService<Runtime> {
                 if !self.is_allowed(peer, file_key, bucket_id) {
                     debug!(
                         target: LOG_TARGET,
-                        "Received unexpected upload request from {} for file key {:?}",
+                        "Received unexpected upload request from {} for file key [{:x}]",
                         peer,
                         file_key
                     );
@@ -759,7 +759,7 @@ impl<Runtime: StorageEnableRuntime> FileTransferService<Runtime> {
                 if !self.is_allowed(peer, file_key, bucket_id) {
                     warn!(
                         target: LOG_TARGET,
-                        "Received unexpected download request from {} for file key {:?} (bucket {:?})",
+                        "Received unexpected download request from {} for file key [{:x}] (bucket [{:?}])",
                         peer, file_key, bucket_id
                     );
 
@@ -871,7 +871,7 @@ impl<Runtime: StorageEnableRuntime> FileTransferService<Runtime> {
 
             // Try to unregister the bucket.
             if let Err(e) = self.unregister_bucket(bucket_to_remove.bucket_id) {
-                error!(target: LOG_TARGET, "Failed to unregister expired bucket {:?}: {:?}", bucket_to_remove.bucket_id, e);
+                error!(target: LOG_TARGET, "Failed to unregister expired bucket [0x{:x}]: {:?}", bucket_to_remove.bucket_id, e);
             }
 
             // Update the expiration to check.
