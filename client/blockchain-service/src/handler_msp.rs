@@ -626,6 +626,8 @@ where
                 return;
             };
 
+            info!(target: LOG_TARGET, "🪾 Applying mutations to bucket [0x{:x}]", bucket_id);
+
             // Log mutations at info level during catchup/sync for better visibility
             if !self.caught_up {
                 let action = if revert { "Reverting" } else { "Applying" };
