@@ -11,18 +11,18 @@ From the repo root:
 pnpm i
 ```
 
-### Run (with Bun)
+### Run (with pnpm + tsx)
 
 From the repo root:
 
 ```bash
-pnpm --dir scripts find:file-deletions -- <initialBlock> <finalBlock> <wsEndpoint> <outputJsonPath>
+pnpm --dir scripts find:file-deletions <initialBlock> <finalBlock> <wsEndpoint> <outputJsonPath>
 ```
 
 Or:
 
 ```bash
-pnpm --dir scripts remove:files-from-forest-storage -- --file=/path/to/bucket_file_deletions.json
+pnpm --dir scripts remove:files-from-forest-storage --file=/path/to/bucket_file_deletions.json
 ```
 
 ### Parameters / usage details
@@ -42,9 +42,8 @@ Start here:
   - **Flags**: `--file`, optional `--rpc-url`, `--concurrency`, `--dry-run`
   - **Env vars**: `NODE_RPC_URL` (optional)
 
-### Note about Bun installs
+### Notes
 
-These scripts run with Bun, but **dependency installation is handled by pnpm** (workspace-aware).
-Running `bun install` in this folder will not resolve pnpm `workspace:*` the same way.
-
-
+- These scripts are executed via **pnpm** using a TypeScript runtime (`tsx`) from the workspace.
+- Always install dependencies from the repo root with `pnpm i` so that `workspace:*` references
+  resolve correctly.

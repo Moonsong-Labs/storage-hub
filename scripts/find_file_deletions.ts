@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 /**
  * Find `fileSystem.BucketFileDeletionsCompleted` events over a block range and dump them to JSON.
  *
@@ -13,14 +12,14 @@
  *
  * How to run (from the repository root):
  *   - Basic usage (positional args):
- *       bun scripts/find_file_deletions.ts \
+ *       pnpm --dir scripts find:file-deletions \
  *         <initialBlock> <finalBlock> <wsEndpoint> <outputJsonPath>
  *
  *   - Using env vars:
  *       INITIAL_BLOCK=738513 FINAL_BLOCK=738900 \
  *       WS_ENDPOINT=wss://services.datahaven-testnet.network/testnet \
  *       OUTPUT_JSON=./bucket_file_deletions.json \
- *       bun scripts/find_file_deletions.ts
+ *       pnpm --dir scripts find:file-deletions
  *
  * Environment:
  *   - INITIAL_BLOCK: start block number (non-negative integer)
@@ -113,13 +112,13 @@ function usage(): string {
   return [
     "Usage:",
     "  # From repo root",
-    "  pnpm --dir test debug:block-walk:parallel -- <initialBlock> <finalBlock> <wsEndpoint> <outputJsonPath>",
+    "  pnpm --dir scripts find:file-deletions <initialBlock> <finalBlock> <wsEndpoint> <outputJsonPath>",
     "",
-    "  # From ./test",
-    "  pnpm debug:block-walk:parallel -- <initialBlock> <finalBlock> <wsEndpoint> <outputJsonPath>",
+    "  # From ./scripts",
+    "  pnpm find:file-deletions <initialBlock> <finalBlock> <wsEndpoint> <outputJsonPath>",
     "",
     "Env alternative:",
-    "  INITIAL_BLOCK=... FINAL_BLOCK=... WS_ENDPOINT=ws://... OUTPUT_JSON=./out.json pnpm --dir test debug:block-walk:parallel",
+    "  INITIAL_BLOCK=... FINAL_BLOCK=... WS_ENDPOINT=ws://... OUTPUT_JSON=./out.json pnpm --dir scripts find:file-deletions",
     "",
     "Optional env:",
     "  CONCURRENCY=8",
@@ -129,10 +128,19 @@ function usage(): string {
 }
 
 function getArgs(): CliArgs {
-  const argvInitial = process.argv[2];
-  const argvFinal = process.argv[3];
-  const argvEndpoint = process.argv[4];
-  const argvOutput = process.argv[5];
+  const argvRaw = process.argv.slice(2);
+
+  if (argvRaw.includes("--help") || argvRaw.includes("-h")) {
+    console.log(usage());
+    process.exit(0);
+  }
+
+  const argv = argvRaw[0] === "--" ? argvRaw.slice(1) : argvRaw;
+
+  const argvInitial = argv[0];
+  const argvFinal = argv[1];
+  const argvEndpoint = argv[2];
+  const argvOutput = argv[3];
 
   const initialRaw = process.env.INITIAL_BLOCK ?? argvInitial;
   const finalRaw = process.env.FINAL_BLOCK ?? argvFinal;
@@ -176,6 +184,11 @@ async function readExistingDump(outputPath: string): Promise<DumpEntry[]> {
   } catch (err) {
     const e = err as { code?: unknown };
     if (e.code === "ENOENT") return [];
+    if (e.code === "EISDIR") {
+      throw new Error(
+        `Output path "${outputPath}" is a directory. Please provide a file path (e.g. ./bucket_file_deletions.json).`
+      );
+    }
     throw err;
   }
 }
@@ -198,7 +211,9 @@ async function scanOneBlock(
   blockNumber: number
 ): Promise<{ blockNumber: number; matches: DumpEntry[] }> {
   const blockHash = await api.rpc.chain.getBlockHash(blockNumber);
-  const eventsAt = (await (await api.at(blockHash)).query.system.events()) as unknown as EventRecord[];
+  const eventsAt = (await (
+    await api.at(blockHash)
+  ).query.system.events()) as unknown as EventRecord[];
 
   const matches: DumpEntry[] = [];
 
@@ -226,7 +241,8 @@ async function scanOneBlock(
 }
 
 async function main(): Promise<void> {
-  const { initialBlock, finalBlock, endpoint, outputPath, concurrency, flushEveryBlocks } = getArgs();
+  const { initialBlock, finalBlock, endpoint, outputPath, concurrency, flushEveryBlocks } =
+    getArgs();
 
   console.log("=".repeat(80));
   console.log("StorageHub Debug Block Walker (Parallel)");
@@ -288,7 +304,7 @@ async function main(): Promise<void> {
     process.once("SIGINT", onSigInt);
 
     const worker = async (): Promise<void> => {
-      for (; ;) {
+      for (;;) {
         if (aborted) return;
 
         const current = nextBlock;
@@ -342,4 +358,3 @@ async function main(): Promise<void> {
 }
 
 await main();
-

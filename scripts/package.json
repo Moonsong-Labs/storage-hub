@@ -3,15 +3,19 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "find:file-deletions": "bun ./find_file_deletions.ts",
-    "remove:files-from-forest-storage": "bun ./remove_files_from_forest_storage.ts"
+    "find:file-deletions": "pnpm tsx ./find_file_deletions.ts",
+    "remove:files-from-forest-storage": "pnpm tsx ./remove_files_from_forest_storage.ts"
   },
   "dependencies": {
     "@polkadot/api": "^16.4.7",
     "@polkadot/types": "^16.4.7",
     "@storagehub/api-augment": "workspace:*",
     "@storagehub/types-bundle": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "4.20.5"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }
-
-

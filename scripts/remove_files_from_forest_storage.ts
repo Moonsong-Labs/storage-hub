@@ -1,23 +1,21 @@
-#!/usr/bin/env bun
-
 /**
  * Remove files from forest storage for a list of buckets, using the
  * `storagehubclient_removeFilesFromForestStorage` RPC exposed by the node.
  *
  * How to run (from the repository root):
  *   - Basic usage (JSON file is mandatory):
- *       bun scripts/remove_files_from_forest_storage.ts \
- *         --file=/path/to/bucket_file_deletions_parallel.json
+ *       pnpm --dir scripts remove:files-from-forest-storage \
+ *         --file=/path/to/bucket_file_deletions.json
  *
  *   - With custom RPC URL and higher concurrency:
- *       bun scripts/remove_files_from_forest_storage.ts \
- *         --file=/path/to/bucket_file_deletions_parallel.json \
+ *       pnpm --dir scripts remove:files-from-forest-storage \
+ *         --file=/path/to/bucket_file_deletions.json \
  *         --rpc-url=http://127.0.0.1:9933 \
  *         --concurrency=16
  *
  *   - Dry run (no RPC calls, just logs):
- *       bun scripts/remove_files_from_forest_storage.ts \
- *         --file=/path/to/bucket_file_deletions_parallel.json \
+ *       pnpm --dir scripts remove:files-from-forest-storage \
+ *         --file=/path/to/bucket_file_deletions.json \
  *         --dry-run
  *
  * Environment:
@@ -52,6 +50,15 @@ type CliOptions = {
 };
 
 function parseArgs(argv: string[]): CliOptions {
+  if (argv.includes("--help") || argv.includes("-h")) {
+    console.log(
+      "Usage: pnpm --dir scripts remove:files-from-forest-storage " +
+        "--file=/path/to/bucket_file_deletions.json " +
+        "[--rpc-url=URL] [--concurrency=N] [--dry-run]"
+    );
+    process.exit(0);
+  }
+
   let jsonPath: string | undefined;
   let rpcUrl = DEFAULT_RPC_URL;
   let concurrency = DEFAULT_CONCURRENCY;
@@ -86,8 +93,8 @@ function parseArgs(argv: string[]): CliOptions {
   if (!jsonPath) {
     throw new Error(
       "Missing required --file option.\n" +
-        "Usage: bun scripts/remove_files_from_forest_storage.ts " +
-        "--file=/path/to/bucket_file_deletions_parallel.json " +
+        "Usage: pnpm --dir scripts remove:files-from-forest-storage " +
+        "--file=/path/to/bucket_file_deletions.json " +
         "[--rpc-url=URL] [--concurrency=N] [--dry-run]"
     );
   }

@@ -59,6 +59,10 @@ importers:
       '@storagehub/types-bundle':
         specifier: workspace:*
         version: link:../types-bundle
+    devDependencies:
+      tsx:
+        specifier: 4.20.5
+        version: 4.20.5
 
   sdk:
     devDependencies:
