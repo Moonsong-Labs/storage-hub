@@ -341,6 +341,7 @@ where
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
         let mut file_keys_and_proofs = Vec::new();
         let mut file_metadatas = HashMap::new();
+        let mut requests_to_retry = Vec::new();
         for (confirm_storing_request, chunks_to_prove) in
             confirm_storing_requests_with_chunks_to_prove.into_iter()
         {
@@ -365,16 +366,21 @@ where
                         error!(target: LOG_TARGET, "Failed to generate proof or get metadatas for file {:?}.\nMax try count exceeded! Dropping request!", confirm_storing_request.file_key);
                     } else {
                         error!(target: LOG_TARGET, "Failed to generate proof or get metadatas for file {:?}.\nEnqueuing file key again! (retry {}/{})", confirm_storing_request.file_key, confirm_storing_request.try_count, self.config.max_try_count);
-                        self.storage_hub_handler
-                            .blockchain
-                            .queue_confirm_bsp_request(confirm_storing_request)
-                            .await?;
+                        requests_to_retry.push(confirm_storing_request);
                     }
                 }
             }
         }
         // Release the file storage read lock as soon as possible.
         drop(read_file_storage);
+
+        // Re-enqueue any requests that we could not process, now that the file storage lock is dropped.
+        for confirm_storing_request in requests_to_retry {
+            self.storage_hub_handler
+                .blockchain
+                .queue_confirm_bsp_request(confirm_storing_request)
+                .await?;
+        }
 
         if file_keys_and_proofs.is_empty() {
             error!(target: LOG_TARGET, "Failed to generate proofs for ALL the requested files.\n");

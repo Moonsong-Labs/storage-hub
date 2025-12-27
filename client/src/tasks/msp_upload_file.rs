@@ -305,10 +305,11 @@ where
 
         let mut file_key_responses = HashMap::new();
 
-        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-
         for respond in &event.data.respond_storing_requests {
             info!(target: LOG_TARGET, "Processing respond storing request.");
+
+            let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+
             let bucket_id = match read_file_storage.get_metadata(&respond.file_key) {
                 Ok(Some(metadata)) => H256::from_slice(metadata.bucket_id().as_ref()),
                 Ok(None) => {
@@ -363,8 +364,6 @@ where
                 }
             }
         }
-
-        drop(read_file_storage);
 
         let mut storage_request_msp_response = Vec::new();
 
@@ -577,11 +576,13 @@ where
             .forest_storage_handler
             .get_or_create(&ForestStorageKey::from(event.bucket_id.as_ref().to_vec()))
             .await;
-        let read_fs = fs.read().await;
 
         // If we do not have the file already in forest storage, we must take into account the
         // available storage capacity.
-        let file_in_forest_storage = read_fs.contains_file_key(&file_key.into())?;
+        let file_in_forest_storage = {
+            let read_fs = fs.read().await;
+            read_fs.contains_file_key(&file_key.into())?
+        };
         if !file_in_forest_storage {
             info!(target: LOG_TARGET, "File key [{:x}] not found in forest storage. Checking available storage capacity.", file_key);
 
