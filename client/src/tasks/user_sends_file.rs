@@ -100,7 +100,7 @@ where
                 event.bucket_id
             );
             return Ok(format!(
-                "Skipped NewStorageRequest - no MSP ID for bucket [{:x}]",
+                "Skipped NewStorageRequest - no MSP ID for bucket [0x{:x}]",
                 event.bucket_id
             ));
         };
@@ -143,7 +143,7 @@ where
         // by implementing formatting checks for multiaddresses in the runtime,
         // or try to fetch new peer ids from the runtime at this point.
         if peer_ids.is_empty() {
-            info!(target: LOG_TARGET, "No peers were found to receive file key {:?}", file_key);
+            info!(target: LOG_TARGET, "No peers were found to receive file key [{:x}]", file_key);
         }
 
         self.storage_hub_handler
@@ -151,7 +151,7 @@ where
             .await?;
 
         Ok(format!(
-            "Handled NewStorageRequest from user [{}] for file key [{:x}]",
+            "Handled NewStorageRequest from user [{:?}] for file key [{:x}]",
             hex::encode(event.who),
             file_key
         ))
@@ -203,7 +203,7 @@ where
         // by implementing formatting checks for multiaddresses in the runtime,
         // or try to fetch new peer ids from the runtime at this point.
         if peer_ids.is_empty() {
-            info!(target: LOG_TARGET, "No peers were found to receive file key {:?}", file_key);
+            info!(target: LOG_TARGET, "No peers were found to receive file key [{:x}]", file_key);
         }
 
         self.storage_hub_handler
