@@ -233,7 +233,7 @@ where
     ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
-            "Deleting bucket {:?} for MSP {:?} from file storage since its stop storing event reached finality.",
+            "Deleting bucket [0x{:x}] for MSP [0x{:x}] from file storage since its stop storing event reached finality.",
             event.bucket_id,
             event.msp_id
         );
@@ -265,7 +265,7 @@ where
             .await;
 
         Ok(format!(
-            "Handled FinalisedMspStopStoringBucketInsolventUser for bucket [{:x}] and MSP [{:x}]",
+            "Handled FinalisedMspStopStoringBucketInsolventUser for bucket [0x{:x}] and MSP [0x{:x}]",
             event.bucket_id, event.msp_id
         ))
     }
@@ -308,12 +308,12 @@ where
             .await
         {
             Err(anyhow!(
-                "Failed to submit extrinsic to stop storing bucket {:?} for insolvent user. Error: {:?}",
+                "Failed to submit extrinsic to stop storing bucket [0x{:x}] for insolvent user. Error: {:?}",
                 bucket_id,
                 e
             ))
         } else {
-            trace!(target: LOG_TARGET, "Stop storing bucket {:?} for insolvent user submitted successfully and included in block.", bucket_id);
+            trace!(target: LOG_TARGET, "Stop storing bucket [0x{:x}] for insolvent user submitted successfully and included in block.", bucket_id);
             Ok(())
         }
     }

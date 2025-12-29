@@ -90,7 +90,7 @@ where
     ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
-            "MoveBucketRequested: BSP will accept download requests for files in bucket {:?} from MSP {:?}",
+            "MoveBucketRequested: BSP will accept download requests for files in bucket [0x{:x}] from MSP [0x{:x}]",
             event.bucket_id,
             event.new_msp_id
         );
@@ -123,7 +123,7 @@ where
         }
 
         Ok(format!(
-            "Handled MoveBucketRequested for bucket [{:x}] and MSP [{:x}]",
+            "Handled MoveBucketRequested for bucket [0x{:x}] and MSP [0x{:x}]",
             event.bucket_id, event.new_msp_id
         ))
     }
@@ -144,7 +144,7 @@ where
     async fn handle_event(&mut self, event: MoveBucketAccepted<Runtime>) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
-            "MoveBucketAccepted: New MSP {:?} accepted move bucket request for bucket {:?} from old MSP {:?}. Will keep accepting download requests for a window of time.",
+            "MoveBucketAccepted: New MSP [0x{:x}] accepted move bucket request for bucket [0x{:x}] from old MSP [{:?}]. Will keep accepting download requests for a window of time.",
             event.new_msp_id,
             event.bucket_id,
             event.old_msp_id
@@ -160,7 +160,7 @@ where
             .map_err(|e| anyhow!("Failed to unregister bucket: {:?}", e))?;
 
         Ok(format!(
-            "Handled MoveBucketAccepted for bucket [{:x}]",
+            "Handled MoveBucketAccepted for bucket [0x{:x}]",
             event.bucket_id
         ))
     }
@@ -179,7 +179,7 @@ where
     async fn handle_event(&mut self, event: MoveBucketRejected<Runtime>) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
-            "MoveBucketRejected: BSP will no longer accept download requests for files in bucket {:?} from MSP {:?}",
+            "MoveBucketRejected: BSP will no longer accept download requests for files in bucket [0x{:x}] from MSP [0x{:x}]",
             event.bucket_id,
             event.new_msp_id
         );
@@ -191,7 +191,7 @@ where
             .map_err(|e| anyhow!("Failed to unregister bucket: {:?}", e))?;
 
         Ok(format!(
-            "Handled MoveBucketRejected for bucket [{:x}]",
+            "Handled MoveBucketRejected for bucket [0x{:x}]",
             event.bucket_id
         ))
     }
@@ -210,7 +210,7 @@ where
     async fn handle_event(&mut self, event: MoveBucketExpired<Runtime>) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
-            "MoveBucketExpired: BSP will no longer accept download requests for files in bucket {:?}",
+            "MoveBucketExpired: BSP will no longer accept download requests for files in bucket [0x{:x}]",
             event.bucket_id,
         );
 
@@ -221,7 +221,7 @@ where
             .map_err(|e| anyhow!("Failed to unregister bucket: {:?}", e))?;
 
         Ok(format!(
-            "Handled MoveBucketExpired for bucket [{:x}]",
+            "Handled MoveBucketExpired for bucket [0x{:x}]",
             event.bucket_id
         ))
     }
