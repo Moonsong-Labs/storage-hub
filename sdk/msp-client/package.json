@@ -37,11 +37,11 @@
   },
   "peerDependencies": {
     "@storagehub-sdk/core": ">=0.0.5",
-    "viem": ">=2.41.2"
+    "viem": ">=2.43.3"
   },
   "devDependencies": {
     "@storagehub-sdk/core": "workspace:*",
-    "viem": ">=2.41.2"
+    "viem": ">=2.43.3"
   },
   "engines": {
     "node": ">=22"

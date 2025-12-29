@@ -41,14 +41,14 @@
   "dependencies": {
     "@polkadot/types": "^16.4.7",
     "abitype": "^1.0.0",
-    "ethers": "^6.15.0"
+    "ethers": "^6.16.0"
   },
   "peerDependencies": {
-    "viem": ">=2.41.2"
+    "viem": ">=2.43.3"
   },
   "devDependencies": {
     "@types/node": "^20.11.19",
-    "viem": ">=2.41.2",
+    "viem": ">=2.43.3",
     "solc": "^0.8.26"
   },
   "engines": {
