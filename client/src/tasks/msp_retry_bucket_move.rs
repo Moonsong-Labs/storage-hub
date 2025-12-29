@@ -101,7 +101,7 @@ where
         for bucket_id in pending_buckets {
             info!(
                 target: LOG_TARGET,
-                "Attempting to resume download for bucket {:?}", bucket_id
+                "Attempting to resume download for bucket [0x{:x}]", bucket_id
             );
 
             // Get connection to indexer DB
@@ -123,7 +123,7 @@ where
             if missing_files.is_empty() {
                 info!(
                     target: LOG_TARGET,
-                    "No missing files found for bucket {:?}, marking as completed", bucket_id
+                    "No missing files found for bucket [0x{:x}], marking as completed", bucket_id
                 );
 
                 // Mark as completed if no missing files in download state
@@ -144,7 +144,7 @@ where
                 Err(e) => {
                     error!(
                         target: LOG_TARGET,
-                        "Failed to get files for bucket {:?} from indexer: {:?}", bucket_id, e
+                        "Failed to get files for bucket [0x{:x}] from indexer: {:?}", bucket_id, e
                     );
                     // Continue with download attempt even if we couldn't get indexer info
                     // We'll just have fewer peers to try
@@ -190,7 +190,7 @@ where
 
             info!(
                 target: LOG_TARGET,
-                "Starting download of {} files for bucket {:?}",
+                "Starting download of {} files for bucket [0x{:x}]",
                 file_metadatas.len(), bucket_id
             );
 

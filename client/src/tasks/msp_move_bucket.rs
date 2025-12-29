@@ -114,7 +114,7 @@ where
     ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
-            "MSP: user requested to move bucket {:?} to us",
+            "MSP: user requested to move bucket [0x{:x}] to us",
             event.bucket_id,
         );
 
@@ -127,13 +127,13 @@ where
             );
             self.reject_bucket_move(event.bucket_id).await?;
             return Ok(format!(
-                "Rejected MoveBucketRequestedForMsp for bucket [{:x}] due to error {:?}",
+                "Rejected MoveBucketRequestedForMsp for bucket [0x{:x}] due to error {:?}",
                 event.bucket_id, error
             ));
         }
 
         Ok(format!(
-            "Handled MoveBucketRequestedForMsp for bucket [{:x}]",
+            "Handled MoveBucketRequestedForMsp for bucket [0x{:x}]",
             event.bucket_id
         ))
     }
@@ -152,7 +152,7 @@ where
     ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
-            "StartMovedBucketDownload: Starting download process for bucket {:?}",
+            "StartMovedBucketDownload: Starting download process for bucket [0x{:x}]",
             event.bucket_id
         );
 
@@ -160,7 +160,7 @@ where
         // This gives the BSPs time to process the chain event and prepare to serve files
         info!(
             target: LOG_TARGET,
-            "Waiting for BSPs to be ready to serve files for bucket {:?}", event.bucket_id
+            "Waiting for BSPs to be ready to serve files for bucket [0x{:x}]", event.bucket_id
         );
 
         // Get all files for this bucket from the indexer
@@ -184,11 +184,11 @@ where
         if files.is_empty() {
             info!(
                 target: LOG_TARGET,
-                "No files to download for bucket {:?}", event.bucket_id
+                "No files to download for bucket [0x{:x}]", event.bucket_id
             );
             self.pending_bucket_id = None;
             return Ok(format!(
-                "No files to download for bucket [{:x}]",
+                "No files to download for bucket [0x{:x}]",
                 event.bucket_id
             ));
         }
@@ -216,7 +216,7 @@ where
 
         info!(
             target: LOG_TARGET,
-            "Starting new download of bucket {:?}", event.bucket_id
+            "Starting new download of bucket [0x{:x}]", event.bucket_id
         );
 
         // Use try_lock_and_download_bucket which handles locking internally
@@ -233,7 +233,7 @@ where
             Ok(()) => {
                 info!(
                     target: LOG_TARGET,
-                    "Successfully downloaded bucket {:?}", event.bucket_id
+                    "Successfully downloaded bucket [0x{:x}]", event.bucket_id
                 );
             }
             Err(crate::file_download_manager::BucketDownloadError::AlreadyBeingDownloaded(_)) => {
@@ -245,7 +245,7 @@ where
             Err(crate::file_download_manager::BucketDownloadError::DownloadFailed(e)) => {
                 error!(
                     target: LOG_TARGET,
-                    "Failed to download bucket {:?}: {:?}", event.bucket_id, e
+                    "Failed to download bucket [0x{:x}]: {:?}", event.bucket_id, e
                 );
             }
         }
@@ -255,11 +255,11 @@ where
 
         info!(
             target: LOG_TARGET,
-            "Bucket move completed for bucket {:?}", event.bucket_id
+            "Bucket move completed for bucket [0x{:x}]", event.bucket_id
         );
 
         Ok(format!(
-            "Handled StartMovedBucketDownload for bucket [{:x}]",
+            "Handled StartMovedBucketDownload for bucket [0x{:x}]",
             event.bucket_id
         ))
     }
@@ -305,7 +305,7 @@ where
         if files.is_empty() {
             warn!(
                 target: LOG_TARGET,
-                "No files found for bucket {:?}", event.bucket_id
+                "No files found for bucket [0x{:x}]", event.bucket_id
             );
             // We still accept since there's nothing to download
             self.accept_bucket_move(event.bucket_id).await?;
@@ -415,7 +415,7 @@ where
         // File downloads will be initiated by the StartMovedBucketDownload event handler
         info!(
             target: LOG_TARGET,
-            "Bucket move request accepted for bucket {:?}, waiting for on-chain confirmation", event.bucket_id
+            "Bucket move request accepted for bucket [0x{:x}], waiting for on-chain confirmation", event.bucket_id
         );
 
         Ok(())
@@ -438,8 +438,8 @@ where
     async fn reject_bucket_move(&mut self, bucket_id: BucketId<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "MSP: rejecting move bucket request for bucket {:?}",
-            bucket_id.as_ref(),
+            "MSP: rejecting move bucket request for bucket [0x{:x}]",
+            bucket_id,
         );
 
         for file_key in self.file_storage_inserted_file_keys.iter() {
@@ -505,8 +505,8 @@ where
     async fn accept_bucket_move(&self, bucket_id: BucketId<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "MSP: accepting move bucket request for bucket {:?}",
-            bucket_id.as_ref(),
+            "MSP: accepting move bucket request for bucket [0x{:x}]",
+            bucket_id,
         );
 
         let call: Runtime::Call = pallet_file_system::Call::msp_respond_move_bucket_request {
@@ -517,8 +517,8 @@ where
 
         info!(
             target: LOG_TARGET,
-            "MSP: accepting move bucket request for bucket {:?}",
-            bucket_id.as_ref(),
+            "MSP: accepting move bucket request for bucket [0x{:x}]",
+            bucket_id,
         );
 
         self.storage_hub_handler
