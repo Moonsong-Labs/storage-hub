@@ -112,7 +112,7 @@ where
 
                 // Check if this bucket is managed by this MSP
                 if bucket_set.contains(&bucket_id) {
-                    debug!(target: LOG_TARGET, "Applying {} mutations during sync for bucket [{:?}]", mutations.len(), bucket_id);
+                    debug!(target: LOG_TARGET, "Applying {} mutations during sync for bucket [0x{:x}]", mutations.len(), bucket_id);
                     let forest_key = bucket_id.as_ref().to_vec();
                     for (file_key, mutation) in mutations {
                         let mutation_type = match &mutation {
@@ -121,14 +121,14 @@ where
                         };
                         info!(
                             target: LOG_TARGET,
-                            "🔧 Applying mutation [{}] for file key [{:?}] in bucket [{:?}]",
+                            "🔧 Applying mutation [{}] for file key [{:x}] in bucket [0x{:x}]",
                             mutation_type, file_key, bucket_id
                         );
                         if let Err(e) = self
                             .apply_forest_mutation(forest_key.clone(), &file_key, &mutation)
                             .await
                         {
-                            error!(target: LOG_TARGET, "CRITICAL ❗❗ Failed to apply mutation during sync for bucket [{:?}]: {:?}", bucket_id, e);
+                            error!(target: LOG_TARGET, "CRITICAL ❗❗ Failed to apply mutation during sync for bucket [0x{:x}]: {:?}", bucket_id, e);
                         }
                     }
                 }
@@ -529,7 +529,7 @@ where
                 if let Some(request) = msp_handler.pending_respond_storage_requests.pop_front() {
                     trace!(
                         target: LOG_TARGET,
-                        "Popped respond storage request for file key {:?} from queue",
+                        "Popped respond storage request for file key [{:x}] from queue",
                         request.file_key
                     );
                     // Remove from dedup tracking set so the file key can be re-queued if needed.
@@ -626,6 +626,8 @@ where
                 return;
             };
 
+            info!(target: LOG_TARGET, "🪾 Applying mutations to bucket [0x{:x}]", bucket_id);
+
             // Log mutations at info level during catchup/sync for better visibility
             if !self.caught_up {
                 let action = if revert { "Reverting" } else { "Applying" };
@@ -636,7 +638,7 @@ where
                     };
                     info!(
                         target: LOG_TARGET,
-                        "🔧 {} mutation [{}] for file key [{:?}] in bucket [{:?}]",
+                        "🔧 {} mutation [{}] for file key [{:x}] in bucket [0x{:x}]",
                         action, mutation_type, file_key, bucket_id
                     );
                 }
@@ -1154,7 +1156,7 @@ where
                     stale_keys.len()
                 );
                 for file_key in stale_keys {
-                    trace!(target: LOG_TARGET, "Removing stale file key {:?} from statuses", file_key);
+                    trace!(target: LOG_TARGET, "Removing stale file key [{:x}] from statuses", file_key);
                     msp_handler.file_key_statuses.remove(&file_key);
                 }
             }
@@ -1168,7 +1170,7 @@ where
                     if let Some(status) = msp_handler.file_key_statuses.get(&file_key_h256) {
                         trace!(
                             target: LOG_TARGET,
-                            "Skipping file key {:?} - status: {:?}",
+                            "Skipping file key [{:x}] - status: {:?}",
                             file_key_h256,
                             status
                         );
@@ -1176,7 +1178,7 @@ where
                     }
 
                     // Mark as Processing before emitting
-                    debug!(target: LOG_TARGET, "Processing new file key {:?}", file_key_h256);
+                    debug!(target: LOG_TARGET, "Processing new file key [{:x}]", file_key_h256);
                     msp_handler
                         .file_key_statuses
                         .insert(file_key_h256, FileKeyStatus::Processing);

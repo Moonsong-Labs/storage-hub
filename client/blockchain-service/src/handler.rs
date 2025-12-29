@@ -986,7 +986,7 @@ where
 
                         trace!(
                             target: LOG_TARGET,
-                            "QueueMspRespondStorageRequest received for file key {:?}",
+                            "QueueMspRespondStorageRequest received for file key [{:x}]",
                             file_key
                         );
 
@@ -1002,7 +1002,7 @@ where
 
                             trace!(
                                 target: LOG_TARGET,
-                                "File key {:?} added to pending queue (size: {})",
+                                "File key [{:x}] added to pending queue (size: {})",
                                 file_key,
                                 msp_handler.pending_respond_storage_requests.len()
                             );
@@ -1012,7 +1012,7 @@ where
                         } else {
                             warn!(
                                 target: LOG_TARGET,
-                                "File key {:?} already pending, skipping",
+                                "File key [{:x}] already pending, skipping",
                                 file_key
                             );
                         }
@@ -1262,9 +1262,9 @@ where
                         // Register BSP as one for which the file is being distributed already.
                         // Error if the BSP is already registered.
                         if !entry.bsps_distributing.insert(bsp_id) {
-                            error!(target: LOG_TARGET, "BSP {:?} is already registered as distributing file {:?}", bsp_id, file_key);
+                            error!(target: LOG_TARGET, "BSP {:?} is already registered as distributing file [{:x}]", bsp_id, file_key);
                             match callback.send(Err(anyhow!(
-                                "BSP {:?} is already registered as distributing file {:?}",
+                                "BSP {:?} is already registered as distributing file [{:x}]",
                                 bsp_id,
                                 file_key
                             ))) {
@@ -1492,7 +1492,7 @@ where
                     {
                         info!(
                             target: LOG_TARGET,
-                            "Setting file key {:?} status to {:?}",
+                            "Setting file key [{:x}] status to {:?}",
                             file_key,
                             status
                         );
@@ -1514,7 +1514,7 @@ where
                     {
                         info!(
                             target: LOG_TARGET,
-                            "Removing file key {:?} from statuses (enabling retry)",
+                            "Removing file key [{:x}] from statuses (enabling retry)",
                             file_key
                         );
                         msp_handler.file_key_statuses.remove(&file_key);
@@ -1687,7 +1687,7 @@ where
             hash: block_hash,
         } = block_info;
 
-        info!(target: LOG_TARGET, "📥 Block import notification (#{}): {}", block_number, block_hash);
+        info!(target: LOG_TARGET, "📬 Block import notification (#{}): {}", block_number, block_hash);
 
         // Get provider IDs linked to keys in this node's keystore and update the nonce.
         self.init_block_processing(&block_hash);
@@ -1702,6 +1702,8 @@ where
         let block_number = block_number.saturated_into();
         self.process_block_import(&block_hash, &block_number, tree_route)
             .await;
+
+        info!(target: LOG_TARGET, "📭 Block import notification (#{}): {} processed successfully", block_number, block_hash);
     }
 
     /// Handle block notifications during network initial sync.
@@ -1943,7 +1945,7 @@ where
 
     /// Handle a finality notification.
     ///
-    /// This processes finality events for the finalized block and all implicitly finalized blocks
+    /// This processes finality events for the finalised block and all implicitly finalised blocks
     /// in the `tree_route`. This is important for scenarios where finality jumps multiple blocks
     /// at once (e.g., after a node restart, network partition recovery or solved finality staleness).
     async fn handle_finality_notification(
@@ -1959,36 +1961,36 @@ where
             return;
         }
 
-        // Skip if this finalized block was already processed.
+        // Skip if this finalised block was already processed.
         // This can happen during sync when both `handle_sync_block_notification` (via
-        // `process_finality_events_if_finalized`) and this handler process the same block.
+        // `process_finality_events_if_finalised`) and this handler process the same block.
         // Finality notifications fire even during sync, but we may have
         // already processed some blocks eagerly based on `client.info().finalized_number`.
         if block_number <= self.last_finalised_block_processed.number {
             trace!(
                 target: LOG_TARGET,
-                "📨 Finality notification #{} already processed (last_finalised={}), skipping",
+                "🔁 Finality notification #{} already processed (last_finalised={}), skipping",
                 block_number,
                 self.last_finalised_block_processed.number
             );
             return;
         }
 
-        info!(target: LOG_TARGET, "📨 Finality notification #{}: {:?}", block_number, block_hash);
+        info!(target: LOG_TARGET, "📩 Finality notification #{}: {:x}", block_number, block_hash);
 
-        // Process finality events for all implicitly finalized blocks in tree_route.
-        // tree_route contains all blocks from (old_finalized, new_finalized_parent), i.e., the blocks
-        // that were implicitly finalized when jumping from the old finalized to the new one.
+        // Process finality events for all implicitly finalised blocks in tree_route.
+        // tree_route contains all blocks from (old_finalised, new_finalised_parent), i.e., the blocks
+        // that were implicitly finalised when jumping from the old finalised to the new one.
         // The tree_route does not include the latest finalised block itself.
         //
         // We filter out blocks that were already processed to avoid double-processing.
         // This can happen when blocks were processed eagerly during sync via
-        // `process_finality_events_if_finalized`, but the finality gadget's internal finalized state
+        // `process_finality_events_if_finalised`, but the finality gadget's internal finalised state
         // was behind our `last_finalised_block_processed`.
         if !notification.tree_route.is_empty() {
             info!(
                 target: LOG_TARGET,
-                "📦 Processing finality events for {} implicitly finalized blocks",
+                "📦 Processing finality events for {} implicitly finalised blocks",
                 notification.tree_route.len()
             );
 
@@ -2026,7 +2028,7 @@ where
             }
         }
 
-        // Process finality events for the newly finalized block itself
+        // Process finality events for the newly finalised block itself
         self.process_finality_events(&block_hash);
 
         // Cleanup the pending transaction store for the last finalised block processed.
@@ -2043,5 +2045,7 @@ where
             number: block_number.saturated_into(),
             hash: block_hash,
         };
+
+        info!(target: LOG_TARGET, "📨 Finality notification #{}: {:x} processed successfully", block_number, block_hash);
     }
 }

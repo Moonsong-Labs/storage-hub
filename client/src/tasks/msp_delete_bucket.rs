@@ -75,7 +75,7 @@ where
     ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
-            "MSP: bucket {:?} moved to MSP {:?}, starting cleanup",
+            "MSP: bucket [0x{:x}] moved to MSP [0x{:x}], starting cleanup",
             event.bucket_id,
             event.new_msp_id,
         );
@@ -83,7 +83,7 @@ where
         if let Err(e) = self.delete_bucket(&event.bucket_id).await {
             error!(
                 target: LOG_TARGET,
-                "Failed to delete bucket {:?} after move: {:?}",
+                "Failed to delete bucket [0x{:x}] after move: {:?}",
                 event.bucket_id,
                 e
             );
@@ -91,7 +91,7 @@ where
         }
 
         Ok(format!(
-            "MSP: successfully deleted bucket [{:x}] after move",
+            "MSP: successfully deleted bucket [0x{:x}] after move",
             event.bucket_id,
         ))
     }
@@ -110,7 +110,7 @@ where
     ) -> anyhow::Result<String> {
         info!(
             target: LOG_TARGET,
-            "MSP: deleting bucket {:?} for MSP {:?}",
+            "MSP: deleting bucket [0x{:x}] for MSP [0x{:x}]",
             event.bucket_id,
             event.msp_id
         );
@@ -118,7 +118,7 @@ where
         if let Err(e) = self.delete_bucket(&event.bucket_id).await {
             error!(
                 target: LOG_TARGET,
-                "Failed to delete bucket {:?} after stop storing: {:?}",
+                "Failed to delete bucket [0x{:x}] after stop storing: {:?}",
                 event.bucket_id,
                 e
             );
@@ -126,7 +126,7 @@ where
         }
 
         Ok(format!(
-            "MSP: successfully deleted bucket [{:x}] after stop storing",
+            "MSP: successfully deleted bucket [0x{:x}] after stop storing",
             event.bucket_id,
         ))
     }
