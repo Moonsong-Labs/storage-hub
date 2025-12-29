@@ -513,11 +513,13 @@ where
             .forest_storage_handler
             .get_or_create(&ForestStorageKey::from(event.bucket_id.as_ref().to_vec()))
             .await;
-        let read_fs = fs.read().await;
 
         // If we do not have the file already in forest storage, we must take into account the
         // available storage capacity.
-        let file_in_forest_storage = read_fs.contains_file_key(&file_key.into())?;
+        let file_in_forest_storage = {
+            let read_fs = fs.read().await;
+            read_fs.contains_file_key(&file_key.into())?
+        };
         if !file_in_forest_storage {
             info!(target: LOG_TARGET, "File key {:x} not found in forest storage. Checking available storage capacity.", file_key);
 
@@ -620,13 +622,14 @@ where
             debug!(target: LOG_TARGET, "File key {:x} found in forest storage.", file_key);
         }
 
-        let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
-
         // Create file in file storage if it is not present so we can write uploaded chunks as soon as possible.
-        let file_in_file_storage = write_file_storage
-            .get_metadata(&file_key.into())
-            .map_err(|e| anyhow!("Failed to get metadata from file storage: {:?}", e))?
-            .is_some();
+        let file_in_file_storage = {
+            let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+            read_file_storage
+                .get_metadata(&file_key.into())
+                .map_err(|e| anyhow!("Failed to get metadata from file storage: {:?}", e))?
+                .is_some()
+        };
 
         debug!(
             target: LOG_TARGET,
@@ -637,6 +640,7 @@ where
         );
 
         if !file_in_file_storage {
+            let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
             debug!(target: LOG_TARGET, "File key {:x} not found in file storage. Inserting file.", file_key);
             write_file_storage
                 .insert_file(
@@ -645,12 +649,8 @@ where
                 )
                 .map_err(|e| anyhow!("Failed to insert file in file storage: {:?}", e))?;
         } else {
-            debug!(target: LOG_TARGET, "File key {:x} found in file storage.", file_key);
-        }
-
-        // If the file is in file storage, we can skip the file transfer,
-        // and proceed to accepting the storage request directly, provided that we have the entire file in file storage.
-        if file_in_file_storage {
+            // If the file is in file storage, we can skip the file transfer,
+            // and proceed to accepting the storage request directly, provided that we have the entire file in file storage.
             info!(target: LOG_TARGET, "File key {:?} found in file storage. No need to receive the file from the user.", file_key);
 
             // Do not skip the file key even if it is in forest storage since not responding to the storage request or rejecting it would result in the file key being deleted from the network entirely.
@@ -658,13 +658,15 @@ where
                 info!(target: LOG_TARGET, "File key {:?} found in forest storage when storage request is open. The storage request is most likely opened to increase replication amongst BSPs, but still requires the MSP to accept the request.", file_key);
             }
 
-            // Check if the file is complete in file storage.
-            let file_complete = match write_file_storage.is_file_complete(&file_key.into()) {
-                Ok(is_complete) => is_complete,
-                Err(e) => {
-                    warn!(target: LOG_TARGET, "Failed to check if file is complete. The file key {:x} is in a bad state with error: {:?}", file_key, e);
-                    warn!(target: LOG_TARGET, "Assuming the file is not complete.");
-                    false
+            let file_complete = {
+                let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+                match read_file_storage.is_file_complete(&file_key.into()) {
+                    Ok(is_complete) => is_complete,
+                    Err(e) => {
+                        warn!(target: LOG_TARGET, "Failed to check if file is complete. The file key {:x} is in a bad state with error: {:?}", file_key, e);
+                        warn!(target: LOG_TARGET, "Assuming the file is not complete.");
+                        false
+                    }
                 }
             };
 
@@ -678,9 +680,7 @@ where
             } else {
                 debug!(target: LOG_TARGET, "File key {:x} is not complete in file storage. Need to receive the file from the user.", file_key);
             }
-        };
-
-        drop(write_file_storage);
+        }
 
         // Register the file for upload in the file transfer service.
         // Even though we could already have the entire file in file storage, we
@@ -909,18 +909,41 @@ where
 
         let mut file_key_responses = HashMap::new();
 
-        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-
-        // Filter out requests that are do not have any pending storage requests.
+        // Filter out requests that do not have any pending storage requests.
         let filtered_responses = event
             .data
             .respond_storing_requests
             .iter()
             .filter(|r| pending_file_keys.contains(&r.file_key))
             .collect::<Vec<_>>();
+        // For accepted requests, prefetch the chunks to prove without holding any file storage locks.
+        let mut chunks_to_prove_by_file_key: HashMap<H256, Vec<_>> = HashMap::new();
+        for respond in &filtered_responses {
+            if let MspRespondStorageRequest::Accept = &respond.response {
+                let chunks_to_prove = match self
+                    .storage_hub_handler
+                    .blockchain
+                    .query_msp_confirm_chunks_to_prove_for_file(own_msp_id, respond.file_key)
+                    .await
+                {
+                    Ok(chunks) => chunks,
+                    Err(e) => {
+                        error!(target: LOG_TARGET, "Failed to get chunks to prove: {:?}", e);
+                        continue;
+                    }
+                };
+
+                chunks_to_prove_by_file_key.insert(respond.file_key, chunks_to_prove);
+            }
+        }
 
         for respond in filtered_responses {
             info!(target: LOG_TARGET, "Processing response for file key {:x}", respond.file_key);
+
+            // Acquire a file storage read lock only for metadata/proof generation,
+            // for each iteration of the loop, to avoid holding the lock for too long.
+            let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+
             let bucket_id = match read_file_storage.get_metadata(&respond.file_key) {
                 Ok(Some(metadata)) => H256::from_slice(metadata.bucket_id().as_ref()),
                 Ok(None) => {
@@ -939,22 +962,20 @@ where
 
             match &respond.response {
                 MspRespondStorageRequest::Accept => {
-                    let chunks_to_prove = match self
-                        .storage_hub_handler
-                        .blockchain
-                        .query_msp_confirm_chunks_to_prove_for_file(own_msp_id, respond.file_key)
-                        .await
-                    {
-                        Ok(chunks) => chunks,
-                        Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to get chunks to prove: {:?}", e);
-                            continue;
-                        }
+                    let Some(chunks_to_prove) = chunks_to_prove_by_file_key.get(&respond.file_key)
+                    else {
+                        error!(
+                            target: LOG_TARGET,
+                            "Missing cached chunks_to_prove for accepted file key {:x}",
+                            respond.file_key
+                        );
+                        continue;
                     };
 
-                    let proof = match read_file_storage
-                        .generate_proof(&respond.file_key, &HashSet::from_iter(chunks_to_prove))
-                    {
+                    let proof = match read_file_storage.generate_proof(
+                        &respond.file_key,
+                        &HashSet::from_iter(chunks_to_prove.iter().cloned()),
+                    ) {
                         Ok(p) => p,
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to generate proof: {:?}", e);
@@ -975,8 +996,6 @@ where
                 }
             }
         }
-
-        drop(read_file_storage);
 
         let mut storage_request_msp_response = Vec::new();
 

@@ -15,9 +15,10 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_storage_providers_runtime_api::{
-    GetBspInfoError, GetStakeError, QueryAvailableStorageCapacityError, QueryBucketsForMspError,
-    QueryBucketsOfUserStoredByMspError, QueryEarliestChangeCapacityBlockError,
-    QueryMspIdOfBucketIdError, QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
+    GetBspInfoError, GetStakeError, QueryAvailableStorageCapacityError, QueryBucketRootError,
+    QueryBucketsForMspError, QueryBucketsOfUserStoredByMspError,
+    QueryEarliestChangeCapacityBlockError, QueryMspIdOfBucketIdError,
+    QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
 };
 use shp_constants::GIGAUNIT;
 use shp_traits::{
@@ -2891,6 +2892,16 @@ where
             .collect();
 
         Ok(buckets)
+    }
+
+    /// Query the root hash of a bucket.
+    ///
+    /// Returns the Merkle Patricia Trie root of the specified bucket.
+    pub fn query_bucket_root(
+        bucket_id: &BucketId<T>,
+    ) -> Result<MerklePatriciaRoot<T>, QueryBucketRootError> {
+        let bucket = Buckets::<T>::get(bucket_id).ok_or(QueryBucketRootError::BucketNotFound)?;
+        Ok(bucket.root)
     }
 }
 

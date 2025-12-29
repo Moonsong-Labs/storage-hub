@@ -68,21 +68,26 @@ where
             chunk_ids,
             request_id,
             bucket_id,
+            file_key,
             ..
         } = event;
 
-        // Get the file metadata from the file storage.
-        let file_storage_read_lock = self.storage_hub_handler.file_storage.read().await;
-        let file_metadata = file_storage_read_lock
-            .get_metadata(&event.file_key.into())
-            .map_err(|_| anyhow::anyhow!("Failed to get file metadata"))?;
+        let file_key_hash = file_key.into();
 
-        // If the file metadata is not found, return an error.
-        let file_metadata = if let Some(file_metadata) = file_metadata {
-            file_metadata
-        } else {
-            error!(target: LOG_TARGET, "File not found in file storage");
-            return Err(anyhow::anyhow!("File not found in file storage"));
+        // Get the file metadata from the file storage within a short-lived read lock.
+        let file_metadata = {
+            let file_storage_read_lock = self.storage_hub_handler.file_storage.read().await;
+            let file_metadata = file_storage_read_lock
+                .get_metadata(&file_key_hash)
+                .map_err(|_| anyhow::anyhow!("Failed to get file metadata"))?;
+
+            // If the file metadata is not found, return an error.
+            if let Some(file_metadata) = file_metadata {
+                file_metadata
+            } else {
+                error!(target: LOG_TARGET, "File not found in file storage");
+                return Err(anyhow::anyhow!("File not found in file storage"));
+            }
         };
 
         // If we have a bucket ID in the request, check if the file bucket matches the bucket ID in
@@ -92,15 +97,20 @@ where
                 error!(
                     target: LOG_TARGET,
                     "File bucket mismatch for file {:?}: expected {:?}, got {:?}",
-                    event.file_key, file_metadata.bucket_id(), bucket_id
+                    file_key,
+                    file_metadata.bucket_id(),
+                    bucket_id
                 );
                 return Err(anyhow::anyhow!("File bucket mismatch"));
             }
         }
 
-        // Generate the proof for the chunk (which also contains the chunk data itself).
-        let generate_proof_result =
-            file_storage_read_lock.generate_proof(&event.file_key.into(), &chunk_ids);
+        // Generate the proof for the chunk (which also contains the chunk data itself) within a
+        // short-lived read lock, then drop the lock before performing any network I/O.
+        let generate_proof_result = {
+            let file_storage_read_lock = self.storage_hub_handler.file_storage.read().await;
+            file_storage_read_lock.generate_proof(&file_key_hash, &chunk_ids)
+        };
 
         match generate_proof_result {
             Ok(file_key_proof) => {
@@ -118,7 +128,7 @@ where
 
         Ok(format!(
             "Handled RemoteDownloadRequest [{:?}] for file [{:x}]",
-            request_id, event.file_key
+            request_id, file_key
         ))
     }
 }
