@@ -1,4 +1,4 @@
-name: Version Guard (api-augment, types-bundle)
+name: Version Guard (api-augment, sdk, types-bundle)
 
 on:
   pull_request:
