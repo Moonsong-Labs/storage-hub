@@ -135,11 +135,6 @@ jobs:
           CURR="$CORE_CURR" PUBLISHED="$CORE_PUBLISHED" BASE_VER="$CORE_BASE" node -e '
             const semver = require("semver");
             const curr = process.env.CURR; const pub = process.env.PUBLISHED; const base = process.env.BASE_VER;
-            if (semver.eq(curr, pub)) {
-              if (semver.gt(curr, base)) { process.exit(0); }
-              console.log("::error title=Version not greater than npm::sdk/core current " + curr + " equals published " + pub + " and is not greater than base " + base);
-              process.exit(1);
-            }
             if (!semver.gt(curr, pub)) {
               console.log("::error title=Version not greater than npm::sdk/core current " + curr + " must be greater than published " + pub);
               process.exit(1);
@@ -152,11 +147,6 @@ jobs:
           CURR="$MSP_CURR" PUBLISHED="$MSP_PUBLISHED" BASE_VER="$MSP_BASE" node -e '
             const semver = require("semver");
             const curr = process.env.CURR; const pub = process.env.PUBLISHED; const base = process.env.BASE_VER;
-            if (semver.eq(curr, pub)) {
-              if (semver.gt(curr, base)) { process.exit(0); }
-              console.log("::error title=Version not greater than npm::sdk/msp-client current " + curr + " equals published " + pub + " and is not greater than base " + base);
-              process.exit(1);
-            }
             if (!semver.gt(curr, pub)) {
               console.log("::error title=Version not greater than npm::sdk/msp-client current " + curr + " must be greater than published " + pub);
               process.exit(1);
