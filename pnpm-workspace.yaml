@@ -1,5 +1,6 @@
 packages:
   - api-augment
+  - scripts
   - types-bundle
   - test
   - sdk
