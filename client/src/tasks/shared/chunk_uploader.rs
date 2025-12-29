@@ -102,7 +102,7 @@ where
         chunk_count: u64,
     ) -> impl core::future::Future<Output = Result<(), anyhow::Error>> + 'a {
         async move {
-            debug!(target: LOG_TARGET, "Attempting to send chunks of file key {:?} to peer {:?}", file_key, peer_id);
+            debug!(target: LOG_TARGET, "Attempting to send chunks of file key [{:x}] to peer {:?}", file_key, peer_id);
 
             let mut current_batch = Vec::new();
             let mut current_batch_size = 0usize;
@@ -121,7 +121,7 @@ where
                 if current_batch_size + chunk_data.len() > BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE {
                     debug!(
                         target: LOG_TARGET,
-                        "Sending batch of {} chunks (total size: {} bytes) for file {:?} to peer {:?}",
+                        "Sending batch of {} chunks (total size: {} bytes) for file [{:x}] to peer {:?}",
                         current_batch.len(),
                         current_batch_size,
                         file_key,
