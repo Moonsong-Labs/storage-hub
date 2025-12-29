@@ -1765,7 +1765,7 @@ where
         for (file_key, mutation) in mutations {
             // If we are reverting the Forest root changes, we need to revert the mutation.
             let mutation = if revert {
-                debug!(target: LOG_TARGET, "Reverting mutation [{:?}] with file key [{:?}]", mutation, file_key);
+                debug!(target: LOG_TARGET, "Reverting mutation [{:?}] with file key [{:x}]", mutation, file_key);
                 match self.revert_mutation(mutation) {
                     Ok(mutation) => mutation,
                     Err(e) => {
@@ -1774,7 +1774,7 @@ where
                     }
                 }
             } else {
-                debug!(target: LOG_TARGET, "Applying mutation [{:?}] with file key [{:?}]", mutation, file_key);
+                debug!(target: LOG_TARGET, "Applying mutation [{:?}] with file key [{:x}]", mutation, file_key);
                 mutation.clone()
             };
 
