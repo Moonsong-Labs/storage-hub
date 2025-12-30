@@ -8,23 +8,26 @@
  * Binary data (signatures) are passed as Uint8Array. Hex values are 0x-prefixed strings (32-byte IDs).
  */
 
-import { filesystemAbi } from "../abi/filesystem";
-import type { FileInfo } from "../types";
-import type { EvmWriteOptions, StorageHubClientOptions } from "./types";
-import { FileOperation, type ReplicationLevel } from "./types";
 import {
   type Address,
+  type ContractFunctionArgs,
+  type ContractFunctionName,
   createPublicClient,
-  getContract,
+  type EstimateContractGasParameters,
   type GetContractReturnType,
+  getContract,
   hexToBytes,
   http,
-  parseGwei,
   type PublicClient,
+  parseGwei,
   stringToBytes,
   stringToHex,
   type WalletClient
 } from "viem";
+import { filesystemAbi } from "../abi/FileSystem.abi";
+import type { FileInfo } from "../types";
+import type { EvmWriteOptions, StorageHubClientOptions } from "./types";
+import { FileOperation, type ReplicationLevel } from "./types";
 
 // Re-export filesystemAbi for external use
 export { filesystemAbi };
@@ -58,19 +61,6 @@ export class StorageHubClient {
   private static readonly DEFAULT_GAS_PRICE = parseGwei("1");
 
   /**
-   * Get write contract instance bound to the wallet client.
-   *
-   * @returns Contract instance for write operations (transactions)
-   */
-  private getWriteContract(): FileSystemContract<WalletClient> {
-    return getContract({
-      address: this.filesystemContractAddress,
-      abi: filesystemAbi,
-      client: this.walletClient
-    });
-  }
-
-  /**
    * Get read contract instance bound to the public client.
    *
    * @returns Contract instance for read operations (view calls)
@@ -94,9 +84,11 @@ export class StorageHubClient {
    * @param options - Gas overrides (explicit gas, multiplier, etc.)
    * @returns Estimated gas limit with safety multiplier applied
    */
-  private async estimateGas(
-    functionName: string,
-    args: readonly unknown[],
+  private async estimateGas<
+    TFunctionName extends ContractFunctionName<typeof filesystemAbi, "nonpayable" | "payable">
+  >(
+    functionName: TFunctionName,
+    args: ContractFunctionArgs<typeof filesystemAbi, "nonpayable" | "payable", TFunctionName>,
     options?: EvmWriteOptions
   ): Promise<bigint> {
     // User provided explicit gas limit
@@ -111,7 +103,7 @@ export class StorageHubClient {
       functionName,
       args,
       account: accountAddr
-    });
+    } as EstimateContractGasParameters<typeof filesystemAbi, TFunctionName>);
 
     const multiplier = options?.gasMultiplier ?? StorageHubClient.DEFAULT_GAS_MULTIPLIER;
     return gasEstimation * BigInt(Math.max(1, Math.floor(multiplier)));
@@ -154,23 +146,13 @@ export class StorageHubClient {
   }
 
   /**
-   * Assert that a value is present (non-null and non-undefined).
-   */
-  private assertPresent<T>(
-    value: T | null | undefined,
-    message: string
-  ): asserts value is NonNullable<T> {
-    if (value == null) throw new Error(message);
-  }
-
-  /**
    * Serialize FileOperationIntention and sign it
    */
   private async signIntention(
     fileKey: `0x${string}`,
     operation: FileOperation
   ): Promise<{
-    signedIntention: readonly [`0x${string}`, number];
+    intention: { fileKey: `0x${string}`; operation: number };
     signature: `0x${string}`;
   }> {
     const fileKeyBytes = hexToBytes(fileKey);
@@ -189,7 +171,7 @@ export class StorageHubClient {
     });
 
     return {
-      signedIntention: [fileKey, operation],
+      intention: { fileKey, operation },
       signature
     };
   }
@@ -266,8 +248,19 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas("createBucket", args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    const contract = this.getWriteContract();
-    return await contract.write.createBucket?.(args, txOpts);
+    if (!this.walletClient.account) {
+      throw new Error("Wallet client must have an account to write contracts");
+    }
+
+    return await this.walletClient.writeContract({
+      account: this.walletClient.account,
+      address: this.filesystemContractAddress,
+      abi: filesystemAbi,
+      functionName: "createBucket",
+      args,
+      ...txOpts,
+      chain: null
+    });
   }
 
   /**
@@ -287,8 +280,19 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas("requestMoveBucket", args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    const contract = this.getWriteContract();
-    return await contract.write.requestMoveBucket?.(args, txOpts);
+    if (!this.walletClient.account) {
+      throw new Error("Wallet client must have an account to write contracts");
+    }
+
+    return await this.walletClient.writeContract({
+      account: this.walletClient.account,
+      address: this.filesystemContractAddress,
+      abi: filesystemAbi,
+      functionName: "requestMoveBucket",
+      args,
+      ...txOpts,
+      chain: null
+    });
   }
 
   /**
@@ -306,8 +310,19 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas("updateBucketPrivacy", args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    const contract = this.getWriteContract();
-    return await contract.write.updateBucketPrivacy?.(args, txOpts);
+    if (!this.walletClient.account) {
+      throw new Error("Wallet client must have an account to write contracts");
+    }
+
+    return await this.walletClient.writeContract({
+      account: this.walletClient.account,
+      address: this.filesystemContractAddress,
+      abi: filesystemAbi,
+      functionName: "updateBucketPrivacy",
+      args,
+      ...txOpts,
+      chain: null
+    });
   }
 
   /**
@@ -324,8 +339,19 @@ export class StorageHubClient {
     );
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    const contract = this.getWriteContract();
-    return await contract.write.createAndAssociateCollectionWithBucket?.(args, txOpts);
+    if (!this.walletClient.account) {
+      throw new Error("Wallet client must have an account to write contracts");
+    }
+
+    return await this.walletClient.writeContract({
+      account: this.walletClient.account,
+      address: this.filesystemContractAddress,
+      abi: filesystemAbi,
+      functionName: "createAndAssociateCollectionWithBucket",
+      args,
+      ...txOpts,
+      chain: null
+    });
   }
 
   /**
@@ -338,8 +364,19 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas("deleteBucket", args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    const contract = this.getWriteContract();
-    return await contract.write.deleteBucket?.(args, txOpts);
+    if (!this.walletClient.account) {
+      throw new Error("Wallet client must have an account to write contracts");
+    }
+
+    return await this.walletClient.writeContract({
+      account: this.walletClient.account,
+      address: this.filesystemContractAddress,
+      abi: filesystemAbi,
+      functionName: "deleteBucket",
+      args,
+      ...txOpts,
+      chain: null
+    });
   }
 
   /**
@@ -386,8 +423,19 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas("issueStorageRequest", args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    const contract = this.getWriteContract();
-    return await contract.write.issueStorageRequest?.(args, txOpts);
+    if (!this.walletClient.account) {
+      throw new Error("Wallet client must have an account to write contracts");
+    }
+
+    return await this.walletClient.writeContract({
+      account: this.walletClient.account,
+      address: this.filesystemContractAddress,
+      abi: filesystemAbi,
+      functionName: "issueStorageRequest",
+      args,
+      ...txOpts,
+      chain: null
+    });
   }
 
   /**
@@ -400,8 +448,19 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas("revokeStorageRequest", args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    const contract = this.getWriteContract();
-    return await contract.write.revokeStorageRequest?.(args, txOpts);
+    if (!this.walletClient.account) {
+      throw new Error("Wallet client must have an account to write contracts");
+    }
+
+    return await this.walletClient.writeContract({
+      account: this.walletClient.account,
+      address: this.filesystemContractAddress,
+      abi: filesystemAbi,
+      functionName: "revokeStorageRequest",
+      args,
+      ...txOpts,
+      chain: null
+    });
   }
 
   /**
@@ -411,7 +470,7 @@ export class StorageHubClient {
    * @returns Transaction hash
    */
   async requestDeleteFile(fileInfo: FileInfo, options?: EvmWriteOptions): Promise<`0x${string}`> {
-    const { signedIntention, signature } = await this.signIntention(
+    const { intention, signature } = await this.signIntention(
       fileInfo.fileKey,
       FileOperation.Delete
     );
@@ -421,7 +480,7 @@ export class StorageHubClient {
       "File location"
     );
     const args = [
-      signedIntention,
+      intention,
       signature,
       fileInfo.bucketId,
       locationHex,
@@ -431,9 +490,18 @@ export class StorageHubClient {
     const gasLimit = await this.estimateGas("requestDeleteFile", args, options);
     const txOpts = this.buildTxOptions(gasLimit, options);
 
-    const contract = this.getWriteContract();
-    const fn = contract.write.requestDeleteFile;
-    this.assertPresent(fn, "requestDeleteFile not available on this contract/ABI");
-    return await fn(args, txOpts);
+    if (!this.walletClient.account) {
+      throw new Error("Wallet client must have an account to write contracts");
+    }
+
+    return await this.walletClient.writeContract({
+      account: this.walletClient.account,
+      address: this.filesystemContractAddress,
+      abi: filesystemAbi,
+      functionName: "requestDeleteFile",
+      args,
+      ...txOpts,
+      chain: null
+    });
   }
 }
