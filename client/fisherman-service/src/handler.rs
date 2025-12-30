@@ -407,7 +407,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
         if &bucket_id != target_bucket_id {
             debug!(
                 target: LOG_TARGET,
-                "Bucket [{:?}] is not the target bucket [{:?}]. Skipping mutations.",
+                "Bucket [0x{:x}] is not the target bucket [0x{:x}]. Skipping mutations.",
                 bucket_id,
                 target_bucket_id
             );
@@ -439,7 +439,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
 
         debug!(
             target: LOG_TARGET,
-            "Processed {} MSP/bucket mutations for bucket {:?}",
+            "Processed {} MSP/bucket mutations for bucket [0x{:x}]",
             mutations.len(),
             bucket_id
         );
@@ -484,7 +484,7 @@ impl<Runtime: StorageEnableRuntime> Actor for FishermanService<Runtime> {
                 FishermanServiceCommand::QueryIncompleteStorageRequest { file_key, callback } => {
                     debug!(
                         target: LOG_TARGET,
-                        "🎣 QueryIncompleteStorageRequest for file key {:?}",
+                        "🎣 QueryIncompleteStorageRequest for file key [{:x}]",
                         file_key
                     );
 
