@@ -5,7 +5,9 @@ import {
   type SqlClient,
   shUser,
   mspKey,
-  hexToBuffer
+  hexToBuffer,
+  bspTwoKey,
+  ShConsts
 } from "../../../util";
 
 /**
@@ -16,8 +18,11 @@ import {
  * The test scenarios below are:
  * - User requests file deletions for files that are in bucket forests (i.e. the MSP accepted the storage request). We expect
  *   the fisherman to submit bucket file deletions for the files that are in the bucket forest.
- * - Storage requests are revoked by the user before the MSP accepted the storage request (i.e. the files are not in the bucket forest)
+ * - Storage requests are revoked by the user before the MSP accepted the storage request (i.e. the files are not in the bucket forest).
  *   We expect the fisherman to submit BSP file deletions for the files that are not in the bucket forest but not bucket file deletions.
+ * - (SKIPPED - waiting on PR https://github.com/Moonsong-Labs/storage-hub/pull/600) A subsequent storage request is revoked after the MSP already accepted the first request
+ *   (file is already in the bucket forest). We expect the fisherman to only submit BSP deletion for the revoked request,
+ *   NOT a bucket deletion.
  */
 await describeMspNet(
   "Fisherman Batch File Deletion - MSP Stop Storing Bucket",
@@ -212,7 +217,9 @@ await describeMspNet(
         );
         const intentionPayload = intentionCodec.toU8a();
         const rawSignature = shUser.sign(intentionPayload);
-        const userSignature = userApi.createType("MultiSignature", { Sr25519: rawSignature });
+        const userSignature = userApi.createType("MultiSignature", {
+          Sr25519: rawSignature
+        });
 
         deletionCalls.push(
           userApi.tx.fileSystem.requestDeleteFile(
@@ -246,7 +253,10 @@ await describeMspNet(
       await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
 
       // Verify deletion signatures are stored in database for the User deletion type
-      await indexerApi.indexer.verifyDeletionSignaturesStored({ sql, fileKeys });
+      await indexerApi.indexer.verifyDeletionSignaturesStored({
+        sql,
+        fileKeys
+      });
 
       // Use fisherman helper to verify batch deletions are processed correctly
       // Skip forest root verification for buckets that MSP stopped storing since the MSP is no longer managing them
@@ -430,6 +440,217 @@ await describeMspNet(
           containerName: userApi.shConsts.NODE_INFOS.msp1.containerName
         });
       }
+    });
+
+    // TODO: Unskip this test once this PR is merged: https://github.com/Moonsong-Labs/storage-hub/pull/600
+    it.skip("revoked subsequent storage request only triggers BSP deletion (not bucket deletion) when file already in bucket", async () => {
+      // This test verifies that when a subsequent storage request is revoked after the MSP
+      // has already accepted the first request (file is in bucket), the fisherman only submits
+      // BSP deletion for the revoked request, NOT a bucket deletion (since is_in_bucket = true).
+
+      const source = "res/adolphus.jpg";
+      const destination = "test/revoke-subsequent-fisherman.jpg";
+      const bucketName = "revoke-subsequent-fisherman-bucket";
+
+      const mspId = userApi.shConsts.DUMMY_MSP_ID;
+      const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
+      const valuePropId = valueProps[0].id;
+
+      // Step 1: Create bucket and issue first storage request - MSP will accept
+      const firstFile = await userApi.file.createBucketAndSendNewStorageRequest(
+        source,
+        destination,
+        bucketName,
+        valuePropId,
+        mspId,
+        shUser,
+        1,
+        true
+      );
+
+      // Step 2: Wait for MSP to accept (triggers MutationsApplied, sets is_in_bucket = true)
+      await msp1Api.wait.fileStorageComplete(firstFile.fileKey);
+      await userApi.wait.mspResponseInTxPool();
+
+      // Wait for BSP to volunteer and store
+      await userApi.wait.bspVolunteer(1);
+      await userApi.assert.eventPresent("fileSystem", "MspAcceptedStorageRequest");
+
+      const bspAccount = userApi.createType("Address", userApi.accounts.bspKey.address);
+      await userApi.wait.bspStored({ expectedExts: 1, bspAccount });
+
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
+
+      // Wait for first file to be indexed with MSP and BSP associations
+      await indexerApi.indexer.waitForFileIndexed({
+        sql,
+        fileKey: firstFile.fileKey
+      });
+      await indexerApi.indexer.waitForMspFileAssociation({
+        sql,
+        fileKey: firstFile.fileKey
+      });
+      await indexerApi.indexer.waitForBspFileAssociation({
+        sql,
+        fileKey: firstFile.fileKey
+      });
+
+      // Verify first file record has is_in_bucket = true
+      const firstFileRecords = await sql`
+        SELECT id, file_key, is_in_bucket FROM file 
+        WHERE file_key = ${hexToBuffer(firstFile.fileKey)}
+      `;
+      assert.equal(firstFileRecords.length, 1, "Should have one file record");
+      assert.equal(
+        firstFileRecords[0].is_in_bucket,
+        true,
+        "First file record should have is_in_bucket = true after MSP acceptance"
+      );
+
+      // Step 3: Onboard BSP2 after first storage request completes
+      // This ensures BSP2 is available to volunteer for the second request
+      await userApi.docker.onboardBsp({
+        bspSigner: bspTwoKey,
+        name: "sh-bsp-two",
+        bspId: ShConsts.BSP_TWO_ID,
+        additionalArgs: ["--keystore-path=/keystore/bsp-two"],
+        waitForIdle: true
+      });
+
+      // Step 5: Issue second storage request for same file
+      const fingerprint = userApi.shConsts.TEST_ARTEFACTS[source].fingerprint;
+      const fileSize = userApi.shConsts.TEST_ARTEFACTS[source].size;
+
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.fileSystem.issueStorageRequest(
+            firstFile.bucketId,
+            destination,
+            fingerprint,
+            fileSize,
+            mspId,
+            [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+            { Custom: 2 }
+          )
+        ],
+        signer: shUser
+      });
+
+      const { event: newStorageRequestEvent } = await userApi.assert.eventPresent(
+        "fileSystem",
+        "NewStorageRequest"
+      );
+
+      const newStorageRequestDataBlob =
+        userApi.events.fileSystem.NewStorageRequest.is(newStorageRequestEvent) &&
+        newStorageRequestEvent.data;
+
+      assert(newStorageRequestDataBlob, "NewStorageRequest event data not found");
+      const secondFileKey = newStorageRequestDataBlob.fileKey.toString();
+
+      // Wait for BSP2 to volunteer for second request
+      // BSP1 already stored the file, so only BSP2 will volunteer
+      await userApi.wait.bspVolunteer(1);
+      const bspTwoAccount = userApi.createType("Address", bspTwoKey.address);
+      await userApi.wait.bspStored({
+        expectedExts: 1,
+        bspAccount: bspTwoAccount
+      });
+
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
+
+      // Wait for second file record to be indexed
+      await indexerApi.indexer.waitForFileIndexed({
+        sql,
+        fileKey: secondFileKey
+      });
+
+      // Step 6: Verify second file record has is_in_bucket = true (inherited from first)
+      const allRecordsBeforeRevoke = await sql`
+          SELECT id, file_key, is_in_bucket, created_at FROM file 
+          WHERE file_key = ${hexToBuffer(secondFileKey)}
+          ORDER BY created_at ASC
+        `;
+
+      assert.equal(
+        allRecordsBeforeRevoke.length,
+        2,
+        "Should have two file records (first and second storage request)"
+      );
+      assert.equal(
+        allRecordsBeforeRevoke[0].is_in_bucket,
+        true,
+        "First file record should have is_in_bucket = true"
+      );
+      assert.equal(
+        allRecordsBeforeRevoke[1].is_in_bucket,
+        true,
+        "Second file record should have is_in_bucket = true (inherited from first)"
+      );
+
+      // Step 7: Revoke the second storage request
+      await userApi.block.seal({
+        calls: [userApi.tx.fileSystem.revokeStorageRequest(secondFileKey)],
+        signer: shUser
+      });
+
+      await userApi.assert.eventPresent("fileSystem", "StorageRequestRevoked");
+      await userApi.assert.eventPresent("fileSystem", "IncompleteStorageRequest");
+
+      await indexerApi.indexer.waitForIndexing({ producerApi: userApi, sql });
+
+      // Verify is_in_bucket is still true for the first record (file is still in bucket)
+      const recordsAfterRevoke = await sql`
+          SELECT id, is_in_bucket, created_at FROM file 
+          WHERE file_key = ${hexToBuffer(secondFileKey)}
+          ORDER BY created_at ASC
+        `;
+
+      assert(recordsAfterRevoke.length >= 1, "At least first file record should exist");
+      assert.equal(
+        recordsAfterRevoke[0].is_in_bucket,
+        true,
+        "First file record should still have is_in_bucket = true (file still in bucket)"
+      );
+
+      // Step 8: Use fisherman to verify batch deletions
+      // The fisherman should ONLY submit BSP deletion (not bucket deletion)
+      // because is_in_bucket = true means the file is still in the bucket forest
+      await userApi.fisherman.retryableWaitAndVerifyBatchDeletions({
+        blockProducerApi: userApi,
+        deletionType: "Incomplete",
+        expectExt: 1, // Only BSP deletion, NO bucket deletion
+        userApi,
+        bspApi,
+        expectedBspCount: 1, // BSP deletion for the revoked request
+        mspApi: msp1Api,
+        expectedBucketCount: 0, // NO bucket deletion since file is still in bucket (is_in_bucket = true)
+        maxRetries: 3
+      });
+
+      // Verify MSP association still exists (file is still in bucket)
+      const mspAssociations = await sql`
+          SELECT mf.* FROM msp_file mf
+          INNER JOIN file f ON mf.file_id = f.id
+          WHERE f.file_key = ${hexToBuffer(secondFileKey)}
+        `;
+      assert.equal(
+        mspAssociations.length,
+        1,
+        "MSP association from first request should still exist"
+      );
+
+      // Verify at least the first file record still exists with is_in_bucket = true
+      const finalRecords = await sql`
+          SELECT id, is_in_bucket FROM file 
+          WHERE file_key = ${hexToBuffer(secondFileKey)}
+        `;
+      assert(finalRecords.length >= 1, "At least first file record should still exist");
+      assert.equal(
+        finalRecords[0].is_in_bucket,
+        true,
+        "First file record should still have is_in_bucket = true after fisherman processing"
+      );
     });
   }
 );
