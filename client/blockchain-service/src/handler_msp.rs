@@ -56,27 +56,6 @@ where
         block_hash: &Runtime::Hash,
         msp_id: ProviderId<Runtime>,
     ) {
-        // Get the buckets managed by this MSP
-        let buckets = match self
-            .client
-            .runtime_api()
-            .query_buckets_for_msp(*block_hash, &msp_id)
-        {
-            Ok(Ok(buckets)) => buckets,
-            Ok(Err(e)) => {
-                error!(target: LOG_TARGET, "CRITICAL ❗❗ Failed to query buckets for MSP during sync. If this block {:?} had any mutations, this node will not be able to process them: {:?}", block_hash, e);
-                return;
-            }
-            Err(e) => {
-                error!(target: LOG_TARGET, "CRITICAL ❗❗ Runtime API error querying buckets for MSP during sync. If this block {:?} had any mutations, this node will not be able to process them: {:?}", block_hash, e);
-                return;
-            }
-        };
-
-        if buckets.is_empty() {
-            return;
-        }
-
         // Get all events for the block
         let events = match get_events_at_block::<Runtime>(&self.client, block_hash) {
             Ok(events) => events,
@@ -85,9 +64,6 @@ where
                 return;
             }
         };
-
-        // Create a set of bucket IDs to quickly check if a bucket is managed by this MSP
-        let bucket_set: HashSet<_> = buckets.iter().cloned().collect();
 
         // Apply any mutations in the block that are relevant to this MSP
         for ev in events {
@@ -101,36 +77,38 @@ where
             {
                 // Decode the bucket ID from the event info
                 let bucket_id = match self
-                    .client
-                    .runtime_api()
-                    .decode_generic_apply_delta_event_info(
-                        *block_hash,
-                        event_info.unwrap_or_default(),
-                    ) {
-                    Ok(Ok(bid)) => bid,
-                    _ => continue,
+                    .get_bucket_id_from_mutations_applied_event_info(block_hash, event_info)
+                {
+                    Ok(bucket_id) => bucket_id,
+                    Err(e) => {
+                        error!(target: LOG_TARGET, "Failed to get bucket ID from MutationsApplied event info: {:?}", e);
+                        return;
+                    }
                 };
 
                 // Check if this bucket is managed by this MSP
-                if bucket_set.contains(&bucket_id) {
-                    debug!(target: LOG_TARGET, "Applying {} mutations during sync for bucket [0x{:x}]", mutations.len(), bucket_id);
-                    let forest_key = bucket_id.as_ref().to_vec();
-                    for (file_key, mutation) in mutations {
-                        let mutation_type = match &mutation {
-                            TrieMutation::Add(_) => "Add",
-                            TrieMutation::Remove(_) => "Remove",
-                        };
-                        info!(
-                            target: LOG_TARGET,
-                            "🔧 Applying mutation [{}] for file key [{:x}] in bucket [0x{:x}]",
-                            mutation_type, file_key, bucket_id
-                        );
-                        if let Err(e) = self
-                            .apply_forest_mutation(forest_key.clone(), &file_key, &mutation)
-                            .await
-                        {
-                            error!(target: LOG_TARGET, "CRITICAL ❗❗ Failed to apply mutation during sync for bucket [0x{:x}]: {:?}", bucket_id, e);
-                        }
+                if !self.validate_bucket_mutations_for_msp(block_hash, &msp_id, &bucket_id) {
+                    trace!(target: LOG_TARGET, "Bucket [0x{:x}] is not managed by this MSP [0x{:x}]. Skipping mutations applied event.", bucket_id, msp_id);
+                    return;
+                }
+
+                debug!(target: LOG_TARGET, "Applying {} mutations during sync for bucket [0x{:x}]", mutations.len(), bucket_id);
+                let forest_key = bucket_id.as_ref().to_vec();
+                for (file_key, mutation) in mutations {
+                    let mutation_type = match &mutation {
+                        TrieMutation::Add(_) => "Add",
+                        TrieMutation::Remove(_) => "Remove",
+                    };
+                    info!(
+                        target: LOG_TARGET,
+                        "🔧 Applying mutation [{}] for file key [{:x}] in bucket [0x{:x}]",
+                        mutation_type, file_key, bucket_id
+                    );
+                    if let Err(e) = self
+                        .apply_forest_mutation(forest_key.clone(), &file_key, &mutation)
+                        .await
+                    {
+                        error!(target: LOG_TARGET, "CRITICAL ❗❗ Failed to apply mutation during sync for bucket [0x{:x}]: {:?}", bucket_id, e);
                     }
                 }
             }
@@ -1013,6 +991,7 @@ where
         msp_id: &ProviderId<Runtime>,
     ) {
         // Get all buckets managed by this MSP
+        //! DANGER: This runtime API call is extremely expensive, as it iterates over all buckets in the system.
         let buckets = match self
             .client
             .runtime_api()
