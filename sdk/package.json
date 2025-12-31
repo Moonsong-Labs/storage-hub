@@ -1,7 +1,7 @@
 {
   "name": "@storagehub-sdk/root",
   "private": true,
-  "version": "0.3.4",
+  "version": "0.4.1",
   "description": "Workspace root for StorageHub SDK monorepo",
   "type": "module",
   "workspaces": [
