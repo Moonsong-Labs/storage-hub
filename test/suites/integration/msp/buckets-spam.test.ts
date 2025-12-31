@@ -2,11 +2,26 @@ import assert, { strictEqual } from "node:assert";
 import * as readline from "node:readline";
 import { describeMspNet, type EnrichedBspApi, shUser } from "../../../util";
 
-// TODO: Add description of what this test was useful for. It was used to spam the chain with buckets, and expose a bug where the Blockchain Service would start lagging behind in processing blocks, due to querying all of the buckets for each event processed.
-// TODO: To see the effects of this test, run it with `only: true, keepAlive: true`, then see the logs in the MSP docker container.
-// TODO: Suggestion: To the log at the end of processing a block import, add the time it took to process the block, to measure that in the MSP logs when running the tests.
+// Stress/regression repro: bucket-creation spam should NOT make the MSP fall behind during block import.
+//
+// Why this exists:
+// - We previously triggered severe MSP block-import lag once storage reached ~10k+ buckets, because block import processing
+//   called an expensive runtime API (`query_buckets_for_msp`) that iterates *all* buckets. Worse, it was effectively hit for
+//   many StorageHub-related events in a block (not just the relevant one), so a single “spammy” block could take minutes.
+//
+// What this test does (intentionally “unrealistic”, but very effective at surfacing the symptom):
+// - Alternates between:
+//   - a “quiet” block that only force-sets the spam user balance to max (so funds never run out), and
+//   - a “spam” block that batches 500 `createBucket` extrinsics (i.e. lots of events in one block).
+// - Repeats until 100k buckets are created (200 blocks × 500 buckets/block), which is enough to reproduce the old behaviour.
+//
+// How to use it:
+// - Unskip it and run with `only: true, keepAlive: true`.
+// - Suggestion: include processing duration in the MSP log line
+//   `📭 Block import notification (#{}): {} processed successfully` (e.g. “… processed successfully in …”) and then watch
+//   those timings to see whether block import time grows with bucket count (old behaviour) or stays flat (fixed behaviour).
 await describeMspNet(
-  "MSP is spammed with A LOT of buckets created",
+  "Stress: bucket creation spam does not cause MSP block-import lag",
   { initialised: false, networkConfig: "standard" },
   ({ before, createMsp1Api, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
@@ -54,7 +69,7 @@ await describeMspNet(
     it(
       "Create 100k buckets, 500 per block",
       {
-        skip: "Test takes way to long to run. This test actually spams the chain with buckets, unskip it if you want to run it."
+        skip: "Manual stress test (slow): this intentionally spams the chain with buckets; unskip to reproduce/observe MSP block-import timings."
       },
       async () => {
         const blocksToBuild = 200;
