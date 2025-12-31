@@ -1,3 +1,4 @@
+use anyhow::Result;
 use log::{debug, error, info, trace, warn};
 use std::{collections::HashSet, str, sync::Arc};
 use tokio::sync::{oneshot::error::TryRecvError, Mutex};
@@ -380,26 +381,21 @@ where
                 event_info,
             }) => {
                 // The mutations are applied to a Bucket's Forest root.
-                // Check that this MSP is managing at least one bucket.
-                let buckets_managed_by_msp =
-            self.client
-                    .runtime_api()
-                    .query_buckets_for_msp(*block_hash, &managed_msp_id)
-                    .inspect_err(|e| error!(target: LOG_TARGET, "CRITICAL ❗❗ Runtime API call failed while querying buckets for MSP [{:?}]: {:?}", managed_msp_id, e))
-                    .ok()
-                    .and_then(|api_result| {
-                        api_result
-                            .inspect_err(|e| error!(target: LOG_TARGET, "CRITICAL ❗❗ Runtime API error while querying buckets for MSP [{:?}]: {:?}", managed_msp_id, e))
-                            .ok()
-                    });
-
-                let Some(bucket_id) = self.validate_bucket_mutations_for_msp(
-                    block_hash,
-                    buckets_managed_by_msp,
-                    event_info,
-                ) else {
-                    return;
+                let bucket_id = match self
+                    .get_bucket_id_from_mutations_applied_event_info(block_hash, event_info)
+                {
+                    Ok(bucket_id) => bucket_id,
+                    Err(e) => {
+                        error!(target: LOG_TARGET, "Failed to get bucket ID from MutationsApplied event info: {:?}", e);
+                        return;
+                    }
                 };
+
+                if !self.validate_bucket_mutations_for_msp(block_hash, &managed_msp_id, &bucket_id)
+                {
+                    trace!(target: LOG_TARGET, "Bucket [0x{:x}] is not managed by this MSP [0x{:x}]. Skipping mutations applied event.", bucket_id, managed_msp_id);
+                    return;
+                }
 
                 self.emit(FinalisedBucketMutationsApplied {
                     bucket_id,
@@ -597,20 +593,6 @@ where
             }
         };
 
-        // Preemptively getting the Buckets managed by this MSP, so that we do the query just once,
-        // instead of doing it for every event.
-        let buckets_managed_by_msp =
-            self.client
-                    .runtime_api()
-                    .query_buckets_for_msp(*block_hash, managed_msp_id)
-                    .inspect_err(|e| error!(target: LOG_TARGET, "Runtime API call failed while querying buckets for MSP [{:?}]: {:?}", managed_msp_id, e))
-                    .ok()
-                    .and_then(|api_result| {
-                        api_result
-                            .inspect_err(|e| error!(target: LOG_TARGET, "Runtime API error while querying buckets for MSP [{:?}]: {:?}", managed_msp_id, e))
-                            .ok()
-                    });
-
         if let StorageEnableEvents::ProofsDealer(pallet_proofs_dealer::Event::MutationsApplied {
             mutations,
             old_root,
@@ -618,13 +600,20 @@ where
             event_info,
         }) = event
         {
-            let Some(bucket_id) = self.validate_bucket_mutations_for_msp(
-                block_hash,
-                buckets_managed_by_msp,
-                event_info,
-            ) else {
-                return;
+            let bucket_id = match self
+                .get_bucket_id_from_mutations_applied_event_info(block_hash, event_info)
+            {
+                Ok(bucket_id) => bucket_id,
+                Err(e) => {
+                    error!(target: LOG_TARGET, "Failed to get bucket ID from MutationsApplied event info: {:?}", e);
+                    return;
+                }
             };
+
+            if !self.validate_bucket_mutations_for_msp(block_hash, managed_msp_id, &bucket_id) {
+                trace!(target: LOG_TARGET, "Bucket [0x{:x}] is not managed by this MSP [0x{:x}]. Skipping mutations applied event.", bucket_id, managed_msp_id);
+                return;
+            }
 
             info!(target: LOG_TARGET, "🪾 Applying mutations to bucket [0x{:x}]", bucket_id);
 
@@ -709,44 +698,31 @@ where
         }
     }
 
-    /// Validates that a MutationsApplied event's bucket is managed by this MSP.
+    /// Extracts the bucket ID encoded in a `MutationsApplied` event's `event_info`.
     ///
-    /// This helper performs the following validation steps:
-    /// 1. Checks if this MSP is managing at least one bucket
-    /// 2. Validates that the event_info contains the BucketId of the bucket that was mutated
-    /// 3. Decodes the BucketId from the event_info
-    /// 4. Verifies that the BucketId is in the list of buckets managed by this MSP
+    /// The `ProofsDealer::MutationsApplied` event includes an opaque `event_info` payload which,
+    /// for generic apply-delta mutations, is expected to contain the SCALE-encoded `BucketId` of
+    /// the bucket whose Forest root was mutated.
     ///
-    /// Returns Some(bucket_id) if all validations pass, None otherwise.
-    fn validate_bucket_mutations_for_msp(
+    /// Behaviour:
+    /// - Logs an error and returns an error if `event_info` is `None`.
+    /// - Calls the runtime API (`decode_generic_apply_delta_event_info`) at `block_hash` to decode
+    ///   the bucket ID.
+    /// - Logs an error and returns an error if the runtime API call fails or if decoding fails.
+    fn get_bucket_id_from_mutations_applied_event_info(
         &self,
         block_hash: &Runtime::Hash,
-        buckets_managed_by_msp: Option<Vec<BucketId<Runtime>>>,
         event_info: Option<Vec<u8>>,
-    ) -> Option<BucketId<Runtime>> {
-        // Check that this MSP is managing at least one bucket.
-        if buckets_managed_by_msp.is_none() {
-            debug!(target: LOG_TARGET, "MSP is not managing any buckets. Skipping mutations applied event.");
-            return None;
-        }
-        let buckets_managed_by_msp = buckets_managed_by_msp
-            .as_ref()
-            .expect("Just checked that this is not None; qed");
-        if buckets_managed_by_msp.is_empty() {
-            debug!(target: LOG_TARGET, "Buckets managed by MSP is an empty vector. Skipping mutations applied event.");
-            return None;
-        }
+    ) -> Result<BucketId<Runtime>> {
+        let Some(event_info) = event_info else {
+            let msg = "MutationsApplied event with `None` event info, when it is expected to contain the BucketId of the bucket that was mutated.";
+            error!(target: LOG_TARGET, "{}", msg);
+            return Err(anyhow::anyhow!(msg));
+        };
 
         // In StorageHub, we assume that all `MutationsApplied` events are emitted by bucket
         // root changes, and they should contain the encoded `BucketId` of the bucket that was mutated
         // in the `event_info` field.
-        let Some(event_info) = event_info else {
-            error!(
-                target: LOG_TARGET,
-                "MutationsApplied event with `None` event info, when it is expected to contain the BucketId of the bucket that was mutated."
-            );
-            return None;
-        };
         let bucket_id = match self
             .client
             .runtime_api()
@@ -755,23 +731,73 @@ where
             Ok(runtime_api_result) => match runtime_api_result {
                 Ok(bucket_id) => bucket_id,
                 Err(e) => {
-                    error!(target: LOG_TARGET, "Failed to decode BucketId from event info: {:?}", e);
-                    return None;
+                    let msg = format!("Failed to decode BucketId from event info: {:?}", e);
+                    error!(target: LOG_TARGET, "{}", msg);
+                    return Err(anyhow::anyhow!(msg));
                 }
             },
             Err(e) => {
-                error!(target: LOG_TARGET, "Error while calling runtime API to decode BucketId from event info: {:?}", e);
-                return None;
+                let msg = format!(
+                    "Error while calling runtime API to decode BucketId from event info: {:?}",
+                    e
+                );
+                error!(target: LOG_TARGET, "{}", msg);
+                return Err(anyhow::anyhow!(msg));
             }
         };
 
-        // Check if the bucket is managed by this MSP.
-        if !buckets_managed_by_msp.contains(&bucket_id) {
-            debug!(target: LOG_TARGET, "Bucket [{:?}] is not managed by this MSP. Skipping mutations applied event.", bucket_id);
-            return None;
-        }
+        Ok(bucket_id)
+    }
 
-        Some(bucket_id)
+    /// Checks whether a bucket is managed by the MSP this node is handling.
+    ///
+    /// Queries the runtime for the MSP ID associated with `bucket_id` and compares it with
+    /// `managed_msp_id`.
+    ///
+    /// Returns `true` iff the runtime reports the bucket is managed by `managed_msp_id`.
+    /// Returns `false` when:
+    /// - The bucket is managed by a different MSP
+    /// - The bucket is not managed by any MSP
+    /// - The runtime API call fails (an error is logged)
+    fn validate_bucket_mutations_for_msp(
+        &self,
+        block_hash: &Runtime::Hash,
+        managed_msp_id: &ProviderId<Runtime>,
+        bucket_id: &BucketId<Runtime>,
+    ) -> bool {
+        // Check if the bucket is managed by this MSP.
+        match self
+            .client
+            .runtime_api()
+            .query_msp_id_of_bucket_id(*block_hash, &bucket_id)
+        {
+            Ok(runtime_api_result) => match runtime_api_result {
+                Ok(Some(msp_id)) => {
+                    if msp_id != *managed_msp_id {
+                        // This is a valid scenario. It would be the case where the mutation is being applied to a bucket that is managed by another MSP.
+                        trace!(target: LOG_TARGET, "Bucket [0x{:x}] is not managed by this MSP [0x{:x}]. It is managed by MSP [0x{:x}].", bucket_id, managed_msp_id, msp_id);
+                        return false;
+                    } else {
+                        // This is a valid scenario. It would be the case where the bucket is managed by this MSP.
+                        trace!(target: LOG_TARGET, "Bucket [0x{:x}] is managed by this MSP [0x{:x}].", bucket_id, managed_msp_id);
+                        return true;
+                    }
+                }
+                Ok(None) => {
+                    // This is a valid scenario. It would be the case where the bucket is not managed by any MSP.
+                    trace!(target: LOG_TARGET, "Bucket [0x{:x}] is not managed by any MSP.", bucket_id);
+                    return false;
+                }
+                Err(e) => {
+                    error!(target: LOG_TARGET, "Error querying MSP ID of bucket [0x{:x}]: {:?}", bucket_id, e);
+                    return false;
+                }
+            },
+            Err(e) => {
+                error!(target: LOG_TARGET, "Error while calling runtime API to query MSP ID of bucket [0x{:x}]: {:?}", bucket_id, e);
+                return false;
+            }
+        }
     }
 
     /// Scans pending storage requests for this MSP and triggers distribution tasks.
