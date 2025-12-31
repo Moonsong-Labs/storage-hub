@@ -4,6 +4,7 @@ import { describeMspNet, type EnrichedBspApi, shUser } from "../../../util";
 
 // TODO: Add description of what this test was useful for. It was used to spam the chain with buckets, and expose a bug where the Blockchain Service would start lagging behind in processing blocks, due to querying all of the buckets for each event processed.
 // TODO: To see the effects of this test, run it with `only: true, keepAlive: true`, then see the logs in the MSP docker container.
+// TODO: Suggestion: To the log at the end of processing a block import, add the time it took to process the block, to measure that in the MSP logs when running the tests.
 await describeMspNet(
   "MSP is spammed with A LOT of buckets created",
   { initialised: false, networkConfig: "standard" },
