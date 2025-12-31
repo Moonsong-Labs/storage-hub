@@ -5,6 +5,7 @@ import { Wallet, AlertCircle, ExternalLink, Copy, CheckCircle } from 'lucide-rea
 import { createWalletClient, createPublicClient, custom, defineChain, formatEther, type WalletClient, type PublicClient } from 'viem';
 import { loadAppConfig } from '../config/load';
 import type { AppConfig } from '../config/types';
+import { getMetaMaskProvider, safeProviderRequest } from '../utils/metamask';
 
 interface WalletConnectionProps {
   onWalletConnected: (connected: boolean) => void;
@@ -67,15 +68,13 @@ export function WalletConnection({
 
   // Switch to StorageHub network
   const switchToStorageHubNetwork = useCallback(async () => {
-    if (!window.ethereum) return false;
+    const provider = getMetaMaskProvider();
+    if (!provider) return false;
 
     try {
       console.log('Attempting to switch to StorageHub network...');
       // Try to switch to the network first
-      await window.ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: `0x${expectedChainId.toString(16)}` }]
-      });
+      await safeProviderRequest(provider, 'wallet_switchEthereumChain', [{ chainId: `0x${expectedChainId.toString(16)}` }]);
       console.log('Successfully switched to existing network');
       return true;
     } catch (switchError: unknown) {
@@ -84,16 +83,13 @@ export function WalletConnection({
       if ((switchError as { code?: number }).code === 4902) {
         console.log('Network not found, attempting to add...');
         try {
-          await window.ethereum.request({
-            method: 'wallet_addEthereumChain',
-            params: [{
-              chainId: `0x${expectedChainId.toString(16)}`,
-              chainName: appConfig?.chain.name ?? 'StorageHub Solochain EVM',
-              nativeCurrency: appConfig?.chain.nativeCurrency ?? { name: 'StorageHub', symbol: 'SH', decimals: 18 },
-              rpcUrls: [expectedRpcUrl],
-              blockExplorerUrls: null
-            }]
-          });
+          await safeProviderRequest(provider, 'wallet_addEthereumChain', [{
+            chainId: `0x${expectedChainId.toString(16)}`,
+            chainName: appConfig?.chain.name ?? 'StorageHub Solochain EVM',
+            nativeCurrency: appConfig?.chain.nativeCurrency ?? { name: 'StorageHub', symbol: 'SH', decimals: 18 },
+            rpcUrls: [expectedRpcUrl],
+            blockExplorerUrls: null
+          }]);
           console.log('Successfully added and switched to new network');
           return true;
         } catch (addError) {
@@ -110,21 +106,22 @@ export function WalletConnection({
   // Get chain ID
   const getChainId = useCallback(async (): Promise<number> => {
     try {
-      if (window?.ethereum) {
-        const chainId = await window.ethereum.request({
-          method: 'eth_chainId'
-        }) as string;
+      const provider = getMetaMaskProvider();
+      if (provider) {
+        const chainId = await safeProviderRequest(provider, 'eth_chainId') as string;
         return Number.parseInt(chainId, 16);
       }
       return 0;
-    } catch {
+    } catch (error) {
+      console.error('[WalletConnection] Failed to get chain ID:', error);
       return 0;
     }
   }, []);
 
   // Connect to MetaMask using Viem
   const connectWallet = useCallback(async () => {
-    if (!window?.ethereum) {
+    const provider = getMetaMaskProvider();
+    if (!provider) {
       setWalletState(prev => ({
         ...prev,
         error: 'MetaMask not found. Please install MetaMask extension.'
@@ -135,41 +132,33 @@ export function WalletConnection({
     setWalletState(prev => ({ ...prev, isConnecting: true, error: null }));
 
     try {
-      console.log('Attempting to connect to MetaMask with Viem...');
-
-      // First, request account access
-      const accounts = await window.ethereum?.request({
-        method: 'eth_requestAccounts'
-      }) as string[];
-
-      if (!accounts || accounts.length === 0) {
-        throw new Error('No accounts returned from MetaMask');
-      }
-
-      const address = accounts[0];
-      console.log('Connected to address:', address);
-
-      // Check current network
+      // CRITICAL: Configure network BEFORE requesting accounts
+      // This prevents wallet picker extension errors when the network doesn't exist in MetaMask
       let chainId = await getChainId();
-      console.log('Current Chain ID:', chainId);
 
-      // If not on StorageHub network, try to switch
+      // If not on StorageHub network, try to switch/add it
       if (chainId !== expectedChainId) {
-        console.log('Not on StorageHub network, attempting to switch...');
         const switchSuccess = await switchToStorageHubNetwork();
 
         if (switchSuccess) {
           // Wait a moment for the switch to complete
           await new Promise(resolve => setTimeout(resolve, 1000));
           chainId = await getChainId();
-          console.log('After switch, Chain ID:', chainId);
         } else {
           throw new Error('Failed to switch to StorageHub network. Please switch manually in MetaMask.');
         }
       }
 
+      // NOW request account access (network is configured)
+      const accounts = await safeProviderRequest(provider, 'eth_requestAccounts') as string[];
+
+      if (!accounts || accounts.length === 0) {
+        throw new Error('No accounts returned from MetaMask');
+      }
+
+      const address = accounts[0];
+
       // Create Viem clients
-      const provider = window.ethereum;
       if (!provider) {
         throw new Error('MetaMask provider unavailable');
       }
@@ -195,7 +184,6 @@ export function WalletConnection({
       // Get balance using Viem
       const balanceWei = await publicClientInstance.getBalance({ address: address as `0x${string}` });
       const balance = formatEther(balanceWei);
-      console.log('Balance:', balance, 'SH');
 
       setWalletState({
         address,
@@ -219,15 +207,33 @@ export function WalletConnection({
           ...prev,
           error: `Still on wrong network. Current Chain ID: ${chainId}. Expected: ${expectedChainId}. Please switch manually in MetaMask.`
         }));
-      } else {
-        console.log('Successfully connected to StorageHub network with Viem!');
       }
     } catch (error) {
       console.error('Failed to connect wallet:', error);
+      
+      // Provide more specific error messages
+      let errorMessage = 'Failed to connect wallet';
+      if (error instanceof Error) {
+        const errorMsg = error.message;
+        if (errorMsg.includes('User rejected') || errorMsg.includes('user rejected')) {
+          errorMessage = 'Connection cancelled by user';
+        } else if (errorMsg.includes('Unexpected error') || errorMsg.includes('selectExtension')) {
+          errorMessage = 'Wallet picker extension error. Try disabling other wallet extensions or refresh the page.';
+        } else if (errorMsg.includes('Please switch')) {
+          errorMessage = errorMsg;
+        } else if (errorMsg.includes('network') || errorMsg.includes('Network')) {
+          errorMessage = 'Network configuration error. Please check your MetaMask settings.';
+        } else if (errorMsg.includes('JSON-RPC') || errorMsg.includes('RPC')) {
+          errorMessage = 'RPC connection error. Please ensure the StorageHub node is running.';
+        } else {
+          errorMessage = errorMsg;
+        }
+      }
+      
       setWalletState(prev => ({
         ...prev,
         isConnecting: false,
-        error: error instanceof Error ? error.message : 'Failed to connect wallet'
+        error: errorMessage
       }));
       onWalletConnected(false);
     }
@@ -267,7 +273,8 @@ export function WalletConnection({
 
   // Listen for account/chain changes
   useEffect(() => {
-    if (window.ethereum) {
+    const provider = getMetaMaskProvider();
+    if (provider) {
       const handleAccountsChanged = (...args: unknown[]) => {
         const accounts = args[0] as string[];
         if (accounts.length === 0) {
@@ -300,13 +307,13 @@ export function WalletConnection({
         }
       };
 
-      window.ethereum.on('accountsChanged', handleAccountsChanged);
-      window.ethereum.on('chainChanged', handleChainChanged);
+      provider.on('accountsChanged', handleAccountsChanged);
+      provider.on('chainChanged', handleChainChanged);
 
       return () => {
-        if (window.ethereum?.removeListener) {
-          window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
-          window.ethereum.removeListener('chainChanged', handleChainChanged);
+        if (provider.removeListener) {
+          provider.removeListener('accountsChanged', handleAccountsChanged);
+          provider.removeListener('chainChanged', handleChainChanged);
         }
       };
     }
@@ -314,16 +321,19 @@ export function WalletConnection({
 
   // Check for existing connection on mount
   useEffect(() => {
-    if (window?.ethereum && configurationValid) {
+    const provider = getMetaMaskProvider();
+    if (provider && configurationValid) {
       // Check if already connected
-      window.ethereum?.request({ method: 'eth_accounts' })
+      safeProviderRequest(provider, 'eth_accounts')
         .then((result: unknown) => {
           const accounts = result as string[];
           if (accounts.length > 0) {
             void connectWallet();
           }
         })
-        .catch(console.error);
+        .catch((error) => {
+          console.error('[WalletConnection] Failed to check existing accounts:', error);
+        });
     }
   }, [configurationValid, connectWallet]);
 
@@ -353,7 +363,8 @@ export function WalletConnection({
     );
   }
 
-  if (!(typeof window !== 'undefined' && typeof window.ethereum !== 'undefined')) {
+  const provider = getMetaMaskProvider();
+  if (!provider) {
     return (
       <div className="text-center py-12">
         <Wallet className="w-12 h-12 text-gray-400 mx-auto mb-4" />
@@ -436,17 +447,37 @@ export function WalletConnection({
                 onClick={async () => {
                   try {
                     console.log('=== MetaMask Debug Test ===');
-                    console.log('window.ethereum exists:', !!window.ethereum);
-                    console.log('window.ethereum.isMetaMask:', window.ethereum?.isMetaMask);
+                    const provider = getMetaMaskProvider();
+                    console.log('Provider found:', !!provider);
+                    console.log('Provider isMetaMask:', provider?.isMetaMask);
+                    console.log('window.ethereum type:', Array.isArray(window.ethereum) ? 'array' : typeof window.ethereum);
+                    console.log('window.ethereum value:', window.ethereum);
 
-                    if (window.ethereum) {
-                      const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-                      const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-                      console.log('Current chainId:', chainId, '(decimal:', Number.parseInt(chainId as string, 16), ')');
-                      console.log('Current accounts:', accounts);
+                    if (provider) {
+                      try {
+                        const chainId = await safeProviderRequest(provider, 'eth_chainId');
+                        console.log('Current chainId:', chainId, '(decimal:', Number.parseInt(chainId as string, 16), ')');
+                      } catch (e) {
+                        console.error('Failed to get chainId:', e);
+                      }
+                      
+                      try {
+                        const accounts = await safeProviderRequest(provider, 'eth_accounts');
+                        console.log('Current accounts:', accounts);
+                      } catch (e) {
+                        console.error('Failed to get accounts:', e);
+                      }
+                    } else {
+                      console.warn('No MetaMask provider found');
+                      console.log('Available window.ethereum:', window.ethereum);
                     }
                   } catch (e) {
                     console.error('Debug test error:', e);
+                    console.error('Error details:', {
+                      message: e instanceof Error ? e.message : String(e),
+                      stack: e instanceof Error ? e.stack : undefined,
+                      name: e instanceof Error ? e.name : undefined
+                    });
                   }
                 }}
                 className="w-full py-2 px-4 bg-gray-500 text-white rounded-lg hover:bg-gray-600 text-sm"
